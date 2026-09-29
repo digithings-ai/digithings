@@ -73,7 +73,7 @@ The following is built and functional as of this architecture review (March 2026
 | `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
 | `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `digigraph-rag` |
 | `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
-| `POST` | `/v1/chat/completions` | digikey JWT (optional) | 10 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
+| `POST` | `/v1/chat/completions` | digikey JWT (optional) | 60 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
 | `GET` | `/v1/debug/input_messages` | digikey JWT | 30 req/min/IP | Last N request summaries; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
 | `GET` | `/test_llm` | digikey JWT | 30 req/min/IP | LLM connectivity test; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
 | `GET` | `/threads/{thread_id}/state` | digikey JWT | 30 req/min/IP | LangGraph checkpoint state; **requires `DIGI_ENABLE_THREAD_API=1`** |
@@ -85,7 +85,7 @@ Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_midd
 
 Rate limits are per-IP (sliding window, in-process `deque`). `X-Forwarded-For` is honored only from a configured trusted proxy (`DIGI_TRUSTED_PROXIES`) and validated before use — see Section 12.8 for the extraction algorithm and Section 6 (Security Analysis) for the trust-boundary discussion.
 
-A request that opts into `require_tool_calls=true` (body field or `X-Require-Tool-Calls` header — see §6.2.1) is metered by a **second, stricter** per-IP budget on top of the 10 req/min above: `_enforce_require_tool_calls_budget` in `server.py`, default 3 req/min, overridable via `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX`. Forcing `tool_choice="required"` reliably exhausts all `max_tool_rounds` completions instead of returning after one — a ~4-5x LLM-spend multiplier any caller with plain `digigraph:chat` scope can opt into per request — so the two budgets are checked independently and either can 429 the request. A deployment that itself mandates `require_tool_calls` via project config / `DIGI_REQUIRE_TOOL_CALLS` isn't newly constrained by this: the budget only meters a request's own opt-in signal, not the resolved floor.
+A request that opts into `require_tool_calls=true` (body field or `X-Require-Tool-Calls` header — see §6.2.1) is metered by a **second, stricter** per-IP budget on top of the 60 req/min chat limit above: `_enforce_require_tool_calls_budget` in `server.py`, default 3 req/min, overridable via `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX`. Forcing `tool_choice="required"` reliably exhausts all `max_tool_rounds` completions instead of returning after one — a ~4-5x LLM-spend multiplier any caller with plain `digigraph:chat` scope can opt into per request — so the two budgets are checked independently and either can 429 the request. A deployment that itself mandates `require_tool_calls` via project config / `DIGI_REQUIRE_TOOL_CALLS` isn't newly constrained by this: the budget only meters a request's own opt-in signal, not the resolved floor.
 
 ### 3.2 MCP Tools
 
