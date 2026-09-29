@@ -170,4 +170,52 @@ describe("baseline embed defaults (unconfigured container) are least-privilege",
     expect(client.gate.webSearch).toBe(true);
     expect(client.gate.showByok).toBe(true);
   });
+
+  it("leaves searchEngine unset in the least-privilege default (auto by omission)", () => {
+    expect("searchEngine" in DEFAULT_CLIENT_CONFIG.gate).toBe(false);
+  });
+
+  it("projects an allowlisted tenant searchEngine default into the client gate", () => {
+    const client = toDigichatClientConfig({
+      slug: "configured",
+      chrome: { mode: "embed", theme: "dark" },
+      persistence: "none",
+      auth: "anonymous",
+      features: {},
+      models: { available: [] },
+      gate: {
+        mode: "turn_limited",
+        activityDetail: "labels",
+        showByok: true,
+        webSearch: true,
+        searchEngine: "exa",
+      },
+      backend: { type: "digigraph" },
+      tools: { allowUserToggle: true, catalog: [] },
+      mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+    } as unknown as DigichatDeployment);
+    expect(client.gate.searchEngine).toBe("exa");
+  });
+
+  it("drops an unknown tenant searchEngine instead of projecting it", () => {
+    const client = toDigichatClientConfig({
+      slug: "configured",
+      chrome: { mode: "embed", theme: "dark" },
+      persistence: "none",
+      auth: "anonymous",
+      features: {},
+      models: { available: [] },
+      gate: {
+        mode: "turn_limited",
+        activityDetail: "labels",
+        showByok: true,
+        webSearch: true,
+        searchEngine: "not-an-engine",
+      },
+      backend: { type: "digigraph" },
+      tools: { allowUserToggle: true, catalog: [] },
+      mcp: { servers: [], allowUserServers: true, allowAddForm: true },
+    } as unknown as DigichatDeployment);
+    expect(client.gate.searchEngine).toBeUndefined();
+  });
 });

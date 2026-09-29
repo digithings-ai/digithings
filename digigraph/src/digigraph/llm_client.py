@@ -252,13 +252,16 @@ def digifetch_web_search(
     exclude_domains: list[str] | None = None,
     max_results: int = 8,
     usage_kind: str = "web_search",
+    provider: str | None = None,
     context: Any | None = None,
 ) -> tuple[str, list[str]]:
     """Tool-only web grounding. Raises on any failure — never synthesizes, never None.
 
     ``model`` is accepted for caller compat but unused — the tool path needs no
     synthesis model. ``usage_kind`` is likewise retained for compat (telemetry
-    retires in a later task). The bearer threads via ``context`` (Task 2 seam:
+    retires in a later task). ``provider`` names the search engine and is
+    forwarded only when set and not ``auto`` (see ``call_digisearch_web_search``,
+    #4722). The bearer threads via ``context`` (Task 2 seam:
     ``ToolContext.state["digi_bearer"]``).
     """
     del model, usage_kind
@@ -269,6 +272,7 @@ def digifetch_web_search(
         include_domains=include_domains,
         exclude_domains=exclude_domains,
         max_results=max_results,
+        provider=provider,
         context=context,
     )
     rows = (raw or {}).get("results", []) if isinstance(raw, dict) else []

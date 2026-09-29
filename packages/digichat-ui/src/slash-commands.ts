@@ -22,6 +22,7 @@ export type SlashId =
   | "byok"
   | "models"
   | "effort"
+  | "search-engine"
   | "view"
   | "thinking"
   | "sessions"
@@ -69,6 +70,27 @@ export const EFFORT_CHOICES: readonly { value: EffortCode; label: string }[] = E
 
 export function isEffortCode(value: string): value is EffortCode {
   return (EFFORT_CODES as readonly string[]).includes(value.trim().toLowerCase());
+}
+
+/** Web-search engine ids (digisearch provider vocabulary, #4724). */
+export const SEARCH_ENGINE_CODES = [
+  "auto",
+  "internal",
+  "exa",
+  "tavily",
+  "parallel",
+  "firecrawl",
+  "tinyfish",
+] as const;
+export type SearchEngineCode = (typeof SEARCH_ENGINE_CODES)[number];
+export const SEARCH_ENGINE_CHOICES: readonly { value: SearchEngineCode; label: string }[] =
+  SEARCH_ENGINE_CODES.map((code) => ({
+    value: code,
+    label: code === "auto" ? "Auto \u00b7 in-house" : code.charAt(0).toUpperCase() + code.slice(1),
+  }));
+
+export function isSearchEngine(value: string): value is SearchEngineCode {
+  return (SEARCH_ENGINE_CODES as readonly string[]).includes(value.trim().toLowerCase());
 }
 
 export const VIEW_CODES = ["hidden", "compact", "balanced", "detailed"] as const;
@@ -188,6 +210,15 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     needsArg: false,
     hint: "auto / collapsed / open",
     choiceOptions: THINKING_CHOICES,
+    kind: "client",
+    category: "setup",
+  },
+  {
+    id: "search-engine",
+    names: ["/search-engine"],
+    needsArg: false,
+    hint: "auto / exa / tavily / parallel / firecrawl / tinyfish",
+    choiceOptions: SEARCH_ENGINE_CHOICES,
     kind: "client",
     category: "setup",
   },
@@ -323,6 +354,7 @@ export function parseSlashInput(raw: string, extra?: readonly SlashDef[]): Parse
 
 function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "websearch") return visibility?.webSearch === true;
+  if (cmd.id === "search-engine") return visibility?.webSearch === true;
   if (cmd.id === "byok") return visibility?.byok !== false;
   if (cmd.id === "digisearch") return visibility?.digisearch !== false;
   if (cmd.id === "digivault") return visibility?.digivault !== false;
