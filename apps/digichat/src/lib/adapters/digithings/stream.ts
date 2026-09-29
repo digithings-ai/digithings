@@ -469,7 +469,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
           `[digigraph] upstream ${res.status} ${res.statusText}`,
           detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
         );
-        const relayable = relayableUpstreamCode(detail);
         if (res.status === 429) {
           // #4777: rate-limited, not down — say when to retry instead of the
           // generic unavailable-message. Status-gated (never body-parsed):
@@ -482,6 +481,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
             rateLimitRetryPayload(res.headers.get("retry-after")),
           );
         }
+        const relayable = relayableUpstreamCode(detail);
         if (relayable) {
           // Actionable refusal: hand the code (never the body) to the client so
           // it can say what to do instead of a dead end. Same mechanism as the

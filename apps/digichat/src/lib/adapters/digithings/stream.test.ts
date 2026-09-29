@@ -1229,6 +1229,16 @@ it("surfaces a digigraph 429 as retry-in-N-seconds from Retry-After", async () =
   expect(formatEmbedChatError(new Error(errorText))).toBe(
     "Rate limit reached, retry in 60 seconds.",
   );
+  // The relayed code keeps the rate-limit BYOK policy: free_then_byok tenants
+  // open the sequence instead of dead-ending on the 429.
+  expect(
+    shouldSuggestByokOnEmbedError({
+      llmAccess: "free_then_byok",
+      showByok: true,
+      gateMode: "ungated",
+      errorCode: parsed?.code,
+    }),
+  ).toBe(true);
   // Server-composed copy only: no upstream text crosses to the visitor.
   expect(body).not.toContain("203.0.113.7");
   expect(body).not.toContain("db.internal");
