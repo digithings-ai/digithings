@@ -73,6 +73,40 @@ function px(value: string | null | undefined, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Canvas 2d font string for the textarea. Built from the individual longhands
+ * — NEVER from the `font` shorthand: computed `font` includes `/line-height`
+ * (`400 14px/22px …`), which `ctx.font` rejects, silently leaving the canvas
+ * at default 10px sans-serif. Every glyph then measures wrong and the error
+ * compounds per character (block drifts further the longer the line).
+ */
+export function canvasFont(cs: CSSStyleDeclaration | null, fontSize: number): string {
+  const style = cs?.fontStyle && cs.fontStyle !== "" ? cs.fontStyle : "normal";
+  const variant = cs?.fontVariant && cs.fontVariant !== "" ? cs.fontVariant : "normal";
+  const weight = cs?.fontWeight && cs.fontWeight !== "" ? cs.fontWeight : "400";
+  const family = cs?.fontFamily && cs.fontFamily !== "" ? cs.fontFamily : "monospace";
+  return `${style} ${variant} ${weight} ${fontSize}px ${family}`;
+}
+
+/** Expand tabs the way a textarea lays them out (advance to next tab stop). */
+export function expandTabs(line: string, tabSize: number): string {
+  if (!line.includes("\t")) return line;
+  const stops = Math.max(1, Math.trunc(tabSize) || 8);
+  let out = "";
+  let col = 0;
+  for (const ch of line) {
+    if (ch === "\t") {
+      const next = col + (stops - (col % stops));
+      out += " ".repeat(next - col);
+      col = next;
+    } else {
+      out += ch;
+      col += 1;
+    }
+  }
+  return out;
+}
+
 /** Pixel position of the caret relative to the container. Falls back to null when unmeasurable. */
 export function caretPx(
   area: HTMLTextAreaElement,
@@ -91,12 +125,20 @@ export function caretPx(
   const fontSize = px(cs?.fontSize, 14);
   const rawLineHeight = cs?.lineHeight ?? "";
   const lineHeight = rawLineHeight === "normal" || !rawLineHeight ? fontSize * 1.5 : px(rawLineHeight, fontSize * 1.5);
-  const font =
-    cs?.font && cs.font !== "" ? cs.font : `${cs?.fontWeight ?? "400"} ${fontSize}px ${cs?.fontFamily ?? "monospace"}`;
+  const font = canvasFont(cs, fontSize);
 
-  const measured = measureTextWidth(lineText, font);
+  const tabSizeRaw = cs?.tabSize ?? "";
+  const tabSize = tabSizeRaw.endsWith("px") ? px(tabSizeRaw, 8) / Math.max(1, fontSize * 0.6) : px(tabSizeRaw, 8);
+  const lineExpanded = expandTabs(lineText, tabSize);
+  const measured = measureTextWidth(lineExpanded, font);
   const chWidth = measureTextWidth("0", font) ?? fontSize * 0.6;
-  const textWidth = measured ?? col * chWidth;
+  // Canvas measureText ignores CSS letter/word-spacing — add them per unit
+  // or the block drifts a fraction of a pixel per character/space.
+  const letterSpacing = px(cs?.letterSpacing, 0);
+  const wordSpacing = px(cs?.wordSpacing, 0);
+  const spaces = (lineExpanded.match(/ /g) ?? []).length;
+  const textWidth =
+    (measured ?? [...lineExpanded].length * chWidth) + [...lineExpanded].length * letterSpacing + spaces * wordSpacing;
 
   const paddingLeft = px(cs?.paddingLeft, 0);
   const paddingTop = px(cs?.paddingTop, 0);
