@@ -2,8 +2,13 @@ import { it, expect, vi, afterEach } from "vitest";
 import type { UIMessage } from "ai";
 import {
   DIGIGRAPH_UNAVAILABLE_MESSAGE,
+  UPSTREAM_BOOT_MAX_ATTEMPTS,
+  UPSTREAM_BOOT_MAX_ELAPSED_MS,
+  UPSTREAM_BOOT_RETRY_CODE,
   createDigigraphTraceStreamResponse,
   digigraphErrorToEmbedPayload,
+  isUpstreamBootRetry,
+  parseRetryAfterMs,
 } from "./stream";
 import {
   BYOK_MODEL_REMEDIABLE_MESSAGE,
@@ -1275,6 +1280,324 @@ it("stops the retry when the request is aborted during a cold-start wait", async
       });
       return new Response(res.body).text();
     })();
+    await vi.advanceTimersByTimeAsync(100);
+    controller.abort();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(errorTextFrom(body)).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// #4753: boot-coded 503s (stack container_booting + Retry-After) get the
+// extended budget; everything below pins that contract.
+
+const boot503 = (retryAfter = "5", body?: string) =>
+  new Response(
+    body ?? JSON.stringify({ code: "container_booting", message: "stack container not ready" }),
+    { status: 503, headers: { "retry-after": retryAfter } },
+  );
+
+const sseHello = () =>
+  new Response('data: {"choices":[{"delta":{"content":"Hello."}}]}\n\ndata: [DONE]\n\n', {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+
+const streamBody = async (init?: RequestInit & { signal?: AbortSignal }) => {
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    signal: init?.signal,
+  });
+  return new Response(res.body).text();
+};
+
+it("detects the boot code in flat, nested, and string envelopes only", () => {
+  expect(isUpstreamBootRetry(JSON.stringify({ code: UPSTREAM_BOOT_RETRY_CODE }))).toBe(true);
+  expect(
+    isUpstreamBootRetry(JSON.stringify({ error: { code: UPSTREAM_BOOT_RETRY_CODE } })),
+  ).toBe(true);
+  expect(isUpstreamBootRetry(JSON.stringify({ error: UPSTREAM_BOOT_RETRY_CODE }))).toBe(true);
+  expect(isUpstreamBootRetry("stack container not ready: timeout")).toBe(false);
+  expect(isUpstreamBootRetry(JSON.stringify({ code: "overloaded" }))).toBe(false);
+  expect(isUpstreamBootRetry(JSON.stringify({ error: { code: "overloaded" } }))).toBe(false);
+  expect(isUpstreamBootRetry("")).toBe(false);
+  expect(isUpstreamBootRetry("not json {")).toBe(false);
+});
+
+it("parses Retry-After seconds, clamps floods and hangs, rejects garbage", () => {
+  expect(parseRetryAfterMs("5")).toBe(5000);
+  expect(parseRetryAfterMs("0")).toBe(1000);
+  expect(parseRetryAfterMs("3600")).toBe(30000);
+  expect(parseRetryAfterMs(null)).toBeNull();
+  expect(parseRetryAfterMs("")).toBeNull();
+  expect(parseRetryAfterMs("soon")).toBeNull();
+  // HTTP-date has 1s resolution, so assert a window, not an exact delta.
+  const httpDate = parseRetryAfterMs(new Date(Date.now() + 7000).toUTCString());
+  expect(httpDate).toBeGreaterThan(5000);
+  expect(httpDate).toBeLessThanOrEqual(7000);
+  expect(parseRetryAfterMs(new Date(Date.now() - 7000).toUTCString())).toBe(1000);
+});
+
+it("retries a boot-coded 503 and reports warming_up between connecting and connected", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503())
+      .mockResolvedValueOnce(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(eventsFrom(body).filter((event) => event.type === "data-connection")).toEqual([
+      { type: "data-connection", id: "digigraph-connection", data: { state: "connecting" } },
+      { type: "data-connection", id: "digigraph-connection", data: { state: "warming_up" } },
+      { type: "data-connection", id: "digigraph-connection", data: { state: "connected" } },
+    ]);
+    expect(errorTextFrom(body)).toBeUndefined();
+    expect(body).toContain("Hello.");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("accepts the boot code in the nested digibase envelope", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        boot503("5", JSON.stringify({ error: { code: UPSTREAM_BOOT_RETRY_CODE } })),
+      )
+      .mockResolvedValueOnce(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(body).toContain("warming_up");
+    expect(body).toContain("Hello.");
+    expect(errorTextFrom(body)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Acceptance: a full ~240s boot (48 x Retry-After 5s) ends in a streamed
+// answer with the warming state throughout — never the unavailable-message.
+it("survives a simulated ~240s boot and streams the first send", async () => {
+  vi.useFakeTimers();
+  try {
+    const boots = Array.from({ length: 48 }, () => boot503("5"));
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boots.shift() ?? sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(49);
+    expect(body).toContain("warming_up");
+    expect(body).toContain("Hello.");
+    expect(errorTextFrom(body)).toBeUndefined();
+    expect(body).not.toContain(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("honors the server Retry-After exactly on the boot code", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503("10"))
+      .mockResolvedValueOnce(boot503("10"))
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(body).toContain("Hello.");
+    expect(errorTextFrom(body)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("clamps an excessive Retry-After to the boot delay ceiling", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503("3600"))
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.runAllTimersAsync();
+    expect(errorTextFrom(await pendingBody)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("floors a zero Retry-After so a boot 503 cannot hot-loop", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(boot503("0"))
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.runAllTimersAsync();
+    expect(errorTextFrom(await pendingBody)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Retry-After is honored on the boot code ONLY: a non-boot 503 keeps the
+// fixed 2s/5s/8s delays and the 4-attempt budget even when it carries one.
+it("ignores Retry-After on a non-boot 503 and keeps the short budget", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "overloaded" } }), {
+          status: 503,
+          headers: { "retry-after": "30" },
+        }),
+      )
+      .mockResolvedValue(sseHello());
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(body).not.toContain("warming_up");
+    expect(body).toContain("Hello.");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps the short budget when a non-boot 503 never recovers", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boot503("30", JSON.stringify({ code: "overloaded" })));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(body).not.toContain("warming_up");
+    expect(body).not.toContain('"type":"text-delta"');
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+    expect(errorLog).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Time bound: Retry-After 5s polls floor(250s / 5s) + 1 = 51 times, then the
+// turn fails with the unavailable-message instead of retrying forever.
+it("exhausts the boot budget on a boot that never ends", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boot503("5"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(
+      Math.floor(UPSTREAM_BOOT_MAX_ELAPSED_MS / 5000) + 1,
+    );
+    expect(body).not.toContain('"type":"text-delta"');
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+    expect(errorLog).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Attempt bound: the backstop when the clock cannot be trusted.
+it("caps boot attempts even when the budget has not elapsed", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => boot503("1"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody();
+    await vi.runAllTimersAsync();
+    const body = await pendingBody;
+
+    expect(fetchSpy).toHaveBeenCalledTimes(UPSTREAM_BOOT_MAX_ATTEMPTS);
+    expect(errorTextFrom(body)).toBe(DIGIGRAPH_UNAVAILABLE_MESSAGE);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops a boot wait when the request is aborted", async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(boot503("30"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const pendingBody = streamBody({ signal: controller.signal });
     await vi.advanceTimersByTimeAsync(100);
     controller.abort();
     await vi.runAllTimersAsync();
