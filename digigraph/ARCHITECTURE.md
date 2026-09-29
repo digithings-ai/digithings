@@ -806,6 +806,16 @@ This also strictly tightens `workflow_thread_id`'s subject-based `thread_id` sco
 
 ---
 
+### 6.11 Hosted License Scope Checks (`X-Digi-License`)
+
+digigraph enforces hosted-service license scopes at the HTTP boundary via `digikey.license_edge.evaluate_hosted_license` (spec `docs/superpowers/specs/2026-09-28-digichat-license-receiver-impl.md` §7). The digichat container forwards its in-memory license JWT as `X-Digi-License` on digigraph calls; containers with no license omit the header.
+
+Scope map (normative): corpus/vault headers (`X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`) require the `digisearch-corpus` scope, enforced in `_digi_fields_from_request` (`http_api/context.py`) after corpus-map resolution; web-search opt-in (body-or-header `enable_web_search` on the chat path, body flag on `/workflow`) requires the `hosted-web-search` scope, enforced in `chat_completions` (`server.py`, via `http_api/chat_resolve.py`) before streaming and non-streaming diverge, and in the `/workflow` handler for the body flag. The graph layer (`workflow.py`) needs no gate: it never sees the raw JWT (secret hygiene — the JWT must not enter checkpointed state), and unlicensed hosted turns are refused before they reach it.
+
+A hosted capability requested without an authorizing license (header absent, invalid, expired, wrong scope) is refused with **403 `{"error":"insufficient_license_scope","message":…}`** naming the missing scope (`LicenseScopeDenied` → `denial_response` in `http_api/license_gate.py`; signature verified against `DIGIKEY_PUBLIC_KEY_PEM`). **Plain-inference-open guarantee:** requests carrying none of the hosted headers/flags never touch license code and behave byte-identically with or without a license. Map-authoritative deployments are unchanged: when `DIGI_TENANT_CORPUS_MAP` is set, client corpus headers stay ignored and the corpus gate does not fire there — it narrows only header-driven selection, never mapped selection. No per-call allowlist read at edge; revocation freshness comes from the container heartbeat latch plus the `exp` backstop.
+
+See `tests/dg/test_license_edge_wiring.py` for the pinned cases (scoped allows, scopeless/absent/invalid/expired denies with the 403 shape, map-set carve-out, plain-open regression).
+
 ## 7. Scalability Analysis
 
 ### 7.1 Shared In-Process Checkpointer (Single-Node Constraint)

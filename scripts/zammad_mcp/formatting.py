@@ -8,7 +8,13 @@ from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Any
 
+from scripts.zammad_mcp.aggregate import AUTOMATION_OWNERS
 from scripts.zammad_mcp.client import PAGE_SIZE
+
+try:  # Stack container + dev: reuse the generic Task 1 window op.
+    from digisearch.core.tables import window as _tables_window
+except ImportError:  # Slim zammad-mcp image ships only mcp+httpx (no polars/digisearch).
+    _tables_window = None  # type: ignore[assignment]
 
 MAX_ARTICLE_BODY_CHARS = 4000
 MAX_ARTICLES_SHOWN = 50
@@ -223,11 +229,18 @@ def _format_article(index: int, article: dict[str, Any]) -> list[str]:
     return lines
 
 
-def format_ticket_detail(ticket: dict[str, Any], articles: list[dict[str, Any]]) -> str:
+def format_ticket_detail(
+    ticket: dict[str, Any],
+    articles: list[dict[str, Any]],
+    owner_name: str | None = None,
+    category: str | None = None,
+) -> str:
     """Render one ticket with its articles for the model.
 
     Internal notes are omitted and customer emails are masked — the OCC
     embed is anonymous, so tool output must not leak helpdesk-internal data.
+    ``owner_name`` is the ``resolve_user`` display name for the raw owner
+    value; ``category`` is the open|closed|pending state category.
     """
     ticket_id = _field(ticket.get("id")) or "?"
     number = _field(ticket.get("number"))
@@ -242,6 +255,7 @@ def format_ticket_detail(ticket: dict[str, Any], articles: list[dict[str, Any]])
         part
         for part in (
             _labeled("State", ticket.get("state")),
+            _labeled("Category", category),
             _labeled("Group", ticket.get("group")),
             _labeled("Priority", ticket.get("priority")),
             _labeled("Type", ticket.get("type")),
@@ -255,7 +269,7 @@ def format_ticket_detail(ticket: dict[str, Any], articles: list[dict[str, Any]])
         for part in (
             _labeled("Customer", _mask_customer(ticket.get("customer"))),
             _labeled("Organization", ticket.get("organization")),
-            _labeled("Owner", ticket.get("owner")),
+            _labeled("Owner", owner_name or ticket.get("owner")),
         )
         if part
     )
@@ -291,6 +305,7 @@ def format_ticket_detail(ticket: dict[str, Any], articles: list[dict[str, Any]])
 
 CLOSED_STATE_NAMES = {"closed", "merged"}
 RECENT_WINDOW_DAYS = 7
+REPORT_GROUP_BYS = frozenset({"state", "group", "priority"})
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -309,24 +324,55 @@ def _counts_line(label: str, counter: Counter[str]) -> str:
     return f"{label}: " + ", ".join(f"{name} {count}" for name, count in ordered)
 
 
-def format_ticket_report(tickets: list[dict[str, Any]], now: datetime | None = None) -> str:
+def _fallback_window(
+    rows: list[dict[str, Any]], field: str, since_days: int | None, now: datetime | None
+) -> list[dict[str, Any]]:
+    """Keep rows updated within the window (slim image: no digisearch tables)."""
+    if since_days is None:
+        return list(rows)
+    ref = now or datetime.now(timezone.utc)
+    cutoff = ref - timedelta(days=since_days)
+    out = []
+    for row in rows:
+        stamp = _parse_timestamp(row.get(field))
+        if stamp is not None and stamp >= cutoff:
+            out.append(row)
+    return out
+
+
+def format_ticket_report(
+    tickets: list[dict[str, Any]],
+    now: datetime | None = None,
+    since_days: int | None = None,
+    group_by: str | None = None,
+) -> str:
     """Aggregate visible tickets into a compact status report.
 
     "Closed" counts states named ``closed``/``merged`` (Zammad's closed-type
-    defaults); any other state is reported as unresolved.
+    defaults); any other state is reported as unresolved. ``since_days``
+    filters client-side to tickets updated in the window (via the shared
+    ``tables.window`` op); ``group_by`` appends a top-values section.
     """
-    total = len(tickets)
+    window_days = RECENT_WINDOW_DAYS if since_days is None else since_days
+    if since_days is not None:
+        if _tables_window is not None:
+            rows = _tables_window(tickets, "updated_at", since_days=since_days, now=now)
+        else:  # pragma: no cover - slim image only
+            rows = _fallback_window(tickets, "updated_at", since_days, now)
+    else:
+        rows = list(tickets)
+    total = len(rows)
     if total == 0:
         return "Zammad ticket report: no tickets visible to this token."
-    states: Counter[str] = Counter(_field(ticket.get("state")) or "unknown" for ticket in tickets)
+    states: Counter[str] = Counter(_field(ticket.get("state")) or "unknown" for ticket in rows)
     closed = sum(count for name, count in states.items() if name.lower() in CLOSED_STATE_NAMES)
-    groups: Counter[str] = Counter(_field(ticket.get("group")) or "unknown" for ticket in tickets)
+    groups: Counter[str] = Counter(_field(ticket.get("group")) or "unknown" for ticket in rows)
     priorities: Counter[str] = Counter(
-        _field(ticket.get("priority")) or "unknown" for ticket in tickets
+        _field(ticket.get("priority")) or "unknown" for ticket in rows
     )
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=RECENT_WINDOW_DAYS)
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=window_days)
     recent = 0
-    for ticket in tickets:
+    for ticket in rows:
         updated = _parse_timestamp(ticket.get("updated_at"))
         if updated is not None and updated >= cutoff:
             recent += 1
@@ -336,6 +382,39 @@ def format_ticket_report(tickets: list[dict[str, Any]], now: datetime | None = N
         _counts_line("By state", states),
         _counts_line("By group", groups),
         _counts_line("By priority", priorities),
-        f"Updated in the last {RECENT_WINDOW_DAYS} days: {recent}",
+        f"Updated in the last {window_days} days: {recent}",
     ]
+    if group_by is not None:
+        ranked: Counter[str] = Counter(_field(ticket.get(group_by)) or "unknown" for ticket in rows)
+        lines.append(_counts_line(f"Top {group_by}", ranked))
+    return "\n".join(lines)
+
+
+def format_aggregate(
+    ranked: list[dict[str, Any]],
+    group_by: str,
+    metric: str,
+    total: int,
+    since_days: int | None = None,
+) -> str:
+    """Render a windowed ranking for the model.
+
+    Customer entries prefer the server-enriched masked-email + id ``name``
+    (raw values mask here, never raw); owner entries prefer the resolved
+    ``name`` enrichment.
+    """
+    scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
+    if not ranked:
+        return f"No tickets to rank by {group_by} ({metric}, {scope}; {total} ticket(s) scanned)."
+    lines = [f"Top {group_by} by {metric} ({scope}; {total} ticket(s) scanned):"]
+    for index, entry in enumerate(ranked, start=1):
+        name = entry.get("name") or entry.get("value", "?")
+        if group_by == "customer":
+            # Server-enriched names already carry the masked-email + id
+            # display and pass through unchanged; raw values mask here.
+            name = _mask_customer(name)
+        lines.append(f"{index}. {name} — {entry.get('count', 0)}")
+    if group_by in ("owner", "customer"):
+        owners = ", ".join(sorted(AUTOMATION_OWNERS))
+        lines.append(f"Automation accounts ({owners}) are excluded from {group_by} rankings.")
     return "\n".join(lines)

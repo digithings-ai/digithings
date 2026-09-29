@@ -214,6 +214,62 @@ describe('EventsTab timeline wiring', () => {
   });
 });
 
+describe('EventsTab opinion matching across source-switched twins (#4739)', () => {
+  // The calendar table is append-only across sources: a te- row retired by twin
+  // cleanup (or hidden by read-model dedup) lives on as a gb- twin with the same
+  // name+date but a different external_id. An opinion snapshot linked to the dead
+  // te- id must still match the surviving gb- row via the name+date fallback —
+  // otherwise the desk commentary silently disappears from the event.
+  const gbRow = row({
+    id: 101,
+    event_date: '2026-09-29',
+    event_time: '13:30',
+    country: 'EU',
+    event_name: 'CPI Flash Estimate y/y',
+    external_id: 'gb-EU-2026-09-29-cpi-flash-estimate-y-y',
+    event_datetime_utc: '2026-09-29T13:30:00Z',
+  });
+  const teOpinion = opinion({
+    event_key: 'eu-cpi-flash-2026-09-29',
+    event_name: 'CPI Flash Estimate y/y',
+    event_date: '2026-09-29',
+    calendar_external_id: 'te-EU-2026-09-29-spanish-flash-cpi-y-y',
+    mentions: 7,
+    brokers: ['Desk Alpha'],
+  });
+
+  it('matches an id-linked opinion to the surviving gb- twin via name+date fallback', () => {
+    const html = render({ events: [gbRow], opinions: [teOpinion] });
+    // The mentions badge only renders inside the evidence Button branch, i.e.
+    // iff matchOpinions found the opinion for this row.
+    expect(html).toContain('>7</span>');
+  });
+
+  it('does not match the fallback when name+date disagree', () => {
+    const html = render({
+      events: [gbRow],
+      opinions: [{ ...teOpinion, event_name: 'Unrelated Release' }],
+    });
+    expect(html).not.toContain('>7</span>');
+  });
+
+  it('still prefers the exact external_id join when the linked row exists', () => {
+    const teRow = row({
+      id: 102,
+      event_date: '2026-09-29',
+      event_time: '09:30',
+      country: 'EU',
+      event_name: 'CPI Flash Estimate y/y',
+      external_id: 'te-EU-2026-09-29-spanish-flash-cpi-y-y',
+      event_datetime_utc: '2026-09-29T09:30:00Z',
+    });
+    const html = render({ events: [teRow, gbRow], opinions: [teOpinion] });
+    // Both rows match (te- exactly, gb- via fallback) — the opinion stays
+    // visible on either rather than orphaned from one.
+    expect(html.match(/>7<\/span>/g)).toHaveLength(2);
+  });
+});
+
 describe('eventsToTimeline shared mapper', () => {
   it('maps calendar rows to the timeline event shape', () => {
     const mapped = eventsToTimeline(events);

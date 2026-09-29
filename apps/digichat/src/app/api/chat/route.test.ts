@@ -155,6 +155,30 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(res.status).toBe(401);
   });
 
+  it("returns 503 license_revoked before auth when the license latch is revoked", async () => {
+    const { applyHeartbeatResult, resetLicenseStateForTests } = await import(
+      "@/lib/license/state"
+    );
+    try {
+      resetLicenseStateForTests();
+      applyHeartbeatResult("denied", "heartbeat_deny_revoked");
+      vi.mocked(requireDigiChatAuth).mockClear();
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: [{ id: "1", role: "user", parts: [] }] }),
+        })
+      );
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: "license_revoked" });
+      expect(res.headers.get("retry-after")).toBeNull();
+      expect(vi.mocked(requireDigiChatAuth)).not.toHaveBeenCalled();
+    } finally {
+      resetLicenseStateForTests();
+    }
+  });
+
   it("returns 503 when embed gate blocks anonymous embed", async () => {
     vi.mocked(resolveChatTenantContext).mockResolvedValue(
       new Response(JSON.stringify({ error: "embed_disabled" }), { status: 503 })
@@ -564,6 +588,61 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       headers?: Record<string, string>;
     };
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+  });
+
+  it("forwards X-Digi-License when the container holds a license (spec §7.1)", async () => {
+    const { generateTestKeypair, mintLicenseJwt } = await import(
+      "@/lib/license/jwt-fixtures"
+    );
+    const state = await import("@/lib/license/state");
+    try {
+      const { publicKeyPem, privateKeyPem } = generateTestKeypair();
+      const token = mintLicenseJwt(privateKeyPem);
+      process.env.DIGICHAT_LICENSE_JWT = token;
+      process.env.DIGIKEY_PUBLIC_KEY_PEM = publicKeyPem;
+      state.initLicenseStateAtStartup();
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-License"]).toBe(token);
+    } finally {
+      state.resetLicenseStateForTests();
+      delete process.env.DIGICHAT_LICENSE_JWT;
+      delete process.env.DIGIKEY_PUBLIC_KEY_PEM;
+    }
+  });
+
+  it("omits X-Digi-License when unlicensed (spec §7.1)", async () => {
+    const state = await import("@/lib/license/state");
+    try {
+      state.resetLicenseStateForTests();
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-License"]).toBeUndefined();
+    } finally {
+      state.resetLicenseStateForTests();
+    }
   });
 
   it("ignores X-Digi-Force-Tool on regenerate (send-only)", async () => {
