@@ -230,6 +230,8 @@ describe('getTradeIdeas', () => {
     expect(tradeIdeasDb.selectColumns).toContain('evidence');
     expect(tradeIdeasDb.selectColumns).toContain('citations');
     expect(tradeIdeasDb.selectColumns).toContain('as_of');
+    expect(tradeIdeasDb.selectColumns).toContain('timeframe');
+    expect(tradeIdeasDb.selectColumns).toContain('idea_id');
   });
 
   it('reads the board by exact run_date and does not query further when it has rows', async () => {
@@ -269,21 +271,24 @@ describe('getTradeIdeas', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0].idea_id).toBe('carried-episode');
-    // Bounded to boards on/before today AND refreshed by today's publish, so a closed
-    // episode (not republished) can never resurface on the board.
+    // Bounded to boards on/before today, newest-refresh-first with headroom past
+    // the board cap (the limit applies pre-dedupe), and NO clock-midnight bound —
+    // "today's publish" is anchored to the last-publish instant in code, not SQL.
     expect(tradeIdeasDb.lte).toEqual([['run_date', '2026-09-28']]);
-    expect(tradeIdeasDb.gte).toEqual([['as_of', '2026-09-28T00:00:00.000Z']]);
-    expect(tradeIdeasDb.limits).toEqual([10]);
+    expect(tradeIdeasDb.gte).toEqual([]);
+    expect(tradeIdeasDb.order).toContainEqual(['as_of', { ascending: false }]);
+    expect(tradeIdeasDb.limits).toEqual([50]);
   });
 
   it('keeps only the newest row per episode in the fallback', async () => {
     tradeIdeasDb.responses = [
       { data: [], error: null },
       {
+        // Newest-refresh-first, as the fallback query orders them.
         data: [
-          { run_date: '2026-09-25', rank: 2, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1' },
-          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1' },
-          { run_date: '2026-09-24', rank: 2, pair: 'USD/JPY', direction: 'long', idea_id: 'ep-2' },
+          { run_date: '2026-09-25', rank: 2, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1', as_of: '2026-09-28T22:26:00+00:00' },
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'ep-1', as_of: '2026-09-28T22:25:00+00:00' },
+          { run_date: '2026-09-24', rank: 2, pair: 'USD/JPY', direction: 'long', idea_id: 'ep-2', as_of: '2026-09-28T22:24:00+00:00' },
         ],
         error: null,
       },
@@ -292,6 +297,69 @@ describe('getTradeIdeas', () => {
     const rows = await getTradeIdeas('2026-09-28');
 
     expect(rows.map((r) => r.idea_id)).toEqual(['ep-1', 'ep-2']);
+  });
+
+  it('stays empty when nothing published since the board date began', async () => {
+    // The latest publish is yesterday's — a closed-episode day must never
+    // resurface stale rows, even though boards on/before today exist.
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'stale', as_of: '2026-09-27T22:26:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    expect(await getTradeIdeas('2026-09-28')).toEqual([]);
+  });
+
+  it('counts a publish that crossed UTC midnight as the run it belongs to', async () => {
+    // Late run for the 28th published at 00:10Z on the 29th: the rows satisfy a
+    // next-day clock bound, but the last-publish anchor keeps them on the 28th's
+    // board — and off the 29th's until the 29th publishes for real.
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          { run_date: '2026-09-24', rank: 1, pair: 'EUR/USD', direction: 'short', idea_id: 'late', as_of: '2026-09-29T00:10:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows.map((r) => r.idea_id)).toEqual(['late']);
+  });
+
+  it('keeps only the latest publish batch, then caps the board', async () => {
+    const batch = Array.from({ length: 11 }, (_, i) => ({
+      run_date: '2026-09-24',
+      rank: i + 1,
+      pair: `PAIR${i}`,
+      direction: 'long',
+      idea_id: `batch-${i}`,
+      as_of: '2026-09-28T22:26:00+00:00',
+    }));
+    tradeIdeasDb.responses = [
+      { data: [], error: null },
+      {
+        data: [
+          ...batch,
+          // An older publish's row inside the over-fetch window: outside the
+          // batch grace, so it must not displace (or join) today's board.
+          { run_date: '2026-09-23', rank: 1, pair: 'OLD', direction: 'short', idea_id: 'old-batch', as_of: '2026-09-28T21:00:00+00:00' },
+        ],
+        error: null,
+      },
+    ];
+
+    const rows = await getTradeIdeas('2026-09-28');
+
+    expect(rows).toHaveLength(10);
+    expect(rows.map((r) => r.idea_id)).not.toContain('old-batch');
   });
 
   it('stays empty when the board date never published', async () => {
@@ -312,6 +380,10 @@ describe('getTradeIdeaArchive', () => {
     expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
     expect(tradeIdeasDb.selectColumns).toContain('thesis');
     expect(tradeIdeasDb.selectColumns).toContain('catalyst');
+    // Same board columns as getTradeIdeas (idea identity included) so
+    // archive↔board joins on episode identity never miss.
+    expect(tradeIdeasDb.selectColumns).toContain('idea_id');
+    expect(tradeIdeasDb.selectColumns).toContain('timeframe');
     expect(tradeIdeasDb.order[0]).toEqual(['run_date', { ascending: false }]);
     expect(tradeIdeasDb.order[1]).toEqual(['rank', { ascending: true }]);
   });

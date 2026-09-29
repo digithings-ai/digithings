@@ -530,16 +530,30 @@ export function sortTodayBriefs(briefs: FxBriefRow[]): FxBriefRow[] {
 }
 
 const TRADE_IDEA_BOARD_COLUMNS =
-  'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of, idea_id';
+  'run_date, rank, pair, direction, timeframe, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of, idea_id';
 
 /** Cap on the carried-episode fallback so one broken date can't pull the archive. */
 const CARRIED_BOARD_LIMIT = 10;
 
 /**
+ * Over-fetch the fallback so twins can't eat the board's slots: the query limit
+ * applies pre-dedupe, so without headroom distinct carried episodes past the
+ * limit would be silently dropped. Sliced back to {@link CARRIED_BOARD_LIMIT}
+ * after {@link dedupeEpisodes}.
+ */
+const CARRIED_BOARD_OVERFETCH = 50;
+
+/**
+ * Rows refreshed within this window of the latest publish count as one publish
+ * batch (a publish writes its rows within seconds; the grace covers retries).
+ */
+const CARRIED_BATCH_WINDOW_MS = 15 * 60 * 1000;
+
+/**
  * Collapse rows that are the same episode published on several board dates.
  *
- * Ordered newest-board-first by the caller, so the first sighting wins. Falls back
- * to the axis when `idea_id` is absent (pre-identity rows).
+ * Ordered newest-refresh-first by the caller, so the first sighting wins. Falls
+ * back to the axis when `idea_id` is absent (pre-identity rows).
  */
 function dedupeEpisodes(rows: FxTradeIdeaRow[]): FxTradeIdeaRow[] {
   const seen = new Set<string>();
@@ -559,10 +573,17 @@ function dedupeEpisodes(rows: FxTradeIdeaRow[]): FxTradeIdeaRow[] {
  * A CONTINUED episode is written back to its ORIGIN run_date (trade-episodes,
  * 2026-09-23) so identity and revision update in place — which means an exact-date
  * match misses an idea that originated earlier and silently empties today's board.
- * When the exact-date query comes back empty we fall back to the episode rows that
- * today's publish refreshed (`as_of` on the board date) but keyed to an earlier date:
- * precisely a carried idea the board would otherwise hide. Rows not republished
- * today — closed episodes, or a day when nothing ran — stay excluded.
+ * When the exact-date query comes back empty we fall back to the latest publish's
+ * batch: the freshest `as_of` over boards on/before today, plus rows refreshed
+ * within {@link CARRIED_BATCH_WINDOW_MS} of it (one publish), deduped to one row
+ * per episode. That is precisely a carried idea the board would otherwise hide.
+ *
+ * "Today's publish" is anchored to the last-publish instant, NOT to UTC midnight:
+ * a publish that crosses midnight (late run, retry, ET-evening schedule) still
+ * counts as the run it belongs to, so yesterday's rows can never satisfy today's
+ * board by clock accident. Conversely, when nothing has published since the board
+ * date began — closed episodes, or a day when nothing ran — the guard returns `[]`
+ * instead of resurfacing stale rows.
  */
 export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
@@ -575,17 +596,24 @@ export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> 
       .order('rank', { ascending: true })
   );
   if (rows?.length) return rows;
-  const carried = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+  // Newest-refresh-first so the freshest rows win the over-fetch window (the
+  // query limit applies pre-dedupe; see CARRIED_BOARD_OVERFETCH).
+  const recent = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
       .select(TRADE_IDEA_BOARD_COLUMNS)
       .lte('run_date', runDate)
-      .gte('as_of', `${runDate}T00:00:00.000Z`)
-      .order('run_date', { ascending: false })
-      .order('rank', { ascending: true })
-      .limit(CARRIED_BOARD_LIMIT)
+      .order('as_of', { ascending: false })
+      .limit(CARRIED_BOARD_OVERFETCH)
   );
-  return dedupeEpisodes(carried ?? []);
+  const latest = recent && recent.length ? recent[0].as_of : undefined;
+  const latestMs = latest ? Date.parse(latest) : NaN;
+  if (!Number.isFinite(latestMs) || latestMs < Date.parse(`${runDate}T00:00:00.000Z`)) return [];
+  const batch = (recent ?? []).filter((r) => {
+    const t = Date.parse(r.as_of || '');
+    return Number.isFinite(t) && t >= latestMs - CARRIED_BATCH_WINDOW_MS;
+  });
+  return dedupeEpisodes(batch).slice(0, CARRIED_BOARD_LIMIT);
 }
 
 /**
@@ -632,9 +660,7 @@ export async function getTradeIdeaArchive(): Promise<FxTradeIdeaRow[]> {
   const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
     sb
       .from('fx_trade_ideas_snapshot')
-      .select(
-        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of',
-      )
+      .select(TRADE_IDEA_BOARD_COLUMNS)
       .order('run_date', { ascending: false })
       .order('rank', { ascending: true }),
   );
