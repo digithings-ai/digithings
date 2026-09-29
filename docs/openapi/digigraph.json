@@ -84,6 +84,18 @@
             "description": "Deprecated and IGNORED. Accepted only so clients that still send it do not get a 422; its value never reaches graph state. The research system prompt is operator-configured only \u2014 project config (agents.research_system_prompt) or the tenant corpus map (DIGI_TENANT_CORPUS_MAP) \u2014 so a caller cannot inject its own system prompt (CWE-639 / prompt injection).",
             "title": "Research System Prompt"
           },
+          "search_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request web_search engine (X-Digi-Search-Engine). One of auto, internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto for the in-house engine; unknown values fail at the digisearch hub (#4722).",
+            "title": "Search Engine"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -566,6 +578,18 @@
             ],
             "description": "Per-request response language code (X-Digi-Language). One of the curated codes in digigraph.languages.LANGUAGE_NAMES; unrecognized values are ignored.",
             "title": "Response Language"
+          },
+          "search_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request web_search engine (X-Digi-Search-Engine). One of auto, internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto for the in-house engine; unknown values fail at the digisearch hub (#4722).",
+            "title": "Search Engine"
           },
           "session_id": {
             "anyOf": [
