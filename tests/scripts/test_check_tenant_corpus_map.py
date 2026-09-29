@@ -248,6 +248,42 @@ def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
     assert len(set(prompts.values())) == 1, "occ researchSystemPrompt drifted across maps"
 
 
+#: Runtime MCP union exposes Zammad tools as ``zammad_<name>`` (#4749 / #4750).
+#: Bare recipe names teach the model ``ticket_report`` etc. → ``Unknown tool``.
+_OCC_ZAMMAD_PREFIXED_TOOLS = (
+    "zammad_aggregate_tickets",
+    "zammad_search_tickets",
+    "zammad_get_ticket",
+    "zammad_ticket_report",
+)
+
+
+def test_real_blobs_occ_prompt_uses_zammad_prefixed_tool_names(ccm: Any) -> None:
+    """OCC recipes must name the prefixed tools the runtime actually exposes (#4750).
+
+    Parity alone is not enough: three identical bare-name prompts still strand
+    the model on ``Unknown tool: ticket_report``. Pin the full ``zammad_`` names
+    and refuse bare recipe tokens that lack the server prefix.
+    """
+    raw = _load_raw_corpus_maps(ccm)
+    prompt = raw["compose"]["occ"]["researchSystemPrompt"]
+    assert isinstance(prompt, str) and prompt.strip()
+    for name in _OCC_ZAMMAD_PREFIXED_TOOLS:
+        assert name in prompt, f"OCC prompt missing prefixed tool {name!r}"
+    # Bare recipe names that previously shipped and caused Unknown-tool misses.
+    for bare in (
+        "aggregate_tickets",
+        "search_tickets",
+        "get_ticket",
+        "ticket_report",
+    ):
+        # Allow the substring only as part of the prefixed form.
+        assert f"zammad_{bare}" in prompt
+        assert bare not in prompt.replace(f"zammad_{bare}", ""), (
+            f"OCC prompt still teaches bare tool name {bare!r}"
+        )
+
+
 def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
     """digithings entries stay prompt-free in all three maps (generic project prompt)."""
     raw = _load_raw_corpus_maps(ccm)

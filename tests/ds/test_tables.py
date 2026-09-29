@@ -52,3 +52,38 @@ def test_compare_int_float_equality_ignores_bool():
     assert _compare("ne", True, 1) is True
     assert _compare("eq", 2**53 + 1, 2**53) is False
     assert _compare("ne", 2**53 + 1, 2**53) is True
+
+
+def test_compare_datetime_strings_use_instant_not_lexicographic():
+    """ISO instants with Z/+00:00 must compare as times (Zammad windows, #4729).
+
+    Pre-tables-lib filters returned False for date-string inequalities; the
+    shared ``_compare`` path parses ISO and compares instants. A lexicographic
+    trap would still pass naive ``2026-09-20`` vs ``2026-09-25`` ASCII order,
+    so pin a same-day hour ordering and aware-datetime vs ISO string.
+    """
+    from datetime import datetime, timezone
+
+    from digisearch.core.tables import _compare
+
+    earlier = "2026-09-25T09:00:00Z"
+    later = "2026-09-25T10:00:00+00:00"
+    assert _compare("lt", earlier, later) is True
+    assert _compare("ge", later, earlier) is True
+    assert _compare("gt", earlier, later) is False
+    # Aware datetime vs ISO string (ticket rows mix shapes).
+    aware = datetime(2026, 9, 25, 9, 0, tzinfo=timezone.utc)
+    assert _compare("le", aware, later) is True
+    assert _compare("gt", aware, later) is False
+
+
+def test_apply_filters_updated_at_window_keeps_rows_inside_range():
+    """since_days-style windows filter on updated_at via ge/lt datetime compare."""
+    out = apply_filters(
+        ROWS,
+        [
+            FilterClause(field="updated_at", op="ge", value="2026-09-25T00:00:00Z"),
+            FilterClause(field="updated_at", op="lt", value="2026-09-26T00:00:00Z"),
+        ],
+    )
+    assert [r["id"] for r in out] == [2]

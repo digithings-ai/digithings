@@ -136,6 +136,34 @@ def test_memo_hit_returns_an_equal_copy() -> None:
     assert first is not second
 
 
+def test_memo_miss_returns_a_copy_so_first_reader_cannot_poison_cache() -> None:
+    """#4617 miss-path: return ``list(resolved)``, not the cached list itself.
+
+    Before the fix the first reader received the same list object stored in the
+    memo. Mutating that list (append/clear) poisoned every later hit — the
+    preflight snapshot and direction phase would disagree silently.
+    """
+    client, gets = _counting_client(canned_reads={fo.OUTCOMES: [_healthy_row()]})
+    memo: fo.ResolvedOutcomesMemo = {}
+    state = _state()
+
+    first = _load_cutoff_outcomes(client=client, state=state, resolved_outcomes_memo=memo)
+    assert len(gets) == 1
+    assert len(first) == 1
+    original_id = str(first[0].outcome_id)
+    first.clear()
+
+    second = _load_cutoff_outcomes(client=client, state=state, resolved_outcomes_memo=memo)
+    assert len(gets) == 1
+    assert len(second) == 1
+    assert str(second[0].outcome_id) == original_id
+    assert first is not second
+    # Cached cohort is still the healthy row, not the mutated miss return.
+    cached = next(iter(memo.values()))
+    assert len(cached) == 1
+    assert str(cached[0].outcome_id) == original_id
+
+
 def test_memo_none_reads_directly_each_time() -> None:
     client, gets = _counting_client(canned_reads={fo.OUTCOMES: [_healthy_row()]})
     state = _state()
