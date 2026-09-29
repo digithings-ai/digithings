@@ -693,7 +693,10 @@ python digiquant/scripts/verify_strategy_calibrations_rls.py
 The separate `pipeline-digiquant-prices.yml` job owns `position_events` writes at the
 market open and the surviving macro ingest; price/technicals ingest moved to the R2
 refresh (`pipeline-market-data-refresh.yml`) and migration 127 dropped the Supabase
-`price_history`/`price_technicals` tables (#4053). It does
+`price_history`/`price_technicals` tables (#4053). Phase 1 of #4761 moves those
+clocks onto digithings-cron `kind: container` → the private digiquant-runner
+Worker (`docs/ops/digiquant-runner.md`). The market-data workflow keeps
+`workflow_dispatch` and has no `schedule`. It does
 **not** regenerate these public tearsheets. Two UTC crons cover New York daylight
 and standard time. `market_open_gate.py` selects the season-correct cron and keeps
 it valid after the open even when GitHub delivers it late, while rejecting the

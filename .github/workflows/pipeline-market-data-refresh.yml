@@ -1,5 +1,10 @@
 # Daily R2 market-data refresh (#3780, Task 6).
 #
+# The clock is digithings-cron -> digiquant-runner (issue #4761). This file is
+# a manual override only. Do not add a schedule key; enabling the workflow
+# does not restore a clock. GITHUB_OVERRIDE_JOBS on digithings-cron is the
+# rollback that workflow_dispatch-es this file.
+#
 # yfinance/FRED/Yahoo-FX latest -> merge into new immutable R2 generations
 # via scripts/refresh_market_data_r2.py. Fail-soft: on a fetch failure the
 # previous objects keep serving, the manifest is written with stale=true,
@@ -10,9 +15,6 @@
 # as the Task 5 backfill. Without it no generation can be recorded.
 name: market-data-refresh
 on:
-  schedule:
-    - cron: "0 13 * * *"    # morning: crypto + previous-settled equity bars
-    - cron: "30 21 * * *"   # evening: settled US close before the 22:00 research-metrics run (#4013 D4)
   workflow_dispatch: {}
 permissions:
   contents: read
