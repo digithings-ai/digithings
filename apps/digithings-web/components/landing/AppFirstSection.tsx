@@ -16,11 +16,13 @@ import { ArchitectureTour } from "@digithings/ui";
 import { APP_PRESETS } from "@/lib/appPresets";
 import {
   DIGI_LAYERS,
+  EMAIL_OPTIONS,
   PROVIDER_LAYERS,
   morphSpec,
   providerSpec,
   type Layer,
   type LayerId,
+  type LayerOption,
   type StackPick,
 } from "@/lib/stackCatalog";
 import { emailSwapped, revealedLayers, swappedBoxes } from "@/lib/whyStory";
@@ -57,12 +59,19 @@ const LAYERS_BY_SIDE: Record<"provider" | "digi", Layer[]> = {
   digi: DIGI_LAYERS,
 };
 
+type MenuLayer = LayerId | "email";
+
 interface Popover {
   side: "provider" | "digi";
-  layer: LayerId;
-  x: number;
-  y: number;
+  layer: MenuLayer;
+  boxId: string;
+  left: number;
+  top: number;
+  above: boolean;
+  maxH: number;
 }
+
+const MENU_W = 248;
 
 export function AppFirstSection() {
   const [appId, setAppId] = useState(APP_PRESETS[0].id);
@@ -73,6 +82,8 @@ export function AppFirstSection() {
     ),
   );
   const [pop, setPop] = useState<Popover | null>(null);
+  const [emailId, setEmailId] = useState("sendgrid");
+  const menuRef = useRef<HTMLDivElement>(null);
   const [tourStep, setTourStep] = useState(0);
   const [tourMode, setTourMode] = useState<string>("static");
   /* The graph draws itself the first time it scrolls into view and again on
@@ -105,7 +116,7 @@ export function AppFirstSection() {
     sourcesLabel: preset.providerSources,
     topology: preset.topology,
   };
-  const theirsSpec = providerSpec(effProvider, workload, draw);
+  const theirsSpec = providerSpec(effProvider, workload, { ...draw, emailId });
   /* The digithings side is drawn finished from its first step: every box
      already carries its digithings label, and the walk only moves the camera. */
   const lastBeat = preset.leftSteps.length + preset.morphSteps.length - 1;
@@ -114,6 +125,7 @@ export function AppFirstSection() {
     replaced: revealedLayers(preset, lastBeat),
     boxes: swappedBoxes(preset, lastBeat),
     email: emailSwapped(preset, lastBeat),
+    emailId,
     owned: true,
   });
   const onDigiSide = tourStep >= preset.leftSteps.length;
@@ -135,8 +147,28 @@ export function AppFirstSection() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPop(null);
     };
+    /* Any scroll that moves the page or the graph dismisses the menu. A
+       scroll inside the menu itself (a long model list) does not. */
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      setPop(null);
+    };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (menuRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(`[id="arch-service-${pop.boxId}"]`)) return;
+      setPop(null);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("pointerdown", onPointer);
+    };
   }, [pop]);
 
   useEffect(() => {
@@ -206,29 +238,64 @@ export function AppFirstSection() {
       [preset.id]: { ...prev[preset.id], [side]: { ...prev[preset.id][side], [layer]: option } },
     }));
 
-  const onStageClick = (event: MouseEvent<HTMLDivElement>) => {
+  const openMenu = (side: "provider" | "digi", layer: MenuLayer, node: Element, boxId: string) => {
+    const host = sectionRef.current;
+    if (!host) return;
+    const nodeRect = node.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    let left = nodeRect.left - hostRect.left;
+    left = Math.max(8, Math.min(left, hostRect.width - MENU_W - 8));
+    const spaceBelow = window.innerHeight - nodeRect.bottom - 16;
+    const spaceAbove = nodeRect.top - 16;
+    const above = spaceBelow < 200 && spaceAbove > spaceBelow;
+    const top = above ? nodeRect.top - hostRect.top : nodeRect.bottom - hostRect.top + 6;
+    const maxH = Math.max(140, Math.min(352, above ? spaceAbove - 8 : spaceBelow - 8));
+    setPop({ side, layer, boxId, left, top, above, maxH });
+  };
+
+  const onStageClick = (event: MouseEvent<HTMLElement>) => {
+    if (menuRef.current?.contains(event.target as Node)) return;
     const node = (event.target as Element).closest?.('[id^="arch-service-"]');
     if (!node) return;
     const boxId = node.id.replace("arch-service-", "");
+    if (boxId === "email") {
+      if (onDigiSide) return;
+      if (pop?.boxId === "email") {
+        setPop(null);
+        return;
+      }
+      openMenu("provider", "email", node, boxId);
+      return;
+    }
     const layer = PROVIDER_LAYER_BY_BOX[boxId];
     if (!layer) return;
     const side = onDigiSide ? "digi" : "provider";
-    setPop({
-      side,
-      layer,
-      x: Math.min(event.clientX, window.innerWidth - 280),
-      y: Math.min(event.clientY + 12, window.innerHeight - 320),
-    });
+    if (pop?.boxId === boxId && pop.side === side) {
+      setPop(null);
+      return;
+    }
+    openMenu(side, layer, node, boxId);
   };
 
-  const popLayer = pop ? LAYERS_BY_SIDE[pop.side].find((layer) => layer.id === pop.layer) : undefined;
-  const popPick = pop ? (pop.side === "provider" ? effProvider : effDigi) : pick.provider;
+  const popLayer =
+    pop && pop.layer !== "email"
+      ? LAYERS_BY_SIDE[pop.side].find((layer) => layer.id === pop.layer)
+      : undefined;
+  const popOptions: LayerOption[] | undefined =
+    pop?.layer === "email" ? EMAIL_OPTIONS : popLayer?.options;
+  const popTitle = pop?.layer === "email" ? "Email" : popLayer?.label;
+  const popSelected =
+    pop?.layer === "email"
+      ? emailId
+      : pop && pop.layer !== "email"
+        ? (pop.side === "provider" ? effProvider : effDigi)[pop.layer]
+        : "";
 
   return (
     <section
       ref={sectionRef}
       aria-label="Their stack or the digithings stack"
-      className={`whyx${build.state === "pending" ? " arch-build-pending" : ""}${build.state === "run" ? " arch-build" : ""}${nextId ? " whyx--leaving" : ""}`}
+      className={`whyx relative${build.state === "pending" ? " arch-build-pending" : ""}${build.state === "run" ? " arch-build" : ""}${nextId ? " whyx--leaving" : ""}`}
       onClick={onStageClick}
     >
       <ArchitectureTour
@@ -315,39 +382,42 @@ export function AppFirstSection() {
         ]}
       />
 
-      {pop && popLayer ? (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setPop(null)} aria-hidden="true" />
-          <div
-            role="listbox"
-            aria-label={`${popLayer.label} options`}
-            className="fixed z-50 flex w-[16rem] flex-col gap-[0.25rem] border border-hair bg-surface p-[0.7rem] shadow-[0_18px_50px_-20px_rgba(0,0,0,0.6)]"
-            /* Physical on purpose: placed from the pointer's clientX/clientY. */
-            style={{ left: Math.max(pop.x, 8), top: Math.max(pop.y, 8) }}
-          >
-            <span className={LABEL}>{popLayer.label}</span>
-            {popLayer.options.map((option, i) => (
-              <button
-                key={option.id}
-                type="button"
-                role="option"
-                aria-selected={popPick[pop.layer] === option.id}
-                autoFocus={i === 0}
-                className={`px-[0.6rem] py-[0.5rem] text-start font-mono text-[0.8rem] ${
-                  popPick[pop.layer] === option.id
-                    ? "text-ink shadow-[inset_0_0_0_1px_var(--accent)]"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-                onClick={() => {
-                  setPick(pop.side, pop.layer, option.id);
-                  setPop(null);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
+      {pop && popOptions && popTitle ? (
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-label={`${popTitle} options`}
+          className="absolute z-30 flex w-[15.5rem] flex-col overflow-y-auto border border-hair bg-surface py-[0.35rem] shadow-[0_12px_32px_-20px_rgba(0,0,0,0.45)]"
+          style={{
+            left: pop.left,
+            top: pop.top,
+            maxHeight: pop.maxH,
+            transform: pop.above ? "translateY(calc(-100% - 6px))" : undefined,
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className={`${LABEL} px-[0.95rem] pt-[0.4rem] pb-[0.45rem]`}>{popTitle}</span>
+          {popOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="option"
+              aria-selected={popSelected === option.id}
+              className={`mx-[0.4rem] px-[0.75rem] py-[0.55rem] text-start font-mono text-[0.84rem] leading-[1.35] ${
+                popSelected === option.id
+                  ? "bg-bg text-ink shadow-[inset_0_0_0_1px_var(--accent)]"
+                  : "text-ink-soft hover:bg-bg hover:text-ink"
+              }`}
+              onClick={() => {
+                if (pop.layer === "email") setEmailId(option.id);
+                else setPick(pop.side, pop.layer, option.id);
+                setPop(null);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       ) : null}
     </section>
   );
