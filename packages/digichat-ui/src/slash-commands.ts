@@ -354,6 +354,7 @@ export function parseSlashInput(raw: string, extra?: readonly SlashDef[]): Parse
 
 function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "websearch") return visibility?.webSearch === true;
+  if (cmd.id === "search-engine") return visibility?.webSearch === true;
   if (cmd.id === "byok") return visibility?.byok !== false;
   if (cmd.id === "digisearch") return visibility?.digisearch !== false;
   if (cmd.id === "digivault") return visibility?.digivault !== false;
