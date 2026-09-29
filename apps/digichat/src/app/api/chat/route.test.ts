@@ -590,6 +590,61 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
   });
 
+  it("forwards X-Digi-License when the container holds a license (spec §7.1)", async () => {
+    const { generateTestKeypair, mintLicenseJwt } = await import(
+      "@/lib/license/jwt-fixtures"
+    );
+    const state = await import("@/lib/license/state");
+    try {
+      const { publicKeyPem, privateKeyPem } = generateTestKeypair();
+      const token = mintLicenseJwt(privateKeyPem);
+      process.env.DIGICHAT_LICENSE_JWT = token;
+      process.env.DIGIKEY_PUBLIC_KEY_PEM = publicKeyPem;
+      state.initLicenseStateAtStartup();
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-License"]).toBe(token);
+    } finally {
+      state.resetLicenseStateForTests();
+      delete process.env.DIGICHAT_LICENSE_JWT;
+      delete process.env.DIGIKEY_PUBLIC_KEY_PEM;
+    }
+  });
+
+  it("omits X-Digi-License when unlicensed (spec §7.1)", async () => {
+    const state = await import("@/lib/license/state");
+    try {
+      state.resetLicenseStateForTests();
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-License"]).toBeUndefined();
+    } finally {
+      state.resetLicenseStateForTests();
+    }
+  });
+
   it("ignores X-Digi-Force-Tool on regenerate (send-only)", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
