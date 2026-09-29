@@ -41,6 +41,13 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
 SystemExit message on missing credentials/URIs (fail closed, like backfill).
 
+Missing ``FRED_API_KEY`` (#4795) is not a stale failure. Those FRED series are
+omitted before the refresh loop, listed on the artifact as ``fred_skipped``,
+and left at their last seal. Yahoo FX, equities, and the rest of the universe
+still refresh, and the job exits 0 when they succeed. The skipped ``fred__*``
+generations stay stale until the Gloomberb migrate (#4794). A set key keeps
+the FRED fetch.
+
 Core macro mirror (#3780): the writers-stop paused the Supabase macro writers,
 but ``macro_series_observations`` is a carve-out table still read directly by
 twelve-x (Yahoo FX pair series). When core Supabase creds are present the
@@ -1195,6 +1202,29 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
     return adapter, manifest
 
 
+def drop_fred_without_key(
+    specs: list[tuple[str, str, str | None]],
+) -> tuple[list[tuple[str, str, str | None]], list[str]]:
+    """Drop FRED series when ``FRED_API_KEY`` is unset (#4795).
+
+    A missing key used to raise ``FetchError`` per series, which the stale
+    gate treats as a failed run. Phase 1 cron has no key: skip the series,
+    keep Yahoo and prices, and record the ids. ``fred__*`` R2 generations
+    stay at the last seal until #4794. A non-empty key returns ``specs``
+    unchanged.
+    """
+    if os.environ.get(FRED_API_KEY_ENV, "").strip():
+        return specs, []
+    kept: list[tuple[str, str, str | None]] = []
+    skipped: list[str] = []
+    for source, series, cadence in specs:
+        if source == "fred":
+            skipped.append(f"fred__{series}")
+            continue
+        kept.append((source, series, cadence))
+    return kept, skipped
+
+
 def _resolve_macro_specs(
     cli_specs: list[str], manifest_path: str
 ) -> list[tuple[str, str, str | None]]:
@@ -1272,10 +1302,13 @@ def main(argv: list[str] | None = None) -> int:
     macro_specs = (
         [] if args.skip_macro else _resolve_macro_specs(args.macro_series, args.macro_manifest)
     )
+    macro_specs, fred_skipped = drop_fred_without_key(macro_specs)
     print(
         f"universe: {len(universe)} tickers; {len(macro_specs)} macro series;"
         f" run={run} sealed={args.sealed}"
     )
+    if fred_skipped:
+        print(f"skip: FRED_API_KEY unset; {len(fred_skipped)} fred series left stale until #4794")
 
     if args.dry_run:
         for ticker in universe:
@@ -1349,6 +1382,7 @@ def main(argv: list[str] | None = None) -> int:
         "failed": [o["ticker"] for o in failed],
         "outcomes": outcomes,
         "core_macro_mirror": mirror,
+        "fred_skipped": fred_skipped,
         "manifest_sha": digest,
     }
     Path(args.manifest_out).write_text(json.dumps(artifact, indent=2, sort_keys=True))

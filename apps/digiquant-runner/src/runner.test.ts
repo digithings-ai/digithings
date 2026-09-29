@@ -65,7 +65,6 @@ function harness(): {
     kv: memoryKv(),
     port,
     scheduleAlarm: (delayMs) => alarms.push(delayMs),
-    fileIssue: async () => {},
     now: () => Date.parse("2026-09-29T13:00:00.000Z"),
   });
   return { session, starts, alarms, statuses };
@@ -162,15 +161,15 @@ describe("heartbeat", () => {
 });
 
 describe("data plane env", () => {
-  it("does not forward runner or issue tokens", () => {
+  it("does not forward the runner auth token", () => {
     const keys = Object.keys(
       dataPlaneEnv({
         RUNNER_AUTH_TOKEN: "nope",
-        GH_ISSUE_TOKEN: "nope",
         RUNNER_CONTAINER: {} as DurableObjectNamespace,
       }),
     );
     expect(keys).not.toContain("RUNNER_AUTH_TOKEN");
     expect(keys).not.toContain("GH_ISSUE_TOKEN");
+    expect(keys).toContain("FRED_API_KEY");
   });
 });

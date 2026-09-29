@@ -2,7 +2,8 @@
 
 `serve` binds 0.0.0.0:8080 inside the container. Child processes receive only
 the command's env allowlist plus a small interpreter baseline (PATH and
-friends). RUNNER_AUTH_TOKEN and GH_ISSUE_TOKEN stay on the Worker.
+friends). RUNNER_AUTH_TOKEN stays on the Worker. The runner does not file
+GitHub issues; a leftover GH_ISSUE_TOKEN is stripped and never required.
 """
 
 from __future__ import annotations

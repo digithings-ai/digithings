@@ -50,7 +50,6 @@ export type RunRecord = {
   git_sha: string;
   log_tail: string;
   started_at_ms: number;
-  failure_filed: boolean;
 };
 
 export type ContainerStatus = {
@@ -97,7 +96,6 @@ export type SessionDeps = {
   kv: RunnerKv;
   port: ContainerPort;
   scheduleAlarm: (delayMs: number) => void;
-  fileIssue: (run: RunRecord) => Promise<void>;
   now?: () => number;
 };
 
@@ -293,7 +291,6 @@ export class RunnerSession {
       git_sha: "unknown",
       log_tail: "",
       started_at_ms: now,
-      failure_filed: false,
     };
   }
 
@@ -329,13 +326,11 @@ export class RunnerSession {
       run.exit_code = 124;
       run.finished_at = new Date(this.now()).toISOString();
       delete ledger.locks[group];
-      await this.maybeFile(run);
       return false;
     }
     if (!remote) return true;
     if (isTerminal(run.status)) {
       delete ledger.locks[group];
-      if (run.status !== "succeeded") await this.maybeFile(run);
       return false;
     }
     return true;
@@ -374,26 +369,9 @@ export class RunnerSession {
         delete ledger.locks[run.concurrency];
         run.status = "failed";
         run.finished_at = new Date(this.now()).toISOString();
-        await this.maybeFile(run);
       }
     }
     return started;
-  }
-
-  private async maybeFile(run: RunRecord): Promise<void> {
-    if (run.failure_filed || run.status === "succeeded") return;
-    const spec = COMMANDS[run.command]?.failure_issue;
-    if (!spec) {
-      run.failure_filed = true;
-      return;
-    }
-    try {
-      await this.deps.fileIssue(run);
-      run.failure_filed = true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(JSON.stringify({ error: "failure_issue", message }));
-    }
   }
 
   private async rollback(runId: string): Promise<void> {

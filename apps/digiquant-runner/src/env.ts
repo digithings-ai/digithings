@@ -4,8 +4,6 @@
  */
 export interface Env {
   RUNNER_AUTH_TOKEN?: string;
-  /** issues:write on digithings-ai/digithings. Worker only — not a container env. */
-  GH_ISSUE_TOKEN?: string;
   RUNNER_CONTAINER: DurableObjectNamespace;
   R2_ACCOUNT_ID?: string;
   R2_BUCKET?: string;
@@ -18,7 +16,7 @@ export interface Env {
   DIGIQUANT_RUNNER_GIT_SHA?: string;
 }
 
-/** Container envVars whitelist. Omits RUNNER_AUTH_TOKEN and GH_ISSUE_TOKEN. */
+/** Container envVars whitelist. Omits RUNNER_AUTH_TOKEN. FRED_API_KEY may be empty. */
 export function dataPlaneEnv(env: Env): Record<string, string> {
   return {
     R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",

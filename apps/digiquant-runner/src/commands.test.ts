@@ -37,4 +37,10 @@ describe("phase 1 commands", () => {
   it("rejects an unknown command", () => {
     expect(() => assertKnownCommand("house-run", raw)).toThrow(/unknown command/);
   });
+
+  it("does not declare GitHub failure issues", () => {
+    for (const spec of Object.values(raw)) {
+      expect(spec).not.toHaveProperty("failure_issue");
+    }
+  });
 });

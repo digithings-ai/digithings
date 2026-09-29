@@ -13,12 +13,6 @@ export type GatedStep = {
 
 export type CommandStep = ArgvStep | GatedStep;
 
-export type FailureIssueSpec = {
-  marker: string;
-  title: string;
-  labels: string[];
-};
-
 export type CommandSpec = {
   timeout_seconds: number;
   concurrency: string;
@@ -28,7 +22,6 @@ export type CommandSpec = {
   env: string[];
   steps: CommandStep[];
   publish?: string[];
-  failure_issue?: FailureIssueSpec;
 };
 
 export function loadCommands(json: unknown): Record<string, CommandSpec> {

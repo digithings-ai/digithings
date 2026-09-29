@@ -8,9 +8,11 @@
 #   printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 #
 #   RUNNER_AUTH_TOKEN          — Bearer on POST /v1/jobs (also set on digithings-cron)
-#   GH_ISSUE_TOKEN             — failure issues; Worker only, not injected into the container
 #   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
-#   FRED_API_KEY, CORE_POSTGRES_URI, CORE_SUPABASE_URL, CORE_SUPABASE_SERVICE_KEY
+#   CORE_POSTGRES_URI, CORE_SUPABASE_URL, CORE_SUPABASE_SERVICE_KEY
+#   FRED_API_KEY               — optional. Unset skips fred__* (#4795). Those
+#                                generations stay stale until #4794. Do not add
+#                                GH_ISSUE_TOKEN; this Worker does not file issues.
 #
 # Not on this Worker in Phase 1: broker credentials, Alpaca keys, provider keys.
 name = "digiquant-runner"
