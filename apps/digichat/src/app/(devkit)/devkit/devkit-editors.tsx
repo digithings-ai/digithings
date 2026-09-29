@@ -451,7 +451,7 @@ export function SecretRow({
         {label}
       </span>
       <span className="flex items-center gap-1">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-soft">
           {masked}
         </span>
         <Button type="button" dress="chat" onClick={() => setReplacing(true)}>
@@ -552,7 +552,7 @@ export function SwatchRow({
               tryCommit(e.target.value);
             }}
           />
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink-soft">
             {value ?? "not set"}
           </span>
           {onClear && value ? (
@@ -919,7 +919,7 @@ export function DevkitEditors({
           />
         ) : (
           <div className="flex items-start justify-between gap-2 py-0.5 text-xs">
-            <dt className="shrink-0 text-muted-foreground">slug</dt>
+            <dt className="shrink-0 text-ink-mute">slug</dt>
             <dd className="min-w-0 text-right font-mono break-words">{dep?.slug}</dd>
           </div>
         )}
@@ -1184,8 +1184,8 @@ export function DevkitEditors({
             </CardContent>
           </Card>
         ))}
-        <div className="flex flex-col gap-1 rounded border border-dashed p-1.5">
-          <span className="text-[11px] text-muted-foreground">Add tool</span>
+        <div className="flex flex-col gap-1 rounded-none border border-dashed border-hair p-1.5">
+          <span className="font-mono text-[11px] text-ink-mute">Add tool</span>
           <Input
             dress="chat"
             value={newTool.id}
@@ -1304,8 +1304,8 @@ export function DevkitEditors({
             </CardContent>
           </Card>
         ))}
-        <div className="flex flex-col gap-1 rounded border border-dashed p-1.5">
-          <span className="text-[11px] text-muted-foreground">Add server</span>
+        <div className="flex flex-col gap-1 rounded-none border border-dashed border-hair p-1.5">
+          <span className="font-mono text-[11px] text-ink-mute">Add server</span>
           <Input
             dress="chat"
             value={newServer.id}
@@ -1421,7 +1421,7 @@ export function DevkitEditors({
     <div className="flex flex-col gap-2">
       <nav
         aria-label="Editor groups"
-        className="sticky top-0 z-10 border-b border-hair bg-surface"
+        className="sticky top-0 z-10 flex flex-col gap-[0.1rem] border-b border-hair bg-surface py-1"
       >
         {GROUPS.map((group) => {
           const active = openGroup === group.id;
@@ -1431,10 +1431,10 @@ export function DevkitEditors({
               type="button"
               onClick={() => scrollToGroup(group.id)}
               aria-current={active ? "true" : undefined}
-              className={`devkit-navlink w-full border-l-2 px-2 py-1.5 text-left font-mono text-xs transition-colors motion-reduce:transition-none ${
+              className={`devkit-navlink w-full rounded-none border-s-2 px-[0.6rem] py-[0.28rem] text-left font-mono text-[0.82rem] no-underline transition-colors duration-150 ease-brand motion-reduce:transition-none ${
                 active
-                  ? "border-accent bg-accent/10 text-accent"
-                  : "border-transparent text-ink-mute hover:text-ink"
+                  ? "border-s-accent bg-accent-weak text-ink"
+                  : "border-s-transparent text-ink-soft hover:bg-accent-weak hover:text-ink"
               }`}
             >
               {group.label}
@@ -1455,9 +1455,9 @@ export function DevkitEditors({
           <Collapsible
             open={openGroup === group.id}
             onOpenChange={(isOpen) => setGroupFromTrigger(group.id, isOpen)}
-            className="group rounded-lg border"
+            className="group rounded-none border border-hair"
           >
-            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-2 py-1.5 font-mono text-xs font-semibold transition-colors hover:text-accent group-data-open:text-accent motion-reduce:transition-none">
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-2 py-1.5 font-mono text-xs font-semibold transition-colors hover:text-ink group-data-open:text-ink motion-reduce:transition-none">
               <span>{group.label}</span>
               <span
                 aria-hidden="true"
@@ -1465,14 +1465,14 @@ export function DevkitEditors({
               />
             </CollapsibleTrigger>
             <CollapsibleContent className="overflow-hidden transition-[height] duration-300 ease-out motion-reduce:transition-none data-open:h-[var(--collapsible-panel-height)] data-starting-style:h-0 data-ending-style:h-0 data-closed:h-0">
-              <div className="flex flex-col gap-2 border-t p-2">
+              <div className="flex flex-col gap-2 border-t border-hair p-2">
                 {group.sections.map((title) => (
                   <div
                     key={title}
                     id={sectionAnchorId(title)}
                     className="flex scroll-mt-28 flex-col gap-2"
                   >
-                    <h4 className="py-0.5 font-mono text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    <h4 className="px-[0.6rem] py-0.5 font-mono text-[0.68rem] font-medium tracking-[0.12em] text-ink-mute uppercase">
                       {title}
                     </h4>
                     {sectionBody(title)}
