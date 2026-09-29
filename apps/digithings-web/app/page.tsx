@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { Colophon, LayoutLines } from "@digithings/ui";
+import { Colophon } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { LandingPage } from "@/components/landing/LandingPage";
@@ -10,8 +10,8 @@ import { embedOriginForChat } from "@/lib/security-headers.mjs";
 //
 // The body of the page is `LandingPage` — the lean seven-section composition
 // the owner picked from the v14 review, refined in v15. This file keeps only
-// the shell: the persistent layout lines, the nav, the metadata, and the
-// footer.
+// the shell: the nav, the metadata, and the footer. The vertical rails live
+// in the root layout so every route shares them.
 //
 // The closing wordmark (v15 point 15) is `<Colophon … sweep />`: the giant
 // outlined `digithings` lockup with a bright band passing through it once as
@@ -41,7 +41,6 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <>
-      <LayoutLines />
       <DtNav />
 
       <main id="main" tabIndex={-1} className="landing relative z-10 pt-[var(--dq-nav-h)]">
