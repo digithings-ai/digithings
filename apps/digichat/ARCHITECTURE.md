@@ -231,7 +231,11 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/tenant.ts` | OIDC subject → tenant slug lookup |
 | `src/lib/api-key.ts` | Machine key validation (env bootstrap + bcrypt Postgres) |
 | `src/lib/migrate.ts` | Programmatic Drizzle migration runner |
-| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` |
+| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
+| `src/app/healthz/route.ts` | Auth-exempt liveness probe (`GET /healthz`) |
+| `src/lib/license/state.ts` | Customer-license verify + revoke latch (`globalThis`, fail-open) |
+| `src/lib/license/heartbeat.ts` | 24h license heartbeat sender (Bearer raw JWT, fail-open backoff) |
+| `src/lib/license/version.ts` | Shared version resolver (health + heartbeat) |
 | `src/components/chat-shell.tsx` | Sidebar + thread state manager |
 | `src/components/chat-panel.tsx` | `useChat` + message list + composer |
 | `src/components/connections-sheet.tsx` | Ecosystem side sheet |
@@ -244,8 +248,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 ## 3. API Surface
 
 All route handlers live under `src/app/api/`. Authentication is required on every
-endpoint except `GET /api/health` (which is unauthenticated to serve as a liveness
-probe).
+endpoint except `GET /api/health` (unauthenticated status probe) and
+`GET /healthz` (auth-exempt liveness probe, always `{"ok": true}`).
 
 ### Chat
 
@@ -284,7 +288,9 @@ probe).
 
 ### Health
 
-**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `apps/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable.
+**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version, license_status, license_detail? }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `apps/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable. `license_status` is always present (`unlicensed` | `valid` | `expired` | `revoked`); `license_detail` is a short reason enum. The license state never feeds the `ok` computation, so a revoked/expired license cannot crash-loop the container — turn-serving probes read `license_status` instead.
+
+**`GET /healthz`** — auth-exempt liveness probe (stack convention: root `AGENTS.md` § Liveness vs status). Always answers `{"ok": true}` with HTTP 200 in every license state; it never consults license state. Load balancers and orchestrator restart policy key on this route.
 
 ### Auth
 
@@ -860,7 +866,7 @@ send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
 Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
 Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
-`/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
+`/search-engine`, `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
 Enter opens JSON + field editors (`/mcp new` adds a session MCP). The **id** field stays a
 text input (custom ids allowed). Focus or typing opens a compact in-menu dropdown just
@@ -877,10 +883,10 @@ Picking a row (click or Enter on a highlight) autofills
 `label` / `url` / `auth` (token kept unless the id changes). Custom ids still type freely;
 operator rows keep id/url locked and hide the catalog. Snapshot only — no live Smithery / PulseMCP / registry
 fetch, and `@assistant-ui/react-mcp` is not installed. `/tools` lists every
-connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/language`,
+connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/search-engine`, `/language`,
 and the `/provider` roster) mark the current choice with the same filled disc as
 dropdown radio items (`CircleIcon`) — never the word “on”. Enter or click commits
-the choice and closes the menu. `/models`, `/effort`,
+the choice and closes the menu. `/models`, `/effort`, `/search-engine`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
 to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
@@ -921,9 +927,13 @@ only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; o
 may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
-`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
+(auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
+engine is the user pref, else the tenant `gate.searchEngine` default. An unset pref
+sends nothing (follow-tenant); an explicit `auto` is sent literally by the browser
+but omitted by the BFF, so it still beats a tenant default (#4724). digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
 variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is
@@ -1583,6 +1593,10 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
 | `DIGIKEY_URL` | digikey base URL | If using digikey |
 | `DIGIKEY_BFF_TOKEN` | BFF credential for digikey `bff_session` grant | If using digikey |
+| `DIGICHAT_LICENSE_JWT` | Customer license JWT, inline (file var wins when both set). Never logged/returned | Licensed deploys |
+| `DIGICHAT_LICENSE_FILE` | Path to a file containing only the license JWT (mounted secret). Wins over inline | Licensed deploys |
+| `DIGIKEY_PUBLIC_KEY_PEM` | One or more concatenated SPKI PEMs for offline license verify (rotation list) | Licensed deploys |
+| `DIGIKEY_ISSUER` | Expected license `iss` (default `http://127.0.0.1:8005`) | Licensed deploys |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL (health probe) | Recommended |
 | `DIGISMITH_INTERNAL_URL` | digismith base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL (health probe) | Optional |
@@ -1623,9 +1637,19 @@ dependencies. Image size is significantly smaller than a non-standalone build.
 ### Auto-migration
 
 `src/instrumentation.ts` is a Next.js instrumentation module. When `NEXT_RUNTIME=nodejs`
-(Node.js runtime, not edge) and `DIGICHAT_AUTO_MIGRATE=1`, it calls `runMigrate()`
+(Node.js runtime, not edge) it runs, in order: `initDigichatConfigAtStartup()`,
+`initLicenseStateAtStartup()` (pure local RS256 license verification — never touches
+the network, never throws, fail-open), and `startLicenseHeartbeat()` (24h sender plus
+one immediate fire-and-forget attempt; unlicensed containers never start a timer).
+The license step runs before the `DIGICHAT_AUTO_MIGRATE` early-return so it is not
+skipped in the common case. When `DIGICHAT_AUTO_MIGRATE=1`, it then calls `runMigrate()`
 which opens a single dedicated connection, runs all pending Drizzle migrations, and
 closes. This runs once per process start, before the server accepts requests.
+
+A `revoked` (heartbeat-learned) or `expired` (local `exp` + 5 min leeway) license
+refuses product traffic with `503 license_revoked` / `503 license_expired` on
+`POST /api/chat` (and the `POST /api/v1/chat` re-export) plus `POST /api/plan-proof`
+only; auth, config, embed-tenant, health, and all other routes keep answering.
 
 ---
 

@@ -69,9 +69,9 @@ _SYSTEM_PROMPT = (
 )
 
 
-def _live(query: str, top_n: int) -> list[WebSearchResult]:
+def _live(query: str, top_n: int, effort: str | None = None) -> list[WebSearchResult]:
     """Task 1 search seam — delegates to ``retrieve.live_search``."""
-    return live_search(query, top_n=top_n)
+    return live_search(query, top_n=top_n, effort=effort)
 
 
 def _fetch(hits: list[WebSearchResult], top_n: int) -> list[FetchedPage]:
@@ -291,7 +291,7 @@ def grounded_answer(
         pages_fetched = 0
     else:
         started = time.perf_counter()
-        hits = _live(question, cfg.live_top_n)
+        hits = _live(question, cfg.live_top_n, cfg.effort.value)
         record_stage(timer, "search_ms", int((time.perf_counter() - started) * 1000))
 
         started = time.perf_counter()

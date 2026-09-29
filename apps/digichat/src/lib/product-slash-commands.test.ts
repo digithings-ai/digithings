@@ -30,6 +30,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     setThinking: vi.fn(),
     setModel: vi.fn(),
     setEffort: vi.fn(),
+    setSearchEngine: vi.fn(),
     reset: vi.fn(),
     tenantAllowsWeb: true,
     showByok: true,
@@ -52,6 +53,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openByok: vi.fn(),
     openModels: vi.fn(),
     openEffort: vi.fn(),
+    openSearchEngine: vi.fn(),
     openView: vi.fn(),
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
@@ -281,6 +283,17 @@ describe("executeSlashDef", () => {
     expect(a.openMcp).toHaveBeenCalledWith("");
     executeSlashDef(def, "new", a);
     expect(a.openMcp).toHaveBeenCalledWith("new");
+  });
+
+  it("opens the search-engine list on empty /search-engine and sets a known engine", () => {
+    const a = api();
+    const def = { id: "search-engine" as const, names: ["/search-engine"], needsArg: false, hint: "" };
+    executeSlashDef(def, "", a);
+    expect(a.openSearchEngine).toHaveBeenCalledOnce();
+    executeSlashDef(def, "exa", a);
+    expect(a.setSearchEngine).toHaveBeenCalledWith("exa");
+    executeSlashDef(def, "not-an-engine", a);
+    expect(a.setSearchEngine).toHaveBeenCalledTimes(1);
   });
 
   it("opens the connected-tools menu on /tools", () => {

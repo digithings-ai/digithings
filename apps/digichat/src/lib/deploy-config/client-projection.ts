@@ -22,6 +22,17 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+
+/** Search-engine ids the BFF forwards to digigraph (digisearch vocabulary, #4724). */
+export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
+  "auto",
+  "internal",
+  "exa",
+  "tavily",
+  "parallel",
+  "firecrawl",
+  "tinyfish",
+]);
 import {
   DEFAULT_THREAD_SKIN,
   type ThreadSkin,
@@ -102,6 +113,7 @@ export type DigichatClientConfig = {
     showByok?: boolean;
     showLanguageSelector?: boolean;
     webSearch?: boolean;
+    searchEngine?: string;
   };
   /** Discriminator only — never project endpoints / agent names */
   backendType: DigichatDeployment["backend"]["type"];
@@ -175,6 +187,10 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
   const catalog = projectCatalog(dep.tools?.catalog);
   const webSearch =
     dep.gate.webSearch === true || catalog.some((t) => t.id === "web_search" && t.default);
+  // Tenant search-engine default: engine NAME only (never keys). Unknown values
+  // are dropped here (GateSchema also rejects them at load); absent = auto (#4724).
+  const rawEngine = (dep.gate.searchEngine ?? "").trim().toLowerCase();
+  const searchEngine = SEARCH_ENGINE_ALLOWLIST.has(rawEngine) ? rawEngine : undefined;
   const models = dep.models;
   const allowPicker =
     models?.allowPicker === true ||
@@ -238,6 +254,7 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
       showByok: dep.gate.showByok,
       showLanguageSelector: dep.gate.showLanguageSelector,
       webSearch,
+      ...(searchEngine ? { searchEngine } : {}),
     },
     backendType: dep.backend.type,
   };

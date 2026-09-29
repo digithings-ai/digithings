@@ -30,6 +30,7 @@ import { createAiSdkStreamResponse } from "@/lib/adapters/ai-sdk/stream";
 import { createNonAiSdkStreamResponse } from "@/lib/adapters/non-ai-sdk";
 import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
+import { getHeartbeatContext, licenseRefusal } from "@/lib/license/state";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import {
@@ -87,6 +88,10 @@ function jsonError(
 }
 
 export async function POST(req: Request) {
+  // Revoked/expired license refuses before auth: a revoked deployment
+  // refuses even an authenticated caller, and the check is cheaper.
+  const refusal = licenseRefusal();
+  if (refusal) return refusal;
   const authResult = await requireDigiChatAuth(req);
   const tenantCtx =
     authResult instanceof Response && isEmbedChatRequest(req)
@@ -539,6 +544,28 @@ export async function POST(req: Request) {
   if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
     upstreamHeaders["X-Digi-Effort"] = effortRaw;
   }
+  // Search engine choice for digisearch web_search (#4724): allowlisted names
+  // only, unknown/blank dropped. "auto" is the hub default, so it is omitted
+  // rather than forwarded. Effective engine is the browser choice, else the
+  // tenant default from dep.gate.searchEngine (engine NAME only, never keys);
+  // an explicit browser "auto" beats a tenant default via omission.
+  const engineRaw = (req.headers.get("x-digi-search-engine") || "").trim().toLowerCase();
+  const tenantEngineRaw = (dep?.gate?.searchEngine || "").trim().toLowerCase();
+  const isEngineName = (v: string) =>
+    v === "auto" ||
+    v === "internal" ||
+    v === "exa" ||
+    v === "tavily" ||
+    v === "parallel" ||
+    v === "firecrawl" ||
+    v === "tinyfish";
+  const browserEngine = isEngineName(engineRaw) ? engineRaw : undefined;
+  const tenantEngine =
+    tenantEngineRaw !== "auto" && isEngineName(tenantEngineRaw) ? tenantEngineRaw : undefined;
+  const effectiveEngine = browserEngine === "auto" ? undefined : (browserEngine ?? tenantEngine);
+  if (effectiveEngine) {
+    upstreamHeaders["X-Digi-Search-Engine"] = effectiveEngine;
+  }
   // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
   // Session X-Digi-Disabled-Tools still forwards on Redo / edit (#3735 review).
   // Catalog allowlist from deployment config is source of truth (fail closed).
@@ -591,6 +618,13 @@ export async function POST(req: Request) {
   // backends (#4552); only the digigraph upstream header is written here.
   if (webSearchEnabled) {
     upstreamHeaders["X-Digi-Enable-Web-Search"] = "1";
+  }
+
+  // Forward the container's in-memory license JWT so digigraph can enforce
+  // hosted scopes (spec §7.1); unlicensed containers omit the header.
+  const licenseJwt = getHeartbeatContext().rawJwt;
+  if (licenseJwt) {
+    upstreamHeaders["X-Digi-License"] = licenseJwt;
   }
 
   // BYOK: forward per-request key to digigraph; never log or persist.

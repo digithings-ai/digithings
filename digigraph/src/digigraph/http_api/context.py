@@ -103,6 +103,17 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     # must never become it — an unmapped tenant (or the map-unset single-tenant path)
     # clears to None rather than letting a caller inject its own system prompt.
     updates["research_system_prompt_override"] = corpus.research_system_prompt
+    # Hosted license gate (spec §7): corpus/vault headers request the hosted
+    # corpus capability, which requires the ``digisearch-corpus`` license scope
+    # (403 ``insufficient_license_scope`` when lacking). The gate sits after map
+    # resolution — the map stays authoritative (a set-but-broken map already
+    # 503'd above; a usable map ignores client headers, so the gate does not
+    # fire there either). It can only narrow header-driven selection, never
+    # widen or disturb mapped selection. Requests without corpus headers never
+    # touch license code (plain open).
+    from digigraph.http_api.license_gate import enforce_corpus_license
+
+    enforce_corpus_license(http_request.headers, headers_effective=not corpus_map)
     if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
         updates["vault_path_prefix"] = corpus.vault_path_prefix
@@ -161,6 +172,15 @@ def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> W
     subject = updates.get("digi_subject")
     if subject:
         updates["session_id"] = workflow_thread_id(subject, req.session_id)
+    if not (req.search_engine or "").strip():
+        # POST /workflow has no chat-resolve step: fall back to the
+        # X-Digi-Search-Engine header here, mirroring _resolve_search_engine_chat
+        # (body wins — a non-blank body value is never overwritten). Chat paths
+        # resolve before this point, so this is a no-op for them (#4722). Capped
+        # to the hub's provider max length; the hub still owns validation.
+        engine = _hget(http_request.headers, "X-Digi-Search-Engine", "x-digi-search-engine").strip()
+        if engine:
+            updates["search_engine"] = engine[:64]
     return req.model_copy(update=updates)
 
 

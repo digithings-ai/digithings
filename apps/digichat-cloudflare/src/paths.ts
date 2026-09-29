@@ -14,9 +14,10 @@ export function shouldProxyToDigiChat(pathname: string): boolean {
     pathname === "/api/plan-proof" ||
     pathname.startsWith("/api/plan-proof/") ||
     pathname === "/api/health" ||
+    pathname === "/healthz" ||
     pathname.startsWith("/_dtchat/")
   );
 }
 
 /** Single Durable Object / Container name for all marketing tenants. */
-export const SHARED_DIGICHAT_CONTAINER_ID = "shared-v7";
+export const SHARED_DIGICHAT_CONTAINER_ID = "shared-v8";

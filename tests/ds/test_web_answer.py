@@ -128,7 +128,7 @@ def test_grounded_answer_cites_every_claim(monkeypatch):
     monkeypatch.setattr(
         mod,
         "_live",
-        lambda q, top_n: [
+        lambda q, top_n, effort=None: [
             WebSearchResult(
                 url="https://a.com/1", title="A", snippet="s1", score=0.9, engine="searxng"
             ),
@@ -159,7 +159,7 @@ def test_grounded_answer_raises_on_zero_pages(monkeypatch):
     from digisearch.web import answer as mod
     from digisearch.web.grounding_models import WebResearchError
 
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: [])
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: [])
     with pytest.raises(WebResearchError):
         mod.grounded_answer("anything")
 
@@ -168,7 +168,7 @@ def test_grounded_answer_raises_when_rank_drops_all_sources(monkeypatch):
     from digisearch.web import answer as mod
     from digisearch.web.grounding_models import WebResearchError
 
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: [_hit("https://a.com/1", "A")])
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: [_hit("https://a.com/1", "A")])
     monkeypatch.setattr(mod, "_fetch", lambda hits, top_n: [_page(h.url, h.title) for h in hits])
     monkeypatch.setattr(mod, "_rank", lambda q, pages, top_n: [])
     with pytest.raises(WebResearchError):
@@ -186,7 +186,7 @@ def test_grounded_answer_envelope_mirrors_exa_shape(monkeypatch):
         _hit("https://b.com/2", "B", score=0.8, engine="ddgs"),
     ]
     pages = [_page("https://a.com/1", "A", markdown="alpha body"), _page("https://b.com/2", "B")]
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: hits)
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: hits)
     monkeypatch.setattr(mod, "_fetch", lambda h, top_n: pages)
     monkeypatch.setattr(mod, "_rank", lambda q, p, top_n: p)
     monkeypatch.setattr(mod, "_synthesize", lambda q, p, cfg: ("answer [1][2]", {"llm_calls": 1}))
@@ -220,7 +220,7 @@ def test_grounded_answer_envelope_mirrors_exa_shape(monkeypatch):
 def test_grounded_answer_snippet_is_capped_at_2000_chars(monkeypatch):
     from digisearch.web import answer as mod
 
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: [_hit("https://a.com/1", "A")])
+    monkeypatch.setattr(mod, "_live", lambda q, top_n, effort=None: [_hit("https://a.com/1", "A")])
     monkeypatch.setattr(
         mod, "_fetch", lambda h, top_n: [_page("https://a.com/1", "A", markdown="x" * 5000)]
     )
@@ -237,8 +237,9 @@ def test_grounded_answer_uses_config_budgets_and_effort_label(monkeypatch):
 
     seen: dict[str, Any] = {}
 
-    def fake_live(q: str, top_n: int) -> list[WebSearchResult]:
+    def fake_live(q: str, top_n: int, effort: str | None = None) -> list[WebSearchResult]:
         seen["live_top_n"] = top_n
+        seen["live_effort"] = effort
         return [_hit("https://a.com/1", "A")]
 
     def fake_fetch(hits: list[WebSearchResult], top_n: int) -> list[FetchedPage]:
@@ -258,6 +259,7 @@ def test_grounded_answer_uses_config_budgets_and_effort_label(monkeypatch):
     assert fast.search_type == "web-fast"
     assert seen == {
         "live_top_n": EFFORT_PRESETS[EffortMode.FAST].live_top_n,
+        "live_effort": EffortMode.FAST.value,
         "fetch_top_n": EFFORT_PRESETS[EffortMode.FAST].fetch_top_n,
         "cited_top_n": EFFORT_PRESETS[EffortMode.FAST].cited_top_n,
     }
@@ -266,6 +268,7 @@ def test_grounded_answer_uses_config_budgets_and_effort_label(monkeypatch):
     thorough_out, _ = mod.grounded_answer("q", config=thorough)
     assert thorough_out.search_type == "web-thorough"
     assert seen["live_top_n"] == 20
+    assert seen["live_effort"] == EffortMode.THOROUGH.value
     assert seen["fetch_top_n"] == 10
     assert seen["cited_top_n"] == 3
 
@@ -539,7 +542,9 @@ def test_grounded_answer_insufficient_path_keeps_cited_sources(monkeypatch):
     import digillm.client as digillm_client
     from digisearch.web import answer as mod
 
-    monkeypatch.setattr(mod, "_live", lambda q, top_n: [_hit("https://a.com/1", "A", score=0.9)])
+    monkeypatch.setattr(
+        mod, "_live", lambda q, top_n, effort=None: [_hit("https://a.com/1", "A", score=0.9)]
+    )
     monkeypatch.setattr(mod, "_fetch", lambda h, top_n: [_page("https://a.com/1", "A")])
     monkeypatch.setattr(mod, "_rank", lambda q, p, top_n: p)
     monkeypatch.setenv("DIGISEARCH_SYNTHESIS_MODEL", "openai/gpt-4o-mini")

@@ -85,7 +85,7 @@ describe("digichat mount (same predicate as the standalone worker)", () => {
   it("pins the Next standalone port and the shared container id", () => {
     expect(DIGICHAT_PORT).toBe(3000);
     expect(SHARED_DIGICHAT_CONTAINER_ID).toBe(standaloneContainerId);
-    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v7");
+    expect(SHARED_DIGICHAT_CONTAINER_ID).toBe("shared-v8");
   });
 });
 

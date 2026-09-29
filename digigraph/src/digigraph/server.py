@@ -336,6 +336,11 @@ from digigraph.http_api.context import (
     _thread_config,
     _with_digi_request_context,
 )
+from digigraph.http_api.license_gate import (
+    LicenseScopeDenied,
+    denial_response,
+    enforce_web_search_license,
+)
 
 
 @v1.get("/debug/input_messages")
@@ -427,6 +432,10 @@ def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> W
     rid = _resolve_request_id(http_request)
     if rid and not (req.request_id and str(req.request_id).strip()):
         req = req.model_copy(update={"request_id": rid})
+    # Hosted license gate (spec §7): body ``enable_web_search`` on /workflow
+    # requires the ``hosted-web-search`` scope (corpus headers are gated inside
+    # ``_with_digi_request_context``). Plain requests never touch license code.
+    enforce_web_search_license(http_request.headers, enabled=bool(req.enable_web_search))
     req = _with_digi_request_context(http_request, req)
     return run_digigraph_workflow(req)
 
@@ -609,8 +618,10 @@ from digigraph.http_api.chat_resolve import (
     _resolve_force_tool_chat,
     _resolve_openwebui_format,
     _resolve_require_tool_calls_chat,
+    _resolve_search_engine_chat,
     _resolve_session_id,
     _resolve_suppress_tool_stream,
+    enforce_web_search_license_scope,
 )
 from digigraph.http_api.streaming import (
     _build_completion,
@@ -646,6 +657,11 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     allowed_tools = _resolve_allowed_tools_chat(req, request)
     require_tool_calls = _resolve_require_tool_calls_chat(req, request)
     enable_web_search = _resolve_enable_web_search_chat(req, request)
+    # Hosted license gate (spec §7): body-or-header web-search opt-in requires
+    # the ``hosted-web-search`` scope (corpus headers are gated inside
+    # ``_digi_fields_from_request`` below). Plain turns never touch license code.
+    enforce_web_search_license_scope(req, request)
+    search_engine = _resolve_search_engine_chat(req, request)
     limited = _enforce_require_tool_calls_budget(require_tool_calls, request)
     if limited is not None:
         return limited
@@ -685,6 +701,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 suppress_tool_stream=suppress_tool_stream,
                 force_tool=_resolve_force_tool_chat(req, request),
                 enable_web_search=enable_web_search,
+                search_engine=search_engine,
             ),
             media_type="text/event-stream",
             headers={
@@ -708,6 +725,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             request_id=request_id,
             force_tool=_resolve_force_tool_chat(req, request),
             enable_web_search=enable_web_search,
+            search_engine=search_engine,
             disabled_tools=disabled_tokens or None,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
@@ -778,4 +796,12 @@ def v1_run_product_graph(
 app.include_router(v1)
 
 register_fastapi_error_handlers(app, service="digigraph")
+
+
+@app.exception_handler(LicenseScopeDenied)
+async def _license_scope_denied_handler(_request: Request, exc: LicenseScopeDenied) -> JSONResponse:
+    """Spec §7.3 refusal: 403 ``insufficient_license_scope`` naming the scope."""
+    return denial_response(exc.missing_scope)
+
+
 setup_otel_fastapi(app, service_name="digigraph", service_version=__version__)

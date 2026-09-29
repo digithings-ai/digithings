@@ -141,7 +141,7 @@ def node_web_retrieve(state: ResearchTurnState) -> dict[str, Any]:
         cfg = resolve_web_config(effort=state.effort, cited_top_n=state.cited_top_n)
         timer = start_clock()
         started = time.perf_counter()
-        hits = _live(question, cfg.live_top_n)
+        hits = _live(question, cfg.live_top_n, cfg.effort.value)
         record_stage(timer, "search_ms", int((time.perf_counter() - started) * 1000))
         started = time.perf_counter()
         pages = _fetch(hits, cfg.fetch_top_n)
