@@ -17,6 +17,7 @@ import {
   setListItemScalar,
   setScalar,
   setStringList,
+  setWelcomeTitle,
   withText,
   withValidation,
 } from "./draft";
@@ -165,6 +166,51 @@ describe("setScalar", () => {
     const r = setScalar(FIXTURE, ["deployment"], ["chrome", "title"], "Ask: anything?");
     expect(r.applied).toBe(true);
     expect(r.text).toContain('    title: "Ask: anything?"');
+  });
+});
+
+describe("setWelcomeTitle", () => {
+  const STRING_WELCOME = `version: 1
+deployment:
+  slug: demo-chat
+  chrome:
+    mode: embed
+    welcome: Ask about your pipelines.
+  backend:
+    type: digigraph
+`;
+  const MAP_WELCOME = `version: 1
+deployment:
+  slug: demo-chat
+  chrome:
+    mode: embed
+    welcome:
+      title: Old title
+      body: Old body
+  backend:
+    type: digigraph
+`;
+
+  it("replaces a scalar welcome string with a title map", () => {
+    const r = setWelcomeTitle(STRING_WELCOME, ["deployment"], "New title");
+    expect(r.applied).toBe(true);
+    expect(r.text).toContain("    welcome:\n      title: New title");
+    expect(r.text).not.toContain("Ask about your pipelines.");
+    expect(r.text).toContain("  backend:\n    type: digigraph");
+  });
+
+  it("sets the nested title when welcome is already a map (body kept)", () => {
+    const r = setWelcomeTitle(MAP_WELCOME, ["deployment"], "New title");
+    expect(r.applied).toBe(true);
+    expect(r.text).toContain("      title: New title");
+    expect(r.text).toContain("      body: Old body");
+  });
+
+  it("creates the welcome map when absent", () => {
+    const bare = "version: 1\ndeployment:\n  slug: demo\n  chrome:\n    mode: embed\n";
+    const r = setWelcomeTitle(bare, ["deployment"], "Hello");
+    expect(r.applied).toBe(true);
+    expect(r.text).toContain("    welcome:\n      title: Hello");
   });
 });
 

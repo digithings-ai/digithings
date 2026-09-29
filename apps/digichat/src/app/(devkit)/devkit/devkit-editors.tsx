@@ -40,6 +40,7 @@ import {
   setListItemScalar,
   setScalar,
   setStringList,
+  setWelcomeTitle,
   type SecretState,
   type EntryDraft,
   type TextEdit,
@@ -779,6 +780,9 @@ export function DevkitEditors({
       case "Backend":
         return (
           <>
+        <p className="font-mono text-[11px] text-muted-foreground">
+          Applies on save — the preview chat keeps answering from the saved file.
+        </p>
         <SelectRow
           label="backend type"
           value={backendType}
@@ -839,7 +843,7 @@ export function DevkitEditors({
         <TextRow
           label="welcome title"
           value={chrome?.welcome?.title}
-          onCommit={(v) => scalar(["chrome", "welcome", "title"], v)}
+          onCommit={(v) => commit(setWelcomeTitle(draft.text, scope, v))}
           onClear={() => commit(deleteKey(draft.text, scope, ["chrome", "welcome"]))}
           hint="Clearing removes the whole welcome copy (title is required)."
         />
@@ -959,6 +963,9 @@ export function DevkitEditors({
       case "Models":
         return (
           <>
+        <p className="font-mono text-[11px] text-muted-foreground">
+          Applies on save — the preview chat keeps answering from the saved file.
+        </p>
         <TextRow
           label="default model"
           value={dep?.models.default}
@@ -1187,6 +1194,9 @@ export function DevkitEditors({
       case "Gate":
         return (
           <>
+        <p className="font-mono text-[11px] text-muted-foreground">
+          Applies on save — the preview chat keeps answering from the saved file.
+        </p>
         <SelectRow
           label="mode"
           value={dep?.gate.mode ?? "ungated"}
