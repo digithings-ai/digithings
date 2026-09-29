@@ -100,7 +100,7 @@ def _retrieve_cited(question: str, config: WebResearchConfig) -> tuple[list[Fetc
     Returns the ranked (deduped) pages and their urls; zero cited pages raises
     :class:`WebResearchError` — fail-hard, never a citation-free synthesis.
     """
-    hits = _live(question, config.live_top_n)
+    hits = _live(question, config.live_top_n, config.effort.value)
     pages = _fetch(hits, config.fetch_top_n)
     cited = _rank(question, pages, config.cited_top_n)
     if not cited:

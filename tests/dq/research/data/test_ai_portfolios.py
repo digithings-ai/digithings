@@ -145,6 +145,22 @@ def test_a_non_integer_recency_days_warns_and_falls_back(
 
 
 @pytest.mark.unit
+def test_a_configured_provider_reaches_the_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``ai_portfolio_accounts.yaml``'s ``provider`` must reach the tool call (#4723)."""
+    seen: dict[str, Any] = {}
+    _tool_ok(monkeypatch, seen)
+    monkeypatch.setattr(
+        ai_portfolios,
+        "_config",
+        lambda: {"accounts": [{"handle": "grkportfolio"}], "provider": "exa"},
+    )
+    ai_portfolios.fetch_ai_portfolio_grounding(model="cheap", run_date=date(2026, 6, 9))
+    assert seen["provider"] == "exa"
+
+
+@pytest.mark.unit
 def test_fetch_ai_portfolio_grounding_raises_on_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

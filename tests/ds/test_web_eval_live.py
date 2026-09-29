@@ -106,7 +106,7 @@ def _patch_offline(monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]) -> lis
 
     hits, pages = _hits_pages(case)
 
-    def fake_live(query: str, top_n: int) -> WebSearchResponse:
+    def fake_live(query: str, top_n: int, effort: str | None = None) -> WebSearchResponse:
         return WebSearchResponse(query=query, provider="searxng", results=hits[:top_n])
 
     def fake_fetch(ranked_hits: list[WebSearchResult], top_n: int) -> list[FetchedPage]:

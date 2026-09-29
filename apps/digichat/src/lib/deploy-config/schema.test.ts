@@ -7,6 +7,7 @@ import {
   disclosureDefaultOpen,
   disclosureIsLocked,
   disclosureIsVisible,
+  GateSchema,
   parseDigichatConfig,
   welcomeTitle,
 } from "./schema";
@@ -449,5 +450,19 @@ describe("allowlistModelId", () => {
     expect(allowlistModelId(models, "b")).toBe("b");
     expect(allowlistModelId(models, "c")).toBeUndefined();
     expect(allowlistModelId(models, undefined)).toBe("a");
+  });
+});
+
+describe("GateSchema searchEngine (#4724)", () => {
+  it("accepts an allowlisted engine name", () => {
+    expect(GateSchema.parse({ searchEngine: "exa" }).searchEngine).toBe("exa");
+  });
+
+  it("omits searchEngine when unset (auto by omission)", () => {
+    expect(GateSchema.parse({}).searchEngine).toBeUndefined();
+  });
+
+  it("rejects an unknown engine name", () => {
+    expect(() => GateSchema.parse({ searchEngine: "not-an-engine" })).toThrow();
   });
 });
