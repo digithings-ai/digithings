@@ -231,10 +231,10 @@ async def byok_header_context(request: Request, call_next):
 from digigraph.rate_limit import RateLimiter as _RateLimiter
 
 _rate_limiter = _RateLimiter()
-# Expensive endpoints: 10 req/min. Ingest/query: 30 req/min. Health: unlimited.
+# Expensive endpoints (/workflow, /v1/product_graphs): 10 req/min. Chat: 60 req/min (#4776). Ingest/query: 30 req/min. Health: unlimited.
 _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/workflow": (10, 60),
-    "/v1/chat/completions": (10, 60),
+    "/v1/chat/completions": (60, 60),
     "/v1/product_graphs": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
