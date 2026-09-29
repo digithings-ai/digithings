@@ -176,9 +176,7 @@ export class DigiStackContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`stack container not ready: ${message}`, {
-        status: 503,
-      });
+      return containerBootingResponse("stack", message);
     }
     return this.containerFetch(request, targetPort);
   }
@@ -234,9 +232,7 @@ export class DigiQuantMcpContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`mcp container not ready: ${message}`, {
-        status: 503,
-      });
+      return containerBootingResponse("mcp", message);
     }
     return this.containerFetch(request, DIGIQUANT_MCP_PORT);
   }
@@ -320,9 +316,7 @@ export class DigiChatContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`digichat container not ready: ${message}`, {
-        status: 503,
-      });
+      return containerBootingResponse("digichat", message);
     }
     return this.containerFetch(request, targetPort);
   }
@@ -337,6 +331,37 @@ function targetPortFromRequest(request: Request): number {
     }
   }
   return DIGIGRAPH_PORT;
+}
+
+/**
+ * Machine-readable boot code for container-not-ready 503s (#4753).
+ *
+ * The digichat BFF keys its extended cold-boot retry budget off this code:
+ * only a 503 carrying `container_booting` (plus `Retry-After`) gets the ~250s
+ * budget; every other 503 keeps the 15s budget. Never reuse this code for a
+ * real outage — the BFF would wait out the budget instead of failing fast.
+ */
+export const CONTAINER_BOOTING_CODE = "container_booting";
+
+/**
+ * Poll hint (seconds) for a booting container. Small enough that a ready
+ * container is picked up promptly, large enough that a full ~240s boot costs
+ * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ */
+const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
+
+/** JSON 503 with the boot code + Retry-After for all three containers. */
+export function containerBootingResponse(
+  service: "stack" | "mcp" | "digichat",
+  message: string,
+): Response {
+  return Response.json(
+    { code: CONTAINER_BOOTING_CODE, message: `${service} container not ready: ${message}` },
+    {
+      status: 503,
+      headers: { "Retry-After": String(CONTAINER_BOOT_RETRY_AFTER_SECONDS) },
+    },
+  );
 }
 
 export interface Env {
