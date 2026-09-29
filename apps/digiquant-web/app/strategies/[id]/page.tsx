@@ -47,6 +47,12 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   btc_sdca_blend1: { label: "BTC-SDCA (Blend 1: Round 2 index + Round 8 curve)", symbol: "BTC-USD" },
   btc_sdca_blend2: { label: "BTC-SDCA (Blend 2: Full-pool ablation reweight)", symbol: "BTC-USD" },
   btc_sdca_blend3: { label: "BTC-SDCA (Blend 3: Hybrid weights, Round 8 curve)", symbol: "BTC-USD" },
+  // Local-only research diagnostic: periodic self-optimization cycle-4
+  // candidate (robust worst-case-vs-flat tiered search, OOS +43.21% vs flat;
+  // gate not cleared — fold-1 dd veto + sensitivity). Never pushed to
+  // Supabase, data comes from the static-JSON fallback in
+  // lib/live/strategies.ts. Not a published/validated strategy.
+  btc_sdca_cycle4_candidate: { label: "BTC-SDCA (Cycle 4 candidate diagnostic)", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
