@@ -9,6 +9,7 @@ from digiquant.research.skills import (
     _split_frontmatter,
     list_skill_slugs,
     load_skill,
+    load_skill_edit,
     load_skill_with_frontmatter,
 )
 
@@ -73,3 +74,62 @@ class TestSplitFrontmatter:
         raw = "---\n- one\n- two\n---\nbody\n"
         with pytest.raises(MalformedFrontmatterError, match="YAML mapping"):
             _split_frontmatter(raw)
+
+
+@pytest.mark.unit
+class TestToolUseContract:
+    """The prompt/tool-contract boundary appended to every skill (#4490).
+
+    The defect these pin: a segment whose wired surface is only the pre-fetched
+    ``web_grounding`` block plus ``query_research``/``fetch_prior_document`` read a skill
+    telling it to go fetch six things it has no tool for, then re-phrased the same query
+    until ``run_tools`` exhausted its 24-round budget (2621 s for ``alt-sentiment-news``).
+    """
+
+    def test_contract_present_on_full_skill(self) -> None:
+        for slug in ("alt-sentiment-news", "commodities", "international", "equity"):
+            assert "## Tools (read this before you plan a single call)" in load_skill(slug)
+
+    def test_contract_names_this_segment(self) -> None:
+        """`{slug}` must be substituted — the segment needs to know which document is its own."""
+        body = load_skill("alt-sentiment-news")
+        contract = body[body.index("## Tools") : body.index("## Research memo")]
+        assert "alt-sentiment-news" in contract
+        assert "{slug}" not in contract
+
+    def test_contract_reaches_the_edit_path_too(self) -> None:
+        """#4490: the same fiction appears in the ``-edit.md`` variants; the contract is
+        appended at the load chokepoint so both paths get it."""
+        body = load_skill_edit("alt-sentiment-news")
+        assert "## Tools (read this before you plan a single call)" in body
+        assert "{slug}" not in body
+
+    def test_contract_imposes_no_limits(self) -> None:
+        """The owner's constraint: fix convergence with instruction, not caps. Guard against
+        a future edit smuggling a time or tool-call limit back in."""
+        contract = load_skill("commodities")
+        contract = contract[contract.index("## Tools") : contract.index("## Research memo")]
+        lowered = contract.lower()
+        for banned in ("call limit", "tool-call limit", "time limit", "minute limit", "budget of"):
+            assert banned not in lowered, f"contract must not impose {banned!r}"
+
+    def test_contract_states_the_run_date_document_does_not_exist(self) -> None:
+        contract = load_skill("macro")
+        contract = contract[contract.index("## Tools") : contract.index("## Research memo")]
+        assert "does not exist yet" in contract
+
+    def test_contract_skipped_for_tool_less_skills(self) -> None:
+        """#4490 review: these skills are called with no ``tools=`` and no ``execute_tool=``,
+        so ``run_tools`` is never entered and the contract's document/fetch instructions
+        would be false for them (``decision-reflector`` writes one JSON field;
+        ``beliefs-distillation`` persists under the key ``beliefs``, not its slug)."""
+        for slug in (
+            "decision-reflector",
+            "beliefs-distillation",
+            "digest",
+            "digest-subsection",
+            "monthly-synthesis",
+        ):
+            body = load_skill(slug)
+            assert "## Tools (read this before you plan a single call)" not in body, slug
+            assert "## Research memo (required)" not in body, slug

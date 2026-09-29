@@ -104,7 +104,7 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Grou
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
 2. Read **house book scope**: [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md) —
-   omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_data`
+   omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_research`
    stamps `HOUSE_BOOK_READ_TABLES`.
 3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
    [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
@@ -119,15 +119,15 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Grou
      yesterday only. Stale gap > `DIGIQUANT_STALE_FULL_DAYS` (default 7) → `full`.
    - Track B WP13-class shadow (#2616): `digiquant.dashboard.attention_plan.plan_attention_shadow`
      records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
-     never actuates; cannot expand H4 or rewrite H7/H8).
+     never actuates; cannot expand screener or rewrite direction/sizing).
    - Track C glass-box (#1945 / #2622): `attention_plan_io` +
      `attention_plan_graph.maybe_publish_attention_plan_shadow` (research
      `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
      `DIGIQUANT_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
      a published document; never actuate (`enforce` absent).
-6. **portfolio extension pattern** (H1–H9): add phases via `build_portfolio_phases_thesis`; wire
-   `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
-   sizes; H9 `commit_run` is the portfolio terminal — do not add parallel `portfolio_materialize`
+6. **portfolio extension pattern** (thesis–commit): add phases via `build_portfolio_phases_thesis`; wire
+   `build_grounding` + phase blinding; direction must not emit weights (`PMDirectionMemo` only); sizing
+   sizes; commit `commit_run` is the portfolio terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
 7. Tests: `pytest tests/dq/dashboard/ tests/dq/research/ tests/dq/portfolio/ -m unit -v`
 
@@ -657,7 +657,7 @@ stays a generic transport engine (no URLs, no env reads).
   curated subsets `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` (each ≤16 names)
   are wired through `build_grounding(digifetch_tools=...)` +
   `SegmentNodeSpec.digifetch_tools`: equity + sector phases take EQUITY, macro
-  takes MACRO, portfolio H5 + H7 take PM. Unlike the MCP surface (which
+  takes MACRO, portfolio analyst + direction take PM. Unlike the MCP surface (which
   registers gated tools and answers `auth_required` / disabled envelopes), the
   in-process list **filters instead of advertising**:
   `available_digifetch_tools` returns no digifetch tools at all when
@@ -665,7 +665,7 @@ stays a generic transport engine (no URLs, no env reads).
   when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
   the client still applies both gates per call. `digifetch_congress_trades`
   stays MCP-only (its upstream OCR answers HTTP 500) and is not in `MACRO_TOOLS`.
-  H6 stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
+  deliberation stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
   Enrichment-only is enforced structurally: the subset attaches **only when a
   primary data/research executor built**. The client factory + envelope
   serializer moved here from `mcp_server.py` (which imports them) so MCP and

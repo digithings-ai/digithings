@@ -1,7 +1,7 @@
 """PM direction skill prompt documents held-name carry-forward (#937, PR 4c).
 
-H7 injects ``prior_analyst_gaps`` into ``phase_inputs`` for held tickers without a
-fresh H5 payload. The ``pm-direction`` skill must document that input and instruct
+direction injects ``prior_analyst_gaps`` into ``phase_inputs`` for held tickers without a
+fresh analyst payload. The ``pm-direction`` skill must document that input and instruct
 the PM not to auto-flat a held name solely because it is absent from
 ``analyst_payloads``.
 """

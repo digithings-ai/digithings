@@ -6,7 +6,7 @@ Phase 0 Task 3.2 (#2597): EOD finalizer for dashboard period accounting.
 
 Loads authoritative opening holdings/cash, same-day paper fills, and closing
 marks; runs the pure ``compute_period`` engine; persists private
-``dashboard_accounting_*`` rows via ``accounting.io``. H9 provisional NAV in
+``dashboard_accounting_*`` rows via ``accounting.io``. commit provisional NAV in
 ``nav_history`` / ``positions`` stays as continuity data and is never selected
 as final.
 
@@ -457,7 +457,7 @@ def assemble_period_input(
 
 
 def _legacy_nav_day_return_pct(*, client: Any, period_date: date) -> Decimal | None:
-    """Legacy indexed NAV day return from ``nav_history`` (provisional H9 continuity)."""
+    """Legacy indexed NAV day return from ``nav_history`` (provisional commit continuity)."""
     iso = period_date.isoformat()
     cur = _eq_house(client.table("nav_history").select("nav")).eq("date", iso).limit(1).execute()
     cur_rows = list(getattr(cur, "data", None) or [])
@@ -483,7 +483,7 @@ def reconcile_shadow(
     period: AccountingPeriod,
     client: Any,
 ) -> tuple[bool, str]:
-    """Compare finalized period return to provisional H9 nav day return."""
+    """Compare finalized period return to provisional commit nav day return."""
     if period.status is not PeriodStatus.FINAL:
         return True, f"period status={period.status.value} — skip numeric reconcile"
     if period.opening_equity <= 0:

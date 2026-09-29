@@ -14,7 +14,7 @@ description: Templated single-sector deep-dive. Parameterized by sectors.yaml �
   computed indicators (sma/rsi/macd/adx/atr/zscore), newest first — use those
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
-  readable through `query_data` (#3780) — never use it to fetch prices or technicals.
+  readable through `query_research` (#3780) — never use it to fetch prices or technicals.
 - Call it for every ETF in `sector_config.etfs` and each name in `sector_config.top_tickers`.
 
 This skill is parameterized. The sub-graph injects the target sector's
@@ -22,10 +22,6 @@ config from `config/sectors.yaml` (GICS name, ETFs, key sub-segments,
 top tickers, structural drivers) through the research agent's
 `phase_inputs.sector_config` block. Every prompt below references fields
 from that block.
-
-Web fetch: use `defuddle parse <url> --md` instead of WebFetch for
-earnings pages, analyst notes, product announcements, or news article
-URLs. Not for API endpoints, `.json`, or `.md` files.
 
 ---
 

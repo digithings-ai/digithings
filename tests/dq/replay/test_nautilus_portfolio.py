@@ -51,7 +51,7 @@ _PRODUCTION_GUARD_PATHS = (
     / "digiquant"
     / "portfolio"
     / "phases"
-    / "h9_commit_run.py",
+    / "commit.py",
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"

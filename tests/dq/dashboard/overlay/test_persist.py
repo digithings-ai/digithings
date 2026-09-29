@@ -1,4 +1,4 @@
-"""Overlay persist guard + namespaced H7/H8 document keys."""
+"""Overlay persist guard + namespaced direction/sizing document keys."""
 
 from __future__ import annotations
 

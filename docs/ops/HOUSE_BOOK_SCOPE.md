@@ -2,7 +2,7 @@
 
 Concise developer guide for **workspace-scoped private books**. Dense inventory
 lives in [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md)
-(overlay / tenancy sections) and the [execution-tenancy epic](../agent-backlog/kairos-tenancy/EPIC.md).
+(overlay / tenancy sections) and the [execution-tenancy epic](../agent-backlog/execution-tenancy/EPIC.md).
 
 ## Intent
 
@@ -54,14 +54,12 @@ row["workspace_id"] = str(house_workspace_id())
 `resolved_workspace_id(None)` / blank also resolves to house. Overlay paths pass
 an explicit workspace UUID and must not fall through to house.
 
-### Research / MCP `query_data`
+### Research / MCP `query_research`
 
-`HOUSE_BOOK_READ_TABLES` in `digiquant.research.data.queries` stamps house
-when `eq` omits `workspace_id`. To read another book:
-
-```python
-query_data(client=client, table="positions", eq={"workspace_id": str(overlay_id), "date": day})
-```
+`search_research` in `digiquant.dashboard.research_retrieval.queries` reads **house
+only** — it stamps `_eq_house` and has no `workspace_id` override. There is no
+overlay-book read path through this tool; read another book with a direct
+Supabase query that pins its `workspace_id`.
 
 ### Dashboard (TypeScript)
 
@@ -90,14 +88,14 @@ script is house-owned).
 | Overlay `--execute` with persist off | Refuses / finishes `persist_disabled` — not a remaining-hop proof |
 | Staged cutover **113** (drop legacy `UNIQUE(date)`) | Not auto-applied; do not copy to top-level or apply on `core` while `main` writers still upsert `on_conflict=date`. [#3331](https://github.com/digithings-ai/digithings/pull/3331) stamps house `workspace_id` on those writers but **does not** widen the conflict target. `pipeline-dashboard.yml` checks out `ref: main` even when the schedule event is on default `develop`. |
 | Main house GHA vs develop tenancy writers | Live cron executes **main**. Develop already stamps via `house_workspace_id()` and upserts `on_conflict=workspace_id,date` — that is not what the scheduled job runs. Do not assume a green develop unit run proves the house publish. |
-| Booked positions, missing H9 ledger | Operator recovery: `python digiquant/scripts/research/recover_h9_ledger_commit.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
+| Booked positions, missing commit ledger | Operator recovery: `python digiquant/scripts/research/recover_commit_ledger.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
 | `DIGIQUANT_OVERLAY_PERSIST=1` (a retired alias is also read) before 113 on target | Persist-on still cannot prove a private overlay book while legacy uniques collide |
 
 ## nav_history write order (provisional window)
 
 `nav_history` is written twice on a daily run, in order:
 
-1. **H9 `commit_io.book_portfolio`** may upsert a **provisional** arithmetic-chain
+1. **commit `commit_io.book_portfolio`** may upsert a **provisional** arithmetic-chain
    NAV for the date. (Legacy `portfolio_materialize.py` has the same shape but is
    not on the daily path — do not reintroduce it.)
 2. **`verify_nav_replay.py --write`** then overwrites it with the Nautilus engine
@@ -116,4 +114,4 @@ authoritative. Do not publish or quote the arithmetic-chain value as a settled N
 - Schema / RLS notes: `digiquant/supabase/SCHEMA.md` (migrations 096–113)
 - Settings / APP_URL paths: `digiquant/supabase/functions/_shared/app-url.ts`
   (`APP_URL` = site origin only; paths append `/dashboard/...`)
-- Epic status: [`docs/agent-backlog/kairos-tenancy/EPIC.md`](../agent-backlog/kairos-tenancy/EPIC.md)
+- Epic status: [`docs/agent-backlog/execution-tenancy/EPIC.md`](../agent-backlog/execution-tenancy/EPIC.md)

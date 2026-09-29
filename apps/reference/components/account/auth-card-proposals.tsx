@@ -5,6 +5,38 @@ import { AuthCard, type AuthCardLayout } from "@digithings/ui";
 const LAYOUTS: AuthCardLayout[] = ["compact", "icons-first", "desk"];
 
 /**
+ * Invite recognition banner — the team-invite treatment above the default
+ * signup card. The marker is the only per-invite variable; the line is a
+ * fixed generic template. Example data · not live.
+ */
+export function InviteBannerSpecimen() {
+  return (
+    <section className="section-block" data-testid="invite-banner">
+      <p className="kicker">{"// invite banner"}</p>
+      <h2 className="title">Recognized, not redecorated.</h2>
+      <p className="section-copy">
+        An invite link never changes the card — the default signup stays
+        untouched. A banner above it confirms the team link was recognized.
+      </p>
+      <div className="mt-8 max-w-[380px]">
+        <div className="acct-invite-banner" role="status">
+          <span className="acct-invite-banner-marker">Join 12X on digiquant</span>
+          <span className="acct-invite-banner-line">
+            Create your account to get started. Your invite unlocks your team&apos;s workspace.
+          </span>
+        </div>
+        <AuthCard
+          layout="compact"
+          mode="signup"
+          idPrefix="acct-invite-up"
+          switchHref="#auth-compact-signin"
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
  * Auth cards — three layouts of AuthCard from @digithings/ui: compact,
  * icons-first, and desk. Sign-in and create-account share a card. Display
  * templates — submit is a no-op.

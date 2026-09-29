@@ -9,49 +9,49 @@ from digiquant.research.state import PhasePortfolioState, ResearchState
 
 @pytest.mark.unit
 class TestBuildPortfolioPhasesThesis:
-    def test_phases_include_h1_through_h9(self) -> None:
+    def test_phases_include_thesis_through_h9(self) -> None:
         phases = build_portfolio_phases_thesis(watchlist=["SPY", "QQQ"], held={"SPY"})
         names = [p.name for p in phases]
-        assert "portfolio_h1_thesis_review" in names
-        assert "portfolio_h2_market_exploration" in names
-        assert "portfolio_h3_vehicle_map" in names
-        assert "portfolio_h4_opportunity_screener" in names
-        assert "portfolio_h5_asset_analyst" in names
-        assert "portfolio_h6_deliberation" in names
-        assert "portfolio_h7_pm_direction" in names
-        assert "portfolio_h8_risk_sizing" in names
-        assert "portfolio_h9_commit_run" in names
+        assert "portfolio_thesis" in names
+        assert "portfolio_market" in names
+        assert "portfolio_vehicle_map" in names
+        assert "portfolio_screener" in names
+        assert "portfolio_analyst" in names
+        assert "portfolio_deliberation" in names
+        assert "portfolio_direction" in names
+        assert "portfolio_sizing_risk_sizing" in names
+        assert "portfolio_commit" in names
         assert not any(n.startswith("phase7c") for n in names)
         assert not any(n.startswith("phase7cd") for n in names)
         assert not any(n.startswith("phase7d") for n in names)
         assert not any(n.startswith("phase9") for n in names)
 
-    def test_h7_precedes_h8(self) -> None:
+    def test_direction_precedes_h8(self) -> None:
         phases = build_portfolio_phases_thesis(watchlist=["SPY"], held=set())
         names = [p.name for p in phases]
-        h7_idx = names.index("portfolio_h7_pm_direction")
-        h8_idx = names.index("portfolio_h8_risk_sizing")
-        assert h7_idx < h8_idx
+        direction_idx = names.index("portfolio_direction")
+        sizing_idx = names.index("portfolio_sizing_risk_sizing")
+        assert direction_idx < sizing_idx
 
-    def test_h8_precedes_h9(self) -> None:
+    def test_sizing_precedes_h9(self) -> None:
         phases = build_portfolio_phases_thesis(watchlist=["SPY"], held=set())
         names = [p.name for p in phases]
-        h8_idx = names.index("portfolio_h8_risk_sizing")
-        h9_idx = names.index("portfolio_h9_commit_run")
-        assert h8_idx < h9_idx
+        sizing_idx = names.index("portfolio_sizing_risk_sizing")
+        commit_idx = names.index("portfolio_commit")
+        assert sizing_idx < commit_idx
 
-    def test_h4_precedes_h5(self) -> None:
+    def test_screener_precedes_h5(self) -> None:
         phases = build_portfolio_phases_thesis(watchlist=["SPY"], held=set())
         names = [p.name for p in phases]
-        h4_idx = names.index("portfolio_h4_opportunity_screener")
-        h5_idx = names.index("portfolio_h5_asset_analyst")
-        assert h4_idx < h5_idx
+        screener_idx = names.index("portfolio_screener")
+        analyst_idx = names.index("portfolio_analyst")
+        assert screener_idx < analyst_idx
 
     def test_build_portfolio_graph_compiles_thesis_path(self) -> None:
         graph = build_portfolio_graph(watchlist=["AAPL", "MSFT"], held={"AAPL"})
         assert graph is not None
 
-    def test_held_survives_h5_fan_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_held_survives_analyst_fan_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "3")
         watchlist = ["AAA", "BBB", "SPY", "CCC", "IJR", "XLP"]
         held = {"SPY", "IJR", "XLP"}
@@ -60,16 +60,16 @@ class TestBuildPortfolioPhasesThesis:
         assert "portfolio/asset-analyst-worker" in all_nodes
         assert "portfolio/deliberation-worker" in all_nodes
 
-    def test_runtime_h5_covers_thesis_mapped_off_watchlist(
+    def test_runtime_analyst_covers_thesis_mapped_off_watchlist(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from unittest.mock import patch
 
         from digigraph.graph.pipeline_builder import build_pipeline
-        from digiquant.portfolio.phases.h4_opportunity_screener import (
-            build_h4_opportunity_screener,
+        from digiquant.portfolio.phases.analyst import build_analyst_from_state
+        from digiquant.portfolio.phases.screener import (
+            build_screener,
         )
-        from digiquant.portfolio.phases.h5_asset_analyst import build_h5_from_state
         from digiquant.research.state import ResearchConfigBundle
 
         monkeypatch.setenv("DIGIQUANT_MAX_ANALYSTS", "2")
@@ -85,7 +85,7 @@ class TestBuildPortfolioPhasesThesis:
         )
         compiled = build_pipeline(
             ResearchState,
-            [build_h4_opportunity_screener(), build_h5_from_state()],
+            [build_screener(), build_analyst_from_state()],
         )
 
         def fake_analyst(**kwargs: object) -> tuple:
@@ -103,7 +103,7 @@ class TestBuildPortfolioPhasesThesis:
             return payload, {}, [], None
 
         with patch(
-            "digiquant.portfolio.phases.h5_asset_analyst.run_asset_analyst_llm",
+            "digiquant.portfolio.phases.analyst.run_asset_analyst_llm",
             side_effect=fake_analyst,
         ):
             result = compiled.invoke(state)

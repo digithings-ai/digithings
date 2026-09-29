@@ -2,7 +2,7 @@
 
 Overlay ``usage.start`` is process-global, so overlay / execution sync / route /
 digest / notify must never share ``pipeline-digiquant.yml``'s portfolio chain job. The spec in
-``docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`` is
+``docs/agent-backlog/execution-tenancy/kairos-cron-check.workflow.yml`` is
 fail-closed ``--check`` / ``--dry-run`` only: ``--execute``, ``--all``, and
 ``portfolio.chain`` on that job would be a production apply against Observer.
 
@@ -22,12 +22,12 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
+SPEC = REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "kairos-cron-check.workflow.yml"
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 NOTIFY_FRAGMENT = (
-    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-notify.env.yml"
+    REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "pipeline-olympus-notify.env.yml"
 )
 NOTIFY_KEYS = ("CLOUDFLARE_EMAIL_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "NOTIFY_FROM")
 
@@ -238,7 +238,7 @@ class TestHousePipelineNotifyEnvFragment:
 
     def test_docs_name_the_splice_hop(self) -> None:
         unblock = (
-            REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "HUMAN-UNBLOCK.md"
+            REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "HUMAN-UNBLOCK.md"
         ).read_text(encoding="utf-8")
         assert "pipeline-olympus-notify.env.yml" in unblock
         for key in NOTIFY_KEYS:

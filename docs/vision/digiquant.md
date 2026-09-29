@@ -45,7 +45,7 @@ Research is built as digigraph sub-graphs with parallel execution, batched API c
 
 ### Portfolio
 
-The portfolio management orchestration layer (`digiquant.portfolio`, phases H1–H9). It takes the research library and translates it into portfolio action through a structured deliberation pipeline:
+The portfolio management orchestration layer (`digiquant.portfolio`, phases thesis–commit). It takes the research library and translates it into portfolio action through a structured deliberation pipeline:
 
 1. **Research ingestion** — pulls the current research library as context.
 2. **Investment thesis construction** — generates theses with explicit validity requirements and exit triggers.

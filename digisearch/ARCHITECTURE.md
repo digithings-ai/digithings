@@ -119,7 +119,9 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Standard hit normalization (`normalize_query_hit`) | Implemented | `core/standard_hits.py` |
 | OData filter validator (regex allowlist) | Implemented | `core/filter_validator.py` |
 | Structured-filter → Chroma `where` translation | Implemented | `core/chroma_where.py` |
-| Structured-filter post-application (stub + Chroma) | Implemented | `core/filter_apply.py` |
+| Structured-filter post-application (stub + Chroma; matching delegates to `core/tables.py`) | Implemented | `core/filter_apply.py` |
+| Generic API-row table ops (`FilterClause`/`OrderClause`, filter/sort/group-count/window/enrich/coverage-score; single implementation shared by RAG hits and API adapters) | Implemented | `core/tables.py` |
+| Result summarization for `response_mode=summary` (stats/top-values delegate to `core/tables.py`) | Implemented | `core/summarize.py` |
 | `EmbeddingProvider` abstract base | Implemented | `embedding/base.py` |
 | `EmbeddingCache` (SQLite-backed) | Implemented | `embedding/cache.py` |
 | `BatchEmbedder` (batching + retry) | Implemented | `embedding/batch.py` |
@@ -1205,7 +1207,10 @@ digisearch/src/digisearch/
 │   ├── evidence_metadata.py   # Evidence tier system, Chroma normalization, sidecar loading
 │   ├── standard_hits.py       # normalize_query_hit(), STANDARD_HIT_KEYS, backend labels
 │   ├── chroma_where.py        # Structured filters → Chroma $and/$eq/$in etc.
-│   ├── filter_apply.py        # Post-retrieval structured-filter matching (stub + Chroma)
+│   ├── filter_apply.py        # Post-retrieval structured-filter matching (stub + Chroma; delegates to tables.py)
+│   ├── tables.py              # Generic Polars table ops for API rows (FilterClause/OrderClause,
+│   │                          # apply_filters/order_rows/group_count/window/enrich_rows/coverage_score;
+│   │                          # one implementation shared by filter_apply, summarize, source adapters)
 │   ├── filter_validator.py    # OData allowlist validator (regex)
 │   └── summarize.py           # Result summarization for response_mode=summary
 │

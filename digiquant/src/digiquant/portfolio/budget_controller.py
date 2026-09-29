@@ -1,7 +1,7 @@
 """Stage 2 — regime-conditioned analyst dispatch budget (#1017).
 
 Turns market state (VIX term structure + breadth + cross-sectional return
-dispersion) into a dispatch budget for H4's focus roster, with a fail-soft
+dispersion) into a dispatch budget for screener's focus roster, with a fail-soft
 fallback to the static DIGIQUANT_MAX_ANALYSTS cap. See
 docs/superpowers/specs/2026-06-23-adaptive-two-track-dispatch-design.md.
 """
@@ -212,7 +212,7 @@ def assess_budget(
 
         # Audit log
         logger.info(
-            f"H4 budget: regime={assessment.regime} vix={vix_state} breadth={pct_above_50dma} "
+            f"screener budget: regime={assessment.regime} vix={vix_state} breadth={pct_above_50dma} "
             f"dispersion={return_dispersion} -> B={budget} explore_floor={explore_floor}"
         )
 

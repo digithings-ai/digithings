@@ -11,7 +11,7 @@ import {
   ToolFallback,
   ToolFallbackAttribution,
   formatToolDuration,
-} from "./tool-fallback.aui";
+} from "@digithings/ui/chat/stock";
 
 /** Feed the exact chunks the adapter emits for an orphaned tool row through the
  * AI SDK runtime conversion, as a real client does. */

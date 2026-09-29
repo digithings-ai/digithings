@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAnalystPayload } from './queries';
 
 describe('parseAnalystPayload (#1562 PR2)', () => {
-  it('maps the full H5 AnalystPayload shape verbatim, including a signed conviction_score', () => {
+  it('maps the full analyst AnalystPayload shape verbatim, including a signed conviction_score', () => {
     const payload = parseAnalystPayload({
       ticker: 'qqq',
       conviction_score: -3,

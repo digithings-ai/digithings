@@ -22,7 +22,10 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
-import { DEFAULT_THREAD_SKIN, type ThreadSkin } from "@/lib/thread-skins";
+import {
+  DEFAULT_THREAD_SKIN,
+  type ThreadSkin,
+} from "@digithings/ui/chat/skins";
 
 export type DigichatClientFeatures = {
   attachments: boolean;
@@ -94,7 +97,6 @@ export type DigichatClientConfig = {
   };
   gate: {
     mode: "turn_limited" | "ungated" | "trial_form";
-    activityDetail: "off" | "labels" | "full";
     llmAccess?: DigichatDeployment["gate"]["llmAccess"];
     lockedContact?: string;
     showByok?: boolean;
@@ -102,7 +104,7 @@ export type DigichatClientConfig = {
     webSearch?: boolean;
   };
   /** Discriminator only — never project endpoints / agent names */
-  backendType: "digigraph" | "foundry";
+  backendType: DigichatDeployment["backend"]["type"];
 };
 
 export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
@@ -150,7 +152,6 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
   mcp: { servers: [], allowUserServers: false, allowAddForm: false },
   gate: {
     mode: "turn_limited",
-    activityDetail: "labels",
     showByok: false,
     showLanguageSelector: false,
     webSearch: false,
@@ -232,7 +233,6 @@ export function toDigichatClientConfig(dep: DigichatDeployment): DigichatClientC
     },
     gate: {
       mode: dep.gate.mode,
-      activityDetail: dep.gate.activityDetail,
       llmAccess: dep.gate.llmAccess,
       lockedContact: dep.gate.lockedContact,
       showByok: dep.gate.showByok,

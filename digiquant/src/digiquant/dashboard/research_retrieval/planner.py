@@ -1,16 +1,16 @@
-"""WP11.3 — deterministic H6 deliberation selection (#2902).
+"""WP11.3 — deterministic deliberation selection (#2902).
 
-Select H6 only for structured decision-value cases (decision boundary, conflict,
+Select deliberation only for structured decision-value cases (decision boundary, conflict,
 uncertainty, invalidation risk, material portfolio weight, or exploration).
 Low-value names carry with a recorded reason and zero provider budget.
 
 Modes (``DIGIQUANT_H6_SELECTION_MODE``):
 
-* ``shadow`` (default) — record :class:`H6Selection`; run full incumbent H6
+* ``shadow`` (default) — record :class:`DeliberationSelection`; run full incumbent deliberation
 * ``enforce`` — actuate carry/select from the typed selection
-* ``off`` — skip selection; full incumbent H6
+* ``off`` — skip selection; full incumbent deliberation
 
-Planner failure falls back to **full incumbent H6**, never an unrecorded skip.
+Planner failure falls back to **full incumbent deliberation**, never an unrecorded skip.
 Materiality (``weight_pct``) is a selection feature only — callers must not
 inject it into provider prompts.
 
@@ -45,9 +45,9 @@ import yaml
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from digiquant.dashboard.envcompat import (
-    H6_BOUNDARY_PRICE_DELTA,
-    H6_MATERIAL_WEIGHT_PCT,
-    H6_SELECTION_MODE,
+    DELIBERATION_BOUNDARY_PRICE_DELTA,
+    DELIBERATION_MATERIAL_WEIGHT_PCT,
+    DELIBERATION_SELECTION_MODE,
     RESEARCH_POLICY_PATH,
     env_lookup,
 )
@@ -71,22 +71,22 @@ RosterReason: TypeAlias = Literal["thesis_mapped", "technical", "held", "momentu
 RawUncertaintyLabel: TypeAlias = Literal["low", "medium", "high"]
 
 
-class H6SelectionMode(StrEnum):
-    """Rollout knob for deterministic H6 selection."""
+class DeliberationSelectionMode(StrEnum):
+    """Rollout knob for deterministic deliberation selection."""
 
     OFF = "off"
     SHADOW = "shadow"
     ENFORCE = "enforce"
 
 
-class H6Action(StrEnum):
-    """Whether H6 deliberation should run or carry."""
+class DeliberationAction(StrEnum):
+    """Whether deliberation should run or carry."""
 
     SELECT = "select"
     CARRY = "carry"
 
 
-class H6SelectionReason(StrEnum):
+class DeliberationSelectionReason(StrEnum):
     """Exactly one primary reason per run/carry (metric gate)."""
 
     DECISION_BOUNDARY = "decision_boundary"
@@ -99,13 +99,13 @@ class H6SelectionReason(StrEnum):
     INCUMBENT_FALLBACK = "incumbent_fallback"
 
 
-class H6PlannerModel(BaseModel):
-    """Strict immutable base for H6 selection contracts."""
+class DeliberationPlannerModel(BaseModel):
+    """Strict immutable base for deliberation selection contracts."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class H6DecisionFeatures(H6PlannerModel):
+class DeliberationDecisionFeatures(DeliberationPlannerModel):
     """Structured inputs for deterministic selection (not prompt material)."""
 
     ticker: NonEmptyStr
@@ -134,7 +134,7 @@ class H6DecisionFeatures(H6PlannerModel):
         return value.strip().lower() or "hold"
 
 
-class H6Budget(H6PlannerModel):
+class DeliberationBudget(DeliberationPlannerModel):
     """Provider/round budget implied by the selection decision."""
 
     max_provider_calls: int = Field(ge=0)
@@ -142,15 +142,15 @@ class H6Budget(H6PlannerModel):
     estimated_rounds: int = Field(ge=0)
 
 
-class H6Selection(H6PlannerModel):
-    """Typed H6 selection outcome — reasons / features / budget."""
+class DeliberationSelection(DeliberationPlannerModel):
+    """Typed deliberation selection outcome — reasons / features / budget."""
 
     ticker: NonEmptyStr
-    action: H6Action
-    reason: H6SelectionReason
-    features: H6DecisionFeatures
-    budget: H6Budget
-    mode: H6SelectionMode = H6SelectionMode.SHADOW
+    action: DeliberationAction
+    reason: DeliberationSelectionReason
+    features: DeliberationDecisionFeatures
+    budget: DeliberationBudget
+    mode: DeliberationSelectionMode = DeliberationSelectionMode.SHADOW
     actuated: bool = False
 
     @field_validator("ticker")
@@ -159,22 +159,22 @@ class H6Selection(H6PlannerModel):
         return value.strip().upper()
 
 
-def resolve_h6_selection_mode() -> H6SelectionMode:
+def resolve_deliberation_selection_mode() -> DeliberationSelectionMode:
     """Read ``DIGIQUANT_H6_SELECTION_MODE``; unknown values → shadow."""
-    raw = env_lookup(H6_SELECTION_MODE, default="shadow").strip().lower()
+    raw = env_lookup(DELIBERATION_SELECTION_MODE, default="shadow").strip().lower()
     try:
-        return H6SelectionMode(raw)
+        return DeliberationSelectionMode(raw)
     except ValueError:
         logger.warning(
             "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
             DIGIQUANT_H6_SELECTION_MODE_ENV,
             raw,
         )
-        return H6SelectionMode.SHADOW
+        return DeliberationSelectionMode.SHADOW
 
 
 def _material_weight_threshold() -> float:
-    raw = env_lookup(H6_MATERIAL_WEIGHT_PCT).strip()
+    raw = env_lookup(DELIBERATION_MATERIAL_WEIGHT_PCT).strip()
     if not raw:
         return _DEFAULT_MATERIAL_WEIGHT_PCT
     try:
@@ -184,7 +184,7 @@ def _material_weight_threshold() -> float:
 
 
 def _boundary_price_delta() -> float:
-    raw = env_lookup(H6_BOUNDARY_PRICE_DELTA).strip()
+    raw = env_lookup(DELIBERATION_BOUNDARY_PRICE_DELTA).strip()
     if not raw:
         return _DEFAULT_BOUNDARY_PRICE_DELTA
     try:
@@ -193,7 +193,7 @@ def _boundary_price_delta() -> float:
         return _DEFAULT_BOUNDARY_PRICE_DELTA
 
 
-def _is_decision_boundary(features: H6DecisionFeatures) -> bool:
+def _is_decision_boundary(features: DeliberationDecisionFeatures) -> bool:
     if features.stance_changed:
         return True
     directional = features.stance in {"buy", "sell"}
@@ -205,60 +205,60 @@ def _is_decision_boundary(features: H6DecisionFeatures) -> bool:
     return False
 
 
-def _is_conflict(features: H6DecisionFeatures) -> bool:
+def _is_conflict(features: DeliberationDecisionFeatures) -> bool:
     return features.has_evidence_conflict or features.counter_evidence_count > 0
 
 
-def _is_uncertainty(features: H6DecisionFeatures) -> bool:
+def _is_uncertainty(features: DeliberationDecisionFeatures) -> bool:
     return features.raw_uncertainty == "high"
 
 
-def _is_material(features: H6DecisionFeatures) -> bool:
+def _is_material(features: DeliberationDecisionFeatures) -> bool:
     return features.held and features.weight_pct >= _material_weight_threshold()
 
 
-def _is_exploration(features: H6DecisionFeatures) -> bool:
+def _is_exploration(features: DeliberationDecisionFeatures) -> bool:
     return features.roster_reason in _EXPLORATORY_ROSTER_REASONS
 
 
-def _primary_reason(features: H6DecisionFeatures) -> H6SelectionReason:
+def _primary_reason(features: DeliberationDecisionFeatures) -> DeliberationSelectionReason:
     """Stable priority: invalidation → conflict → boundary → uncertainty → material → exploration."""
     if features.invalidation_risk:
-        return H6SelectionReason.INVALIDATION_RISK
+        return DeliberationSelectionReason.INVALIDATION_RISK
     if _is_conflict(features):
-        return H6SelectionReason.CONFLICT
+        return DeliberationSelectionReason.CONFLICT
     if _is_decision_boundary(features):
-        return H6SelectionReason.DECISION_BOUNDARY
+        return DeliberationSelectionReason.DECISION_BOUNDARY
     if _is_uncertainty(features):
-        return H6SelectionReason.UNCERTAINTY
+        return DeliberationSelectionReason.UNCERTAINTY
     if _is_material(features):
-        return H6SelectionReason.MATERIAL
+        return DeliberationSelectionReason.MATERIAL
     if _is_exploration(features):
-        return H6SelectionReason.EXPLORATION
-    return H6SelectionReason.LOW_VALUE_CARRY
+        return DeliberationSelectionReason.EXPLORATION
+    return DeliberationSelectionReason.LOW_VALUE_CARRY
 
 
-def _budget_for(reason: H6SelectionReason) -> H6Budget:
-    if reason is H6SelectionReason.LOW_VALUE_CARRY:
-        return H6Budget(max_provider_calls=0, min_rounds=0, estimated_rounds=0)
+def _budget_for(reason: DeliberationSelectionReason) -> DeliberationBudget:
+    if reason is DeliberationSelectionReason.LOW_VALUE_CARRY:
+        return DeliberationBudget(max_provider_calls=0, min_rounds=0, estimated_rounds=0)
     # Selected success always meets the two-round adversarial floor (#945 / WP11.3).
-    return H6Budget(max_provider_calls=4, min_rounds=2, estimated_rounds=2)
+    return DeliberationBudget(max_provider_calls=4, min_rounds=2, estimated_rounds=2)
 
 
 def select_h6(
-    features: H6DecisionFeatures,
+    features: DeliberationDecisionFeatures,
     *,
-    mode: H6SelectionMode | None = None,
+    mode: DeliberationSelectionMode | None = None,
     actuated: bool | None = None,
-) -> H6Selection:
-    """Deterministic H6 selection — no LLM, no H4 roster mutation."""
-    resolved_mode = mode if mode is not None else resolve_h6_selection_mode()
+) -> DeliberationSelection:
+    """Deterministic deliberation selection — no LLM, no screener roster mutation."""
+    resolved_mode = mode if mode is not None else resolve_deliberation_selection_mode()
     reason = _primary_reason(features)
-    action = H6Action.CARRY if reason is H6SelectionReason.LOW_VALUE_CARRY else H6Action.SELECT
+    action = DeliberationAction.CARRY if reason is DeliberationSelectionReason.LOW_VALUE_CARRY else DeliberationAction.SELECT
     if actuated is None:
         # Actuation only when enforce will honor the decision.
-        actuated = resolved_mode is H6SelectionMode.ENFORCE
-    return H6Selection(
+        actuated = resolved_mode is DeliberationSelectionMode.ENFORCE
+    return DeliberationSelection(
         ticker=features.ticker,
         action=action,
         reason=reason,
@@ -270,18 +270,18 @@ def select_h6(
 
 
 def incumbent_fallback_selection(
-    features: H6DecisionFeatures,
+    features: DeliberationDecisionFeatures,
     *,
-    mode: H6SelectionMode | None = None,
-) -> H6Selection:
-    """Typed provenance when selection fails — still run full incumbent H6."""
-    resolved_mode = mode if mode is not None else resolve_h6_selection_mode()
-    return H6Selection(
+    mode: DeliberationSelectionMode | None = None,
+) -> DeliberationSelection:
+    """Typed provenance when selection fails — still run full incumbent deliberation."""
+    resolved_mode = mode if mode is not None else resolve_deliberation_selection_mode()
+    return DeliberationSelection(
         ticker=features.ticker,
-        action=H6Action.SELECT,
-        reason=H6SelectionReason.INCUMBENT_FALLBACK,
+        action=DeliberationAction.SELECT,
+        reason=DeliberationSelectionReason.INCUMBENT_FALLBACK,
         features=features,
-        budget=H6Budget(max_provider_calls=4, min_rounds=2, estimated_rounds=2),
+        budget=DeliberationBudget(max_provider_calls=4, min_rounds=2, estimated_rounds=2),
         mode=resolved_mode,
         actuated=False,
     )
@@ -300,7 +300,7 @@ def _forecast_terms_blob(analyst: Mapping[str, Any]) -> Mapping[str, Any] | None
     return None
 
 
-def build_h6_decision_features(
+def build_deliberation_decision_features(
     *,
     ticker: str,
     roster_reason: str,
@@ -312,8 +312,8 @@ def build_h6_decision_features(
     evidence_bundle_id: str | None = None,
     has_evidence_conflict: bool = False,
     invalidation_risk: bool = False,
-) -> H6DecisionFeatures:
-    """Assemble features from H5/H4/book state (selection path only)."""
+) -> DeliberationDecisionFeatures:
+    """Assemble features from analyst/screener/book state (selection path only)."""
     stance = str(analyst.get("stance") or "hold").strip().lower() or "hold"
     prior_stance: str | None = None
     if isinstance(prior_analyst, Mapping) and prior_analyst:
@@ -356,7 +356,7 @@ def build_h6_decision_features(
         except (TypeError, ValueError):
             delta_abs = None
 
-    return H6DecisionFeatures(
+    return DeliberationDecisionFeatures(
         ticker=ticker,
         roster_reason=reason,  # type: ignore[arg-type]
         held=held,
@@ -374,13 +374,13 @@ def build_h6_decision_features(
     )
 
 
-# Keys that must never appear in H6 provider phase_inputs (blinding / anti-leak).
-H6_SELECTION_PROMPT_FORBIDDEN_KEYS = frozenset(
+# Keys that must never appear in deliberation provider phase_inputs (blinding / anti-leak).
+DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS = frozenset(
     {
         "weight_pct",
         "materiality",
         "material_weight",
-        "h6_selection",
+        "deliberation_selection",
         "selection_features",
         "decision_features",
         "portfolio_materiality",
@@ -390,9 +390,9 @@ H6_SELECTION_PROMPT_FORBIDDEN_KEYS = frozenset(
 
 def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
     """Hard guard: selection materiality features never enter provider prompts."""
-    leaked = H6_SELECTION_PROMPT_FORBIDDEN_KEYS.intersection(phase_inputs)
+    leaked = DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS.intersection(phase_inputs)
     if leaked:
-        raise ValueError(f"H6 prompt must not include selection materiality keys: {sorted(leaked)}")
+        raise ValueError(f"deliberation prompt must not include selection materiality keys: {sorted(leaked)}")
 
 
 # ---------------------------------------------------------------------------
@@ -450,33 +450,33 @@ class AttentionTargetKind(StrEnum):
     TICKER = "ticker"
 
 
-class AttentionBudgetEstimate(H6PlannerModel):
+class AttentionBudgetEstimate(DeliberationPlannerModel):
     """Estimated provider/search/token budget for one attention decision."""
 
     provider_calls: int = Field(ge=0)
     searches: int = Field(ge=0)
     uncached_tokens: int = Field(ge=0)
-    min_h6_rounds: int = Field(default=0, ge=0)
+    min_deliberation_rounds: int = Field(default=0, ge=0)
 
 
-class PolicyThresholds(H6PlannerModel):
+class PolicyThresholds(DeliberationPlannerModel):
     material_weight_pct: float = Field(ge=0.0, allow_inf_nan=False)
     boundary_price_delta: float = Field(ge=0.0, allow_inf_nan=False)
     boundary_conviction: int = Field(ge=0)
     stale_days_full: int = Field(ge=0)
 
 
-class PolicyExploration(H6PlannerModel):
+class PolicyExploration(DeliberationPlannerModel):
     min_reserved_slots: int = Field(ge=0)
 
 
-class PolicySessionBudget(H6PlannerModel):
+class PolicySessionBudget(DeliberationPlannerModel):
     max_provider_calls: int = Field(ge=0)
     max_searches: int = Field(ge=0)
     max_uncached_tokens: int = Field(ge=0)
 
 
-class ResearchAttentionPolicy(H6PlannerModel):
+class ResearchAttentionPolicy(DeliberationPlannerModel):
     """Versioned YAML policy with content-addressed hash."""
 
     schema_version: int = Field(ge=1)
@@ -512,13 +512,13 @@ class ResearchAttentionPolicy(H6PlannerModel):
         return out
 
 
-class AttentionFeatures(H6PlannerModel):
+class AttentionFeatures(DeliberationPlannerModel):
     """Structured inputs for deterministic attention routing."""
 
     target_kind: AttentionTargetKind
     target_key: NonEmptyStr
     state_version_id: str | None = None
-    h6: H6DecisionFeatures | None = None
+    deliberation: DeliberationDecisionFeatures | None = None
     has_prior: bool = False
     force_full_rewrite: bool = False
     triage_mode: _TriageMode | None = None
@@ -536,16 +536,16 @@ class AttentionFeatures(H6PlannerModel):
         return cleaned.upper()
 
     @model_validator(mode="after")
-    def _ticker_requires_h6(self) -> AttentionFeatures:
-        if self.target_kind is AttentionTargetKind.TICKER and self.h6 is None:
-            raise ValueError("ticker AttentionFeatures must include h6 decision features")
-        if self.target_kind is AttentionTargetKind.TICKER and self.h6 is not None:
-            if self.h6.ticker != self.target_key:
-                raise ValueError("h6.ticker must match target_key for ticker targets")
+    def _ticker_requires_deliberation(self) -> AttentionFeatures:
+        if self.target_kind is AttentionTargetKind.TICKER and self.deliberation is None:
+            raise ValueError("ticker AttentionFeatures must include deliberation decision features")
+        if self.target_kind is AttentionTargetKind.TICKER and self.deliberation is not None:
+            if self.deliberation.ticker != self.target_key:
+                raise ValueError("deliberation.ticker must match target_key for ticker targets")
         return self
 
 
-class AttentionDecision(H6PlannerModel):
+class AttentionDecision(DeliberationPlannerModel):
     """One pre-provider attention routing outcome."""
 
     target_key: NonEmptyStr
@@ -564,7 +564,7 @@ class AttentionDecision(H6PlannerModel):
         return self
 
 
-class AttentionPlan(H6PlannerModel):
+class AttentionPlan(DeliberationPlannerModel):
     """Immutable research attention plan for one run under a pinned policy."""
 
     plan_id: UUID
@@ -656,7 +656,7 @@ def _stable_reasons(
     return (primary, *ordered)
 
 
-def _h6_reason_to_attention(reason: H6SelectionReason) -> AttentionReason:
+def _deliberation_reason_to_attention(reason: DeliberationSelectionReason) -> AttentionReason:
     return AttentionReason(reason.value)
 
 
@@ -668,8 +668,8 @@ def _evaluate_ticker_reasons(
     features: AttentionFeatures,
     policy: ResearchAttentionPolicy,
 ) -> list[AttentionReason]:
-    assert features.h6 is not None
-    h6 = features.h6
+    assert features.deliberation is not None
+    deliberation = features.deliberation
     thresholds = _thresholds_from_policy(policy)
     reasons: list[AttentionReason] = []
 
@@ -689,27 +689,28 @@ def _evaluate_ticker_reasons(
     ):
         reasons.append(AttentionReason.STALE_CONTENT)
 
-    if h6.invalidation_risk:
+    if deliberation.invalidation_risk:
         reasons.append(AttentionReason.INVALIDATION_RISK)
-    if h6.has_evidence_conflict or h6.counter_evidence_count > 0:
+    if deliberation.has_evidence_conflict or deliberation.counter_evidence_count > 0:
         reasons.append(AttentionReason.CONFLICT)
-    if h6.stance_changed:
+    if deliberation.stance_changed:
         reasons.append(AttentionReason.DECISION_BOUNDARY)
     elif (
-        h6.stance in {"buy", "sell"} and abs(h6.conviction_score) >= thresholds.boundary_conviction
+        deliberation.stance in {"buy", "sell"}
+        and abs(deliberation.conviction_score) >= thresholds.boundary_conviction
     ):
         reasons.append(AttentionReason.DECISION_BOUNDARY)
     elif (
-        h6.held
-        and h6.price_delta_abs is not None
-        and h6.price_delta_abs >= thresholds.boundary_price_delta
+        deliberation.held
+        and deliberation.price_delta_abs is not None
+        and deliberation.price_delta_abs >= thresholds.boundary_price_delta
     ):
         reasons.append(AttentionReason.DECISION_BOUNDARY)
-    if h6.raw_uncertainty == "high":
+    if deliberation.raw_uncertainty == "high":
         reasons.append(AttentionReason.UNCERTAINTY)
-    if h6.held and h6.weight_pct >= thresholds.material_weight_pct:
+    if deliberation.held and deliberation.weight_pct >= thresholds.material_weight_pct:
         reasons.append(AttentionReason.MATERIAL)
-    if h6.roster_reason in _EXPLORATORY_ROSTER_REASONS or features.exploration_slot:
+    if deliberation.roster_reason in _EXPLORATORY_ROSTER_REASONS or features.exploration_slot:
         reasons.append(AttentionReason.EXPLORATION)
 
     if not reasons:
@@ -810,7 +811,7 @@ def sum_budget_estimates(decisions: Sequence[AttentionDecision]) -> AttentionBud
         provider_calls=sum(item.budget.provider_calls for item in decisions),
         searches=sum(item.budget.searches for item in decisions),
         uncached_tokens=sum(item.budget.uncached_tokens for item in decisions),
-        min_h6_rounds=max((item.budget.min_h6_rounds for item in decisions), default=0),
+        min_deliberation_rounds=max((item.budget.min_deliberation_rounds for item in decisions), default=0),
     )
 
 
@@ -981,7 +982,7 @@ def attention_evaluation_id(*, plan_id: UUID, reconciliation_digest: str) -> UUI
     )
 
 
-class PersistedAttentionPlan(H6PlannerModel):
+class PersistedAttentionPlan(DeliberationPlannerModel):
     """Stored attention plan envelope with run/attempt provenance."""
 
     plan: AttentionPlan
@@ -994,7 +995,7 @@ class PersistedAttentionPlan(H6PlannerModel):
         return self
 
 
-class PersistedAttentionDecision(H6PlannerModel):
+class PersistedAttentionDecision(DeliberationPlannerModel):
     """One persisted attention decision linked to a plan and policy/state lineage."""
 
     decision_id: UUID
@@ -1018,7 +1019,7 @@ class PersistedAttentionDecision(H6PlannerModel):
         return self
 
 
-class AttentionContextManifest(H6PlannerModel):
+class AttentionContextManifest(DeliberationPlannerModel):
     """Append-only context manifest row (WP14 compiler will populate; storage only here)."""
 
     manifest_id: UUID
@@ -1058,7 +1059,7 @@ class AttentionContextManifest(H6PlannerModel):
         return self
 
 
-class AttentionDecisionReconciliation(H6PlannerModel):
+class AttentionDecisionReconciliation(DeliberationPlannerModel):
     """Planned vs actual resource linkage for one decision (WP13.5/WP16 input)."""
 
     decision_id: UUID
@@ -1078,7 +1079,7 @@ class AttentionDecisionReconciliation(H6PlannerModel):
         return value
 
 
-class AttentionPolicyEvaluation(H6PlannerModel):
+class AttentionPolicyEvaluation(DeliberationPlannerModel):
     """Shadow/enforced policy evaluation with per-decision reconciliation."""
 
     evaluation_id: UUID
@@ -1107,26 +1108,26 @@ class AttentionPolicyEvaluation(H6PlannerModel):
         return self
 
 
-def h6_selection_to_attention_decision(
-    selection: H6Selection,
+def deliberation_selection_to_attention_decision(
+    selection: DeliberationSelection,
     policy: ResearchAttentionPolicy,
     *,
     actuated: bool = False,
 ) -> AttentionDecision:
-    """Bridge WP11.3 H6 selection into WP13.1 attention vocabulary."""
+    """Bridge WP11.3 deliberation selection into WP13.1 attention vocabulary."""
     features = AttentionFeatures(
         target_kind=AttentionTargetKind.TICKER,
         target_key=selection.ticker,
-        h6=selection.features,
+        deliberation=selection.features,
         has_prior=True,
-        exploration_slot=selection.reason is H6SelectionReason.EXPLORATION,
+        exploration_slot=selection.reason is DeliberationSelectionReason.EXPLORATION,
     )
-    if selection.action is H6Action.CARRY:
+    if selection.action is DeliberationAction.CARRY:
         primary = AttentionReason.LOW_VALUE_CARRY
         mode = AttentionMode.CARRY
         budget = _budget_for_mode(mode, policy)
     else:
-        primary = _h6_reason_to_attention(selection.reason)
+        primary = _deliberation_reason_to_attention(selection.reason)
         mode = AttentionMode.CHALLENGE
         budget = _budget_for_mode(mode, policy)
     return AttentionDecision(
@@ -1155,32 +1156,32 @@ __all__ = [
     "AttentionTargetKind",
     "PersistedAttentionDecision",
     "PersistedAttentionPlan",
-    "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
+    "DELIBERATION_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "DIGIQUANT_H6_SELECTION_MODE_ENV",
     "RESEARCH_POLICY_ENV",
     "PolicyExploration",
     "PolicySessionBudget",
     "PolicyThresholds",
     "ResearchAttentionPolicy",
-    "H6Action",
-    "H6Budget",
-    "H6DecisionFeatures",
-    "H6Selection",
-    "H6SelectionMode",
-    "H6SelectionReason",
+    "DeliberationAction",
+    "DeliberationBudget",
+    "DeliberationDecisionFeatures",
+    "DeliberationSelection",
+    "DeliberationSelectionMode",
+    "DeliberationSelectionReason",
     "apply_session_budget",
     "assert_no_materiality_in_prompt",
     "attention_decision_id",
     "attention_evaluation_id",
     "attention_plan_id",
-    "build_h6_decision_features",
+    "build_deliberation_decision_features",
     "default_research_policy_path",
-    "h6_selection_to_attention_decision",
+    "deliberation_selection_to_attention_decision",
     "incumbent_fallback_selection",
     "load_research_attention_policy",
     "plan_research_attention",
     "policy_content_hash",
-    "resolve_h6_selection_mode",
+    "resolve_deliberation_selection_mode",
     "resolve_research_policy_path",
     "route_attention",
     "select_h6",

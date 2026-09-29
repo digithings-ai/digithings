@@ -1,21 +1,16 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-describe("gallery chatbot.css product share", () => {
-  const css = readFileSync(
-    join(here, "../../../../../apps/reference/app/(chatbot)/chatbot/chatbot.css"),
-    "utf8",
-  );
-  const productImport = readFileSync(join(here, "../../styles/chatbot.css"), "utf8");
+describe("package chat-digichat.css owns the digichat grammar", () => {
+  const css = readFileSync(join(here, "../../styles/chat-digichat.css"), "utf8");
 
   it("scopes grammar to the gallery stage and product digichat skin", () => {
     expect(css).toContain('[data-thread-skin="digichat"]');
     expect(css).toContain(":is(.aui-theme-stage, [data-thread-skin=\"digichat\"])");
-    expect(productImport).toMatch(/chatbot\/chatbot\.css/);
   });
 
   it("keeps the 72vh specimen frame on the gallery stage only", () => {
@@ -46,5 +41,21 @@ describe("gallery chatbot.css product share", () => {
     expect(skinBlock).toMatch(
       /--font-mono:\s*var\(--font-geist-mono\),\s*ui-monospace,\s*monospace/,
     );
+  });
+
+  it("no longer reaches into the reference app tree (WS1)", () => {
+    // The shim and the gallery original are deleted; the package owns the sheet.
+    expect(existsSync(join(here, "../../styles/chatbot.css"))).toBe(false);
+    expect(
+      existsSync(
+        join(
+          here,
+          "../../../../../apps/reference/app/(chatbot)/chatbot/chatbot.css",
+        ),
+      ),
+    ).toBe(false);
+    // Provenance notes may name the old home; no rule may load a file from it.
+    expect(css).not.toMatch(/apps\/reference\/[^\s]*\.css/);
+    expect(css).not.toMatch(/@import[^;]*apps\/reference/);
   });
 });

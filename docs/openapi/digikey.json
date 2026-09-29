@@ -100,6 +100,21 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LicenseRevokeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "revoked": {
+            "description": "True when the row is revoked (idempotent)",
+            "title": "Revoked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "LicenseRevokeResponse",
+        "type": "object"
+      },
       "RevokeResponse": {
         "properties": {
           "jtis_invalidated": {
@@ -514,6 +529,69 @@
         ]
       }
     },
+    "/v1/admin/licenses/{license_id}/revoke": {
+      "post": {
+        "description": "Set ``revoked_at`` on a ``digikey_licenses`` row (slice 3 \u00a75).\n\nMirrors ``POST /v1/admin/keys/{key_id}/revoke`` minus the blocklist: license\nrevocation is allowlist-enforced, never jti-blocklisted (slice 1 \u00a74.3), so\nthere is no blocklist write and no 503-on-blocklist-failure branch.\nIdempotent; unknown ids 404 distinctly from revoked ones.",
+        "operationId": "admin_revoke_license_v1_admin_licenses__license_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "license_id",
+            "required": true,
+            "schema": {
+              "title": "License Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseRevokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke customer license",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/licenses/heartbeat": {
+      "post": {
+        "description": "Answer the heartbeat sender with the four-state allowlist read.\n\nThis route authenticates *as* a license: its only credential check is\nsignature + allowlist + expiry, in that order. It never touches the\nAPI-key exchange path (prefix lookup + bcrypt) or the admin bearer gate.\n\nContract (slice 1 \u00a74.4 / slice 2 \u00a78): live row \u2192 200 ``valid``; live but\nexpired row \u2192 200 ``expired`` (never 401); revoked row \u2192 401\n``license_revoked``; no row \u2192 401 ``unknown_license``. Crypto failures\nanswer generic 401 ``unauthorized`` (an error outcome, never a latch);\nbad telemetry answers 400 (never a deny). The ``error``-key shape is what\nthe sender matches on \u2014 do not normalize it to the middleware ``code``\nidiom. Never logs the raw JWT.",
+        "operationId": "license_heartbeat_v1_licenses_heartbeat_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Customer license heartbeat (four-state allowlist read)",
+        "tags": [
+          "licenses"
+        ]
+      }
+    },
     "/v1/oauth/token": {
       "post": {
         "operationId": "oauth_token_v1_oauth_token_post",
@@ -572,6 +650,10 @@
     {
       "description": "Key issue/revoke (requires DIGIKEY_ADMIN_TOKEN).",
       "name": "admin"
+    },
+    {
+      "description": "Customer license heartbeat + license revoke.",
+      "name": "licenses"
     }
   ]
 }

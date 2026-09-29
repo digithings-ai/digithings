@@ -207,6 +207,7 @@ def run_tools(
     max_tool_rounds: int = 5,
     tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
+    final_response_format: JsonSchemaResponseFormat | None = None,
 ) -> str:
     """Run digillm's agentic tool-calling loop with digigraph's parallel-safe set + streaming.
 
@@ -216,6 +217,11 @@ def run_tools(
     every turn ("auto" default; "required" forces a tool call every round — see
     :func:`digigraph.tool_policy.require_tool_calls_for_workflow`). Returns the
     model's final answer.
+
+    ``final_response_format`` is forwarded to digillm and enforces the caller's
+    output schema on the forced tool-free wrap-up completion only (#4556) — the
+    tool-enabled turns cannot carry it, since function-calling and json_schema are
+    mutually exclusive provider modes.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,
@@ -234,6 +240,7 @@ def run_tools(
             on_tool_step=on_tool_step,
             parallel_safe_tools=_parallel_safe_tools(),
             stream_deltas=on_tool_step is not None,
+            final_response_format=final_response_format,
         )
 
 

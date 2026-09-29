@@ -159,7 +159,6 @@ function render(
       <TodayTab
         digest={null}
         tradeIdeas={tradeIdeas}
-        confluence={[]}
         briefs={briefsFixture()}
         events={eventsFixture()}
         series={tenCurrencySeries()}

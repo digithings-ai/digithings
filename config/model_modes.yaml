@@ -31,7 +31,7 @@ defaults:
 
 # Optional per-phase overrides — empty by default; digiquant_models.yaml owns routing.
 phase_models:
-  # #1006: pin H6 deliberation. Historically the cheap research pool also held
+  # #1006: pin deliberation. Historically the cheap research pool also held
   # llama-4-maverick (empty completions under STRICT json_schema — ~40% of watchlist
   # tickers hashing onto it failed json.loads). Maverick is no longer in pools
   # (#3660/#3788); pin stays on deepseek-v4-flash. The trailing '-' is a prefix

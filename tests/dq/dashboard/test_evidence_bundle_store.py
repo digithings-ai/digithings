@@ -84,7 +84,7 @@ def _request(
     content_hash = missing_fact_request_content_hash(
         base_bundle_id=bundle.bundle_id,
         fact_key=fact_key,
-        rationale="H6 needs dated catalyst for challenge",
+        rationale="deliberation needs dated catalyst for challenge",
     )
     return MissingFactRequest(
         request_id=missing_fact_request_id(
@@ -95,7 +95,7 @@ def _request(
         base_bundle_id=bundle.bundle_id,
         ticker=bundle.ticker,
         fact_key=fact_key,
-        rationale="H6 needs dated catalyst for challenge",
+        rationale="deliberation needs dated catalyst for challenge",
         event_time=bundle.event_time,
         effective_as_of=bundle.effective_as_of,
         known_at=bundle.known_at,

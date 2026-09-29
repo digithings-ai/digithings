@@ -177,6 +177,10 @@ usage totals, source count, and code-generated shape summaries. All public text 
 It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
 values, model output, or chain-of-thought. `events_snapshot()` returns the ordered body-free
 records; aggregate `snapshot()` includes them under `events` for the research diagnostics writer.
+`snapshot()` also carries `by_kind` (per-call-kind) and `by_model` (per-model
+`calls`/`prompt_tokens`/`completion_tokens`/`cached_tokens`/`cost`) splits. `by_model` is the
+input digiquant's token-derived cost estimate (#4596) prices; `cost_usd` itself stays the
+ACTUAL reported figure and is never substituted with an estimate here.
 
 #### Logical provider-call boundary
 
@@ -231,7 +235,7 @@ without `wraps` — raises `TypeError` for any node declaring `config`, `writer`
 `runtime`. `tests/dg/test_node_run_context.py::test_node_declaring_runnable_config_still_receives_it`
 is the regression guard.
 
-**Run identity.** `usage.start(run_id=...)` takes the `GITHUB_RUN_ID` that `atlas_run_diagnostics`
+**Run identity.** `usage.start(run_id=...)` takes the `GITHUB_RUN_ID` that `run_diagnostics`
 already writes with `on_conflict="run_id,attempt"`, so detailed telemetry and the diagnostics row
 join on one value. It is stored verbatim — truncating a join key would corrupt reconciliation. No
 second identifier is minted; `ResearchState.run_id` is a per-process `uuid4` that joins to
@@ -248,7 +252,7 @@ nothing and is deliberately not used.
 | `usage.start()` with no argument (operator scripts, the research simulator) | `None` | Emits nothing **by design** |
 
 **A NULL `fanout_key` means "this execution had no fan-out cursor", never "instrumentation
-missing".** research `phase5_sectors` nodes and the compile-time per-ticker H5/H6 variants already
+missing".** research `phase5_sectors` nodes and the compile-time per-ticker analyst/deliberation variants already
 carry their discriminator in `node_name`, so they leave `fanout_key` NULL correctly. A worker that
 no-ops on a falsy cursor still emits an honest `SUCCEEDED` record with no child provider call.
 
@@ -569,7 +573,7 @@ Three properties that any other Postgres-checkpointer deployment should copy:
 - **Key staleness on `max((checkpoint->>'ts')::timestamptz)` per thread.** Per-row it is a reliable ISO 8601 timestamp; taking the max means an in-flight or freshly-resumed thread can never be eligible, and an unparsable/absent `ts` yields `NULL`, fails the comparison, and is retained.
 - **Retention is a resume ceiling.** Any resume-from-checkpoint feature (here, `pipeline-digiquant.yml`'s `resume_run_id`) can only reach back as far as the retention window, so the window can never be zero.
 
-**The real cost driver is upstream of retention.** 94% of the bytes sit on the `__pregel_tasks` channel: `FanOutPhase` dispatches one `Send` per item and `pipeline_builder.py:57-58` hands each worker a **full copy of the live state**, so one H6 superstep persisted 52 complete `ResearchState` copies (a single 48 MB row was measured). That is `O(fan-out width x state size)` per superstep and it contradicts `AGENTS.md`'s "State stays lean … no large DataFrames in state or LangGraph checkpoints" as well as [`docs/LANGGRAPH_REVIEW.md`](docs/LANGGRAPH_REVIEW.md). Shrinking the `Send` payload to a cursor is a ~20x lever; it changes `FanOutPhase`'s state-copy contract in this shared library and is therefore deferred as a human-gated architecture change (follow-up to #1758). Retention caps the footprint; it does not reduce the write volume.
+**The real cost driver is upstream of retention.** 94% of the bytes sit on the `__pregel_tasks` channel: `FanOutPhase` dispatches one `Send` per item and `pipeline_builder.py:57-58` hands each worker a **full copy of the live state**, so one deliberation superstep persisted 52 complete `ResearchState` copies (a single 48 MB row was measured). That is `O(fan-out width x state size)` per superstep and it contradicts `AGENTS.md`'s "State stays lean … no large DataFrames in state or LangGraph checkpoints" as well as [`docs/LANGGRAPH_REVIEW.md`](docs/LANGGRAPH_REVIEW.md). Shrinking the `Send` payload to a cursor is a ~20x lever; it changes `FanOutPhase`'s state-copy contract in this shared library and is therefore deferred as a human-gated architecture change (follow-up to #1758). Retention caps the footprint; it does not reduce the write volume.
 #### 5.5.3 Postgres connection bounds — #1734
 
 `PostgresSaver.from_conn_string` forwards its argument straight to `psycopg.Connection.connect`, which applies **no** connect timeout and **no** TCP keepalives, and exposes no kwarg for either. An established connection to a peer that disappears without sending an RST therefore stays in `ESTABLISHED` indefinitely, and a checkpoint read/write blocks with nothing but the caller's own job timeout as a backstop — the shape of the 2026-07-30 dashboard stall (210 minutes of silence inside a 240-minute job, beginning at a checkpoint-write boundary).
@@ -799,6 +803,16 @@ This also strictly tightens `workflow_thread_id`'s subject-based `thread_id` sco
 **Risk before this fix was low but not zero:** the Store currently holds only a `response_language` preference (§5.5.4), gated behind `DIGI_SUPERVISOR=1` which defaults off, so a realized exploit at most let one subject read or overwrite another's language preference. Recorded here for completeness now that it is closed, since the Store's blast radius would have grown with whatever future data any new supervisor-node logic decides to persist there.
 
 ---
+
+### 6.11 Hosted License Scope Checks (`X-Digi-License`)
+
+digigraph enforces hosted-service license scopes at the HTTP boundary via `digikey.license_edge.evaluate_hosted_license` (spec `docs/superpowers/specs/2026-09-28-digichat-license-receiver-impl.md` §7). The digichat container forwards its in-memory license JWT as `X-Digi-License` on digigraph calls; containers with no license omit the header.
+
+Scope map (normative): corpus/vault headers (`X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`) require the `digisearch-corpus` scope, enforced in `_digi_fields_from_request` (`http_api/context.py`) after corpus-map resolution; web-search opt-in (body-or-header `enable_web_search` on the chat path, body flag on `/workflow`) requires the `hosted-web-search` scope, enforced in `chat_completions` (`server.py`, via `http_api/chat_resolve.py`) before streaming and non-streaming diverge, and in the `/workflow` handler for the body flag. The graph layer (`workflow.py`) needs no gate: it never sees the raw JWT (secret hygiene — the JWT must not enter checkpointed state), and unlicensed hosted turns are refused before they reach it.
+
+A hosted capability requested without an authorizing license (header absent, invalid, expired, wrong scope) is refused with **403 `{"error":"insufficient_license_scope","message":…}`** naming the missing scope (`LicenseScopeDenied` → `denial_response` in `http_api/license_gate.py`; signature verified against `DIGIKEY_PUBLIC_KEY_PEM`). **Plain-inference-open guarantee:** requests carrying none of the hosted headers/flags never touch license code and behave byte-identically with or without a license. Map-authoritative deployments are unchanged: when `DIGI_TENANT_CORPUS_MAP` is set, client corpus headers stay ignored and the corpus gate does not fire there — it narrows only header-driven selection, never mapped selection. No per-call allowlist read at edge; revocation freshness comes from the container heartbeat latch plus the `exp` backstop.
+
+See `tests/dg/test_license_edge_wiring.py` for the pinned cases (scoped allows, scopeless/absent/invalid/expired denies with the 403 shape, map-set carve-out, plain-open regression).
 
 ## 7. Scalability Analysis
 

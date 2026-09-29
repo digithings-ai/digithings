@@ -1,4 +1,4 @@
-"""H6 deliberation skip tests (dashboard #930 PR 4b + WP11.3 #2902)."""
+"""deliberation skip tests (dashboard #930 PR 4b + WP11.3 #2902)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.phases.deliberation import build_deliberation
 from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker
 from digiquant.research.state import (
     FocusRosterEntry,
@@ -74,7 +74,7 @@ def _quiet_state() -> ResearchState:
 @pytest.mark.unit
 class TestDeliberationSkip:
     def test_quiet_fingerprint_carries_summary_without_llm(self) -> None:
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("skip path must not call LLM"),
@@ -137,7 +137,7 @@ class TestDeliberationSkip:
                 }
             },
         )
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("skip path must not call LLM"),
@@ -157,7 +157,7 @@ class TestH6SelectionEnforceCarry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "enforce")
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("enforce low-value must not call provider"),
@@ -168,14 +168,14 @@ class TestH6SelectionEnforceCarry:
         assert summary["carried"] is True
         assert summary["carry_reason"] == "low_value_carry"
         assert summary["selection_reason"] == "low_value_carry"
-        assert summary["h6_selection"]["action"] == "carry"
-        assert summary["h6_selection"]["budget"]["max_provider_calls"] == 0
+        assert summary["deliberation_selection"]["action"] == "carry"
+        assert summary["deliberation_selection"]["budget"]["max_provider_calls"] == 0
 
     def test_shadow_records_selection_but_keeps_incumbent_fingerprint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("DIGIQUANT_H6_SELECTION_MODE", "shadow")
-        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
+        compiled = build_pipeline(ResearchState, [build_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("shadow incumbent skip must not call LLM"),
@@ -186,5 +186,5 @@ class TestH6SelectionEnforceCarry:
         assert summary["carried"] is True
         assert summary["carry_reason"] == "fingerprint_skip"
         assert summary["selection_reason"] == "low_value_carry"
-        assert summary["h6_selection"]["mode"] == "shadow"
-        assert summary["h6_selection"]["actuated"] is False
+        assert summary["deliberation_selection"]["mode"] == "shadow"
+        assert summary["deliberation_selection"]["actuated"] is False

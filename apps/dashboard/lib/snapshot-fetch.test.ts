@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ApiDb } from './api-query';
 import {
   envelopeFromRow,
   fetchLatestSnapshot,
   isBffSnapshotEnabled,
 } from './snapshot-fetch';
 import { fixtureDigest, fixtureSnapshotRow } from './__fixtures__/snapshot-fixture';
-import type { Database } from './database.types';
+
 
 const NOW = new Date('2026-04-27T12:00:00Z');
 
@@ -20,8 +20,8 @@ function fakeClient<T>(payload: { data: T | null; error: { message: string } | n
   };
   const from = vi.fn().mockReturnValue(builder);
   // Cast through unknown — the test only exercises the chain we use in
-  // snapshot-fetch.ts, not the full SupabaseClient surface.
-  return { from } as unknown as SupabaseClient<Database>;
+  // snapshot-fetch.ts, not the full query-root surface.
+  return { from } as unknown as ApiDb;
 }
 
 describe('envelopeFromRow', () => {

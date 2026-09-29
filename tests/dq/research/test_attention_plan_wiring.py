@@ -99,7 +99,7 @@ def test_maybe_publish_upserts_attention_plan() -> None:
     assert row["document_key"] == ATTENTION_PLAN_DOCUMENT_KEY
     assert row["category"] == "planner"
     assert row["run_type"] == "baseline"
-    assert row["payload"]["plan"]["h4_roster"] == ["AAPL", "MSFT"]
+    assert row["payload"]["plan"]["screener_roster"] == ["AAPL", "MSFT"]
     assert len(row["payload"]["plan"]["decisions"]) == 2
 
 

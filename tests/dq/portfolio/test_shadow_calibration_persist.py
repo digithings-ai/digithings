@@ -1,4 +1,4 @@
-"""WP5.4 (#2684): attach + persist shadow forecast calibration at H6/H7 boundary."""
+"""WP5.4 (#2684): attach + persist shadow forecast calibration at deliberation/direction boundary."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from digiquant.portfolio.models.forecast_calibration import (
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
+from digiquant.portfolio.phases.direction import build_direction
 from digiquant.research import forecast_registry as fr
 from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
@@ -373,20 +373,20 @@ class TestPersistShadowCalibrations:
 
 
 class TestH7BoundaryAttach:
-    def test_h7_attaches_shadow_without_feeding_memo_economics(self) -> None:
+    def test_direction_attaches_shadow_without_feeding_memo_economics(self) -> None:
         from unittest.mock import patch
 
         from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
         state = _state_with_effective()
-        phase = build_h7_pm_direction(client=None)
+        phase = build_direction(client=None)
         node = phase.nodes[0].run
         memo = PMDirectionMemo(
             date=RUN_DATE,
             roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
         )
         with patch(
-            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.direction.run_research_agent",
             return_value=memo,
         ):
             out = node(state)
@@ -394,7 +394,7 @@ class TestH7BoundaryAttach:
         assert portfolio.pm_direction_memo is not None
         assert portfolio.forecast_calibrations
         assert portfolio.calibrated_forecasts
-        # H7 memo still direction-only — no calibrated economics on the memo.
+        # direction memo still direction-only — no calibrated economics on the memo.
         assert not hasattr(portfolio.pm_direction_memo.roster[0], "expected_gross_return")
         assert "AAPL" in portfolio.calibrated_forecasts
         assert (
@@ -404,16 +404,16 @@ class TestH7BoundaryAttach:
 
 
 class TestH7OutcomeIntegrityFailsLoud:
-    """#4298: a stale persisted digest must fail H7, not empty the cohort.
+    """#4298: a stale persisted digest must fail direction, not empty the cohort.
 
-    The reader raises ``ForecastOutcomeIntegrityError``; the H7 caller used to
+    The reader raises ``ForecastOutcomeIntegrityError``; the direction caller used to
     catch ``Exception`` twice (inner load + outer attach) and return an empty
     cohort, neutralizing the fail-loud contract. These exercise the *caller*,
     not the reader in isolation.
     """
 
     def test_stale_row_fails_loud_from_attach(self) -> None:
-        from digiquant.portfolio.phases.h7_pm_direction import _attach_shadow_calibration
+        from digiquant.portfolio.phases.direction import _attach_shadow_calibration
         from digiquant.research import forecast_outcomes as fo
 
         from tests.dq.research.test_forecast_outcome_hash_ingress import _stale_row
@@ -428,7 +428,7 @@ class TestH7OutcomeIntegrityFailsLoud:
             _attach_shadow_calibration(_state_with_effective(), client=client)
 
     def test_healthy_row_still_builds_shadow_attachment(self) -> None:
-        from digiquant.portfolio.phases.h7_pm_direction import _attach_shadow_calibration
+        from digiquant.portfolio.phases.direction import _attach_shadow_calibration
         from digiquant.research import forecast_outcomes as fo
 
         from tests.dq.research.test_forecast_outcome_hash_ingress import (
@@ -449,7 +449,7 @@ class TestH7OutcomeIntegrityFailsLoud:
         assert attachment.calibrations[0].sample_count == 1
 
     def test_transient_load_failure_still_degrades(self) -> None:
-        from digiquant.portfolio.phases.h7_pm_direction import _attach_shadow_calibration
+        from digiquant.portfolio.phases.direction import _attach_shadow_calibration
 
         class _BrokenClient:
             def table(self, _name: str) -> object:

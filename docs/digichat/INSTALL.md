@@ -26,7 +26,7 @@ Primary install unit: a **pinned GHCR image** — not npm (`private: true`), not
 `:latest` in production.
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v1.0.0
+docker pull ghcr.io/digithings-ai/digichat:v2.3.2
 ```
 
 | Artifact | Value |
@@ -34,11 +34,11 @@ docker pull ghcr.io/digithings-ai/digichat:v1.0.0
 | Git tag | `digichat-vX.Y.Z` |
 | GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Current app version | `1.0.0` |
+| Current app version | `2.3.2` |
 
 **Existing clients (DataTap and others) stay on `v0.9.3`.** That GHCR tag remains
 published and is not deleted — only new installs / digithings’ own cut should move
-to `v1.0.0` until those clients choose to upgrade.
+to `v2.3.2` until those clients choose to upgrade.
 
 Compose overlays and env templates live under
 [`infra/digichat-release/`](../../infra/digichat-release/).
@@ -52,6 +52,44 @@ Compose overlays and env templates live under
 
 Adapters only: `digigraph` \| `foundry`. digigraph owns digillm→LiteLLM and digivault.
 
+### The deployment config — one file
+
+Every profile mounts [`infra/digichat-release/config/`](../../infra/digichat-release/config/)
+at `/app/config` and reads `/app/config/digichat.yaml`. That one YAML file defines
+the install — skin, chrome, gate, tools, MCP servers, backend:
+
+```bash
+cp infra/digichat-release/config/digichat.yaml.example \
+   infra/digichat-release/config/digichat.yaml
+# edit it: slug, chrome.skin, title/welcome, gate, backend
+
+make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+```
+
+`make digichat-config-check` prints the resolved deployment(s) and fails on an
+invalid file — run it before `up -d`. A missing file falls back silently — to the
+`DIGICHAT_EMBED_TENANTS` registry when that is set, otherwise to the built-in dev
+default. An invalid file fails the container at boot.
+
+Three traps:
+
+- **The mount replaces `/app/config`.** The image's baked
+  `/app/config/examples/*` is *not* reachable in the release profiles. Copy any
+  reference config you want into `config/`. For a different catalog skin alone,
+  set `DIGICHAT_CHROME_SKIN=<id>` (`chatgpt`, `claude`, `grok`, …) instead. If you
+  previously pointed `DIGICHAT_CONFIG_PATH` at a baked example, copy that file
+  into `config/` first, or the path silently stops resolving.
+- **Pick one shape — the env templates already set the other one.** Every
+  `.env.profile-*.example` sets `DIGICHAT_EMBED_TENANTS` (hosts mode), and that
+  merges *with* a `deployment:` block rather than replacing it. The
+  `deployment:` block is what serves an unmatched host, so running the `cp` above
+  while keeping that env var leaves an anonymous, ungated fallback install on your
+  operator keys. Single client: delete `DIGICHAT_EMBED_TENANTS`. Many hostnames:
+  use `hosts:` and drop `deployment:`.
+
+Reference configs: [`apps/digichat/config/examples/`](../../apps/digichat/config/examples/)
+(`local-app.yaml`, `occ-embed.yaml`, `datatap-mcp.yaml`, `skins/*.yaml`, …).
+
 ### Profile A — digigraph stack
 
 ```text
@@ -64,7 +102,7 @@ LiteLLM uses the public berriai image. Pin stack and digichat tags separately:
 
 | Variable | Example | Services |
 |---|---|---|
-| `DIGICHAT_VERSION` | `1.0.0` | digichat → `…/digichat:v1.0.0` |
+| `DIGICHAT_VERSION` | `2.3.2` | digichat → `…/digichat:v2.3.2` |
 | `DIGI_IMAGE_TAG` | `sha-<12>` or `v0.1.0` | digikey, digigraph, digivault |
 
 ```bash
@@ -92,7 +130,7 @@ Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`
 ([`compose.profile-a-bundle.yml`](../../infra/digichat-release/compose.profile-a-bundle.yml)).
 Clients who want per-service pins keep multi-image Profile A above.
 
-Config for LiteLLM / digigraph is vendored under
+Config for LiteLLM / digigraph / digichat is vendored under
 [`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
 `config/` clone required). Stack GHCR packages appear after
 `publish-service-images.yml` runs on `main` (promote #2023, then first publish).
@@ -137,7 +175,7 @@ Product sketch: [`digichat-self-hosted-release.md`](../architecture/digichat-sel
 | `DIGICHAT_DATABASE_URL` | Postgres (Compose wires digichat-db) |
 | `DIGICHAT_AUTO_MIGRATE=1` | Apply Drizzle migrations on start |
 | `DIGICHAT_EMBED_ENABLED` | Enable `/embed` as needed |
-| `DIGICHAT_REQUIRE_ROOT_AUTH` | Default **unset/`0`** (Option A): `/` redirects to `/embed` — no Auth.js login wall. Set `1` only if the client wants a root session gate. Dogfood digithings.ai stays OFF. |
+| `DIGICHAT_REQUIRE_ROOT_AUTH` | Default **unset/`0`** (Option A): bare `/` renders the mode menu — no Auth.js login wall. Set `1` only if the client wants the product chat (`?mode=product`) behind a session gate. Dogfood digithings.ai stays OFF. |
 | `DIGICHAT_EMBED_HOSTS` | **Runtime** comma-separated parent hostnames for CSP `frame-ancestors` (no secrets). Optional if hosts are already `DIGICHAT_EMBED_TENANTS` keys. |
 | `DIGICHAT_EMBED_TENANTS` | **Runtime** JSON registry (hostname → branding, gate, token, `backend`). **Never** a Docker build-arg — tokens leak in layers. |
 
@@ -208,7 +246,7 @@ Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked in
 ## Smoke
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v1.0.0
+docker pull ghcr.io/digithings-ai/digichat:v2.3.2
 curl -sf http://127.0.0.1:3005/api/health | jq .
 # Embed (clients always pass token):
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…

@@ -1,4 +1,4 @@
-"""H6 deliberation turn + summary models (spec §10)."""
+"""deliberation turn + summary models (spec §10)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ CONVICTION_DELTA_MAX = 2
 
 
 def _clamp_conviction_delta(value: object) -> object:
-    """Bound LLM ``conviction_delta`` to the H6 contract instead of rejecting the turn.
+    """Bound LLM ``conviction_delta`` to the deliberation contract instead of rejecting the turn.
 
     House GHA 33426508863 failed ``DeliberationAnalystTurn`` at ``input_value=-3``
     (``ge=-2``). A -3 is a max-bearish revision; clamp, don't drop the debate.
@@ -48,11 +48,11 @@ MissingFactSourceKind = Literal[
 
 
 class MissingFactProposal(BaseModel):
-    """PM-named exact missing fact H6 may supplement once (#2908 / WP11.4)."""
+    """PM-named exact missing fact deliberation may supplement once (#2908 / WP11.4)."""
 
     claim_id: str = Field(
         min_length=1,
-        description="Evidence or bundle ID from the H5 base bundle being challenged.",
+        description="Evidence or bundle ID from the analyst base bundle being challenged.",
     )
     question: str = Field(
         min_length=1,
@@ -100,7 +100,7 @@ class DeliberationPmTurn(BaseModel):
         default=None,
         description=(
             "Optional named missing fact for a bounded evidence amendment. Omit when "
-            "the H5 base bundle is sufficient; never request broad re-grounding."
+            "the analyst base bundle is sufficient; never request broad re-grounding."
         ),
     )
 
@@ -123,11 +123,11 @@ CARRY_FINGERPRINT_SKIP = "fingerprint_skip"
 CARRY_LLM_FAILURE = "llm_failure"
 CARRY_LOW_VALUE = "low_value_carry"
 CARRY_ATTENTION = "attention_carry"
-CarryReason = Literal["fingerprint_skip", "llm_failure", "low_value_carry"]
+CarryReason = Literal["fingerprint_skip", "llm_failure", "low_value_carry", "attention_carry"]
 
 
 class DeliberationSummary(BaseModel):
-    """Per-ticker deliberation output feeding H7."""
+    """Per-ticker deliberation output feeding direction."""
 
     ticker: str = Field()
     converged: bool = True
@@ -142,21 +142,22 @@ class DeliberationSummary(BaseModel):
             "Why the debate did not run. ``fingerprint_skip`` is the benign quiet-ticker "
             "carry (#925); ``llm_failure`` means the deliberation crashed and no PM "
             "challenge ever executed (#1742); ``low_value_carry`` is WP11.3 deterministic "
-            "selection (#2902). ``carried`` alone cannot tell these apart."
+            "selection (#2902); ``attention_carry`` is the WP13.4 post-H5 re-route that "
+            "skipped H6 (#2930). ``carried`` alone cannot tell these apart."
         ),
     )
     escalated: bool = False
     cap_reason: str | None = None
-    # WP11.3 — every H6 run/carry records one selection reason (+ optional full dump).
+    # WP11.3 — every deliberation run/carry records one selection reason (+ optional full dump).
     selection_reason: str | None = Field(
         default=None,
-        description="Primary H6SelectionReason code for this run/carry (#2902).",
+        description="Primary DeliberationSelectionReason code for this run/carry (#2902).",
     )
-    h6_selection: dict[str, Any] | None = Field(
+    deliberation_selection: dict[str, Any] | None = Field(
         default=None,
-        description="Optional H6Selection dump (shadow/enforce audit; never prompt input).",
+        description="Optional DeliberationSelection dump (shadow/enforce audit; never prompt input).",
     )
-    # WP4.4 forecast lineage — IDs + optional full amendment dump for H9 registry (#2663).
+    # WP4.4 forecast lineage — IDs + optional full amendment dump for commit registry (#2663).
     base_forecast_id: str | None = None
     amendment_id: str | None = None
     effective_forecast_id: str | None = None
@@ -167,7 +168,7 @@ class DeliberationSummary(BaseModel):
     # WP11.4 — evidence amendment lineage (distinct from forecast amendment above).
     base_bundle_id: str | None = Field(
         default=None,
-        description="Immutable H5 base bundle ID for this ticker.",
+        description="Immutable analyst base bundle ID for this ticker.",
     )
     missing_fact_request_id: str | None = None
     evidence_amendment_id: str | None = None
@@ -185,6 +186,6 @@ def is_unchallenged_carry(summary: Mapping[str, Any]) -> bool:
     """True when a summary dict carries a stance whose PM challenge never ran (#1742).
 
     Reads the persisted dict shape rather than the model because every downstream consumer
-    (``payloads``, H7, H8 sizing, the published document) sees state as plain JSON.
+    (``payloads``, direction, sizing, the published document) sees state as plain JSON.
     """
     return summary.get("carry_reason") == CARRY_LLM_FAILURE

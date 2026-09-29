@@ -5,8 +5,8 @@ Gate thresholds (spec §12.2 / §16 ``test_quiet_day``) — re-baselined 2026-06
   from phase5 sector bypass until #929 triage wiring lands).
 - ``QUIET_DAY_MIN_PATCH_RATIO`` ≥ 0.10 — patch calls are a minority until phase5 respects
   triage carry; numerator still gates mandatory δ ``DocumentPatch`` paths.
-- portfolio quiet path: H1 thesis review runs; a quiet, unlinked held name is gated out of
-  H5 (Stage 1b staleness gate, #1030) and carried by commit-run, not re-analyzed; H6
+- portfolio quiet path: thesis review runs; a quiet, unlinked held name is gated out of
+  analyst (Stage 1b staleness gate, #1030) and carried by commit-run, not re-analyzed; deliberation
   deliberation skipped when analyst stance is unchanged.
 """
 
@@ -89,7 +89,7 @@ class TestLlmCallTelemetry:
 @pytest.mark.unit
 class TestQuietDayGates:
     def test_quiet_day_llm_budget_and_portfolio_path(self) -> None:
-        """Spec §16 ``test_quiet_day``: zero stale carry + held H5 edits + H1."""
+        """Spec §16 ``test_quiet_day``: zero stale carry + held analyst edits + thesis."""
         run_date = date(2026, 4, 26)
         watchlist = ("AAPL",)
         canned = build_quiet_day_canned_extras(run_date=run_date, watchlist=watchlist)
@@ -124,18 +124,18 @@ class TestQuietDayGates:
             f"patch_calls={telemetry.patch_calls} total={telemetry.total_calls}"
         )
 
-        # portfolio: thesis track runs (H1 minimum). H6 may run ≤1 PM turn when held
-        # ticker price delta triggers H5 edit (2% move) even if deliberation summary carries.
-        assert "ThesisReviewOutput" in telemetry.by_schema, "H1 thesis review must run daily"
+        # portfolio: thesis track runs (thesis minimum). deliberation may run ≤1 PM turn when held
+        # ticker price delta triggers analyst edit (2% move) even if deliberation summary carries.
+        assert "ThesisReviewOutput" in telemetry.by_schema, "thesis review must run daily"
         assert telemetry.by_schema.get("DeliberationPmTurn", 0) <= 1
         # #945: the min-rounds floor (default 2) forces one analyst response before the PM
         # may converge, so a single fresh deliberation now also runs one analyst turn.
         assert telemetry.by_schema.get("DeliberationAnalystTurn", 0) <= 1
 
         # Stage 1b held staleness gate (#1017 / #1030): a quiet, unlinked held name is
-        # NOT re-analyzed — H4 records it in the excluded ledger and dispatches no H5,
-        # and H9 commit-run carries the position rather than failing closed on a missing
-        # analyst doc. (Pre-Stage-1b this path ran a cheap held-ticker H5 edit; the gate
+        # NOT re-analyzed — screener records it in the excluded ledger and dispatches no analyst,
+        # and commit-run carries the position rather than failing closed on a missing
+        # analyst doc. (Pre-Stage-1b this path ran a cheap held-ticker analyst edit; the gate
         # eliminates that re-analysis as the anti-waste win.)
         assert "AAPL" not in final.phase_portfolio.asset_analysts
         assert "AAPL" in {e.ticker for e in final.phase_portfolio.focus_roster_excluded}

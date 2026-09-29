@@ -3,12 +3,12 @@
  *
  * Reads the decision track record (`decision_log`) the Decision Scorecard needs, plus
  * — via `fetchResearchRunDiagnostics` — run health from the anon-readable
- * `atlas_run_health` view (migration 041). Kept separate from `getFullDashboardData`
+ * `run_health` view (migration 041). Kept separate from `getFullDashboardData`
  * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
  * Attribution and recommendation quality now live on Portfolio Attribution; per-position
- * risk remains on Holdings. Pipeline + Brief read run telemetry from `atlas_run_health` —
- * the curated projection that bypasses the base-table RLS on `atlas_run_diagnostics`
+ * risk remains on Holdings. Pipeline + Brief read run telemetry from `run_health` —
+ * the curated projection that bypasses the base-table RLS on `run_diagnostics`
  * (migration 033). Spend telemetry (cost, tokens, error_summary, breakdown) is intentionally
  * excluded from the view; economics tiles render "—" on the public anon-key dashboard.
  *
@@ -26,7 +26,8 @@
  * contract badge. Live marks on Brief are a badged overlay only.
  */
 
-import { supabase, isSupabaseConfigured } from './supabase';
+import { apiDb, apiHouseBook, type ApiDb } from './api-query';
+import { isApiConfigured } from './api-client';
 import type { TableRow, ViewRow } from './database.types';
 import type { ResearchRunDiagnostics, BenchmarkHistoryMap } from './types';
 import type {
@@ -53,7 +54,6 @@ import {
   roundPct,
   soldWeightPct,
 } from './position-event-economics';
-import { houseBook } from './house-workspace';
 import { fetchMarketCloses } from './market-data';
 import { isCashTicker } from './book-reconciliation';
 import { committedBookDate } from './dashboard-ssot';
@@ -83,18 +83,18 @@ export interface PortfolioAttributionData {
 /** Run a single-table read, logging + swallowing any error into an empty array. */
 async function safeSelect<T>(
   label: string,
-  run: (sb: NonNullable<typeof supabase>) => PromiseLike<{ data: T[] | null; error: unknown }>
+  run: (sb: ApiDb) => PromiseLike<{ data: T[] | null; error: unknown }>
 ): Promise<{ rows: T[]; ok: boolean }> {
-  if (!supabase) return { rows: [], ok: false };
+  if (!apiDb) return { rows: [], ok: false };
   try {
-    const { data, error } = await run(supabase);
+    const { data, error } = await run(apiDb);
     if (error) {
-      console.error(`Supabase ${label} query:`, error);
+      console.error(`Dashboard API ${label} query:`, error);
       return { rows: [], ok: false };
     }
     return { rows: data ?? [], ok: true };
   } catch (err) {
-    console.error(`Supabase ${label} query threw:`, err);
+    console.error(`Dashboard API ${label} query threw:`, err);
     return { rows: [], ok: false };
   }
 }
@@ -164,11 +164,11 @@ function fetchRealizedAttribution(fromDate: string) {
 }
 
 export async function fetchObservabilityData(): Promise<ObservabilityData> {
-  // Distinguish a total misconfiguration (no Supabase env) from a configured-but-empty book:
+  // Distinguish a total misconfiguration (no dashboard API URL) from a configured-but-empty book:
   // throw so the page shows a clear error, matching the main data layer (lib/queries.ts).
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured() || !apiDb) {
     throw new Error(
-      'Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). ' +
+      'Dashboard API is not configured (NEXT_PUBLIC_DASHBOARD_API_URL). ' +
         'Observability data cannot be loaded.'
     );
   }
@@ -183,15 +183,15 @@ export async function fetchObservabilityData(): Promise<ObservabilityData> {
 const RUN_DIAGNOSTICS_LIMIT = 90;
 
 /**
- * Read run health from the anon-readable `atlas_run_health` view (migration 041).
+ * Read run health from the anon-readable `run_health` view (migration 041).
  * Cost/tokens/grounding fields are null on the public dashboard — the view
  * deliberately omits operator-internal spend telemetry. Fail-soft: empty array
  * on missing source / RLS deny.
  */
 export async function fetchResearchRunDiagnostics(): Promise<ResearchRunDiagnostics[]> {
-  const res = await safeSelect<ViewRow<'atlas_run_health'>>('atlas_run_health', (sb) =>
+  const res = await safeSelect<ViewRow<'run_health'>>('run_health', (sb) =>
     sb
-      .from('atlas_run_health')
+      .from('run_health')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(RUN_DIAGNOSTICS_LIMIT)
@@ -255,9 +255,9 @@ export function buildPortfolioAttributionData(args: {
 }
 
 export async function fetchPortfolioAttribution(): Promise<PortfolioAttributionData> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured() || !apiDb) {
     throw new Error(
-      'Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). ' +
+      'Dashboard API is not configured (NEXT_PUBLIC_DASHBOARD_API_URL). ' +
         'Portfolio attribution cannot be loaded.'
     );
   }
@@ -900,7 +900,7 @@ export type PerformanceBundle = {
 export async function getPerformanceBundle(
   opts: { snapshotDate?: string | null } = {}
 ): Promise<PerformanceBundle> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isApiConfigured() || !apiDb) {
     const tearsheet = buildPerformanceTearsheet({
       nav: [],
       positions: [],
@@ -923,7 +923,7 @@ export async function getPerformanceBundle(
 
   let snapshotDate = opts.snapshotDate ?? null;
   if (snapshotDate == null) {
-    const snapRes = await supabase
+    const snapRes = await apiDb
       .from('daily_snapshots')
       .select('date')
       .order('date', { ascending: false })
@@ -934,7 +934,7 @@ export async function getPerformanceBundle(
     }
   }
 
-  const navQuery = await supabase
+  const navQuery = await apiDb
     .from(ACCOUNTING_NAV_VIEW)
     .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract,series_seam')
     .order('date', { ascending: true })
@@ -946,12 +946,12 @@ export async function getPerformanceBundle(
 
   const [positionsRes, metricsRes, attributionRes, realizedRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
-      houseBook(sb, 'positions')
+      apiHouseBook('positions')
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
-      houseBook(sb, 'portfolio_metrics').order('date', { ascending: false }).limit(1)
+      apiHouseBook('portfolio_metrics').order('date', { ascending: false }).limit(1)
     ),
     safeSelect<TableRow<'position_attribution'>>('position_attribution', (sb) =>
       sb
@@ -964,7 +964,7 @@ export async function getPerformanceBundle(
       ? fetchRealizedAttribution(navRows[0].date)
       : Promise.resolve({ rows: [], ok: true as const, truncated: false }),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
-      houseBook(sb, 'position_events')
+      apiHouseBook('position_events')
         .in('event', ['EXIT', 'TRIM'])
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
@@ -973,7 +973,7 @@ export async function getPerformanceBundle(
 
   if (realizedRes.truncated) {
     console.error(
-      `Supabase public_daily_realized_attribution hit the ${ATTRIBUTION_MAX_ROWS}-row ` +
+      `Dashboard API public_daily_realized_attribution hit the ${ATTRIBUTION_MAX_ROWS}-row ` +
         'paging cap; contribution bars may understate older days.'
     );
   }

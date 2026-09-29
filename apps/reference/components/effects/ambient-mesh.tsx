@@ -1,8 +1,9 @@
 "use client";
 /**
  * Reference port of the ambient background bloom used on digithings.ai
- * subpages (architecture / chat / modules) and, in a teal-palette variant, on
- * digiquant.io subpages (pipeline / strategies / contact).
+ * subpages (architecture / chat / modules). digiquant.io no longer renders it
+ * (#4430 removed the canvas dressing from every digiquant page); the teal
+ * variant is kept here as the reference specimen.
  *
  * Source: apps/digithings-web/components/landing/AmbientMesh.tsx —
  * verbatim (the neutral variant that reads its colour from the live --ink

@@ -1,6 +1,6 @@
 """Per-attempt diagnostics keying (#1762).
 
-``pipeline-digiquant.yml`` retries the chain up to 3 times inside ONE job, so every attempt sees
+``pipeline-digiquant.yml`` retries the chain up to 2 times inside ONE job, so every attempt sees
 the same ``GITHUB_RUN_ID``. That was the whole upsert key, so the last attempt — usually the
 cheap checkpoint-resumed one — replaced the expensive attempt's tokens and cost. 28 of the 54
 rows in production carry a ``created_at`` that predates their own ``started_at``, which is only

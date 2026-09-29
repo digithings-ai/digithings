@@ -42,6 +42,25 @@ def _split_logical(expr: str) -> list[str]:
     return [p for p in parts if p]
 
 
+def _matches_like(text: str, pattern: str) -> bool:
+    """Emulate PostgREST ``like`` for the in-repo ``%``-wildcard forms.
+
+    Supports prefix (``foo%``), suffix (``%foo``) and contains (``%foo%``)
+    with the ``%`` wildcard only — the repository never sends ``_`` or an
+    escaped ``%``.
+    """
+    prefix = not pattern.startswith("%")
+    suffix = not pattern.endswith("%")
+    core = pattern.strip("%")
+    if prefix and suffix:
+        return text == core
+    if prefix:
+        return text.startswith(core)
+    if suffix:
+        return text.endswith(core)
+    return core in text
+
+
 def _eval_or_expression(row: dict[str, Any], expr: str) -> bool:
     """Evaluate the body of PostgREST ``or=(...)``: a top-level list is OR."""
     return any(_eval_condition(row, part) for part in _split_logical(expr))
@@ -74,7 +93,7 @@ def _eval_leaf(row: dict[str, Any], term: str) -> bool:
     if op == "lte":
         return text <= val
     if op == "like":
-        return text.startswith(val.rstrip("%"))
+        return _matches_like(text, val)
     raise AssertionError(f"FakeSupabaseClient.or_ cannot parse {term!r}")
 
 
@@ -141,12 +160,12 @@ class _FakeQuery:
         return self
 
     def like(self, col: str, pattern: str) -> "_FakeQuery":
-        # PostgREST ``like``; only the trailing-``%`` prefix form is used in-repo.
+        # PostgREST ``like``; prefix/suffix/contains ``%`` forms all match.
         self._filters.append(("like", col, pattern))
         return self
 
     def ilike(self, col: str, pattern: str) -> "_FakeQuery":
-        # PostgREST ``ilike``; fixtures are already lowercase so prefix ``like`` matches.
+        # PostgREST ``ilike``; fixtures are already lowercase so ``like`` matches.
         return self.like(col, pattern)
 
     def is_(self, col: str, val: str) -> "_FakeQuery":
@@ -253,7 +272,7 @@ class _FakeQuery:
                 return False
             if op == "in_" and row_val not in val:
                 return False
-            if op == "like" and not str(row.get(col, "")).startswith(str(val).rstrip("%")):
+            if op == "like" and not _matches_like(str(row.get(col, "")), str(val)):
                 return False
             if op == "is":
                 if str(val).lower() == "null" and row_val is not None:

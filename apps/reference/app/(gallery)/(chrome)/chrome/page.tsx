@@ -1,12 +1,16 @@
 import "./chrome.css";
 import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
 import { BreadcrumbsReference } from "@/components/chrome/breadcrumbs-reference";
+import { CtaReference } from "@/components/chrome/cta-reference";
+import { KbdReference } from "@/components/chrome/kbd-reference";
 import { CommandPaletteReference } from "@/components/command-palette-reference";
 import { FooterReference } from "@/components/footer-reference";
 import { ModuleCardReference } from "@/components/chrome/module-card-reference";
 import { NavMenuReference } from "@/components/chrome/nav-menu-reference";
 import { NavShellReference } from "@/components/chrome/nav-shell-reference";
 import { PaginationReference } from "@/components/chrome/pagination-reference";
+import { FooterCellsReference } from "@/components/footer-cells-reference";
+import { ReleaseRailReference } from "@/components/release-rail-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 import { SocialsReference } from "@/components/socials-reference";
 import { TabsReference } from "@/components/tabs-reference";
@@ -32,9 +36,13 @@ export default function ChromePage() {
       <ToastStackReference />
       <ScrollNavReference />
       <NavShellReference />
+      <CtaReference />
+      <KbdReference />
       <NavMenuReference />
       <BreadcrumbsReference />
       <PaginationReference />
+      <ReleaseRailReference />
+      <FooterCellsReference />
       <ModuleCardReference />
       <SocialsReference />
       <FooterReference />

@@ -8,7 +8,7 @@ import { useState, type FC } from "react";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toolRowTitle } from "@/lib/adapters/digithings/activity/tool-display";
+import { toolRowTitle } from "@digithings/ui/chat/stock";
 
 export const ToolFallback: FC<ToolCallMessagePartProps> = ({
   toolName,

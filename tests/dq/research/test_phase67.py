@@ -13,7 +13,7 @@ import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 from digiquant.portfolio.models.analyst import AnalystPayload
-from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.portfolio.phases.analyst import build_analyst
 from digiquant.portfolio.phases.phase7d_pm import RebalanceDecision, build_phase7d
 from digiquant.research import diagnostics
 from digiquant.research.phases.phase6_consolidate import build_phase6
@@ -650,7 +650,7 @@ class TestPhase7StripTradeVerbs:
         assert "Monitor AI capex commentary into earnings." in stripped.body
 
 
-# ─── H5 unified analyst tests ───────────────────────────────────────────────
+# ─── unified analyst tests ───────────────────────────────────────────────
 
 
 def _analyst_payload(ticker: str) -> str:
@@ -672,7 +672,7 @@ class TestH5AssetAnalysts:
         tickers = ["AAPL", "MSFT"]
         compiled = build_pipeline(
             ResearchState,
-            [build_h5_asset_analyst(tickers)],
+            [build_analyst(tickers)],
         )
         state = _seed_state_through_phase5()
 
@@ -700,7 +700,7 @@ class TestH5AssetAnalysts:
             assert payload.conviction_score >= 1
 
     def test_empty_watchlist_does_not_explode(self) -> None:
-        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst([])])
+        compiled = build_pipeline(ResearchState, [build_analyst([])])
         state = _seed_state_through_phase5()
         with patch(
             "digigraph.graph.research_agent.completion_text",

@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from digiquant.dashboard.envcompat import STAGING_USER_JWT, env_lookup
 
 # Ordered for human/agent checklists — keep in sync with
-# docs/agent-backlog/kairos-tenancy/HUMAN-UNBLOCK.md and WAITING-ON-SECRETS.json.
+# docs/agent-backlog/execution-tenancy/HUMAN-UNBLOCK.md and WAITING-ON-SECRETS.json.
 STAGING_REQUIRED_SECRETS: tuple[str, ...] = (
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",

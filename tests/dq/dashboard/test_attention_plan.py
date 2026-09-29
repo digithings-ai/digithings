@@ -11,12 +11,12 @@ from digiquant.dashboard.attention_plan import (
     AttentionPlanError,
     AttentionPlanShadowResult,
     RefreshReasonCode,
-    assert_plan_has_no_h7_h8_authority,
-    assert_plan_preserves_h4_roster,
+    assert_plan_has_no_direction_sizing_authority,
+    assert_plan_preserves_screener_roster,
     attention_plan_id,
-    h4_roster_fingerprint,
     plan_attention_shadow,
     resolve_profile_pin_for_planner,
+    screener_roster_fingerprint,
 )
 from digiquant.dashboard.edit_mode.models import PriorPublished, TriageSignal
 from digiquant.dashboard.profile_config import (
@@ -55,7 +55,7 @@ def test_shadow_produces_plan_without_actuation() -> None:
         artifacts=[("segment", "macro")],
         prior_loader=loader,
         triages={("segment", "macro"): TriageSignal(mode="quiet")},
-        h4_roster=["SPY", "QQQ"],
+        screener_roster=["SPY", "QQQ"],
         planner_mode="shadow",
     )
     assert result.planner_mode == "shadow"
@@ -90,13 +90,13 @@ def test_deterministic_plan_id() -> None:
         run_date=RUN,
         artifacts=[("asset", "spy")],
         prior_loader=loader,
-        h4_roster=["AAPL", "MSFT"],
+        screener_roster=["AAPL", "MSFT"],
     )
     b = plan_attention_shadow(
         run_date=RUN,
         artifacts=[("asset", "spy")],
         prior_loader=loader,
-        h4_roster=["AAPL", "MSFT"],
+        screener_roster=["AAPL", "MSFT"],
     )
     assert a.plan is not None and b.plan is not None
     assert a.plan.plan_id == b.plan.plan_id
@@ -104,28 +104,28 @@ def test_deterministic_plan_id() -> None:
     assert a.plan.plan_id == attention_plan_id(
         run_date=RUN,
         profile_config_version_id=house.version_id,
-        roster_fingerprint=h4_roster_fingerprint(["AAPL", "MSFT"]),
+        roster_fingerprint=screener_roster_fingerprint(["AAPL", "MSFT"]),
     )
 
 
-def test_cannot_expand_h4_roster() -> None:
+def test_cannot_expand_screener_roster() -> None:
     loader = _MapPriorLoader({})
     result = plan_attention_shadow(
         run_date=RUN,
         artifacts=[],
         prior_loader=loader,
-        h4_roster=["SPY"],
+        screener_roster=["SPY"],
     )
     assert result.plan is not None
-    assert_plan_preserves_h4_roster(result.plan, ["SPY"])
+    assert_plan_preserves_screener_roster(result.plan, ["SPY"])
     with pytest.raises(AttentionPlanError):
-        assert_plan_preserves_h4_roster(result.plan, ["SPY", "EXTRA"])
+        assert_plan_preserves_screener_roster(result.plan, ["SPY", "EXTRA"])
 
 
 def test_plan_rejects_fingerprint_tamper() -> None:
     house = house_profile_config()
     roster = ["SPY"]
-    fp = h4_roster_fingerprint(roster)
+    fp = screener_roster_fingerprint(roster)
     with pytest.raises(ValidationError):
         AttentionPlan(
             plan_id=attention_plan_id(
@@ -138,22 +138,22 @@ def test_plan_rejects_fingerprint_tamper() -> None:
             profile_key="house",
             is_house_default=True,
             run_date=RUN,
-            h4_roster=["SPY", "HACK"],
-            h4_roster_fingerprint=fp,
+            screener_roster=["SPY", "HACK"],
+            screener_roster_fingerprint=fp,
             decisions=[],
         )
 
 
-def test_no_h7_h8_authority_fields() -> None:
+def test_no_direction_sizing_authority_fields() -> None:
     loader = _MapPriorLoader({})
     result = plan_attention_shadow(
         run_date=RUN,
         artifacts=[("segment", "rates")],
         prior_loader=loader,
-        h4_roster=["TLT"],
+        screener_roster=["TLT"],
     )
     assert result.plan is not None
-    assert_plan_has_no_h7_h8_authority(result.plan)
+    assert_plan_has_no_direction_sizing_authority(result.plan)
     dumped = result.plan.model_dump()
     assert "weights" not in dumped
     assert "mandate" not in dumped
@@ -199,7 +199,7 @@ def test_overlay_pin_allowed_when_present() -> None:
         prior_loader=_MapPriorLoader({}),
         profile_config_version_id=overlay.version_id,
         profile_store=store,
-        h4_roster=["IWM"],
+        screener_roster=["IWM"],
     )
     assert result.plan is not None
     assert result.plan.is_house_default is False

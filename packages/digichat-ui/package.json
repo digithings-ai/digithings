@@ -7,8 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./styles/session.css": "./src/styles/session.css",
-    "./styles/cursor.css": "./src/styles/cursor.css",
-    "./styles/tokens-shadcn-bridge.css": "./src/styles/tokens-shadcn-bridge.css"
+    "./styles/cursor.css": "./src/styles/cursor.css"
   },
   "scripts": {
     "test": "vitest run"

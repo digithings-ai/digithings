@@ -576,12 +576,15 @@ def test_pipeline_bearer_auth_error_propagates(
 
 
 @pytest.mark.unit
-def test_scoped_empty_retries_unscoped(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_scoped_empty_retries_unscoped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     """A zero-row scoped search retries without the allowlist (#4086).
 
     The hosted ddgs provider post-filters by domain (it cannot bias), so a
     narrow allowlist can empty the result set; the retry keeps real grounding
-    flowing instead of aborting the pipeline.
+    flowing instead of aborting the pipeline. It is routine, so it is logged
+    at debug level rather than as a warning.
     """
     import digibase.service_auth as sa_mod
     import digigraph.orchestration.web_search_tools as ws_mod
@@ -604,12 +607,14 @@ def test_scoped_empty_retries_unscoped(monkeypatch: pytest.MonkeyPatch) -> None:
         }
 
     monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
-    out = _real_call_web_search_tool(
-        query="etf flows",
-        include_domains=["reuters.com"],
-        exclude_domains=["spam.example"],
-        max_results=4,
-    )
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        out = _real_call_web_search_tool(
+            query="etf flows",
+            include_domains=["reuters.com"],
+            exclude_domains=["spam.example"],
+            max_results=4,
+        )
+    assert "retrying unscoped" not in caplog.text
     assert out["sources"] == ["https://b.com/1"]
     assert out["relaxed_domains"] is True
     assert len(calls) == 2

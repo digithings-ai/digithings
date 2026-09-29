@@ -42,13 +42,19 @@ vi.mock("@assistant-ui/ai-sdk", () => ({
   useAISDKRuntime: () => ({} as AssistantRuntime),
 }));
 
-vi.mock("@/components/assistant-ui/skins", () => ({
-  ThreadSkinView: ({ skin }: { skin: string }) => (
-    <div data-testid="stock-thread" data-skin={skin}>
-      stock thread
-    </div>
-  ),
-}));
+vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+  // Keep the real registry exports (WS4 barrel) — only stub the dispatch.
+  const actual =
+    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+  return {
+    ...actual,
+    ThreadSkinView: ({ skin }: { skin: string }) => (
+      <div data-testid="stock-thread" data-skin={skin}>
+        stock thread
+      </div>
+    ),
+  };
+});
 
 vi.mock("@/components/stock/memory-thread-list-sidebar", () => ({
   MemoryThreadListSidebar: () => (

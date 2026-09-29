@@ -1895,6 +1895,7 @@ def run_tools(
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
+    final_response_format: JsonSchemaResponseFormat | None = None,
 ) -> str:
     """Run a non-streaming tool-calling loop until the model returns a final answer.
 
@@ -1935,7 +1936,17 @@ def run_tools(
             round's deltas are buffered and released as one end-of-round batch
             instead of live per-token, since a delta already streamed can't be
             un-streamed if that round then turns out to have no tool_calls and
-            gets rejected (see ``_produce_turn``'s docstring below).
+            (see ``_produce_turn``'s docstring below).
+        final_response_format: Optional JSON-schema descriptor applied to the
+            forced tool-free wrap-up completion ONLY (#4556). Tool-enabled turns
+            cannot carry ``response_format`` at all -- ``completion`` rejects
+            ``tools`` + ``response_format`` together (fail-fast), because the
+            provider json_schema and function-calling modes are mutually
+            exclusive. Without enforcement here the cheap model may answer the
+            wrap-up in prose or return an empty body, which forces the caller's
+            retry path and discards the grounding this loop just gathered. The
+            wrap-up runs with ``turn_tools=None``, so it is the one legal place
+            to enforce a schema; providers without json_schema support ignore it.
 
     Returns:
         The model's final response content.
@@ -1973,6 +1984,8 @@ def run_tools(
     def _produce_turn(
         turn_messages: list[ChatCompletionMessage],
         turn_tools: list[ToolDefinition] | None,
+        *,
+        response_format: JsonSchemaResponseFormat | None = None,
     ) -> tuple[str, list[ToolCallDict] | None]:
         """Produce one assistant turn as ``(content, tool_calls|None)``.
 
@@ -1987,12 +2000,16 @@ def run_tools(
         buffering is what keeps that turn's narration from ever reaching a consumer
         that would otherwise have shown it as an accepted answer. Trading live
         per-token delivery for that is only worth it under the explicit
-        ``require_tool_calls`` opt-in floor -- the tool-free wrap-up completion
-        (``turn_tools=None``) and the default ``tool_choice="auto"`` path are
-        unaffected and keep streaming deltas live, per the round_boundary comment
-        below.
+        ``require_tool_calls`` opt-in floor -- the default ``tool_choice="auto"``
+        path is unaffected and keeps streaming deltas live, per the round_boundary
+        comment below.
+
+        ``response_format`` (the forced wrap-up's schema, #4556) makes the turn
+        non-streaming: a schema-enforced completion cannot also emit live deltas,
+        and the schema guarantee is the more valuable one. Every other caller
+        leaves it ``None`` and keeps the streaming behaviour above.
         """
-        if stream_deltas:
+        if stream_deltas and response_format is None:
             gate_required = bool(turn_tools) and tool_choice == "required"
             buffered: list[tuple[str, str]] = []
 
@@ -2037,6 +2054,7 @@ def run_tools(
                 temperature=temperature,
                 tools=turn_tools,
                 tool_choice=tool_choice,
+                response_format=response_format,
             )
         )
 
@@ -2220,6 +2238,10 @@ def run_tools(
                 "content": "Based on the tool results above, provide a concise final answer.",
             }
         )
-        final, _ = _produce_turn(current, None)
+        # #4556: the wrap-up is the one legal schema-enforced turn (tools=None).
+        # Enforcing the caller's output schema here stops the cheap model from
+        # answering in prose or returning an empty body, which is what forced the
+        # tool-free retry that could not re-ground.
+        final, _ = _produce_turn(current, None, response_format=final_response_format)
         return final or ""
     return content or ""

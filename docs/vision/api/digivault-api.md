@@ -2,7 +2,7 @@
 title: "digivault — API reference"
 type: reference
 status: generated
-created: 2026-08-10
+created: 2026-09-22
 tags:
   - api
   - support
@@ -21,7 +21,7 @@ An Obsidian-style vault service: it manages a folder of markdown notes with YAML
 Routes cover listing, reading and creating notes, renaming with backlink repair, backlink and tag lookups, and a lint report. Two more — orchestrator_tools and orchestrator_invoke — expose the vault to digigraph as callable tools. Runs behind the `digivault` compose profile, so it is opt-in rather than up by default.
 
 ## Authentication
-DigiAuthMiddleware with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.
+`DigiAuthMiddleware` with a per-path scope map: digivault:read for reads and for both orchestrator routes, digivault:write for mutations. /v1/orchestrator_invoke is gated at read because most of its tools are reads — the one mutating tool re-checks digivault:write in the handler, so a read-only caller cannot reach it through the shared endpoint.
 
 
 ## Run locally

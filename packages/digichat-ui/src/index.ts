@@ -9,7 +9,7 @@ export {
   toolDisplayName,
   stripFoundryCitationMarkers,
   type CanonActivityRow,
-} from "./activity-view";
+} from "@digithings/ui/chat/transcript";
 export {
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
@@ -34,7 +34,7 @@ export {
   type TruncateForMailtoResult,
   type MailtoOpenResult,
   type PrintTranscriptResult,
-} from "./transcript-markdown";
+} from "@digithings/ui/chat/transcript";
 export {
   parseSlashInput,
   matchingSlashCommands,
@@ -71,4 +71,4 @@ export type {
   DigiChatController,
   DigiChatMessage,
   VaultHitSummary,
-} from "./types";
+} from "@digithings/ui/chat/transcript";

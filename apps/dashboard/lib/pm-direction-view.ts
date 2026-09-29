@@ -1,8 +1,8 @@
 /**
- * H7 PM direction operator surface (WP-G).
+ * PM direction operator surface (WP-G).
  *
  * Rank is ordinal order, not size. Confidence is how sure the PM is of the name
- * ([0, 1], shown as a percent). Buy/hold/sell is derived from prior vs H8
+ * ([0, 1], shown as a percent). Buy/hold/sell is derived from prior vs sizing
  * target when a rebalance payload is at hand, else from prior direction, else
  * the raw long/flat label. Audit fields (forecast_reference, degradation_reason)
  * are never copied into the operator row.

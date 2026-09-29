@@ -2,7 +2,7 @@
 
 Entitled Custom/Enterprise workspaces get a scheduled overlay of the **one**
 dashboard graph (no ``run_type`` fork): ProfileConfig pin → publish-if-missing
-into the shared corpus → user-private H7–H9 book under their workspace.
+into the shared corpus → user-private direction–commit book under their workspace.
 House run state and job rows are never touched by overlay failures.
 
 Re-exports are lazy (PEP 562, same pattern as ``digiquant.brokers``): the house

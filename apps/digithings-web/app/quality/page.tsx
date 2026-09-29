@@ -196,12 +196,12 @@ const LIMITS: { term: string; body: string }[] = [
   {
     term: "Frontend is scored differently",
     body:
-      "The score job excludes apps/** and packages/** entirely: the rubrics are Python-oriented and misfire on " +
-      "JS and CSS. Presentation work is gated instead by secret scanning, the canon guard, lint, and " +
-      "a production build that fails on a type error. Only two of the front ends — the chat UI and " +
-      "the digiquant dashboard — run their test suites in CI; the marketing sites and the shared " +
-      "component package have no CI test lane, so their tests are a local discipline. A narrower " +
-      "net, honestly narrower.",
+      "The score job's diff excludes apps/** and packages/** by pathspec — the app frontend's JS and CSS are " +
+      "never scored — rightly, since the heuristics are Python-oriented and misfire on them. Presentation work " +
+      "is gated instead by secret scanning, the canon guard, lint, and a production build that type-checks each " +
+      "app and fails on a type error. The frontend suites run in CI: the web lane runs digithings-web, digiquant-web, the design " +
+      "reference, the shared ui packages, cron and the Cloudflare workers, and digichat and the dashboard have " +
+      "their own lanes. A narrower net than a coverage gate, honestly narrower.",
   },
   {
     term: "Test count is not coverage",

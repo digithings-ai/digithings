@@ -1,25 +1,31 @@
 ---
 name: alt-data-sentiment-news
-description: Aggregates social sentiment, news flow, key opinion leader analysis, and prediction market signals. Runs FIRST in the daily pipeline to inform all downstream segment analysis with sentiment context. Sources include X/Twitter, Polymarket, Reddit, Google Trends, and tracked analyst accounts.
+description: Aggregates news flow, narrative shift, and positioning colour from the pre-fetched web-grounding block plus the prior document. Runs FIRST in the daily pipeline to inform all downstream segment analysis with sentiment context.
 ---
 
 # Sentiment & News Intelligence Sub-Agent
 
 ## Grounding Tools (use first)
 
-- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
-  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
-  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
-  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for market-moving news and sentiment shifts. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
+- **Web grounding (pre-fetched) — this IS your news source.** This segment has no
+  maintained Supabase series. A `web_grounding` block (a cited web/news summary over
+  curated domains incl. reuters.com, apnews.com, cnbc.com, marketwatch.com,
+  bloomberg.com) is provided in PHASE_INPUTS. Ground on it, carry its source URLs into
+  the `sources` field, and do not try to fetch its pages yourself. If no `web_grounding`
+  is present, say so and lower conviction.
+- **Prior document** — `fetch_prior_document(document_key="alt-sentiment-news")` once
+  reads yesterday's body for narrative continuity. There is no X/Twitter, Reddit,
+  Polymarket or Google Trends tool in this loop; those signals reach you only through the
+  `web_grounding` block.
 
 ## Purpose
 Run this skill **before** macro and segment analysis. Its output colors how downstream segments interpret ambiguous signals. Sentiment extremes (euphoria/panic) can override technical/fundamental reads.
 
 ## Inputs
-- `docs/ops/data-sources.md` — full list of tracked accounts and signal sources
-- Previous day's digest snapshot / derived digest markdown (for narrative continuity)
-
-> **Web fetch**: use `defuddle parse <url> --md` instead of WebFetch for any article, news page, Reddit thread, or post URL. Not for API endpoints, `.json`, or `.md` files.
+- The `web_grounding` block in PHASE_INPUTS (news, narrative, positioning colour)
+- Your own prior document, for narrative continuity (one fetch, see Tools above)
+- `docs/ops/data-sources.md` — repository provenance for a maintainer (the list of
+  tracked accounts and signal sources); NOT retrievable by a tool.
 
 ---
 
@@ -32,20 +38,21 @@ Search for the top 3-5 market-moving headlines from the past 24 hours:
 - Any surprise developments (geopolitical, economic, earnings, policy) vs prior expectations?
 - Are markets reacting to **new information** or repricing on **narrative shift** with no new data?
 
-### 2. X / Twitter Sentiment Scan
-Search for recent posts from tracked accounts and hashtags.
+### 2. Positioning Colour
+Report only what the `web_grounding` block and the prior document actually state about
+prediction markets, sentiment, and retail/pro flows. Name the source for each. If a
+signal (Polymarket odds, an X/KOL read, retail sentiment) is not in the grounding, write
+that it is unavailable — do not search for it.
 
-### 3. Polymarket Prediction Markets
-Use the MCP Polymarket tools to see today's most active markets, then query specifics:
-- Fed path, recession odds, geopolitics, BTC levels
+### 3. Narrative Continuity
+Read the prior document once. What changed since yesterday: a new catalyst, a reversal of
+a prior read, or the same story continuing? Note the shift explicitly.
 
-### 4. Reddit Community Sentiment
-Scan WSB and r/investing for any memetic crowding or panic signals.
+### 4. Cross-Asset Coherence
+Does the narrative cohere across equities, rates, FX and crypto as described in the
+grounding, or do they conflict?
 
-### 5. Google Trends Signals
-Scan key search terms ("recession", "gold", "bitcoin", "market crash", key geopolitical term).
-
-### 6. News Sentiment Scoring
+### 5. News Sentiment Scoring
 After reviewing headlines, score:
 - **Headline Sentiment**: Bullish / Bearish / Neutral for markets overall
 - **Surprise Factor**: expected (+0) vs upside (+1) vs downside (-1)
@@ -69,7 +76,7 @@ Dominant 24h story and whether it is new information or a repricing.
 2. …
 
 ## Positioning color
-X/KOL, Polymarket, retail/Reddit, Google Trends — only what you actually retrieved.
+Prediction markets, sentiment, retail/pro — only what the grounding actually states.
 
 ## Implication for today's research
 How this should color downstream segment reads.

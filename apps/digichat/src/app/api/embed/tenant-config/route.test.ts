@@ -155,4 +155,42 @@ describe("GET /api/embed/tenant-config", () => {
     expect(body.llmAccess).toBe("free_then_byok");
     expect(body.pageContext).toBe("silent");
   });
+
+  // The live /embed surface resolves the merged host deployment, not the raw
+  // registry projection, so this asserts the flags survive the whole path
+  // (#4532). It failed before the loader bridge carried them.
+  it("carries the feature flags and seed language through the live path (#4532)", async () => {
+    vi.stubEnv(
+      "DIGICHAT_EMBED_TENANTS",
+      JSON.stringify({
+        "digithings.ai": {
+          slug: "digithings",
+          backend: { type: "digigraph" },
+          gateMode: "ungated",
+          dictation: true,
+          speech: true,
+          sources: false,
+          branchPicker: false,
+          defaultLanguage: "nl",
+          activityDetail: "full",
+          token: "t",
+        },
+      }),
+    );
+    resetEmbedTenantRegistryForTests();
+    const res = await GET(
+      new Request("https://chat.example.com/api/embed/tenant-config", {
+        headers: {
+          "X-Embed-Host": "https://digithings.ai",
+          Origin: "https://digithings.ai",
+        },
+      }),
+    );
+    const body = await res.json();
+    expect(body.dictation).toBe(true);
+    expect(body.speech).toBe(true);
+    expect(body.sources).toBe(false);
+    expect(body.branchPicker).toBe(false);
+    expect(body.defaultLanguage).toBe("nl");
+  });
 });

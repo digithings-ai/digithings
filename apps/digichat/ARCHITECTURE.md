@@ -19,7 +19,8 @@ Next.js 16 **BFF** (the public HTTP surface) plus an optional **default UI**
 (**stock** assistant-ui `Thread` — CLI flavor deferred). The browser never speaks
 directly to digigraph, Foundry, or any Python service. Backends and chrome are
 selected per **deployment config** (`digichat.yaml` / env overlay;
-`DIGICHAT_EMBED_TENANTS` compat) with `backend.type` `digigraph` | `foundry`. See
+`DIGICHAT_EMBED_TENANTS` compat) with `backend.type` `digigraph` | `foundry` |
+`openai-completions` | `openai-responses` | `anthropic` | `google-vertex`. See
 [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md),
 [`docs/architecture/digichat-renderer-contract.md`](../../docs/architecture/digichat-renderer-contract.md),
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
@@ -158,8 +159,9 @@ keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
 with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
 `providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
 classes for the Tailwind `dark:` variant. The old `@digithings/digichat-ui`
-`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) is
-no longer imported; `/embed` sets `[data-theme]` on the root from the effective
+`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) was
+deleted in WS5 (export + file removed — it was imported nowhere); `/embed` sets
+`[data-theme]` on the root from the effective
 theme (URL `?theme=`, parent `digichat:theme` postMessage, or tenant `theme` —
 its own iframe document) and per-tenant accent hexes still override at the
 wrapper. Because the shared `ThemeProvider` (in `providers.tsx`, which wraps
@@ -192,7 +194,7 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 
 | File | Purpose |
 |---|---|
-| `src/app/page.tsx` | Server component: Option A default redirects `/` → `/embed`; `DIGICHAT_REQUIRE_ROOT_AUTH=1` keeps Auth.js gate → `ChatShell` (no session redirects to `/embed` too — no standalone login page ships) |
+| `src/app/page.tsx` | Server component: bare `/` renders the mode menu (no chat); `?mode=product` runs the Option A flow (`DIGICHAT_REQUIRE_ROOT_AUTH=1` gates `ChatShell`, anonymous/session branches redirect to `/embed`); `?mode=embed\|catalog` replay the embed/catalog surfaces (`/baseline` redirects to `/?mode=catalog`) |
 | `src/lib/root-auth.ts` | `isRootAuthRequired()` — root `/` Auth.js wall (default OFF) |
 | `src/app/layout.tsx` | Root layout with `Providers` (session, tooltips) |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
@@ -229,7 +231,11 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/tenant.ts` | OIDC subject → tenant slug lookup |
 | `src/lib/api-key.ts` | Machine key validation (env bootstrap + bcrypt Postgres) |
 | `src/lib/migrate.ts` | Programmatic Drizzle migration runner |
-| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` |
+| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
+| `src/app/healthz/route.ts` | Auth-exempt liveness probe (`GET /healthz`) |
+| `src/lib/license/state.ts` | Customer-license verify + revoke latch (`globalThis`, fail-open) |
+| `src/lib/license/heartbeat.ts` | 24h license heartbeat sender (Bearer raw JWT, fail-open backoff) |
+| `src/lib/license/version.ts` | Shared version resolver (health + heartbeat) |
 | `src/components/chat-shell.tsx` | Sidebar + thread state manager |
 | `src/components/chat-panel.tsx` | `useChat` + message list + composer |
 | `src/components/connections-sheet.tsx` | Ecosystem side sheet |
@@ -242,8 +248,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 ## 3. API Surface
 
 All route handlers live under `src/app/api/`. Authentication is required on every
-endpoint except `GET /api/health` (which is unauthenticated to serve as a liveness
-probe).
+endpoint except `GET /api/health` (unauthenticated status probe) and
+`GET /healthz` (auth-exempt liveness probe, always `{"ok": true}`).
 
 ### Chat
 
@@ -282,7 +288,9 @@ probe).
 
 ### Health
 
-**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `apps/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable.
+**`GET /api/health`** — unauthenticated. Probes `{base}/health` for all enabled services (4 s AbortController timeout per service). Probes Postgres with `SELECT 1`. Returns `{ ok, checks, version, license_status, license_detail? }`. `version` is `DIGICHAT_VERSION` when set and non-empty; otherwise `apps/digichat/package.json` `version` (Cloudflare Container and GHCR images also bake that value into `/etc/digichat-version` and `ENV DIGICHAT_VERSION`). HTTP 200 when healthy, 503 when any required service is unreachable. `license_status` is always present (`unlicensed` | `valid` | `expired` | `revoked`); `license_detail` is a short reason enum. The license state never feeds the `ok` computation, so a revoked/expired license cannot crash-loop the container — turn-serving probes read `license_status` instead.
+
+**`GET /healthz`** — auth-exempt liveness probe (stack convention: root `AGENTS.md` § Liveness vs status). Always answers `{"ok": true}` with HTTP 200 in every license state; it never consults license state. Load balancers and orchestrator restart policy key on this route.
 
 ### Auth
 
@@ -377,12 +385,17 @@ src/auth.ts             # Auth.js configuration
 src/instrumentation.ts  # Auto-migrate hook
 ```
 
-The root `page.tsx` is a **React Server Component**. By default
-(`DIGICHAT_REQUIRE_ROOT_AUTH` unset/`0` — Option A) it redirects to `/embed`. When
-`DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B — no shipped deployment uses this today),
-it calls `auth()` and, with no session, also redirects to `/embed` — there is no
-standalone `/login` page; a session must come from an OIDC callback, a machine
-key, or the dev-only local-bootstrap credentials provider. `ChatShell` is a
+The root `page.tsx` is a **React Server Component**. Bare `/` renders the mode
+menu (brand + product/embed/catalog cards, zero JS) — no chat thread. `?mode=product`
+runs the Option A flow: per deployment chrome it serves the stock shell (or redirects
+to `/embed` for embed-mode deployments); `DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B —
+no shipped deployment uses this today) calls `auth()` and gates `ChatShell` — there
+is no standalone `/login` page; a session must come from an OIDC callback, a machine
+key, or the dev-only local-bootstrap credentials provider. `?mode=embed` replays the
+tenant iframe surface (same `EmbedRouteShell` as `/embed`, which keeps serving directly:
+production splits `/` (Pages) from `/embed*` (Container), so redirecting it would
+strand tenant iframes on Pages). `?mode=catalog` replays the skin catalog (`/baseline`
+redirects here; production → `notFound`). `ChatShell` is a
 `"use client"` component that owns all thread state as React state; the server
 renders nothing but the initial HTML shell for it.
 
@@ -420,8 +433,10 @@ BFF route handler
 
 ### Auth.js session flow
 
-1. User visits `/`. If `DIGICHAT_REQUIRE_ROOT_AUTH` is not enabled (default), redirect
-   to `/embed` (tenant `gateMode` applies there — digithings dogfood uses `ungated`).
+1. User visits `/` and gets the mode menu (no chat thread). `?mode=product` runs the
+   Option A flow (embed-mode deployments redirect to `/embed`, where tenant `gateMode`
+   applies — digithings dogfood uses `ungated`); `DIGICHAT_REQUIRE_ROOT_AUTH=1` gates
+   `?mode=product` behind the session wall instead.
 2. When root auth is required, the server component calls `auth()` — reads and decrypts
    the session JWT from the httpOnly `__Secure-authjs.session-token` cookie.
 3. No session → `redirect("/embed")` (no standalone `/login` page ships).
@@ -1432,7 +1447,7 @@ part-driven vs chrome-driven is indexed in digiweb
 vendored under `src/components/assistant-ui/skins/`, or first-party `digichat`
 (`DigichatThread` from `@digithings/ui/chat/thread` **is** the first-party
 Thread — `gallery-thread/thread.aui.tsx` + slots + cube glyphs — plus
-`@digithings/ui/styles/chatbot.css`. Design-reference `/chatbot` mounts that
+`@digithings/ui/styles/chat-digichat.css`. Design-reference `/chatbot` mounts that
 same subpath with a fixture runtime. Contract:
 [`packages/ui/CHAT_THEME.md`](../../packages/ui/CHAT_THEME.md)).
 
@@ -1574,6 +1589,10 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
 | `DIGIKEY_URL` | digikey base URL | If using digikey |
 | `DIGIKEY_BFF_TOKEN` | BFF credential for digikey `bff_session` grant | If using digikey |
+| `DIGICHAT_LICENSE_JWT` | Customer license JWT, inline (file var wins when both set). Never logged/returned | Licensed deploys |
+| `DIGICHAT_LICENSE_FILE` | Path to a file containing only the license JWT (mounted secret). Wins over inline | Licensed deploys |
+| `DIGIKEY_PUBLIC_KEY_PEM` | One or more concatenated SPKI PEMs for offline license verify (rotation list) | Licensed deploys |
+| `DIGIKEY_ISSUER` | Expected license `iss` (default `http://127.0.0.1:8005`) | Licensed deploys |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL (health probe) | Recommended |
 | `DIGISMITH_INTERNAL_URL` | digismith base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL (health probe) | Optional |
@@ -1605,7 +1624,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 
 Three-stage build:
 1. `deps` (node:22-alpine): `npm ci` to populate `node_modules`.
-2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. Both Dockerfiles also COPY `apps/reference/app/(chatbot)/chatbot/chatbot.css` — the product `chrome.skin: digichat` sheet `@import`s that path from `packages/ui/src/styles/chatbot.css`, and `COPY packages/ui` does not include `reference/` (#3717).
+2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. The product `chrome.skin: digichat` sheet lives in the package (`packages/ui/src/styles/chat-digichat.css`), so no gallery COPY is needed — the old `apps/reference/…/chatbot.css` COPY closed with WS1 (#3717).
 3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`.
 
 The standalone output is a self-contained Node.js server (`server.js`) with only production
@@ -1614,9 +1633,19 @@ dependencies. Image size is significantly smaller than a non-standalone build.
 ### Auto-migration
 
 `src/instrumentation.ts` is a Next.js instrumentation module. When `NEXT_RUNTIME=nodejs`
-(Node.js runtime, not edge) and `DIGICHAT_AUTO_MIGRATE=1`, it calls `runMigrate()`
+(Node.js runtime, not edge) it runs, in order: `initDigichatConfigAtStartup()`,
+`initLicenseStateAtStartup()` (pure local RS256 license verification — never touches
+the network, never throws, fail-open), and `startLicenseHeartbeat()` (24h sender plus
+one immediate fire-and-forget attempt; unlicensed containers never start a timer).
+The license step runs before the `DIGICHAT_AUTO_MIGRATE` early-return so it is not
+skipped in the common case. When `DIGICHAT_AUTO_MIGRATE=1`, it then calls `runMigrate()`
 which opens a single dedicated connection, runs all pending Drizzle migrations, and
 closes. This runs once per process start, before the server accepts requests.
+
+A `revoked` (heartbeat-learned) or `expired` (local `exp` + 5 min leeway) license
+refuses product traffic with `503 license_revoked` / `503 license_expired` on
+`POST /api/chat` (and the `POST /api/v1/chat` re-export) plus `POST /api/plan-proof`
+only; auth, config, embed-tenant, health, and all other routes keep answering.
 
 ---
 

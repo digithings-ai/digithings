@@ -3,7 +3,7 @@ name: thesis-full
 description: Daily review of active market theses — confidence, criteria, status.
 ---
 
-# Thesis Review (H1)
+# Thesis Review (thesis)
 
 Review every thesis in `active_theses`. Refresh confidence (0.0–1.0), validation/invalidation criteria, and status.
 
@@ -11,7 +11,7 @@ Review every thesis in `active_theses`. Refresh confidence (0.0–1.0), validati
 
 - Review **market** theses already in `active_theses`. Reuse those exact `thesis_id` values.
 - Do not invent thesis ids. Do not emit `vehicle-{ticker}` or misspellings (`veicle-*`)
-  as reviewed market theses — vehicle-local rows are written by H5.
+  as reviewed market theses — vehicle-local rows are written by analyst.
 - Emit `reviewed_theses` with one entry per active **market** thesis.
 - `new_status` must be one of: ACTIVE, MONITORING, CHALLENGED, CLOSED, INVALIDATED, PAUSED, NEW.
 - When any **invalidation criterion** is observably hit, set `new_status=CHALLENGED` and list hits in `challenged_by`.

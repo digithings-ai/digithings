@@ -119,9 +119,15 @@ vi.mock("@digithings/digichat-ui", async (importOriginal) => {
   };
 });
 
-vi.mock("@/components/assistant-ui/skins", () => ({
-  ThreadSkinView: () => <div data-testid="stock-thread">stock thread</div>,
-}));
+vi.mock("@digithings/ui/chat/skins", async (importOriginal) => {
+  // Keep the real registry exports (WS4 barrel) — only stub the dispatch.
+  const actual =
+    await importOriginal<typeof import("@digithings/ui/chat/skins")>();
+  return {
+    ...actual,
+    ThreadSkinView: () => <div data-testid="stock-thread">stock thread</div>,
+  };
+});
 
 import { ChatPanel } from "./chat-panel";
 import {

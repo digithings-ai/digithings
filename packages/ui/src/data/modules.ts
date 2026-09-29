@@ -130,10 +130,11 @@ export const modules: ModuleNode[] = [
     role: "Vector retrieval · multi-backend",
     tagline: "Production RAG without a stack rewrite when you switch vector DB.",
     summary: [
-      "One client over Chroma or Azure AI Search, with backend-neutral entities so you swap engines without touching business code.",
+      "One client over Cloudflare Vectorize, Azure AI Search, or Chroma, with backend-neutral entities so you swap engines without touching business code.",
       "Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup and pdfplumber handle ingest, Polars throughout.",
     ],
     stack: [
+      { name: "Cloudflare Vectorize", icon: null, mono: "CF" },
       { name: "Chroma", icon: null, mono: "Ch" },
       { name: "Azure AI Search", icon: null, mono: "AZ" },
       { name: "OpenAI", icon: "openai" },

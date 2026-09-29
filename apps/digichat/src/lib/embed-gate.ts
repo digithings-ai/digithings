@@ -155,8 +155,13 @@ export type EmbedGate = {
   limit: number;
   /** True once `turns >= limit` (and BYOK has not unlocked the gate). */
   locked: boolean;
-  /** Call after a successful user turn. */
+  /**
+   * Call when a gated send is allowed. The counter moves at send time so the
+   * free-turn display and `locked` agree with what the visitor has spent.
+   */
   increment: () => void;
+  /** Refund one turn when a charged send settles as a failure. */
+  decrement: () => void;
   /** Reset counter for this host (test hook / "start over" affordance). */
   reset: () => void;
 };
@@ -227,6 +232,14 @@ export function useEmbedGate(
     });
   }, [host, setTurns]);
 
+  const decrement = useCallback(() => {
+    setTurns((prev) => {
+      const next = Math.max(0, prev - 1);
+      writeTurns(host, next);
+      return next;
+    });
+  }, [host, setTurns]);
+
   const reset = useCallback(() => {
     writeTurns(host, 0);
     setTurns(0);
@@ -235,8 +248,8 @@ export function useEmbedGate(
   const locked = !byokUnlocked && turns >= limit;
 
   return useMemo(
-    () => ({ host, turns, limit, locked, increment, reset }),
-    [host, turns, limit, locked, increment, reset],
+    () => ({ host, turns, limit, locked, increment, decrement, reset }),
+    [host, turns, limit, locked, increment, decrement, reset],
   );
 }
 

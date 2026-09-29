@@ -73,6 +73,18 @@
 .nav-shell-links a:hover {
   color: var(--ink);
 }
+/* The current route (NavShell marks it from currentPath via hrefIsCurrent):
+   ink weight plus an accent hairline, so "you are here" reads distinctly from
+   hover. An inset shadow, not a border — a border would grow the anchor's box
+   and nudge the row. */
+.nav-shell-links a[aria-current="page"] {
+  color: var(--ink);
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+.nav-shell-menu-item[aria-current="page"],
+.nav-shell-sheet-links a[aria-current="page"] {
+  color: var(--ink);
+}
 
 /* ── dropdown group (wide bar only; the sheet gets sections instead) ──────
       The panel is positioned against its group box, so the anchor chain is

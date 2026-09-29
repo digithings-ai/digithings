@@ -75,7 +75,7 @@ def _overlay_chain_deps(
     # Dependency-isolation: portfolio/research pull digillm; cron unit tests never call this.
     from digiquant.portfolio.chain import ChainDeps
     from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
-    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.commit import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
     from digiquant.research.graph import ResearchGraphDeps
     from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
@@ -88,14 +88,23 @@ def _overlay_chain_deps(
             profile_version_id=requested_version_id,
         )
 
+    # One resolved-outcome cohort memo per run, shared by preflight and the
+    # portfolio direction phase so the second reader reuses the first GET (#4617).
+    from digiquant.research.forecast_outcomes import ResolvedOutcomesMemo
+
+    direction_outcomes_memo: ResolvedOutcomesMemo = {}
     research = ResearchGraphDeps(
-        preflight=PreflightDeps(client=client, config_loader=config_loader),
+        preflight=PreflightDeps(
+            client=client,
+            config_loader=config_loader,
+            resolved_outcomes_memo=direction_outcomes_memo,
+        ),
         publish=None,
         triage=TriageDeps(client=client),
         preflight_reflect=PreflightReflectDeps(client=client),
     )
     portfolio = PortfolioGraphDeps(
-        thesis=ThesisGraphDeps(client=client),
+        thesis=ThesisGraphDeps(client=client, resolved_outcomes_memo=direction_outcomes_memo),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )

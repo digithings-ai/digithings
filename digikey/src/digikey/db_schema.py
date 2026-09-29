@@ -111,3 +111,33 @@ class UserProfilePointerRow(Base):
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class LicenseRow(Base):
+    """Customer license allowlist entry (digichat managed-deployment entitlement).
+
+    A license is a signed JWT, not a presented secret — there is nothing to
+    hash, so licenses get their own table instead of reusing ``ApiKeyRow``.
+    The heartbeat slice resolves a presented ``license_id`` to valid /
+    expired / revoked / unknown off ``revoked_at`` + ``expires_at``.
+    License rows are never written to ``JtiIssuedRow`` or the Redis blocklist.
+    """
+
+    __tablename__ = "digikey_licenses"
+
+    license_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    customer_slug: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    hosts: Mapped[list[Any]] = mapped_column(_json_type(), nullable=False, default=list)
+    #: NULL means the ``services`` claim was absent at mint = entitled.
+    services: Mapped[list[Any] | None] = mapped_column(_json_type(), nullable=True, default=None)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    #: Unix ``exp`` so allowlist reads can report expired without parsing the JWT.
+    expires_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: NULL = live; set = revoked.
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Owner note, never in the JWT.
+    label: Mapped[str | None] = mapped_column(String(256), nullable=True)

@@ -4,7 +4,7 @@ Deterministic coordinate-search allocator for write-denied shadow evaluation
 only. Consumes a WP10.1 :class:`ShadowAllocationArtifact` plus numeric
 covariance/cost schedules supplied by the isolated caller.
 
-Must never be imported by the production H8/H9 graph, commit writers, brokers,
+Must never be imported by the production sizing/commit graph, commit writers, brokers,
 or live-trading surfaces. No SciPy/CVXPY — pure Python grid search only.
 """
 
@@ -40,7 +40,7 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
         "cvxopt",
         "digiquant.brokers",
         "digiquant.portfolio.writers",
-        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.commit",
         "digiquant.portfolio.phases.phase7e_risk_sizing",
         "digiquant.research.supabase_io",
         "nautilus_trader",

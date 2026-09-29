@@ -21,7 +21,7 @@ comprehensive long-term view. Designed to run on the last trading day of each mo
 - **Weekly rollups**: monthly range in `documents` (weekly digest artifacts)
 
 ### Step 2: Load Core Context
-- `config/preferences.md` — active portfolio and theses
+- `config/preferences.md` — repository provenance for a maintainer (active portfolio and theses); NOT retrievable by a tool.
 
 Announce: "Monthly synthesis context loaded. Found [N] weekly baselines, [N] delta days. Starting Phase 1."
 

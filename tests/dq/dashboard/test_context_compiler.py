@@ -63,7 +63,7 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionReason,
     AttentionRolloutMode,
     AttentionTargetKind,
-    H6DecisionFeatures,
+    DeliberationDecisionFeatures,
     attention_plan_id,
 )
 from digiquant.dashboard.research_retrieval.store import LoadedResearchState, ResearchStateStore
@@ -312,7 +312,7 @@ def _attention_plan(*, state_version_id: UUID) -> AttentionPlan:
         target_kind=AttentionTargetKind.TICKER,
         target_key=_TICKER,
         state_version_id=state_version_id.hex,
-        h6=H6DecisionFeatures(
+        deliberation=DeliberationDecisionFeatures(
             ticker=_TICKER,
             roster_reason="held",
             held=True,
@@ -350,14 +350,14 @@ def _attention_plan(*, state_version_id: UUID) -> AttentionPlan:
     )
 
 
-def _h5_input(
+def _analyst_input(
     *,
     state: LoadedResearchState,
     changed: frozenset[UUID] | None = None,
     bundle: TickerEvidenceBundle | None = None,
 ) -> ContextCompileInput:
     return ContextCompileInput(
-        role=ContextRole.H5_ANALYST,
+        role=ContextRole.ANALYST,
         state=state,
         ticker=_TICKER,
         bundle=bundle,
@@ -370,7 +370,7 @@ def test_same_state_and_policy_compile_byte_identical_capsule_and_manifest() -> 
     belief = _belief(evidence=ev, statement="Base case intact")
     state = _loaded_state(evidence=(ev,), beliefs=(belief,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
-    inp = _h5_input(
+    inp = _analyst_input(
         state=state,
         changed=frozenset({ev.evidence_id}),
         bundle=bundle,
@@ -393,22 +393,22 @@ def test_compile_is_independent_of_candidate_input_order() -> None:
     changed = frozenset({ev_a.evidence_id, ev_b.evidence_id})
     bundle = _bundle(state_version_id=state_fwd.version.state_version_id)
     cap_fwd, man_fwd = compile_context_capsule(
-        _h5_input(state=state_fwd, changed=changed, bundle=bundle)
+        _analyst_input(state=state_fwd, changed=changed, bundle=bundle)
     )
     cap_rev, man_rev = compile_context_capsule(
-        _h5_input(state=state_rev, changed=changed, bundle=bundle)
+        _analyst_input(state=state_rev, changed=changed, bundle=bundle)
     )
     assert cap_fwd == cap_rev
     assert man_fwd == man_rev
 
 
-def test_h5_rejects_unpinned_bundle_state_version() -> None:
+def test_analyst_rejects_unpinned_bundle_state_version() -> None:
     ev = _evidence(summary="Filed 8-K")
     state = _loaded_state(evidence=(ev,))
     wrong_pin = _bundle(state_version_id=uuid4())
     with pytest.raises(ValueError, match="state_version_id"):
         compile_context_capsule(
-            _h5_input(
+            _analyst_input(
                 state=state,
                 changed=frozenset({ev.evidence_id}),
                 bundle=wrong_pin,
@@ -416,13 +416,13 @@ def test_h5_rejects_unpinned_bundle_state_version() -> None:
         )
 
 
-def test_h5_omits_non_delta_evidence_with_reason() -> None:
+def test_analyst_omits_non_delta_evidence_with_reason() -> None:
     ev_changed = _evidence(summary="New filing")
     ev_stale = _evidence(summary="Old filing")
     state = _loaded_state(evidence=(ev_changed, ev_stale))
     bundle = _bundle(state_version_id=state.version.state_version_id)
     _, manifest = compile_context_capsule(
-        _h5_input(
+        _analyst_input(
             state=state,
             changed=frozenset({ev_changed.evidence_id}),
             bundle=bundle,
@@ -438,15 +438,15 @@ def test_h5_omits_non_delta_evidence_with_reason() -> None:
     assert stale_omissions[0].reason is ContextOmissionReason.NOT_IN_DELTA
 
 
-def test_h6_role_allowlist_rejects_beliefs_and_patches() -> None:
+def test_deliberation_role_allowlist_rejects_beliefs_and_patches() -> None:
     ev = _evidence(summary="Bundle evidence")
-    belief = _belief(evidence=ev, statement="Should not appear in H6")
+    belief = _belief(evidence=ev, statement="Should not appear in deliberation")
     patch = _patch(summary="Metric refresh")
     state = _loaded_state(evidence=(ev,), beliefs=(belief,), patches=(patch,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
     _, manifest = compile_context_capsule(
         ContextCompileInput(
-            role=ContextRole.H6_DELIBERATION,
+            role=ContextRole.DELIBERATION,
             state=state,
             ticker=_TICKER,
             bundle=bundle,
@@ -460,14 +460,14 @@ def test_h6_role_allowlist_rejects_beliefs_and_patches() -> None:
     assert ContextOmissionReason.ROLE_NOT_ALLOWED in reasons
 
 
-def test_h7_includes_attention_decisions_from_plan() -> None:
+def test_direction_includes_attention_decisions_from_plan() -> None:
     ev = _evidence(summary="Macro read")
     belief = _belief(evidence=ev, statement="Risk-on")
     state = _loaded_state(evidence=(ev,), beliefs=(belief,))
     plan = _attention_plan(state_version_id=state.version.state_version_id)
     capsule, manifest = compile_context_capsule(
         ContextCompileInput(
-            role=ContextRole.H7_PM,
+            role=ContextRole.DIRECTION,
             state=state,
             attention_plan=plan,
         )
@@ -487,7 +487,7 @@ def test_legacy_refs_always_omitted_with_reason() -> None:
     state = _loaded_state(evidence=(ev,), legacy_refs=(legacy,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
     _, manifest = compile_context_capsule(
-        _h5_input(
+        _analyst_input(
             state=state,
             changed=frozenset({ev.evidence_id}),
             bundle=bundle,
@@ -505,7 +505,7 @@ def test_byte_budget_emits_omission_for_truncated_items() -> None:
     ev = _evidence(summary="x" * 400)
     state = _loaded_state(evidence=(ev,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
-    base = default_role_context_policy(ContextRole.H5_ANALYST)
+    base = default_role_context_policy(ContextRole.ANALYST)
     tight = RoleContextPolicy(
         role=base.role,
         allowed_kinds=base.allowed_kinds,
@@ -524,7 +524,7 @@ def test_byte_budget_emits_omission_for_truncated_items() -> None:
     )
     _, manifest = compile_context_capsule(
         ContextCompileInput(
-            role=ContextRole.H5_ANALYST,
+            role=ContextRole.ANALYST,
             state=state,
             ticker=_TICKER,
             bundle=bundle,
@@ -542,7 +542,7 @@ def test_manifest_and_capsule_embed_state_version_and_schema() -> None:
     state = _loaded_state(evidence=(ev,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
     capsule, manifest = compile_context_capsule(
-        _h5_input(state=state, changed=frozenset({ev.evidence_id}), bundle=bundle)
+        _analyst_input(state=state, changed=frozenset({ev.evidence_id}), bundle=bundle)
     )
     assert capsule.state_version_id == state.version.state_version_id
     assert manifest.state_version_id == state.version.state_version_id
@@ -551,11 +551,11 @@ def test_manifest_and_capsule_embed_state_version_and_schema() -> None:
 
 
 def test_role_policy_hash_is_deterministic() -> None:
-    h5_a = default_role_context_policy(ContextRole.H5_ANALYST).content_hash
-    h5_b = default_role_context_policy(ContextRole.H5_ANALYST).content_hash
-    h6 = default_role_context_policy(ContextRole.H6_DELIBERATION).content_hash
-    assert h5_a == h5_b
-    assert h5_a != h6
+    analyst_a = default_role_context_policy(ContextRole.ANALYST).content_hash
+    analyst_b = default_role_context_policy(ContextRole.ANALYST).content_hash
+    h6 = default_role_context_policy(ContextRole.DELIBERATION).content_hash
+    assert analyst_a == analyst_b
+    assert analyst_a != h6
 
 
 def test_models_reject_extra_fields() -> None:
@@ -574,14 +574,14 @@ def test_compile_manifest_standalone_matches_capsule_manifest() -> None:
     ev = _evidence(summary="Filed 8-K")
     state = _loaded_state(evidence=(ev,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
-    inp = _h5_input(state=state, changed=frozenset({ev.evidence_id}), bundle=bundle)
+    inp = _analyst_input(state=state, changed=frozenset({ev.evidence_id}), bundle=bundle)
     standalone = compile_context_manifest(inp)
     _, from_capsule = compile_context_capsule(inp)
     assert standalone == from_capsule
 
 
 # ---------------------------------------------------------------------------
-# WP14.2 — blinded H5/H6 provider wiring
+# WP14.2 — blinded analyst/deliberation provider wiring
 # ---------------------------------------------------------------------------
 
 
@@ -618,7 +618,7 @@ def _seed_loaded_state(
     return store, {"state_version_id": str(version_id)}, version_id
 
 
-def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wire_analyst_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "off")
     ev = _evidence(summary="Filed 8-K")
     loaded = _loaded_state(evidence=(ev,))
@@ -629,9 +629,9 @@ def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) ->
         "prior_book": [{"ticker": "MSFT", "weight_pct": 5.0}],
         "active_theses": [{"thesis_id": "t1"}],
     }
-    from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
 
-    result = wire_h5_phase_inputs(
+    result = wire_analyst_phase_inputs(
         incumbent,
         ticker=_TICKER,
         bundle=bundle,
@@ -643,7 +643,7 @@ def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) ->
     assert result.phase_inputs == incumbent
 
 
-def test_wire_h5_shadow_records_manifest_beside_incumbent(
+def test_wire_analyst_shadow_records_manifest_beside_incumbent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
@@ -652,9 +652,9 @@ def test_wire_h5_shadow_records_manifest_beside_incumbent(
     store, pin, version_id = _seed_loaded_state(loaded)
     bundle = _bundle(state_version_id=version_id)
     incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
-    from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
 
-    result = wire_h5_phase_inputs(
+    result = wire_analyst_phase_inputs(
         incumbent,
         ticker=_TICKER,
         bundle=bundle,
@@ -665,12 +665,144 @@ def test_wire_h5_shadow_records_manifest_beside_incumbent(
     assert result.capsule is not None
     assert result.manifest is not None
     assert result.phase_inputs["prior_book"] == incumbent["prior_book"]
-    assert "context_capsule_shadow" in result.phase_inputs
-    assert "context_manifest_shadow" in result.phase_inputs
+    # #4609: shadow blobs no longer ride in the uncached prompt block — the
+    # capsule/manifest objects on the result carry the data.
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
     assert result.phase_inputs["context_manifest_id"] == str(result.manifest.manifest_id)
 
 
-def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
+def test_wire_h5_shadow_omits_capsule_from_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4609: the shadow capsule/manifest must not be re-serialized into the
+    uncached ``phase_inputs`` prompt block — the objects on the result carry them."""
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", raising=False)
+    ev = _evidence(summary="Filed 8-K")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
+
+    result = wire_analyst_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+        changed_evidence_ids=frozenset({ev.evidence_id}),
+    )
+    assert result.capsule is not None
+    assert result.manifest is not None
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
+    # Linkage still present (cheap ids, not the blob).
+    assert result.phase_inputs["context_capsule_id"] == str(result.capsule.capsule_id)
+    assert result.phase_inputs["context_manifest_id"] == str(result.manifest.manifest_id)
+
+
+def test_wire_h5_shadow_escape_hatch_restores_in_prompt_blobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4609 escape hatch: truthy ``DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT`` restores
+    the pre-diet in-prompt shadow blobs."""
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", "1")
+    ev = _evidence(summary="Filed 8-K")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
+
+    result = wire_analyst_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+        changed_evidence_ids=frozenset({ev.evidence_id}),
+    )
+    assert "context_capsule_shadow" in result.phase_inputs
+    assert "context_manifest_shadow" in result.phase_inputs
+
+
+def test_wire_h6_shadow_omits_capsule_and_keeps_incumbent_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#4609: the deliberation (H6) shadow blob is also dropped, and the incumbent
+    ``base_evidence_bundle`` it was compiled from is left in place."""
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", raising=False)
+    ev = _evidence(summary="Bundle evidence")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "analyst_payload": {"stance": "buy", "ticker": _TICKER},
+        "transcript": [{"role": "pm", "message": "challenge"}],
+        "base_evidence_bundle": bundle.model_dump(mode="json"),
+    }
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
+
+    result = wire_deliberation_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+    )
+    assert result.capsule is not None
+    assert result.manifest is not None
+    assert "context_capsule_shadow" not in result.phase_inputs
+    assert "context_manifest_shadow" not in result.phase_inputs
+    assert result.phase_inputs["base_evidence_bundle"] == incumbent["base_evidence_bundle"]
+
+
+def test_wire_shadow_prompt_byte_delta(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#4609 byte yardstick: the shadow blob is real serialized weight in the
+    uncached prompt block — turning the escape hatch on puts it back."""
+    import json
+
+    ev = _evidence(summary="Bundle evidence")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "analyst_payload": {"stance": "buy", "ticker": _TICKER},
+        "transcript": [{"role": "pm", "message": "challenge"}],
+        "base_evidence_bundle": bundle.model_dump(mode="json"),
+    }
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
+
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "shadow")
+
+    def _size() -> int:
+        result = wire_deliberation_phase_inputs(
+            incumbent,
+            ticker=_TICKER,
+            bundle=bundle,
+            research_state_pin=pin,
+            research_state_store=store,
+        )
+        return len(json.dumps(result.phase_inputs, default=str, sort_keys=True))
+
+    monkeypatch.delenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", raising=False)
+    diet_size = _size()
+    monkeypatch.setenv("DIGIQUANT_CONTEXT_SHADOW_IN_PROMPT", "1")
+    legacy_size = _size()
+    # Exact sizes are pinned so the numbers quoted in
+    # docs/research/token-budget.md (#4609) stay reproducible from this fixture.
+    assert diet_size == 1_219
+    assert legacy_size == 2_785
+    assert legacy_size > diet_size
+
+
+def test_wire_analyst_enforce_strips_portfolio_and_injects_capsule(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
@@ -686,9 +818,9 @@ def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
         "held_in_prior_book": True,
         "weight_pct": 12.0,
     }
-    from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_analyst_phase_inputs
 
-    result = wire_h5_phase_inputs(
+    result = wire_analyst_phase_inputs(
         incumbent,
         ticker=_TICKER,
         bundle=bundle,
@@ -703,7 +835,7 @@ def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
     assert f"evidence:{ev.evidence_id}" in result.manifest.included_entity_ids
 
 
-def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
+def test_wire_deliberation_enforce_allows_transcript_and_analyst_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
@@ -718,9 +850,9 @@ def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
         "prior_book": [{"ticker": "MSFT"}],
         "base_evidence_bundle": bundle.model_dump(mode="json"),
     }
-    from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
 
-    result = wire_h6_phase_inputs(
+    result = wire_deliberation_phase_inputs(
         incumbent,
         ticker=_TICKER,
         bundle=bundle,
@@ -734,7 +866,7 @@ def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
     assert result.phase_inputs["structured_context"]
 
 
-def test_wire_h6_rejects_unpinned_bundle_state_version(
+def test_wire_deliberation_rejects_unpinned_bundle_state_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DIGIQUANT_CONTEXT_COMPILER_MODE", "enforce")
@@ -742,10 +874,10 @@ def test_wire_h6_rejects_unpinned_bundle_state_version(
     loaded = _loaded_state(evidence=(ev,))
     wrong_bundle = _bundle(state_version_id=uuid4())
     store, pin, _version_id = _seed_loaded_state(loaded)
-    from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_deliberation_phase_inputs
 
     with pytest.raises(ValueError, match="state_version_id"):
-        wire_h6_phase_inputs(
+        wire_deliberation_phase_inputs(
             {"ticker": _TICKER},
             ticker=_TICKER,
             bundle=wrong_bundle,

@@ -2,7 +2,7 @@
 title: "digiquant — API reference"
 type: reference
 status: generated
-created: 2026-08-10
+created: 2026-09-22
 tags:
   - api
   - core
@@ -16,7 +16,7 @@ relevance:
 **Role:** Quant engine · NautilusTrader · **Tier:** core
 
 ## Overview
-Scheduled research turns into portfolio signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.
+Scheduled research turns into a sized book; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.
 
 Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.
 

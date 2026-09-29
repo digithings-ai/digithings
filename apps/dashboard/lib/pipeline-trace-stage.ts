@@ -81,6 +81,9 @@ export function stageForTracePhase(phase: string | null): PipelineStage | null {
     p.startsWith('h5') ||
     p.startsWith('h6') ||
     p.startsWith('h7') ||
+    p.includes('market-explor') ||
+    p.includes('vehicle') ||
+    p.includes('direction') ||
     p.includes('phase7') ||
     p.includes('thesis') ||
     p.includes('screener') ||

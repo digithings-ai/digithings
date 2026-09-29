@@ -1,4 +1,4 @@
-"""Thesis invalidation criteria — H1 must mark CHALLENGED on hit (spec §16)."""
+"""Thesis invalidation criteria — thesis must mark CHALLENGED on hit (spec §16)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
-from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
+from digiquant.portfolio.phases.thesis import build_thesis
 from digiquant.portfolio.writers.thesis_io import (
     apply_invalidation_hits,
     merge_review_with_invalidation_hits,
@@ -68,7 +68,7 @@ class TestThesisIoInvalidationHits:
 
 @pytest.mark.unit
 class TestH1ThesisReviewInvalidation:
-    def test_h1_node_marks_challenged_on_invalidation_hit(self) -> None:
+    def test_thesis_node_marks_challenged_on_invalidation_hit(self) -> None:
         state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 6, 20),
@@ -87,7 +87,7 @@ class TestH1ThesisReviewInvalidation:
         client = FakeSupabaseClient()
         compiled = build_pipeline(
             ResearchState,
-            [build_h1_thesis_review(client=client)],
+            [build_thesis(client=client)],
         )
 
         llm_review = ThesisReviewOutput(
@@ -102,11 +102,11 @@ class TestH1ThesisReviewInvalidation:
         )
 
         with patch(
-            "digiquant.portfolio.phases.h1_thesis_review._run_h1_llm",
+            "digiquant.portfolio.phases.thesis._run_thesis_llm",
             return_value=llm_review,
         ):
             with patch(
-                "digiquant.portfolio.phases.h1_thesis_review._invalidation_hits_for_state",
+                "digiquant.portfolio.phases.thesis._invalidation_hits_for_state",
                 return_value={"geo-gold": ["USD index above 110"]},
             ):
                 result = compiled.invoke(state)

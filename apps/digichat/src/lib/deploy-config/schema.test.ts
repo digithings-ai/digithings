@@ -11,7 +11,7 @@ import {
   welcomeTitle,
 } from "./schema";
 import { allowedForceTools } from "./force-tool";
-import { THREAD_SKINS } from "@/lib/thread-skins";
+import { THREAD_SKINS } from "@digithings/ui/chat/skins";
 
 const examplesDir = resolve(__dirname, "../../../config/examples");
 

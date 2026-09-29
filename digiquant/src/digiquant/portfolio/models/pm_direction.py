@@ -1,9 +1,9 @@
-"""H7 PM direction memo — direction + conviction rank only (spec §11.2).
+"""PM direction memo — direction + conviction rank only (spec §11.2).
 
 WP4.5 (#2660): each roster row may carry a typed ``ForecastReference`` bound
 deterministically from the current effective-forecast map — never from LLM IDs.
 WP-G: roster rows may also carry ``confidence`` in ``[0, 1]`` (display scale);
-rank remains ordinal order, not size. H8 scales each long by ``confidence``
+rank remains ordinal order, not size. sizing scales each long by ``confidence``
 (cash-first; missing → 0.5).
 """
 
@@ -23,9 +23,9 @@ _FORECAST_UNAVAILABLE = "forecast_unavailable"
 
 
 class ForecastReference(BaseModel):
-    """Audit pointer from an H7 ticker decision to one effective forecast.
+    """Audit pointer from an direction ticker decision to one effective forecast.
 
-    Identity fields are filled by H7 post-processing from the run's effective
+    Identity fields are filled by direction post-processing from the run's effective
     forecast map. Models must not invent these UUIDs. Missing lineage yields
     null IDs plus ``degradation_reason`` — never fabricated identifiers.
     """
@@ -69,7 +69,7 @@ class TickerDirection(BaseModel):
     forecast_reference: ForecastReference | None = Field(
         default=None,
         description=(
-            "Authoritative effective-forecast pointer attached after H7 LLM output; "
+            "Authoritative effective-forecast pointer attached after direction LLM output; "
             "post-bind always set (degraded when lineage is missing)."
         ),
     )
@@ -83,7 +83,7 @@ class TickerDirection(BaseModel):
 
 
 class PMDirectionMemo(BaseModel):
-    """H7 output — consumed by H8 risk sizing; must not carry weight fields."""
+    """direction output — consumed by sizing risk sizing; must not carry weight fields."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +135,7 @@ def forecast_reference_from_lineage(
 def _lineage_from_summary(
     summary: Mapping[str, Any],
 ) -> tuple[UUID | None, UUID | None, UUID | None, str | None]:
-    """Extract IDs from flat H6 fields or nested ``effective_forecast``; never invent UUIDs."""
+    """Extract IDs from flat deliberation fields or nested ``effective_forecast``; never invent UUIDs."""
     eff = _parse_uuid(summary.get("effective_forecast_id"))
     base = _parse_uuid(summary.get("base_forecast_id"))
     amend = _parse_uuid(summary.get("amendment_id"))

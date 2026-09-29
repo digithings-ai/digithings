@@ -43,7 +43,7 @@ function normalizeRounds(raw: unknown[]): Round[] {
 
 // ── DebateSummary types (automated pipeline) ─────────────────────────────
 // Legacy bull/bear: { rounds: [{round_number, bull_argument, bear_argument}], … }
-// H6 PM↔analyst: { transcript|rounds: [{role, round_number, message}], conclusion, … }
+// deliberation PM↔analyst: { transcript|rounds: [{role, round_number, message}], conclusion, … }
 type DebateRound = {
   round_number?: number;
   bull_argument?: string;
@@ -56,7 +56,7 @@ type ChatTurn = {
   message?: string;
 };
 
-/** True when a row is an H6 PM↔analyst transcript turn (not a bull/bear debate round). */
+/** True when a row is an deliberation PM↔analyst transcript turn (not a bull/bear debate round). */
 export function isPmAnalystChatTurn(row: unknown): row is ChatTurn {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
   const o = row as Record<string, unknown>;
@@ -65,7 +65,7 @@ export function isPmAnalystChatTurn(row: unknown): row is ChatTurn {
   return role === 'pm' || role === 'analyst';
 }
 
-/** True when a row is a legacy bull/bear argument pair (not an H6 chat turn). */
+/** True when a row is a legacy bull/bear argument pair (not an deliberation chat turn). */
 export function isBullBearDebateRound(row: unknown): row is DebateRound {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
   if (isPmAnalystChatTurn(row)) return false;
@@ -77,7 +77,7 @@ export function isBullBearDebateRound(row: unknown): row is DebateRound {
 
 /**
  * Prefer `payload.transcript`; fall back to chat-shaped rows in `payload.rounds`.
- * Publish historically remapped H6 transcript → `rounds` without a `transcript` key.
+ * Publish historically remapped deliberation transcript → `rounds` without a `transcript` key.
  */
 export function extractPmAnalystTranscript(
   payload: Record<string, unknown> | null | undefined,
@@ -95,7 +95,7 @@ export function extractPmAnalystTranscript(
 
 /**
  * Hide bull/bear cards when publish fell both sides back to the same conclusion
- * (H6 has no real bull_thesis/bear_thesis — only a PM↔analyst transcript).
+ * (deliberation has no real bull_thesis/bear_thesis — only a PM↔analyst transcript).
  */
 export function shouldShowDistinctTheses(opts: {
   bullThesis: string;
@@ -161,7 +161,7 @@ export default function DeliberationDocumentView({
       : '';
   const isRiskDebateShape = aggressiveCase !== '' || conservativeCase !== '' || keyTension !== '';
 
-  // ── H6 chat transcript (preferred) + legacy bull/bear rounds ──────────
+  // ── deliberation chat transcript (preferred) + legacy bull/bear rounds ──────────
   const transcript = extractPmAnalystTranscript(payload);
   const debateRounds: DebateRound[] = Array.isArray(payload?.rounds)
     ? (payload.rounds as unknown[]).filter(isBullBearDebateRound)
@@ -278,7 +278,7 @@ export default function DeliberationDocumentView({
     );
   }
 
-  // ── DebateSummary / H6 deliberation rendering ───────────────────────────
+  // ── DebateSummary / deliberation rendering ───────────────────────────
   if (isDebateShape) {
     return (
       <div className="space-y-8 text-sm" data-testid="deliberation-document-view">
@@ -302,7 +302,7 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
-        {/* H6 state badges: carried / converged / max_rounds escalation */}
+        {/* deliberation state badges: carried / converged / max_rounds escalation */}
         {(carried || escalated || converged != null) && (
           <div className="flex flex-wrap items-center gap-2">
             {carried && (
@@ -328,7 +328,7 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
-        {/* H5 analyst report — first meeting artifact, not a second dump */}
+        {/* analyst report — first meeting artifact, not a second dump */}
         {debateTicker ? (
           <div data-testid="deliberation-h5-report">
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
@@ -349,7 +349,7 @@ export default function DeliberationDocumentView({
           </div>
         ) : null}
 
-        {/* PM ↔ analyst chat — primary surface for H6 */}
+        {/* PM ↔ analyst chat — primary surface for deliberation */}
         {transcript.length > 0 ? (
           <div data-testid="deliberation-chat">
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">
@@ -418,7 +418,7 @@ export default function DeliberationDocumentView({
           </div>
         ) : null}
 
-        {/* Legacy per-round bull/bear exchange (pre-H6 DebateSummary) */}
+        {/* Legacy per-round bull/bear exchange (pre-deliberation DebateSummary) */}
         {debateRounds.length > 0 ? (
           <div>
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
