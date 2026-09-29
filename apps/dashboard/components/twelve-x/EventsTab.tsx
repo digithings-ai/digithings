@@ -358,9 +358,15 @@ export default function EventsTab({
       if (externalId) {
         // Calendar-linked snapshot: precise key join. First write wins.
         if (!externalIdMap.has(externalId)) externalIdMap.set(externalId, matched);
-        continue;
+        // ...but ALSO fall through to the name+date registration below (no
+        // `continue`): the calendar table is append-only across sources, so a
+        // source switch or twin cleanup can retire the exact id while the same
+        // event lives on under the other source's id (te- vs gb- twins share
+        // name+date, never external_id; #4739). matchOpinions still prefers the
+        // exact join, so this only heals otherwise-orphaned opinions.
       }
-      // Unlinked snapshot: register under name+date keys. The snapshot name often
+      // Name+date registration: the fallback for id-linked snapshots above, and
+      // the only key for unlinked snapshots. The snapshot name often
       // carries a leading country code ("US FOMC Statement") the calendar name lacks,
       // so register BOTH the exact normalized name AND the country-stripped form, the
       // latter qualified by country to avoid cross-country false matches.

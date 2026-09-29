@@ -373,10 +373,84 @@ export function calendarWindow(now: Date, timeZone?: string): CalendarWindow {
 }
 
 /**
+ * Logical-event join key for one `economic_calendar` row: the feed date, the country,
+ * and the whitespace-normalized lowercase event name. Mirrors the twelve-x pipeline's
+ * own join key so the dashboard groups rows exactly the way the pipeline defines "the
+ * same event". `event_time` is deliberately NOT part of the key — see
+ * {@link dedupeCalendarTwins} for why.
+ */
+function calendarEventKey(row: FxEconomicCalendarRow): string {
+  // Country is case/space-normalized: feeds disagree on casing in principle
+  // (`US` vs `us`), and the key must not let a twin through on that basis.
+  return `${row.event_date}|${(row.country ?? '').trim().toUpperCase()}|${row.event_name.trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')}`;
+}
+
+/** True for a row ingested from gloomberb, the pipeline's primary calendar source. */
+function isGloomberbRow(row: FxEconomicCalendarRow): boolean {
+  return (row.external_id ?? '').startsWith('gb-');
+}
+
+/**
+ * PURE — collapse cross-source twin rows from a raw `economic_calendar` read.
+ *
+ * ROOT CAUSE: the shared core `economic_calendar` table is append-only and receives
+ * the same logical event from TWO ingest sources — `forexfactory` (external_id `te-…`
+ * or a feed id) and `gloomberb` (`gb-` prefix). Each twin pair carries an identical
+ * `(event_date, country, event_name)` but disagrees on `event_time` (one source records
+ * the feed's ET wall clock, the other UTC — a +4h offset) while `event_datetime_utc`
+ * is nearly identical. The table currently holds 123 such twin pairs, so a raw-row
+ * read surfaces every affected event twice, as two visually identical rows in
+ * `EventsTab`.
+ *
+ * WHY THE DASHBOARD SEES RAW ROWS: `fetchCalendarWindow` reads the SHARED table
+ * through the main dashboard client with no server-side dedup (the table is not owned
+ * by this app, and `external_id` differs between sources so an id-based dedup cannot
+ * work), while the twelve-x pipeline's own read path dedups by join key upstream. A
+ * write-side fix is landing in the pipeline in parallel; this read-model defense hides
+ * the already-written twins immediately and keeps the dashboard correct while the
+ * backfill runs.
+ *
+ * GROUPING deliberately IGNORES `event_time`: the two sources record that wall clock
+ * in different zones (ET vs UTC), so including it would classify every twin as
+ * distinct. `event_datetime_utc` is not keyed either — it can drift by seconds between
+ * ingest runs — and `id`/`external_id` differ by construction.
+ *
+ * PREFERENCE: when rows share a key, the gloomberb row wins (`external_id` starting
+ * `gb-`) because gloomberb is the pipeline's primary source and its rows were written
+ * most recently; when neither side is gloomberb the incumbent is kept (first wins), so
+ * the outcome is deterministic regardless of which source sorted first.
+ *
+ * ORDER/PAGINATION SEMANTICS ARE UNCHANGED: winners are collected into a `Map` and the
+ * ORIGINAL array is then filtered against it, so every surviving row keeps its original
+ * position in the query's `event_datetime_utc` ordering — nothing is reordered, merged,
+ * or synthesised. Only duplicate rows are dropped, and only downstream local narrowing
+ * (`getUpcomingEvents` / `getTodayEvents`) ever sees the result.
+ */
+function dedupeCalendarTwins(rows: FxEconomicCalendarRow[]): FxEconomicCalendarRow[] {
+  const winners = new Map<string, FxEconomicCalendarRow>();
+  for (const row of rows) {
+    const key = calendarEventKey(row);
+    const incumbent = winners.get(key);
+    if (!incumbent || (isGloomberbRow(row) && !isGloomberbRow(incumbent))) {
+      winners.set(key, row);
+    }
+  }
+  // Filter (not map over winners): the winner must render at ITS original index so the
+  // query's ordering — and therefore pagination/grouping downstream — is preserved.
+  return rows.filter((row) => winners.get(calendarEventKey(row)) === row);
+}
+
+/**
  * The raw `economic_calendar` rows over the PADDED window, ordered by the absolute UTC
  * release instant (NULL release times — all-day rows — sort last, then by event_date).
  * Shared by `getUpcomingEvents` and `getTodayEvents` so both see the same row set and
  * only their LOCAL narrowing differs. `[]` when unconfigured or empty.
+ *
+ * Cross-source twin rows (forexfactory/gloomberb pairs for one logical event) are
+ * collapsed by {@link dedupeCalendarTwins} BEFORE either caller narrows locally, so
+ * both callers see one row per logical event while keeping the original order.
  */
 async function fetchCalendarWindow({
   queryStart,
@@ -396,7 +470,7 @@ async function fetchCalendarWindow({
       .order('event_datetime_utc', { ascending: true, nullsFirst: false })
       .order('event_date', { ascending: true })
   );
-  return rows ?? [];
+  return dedupeCalendarTwins(rows ?? []);
 }
 
 /**
