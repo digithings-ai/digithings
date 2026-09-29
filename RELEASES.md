@@ -110,6 +110,19 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 
 ## Changelog (high level)
 
+### v0.1.0 — 2026-09-29
+
+First repo-wide release. Headline: unified web_search provider chain end to
+end (promoted to main via #4752).
+- digisearch #4711: unified `web_search` tool with swappable providers
+  (internal + exa, tavily, parallel, firecrawl, tinyfish); `auto` is always
+  in-house; named externals fail closed on missing keys.
+- digigraph #4722: provider passthrough — per-call engine choice, session
+  default, `search_engine` / `X-Digi-Search-Engine` ingress (body wins).
+- digiquant #4723: `provider:` grounding YAML key, forwarded only when set.
+- digichat #4724: `searchEngine` session pref + tenant gate default + BFF
+  header forward (names only, never keys).
+
 ### Unreleased
 
 - **Branch cleanup:** Confirmed removal of stale merged branch `task/149-w1e-price-pipeline` (already deleted from origin; merged into `develop` via PR #286 / #288 for issue #149 — research price pipeline migration).
