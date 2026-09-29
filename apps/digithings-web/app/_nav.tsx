@@ -32,14 +32,13 @@ export const Brand = () => (
  *  Four wayfinding entries, the last a NavGroup: the company pages (About,
  *  Team, Security, Changelog) are a small index, not four more top-level slots —
  *  NavShell renders a group as a dropdown on the wide bar and as a labelled
- *  section inside the narrow sheet. "Contact" left the bar with them: it is an
- *  anchor on the home page and it lives in the footer. The website privacy
- *  notice is footer-only by design. */
+ *  section inside the narrow sheet. Nothing here points back into a band of
+ *  the home page — the landing's own section rail does that wayfinding. The
+ *  website privacy notice is footer-only by design. */
 export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
   { label: "Wiki", href: "/openwiki" },
-  { label: "Architecture", href: "/#architecture" },
   { label: "Services", href: "/services" },
   {
     label: "Company",
@@ -60,7 +59,6 @@ export const DT_NAV_PRIMARY: NavItem[] = [
  *  terms. Company profiles (GitHub, X, LinkedIn) are the shared <SocialRow/>,
  *  slotted through <DtFooter/>, not a Connect column here. */
 export const DT_FOOTER: NavLink[] = [
-  { label: "Architecture", href: "/#architecture" },
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
   { label: "Wiki", href: "/openwiki" },
@@ -69,7 +67,6 @@ export const DT_FOOTER: NavLink[] = [
   { label: "Team", href: "/team" },
   { label: "Security", href: "/security" },
   { label: "Changelog", href: "/changelog" },
-  { label: "Contact", href: "/#contact" },
   { label: "digichat", href: "/chat" },
   { label: "Privacy", href: "/legal/privacy" },
   { label: "digiquant.io", href: "https://digiquant.io", external: true },

@@ -1,9 +1,9 @@
 # Why-band copy deck (Refs #4429)
 
 Single variant: three apps, one consistent digithings shape, price table
-always below. Review it live at `/variants/why-copy` — this file tracks
-decisions, not the full text (the text lives in `whyLeftStudy.ts`,
-`appPresets.ts` and `OWNED_TOUR_STEPS`).
+always below. Live in the landing's `#why` band — this file tracks
+decisions, not the full text (the text lives in `appPresets.ts` and
+`whyStory.ts`).
 
 Framing: less you-vs-theirs, less owning-vs-renting. Custom builds,
 modularity, no lock-in, price. Owning is part of it, never the headline.

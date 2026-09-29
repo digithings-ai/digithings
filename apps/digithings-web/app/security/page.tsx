@@ -14,235 +14,138 @@ import { DtNav } from "@/components/DtNav";
 export const metadata: Metadata = {
   title: "security — controls, and the limits we publish",
   description:
-    "How digithings handles identity, correlation, audit and secrets: RS256 JWTs and scoped API " +
-    "keys in digikey, a request id on every hop, a redacted JSONL audit trail, gitleaks and " +
-    "pip-audit in CI — plus the boundaries we have not closed yet.",
+    "How digithings handles identity, audit and change: signed tokens and scoped keys, a request " +
+    "id on every hop, secret scanning and dependency audits in CI, review before every production " +
+    "release — plus the gaps we have not closed yet.",
 };
 
-// /security, rebuilt on the document grammar (D1, #4429): one framed column,
-// hairline section separators, the `[*]` row grammar — no card grid, no
-// alternating bands. Five sections: the four surfaces a reader deciding whether
-// to deploy this wants (identity, traceability, pipeline, limits) and the
-// disclosure policy. Content is read out of the code, not the brochure.
-//
-// Source of record is the root SECURITY.md (threat model + STRIDE table +
-// non-negotiable defaults). Two statements here deliberately differ from prose
-// elsewhere because the code says otherwise:
-//  1. Audit redaction matches secret *key names* recursively over a mapping; it
-//     is not a PII detector and does not inspect values. digibase.audit is ONLY
-//     that function — the JSONL writer is audit_log() in digigraph.audit and the
-//     digiclaw/digiquant copies. Naming digibase.audit as the writer would send
-//     a reader to the one file that does not contain it.
-//  2. Revocation: SECURITY.md still lists JWT revocation as roadmap, but the
-//     Redis-backed jti blocklist landed (ADR-0007) and is checked. It is opt-in:
-//     with DIGIKEY_BLOCKLIST_REDIS_URL unset, revocation only takes effect at
-//     token expiry. Both halves are stated.
-// The limits section is a SELECTION from the STRIDE residual-risk column, not a
-// reproduction of it — asserting completeness while dropping rows is the same
-// defect as overclaiming a control.
-//
-// One correction from the pre-rebuild page: its pip-audit row and a limits row
-// both said the JS dependency trees were unaudited. A sibling npm audit lane
-// (#3523) covers the root `apps/*` + `packages/*` closure on the same cadence,
-// so the pip-audit row now names its two real boundaries and the false limits
-// row is dropped.
+// /security for a client, not a contributor: one or two sentences a row. The
+// full record — threat model, STRIDE table, every residual risk — is the root
+// SECURITY.md, linked from Disclosure. Every row is read out of the code, so
+// two statements deliberately differ from SECURITY.md's prose: revocation is
+// shipped but opt-in (a Redis jti blocklist), and audit redaction matches key
+// names, not values. Limits is a selection, never presented as the full list.
 
 const IDENTITY: { term: string; body: string }[] = [
   {
-    term: "RS256, with a kid",
+    term: "Signed tokens",
     body:
-      "Access tokens are asymmetric RS256 JWTs signed with a rotating RSA key and stamped with a " +
-      "kid header. Verifiers fetch the public half from the JWKS endpoint and never hold signing " +
-      "material, so a compromised consumer cannot mint tokens.",
+      "Access tokens are RS256 JWTs. Services verify them with a public key, so no service can " +
+      "mint one.",
   },
   {
     term: "Scoped API keys",
     body:
-      "Keys are bcrypt-hashed at rest; only a short lookup prefix is stored in the clear. Each key " +
-      "carries a tenant slug and an explicit scope list, and scope matching supports component " +
-      "wildcards (digisearch:*) so a key can be issued narrow and stay narrow.",
+      "Keys are hashed at rest and carry an explicit scope list, so a key can only do what it was " +
+      "issued for.",
   },
   {
-    term: "Scope checked per route",
+    term: "Fails closed",
     body:
-      "Protected routes declare the scope they need and the shared service middleware enforces it. " +
-      "When auth is not configured the middleware fails closed — a protected route returns 503 " +
-      "rather than serving unauthenticated traffic.",
+      "Every protected route checks its scope. If auth is not configured, the route refuses " +
+      "traffic instead of serving it.",
   },
   {
-    term: "Revocation, when you wire it",
+    term: "Revocation",
     body:
-      "Revoking a key marks it revoked and pushes its live token ids to a Redis jti blocklist that " +
-      "the auth middleware checks on every request; a Redis outage returns 503 rather than failing " +
-      "open. With no Redis URL configured the blocklist is a no-op and already-issued tokens stay " +
-      "valid until they expire. SECURITY.md's revocation section predates the blocklist and still " +
-      "calls it roadmap; this description matches the code.",
-  },
-  {
-    term: "Brute force costs something",
-    body:
-      "Key issuance and token mint sit behind a per-IP token bucket — 10 requests a minute, burst " +
-      "20 — returning 429 with a Retry-After. Liveness and JWKS routes are exempt so probes stay " +
-      "up under load. The bucket is in-process only.",
+      "With Redis configured, a revoked key is blocked on its next request. Without it, issued " +
+      "tokens stay valid until they expire.",
   },
 ];
 
 const TRACEABILITY: { term: string; body: string }[] = [
   {
-    term: "digibase.http",
-    body:
-      "One correlation middleware, installed by all six FastAPI services. It reads X-Request-ID " +
-      "from the request or generates a uuid4, publishes it on a ContextVar, injects it onto every " +
-      "log record, forwards it on outbound service-to-service calls, and echoes it on the response.",
+    term: "A request id on every hop",
+    body: "Each request carries one id across every service call and into every log line.",
   },
   {
-    term: "audit_log(), per service",
-    body:
-      "Workflow events append to a JSONL audit log — timestamp, event type, agent id, payload, " +
-      "with optional key prefix, tenant and jti. The writer is audit_log() in digigraph.audit and " +
-      "in the digiclaw and digiquant copies; digibase.audit is not the writer, it supplies the " +
-      "redact_mapping() every writer passes its payload through. The file lives on your host.",
+    term: "An audit trail on your host",
+    body: "Workflow events go to a local log, with fields named like secrets redacted.",
   },
   {
-    term: "Bounded outbound HTTP",
+    term: "No open doors",
     body:
-      "Service-to-service calls are constructed through the shared client helpers, which apply a " +
-      "connect-5 / read-30 / write-10 / pool-5 second timeout envelope. A bare httpx client has no " +
-      "read timeout and will hang forever against a stalled upstream, so it is banned in production.",
-  },
-  {
-    term: "No wildcard CORS",
-    body:
-      "Every service installs CORS from one helper that reads an explicit origin allowlist from " +
-      "the environment. There is no * default: unset means the allowlist is empty and no " +
-      "cross-origin script can call the service.",
+      "Cross-origin access is an explicit allowlist, and every service call between modules has " +
+      "a timeout.",
   },
 ];
 
 const PIPELINE: { term: string; body: string }[] = [
   {
-    term: "gitleaks",
+    term: "Secret scanning",
     body:
-      "Scans the diff on every code pull request, and the full history on every push to develop " +
-      "and main. Any finding fails the job. The scanner is the OSS CLI at a pinned version, " +
-      "verified against a recorded SHA-256 before it runs; allowlist entries require a written " +
-      "justification. Markdown-only pull requests skip this scan.",
+      "Every code pull request is scanned for leaked secrets, and the full history on every push " +
+      "to the release branches. A finding fails the build.",
   },
   {
-    term: "pip-audit",
+    term: "Dependency audits",
     body:
-      "Seven Python components — digibase, digigraph, digiquant, digisearch, digismith, digikey " +
-      "and digiclaw — have their locked dependency closure exported and audited against the OSV " +
-      "database weekly, and whenever a dependency manifest changes. HIGH and CRITICAL block the " +
-      "merge; MEDIUM and LOW are warn-only. Accepting a CVE requires an entry with a rationale and " +
-      "a re-evaluation trigger. Two boundaries remain: the workspace has eleven members, so " +
-      "digifetch, digillm, digiskills and digivault are outside this matrix; and a pull request " +
-      "that adds Python without touching a manifest does not trigger it. The JS workspaces are " +
-      "covered by a sibling npm audit lane on the same cadence.",
+      "The Python services' locked dependencies are audited weekly and on every manifest change; " +
+      "high and critical vulnerabilities block the merge. The JavaScript workspaces have a " +
+      "matching lane.",
   },
   {
-    term: "Loopback by default",
+    term: "Private by default",
     body:
-      "Every service binds 127.0.0.1 in docker-compose.yml. Opening a port or binding 0.0.0.0 " +
-      "requires a matching change to SECURITY.md and is scored against the security rubric.",
-  },
-  {
-    term: "Debug surfaces off",
-    body:
-      "Debug and thread endpoints are behind environment flags that default to 0, so /v1/debug/*, " +
-      "/test_llm and /threads/* are not reachable unless someone deliberately turns them on.",
+      "Every service binds to localhost, and debug endpoints stay off unless someone turns them on.",
   },
 ];
 
-// A selection from the residual-risk column of SECURITY.md's STRIDE table.
+const SHIPPING: { term: string; body: string }[] = [
+  {
+    term: "Tested",
+    body: "Each module's test suite runs on every pull request that touches it.",
+  },
+  {
+    term: "Reviewed",
+    body:
+      "Every change that reaches production was reviewed at its own pull request, and a required " +
+      "check refuses anything that was not.",
+  },
+  {
+    term: "Built",
+    body: "Code is linted, the shared libraries are type-checked, and every site builds in CI.",
+  },
+];
+
 const LIMITS: { term: string; body: string }[] = [
   {
-    term: "Not built for the open internet",
+    term: "Private networks only",
     body:
-      "The design target is a single host or a private network. Putting these services on a public " +
-      "endpoint without a hardened gateway in front is outside the threat model — reach the stack " +
-      "over a VPN or a tunnel, not a public port.",
+      "The stack is designed for one host or a private network. Reach it over a VPN or a " +
+      "hardened gateway, not a public port.",
   },
   {
-    term: "Redaction matches names, not values",
-    body:
-      "The audit redactor walks a payload and replaces any key whose name contains password, " +
-      "api_key, token or secret. It does not inspect values, so it is not a PII scrubber and will " +
-      "not catch a secret stored under an unexpected key name. Keeping prompts and document bodies " +
-      "out of audit payloads is a discipline enforced by review, not by the function.",
+    term: "Tenants are separated by key scope",
+    body: "Storage-level isolation between tenants is not built yet.",
   },
   {
-    term: "The live-trading gate is not a runtime interlock",
-    body:
-      "Broker adapters for Interactive Brokers, Alpaca and QuantConnect exist only as stubs whose " +
-      "connect and submit_order methods raise NotImplementedError. What guards them is a " +
-      "source-tree fact plus process: a local pre-push hook demands a human co-sign trailer on " +
-      "commits touching live-trading paths, and the security rubric scores it. There is no circuit " +
-      "breaker in the running system, and a hook on a developer's machine can be bypassed — after " +
-      "which the change still has to clear review and branch protection.",
-  },
-  {
-    term: "Key-scope isolation, not storage isolation",
-    body:
-      "On a shared deployment, tenant separation is enforced at the digikey key-scope layer. " +
-      "Storage-layer isolation and per-tenant resource quotas are not implemented; multi-tenant " +
-      "operation is a roadmap item, not a shipped guarantee.",
-  },
-  {
-    term: "Retrieved documents are not a trust boundary yet",
-    body:
-      "Tool boundaries are typed and the MCP tool set is an allowlist, which limits what an agent " +
-      "can do. There is no content-level sanitiser or trust-tier tagging on documents pulled back " +
-      "from retrieval, so prompt injection carried in indexed content is not systematically " +
-      "defended. There is also no runtime egress allowlist on production service traffic.",
+    term: "Retrieved content is not screened",
+    body: "Documents pulled back by retrieval are not yet checked for prompt injection.",
   },
   {
     term: "The audit log is local and unsigned",
-    body:
-      "Audit events are per-host JSONL. There is no append-only remote sink and no signed hash " +
-      "chain, so the trail is evidence of what the system recorded, not tamper-proof evidence that " +
-      "the record was never altered.",
+    body: "It records what happened, but cannot prove the record was never edited.",
   },
   {
-    term: "Rate limiting does not span instances",
+    term: "Live trading is stubbed",
     body:
-      "The token bucket is per-process, with no shared store, so it does not coordinate across " +
-      "replicas. There are no per-key or per-tenant quotas on orchestration or retrieval paths, " +
-      "and no request body-size cap at the ASGI layer — that is delegated to an upstream gateway.",
-  },
-  {
-    term: "JWKS is cached for 300 seconds",
-    body:
-      "Verifiers cache the JWKS document for five minutes, so a signing-key rotation takes up to " +
-      "that long to propagate to every verifier.",
-  },
-  {
-    term: "Not every Action is pinned to a SHA",
-    body:
-      "The secret scanner is pinned and SHA-256 verified. The GitHub Actions around it are weaker: " +
-      "some are pinned to a commit SHA, most only to a major-version tag, which a compromised " +
-      "upstream release can move under us. Pinning is audited when a workflow file changes rather " +
-      "than enforced by a check.",
-  },
-  {
-    term: "The insider controls are process, not enforcement",
-    body:
-      "The hooks that block protected-path edits and unsigned live-trading pushes run in the " +
-      "developer's own environment, so a determined insider with write access can bypass them. " +
-      "What is left is pull-request review and GitHub branch protection — configuration audited " +
-      "out of band, not a property of the repository you can read. The same applies to the " +
-      "secret-scanner allowlist: a wrongly scoped entry would mask a real leak, and only review " +
-      "catches that.",
-  },
-  {
-    term: "The public endpoints still fingerprint",
-    body:
-      "Liveness and JWKS are deliberately minimal and secret-free, but their response shape still " +
-      "leaks stack and version information. That is accepted rather than mitigated, on the basis " +
-      "that the contract is public by design — and there is no WAF or bot-management layer in " +
-      "front of any of it.",
+      "Broker adapters refuse to connect, and changes to live-trading code need a human " +
+      "sign-off — a process gate, not a runtime interlock.",
   },
 ];
+
+function Rows({ rows }: { rows: { term: string; body: string }[] }) {
+  return (
+    <GlyphList>
+      {rows.map((r) => (
+        <GlyphRow key={r.term} label={r.term}>
+          {r.body}
+        </GlyphRow>
+      ))}
+    </GlyphList>
+  );
+}
 
 export default function SecurityPage() {
   return (
@@ -252,79 +155,55 @@ export default function SecurityPage() {
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <DocumentFrame>
           <div className="px-[var(--page-pad)] py-[var(--page-step)]">
-            <PageTitle title="Controls, and their edges.">
-              Every claim below was read out of the source before it was written down, and the last
-              section is the part most pages leave out: what is not covered.
+            <PageTitle path="security" title="Controls, and their edges.">
+              Every control here was checked against the code. The last section lists what is not
+              covered yet.
             </PageTitle>
           </div>
 
-          <Section
-            id="identity"
-            title="Identity"
-            lede="digikey issues and verifies everything — a standalone service, not a framework plugin, and there is no static shared-secret fallback left in the stack."
-          >
-            <GlyphList>
-              {IDENTITY.map((r) => (
-                <GlyphRow key={r.term} label={r.term}>
-                  {r.body}
-                </GlyphRow>
-              ))}
-            </GlyphList>
+          <Section id="identity" title="Identity" lede="digikey issues and verifies every credential.">
+            <Rows rows={IDENTITY} />
           </Section>
 
           <Section
             id="traceability"
             title="Traceability"
-            lede="The reason to run your own infrastructure is to be able to answer what happened. These four are the mechanics of that answer."
+            lede="On your own infrastructure, you can answer what happened."
           >
-            <GlyphList>
-              {TRACEABILITY.map((r) => (
-                <GlyphRow key={r.term} label={r.term}>
-                  {r.body}
-                </GlyphRow>
-              ))}
-            </GlyphList>
+            <Rows rows={TRACEABILITY} />
           </Section>
 
-          <Section
-            id="pipeline"
-            title="The pipeline"
-            lede="Secrets scanning and dependency auditing are gates rather than dashboards — when they run they fail the job instead of filing a note for later. Each row says what triggers it, because a gate that does not fire is not a gate."
-          >
-            <GlyphList>
-              {PIPELINE.map((r) => (
-                <GlyphRow key={r.term} label={r.term}>
-                  {r.body}
-                </GlyphRow>
-              ))}
-            </GlyphList>
+          <Section id="pipeline" title="The pipeline" lede="Checks that fail the build, not file a note.">
+            <Rows rows={PIPELINE} />
           </Section>
 
-          <Section
-            id="limits"
-            title="Limits"
-            lede="A selection from the residual-risk column of the threat model — the entries a reader deciding whether to deploy this would want first, not the whole table; SECURITY.md carries every row next to the mitigation it sits behind."
-          >
-            <GlyphList>
-              {LIMITS.map((r) => (
-                <GlyphRow key={r.term} label={r.term}>
-                  {r.body}
-                </GlyphRow>
-              ))}
-            </GlyphList>
+          <Section id="shipping" title="How change ships">
+            <Rows rows={SHIPPING} />
+            <Prose className="mt-[1.6rem]">
+              <p>
+                The tests, workflows and reviews are all in the{" "}
+                <a
+                  href="https://github.com/digithings-ai/digithings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  public repository
+                </a>
+                .
+              </p>
+            </Prose>
+          </Section>
+
+          <Section id="limits" title="Limits" lede="The gaps worth weighing before you deploy.">
+            <Rows rows={LIMITS} />
           </Section>
 
           <Section id="disclosure" title="Disclosure" lede="Please do not open a public issue.">
             <Prose>
               <p>
-                Email the address published in <Mono>SECURITY.md</Mono> with{" "}
-                <Mono>[digithings Security]</Mono> in the subject, and include reproduction steps,
-                the affected components, and any impact you know of.
-              </p>
-              <p>
-                The commitment is an acknowledgement within 72 hours and a coordinated-disclosure
-                timeline within seven days. We will agree an embargo where it makes sense, and
-                credit you in the release notes if you want it.
+                Email the address in <Mono>SECURITY.md</Mono> with{" "}
+                <Mono>[digithings Security]</Mono> in the subject. We acknowledge within 72 hours
+                and agree a disclosure timeline within seven days.
               </p>
               <p>
                 <a
@@ -332,12 +211,8 @@ export default function SecurityPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  SECURITY.md — threat model, defaults, disclosure contact
+                  SECURITY.md — full threat model and contact
                 </a>
-              </p>
-              <p>
-                For how the same posture is enforced on the way in — the review gates, the test
-                suite, the rubrics — <a href="/quality">see the quality page</a>.
               </p>
             </Prose>
           </Section>
@@ -348,3 +223,4 @@ export default function SecurityPage() {
     </>
   );
 }
+    

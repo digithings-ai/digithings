@@ -144,6 +144,14 @@ describe("morph specs", () => {
     expect(plain.services.find((s) => s.id === "email")?.label).toBe("SendGrid");
   });
 
+  it("names the digithings picks on the finished drawing", () => {
+    const owned = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, { owned: true });
+    expect(owned.groups?.[0]?.label).toBe("digithings · no vendors · no meters");
+    expect(owned.edges.find((e) => e.from === "sources")?.label).toBe("your connectors");
+    const leaving = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK);
+    expect(leaving.groups?.[0]?.label).not.toContain("digithings");
+  });
+
   it("files the finance archive in digivault", () => {
     const m = morphSpec(DEFAULT_PROVIDER_PICK, DEFAULT_DIGI_PICK, undefined, {
       topology: "finance",

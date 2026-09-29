@@ -243,8 +243,18 @@
 .arch-tour__camera {
   position: relative;
   transform-origin: 0 0;
-  transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Short follow, not a 1.6s tween: the scroll pose writes the target every
+     frame, and a long transition would lag the narration. */
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
+}
+
+/* Until the tour has painted its first pose (`data-settled`, set by the
+   scroll binding), sides and camera jump straight to it rather than tweening
+   in from the CSS defaults. */
+.arch-tour:not([data-settled]) .arch-tour__side,
+.arch-tour:not([data-settled]) .arch-tour__camera {
+  transition: none;
 }
 
 /* the frame already draws the box; the diagram inside must not draw a second. */
@@ -268,15 +278,17 @@
  * the glow has to remain readable. */
 .arch-tour__spot {
   position: absolute;
+  inset-block-start: 0;
+  left: 0; /* physical: the spot's translate is the camera frame's physical x */
   pointer-events: none;
+  opacity: 0;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 4%, transparent);
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 22%, transparent);
-  transition:
-    left 1.2s cubic-bezier(0.22, 1, 0.36, 1),
-    top 1.2s cubic-bezier(0.22, 1, 0.36, 1),
-    width 1.2s cubic-bezier(0.22, 1, 0.36, 1),
-    height 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Geometry is written from the scroll pose, placed by translate so a frame
+     of travel is not a layout shift. Opacity is the only fade, so a
+     whole-graph beat can drop the spotlight without sliding a box. */
+  transition: opacity 0.35s var(--ease);
 }
 
 /* The glow itself breathes on its own layer so only opacity is animated — an
@@ -599,6 +611,27 @@
   .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__rail {
     grid-column: 1;
   }
+
+  /* An aside takes a third row under the rail and sinks to the frame's
+   * bottom edge; the frame spans all three rows so the pin height holds. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side:has(> .arch-tour__aside) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side:where(:has(> .arch-tour__aside)) .arch-tour__frame {
+    grid-row: 2 / 4;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side > .arch-tour__aside {
+    grid-row: 3;
+    grid-column: 2;
+    align-self: end;
+    min-width: 0;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering > .arch-tour__aside {
+    grid-column: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -814,12 +847,32 @@
   }
 }
 
+/* The why band narrates from its own column, so the tour's step lists would
+   be a second copy and would push the pin taller than the viewport. The
+   diagrams sit under the nav and above the sticky invoice. */
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__pin {
+  min-height: 0;
+  justify-content: flex-start;
+  top: calc(var(--dq-nav-h, 4.5rem) + 0.35rem);
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__rail {
+  display: none;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__frame {
+  padding: 0.55rem 0.7rem;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-svg {
+  width: 100%;
+  height: auto;
+  max-height: min(26rem, calc(100svh - var(--dq-nav-h, 4.5rem) - 19rem));
+}
+
 /* Walk-through text rail (AppFirstSection): remounts per step (key), so a
  * short rise-and-fade marks each beat of the scroll journey. */
 @keyframes why-rail-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -827,7 +880,78 @@
   }
 }
 .why-rail-step {
-  animation: why-rail-in 0.35s ease;
+  animation: why-rail-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── build entrance ─────────────────────────────────────────────────────────
+ * An ancestor carrying `.arch-build` makes every `.arch-svg` inside draw
+ * itself: boundaries fade up, each box traces its outline in reading order and
+ * then fills, and each connector draws once both of its ends exist
+ * (`--arch-i`, set per element by the renderer). `.arch-build-pending` holds
+ * the drawing blank until the caller starts the build. The end state is the
+ * resting style, so the caller drops the class when the build is done and
+ * nothing moves. */
+.arch-build-pending .arch-svg .arch-group,
+.arch-build-pending .arch-svg .arch-node,
+.arch-build-pending .arch-svg .arch-edge {
+  opacity: 0;
+}
+
+.arch-build .arch-svg .arch-group {
+  animation: arch-build-fade 0.6s var(--ease) both;
+  animation-delay: calc(var(--arch-i, 0) * 110ms);
+}
+
+/* Opacity only on the box group: the tour measures box rects for its camera,
+   and a scale here would read a few pixels short mid-build. */
+.arch-build .arch-svg .arch-node {
+  animation: arch-build-fade 0.4s var(--ease) both;
+  animation-delay: calc(180ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-node__box {
+  stroke-dasharray: 1;
+  animation:
+    arch-build-draw 0.55s var(--ease) both,
+    arch-build-fill 0.35s var(--ease) both;
+  animation-delay:
+    calc(180ms + var(--arch-i, 0) * 75ms),
+    calc(480ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-node__glyph,
+.arch-build .arch-svg .arch-node__label {
+  animation: arch-build-fade 0.35s var(--ease) both;
+  animation-delay: calc(420ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-edge {
+  animation: arch-build-fade 0.2s linear both;
+  animation-delay: calc(560ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-edge__line {
+  stroke-dasharray: 1;
+  animation: arch-build-draw 0.5s var(--ease) both;
+  animation-delay: calc(560ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-edge__label {
+  animation: arch-build-fade 0.3s var(--ease) both;
+  animation-delay: calc(900ms + var(--arch-i, 0) * 75ms);
+}
+
+@keyframes arch-build-fade {
+  from { opacity: 0; }
+}
+
+@keyframes arch-build-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes arch-build-fill {
+  from { fill-opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -840,5 +964,13 @@
   }
   .why-rail-step {
     animation: none;
+  }
+  .arch-build-pending .arch-svg .arch-group,
+  .arch-build-pending .arch-svg .arch-node,
+  .arch-build-pending .arch-svg .arch-edge {
+    opacity: 1;
+  }
+  .arch-build .arch-svg * {
+    animation: none !important;
   }
 }

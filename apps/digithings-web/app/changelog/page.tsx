@@ -50,15 +50,16 @@ export default function ChangelogPage() {
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <DocumentFrame>
           <div className="px-[var(--page-pad)] py-[var(--page-step)]">
-            <PageTitle title="Tagged releases.">
-              Versioned frontend packages only — digichat and digiskills, as published on GitHub.
+            <PageTitle path="changelog" title="Tagged releases.">
+              Release notes for the versioned packages, digichat and digiskills, as published on
+              GitHub.
             </PageTitle>
           </div>
 
           <Section
             id="releases"
             title="Releases"
-            lede="Newest first, straight from each package's shipped CHANGELOG — the rest of the stack ships on develop without a product tag."
+            lede="Newest first, taken directly from each package's CHANGELOG. The rest of the stack ships continuously without a version tag."
           >
             <ReleaseRail items={ENTRIES} />
             <div className="mt-[1.6rem]">

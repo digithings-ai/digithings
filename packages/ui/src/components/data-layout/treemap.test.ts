@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { treemapAnchored, treemapAreas, treemapAreasConstrained } from "@/lib/treemap";
+import { treemapAnchored, treemapAreas, treemapAreasConstrained } from "./treemap";
 
 const W = 1284;
 const H = 1002;

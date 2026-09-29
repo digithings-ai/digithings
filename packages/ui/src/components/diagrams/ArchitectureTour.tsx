@@ -54,6 +54,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ArchitectureDiagram, type ArchSpec } from "./ArchitectureDiagram";
+import {
+  CAM_IDENTITY,
+  camTransform,
+  fitCamera,
+  glideAmount,
+  lerpCam,
+  mixSpot,
+  unionSpot,
+  walkCursor,
+  type CamFrame,
+} from "./tour-camera";
 
 export interface TourStep {
   id: string;
@@ -84,6 +95,8 @@ export interface TourSide {
    * while the owned one keeps the left.
    */
   rail?: "start" | "end";
+  /** Extra content under the step column, bottom-aligned with the frame. */
+  aside?: ReactNode;
 }
 
 export type TourVariant = "static" | "highlight" | "camera";
@@ -92,7 +105,7 @@ export interface ArchitectureTourProps {
   /** One side is a plain walk; two add the swipe between them. */
   sides: TourSide[];
   variant?: TourVariant;
-  /** Scroll spent per step, in viewport heights. */
+  /** Scroll spent per step, in viewport heights. The track is this times the step count. */
   vhPerStep?: number;
   /**
    * Controlled step index into the flattened walk. When omitted the tour
@@ -111,6 +124,21 @@ export interface ArchitectureTourProps {
    */
   header?: ReactNode;
   className?: string;
+  /**
+   * How much of the stage a step's boxes should fill, and the zoom cap.
+   * Defaults keep a whole-graph beat at identity. A denser drawing needs a
+   * higher fill before the camera will travel between clusters.
+   */
+  cameraFill?: number;
+  cameraMaxScale?: number;
+  /** Zoom a wide short row into view. Default fits the whole cluster. */
+  cameraCover?: boolean;
+  /**
+   * Stretch each drawing's gutters to its frame's shape in the pinned view, so
+   * a graph fills the box instead of letterboxing. Static mode sizes the frame
+   * from the drawing, so it is left alone there.
+   */
+  fitFrame?: boolean;
 }
 
 interface Box {
@@ -137,12 +165,35 @@ const smooth = (n: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-/** Where a pinned frame parks under the sticky nav. */
-function pinOffset(): number {
-  const nav = Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--dq-nav-h"),
-  );
-  return (Number.isFinite(nav) ? nav : 72) + 16;
+function sameMeasure(prev: SideMeasure[], next: SideMeasure[]): boolean {
+  if (prev.length !== next.length) return false;
+  return next.every((side, si) => {
+    const before = prev[si];
+    if (!before || Math.abs(before.w - side.w) > 0.5 || Math.abs(before.h - side.h) > 0.5) {
+      return false;
+    }
+    const ids = Object.keys(side.boxes);
+    if (ids.length !== Object.keys(before.boxes).length) return false;
+    return ids.every((id) => {
+      const a = before.boxes[id];
+      const b = side.boxes[id];
+      return (
+        a !== undefined &&
+        b !== undefined &&
+        Math.abs(a.x - b.x) < 0.5 &&
+        Math.abs(a.y - b.y) < 0.5 &&
+        Math.abs(a.w - b.w) < 0.5 &&
+        Math.abs(a.h - b.h) < 0.5
+      );
+    });
+  });
+}
+
+/** Where the pin parks: its own sticky `top`, so a consumer that moves the pin
+    in CSS moves the scroll math with it. */
+function pinOffset(pin: HTMLElement): number {
+  const top = Number.parseFloat(getComputedStyle(pin).top);
+  return Number.isFinite(top) ? top : 88;
 }
 
 function usePrefersReducedMotion(): boolean {
@@ -175,12 +226,16 @@ function usePinned(): boolean {
 export function ArchitectureTour({
   sides,
   variant = "static",
-  vhPerStep = 1.6,
+  vhPerStep = 0.62,
   header,
   className,
   step: controlledStep,
   onStepChange,
   onModeChange,
+  cameraFill = 0.34,
+  cameraMaxScale = 1.45,
+  cameraCover = false,
+  fitFrame = false,
 }: ArchitectureTourProps) {
   const reduced = usePrefersReducedMotion();
   const wide = usePinned();
@@ -188,12 +243,19 @@ export function ArchitectureTour({
   // static treatment rather than pinning to nothing.
   const mode: TourVariant = reduced || !wide ? "static" : variant;
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const pinRef = useRef<HTMLDivElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef<Array<HTMLDivElement | null>>([]);
   const cameraRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const spotRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const onStepChangeRef = useRef(onStepChange);
+  onStepChangeRef.current = onStepChange;
+  const controlledRef = useRef(controlledStep);
+  controlledRef.current = controlledStep;
+  /** Last index reported to the parent. -1 so the opening beat still fires. */
+  const reportedStep = useRef(-1);
   /** Set by the scroll effect so a late-arriving SVG can resize the track. */
   const remeasureRef = useRef<() => void>(() => {});
 
@@ -217,6 +279,10 @@ export function ArchitectureTour({
     [sides],
   );
   const count = flat.length;
+  const flatRef = useRef(flat);
+  flatRef.current = flat;
+  const measuresRef = useRef(measures);
+  measuresRef.current = measures;
   /** The flat index at which the swipe has finished and the last side is live. */
   const swapAt = sides.length > 1 ? sides[0].steps.length : count;
 
@@ -228,11 +294,22 @@ export function ArchitectureTour({
     // what re-runs this once the pinned layout exists; without it the effect
     // returned early forever and nothing was ever measured.
     if (mode === "static") return;
-    const stage = stageRef.current;
-    if (!stage) return;
+    const pin = pinRef.current;
+    if (!pin) return;
 
     /** Returns true once every side has at least one measured box. */
     const measure = (): boolean => {
+      // Snapshots are in unscaled pane space. Clear the camera for the read,
+      // then put it back in the same turn so a ResizeObserver does not see a
+      // size change and re-enter.
+      // The camera eases its transform, so clearing it alone leaves the zoom
+      // on screen and every box reads scaled. Drop the transition for the read.
+      const saved = cameraRefs.current.map((camera) => camera?.style.transform ?? "");
+      cameraRefs.current.forEach((camera) => {
+        if (!camera) return;
+        camera.style.transition = "none";
+        camera.style.transform = "";
+      });
       let done = true;
       const next = sides.map((side, si) => {
         const empty: SideMeasure = { boxes: {}, w: 0, h: 0 };
@@ -271,7 +348,13 @@ export function ArchitectureTour({
         if (Object.keys(boxes).length === 0) done = false;
         return { boxes, w: origin.width, h: origin.height };
       });
-      setMeasures(next);
+      cameraRefs.current.forEach((camera, si) => {
+        if (!camera) return;
+        camera.style.transform = saved[si] ?? "";
+        void camera.offsetWidth;
+        camera.style.transition = "";
+      });
+      setMeasures((prev) => (sameMeasure(prev, next) ? prev : next));
       return done;
     };
 
@@ -321,6 +404,17 @@ export function ArchitectureTour({
       }
     }
 
+    // A fitted drawing (`fitFrame`) re-lays its gutters once the frame is
+    // measured: every box moves but the SVG element keeps its size, so the
+    // ResizeObserver above never fires. The viewBox is what changes.
+    const relayout = new MutationObserver(() => {
+      measure();
+      remeasureRef.current?.();
+    });
+    for (const pane of panes) {
+      relayout.observe(pane, { subtree: true, attributes: true, attributeFilter: ["viewBox"] });
+    }
+
     // devicePixelRatio is the other half: a zoom can change it (and a bare
     // resolution change can change it without moving any element), and there is
     // no event for it, so watch the media query that describes it.
@@ -341,6 +435,7 @@ export function ArchitectureTour({
       window.clearTimeout(ceiling);
       window.removeEventListener("resize", onResize);
       observer?.disconnect();
+      relayout.disconnect();
       dprQuery?.removeEventListener("change", onDpr);
     };
   }, [sides, mode]);
@@ -357,8 +452,98 @@ export function ArchitectureTour({
     let frame = 0;
 
     const measureTrack = () => {
-      distance = Math.round(window.innerHeight * vhPerStep);
+      distance = Math.round(window.innerHeight * vhPerStep * Math.max(1, count));
       track.style.height = `${pin.offsetHeight + distance}px`;
+    };
+
+    const boxesFor = (
+      entry: { side: number; ids: string[] } | undefined,
+      si: number,
+    ): Box[] => {
+      if (!entry || entry.side !== si || entry.ids.length === 0) return [];
+      const m = measuresRef.current[si];
+      if (!m) return [];
+      return entry.ids.map((id) => m.boxes[id]).filter((box): box is Box => Boolean(box));
+    };
+
+    const frameFor = (
+      entry: { side: number; ids: string[] } | undefined,
+      si: number,
+    ): CamFrame => {
+      const camera = cameraRefs.current[si];
+      const m = measuresRef.current[si];
+      if (!camera || !m?.w || !m.h) return CAM_IDENTITY;
+      if (!entry || entry.side !== si || entry.ids.length === 0) return CAM_IDENTITY;
+      const stage = camera.closest(".arch-tour__stage") as HTMLElement | null;
+      const stageW = stage?.clientWidth ?? 0;
+      const stageH = stage?.clientHeight ?? 0;
+      if (!stageW || !stageH) return CAM_IDENTITY;
+      const svg = paneRefs.current[si]?.querySelector("svg");
+      const liveW = svg?.clientWidth ?? 0;
+      let scale = 1;
+      let contentW = m.w;
+      let contentH = m.h;
+      if (svg && liveW > 0 && Math.abs(liveW - m.w) > 0.5) {
+        scale = liveW / m.w;
+        contentW = m.w * scale;
+        contentH = m.h * scale;
+      }
+      const picked = boxesFor(entry, si).map((b) => ({
+        x: b.x * scale,
+        y: b.y * scale,
+        w: b.w * scale,
+        h: b.h * scale,
+      }));
+      return fitCamera({
+        boxes: picked,
+        stageW,
+        stageH,
+        contentW,
+        contentH,
+        fill: cameraFill,
+        maxScale: cameraMaxScale,
+        cover: cameraCover,
+      });
+    };
+
+    /* The camera follows scroll, not the integer step. It rests on the
+       narrated boxes, then glides to the next ones across the tail of the
+       beat so the move and the text rail arrive together. A controlled
+       parent (the why band) only hears the integer index — without this
+       report the rail and the glow stay on the opening beat forever. */
+    const pose = (progress: number) => {
+      const cursor = walkCursor(progress, count);
+      const glide = glideAmount(cursor.frac);
+      const steps = flatRef.current;
+      const current = steps[cursor.index];
+      const upcoming = steps[Math.min(count - 1, cursor.index + 1)];
+      cameraRefs.current.forEach((camera, si) => {
+        if (!camera) return;
+        const frame = lerpCam(frameFor(current, si), frameFor(upcoming, si), glide);
+        camera.style.transform = camTransform(frame);
+        const spot = spotRefs.current[si];
+        if (!spot) return;
+        const mixed = mixSpot(
+          unionSpot(boxesFor(current, si), measuresRef.current[si]?.w ?? 0, measuresRef.current[si]?.h ?? 0),
+          unionSpot(boxesFor(upcoming, si), measuresRef.current[si]?.w ?? 0, measuresRef.current[si]?.h ?? 0),
+          glide,
+        );
+        if (!mixed || mixed.opacity < 0.02) {
+          spot.style.opacity = "0";
+          return;
+        }
+        spot.style.opacity = mixed.opacity.toFixed(3);
+        spot.style.transform = `translate(${mixed.rect.left}px, ${mixed.rect.top}px)`;
+        spot.style.width = `${mixed.rect.width}px`;
+        spot.style.height = `${mixed.rect.height}px`;
+      });
+    };
+
+    const report = (index: number) => {
+      if (reportedStep.current === index) return;
+      reportedStep.current = index;
+      if (controlledRef.current === undefined) setInternalStep(index);
+      onStepChangeRef.current?.(index);
     };
 
     /**
@@ -389,7 +574,7 @@ export function ArchitectureTour({
       // the tour start.
       const beforeAvail = Math.max(1, trackEl.offsetHeight - pinEl.offsetHeight);
       const beforeTop = trackEl.getBoundingClientRect().top + window.scrollY;
-      const beforeRaw = (pinOffset() - beforeTop) / beforeAvail;
+      const beforeRaw = (pinOffset(pin) - beforeTop) / beforeAvail;
 
       measureTrack();
 
@@ -404,7 +589,7 @@ export function ArchitectureTour({
       // reader is just scrolling the page and must not be moved at all.
       const afterAvail = Math.max(1, trackEl.offsetHeight - pinEl.offsetHeight);
       const afterTop = trackEl.getBoundingClientRect().top + window.scrollY;
-      const target = afterTop - pinOffset() + beforeP * afterAvail;
+      const target = afterTop - pinOffset(pin) + beforeP * afterAvail;
       // A zoom keeps the anchor scrollY ratio, so the browser may already be at
       // the right place; only nudge when the step would actually change.
       if (Math.abs(window.scrollY - target) > 2) {
@@ -419,7 +604,7 @@ export function ArchitectureTour({
       // pin releases with the walk only partly finished and the last steps are
       // crammed into the tail.
       const avail = Math.max(1, track.offsetHeight - pin.offsetHeight);
-      const p = clamp01((pinOffset() - track.getBoundingClientRect().top) / avail);
+      const p = clamp01((pinOffset(pin) - track.getBoundingClientRect().top) / avail);
       pin.style.setProperty("--arch-p", p.toFixed(4));
 
       // Each rail's own progress bar would otherwise read the whole-walk value:
@@ -454,7 +639,8 @@ export function ArchitectureTour({
         grid.style.setProperty("--arch-in", clamp01(swap * 2 - 1).toFixed(4));
       }
 
-      setInternalStep((current) => (current === index ? current : index));
+      pose(p);
+      report(index);
     };
 
     const onScroll = () => {
@@ -468,6 +654,13 @@ export function ArchitectureTour({
     remeasureRef.current = remeasure;
     measureTrack();
     update();
+    /* The sides and camera ease their transforms, so a fresh mount would
+       otherwise tween from the CSS defaults to the first pose — a remount
+       (a parent swapping content by `key`) slid the old side across the new
+       one. Motion switches on only once that pose has painted. */
+    let settle = requestAnimationFrame(() => {
+      settle = requestAnimationFrame(() => rootRef.current?.setAttribute("data-settled", ""));
+    });
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
 
@@ -484,26 +677,58 @@ export function ArchitectureTour({
        swallowed rather than advancing again — that is what makes the walk read
        as continuous instead of jumpy. */
     const GESTURE_COOLDOWN_MS = 1250;
+    /* A flick that carries the reader INTO the pin keeps firing wheel events
+       after it lands; those are the arrival, not a request for the next step.
+       While they keep coming this close together they are swallowed, so the
+       reader parks on the walk's edge and the next deliberate gesture walks.
+       Capped from the moment the pin catches: a reader flicking again and
+       again never leaves a 350ms gap, and without the cap every flick after
+       the first would read as arrival and the walk would never start. */
+    const ARRIVAL_GAP_MS = 350;
+    const ARRIVAL_MAX_MS = 1000;
     let lockUntil = 0;
+    let freeAt = -Infinity;
+    let caughtAt = -Infinity;
+    let parked = true;
 
     const avail = () => Math.max(1, track.offsetHeight - pin.offsetHeight);
 
     const stepScrollTop = (next: number) => {
       const trackTop = track.getBoundingClientRect().top + window.scrollY;
-      const target = trackTop - pinOffset() + (next / count) * avail();
+      const target = trackTop - pinOffset(pin) + (next / count) * avail();
       return Math.max(0, Math.round(target));
     };
 
     const pinned = () => {
-      const p = clamp01((pinOffset() - track.getBoundingClientRect().top) / avail());
-      return p > 0 && p < 1;
+      // Held from its first pixel: a section snap parks the reader exactly
+      // there, and the first gesture must start the walk, not scroll past it.
+      const raw = pinOffset(pin) - track.getBoundingClientRect().top;
+      return raw >= -1 && raw / avail() < 1;
     };
 
     const nudge = (dir: number) => {
       const now = performance.now();
       if (now < lockUntil) return true;
-      if (!pinned()) return false;
-      const p = clamp01((pinOffset() - track.getBoundingClientRect().top) / avail());
+      if (!pinned()) {
+        freeAt = now;
+        parked = false;
+        return false;
+      }
+      if (now - freeAt < ARRIVAL_GAP_MS && (!parked || now - caughtAt < ARRIVAL_MAX_MS)) {
+        freeAt = now;
+        // The free scroll overshoots by up to one wheel delta; land on the
+        // edge the reader came in through, so the pin sits on its rules. The
+        // nearer edge, not the gesture's direction: a flick leaving through
+        // the bottom can dip back into the pin, and must not rewind the walk.
+        if (!parked) {
+          parked = true;
+          caughtAt = now;
+          const p = (pinOffset(pin) - track.getBoundingClientRect().top) / avail();
+          window.scrollTo({ top: stepScrollTop(p < 0.5 ? 0 : count), behavior: "smooth" });
+        }
+        return true;
+      }
+      const p = clamp01((pinOffset(pin) - track.getBoundingClientRect().top) / avail());
       const current = Math.min(count - 1, Math.floor(p * count));
       const next = Math.max(0, Math.min(count - 1, current + dir));
       // At either end, hand the gesture back to the page so the reader can
@@ -535,6 +760,7 @@ export function ArchitectureTour({
 
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(settle);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
       pin.removeEventListener("wheel", onWheel);
@@ -542,7 +768,7 @@ export function ArchitectureTour({
       pin.removeEventListener("touchmove", onTouchMove);
       track.style.height = "";
     };
-  }, [mode, count, swapAt, sides.length, vhPerStep]);
+  }, [mode, count, swapAt, sides.length, vhPerStep, cameraFill, cameraMaxScale, cameraCover]);
 
   // The diagrams arrive after mermaid draws, so the pin is taller than it was
   // when the track was first measured — remeasure once the boxes land.
@@ -557,100 +783,12 @@ export function ArchitectureTour({
   const activeSide = active?.side ?? 0;
   const activeIds = mode === "static" ? [] : (active?.ids ?? []);
 
-  useEffect(() => {
-    const stage = stageRef.current;
-    // The camera follows the active side, so the provider walk gets the
-    // guided zoom on its focused steps as well as the morph. Steps that
-    // light the whole diagram compute a zoom of ~1 and switch off
-    // (k < 1.02 below), which is what keeps a walk from zooming in and
-    // then having to pull back out.
-    cameraRefs.current.forEach((camera, si) => {
-      if (!camera) return;
-      const off = (): void => {
-        camera.style.transform = "";
-      };
-      if (mode !== "camera" || si !== activeSide || activeIds.length === 0) {
-        off();
-        return;
-      }
-      const m = measures[si];
-      if (!m || !m.w || !m.h) {
-        off();
-        return;
-      }
-      const picked = activeIds.map((id) => m.boxes[id]).filter(Boolean) as Box[];
-      if (picked.length === 0) {
-        off();
-        return;
-      }
-      const stageW = stage?.clientWidth ?? 0;
-      const stageH = stage?.clientHeight ?? 0;
-      if (!stageW || !stageH) {
-        off();
-        return;
-      }
-
-      // The snapshot's box coordinates are CSS pixels measured at whatever the
-      // zoom was when `measure()` last ran. The stage below is read live, so if a
-      // zoom has resized the diagram since, the two are on different scales and
-      // the transform lands off-target. Re-read the pane's own SVG and, when it
-      // disagrees with the snapshot, scale the snapshot's coordinates onto the
-      // current size so the camera still frames the same boxes.
-      const svg = paneRefs.current[si]?.querySelector("svg");
-      const liveW = svg?.getBoundingClientRect().width ?? 0;
-      let scale = 1;
-      let contentW = m.w;
-      let contentH = m.h;
-      if (svg && liveW > 0 && Math.abs(liveW - m.w) > 0.5) {
-        scale = liveW / m.w;
-        contentW = m.w * scale;
-        contentH = m.h * scale;
-      }
-      const metrics = picked.map((b) => ({
-        x: b.x * scale,
-        y: b.y * scale,
-        w: b.w * scale,
-        h: b.h * scale,
-      }));
-
-      const minX = Math.min(...metrics.map((b) => b.x));
-      const minY = Math.min(...metrics.map((b) => b.y));
-      const maxX = Math.max(...metrics.map((b) => b.x + b.w));
-      const maxY = Math.max(...metrics.map((b) => b.y + b.h));
-      const width = Math.max(maxX - minX, 1);
-      const height = Math.max(maxY - minY, 1);
-
-      // Fill at most about a third of the frame with the target, and never zoom
-      // out. The cap matters more than the fraction: a two-box step whose union
-      // is 105px wide inside a 734px stage would otherwise peg the zoom and crop
-      // the architecture out of the frame entirely.
-      const k = Math.max(1, Math.min(1.45, 0.34 * Math.min(stageW / width, stageH / height)));
-      if (k < 1.02) {
-        off();
-        return;
-      }
-
-      // Centre the target, then clamp the pan so the scaled diagram always
-      // covers the stage. Without this clamp a target near an edge pulls the
-      // opposite edge of the diagram in and leaves a bare gap in the frame,
-      // which is what made the camera look broken.
-      const cx = (minX + maxX) / 2;
-      const cy = (minY + maxY) / 2;
-      const pan = (span: number, content: number, centre: number): number => {
-        const low = span / k - content;
-        if (low > 0) return low / 2;
-        return Math.min(0, Math.max(low, span / (2 * k) - centre));
-      };
-
-      camera.style.transform = `scale(${k.toFixed(4)}) translate(${pan(stageW, contentW, cx).toFixed(2)}px, ${pan(stageH, contentH, cy).toFixed(2)}px)`;
-    });
-  }, [mode, activeSide, activeIds, measures]);
-
   /* ── render ────────────────────────────────────────────────────────── */
 
   if (mode === "static") {
     return (
       <div className={`arch-tour${className ? ` ${className}` : ""}`} data-variant="static">
+        {header ? <div className="arch-tour__head">{header}</div> : null}
         {sides.map((side, si) => (
           <div className="arch-tour__static" key={si}>
             {side.tag ? <span className="arch-tour__tag" data-tag={side.tag}>{side.tag}</span> : null}
@@ -664,6 +802,7 @@ export function ArchitectureTour({
                 </li>
               ))}
             </ol>
+            {side.aside ? <div className="arch-tour__aside">{side.aside}</div> : null}
           </div>
         ))}
       </div>
@@ -672,6 +811,7 @@ export function ArchitectureTour({
 
   return (
     <div
+      ref={rootRef}
       className={`arch-tour${className ? ` ${className}` : ""}`}
       data-variant={mode}
       /* The walked side, so CSS can light it bright white and subdue the
@@ -703,7 +843,7 @@ export function ArchitectureTour({
                   data-active={si === activeSide}
                 >
                   <div className="arch-tour__frame">
-                    <div className="arch-tour__stage" ref={si === 0 ? stageRef : undefined}>
+                    <div className="arch-tour__stage">
                       <div
                         className="arch-tour__pane"
                         ref={(el) => {
@@ -716,35 +856,20 @@ export function ArchitectureTour({
                             cameraRefs.current[si] = el;
                           }}
                         >
-                          <ArchitectureDiagram spec={effSpec} lit={si === activeSide ? activeIds : undefined} />
-                          {si === activeSide ? (() => {
-                            // ONE spotlight over the union of the lit boxes, never
-                            // one per box: each `.arch-tour__spot` carries a 9999px
-                            // dim shadow, so N spots stack that dim N times and the
-                            // last rented steps — which light most of the diagram —
-                            // went to near-black and read as an unreadable blur.
-                            const lit0 = activeIds
-                              .map((id) => measures[si]?.boxes[id])
-                              .filter(Boolean) as Box[];
-                            if (lit0.length === 0) return null;
-                            const minX = Math.min(...lit0.map((b) => b.x));
-                            const minY = Math.min(...lit0.map((b) => b.y));
-                            const maxX = Math.max(...lit0.map((b) => b.x + b.w));
-                            const maxY = Math.max(...lit0.map((b) => b.y + b.h));
-                            const pad = 6;
-                            return (
-                              <span
-                                className="arch-tour__spot"
-                                aria-hidden="true"
-                                style={{
-                                  left: `${minX - pad}px`,
-                                  top: `${minY - pad}px`,
-                                  width: `${maxX - minX + pad * 2}px`,
-                                  height: `${maxY - minY + pad * 2}px`,
-                                }}
-                              />
-                            );
-                          })() : null}
+                          <ArchitectureDiagram
+                            spec={effSpec}
+                            lit={si === activeSide ? activeIds : undefined}
+                            fit={fitFrame}
+                          />
+                          {/* One spotlight, positioned from the scroll pose. A second
+                              spot would stack the 9999px dim and black out the frame. */}
+                          <span
+                            className="arch-tour__spot"
+                            aria-hidden="true"
+                            ref={(el) => {
+                              spotRefs.current[si] = el;
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
@@ -767,6 +892,7 @@ export function ArchitectureTour({
                       );
                     })}
                   </ol>
+                  {side.aside ? <div className="arch-tour__aside">{side.aside}</div> : null}
                 </div>
               );
             })}

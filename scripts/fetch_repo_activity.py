@@ -12,7 +12,7 @@ deploy when GitHub is slow.
 So this runs in Actions (which already has a token), writes JSON, and commits it.
 The band renders a plain object with no network, no loading state and no failure
 mode, and the snapshot's own timestamp is printed on the page — the same honesty
-`COUNTED_AT` gives the figures on /quality.
+`COUNTED_AT` gives the counted figures in `lib/siteCounts.ts`.
 
 WHICH NUMBERS, AND WHY NOT THE OTHERS. Measured 2026-08-06: 770 commits on main and
 337 merged PRs in 30 days, against 1 star, 1 fork and 0 watchers. Both are true of

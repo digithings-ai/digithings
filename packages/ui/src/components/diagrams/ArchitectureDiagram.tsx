@@ -240,14 +240,23 @@ export type ArchitectureDiagramProps = {
   caption?: string;
   /** Service and group ids to mark as the current step (the tour's handles). */
   lit?: readonly string[];
+  /**
+   * Stretch the positioned drawing's gutters to the body's measured shape, so
+   * it fills the frame instead of letterboxing. Only meaningful where the body
+   * has a height of its own (a fixed frame); a body sized by its SVG would
+   * chase itself.
+   */
+  fit?: boolean;
   className?: string;
 };
 
-export function ArchitectureDiagram({ spec, caption, lit, className }: ArchitectureDiagramProps) {
+export function ArchitectureDiagram({ spec, caption, lit, fit, className }: ArchitectureDiagramProps) {
   const [svg, setSvg] = useState("");
   const [failed, setFailed] = useState(false);
   const [themeTick, setThemeTick] = useState(0);
+  const [aspect, setAspect] = useState<number | undefined>(undefined);
   const hostRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const id = `arch-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const source = toMermaid(spec);
   // A spec that declares a grid slot per service is drawn by the kit's own
@@ -263,6 +272,19 @@ export function ArchitectureDiagram({ spec, caption, lit, className }: Architect
     });
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!fit || !laidOut || !body) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const box = entry?.contentRect;
+      if (!box || box.width <= 0 || box.height <= 0) return;
+      const next = Math.round((box.width / box.height) * 100) / 100;
+      setAspect((prev) => (prev === next ? prev : next));
+    });
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [fit, laidOut]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -307,6 +329,7 @@ export function ArchitectureDiagram({ spec, caption, lit, className }: Architect
   return (
     <figure ref={hostRef} className={cls} data-state={state}>
       <div
+        ref={bodyRef}
         className="arch-figure__body"
         role="img"
         aria-label={`${spec.title}. ${spec.description}`}
@@ -314,7 +337,7 @@ export function ArchitectureDiagram({ spec, caption, lit, className }: Architect
         // string under securityLevel: "strict" — see ChatMermaidBlock.
         dangerouslySetInnerHTML={!laidOut && drawn ? { __html: svg } : undefined}
       >
-        {laidOut ? <ArchitectureSvg spec={spec} lit={lit} /> : null}
+        {laidOut ? <ArchitectureSvg spec={spec} lit={lit} aspect={fit ? aspect : undefined} /> : null}
       </div>
       {!drawn ? (
         <pre className="arch-figure__source">

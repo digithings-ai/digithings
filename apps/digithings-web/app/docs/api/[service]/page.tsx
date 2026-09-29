@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DocsLayout } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
+import { ServiceWordmark, apiDocsNav } from "@/components/docs/apiDocsNav";
 import { SwaggerExplorer } from "@/components/docs/SwaggerExplorer";
 import {
   OPENAPI_SERVICE_IDS,
@@ -32,15 +33,6 @@ export function generateMetadata({
   });
 }
 
-function ServiceWordmark({ id }: { id: string }) {
-  return (
-    <>
-      <span className="dt-d">digi</span>
-      <span className="dt-s">{id.replace(/^digi/, "")}</span>
-    </>
-  );
-}
-
 export default async function OpenApiServicePage({
   params,
 }: {
@@ -54,29 +46,16 @@ export default async function OpenApiServicePage({
     <>
       <DtNav />
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
-        <div className="docs-shell docs-shell--wide">
-          <div className="docs-content flex min-w-0 flex-col gap-[clamp(1.2rem,2.5vw,1.8rem)]">
-            <nav className="flex flex-wrap items-center gap-[0.55rem] font-mono text-[0.72rem] text-ink-mute">
-              <Link className="doc-inline-link" href="/docs/">
-                docs
-              </Link>
-              <span aria-hidden="true">/</span>
-              <Link className="doc-inline-link" href="/docs/api/">
-                api
-              </Link>
-              <span aria-hidden="true">/</span>
-              <span className="text-ink">{entry.id}</span>
-            </nav>
-
-            <header className="docs-hero">
-              <p className="m-0 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-accent">
-                {"// openapi"}
-              </p>
-              <h1 className="mb-[0.7rem] mt-[0.5rem] font-display text-[clamp(1.9rem,4vw,2.7rem)] font-normal tracking-[-0.02em] text-ink">
-                <ServiceWordmark id={entry.id} />
-              </h1>
-              <p className="m-0 max-w-[62ch] leading-[1.55] text-ink-soft">{entry.role}</p>
-              <p className="m-0 mt-[0.65rem] text-[0.8rem] text-ink-mute">
+        <DocsLayout
+          nav={apiDocsNav(entry.id)}
+          ariaLabel="api docs"
+          className="docs-shell--wide"
+          hero={{
+            kicker: "// openapi",
+            title: <ServiceWordmark id={entry.id} />,
+            lede: entry.role,
+            actions: (
+              <p className="m-0 text-[0.8rem] text-ink-mute">
                 Spec:{" "}
                 <a className="doc-inline-link" href={openApiSpecPath(entry.id)}>
                   {openApiSpecPath(entry.id)}
@@ -84,31 +63,11 @@ export default async function OpenApiServicePage({
                 {entry.authored ? " · authored BFF contract" : " · FastAPI export via make openapi-export"}
                 . Try-it-out is off on this public site — point clients at your own deployment.
               </p>
-            </header>
-
-            <nav
-              className="flex flex-wrap gap-[0.45rem]"
-              aria-label="OpenAPI services"
-            >
-              {OPENAPI_SERVICES.map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/docs/api/${s.id}/`}
-                  aria-current={s.id === entry.id ? "page" : undefined}
-                  className={`rounded-none border px-[0.65rem] py-[0.28rem] font-mono text-[0.76rem] no-underline transition-colors duration-150 ease-brand ${
-                    s.id === entry.id
-                      ? "border-accent bg-accent-weak text-ink"
-                      : "border-hair text-ink-soft hover:bg-accent-weak hover:text-ink"
-                  }`}
-                >
-                  <ServiceWordmark id={s.id} />
-                </Link>
-              ))}
-            </nav>
-
-            <SwaggerExplorer serviceId={entry.id} />
-          </div>
-        </div>
+            ),
+          }}
+        >
+          <SwaggerExplorer serviceId={entry.id} />
+        </DocsLayout>
       </main>
       <DtFooter />
     </>

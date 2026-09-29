@@ -75,7 +75,11 @@
   inset-inline-start: 50%;
   translate: -50% 0;
   width: 100%;
-  max-width: calc(var(--frame-w, var(--wrap, 1180px)) + 2 * var(--page-pad, var(--gutter, 1.5rem)));
+  /* One hairline short on each side, so the rails' own 1px columns stay
+     visible through the blurred band. */
+  max-width: calc(
+    var(--frame-w, var(--wrap, 1180px)) + 2 * var(--page-pad, var(--gutter, 1.5rem)) - 2px
+  );
   z-index: -1;
   pointer-events: none;
   background: transparent;

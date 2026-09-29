@@ -50,10 +50,10 @@ export default function PrivacyPage() {
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <DocumentFrame>
           <div className="px-[var(--page-pad)] py-[var(--page-step)]">
-            <PageTitle title="How this website handles data.">
+            <PageTitle path="legal/privacy" title="How this website handles data.">
               This notice explains what the digithings.ai website stores in your browser and what
-              happens when you use its optional chat; it does not cover a copy of the open-source
-              software that you or another organization operate on separate infrastructure.
+              happens when you use its optional chat. It does not cover copies of the open-source
+              software that you or another organization run on separate infrastructure.
             </PageTitle>
           </div>
 

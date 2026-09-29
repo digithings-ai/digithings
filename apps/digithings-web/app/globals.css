@@ -111,6 +111,9 @@
 /* … and the promoted prose atoms (PageHead/RuledList/RuledRow/Mono) and the
    `Fig N` Figure, which carry the long-form page grammar as utilities. */
 @source "../../../packages/ui/src/components/prose";
+/* … and the document family every subpage is built from. Without it the glyph
+   row's label gap and the section numbering are never generated. */
+@source "../../../packages/ui/src/components/document";
 @source "../../../packages/ui/src/components/figure";
 /* … and the finance primitives the digiquant band composes: <PriceChart>
    (finance-charts), <StockTicker>/.srt leaderboard (finance-composites),
@@ -241,8 +244,25 @@ html {
   scroll-behavior: auto;
   scroll-padding-top: var(--dq-nav-h);
 }
-#architecture { scroll-margin-top: var(--dq-nav-h); }
-#contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
+
+/* The landing bands settle with their top rule on the nav's bottom hairline.
+   scroll-padding-top already reserves the bar, so a band adds no margin of
+   its own (a margin would stack and park the rule a bar-height lower).
+   Proximity only: a band taller than the viewport still scrolls freely, and
+   the footer carries an end snap so the page bottom stays reachable. Fine
+   pointers only: under a touch fling, a snap near a band edge yanks the
+   momentum, so touch scrolling stays native. */
+@media (pointer: fine) {
+  html:has(main #why) {
+    scroll-snap-type: y proximity;
+  }
+  html:has(main #why) main > section[id] {
+    scroll-snap-align: start;
+  }
+  html:has(main #why) footer {
+    scroll-snap-align: end;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
@@ -495,8 +515,156 @@ html {
   display: flex;
   flex-direction: column;
   gap: var(--page-step);
+  width: 100%;
+  min-width: 0;
+  /* The frame width, so the band sits a gutter inside the vertical rails. */
   max-width: var(--frame-w);
   margin-inline: auto;
+}
+
+/* An app switch is a crossfade: the outgoing graph and rail fade out
+   (whyx--leaving, LEAVE_MS in AppFirstSection), the new app mounts unseen and
+   fades in. Animations, not transitions: the entrance is itself an animation
+   and would win over a transition on the same property. */
+@keyframes whyx-app-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes whyx-app-out {
+  to {
+    opacity: 0;
+  }
+}
+.whyx .arch-tour__grid {
+  animation: whyx-app-in 0.4s var(--ease) both;
+}
+.whyx.whyx--leaving .arch-tour__grid {
+  animation: whyx-app-out 0.2s var(--ease) forwards;
+}
+
+/* The pinned walk fills the viewport under the nav, and the diagram
+   takes the height the header does not, so the band is not a short
+   graph over an empty page. */
+.whyx .arch-tour__pin {
+  min-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
+  max-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
+  justify-content: flex-start;
+  overflow: clip;
+}
+
+.whyx .arch-tour__head {
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.whyx .arch-tour__grid {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__side {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__frame {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__stage,
+.whyx .arch-tour__pane,
+.whyx .arch-tour__camera,
+.whyx .arch-tour__camera .arch-figure {
+  height: 100%;
+}
+
+/* Unlayered on purpose: these override the kit's per-side tour geometry in
+   diagrams.css, which is itself unlayered (MIGRATION.md cascade contract).
+   The app tabs and description are the graph box's own header: the same width
+   as the frame (its 1.35fr share of the side, less the rail gap), and they
+   slide with it to the right edge when the digithings side takes the walk. */
+@media (min-width: 1024px) {
+  .whyx .arch-tour:not([data-variant="static"]) .whyx__apps {
+    width: calc((100% - 2.4rem) * 1.35 / 2);
+    margin-inline-start: 0;
+    transition: margin-inline-start 1.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .whyx .arch-tour:not([data-variant="static"])[data-active-side="1"] .whyx__apps {
+    margin-inline-start: calc(100% - (100% - 2.4rem) * 1.35 / 2);
+  }
+  /* The box sits flush under its tabs: no pin gap, and the frame spans the
+     side-tag row (the tag only ever sits over the rail column).
+     The walk is held between two rules: the nav's edge above and the pin's
+     own bottom rule, which bleeds past the rails like every section divider.
+     A border-image outset is ink overflow, so the bleed adds no scroll width. */
+  /* The pin holds exactly where the section snap parks the band — top on the
+     nav's edge — and fills to the viewport's foot, so both section rules are on
+     screen for the whole walk and the graph compresses to fit between them. */
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__pin {
+    top: var(--dq-nav-h, 4.5rem);
+    min-height: calc(100svh - var(--dq-nav-h, 4.5rem));
+    max-height: calc(100svh - var(--dq-nav-h, 4.5rem));
+    row-gap: 0;
+    padding-block: 1.2rem;
+    border-block-end: 1px solid var(--hair);
+    border-image: linear-gradient(var(--hair), var(--hair)) 0 0 1 0 / 0 0 1px 0 / 0 100vw;
+  }
+  /* The pin's rule is the band's bottom divider and the pin carries its own
+     top padding, so the section drops both: the track starts on the band's top
+     rule and the next band starts on the pin's rule when it lets go. */
+  #why:has(> .whyx .arch-tour:not([data-variant="static"])) {
+    padding-block: 0;
+    border-block-end-width: 0;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__frame {
+    grid-row: 1 / -1;
+  }
+  /* Resting steps fold to one line so the price table fits under the rail;
+     the walked step still opens in full. */
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__rail {
+    gap: 0.55rem;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__step:not(.on) {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.6rem;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side[data-rail="end"] .arch-tour__step:not(.on) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side[data-rail="end"] .arch-tour__step:not(.on) .arch-tour__index {
+    order: 2;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__step:not(.on) .arch-tour__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* A short screen gives the graph the lede's rows; the walk shows the same thing. */
+@media (max-height: 820px) {
+  .whyx .whyx__how {
+    display: none;
+  }
+}
+
+.whyx .arch-tour__camera .arch-figure__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__camera .arch-figure__body > svg {
+  width: 100%;
+  height: 100%;
+  max-height: none;
 }
 
 .whyx__diagrams,

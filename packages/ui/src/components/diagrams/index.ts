@@ -18,4 +18,5 @@ export {
   type TourStep,
   type TourVariant,
 } from "./ArchitectureTour";
+export { camTransform, fitCamera, type CamFrame } from "./tour-camera";
 export { THEME_TOKENS, tokenThemeVariables } from "./mermaid-theme";
