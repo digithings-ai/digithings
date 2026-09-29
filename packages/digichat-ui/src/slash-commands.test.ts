@@ -147,6 +147,16 @@ describe("matchingSlashCommands", () => {
     );
   });
 
+  it("hides search-engine unless the tenant allows web search", () => {
+    expect(matchingSlashCommands("/se", { webSearch: false }).map((c) => c.id)).toEqual([
+      "settings",
+    ]);
+    expect(matchingSlashCommands("/se", { webSearch: true }).map((c) => c.id)).toEqual([
+      "search-engine",
+      "settings",
+    ]);
+  });
+
   it("narrows as the user types a prefix", () => {
     expect(matchingSlashCommands("/se").map((c) => c.id)).toEqual(["settings"]);
     expect(matchingSlashCommands("/sett").map((c) => c.id)).toEqual(["settings"]);
