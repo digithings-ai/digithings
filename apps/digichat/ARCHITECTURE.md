@@ -567,6 +567,20 @@ of the turn dead-ending. The upstream `message` is never relayed on that path:
 digigraph's text for `byok_default_model_provider_mismatch` reflects the
 caller's own `X-BYOK-Provider` header back at them.
 
+Upstream 503s retry on two budgets (#4753). A 503 carrying the stack worker's
+`container_booting` code (JSON body + `Retry-After` header) means the container
+is still waking: the BFF extends the retry budget to ~250s (elapsed + attempt
+caps), honoring the server-sent `Retry-After` exactly (clamped to 1–30s, zero
+floored) and falling back to exponential backoff with jitter otherwise. While
+those boot-retries are in flight the stream carries a `data-connection`
+`warming_up` part (same `digigraph-connection` id as `connecting`/`connected`)
+so the thread shows a warming-up indicator instead of ending in the
+unavailable-message. Every other 503 — real outage, digigraph overload, or a
+pre-`container_booting` plain-text worker body — keeps the ~15s budget (4
+attempts, fixed 2s/5s/8s delays, `Retry-After` ignored) and the
+unavailable-message + Retry path. The chat route's `maxDuration` (300s) must
+outlive the boot budget or a slow cold boot is cut off mid-retry.
+
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
 Visitor API keys are **session memory only** (`useBYOKKey` React state). The

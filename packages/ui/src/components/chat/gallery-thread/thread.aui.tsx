@@ -858,14 +858,19 @@ const AssistantWorkingIndicator: FC = () => {
       (part) => part.type === "tool-call" && part.status.type === "running",
     ),
   );
-  const connecting = useAuiState((s) =>
-    s.message.parts.some(
-      (part) =>
-        part.type === "data" &&
-        part.name === "connection" &&
-        (part.data as { state?: string } | undefined)?.state === "connecting",
-    ),
-  );
+  // Latest data-connection state wins: the BFF replaces `connecting` with
+  // `warming_up` while it retries a booting upstream (#4753) and with
+  // `connected` once the stream starts.
+  const connectionState = useAuiState((s) => {
+    let state: string | undefined;
+    for (const part of s.message.parts) {
+      if (part.type === "data" && part.name === "connection") {
+        const next = (part.data as { state?: string } | undefined)?.state;
+        if (typeof next === "string") state = next;
+      }
+    }
+    return state;
+  });
   if (toolRunning) return null;
   return (
     <span
@@ -877,7 +882,9 @@ const AssistantWorkingIndicator: FC = () => {
         label="Assistant is working"
         className="size-3.5"
       />
-      {connecting ? (
+      {connectionState === "warming_up" ? (
+        <span className="text-sm text-muted-foreground">Warming up…</span>
+      ) : connectionState === "connecting" ? (
         <span className="text-sm text-muted-foreground">Connecting…</span>
       ) : null}
     </span>
