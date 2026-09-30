@@ -313,13 +313,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 120 for the develop merge-forward (promotion #4745
     prep): merged ARCHITECTURE.md carries both #4717 and #4711 prose —
     fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 120) re-recorded for #4823 (cross-namespace
+    twin-dedupe behavior note in the POST /query section of ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 122 for #4826 (luxalgo market-trackers ingest
+    section + url_ingest JSON-helper tree note in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 120
+    assert len(chunks) == 122
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -331,10 +337,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "bea0bf0dc35372d3",
         "0a3a7b984057149d",
         "27f0ca91eb93d7e1",
-        "5fc146dcd98ed469",
-        "6bb725ee96409565",
-        "2496b0331a6908ca",
-        "d79c9e4802601817",
+        "ac22aad7e50a19a8",
+        "bd5783df8cad254d",
+        "1d58a13adc2f1766",
+        "f79f2f8493e2a01b",
         "8135b004b65f5e71",
         "38ba575592a8ce18",
         "a08f56ac9059ac1b",
@@ -387,11 +393,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "7cd2ab2a02a644ad",
-        "0f3f0cd274843600",
-        "088e1f78f0807cf2",
-        "3b33ce80895ebd06",
-        "0cc6a533a3ec0447",
+        "2f15957cf097fd65",
+        "83f856f0db628c3f",
+        "a7d08e8e3688dbbc",
+        "a0b3e816da5570f0",
+        "27290fd00d3e9cbf",
+        "d040c14d01f65a04",
+        "3830c71d9e7ea01e",
         "819ebadc3320ecc2",
         "10832c167583db90",
         "3442051d624d3623",
