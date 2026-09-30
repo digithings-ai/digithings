@@ -37,6 +37,7 @@ def test_paste_copies_then_keystrokes() -> None:
     copied, typed = runner.calls
     # The transcript travels over stdin, never inside an AppleScript string.
     assert copied.stdin == TEXT
+    assert copied.argv == ["/usr/bin/pbcopy"]
     assert typed.argv == ["/usr/bin/osascript", "-e", KEYSTROKE_SCRIPT]
     assert "v" in KEYSTROKE_SCRIPT and "command down" in KEYSTROKE_SCRIPT
 

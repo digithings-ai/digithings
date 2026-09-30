@@ -34,7 +34,7 @@ def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) 
             pasted=False,
             detail=f"missing on PATH: {', '.join(missing)}",
         )
-    copied = runner([str(pbcopy), "w"], stdin=text, timeout=PASTE_TIMEOUT)
+    copied = runner([str(pbcopy)], stdin=text, timeout=PASTE_TIMEOUT)
     if copied.code != 0:
         reason = error_tail(copied.stderr) or f"exit {copied.code}"
         return PasteResult(attempted=True, pasted=False, detail=f"pbcopy failed ({reason})")
