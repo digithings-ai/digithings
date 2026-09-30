@@ -12,6 +12,27 @@ from digiquant.charts.common import (
     _apply_layout,
     _extract_frame,
 )
+from digiquant.stats.honesty import honest_rate
+
+
+def count_winning_trades(realized_pnls_series: Any) -> int | None:
+    """Count winning (PnL > 0) trades; None when the series is missing/empty.
+
+    Goes through :func:`_extract_frame` (duck-typed ``.values`` / ``.to_list``
+    / ``.tolist`` / iterable — no imports) and counts ``> 0`` over the value
+    column. Never ``.to_pandas()``: that bridge needs pyarrow, which is not
+    installed, so it raised ``ModuleNotFoundError`` and — called unguarded
+    from ``tearsheet.py`` — crashed whole-tearsheet generation.
+    """
+    if realized_pnls_series is None:
+        return None
+    df = _extract_frame(realized_pnls_series)
+    if df is None or len(df) == 0:
+        return None
+    try:
+        return int((df["value"] > 0).sum())
+    except Exception:
+        return None
 
 
 def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
@@ -202,16 +223,51 @@ def _build_per_trade_pnl_bars(realized_pnls_series: Any) -> Any:
         return ChartUnavailable("Per-Trade PnL", str(exc))
 
 
-def _build_win_rate_donut(win_rate: float | None, num_trades: int) -> Any:
-    """Donut chart showing win/loss split."""
+def _build_win_rate_donut(
+    win_rate: float | None, num_trades: int, num_wins: int | None = None
+) -> Any:
+    """Donut chart showing win/loss split.
+
+    ``num_wins`` is the caller-counted (k, n) pair — the only honest source
+    for the center annotation. When omitted, the pie slices still use the
+    rate-derived estimate, but the center renders an explicit unknown
+    (rate + n, wins uncounted, no CI) instead of presenting a reconstructed
+    ``round(rate * n)`` count as observed.
+    The center annotation always carries N + Wilson 95% CI (counted path),
+    never a bare percentage.
+    """
     if win_rate is None:
         return None
     try:
         import plotly.graph_objects as go
 
-        wr = max(0.0, min(1.0, win_rate))
-        wins = round(wr * num_trades)
+        wr = win_rate / 100.0 if win_rate > 1 else win_rate
+        wr = max(0.0, min(1.0, wr))
+        if num_wins is None:
+            # Slice-only estimate: shapes the pie, never shown as counted k.
+            wins = round(wr * num_trades)
+            counted = False
+        else:
+            wins = min(num_trades, max(0, num_wins))
+            counted = True
         losses = num_trades - wins
+        hr = honest_rate(wins, num_trades)
+        sub = "<span style='font-size:9px;color:#64748b'>"
+        if hr.refused or hr.estimate is None or hr.ci_lo is None or hr.ci_hi is None:
+            center = f"<b>REFUSED</b><br>{sub}n={num_trades}</span>"
+        elif not counted:
+            center = (
+                f"<b>{wr * 100:.1f}%</b><br>"
+                "<span style='font-size:9px;color:#64748b'>"
+                f"n={num_trades} · wins uncounted</span>"
+            )
+        else:
+            flag = " · LOW SAMPLE" if hr.low_sample else ""
+            center = (
+                f"<b>{hr.estimate * 100:.1f}%</b><br>"
+                f"<span style='font-size:9px;color:#64748b'>n={num_trades}, "
+                f"95% CI [{hr.ci_lo * 100:.1f}%, {hr.ci_hi * 100:.1f}%]{flag}</span>"
+            )
         fig = go.Figure(
             data=[
                 go.Pie(
@@ -227,7 +283,7 @@ def _build_win_rate_donut(win_rate: float | None, num_trades: int) -> Any:
             ]
         )
         fig.add_annotation(
-            text=f"<b>{wr * 100:.1f}%</b><br><span style='font-size:9px;color:#64748b'>WIN RATE</span>",
+            text=center,
             x=0.5,
             y=0.5,
             xref="paper",

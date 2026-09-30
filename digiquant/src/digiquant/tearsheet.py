@@ -35,6 +35,7 @@ from digiquant.charts import (
     _build_underwater_from_returns,
     _build_win_rate_donut,
     _build_yearly_returns_chart,
+    count_winning_trades,
     section_unavailable_html,
 )
 from digiquant.models import BacktestResult
@@ -127,7 +128,9 @@ def create_tearsheet(
     price_fig = _build_price_chart_inline(
         ohlcv_df, symbol, period, std_dev, fill_ts, fill_px, fill_sides
     )
-    win_rate_donut_fig = _build_win_rate_donut(win_rate, result.num_trades)
+    # Caller-counted (k, n): prefer actual winning fills over rate × n.
+    num_wins = count_winning_trades(realized_pnls_series)
+    win_rate_donut_fig = _build_win_rate_donut(win_rate, result.num_trades, num_wins=num_wins)
     realized_pnl_fig = _build_realized_pnl_chart(realized_pnls_series)
     per_trade_pnl_fig = _build_per_trade_pnl_bars(realized_pnls_series)
     cum_trade_pnl_fig = _build_cumulative_trade_pnl(realized_pnls_series)
@@ -194,6 +197,7 @@ def create_tearsheet(
         symbols_str=symbols_str,
         params_str=params_str,
         win_rate=win_rate,
+        win_rate_wins=num_wins,
         profit_factor=profit_factor,
         sortino=sortino,
         calmar=calmar,
