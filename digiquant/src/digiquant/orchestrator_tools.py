@@ -816,12 +816,14 @@ def build_digifetch_saved_searches_tool() -> dict[str, Any]:
     }
 
 
-# ── LuxAlgo Library family (#4779 P0) ─────────────────────────────────────────
+# ── LuxAlgo hosted family (#4779 P0, #4844) ───────────────────────────────────
 #
-# Thin wrap of the hosted LuxAlgo MCP (Library research reads only). All 8
-# tools are keyless (``free``); every payload carries the "Sourced from
-# LuxAlgo Library" attribution + the upstream canonical URL. Indicator source
-# code is deliberately NOT wrapped (CC BY-NC-SA license boundary).
+# Thin wrap of the hosted LuxAlgo MCP (Library research reads + Edge Stats
+# preset reads + Market Trackers live-query companions). All 14 tools are
+# keyless (``free``); every payload carries a per-family "Sourced from LuxAlgo
+# ..." attribution + a canonical link. Indicator source code is deliberately
+# NOT wrapped (CC BY-NC-SA license boundary), and neither is trackers_query
+# (the CC0 dumps stay the source of record).
 
 
 def build_luxalgo_library_search_tool() -> dict[str, Any]:
@@ -990,6 +992,171 @@ def build_luxalgo_library_get_family_tool() -> dict[str, Any]:
                     "family": {"type": "string"},
                 },
                 "required": ["family"],
+            },
+        },
+    }
+
+
+def build_luxalgo_edge_symbols_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_edge_symbols",
+            "description": (
+                "Coverage of the hosted LuxAlgo Edge Stats store (hosted "
+                "LuxAlgo MCP, anonymous): symbols, session calendars, coverage "
+                "windows, session counts, and when the nightly build last ran. "
+                "Takes no parameters. Start here, then edge_presets, then "
+                "edge_report. Precomputed session statistics only — no raw "
+                "vendor bars are published."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_luxalgo_edge_presets_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_edge_presets",
+            "description": (
+                "Catalog of session-statistics questions the hosted LuxAlgo "
+                "Edge Stats store precomputes nightly (hosted LuxAlgo MCP, "
+                "anonymous): gap fills, opening-range breakouts, day-of-week "
+                "effects, event-day behavior, and more. `category` narrows to "
+                "one category. Each preset states in plain language what its "
+                "number means; preset ids feed edge_report."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string"},
+                },
+            },
+        },
+    }
+
+
+def build_luxalgo_edge_report_tool() -> dict[str, Any]:
+    from digiquant.stats.honesty import DISCLAIMER
+
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_edge_report",
+            "description": (
+                "One precomputed LuxAlgo Edge Stats result: P(outcome | "
+                "conditions) for a preset on a hosted symbol (hosted LuxAlgo "
+                "MCP, anonymous), in the engine's honesty envelope — the "
+                "estimate with N and a Wilson 95% confidence interval, "
+                "minimum-sample guards, a first-half vs second-half stability "
+                "split, and per-year counts. `preset` comes from edge_presets, "
+                "`symbol` from edge_symbols. "
+                f"Disclaimer: {DISCLAIMER}"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "preset": {"type": "string"},
+                    "symbol": {"type": "string"},
+                },
+                "required": ["preset", "symbol"],
+            },
+        },
+    }
+
+
+def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_trackers_datasets",
+            "description": (
+                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): every "
+                "dataset of US public-record market data the LuxAlgo pipeline "
+                "publishes as CC0 dumps — congressional trades, insider "
+                "transactions, 13F holdings, federal contracts and grants, "
+                "lobbying filings, short-sale volume, and more — with row "
+                "counts, freshness, the years with data, and whether it is "
+                "ticker-searchable. `dataset` selects one dataset's full field "
+                "roster (read it before composing filters). The dumps are the "
+                "source of record."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dataset": {"type": "string"},
+                },
+            },
+        },
+    }
+
+
+def build_luxalgo_trackers_latest_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_trackers_latest",
+            "description": (
+                "Newest ingestion day's rows for one Market Trackers dataset "
+                "(hosted LuxAlgo MCP, anonymous): the cheapest freshness check "
+                "— today's insider filings, this week's congressional "
+                "disclosures. `dataset` is required; `ticker`/`text`/`where` "
+                "narrow the rows; `sort` is newest|oldest; `limit` is 1-100 "
+                "(default 25); `offset` pages. Freshness checks and ad-hoc "
+                "lookups only — never build a pipeline on live queries alone."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dataset": {"type": "string"},
+                    "ticker": {"type": "string"},
+                    "text": {"type": "string"},
+                    "where": {"type": "object"},
+                    "sort": {"type": "string", "enum": ["newest", "oldest"]},
+                    "limit": {
+                        "type": "integer",
+                        "default": 25,
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                    "offset": {"type": "integer", "default": 0, "minimum": 0},
+                },
+                "required": ["dataset"],
+            },
+        },
+    }
+
+
+def build_luxalgo_trackers_ticker_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_trackers_ticker",
+            "description": (
+                "One ticker across every ticker-bearing Market Trackers dataset "
+                "for one year (hosted LuxAlgo MCP, anonymous): insider "
+                "transactions, congressional trades, 13F holdings, federal "
+                "contracts and grants, lobbying filings, short-sale volume, "
+                "and more — a public-record dossier from primary sources. "
+                "`ticker` is required; `year` is 1900-2100 (default the current "
+                "year); `limit` is 1-25 newest rows per dataset (default 5). "
+                "Ad-hoc lookups only — never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "year": {"type": "integer", "minimum": 1900, "maximum": 2100},
+                    "limit": {
+                        "type": "integer",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": 25,
+                    },
+                },
+                "required": ["ticker"],
             },
         },
     }
@@ -1769,7 +1936,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     Every digifetch tool carries a top-level ``entitlement`` declaration
     (``free`` | ``session`` | ``preview`` | ``pro``) and an entitlement note in
     its description; see :mod:`digiquant.data.gloomberb.entitlements`. Every
-    luxalgo Library tool carries ``entitlement="free"`` plus the LuxAlgo
+    luxalgo tool carries ``entitlement="free"`` plus the LuxAlgo
     attribution/license note; see :mod:`digiquant.data.luxalgo.entitlements`.
     """
     tools = [
@@ -1823,6 +1990,12 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_luxalgo_library_list_tags_tool(),
         build_luxalgo_library_list_families_tool(),
         build_luxalgo_library_get_family_tool(),
+        build_luxalgo_edge_symbols_tool(),
+        build_luxalgo_edge_presets_tool(),
+        build_luxalgo_edge_report_tool(),
+        build_luxalgo_trackers_datasets_tool(),
+        build_luxalgo_trackers_latest_tool(),
+        build_luxalgo_trackers_ticker_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),

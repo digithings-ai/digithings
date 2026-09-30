@@ -1,4 +1,4 @@
-"""LuxAlgo Library thin wrap (#4779 P0).
+"""LuxAlgo hosted thin wrap (#4779 P0 Library, #4844 edge/trackers).
 
 A thin client over the hosted LuxAlgo MCP (``https://mcp.luxalgo.com/mcp``,
 streamable HTTP JSON-RPC), mirroring the digifetch x Gloomberb layering: the
@@ -11,8 +11,11 @@ and envelope serializer also live there and ``mcp_server`` imports them.
 
 P0 subset (Library research only): search, get_concept, get_indicator
 (metadata — never source code), list_concepts, list_indicators, list_tags,
-list_families, get_family. All keyless (``free``), read-scope, default-ON
-behind ``LUXALGO_ENABLED``.
+list_families, get_family. #4844 companions: edge_symbols, edge_presets,
+edge_report (preset reads with the honesty disclaimer) and
+trackers_datasets, trackers_latest, trackers_ticker (freshness/ad-hoc
+lookups over the CC0 dumps — never pipeline primaries). All keyless
+(``free``), read-scope, default-ON behind ``LUXALGO_ENABLED``.
 """
 
 from __future__ import annotations
@@ -30,9 +33,20 @@ from .agent_tools import (
 )
 from .attribution import (
     LUXALGO_ATTRIBUTION,
+    LUXALGO_EDGE_ATTRIBUTION,
+    LUXALGO_EDGE_LICENSE_NOTE,
+    LUXALGO_EDGE_URL,
     LUXALGO_LIBRARY_URL,
     LUXALGO_LICENSE_NOTE,
+    LUXALGO_LICENSE_STATE_NOTE_DISABLED,
+    LUXALGO_LICENSE_STATE_NOTE_ENABLED,
+    LUXALGO_TRACKERS_ATTRIBUTION,
+    LUXALGO_TRACKERS_LICENSE_NOTE,
+    LUXALGO_TRACKERS_URL,
+    TOOL_ATTRIBUTION,
     attribution_fields,
+    attribution_fields_for,
+    commercial_license_note,
 )
 from .client import (
     DEFAULT_CACHE_TTL_SECONDS,
@@ -47,14 +61,37 @@ from .client import (
 from .entitlements import (
     ENTITLEMENT_DESCRIPTIONS,
     TOOL_ENTITLEMENTS,
+    TOOL_NOTES,
     Entitlement,
     entitlement_for,
     entitlement_note,
     with_entitlement_note,
 )
+from .license_guard import (
+    LUXALGO_COMMERCIAL_LICENSE_ENV,
+    PAID_RENDER_SURFACES,
+    PERSIST_SINKS,
+    SCAN_ALLOWLIST,
+    SOURCE_CODE_PAYLOAD_KEYS,
+    SOURCE_CODE_TOOL_NAME,
+    SOURCE_CODE_TOOL_NAMES,
+    SOURCE_CODE_UPSTREAM_TOOL,
+    LicenseBoundaryError,
+    assert_payload_has_no_source_code,
+    is_source_code_tool,
+    luxalgo_commercial_license_enabled,
+    payload_contains_source_code,
+    run_boundary_checks,
+    scan_source_code_references,
+    source_code_refusal_message,
+    source_code_violations,
+)
 from .models import (
     PROVIDER_ID,
     SOURCE,
+    EdgePresetsInput,
+    EdgeReportInput,
+    EdgeSymbolsInput,
     ErrorCode,
     LibraryGetConceptEnvelope,
     LibraryGetConceptInput,
@@ -74,6 +111,9 @@ from .models import (
     LibrarySearchInput,
     LuxalgoEnvelope,
     LuxalgoError,
+    TrackersDatasetsInput,
+    TrackersLatestInput,
+    TrackersTickerInput,
     envelope_error,
 )
 
@@ -92,7 +132,18 @@ __all__ = [
     "LUXALGO_ATTRIBUTION",
     "LUXALGO_LIBRARY_URL",
     "LUXALGO_LICENSE_NOTE",
+    "LUXALGO_LICENSE_STATE_NOTE_ENABLED",
+    "LUXALGO_LICENSE_STATE_NOTE_DISABLED",
+    "commercial_license_note",
+    "LUXALGO_EDGE_ATTRIBUTION",
+    "LUXALGO_EDGE_URL",
+    "LUXALGO_EDGE_LICENSE_NOTE",
+    "LUXALGO_TRACKERS_ATTRIBUTION",
+    "LUXALGO_TRACKERS_URL",
+    "LUXALGO_TRACKERS_LICENSE_NOTE",
+    "TOOL_ATTRIBUTION",
     "attribution_fields",
+    "attribution_fields_for",
     # client
     "LuxAlgoClient",
     "luxalgo_enabled",
@@ -106,9 +157,28 @@ __all__ = [
     "Entitlement",
     "TOOL_ENTITLEMENTS",
     "ENTITLEMENT_DESCRIPTIONS",
+    "TOOL_NOTES",
     "entitlement_for",
     "entitlement_note",
     "with_entitlement_note",
+    # commercial-license guard (#4845)
+    "LUXALGO_COMMERCIAL_LICENSE_ENV",
+    "luxalgo_commercial_license_enabled",
+    "SOURCE_CODE_UPSTREAM_TOOL",
+    "SOURCE_CODE_TOOL_NAME",
+    "SOURCE_CODE_TOOL_NAMES",
+    "PERSIST_SINKS",
+    "PAID_RENDER_SURFACES",
+    "SOURCE_CODE_PAYLOAD_KEYS",
+    "SCAN_ALLOWLIST",
+    "LicenseBoundaryError",
+    "is_source_code_tool",
+    "source_code_refusal_message",
+    "payload_contains_source_code",
+    "assert_payload_has_no_source_code",
+    "source_code_violations",
+    "scan_source_code_references",
+    "run_boundary_checks",
     # models
     "SOURCE",
     "PROVIDER_ID",
@@ -132,4 +202,10 @@ __all__ = [
     "LibraryListTagsEnvelope",
     "LibraryListFamiliesEnvelope",
     "LibraryGetFamilyEnvelope",
+    "EdgeSymbolsInput",
+    "EdgePresetsInput",
+    "EdgeReportInput",
+    "TrackersDatasetsInput",
+    "TrackersLatestInput",
+    "TrackersTickerInput",
 ]
