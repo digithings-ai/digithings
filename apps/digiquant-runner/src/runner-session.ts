@@ -8,7 +8,8 @@ import { assertKnownCommand, loadCommands, type CommandSpec } from "./commands";
 
 export const HEARTBEAT_MS = 60_000;
 export const MAX_INFLIGHT = 2;
-const WATCHDOG_GRACE_SECONDS = 120;
+/** Extra seconds past timeout_seconds before the DO marks a run timed_out. */
+export const WATCHDOG_GRACE_SECONDS = 120;
 const STATE_KEY = "runner-state";
 
 export const COMMANDS: Record<string, CommandSpec> = loadCommands(commandsJson);
