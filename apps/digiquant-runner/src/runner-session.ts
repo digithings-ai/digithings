@@ -342,10 +342,29 @@ export class RunnerSession {
     } catch {
       remote = null;
     }
+    if (remote) {
+      this.applyRemote(run, remote);
+      // Align the watchdog to the container's start, not accept time — cold
+      // boot can burn minutes before /run begins, and kicking the lock early
+      // lets a second writer race the same R2 keys (#4761 Kick2 class).
+      if (remote.started_at) {
+        const remoteMs = Date.parse(remote.started_at);
+        if (!Number.isNaN(remoteMs) && remoteMs > 0) {
+          lock.started_at_ms = remoteMs;
+          run.started_at_ms = remoteMs;
+        }
+      }
+    }
     const ageSeconds = (this.now() - lock.started_at_ms) / 1000;
     const pastDeadline = ageSeconds > lock.timeout_seconds + WATCHDOG_GRACE_SECONDS;
-    if (remote) this.applyRemote(run, remote);
     if (pastDeadline && !isTerminal(run.status)) {
+      // Container still alive: keep the lock. Releasing here drops
+      // hasActiveWork (platform can reap mid-write) and lets accept start a
+      // twin /run against the same command. The container kills its own
+      // child at timeout_seconds; only ledger-timeout when unreachable.
+      if (remote && !isTerminal(remote.status)) {
+        return true;
+      }
       run.status = "timed_out";
       run.exit_code = 124;
       run.finished_at = new Date(this.now()).toISOString();

@@ -27,6 +27,9 @@ WORKDIR = Path(os.environ.get("RUNNER_WORKDIR", "/app"))
 HOST = "0.0.0.0"
 PORT = 8080
 LOG_TAIL_LINES = 200
+# Artifact upload is outside the step deadline; bound it so status clears and
+# a twin /run cannot be blocked forever by a hung boto3 call.
+PUBLISH_TIMEOUT_SECONDS = 120
 
 # Interpreter baseline. The full process environ is never copied: that would
 # leak Worker-only tokens into the pipeline child.
@@ -258,6 +261,32 @@ def _read_status(run_id: str) -> dict[str, Any] | None:
     return loaded
 
 
+def _running_command(command: str) -> str | None:
+    """Return the run_id of an in-progress job for ``command``, else None.
+
+    The Durable Object is the primary concurrency ledger, but a premature
+    watchdog timeout can release that lock while this container is still
+    writing. Refusing a twin ``/run`` for the same command prevents two
+    ``market-data-refresh`` (or similar) processes from racing the same R2
+    generation keys.
+    """
+    if not STATUS_DIR.is_dir():
+        return None
+    for path in STATUS_DIR.glob("*.status.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("status") != "running":
+            continue
+        if payload.get("command") != command:
+            continue
+        run_id = payload.get("run_id")
+        if isinstance(run_id, str) and run_id:
+            return run_id
+    return None
+
+
 def _wait_argv(
     argv: list[str],
     child_env: dict[str, str],
@@ -323,6 +352,25 @@ def _publish(command: str, run_id: str, paths: list[str]) -> None:
         client.upload_file(str(path), bucket, key)
 
 
+def _publish_bounded(command: str, run_id: str, paths: list[str]) -> None:
+    """Run ``_publish`` with a hard wall clock so status cannot stick on running."""
+    errors: list[BaseException] = []
+
+    def _target() -> None:
+        try:
+            _publish(command, run_id, paths)
+        except BaseException as exc:  # noqa: BLE001 — re-raised below
+            errors.append(exc)
+
+    thread = threading.Thread(target=_target, name=f"publish-{run_id}", daemon=True)
+    thread.start()
+    thread.join(PUBLISH_TIMEOUT_SECONDS)
+    if thread.is_alive():
+        raise TimeoutError(f"publish exceeded {PUBLISH_TIMEOUT_SECONDS}s")
+    if errors:
+        raise errors[0]
+
+
 def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds: int) -> None:
     spec = load_commands()[command]
     log_path = _log_path(run_id)
@@ -374,7 +422,7 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
                 outcome = "failed"
     if outcome == "succeeded" and spec.get("publish"):
         try:
-            _publish(command, run_id, [str(path) for path in spec["publish"]])
+            _publish_bounded(command, run_id, [str(path) for path in spec["publish"]])
         except Exception as exc:  # publish failure fails the run; do not leak secrets
             outcome = "failed"
             exit_code = 1
@@ -501,6 +549,25 @@ class _Handler(BaseHTTPRequestHandler):
             return
         string_args = {str(k): str(v) for k, v in args.items()}
         with _lock:
+            busy = _running_command(command)
+            if busy:
+                self._json(409, {"error": "already_running", "run_id": busy})
+                return
+            # Reserve the command slot before the thread starts so a twin
+            # POST cannot slip through between check and first status write.
+            _write_status(
+                run_id,
+                {
+                    "run_id": run_id,
+                    "command": command,
+                    "status": "running",
+                    "exit_code": None,
+                    "started_at": _now(),
+                    "finished_at": None,
+                    "git_sha": git_sha(),
+                    "reason": None,
+                },
+            )
             _current["run_id"] = run_id
         thread = threading.Thread(
             target=_run_steps,
