@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -114,6 +115,38 @@ def gold_generic_rails_fitter(dates: list[date], prices: list[float]) -> RiskMod
     return GenericValuationRiskModel(coeffs)
 
 
+def _make_bounded_lookback_rails_fitter(
+    name: str, fit_lookback_days: int
+) -> Callable[[list[date], list[float]], RiskModel]:
+    """Inline rails variant (#4804 Task 3): same body as the gate fitter +
+    the Task-2 ``fit_lookback_days`` only. Params match
+    ``gold_rails_variants.json`` / ``VARIANT_SPECS`` exactly
+    (form stays the ``log_quadratic`` default, no trend cap).
+    Defined inline (not imported from ``run_gold_rails_variants``) because
+    that module's top level mutates ``sys.path`` and back-imports this
+    script's fitter — a circular import for no behavioral gain.
+    """
+
+    def _fitter(dates: list[date], prices: list[float]) -> RiskModel:
+        coeffs = fit_generic_valuation(
+            pl.Series("date", dates, dtype=pl.Date),
+            pl.Series("price", prices, dtype=pl.Float64),
+            fit_lookback_days=fit_lookback_days,
+            notes=f"gold rails variant {name}; fold IS window only",
+        )
+        return GenericValuationRiskModel(coeffs)
+
+    _fitter.__name__ = f"rails_fitter_{name}"
+    return _fitter
+
+
+RAILS_FITTERS = {
+    "default": gold_generic_rails_fitter,
+    "quad_3y": _make_bounded_lookback_rails_fitter("quad_3y", 756),
+    "quad_5y": _make_bounded_lookback_rails_fitter("quad_5y", 1260),
+}
+
+
 def iter_grid() -> list[SdcaCurveShape]:
     shapes: list[SdcaCurveShape] = []
     keys = list(GRID)
@@ -131,6 +164,11 @@ def iter_grid() -> list[SdcaCurveShape]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gold GLD tiered curve search + gate")
     parser.add_argument("--seed-path", default=str(SEED_PATH))
+    parser.add_argument(
+        "--rails-variant",
+        choices=sorted(RAILS_FITTERS),
+        default="default",
+    )
     args = parser.parse_args()
     seed = json.loads(Path(args.seed_path).read_text())
     dates = [date.fromisoformat(d) for d in seed["dates"]]
@@ -200,11 +238,12 @@ def main() -> None:
 
     sources = load_sdca_extra_sources(DATA_PATH.parent)
     extra_z = extra_z_vectors(date_s, price_s, weights, sources)
+    print(f"rails-variant: {args.rails_variant}")
     result = run_sdca_walk_forward(
         dates,
         prices,
         [winner_params],
-        rails_fitter=gold_generic_rails_fitter,
+        rails_fitter=RAILS_FITTERS[args.rails_variant],
         evaluator=evaluate_sdca_trial_curve_sim,
         evaluator_label="curve_simulator",
         extra_z=extra_z,
