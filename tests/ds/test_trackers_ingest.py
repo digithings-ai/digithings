@@ -17,6 +17,7 @@ import pytest
 from digisearch.search._stub import _stub_index
 from digisearch.trackers_ingest import (
     TRACKERS_INDEX_NAME,
+    StaleDatasetError,
     fetch_congress_trades_latest,
     ingest_congress_trades,
     normalize_congress_trade,
@@ -223,7 +224,7 @@ def test_ingest_refuses_stale_manifest() -> None:
         "datasets": {"congress-trades": {"stale": True, "rows": 175}},
     }
     fetcher = _FakeFetcher([_TICKER_ROW], manifest=stale_manifest)
-    with pytest.raises(Exception, match="[Ss]tale"):
+    with pytest.raises(StaleDatasetError, match="[Ss]tale"):
         ingest_congress_trades(fetcher)
     assert not _stub_index.get(TRACKERS_INDEX_NAME)
 

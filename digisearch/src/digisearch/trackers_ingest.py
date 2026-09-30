@@ -20,14 +20,16 @@ by id. The ``ingested``/``skipped`` counts additionally probe the in-memory
 stub index — exact on the unit-test path; on production backends a rewritten
 row reports as ingested while storage still dedupes by stable id.
 
-Network: all HTTP goes through digifetch ``HttpFetcher`` (SSRF-guarded via
-``validate_fetch_url``); this module never opens sockets itself. ``digifetch``
-is imported lazily so importing this module never requires the extra.
+Network: all HTTP goes through
+:func:`digisearch.pipeline.url_ingest.fetch_json_feed` — the single URL-fetch
+site (SSRF-guarded digifetch ``HttpFetcher`` via ``validate_fetch_url``).
+This module never opens sockets itself and never fetches URLs directly.
+``digifetch``/``url_ingest`` are imported lazily so importing this module
+never requires the extra.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any, Mapping, Protocol
@@ -79,6 +81,15 @@ class StaleDatasetError(RuntimeError):
     """The upstream manifest flags this dataset ``stale`` — ingest refused."""
 
 
+class TrackersFetchError(RuntimeError):
+    """Fetch/validation/shape failure for the trackers feed.
+
+    Raised for unreachable manifests, unvalidated URLs, non-JSON bodies, and
+    row-list shape violations — never for a genuine ``stale: true`` flag
+    (that stays :class:`StaleDatasetError`).
+    """
+
+
 class TrackersIngestResult(BaseModel):
     """Outcome of one congress-trades ingest run."""
 
@@ -89,44 +100,53 @@ class TrackersIngestResult(BaseModel):
     source: str = TRACKERS_ORIGIN
 
 
-class _FetchResultLike(Protocol):
-    """Minimal digifetch ``FetchResult`` surface this module needs."""
-
-    text: str
-
-
 class _FetcherLike(Protocol):
-    """Minimal digifetch ``HttpFetcher`` surface this module needs."""
+    """Minimal fetch surface this module needs (duck-typed onto HttpFetcher)."""
 
-    def fetch(self, url: str) -> _FetchResultLike:
-        """GET *url* and return the decoded body."""
+    def fetch(self, url: str) -> Any:
+        """GET *url* and return the decoded body (``.text`` is all we read)."""
         ...
 
 
-def _default_fetcher(allowed_hosts: tuple[str, ...]) -> Any:
-    """Build the owned digifetch client (lazy import — optional extra)."""
-    from digifetch import HttpFetcher
+def _fetch_feed_json(
+    url: str,
+    fetcher: _FetcherLike | None,
+    allowed_hosts: tuple[str, ...],
+) -> Any:
+    """Fetch + JSON-decode via ``pipeline.url_ingest`` (the only fetch site).
 
-    return HttpFetcher(timeout=15.0, allowed_hosts=allowed_hosts)
-
-
-def _checked_url(url: str, allowed_hosts: tuple[str, ...]) -> str:
-    """SSRF-guard *url* (fail-closed), returning it unchanged on success."""
-    from digifetch.ssrf import SsrfBlockedError, validate_fetch_url
+    Maps :class:`UrlFetchError` onto :class:`TrackersFetchError` so callers
+    can distinguish transport problems from a genuine stale flag.
+    """
+    from digisearch.pipeline.url_ingest import UrlFetchError, fetch_json_feed
 
     try:
-        return validate_fetch_url(url, allowed_hosts=allowed_hosts)
-    except (SsrfBlockedError, ValueError) as exc:
-        raise StaleDatasetError(f"refusing unvalidated trackers URL {url!r}: {exc}") from exc
+        return fetch_json_feed(url, fetcher=fetcher, allowed_hosts=allowed_hosts)
+    except UrlFetchError as exc:
+        raise TrackersFetchError(f"trackers fetch failed for {url!r}: {exc}") from exc
 
 
-def _fetch_json(fetcher: _FetcherLike, url: str) -> Any:
-    """GET *url* via *fetcher* and decode the JSON body."""
-    result = fetcher.fetch(url)
-    try:
-        return json.loads(result.text)
-    except (ValueError, TypeError) as exc:
-        raise StaleDatasetError(f"trackers feed at {url!r} is not valid JSON: {exc}") from exc
+def _manifest_dataset_entry(manifest: Any) -> Mapping[str, Any] | None:
+    """congress-trades entry of the manifest ``datasets`` section, any shape.
+
+    Returns ``None`` when the manifest has no entry for this dataset, so a
+    manifest reshape degrades to warn-and-proceed rather than blocking ingest
+    or passing a stale flag silently.
+    """
+    datasets: Any = None
+    if isinstance(manifest, Mapping):
+        datasets = manifest.get("datasets")
+    if isinstance(datasets, Mapping):
+        entry = datasets.get(CONGRESS_TRADES_DATASET)
+        return entry if isinstance(entry, Mapping) else None
+    if isinstance(datasets, list):
+        for entry in datasets:
+            if not isinstance(entry, Mapping):
+                continue
+            name = entry.get("name") or entry.get("id") or entry.get("dataset")
+            if name == CONGRESS_TRADES_DATASET:
+                return entry
+    return None
 
 
 def _manifest_dataset_stale(manifest: Any) -> bool | None:
@@ -136,40 +156,36 @@ def _manifest_dataset_stale(manifest: Any) -> bool | None:
     degrades to ``None`` — warn-and-proceed — for anything else, so a manifest
     reshape never silently blocks ingest nor silently passes a stale flag.
     """
-    datasets: Any = None
-    if isinstance(manifest, Mapping):
-        datasets = manifest.get("datasets")
-    if isinstance(datasets, Mapping):
-        entry = datasets.get(CONGRESS_TRADES_DATASET)
-        if isinstance(entry, Mapping) and "stale" in entry:
-            return bool(entry.get("stale"))
-        return None
-    if isinstance(datasets, list):
-        for entry in datasets:
-            if not isinstance(entry, Mapping):
-                continue
-            name = entry.get("name") or entry.get("id") or entry.get("dataset")
-            if name == CONGRESS_TRADES_DATASET and "stale" in entry:
-                return bool(entry.get("stale"))
-        return None
+    entry = _manifest_dataset_entry(manifest)
+    if entry is not None and "stale" in entry:
+        return bool(entry.get("stale"))
     return None
+
+
+def _manifest_expected_rows(manifest: Any) -> int | None:
+    """Manifest-declared row count for congress-trades, or ``None`` unknown."""
+    entry = _manifest_dataset_entry(manifest)
+    rows = entry.get("rows") if entry is not None else None
+    if isinstance(rows, bool) or not isinstance(rows, int) or rows < 0:
+        return None
+    return rows
 
 
 def check_manifest_not_stale(
     fetcher: _FetcherLike | None = None,
     *,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
-) -> None:
+) -> Any | None:
     """Refuse congress-trades ingest when the manifest flags it ``stale``.
 
     A missing/unreachable/unparseable manifest warns and proceeds (advisory
     signal); an explicit ``stale: true`` raises :class:`StaleDatasetError`.
+    Returns the parsed manifest (``None`` when unreadable) so callers can
+    reuse it — e.g. the row-count check — without a second fetch.
     """
-    active = fetcher if fetcher is not None else _default_fetcher(allowed_hosts)
-    url = _checked_url(TRACKERS_MANIFEST_URL, allowed_hosts)
     try:
-        manifest = _fetch_json(active, url)
-    except Exception as exc:
+        manifest = _fetch_feed_json(TRACKERS_MANIFEST_URL, fetcher, allowed_hosts)
+    except TrackersFetchError as exc:
         logger.warning(
             "trackers manifest unreadable — proceeding without freshness check",
             extra={
@@ -178,17 +194,19 @@ def check_manifest_not_stale(
                 "error": str(exc),
             },
         )
-        return
+        return None
     stale = _manifest_dataset_stale(manifest)
     if stale is True:
         raise StaleDatasetError(
-            f"dataset {CONGRESS_TRADES_DATASET!r} flagged stale in {url} — ingest refused"
+            f"dataset {CONGRESS_TRADES_DATASET!r} flagged stale in"
+            f" {TRACKERS_MANIFEST_URL} — ingest refused"
         )
     if stale is None:
         logger.warning(
             "trackers manifest has no freshness entry for congress-trades — proceeding",
             extra={"operation": "check_manifest_not_stale", "outcome": "degraded"},
         )
+    return manifest
 
 
 def fetch_congress_trades_latest(
@@ -199,12 +217,11 @@ def fetch_congress_trades_latest(
     """GET the congress-trades snapshot and return raw row dicts.
 
     Accepts the verified bare-array shape; also unwraps common ``{"trades" /
-    "rows" / "data": [...]}`` envelopes. Raises :class:`StaleDatasetError`
+    "rows" / "data": [...]}`` envelopes. Raises :class:`TrackersFetchError`
     when the body is not a row list.
     """
-    active = fetcher if fetcher is not None else _default_fetcher(allowed_hosts)
-    url = _checked_url(CONGRESS_TRADES_URL, allowed_hosts)
-    payload = _fetch_json(active, url)
+    payload = _fetch_feed_json(CONGRESS_TRADES_URL, fetcher, allowed_hosts)
+    url = CONGRESS_TRADES_URL
     if isinstance(payload, list):
         rows: list[Any] = payload
     elif isinstance(payload, Mapping):
@@ -214,11 +231,11 @@ def fetch_congress_trades_latest(
                 rows = list(payload[key])
                 break
         else:
-            raise StaleDatasetError(
+            raise TrackersFetchError(
                 f"trackers feed at {url!r} has no row list (keys: {sorted(payload)})"
             )
     else:
-        raise StaleDatasetError(
+        raise TrackersFetchError(
             f"trackers feed at {url!r} returned {type(payload).__name__}, not a row list"
         )
     out: list[dict[str, Any]] = []
@@ -406,12 +423,26 @@ def ingest_congress_trades(
     """Fetch → normalize → index the congress-trades snapshot (entry point).
 
     Checks the manifest freshness flag first (refuses on ``stale: true``),
-    then ingests each row. Rows without a natural key are counted as skipped
-    (logged, never silent); already-indexed rows are skipped idempotently.
+    then ingests each row. Warns when the served row count differs from the
+    manifest-declared count. Rows without a natural key are counted as
+    skipped (logged, never silent); already-indexed rows are skipped
+    idempotently.
     """
-    active = fetcher if fetcher is not None else _default_fetcher(allowed_hosts)
-    check_manifest_not_stale(active, allowed_hosts=allowed_hosts)
-    rows = fetch_congress_trades_latest(active, allowed_hosts=allowed_hosts)
+    manifest = check_manifest_not_stale(fetcher, allowed_hosts=allowed_hosts)
+    rows = fetch_congress_trades_latest(fetcher, allowed_hosts=allowed_hosts)
+    expected = _manifest_expected_rows(manifest)
+    if expected is not None and expected != len(rows):
+        logger.warning(
+            "trackers feed served %d rows, manifest declares %d — proceeding",
+            len(rows),
+            expected,
+            extra={
+                "operation": "ingest_congress_trades",
+                "outcome": "degraded",
+                "served_rows": len(rows),
+                "manifest_rows": expected,
+            },
+        )
     target_index = (index_name or TRACKERS_INDEX_NAME).strip() or TRACKERS_INDEX_NAME
 
     ingested = 0
@@ -452,6 +483,7 @@ __all__ = [
     "TRACKERS_MANIFEST_URL",
     "TRACKERS_ORIGIN",
     "StaleDatasetError",
+    "TrackersFetchError",
     "TrackersIngestResult",
     "check_manifest_not_stale",
     "fetch_congress_trades_latest",
