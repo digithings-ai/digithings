@@ -15,7 +15,7 @@ description: Run forex and currency analysis as part of the daily digest. Covers
   values; **never invent a number** — every quantitative claim must cite a value you fetched.
   If a call returns no rows for a symbol, say so and lower conviction. Market history is not
   readable through `query_research` (#3780) — never use it to fetch prices or technicals.
-- Also **`get_macro_series`** for `DTWEXBGS` (broad USD index) to anchor the dollar view.
+- **`get_macro_series`** for `DGS10` / `DGS2` (rate differentials) to ground the dollar view.
 
 ## Inputs
 - `config/watchlist.md` — repository provenance for a maintainer (forex section); NOT retrievable by a tool.
@@ -25,7 +25,7 @@ description: Run forex and currency analysis as part of the daily digest. Covers
 
 ## Data Layer
 
-> DB-first: read DXY and FX levels from published `daily_snapshots.market_data` / `documents.payload` (web for fresh intraday). Anchor the dollar view with `get_macro_series` (`DTWEXBGS`, and `DGS10` / `DGS2` for rate differentials). The per-pair Yahoo feed (`EURUSD=X` → `FX/EUR`, `GBPUSD=X` → `FX/GBP`, `JPY=X` → `FX/JPY`, `CAD=X` → `FX/CAD`; directions `USD_per_EUR`, `USD_per_GBP`, `JPY_per_USD`, `CAD_per_USD`) is not part of the injected `market_context` macro block — read the pairs from the snapshot payload; market history is not readable through `query_research` (#3780).
+> DB-first: read DXY and FX levels from published `daily_snapshots.market_data` / `documents.payload` (web for fresh intraday). Anchor the dollar view on the Yahoo FX pairs plus `get_macro_series` (`DGS10` / `DGS2` for rate differentials) — `DTWEXBGS` is not on the gloomberb macro panel, so do not call `get_macro_series` for it. The per-pair Yahoo feed (`EURUSD=X` → `FX/EUR`, `GBPUSD=X` → `FX/GBP`, `JPY=X` → `FX/JPY`, `CAD=X` → `FX/CAD`; directions `USD_per_EUR`, `USD_per_GBP`, `JPY_per_USD`, `CAD_per_USD`) is not part of the injected `market_context` macro block — read the pairs from the snapshot payload; market history is not readable through `query_research` (#3780).
 
 For live or intraday rates that have not yet been snapshotted, query the same Yahoo Finance symbols directly (`EURUSD=X`, `GBPUSD=X`, `JPY=X`, `CAD=X`) — the underlying provider for the daily feed.
 

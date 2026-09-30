@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from digiquant.models import BacktestResult
+from digiquant.stats.honesty import DISCLAIMER, format_honest_rate, wilson
 
 
 def _build_page(
@@ -42,11 +43,35 @@ def _build_page(
     risk_metrics_html: str = "",
     categorized_stats_html: str = "",
     logo_data_url: str = "",
+    win_rate_wins: int | None = None,
 ) -> str:
     md_val = result.max_drawdown_pct
     md = f"{md_val:.1f}%" if md_val is not None else "—"
     sharpe_str = f"{result.sharpe_ratio:.2f}" if result.sharpe_ratio is not None else "—"
-    win_rate_str = f"{win_rate * 100:.1f}%" if win_rate is not None else "—"
+    n_trades = result.num_trades
+    if win_rate is None:
+        win_rate_str = "—"
+        win_rate_cls = ""
+    else:
+        # Nautilus emits Win Rate as a fraction; tolerate percent-scale callers.
+        wr = win_rate / 100.0 if win_rate > 1 else win_rate
+        wr = max(0.0, min(1.0, wr))
+        if win_rate_wins is None:
+            k_wins = min(n_trades, max(0, round(wr * n_trades)))
+        else:
+            k_wins = min(n_trades, max(0, win_rate_wins))
+        win_rate_str = format_honest_rate(k_wins, n_trades)
+        w = wilson(k_wins, n_trades)
+        lo = w.lo if w is not None else None
+        # Thresholds act on the CI lower bound, never the point estimate.
+        if lo is None:
+            win_rate_cls = ""
+        elif lo > 0.5:
+            win_rate_cls = "positive"
+        elif lo < 0.4:
+            win_rate_cls = "negative"
+        else:
+            win_rate_cls = ""
     pf_str = f"{profit_factor:.2f}" if profit_factor is not None else "—"
     sortino_str = f"{sortino:.2f}" if sortino is not None else "—"
     calmar_str = f"{calmar:.2f}" if calmar is not None else "—"
@@ -67,15 +92,7 @@ def _build_page(
         )
         + kpi("SORTINO", sortino_str, "positive" if sortino and sortino > 1 else "")
         + kpi("MAX DRAWDOWN", md, md_cls)
-        + kpi(
-            "WIN RATE",
-            win_rate_str,
-            "positive"
-            if win_rate and win_rate > 0.5
-            else "negative"
-            if win_rate and win_rate < 0.4
-            else "",
-        )
+        + kpi("WIN RATE", win_rate_str, win_rate_cls)
         + kpi(
             "PROFIT FACTOR",
             pf_str,
@@ -297,6 +314,11 @@ def _build_page(
     .chart-unavailable-title {{ color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 0.5rem; }}
     .chart-unavailable-detail {{ color: #64748b; font-size: 0.8rem; margin: 0; }}
     /* ── Footer ──────────────────────────────────────────── */
+    .disclaimer {{
+      margin-top: 2rem; padding: 0.75rem 1rem; text-align: center;
+      font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted);
+      background: var(--card); border: 1px solid var(--border2); border-radius: 8px;
+    }}
     .footer {{
       margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border2);
       font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);
@@ -397,6 +419,8 @@ def _build_page(
   <div class="tab-content" id="price">
     <div class="chart-wrap h-xl"><div class="chart-wrap-title">Price + Bollinger Bands + Entries &amp; Exits</div>{price_tab}</div>
   </div>
+
+  <div class="disclaimer">{DISCLAIMER}</div>
 
   <div class="footer">
     <span>digiquant Backtest Report — Generated from NautilusTrader</span>

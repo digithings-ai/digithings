@@ -218,7 +218,7 @@ Configured in `.vscode/mcp.json` (VS Code Copilot) and `~/Library/Application Su
 | Macro (3) | `CPIAUCSL`, `PCEPI`, `UNRATE`, `GDP`, `GDPC1` | CPI, PCE, unemployment, GDP |
 | Bonds (4A) | `T10YIE`, `T5YIE`, `DFII10` | 10Y/5Y TIPS breakeven, 10Y real yield |
 | Bonds (4A) | `BAMLH0A0HYM2`, `BAMLC0A0CM` | HY OAS, IG OAS credit spreads |
-| Macro (3) | `VIXCLS`, `DTWEXBGS` | VIX close, broad USD trade-weighted index |
+| Macro (3) | `VIXCLS` | VIX close |
 
 ### Key CoinGecko Queries
 

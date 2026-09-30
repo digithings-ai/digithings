@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -84,6 +85,10 @@ from .models import (
     OptionsChainEnvelope,
     OptionsChainInput,
     OptionsChainResult,
+    PredictionMarketRow,
+    PredictionMarketsEnvelope,
+    PredictionMarketsInput,
+    PredictionMarketsResult,
     PriceHistoryEnvelope,
     PriceHistoryInput,
     PriceHistoryMetadata,
@@ -248,6 +253,203 @@ ENDPOINTS: dict[str, str] = {
     # coverage expansion (#4110 phase 4a)
     "saved_searches": "/cloud/search/saved",
 }
+
+# Prediction-markets venue catalog (#4813). No Gloomberb Cloud route exists
+# for prediction markets, so the catalog reads the public venue APIs directly
+# (the same hosts the gloom prediction-markets plugin reads client-side).
+# Both are anonymous, unauthenticated, unofficial: shapes are parsed
+# defensively and each venue fails soft into the result warnings.
+POLYMARKET_GAMMA_BASE_URL = "https://gamma-api.polymarket.com"
+POLYMARKET_EVENTS_PATH = "/events"
+POLYMARKET_EVENT_URL = "https://polymarket.com/event/{slug}"
+KALSHI_TRADE_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
+KALSHI_EVENTS_PATH = "/events"
+KALSHI_MARKET_URL = "https://kalshi.com/markets/{ticker}"
+
+# Venue honesty: result-level attribution for venue-sourced rows. This names
+# the venues, never Gloomberb Cloud (there is no term.gloom.sh page for
+# venue rows), and carries the polling notice the plugin documents.
+PREDICTION_MARKETS_ATTRIBUTION = (
+    "Prediction-markets catalog sourced directly from the venues' public APIs "
+    "(Polymarket Gamma, Kalshi trade API). Anonymous, polled reads: quotes may "
+    "lag the venue order book. Enrichment only, never a pipeline primary."
+)
+
+
+def _venue_float(value: Any) -> float | None:
+    """Coerce a loose venue number (numeric string, int, float) to float."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        text = value.strip().rstrip("%").strip()
+        if not text:
+            return None
+        try:
+            value = float(text)
+        except ValueError:
+            return None
+    if not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _polymarket_yes_prob(market: Mapping[str, Any]) -> float | None:
+    """Yes probability from a Gamma market's JSON-encoded outcome arrays."""
+    outcomes = market.get("outcomes")
+    prices = market.get("outcomePrices")
+    if isinstance(outcomes, str):
+        try:
+            outcomes = json.loads(outcomes)
+        except (json.JSONDecodeError, ValueError):
+            outcomes = None
+    if isinstance(prices, str):
+        try:
+            prices = json.loads(prices)
+        except (json.JSONDecodeError, ValueError):
+            prices = None
+    if not isinstance(outcomes, list) or not isinstance(prices, list):
+        return None
+    names = [str(name).lower() for name in outcomes]
+    index = names.index("yes") if "yes" in names else 0
+    if index >= len(prices):
+        return None
+    prob = _venue_float(prices[index])
+    return prob if prob is not None and 0.0 <= prob <= 1.0 else None
+
+
+def _polymarket_tags(event: Mapping[str, Any]) -> str | None:
+    """First Gamma tag label (``[{"label": "Macro"}]`` or plain strings)."""
+    tags = event.get("tags")
+    if not isinstance(tags, list):
+        return None
+    for tag in tags:
+        if isinstance(tag, Mapping) and isinstance(tag.get("label"), str):
+            return tag["label"]
+        if isinstance(tag, str) and tag.strip():
+            return tag.strip()
+    return None
+
+
+def _polymarket_rows(events: Any) -> list[PredictionMarketRow]:
+    """Normalize a Gamma ``/events`` array to catalog rows (bad entries skipped)."""
+    rows: list[PredictionMarketRow] = []
+    if not isinstance(events, list):
+        return rows
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        slug = event.get("slug")
+        venue_url = POLYMARKET_EVENT_URL.format(slug=slug) if isinstance(slug, str) else ""
+        markets = event.get("markets")
+        if not isinstance(markets, list):
+            continue
+        for market in markets:
+            if not isinstance(market, Mapping):
+                continue
+            title = market.get("question") or event.get("title")
+            if not isinstance(title, str) or not title.strip():
+                continue
+            end_date = market.get("endDate")
+            rows.append(
+                PredictionMarketRow(
+                    venue="polymarket",
+                    title=title.strip(),
+                    yes_prob=_polymarket_yes_prob(market),
+                    spread=None,
+                    volume_24h=_venue_float(market.get("volume24hr") or market.get("volume")),
+                    liquidity=_venue_float(market.get("liquidity")),
+                    open_interest=None,
+                    ends_at=end_date if isinstance(end_date, str) else None,
+                    status="open" if market.get("closed") is False else None,
+                    category=_polymarket_tags(event),
+                    venue_url=venue_url,
+                )
+            )
+    return rows
+
+
+def _kalshi_price(value: Any, cents: bool) -> float | None:
+    """Kalshi price in probability units (dollar-or-cent wire values)."""
+    prob = _venue_float(value)
+    if prob is None:
+        return None
+    return prob / 100.0 if cents else prob
+
+
+def _kalshi_rows(payload: Any) -> list[PredictionMarketRow]:
+    """Normalize a Kalshi ``/events`` payload to catalog rows (bad entries skipped)."""
+    rows: list[PredictionMarketRow] = []
+    events = payload.get("events") if isinstance(payload, Mapping) else None
+    if not isinstance(events, list):
+        return rows
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        event_title = event.get("title")
+        category = event.get("category")
+        markets = event.get("markets")
+        if not isinstance(markets, list):
+            continue
+        for market in markets:
+            if not isinstance(market, Mapping):
+                continue
+            title = market.get("title") or event_title
+            if not isinstance(title, str) or not title.strip():
+                continue
+            raw_bid = _venue_float(market.get("yes_bid"))
+            raw_ask = _venue_float(market.get("yes_ask"))
+            raw_last = _venue_float(market.get("last_price"))
+            # Dollar-or-cent wire values: anything above 1 is cents.
+            candidates = [v for v in (raw_bid, raw_ask, raw_last) if v is not None]
+            cents = bool(candidates) and max(candidates) > 1.0
+            bid = _kalshi_price(raw_bid, cents)
+            ask = _kalshi_price(raw_ask, cents)
+            ticker = market.get("ticker")
+            close_time = market.get("close_time")
+            rows.append(
+                PredictionMarketRow(
+                    venue="kalshi",
+                    title=title.strip(),
+                    yes_prob=_kalshi_price(raw_last, cents),
+                    spread=(ask - bid)
+                    if bid is not None and ask is not None and ask >= bid
+                    else None,
+                    volume_24h=_venue_float(market.get("volume")),
+                    liquidity=None,
+                    open_interest=_venue_float(market.get("open_interest")),
+                    ends_at=close_time if isinstance(close_time, str) else None,
+                    status=market.get("status") if isinstance(market.get("status"), str) else None,
+                    category=category if isinstance(category, str) else None,
+                    venue_url=KALSHI_MARKET_URL.format(ticker=ticker)
+                    if isinstance(ticker, str)
+                    else "",
+                )
+            )
+    return rows
+
+
+def _filter_prediction_markets(
+    rows: list[PredictionMarketRow],
+    *,
+    query: str | None,
+    category: str | None,
+    tab: str,
+    limit: int,
+) -> list[PredictionMarketRow]:
+    """Client-side catalog filter/sort/slice (venue search params are unprobed)."""
+    if query:
+        needle = query.lower()
+        rows = [row for row in rows if needle in row.title.lower()]
+    if category:
+        needle = category.lower()
+        rows = [row for row in rows if row.category is not None and needle in row.category.lower()]
+    if tab == "ending_soon":
+        rows = sorted(rows, key=lambda row: (row.ends_at is None, row.ends_at or ""))
+    elif tab == "top":
+        rows = sorted(rows, key=lambda row: (row.volume_24h is None, -(row.volume_24h or 0.0)))
+    return rows[:limit]
+
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
@@ -2033,6 +2235,118 @@ class GloomberbClient:
 
         return self._cached("equity_diagnostic", parsed, produce, should_cache=_cacheable)
 
+    # -- prediction-markets venue catalog (#4813) ----------------------------
+
+    def prediction_markets(
+        self, request: PredictionMarketsInput | Mapping[str, Any] | None = None
+    ) -> PredictionMarketsEnvelope:
+        """Prediction-markets catalog (anonymous direct-to-venue reads).
+
+        No Gloomberb Cloud route exists for prediction markets, so the client
+        calls the Polymarket Gamma and Kalshi trade APIs directly through the
+        shared digifetch transport (pacing, retry, breaker, SSRF guard) and
+        normalizes the catalog rows. Only ``limit`` (plus Kalshi's ``open``
+        status) is sent upstream — the Gamma/Kalshi search, category, and tab
+        parameters are unprobed, so ``query`` / ``category`` / ``tab`` filter
+        client-side. Each venue fails soft into the result ``warnings``; when
+        every requested venue fails the envelope carries a typed
+        ``upstream_error``.
+        """
+        parsed = self._validate_input(PredictionMarketsInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PredictionMarketsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PredictionMarketsEnvelope)
+
+        def produce() -> PredictionMarketsEnvelope:
+            rows: list[PredictionMarketRow] = []
+            warnings: list[str] = []
+            errors: list[DigifetchError] = []
+            if parsed.venue in ("all", "polymarket"):
+                poly_rows, poly_error = self._fetch_polymarket_catalog(parsed.limit)
+                rows.extend(poly_rows)
+                if poly_error is not None:
+                    warnings.append(f"Polymarket catalog unavailable: {poly_error.message}")
+                    errors.append(poly_error)
+            if parsed.venue in ("all", "kalshi"):
+                kal_rows, kal_error = self._fetch_kalshi_catalog(parsed.limit)
+                rows.extend(kal_rows)
+                if kal_error is not None:
+                    warnings.append(f"Kalshi catalog unavailable: {kal_error.message}")
+                    errors.append(kal_error)
+            wanted = 2 if parsed.venue == "all" else 1
+            if not rows and len(errors) == wanted:
+                return self._error_envelope(
+                    PredictionMarketsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"Prediction-markets catalog unavailable ({'; '.join(warnings)})",
+                        retryable=any(error.retryable for error in errors),
+                    ),
+                )
+            rows = _filter_prediction_markets(
+                rows,
+                query=parsed.query,
+                category=parsed.category,
+                tab=parsed.tab,
+                limit=parsed.limit,
+            )
+            return PredictionMarketsEnvelope(
+                data=PredictionMarketsResult(
+                    markets=rows,
+                    attribution=PREDICTION_MARKETS_ATTRIBUTION,
+                    warnings=warnings,
+                ),
+                fetched_at=self._now(),
+                provider_id="prediction-markets-venues",
+                warnings=warnings,
+            )
+
+        return self._cached("prediction_markets", parsed, produce)
+
+    def _fetch_polymarket_catalog(
+        self, limit: int
+    ) -> tuple[list[PredictionMarketRow], DigifetchError | None]:
+        raw = self._request_json(
+            "GET",
+            POLYMARKET_EVENTS_PATH,
+            params={"closed": "false", "limit": str(limit)},
+            allow_array=True,
+            base_url=POLYMARKET_GAMMA_BASE_URL,
+            label="Polymarket",
+        )
+        if isinstance(raw, DigifetchError):
+            return [], raw
+        try:
+            return _polymarket_rows(raw.data), None
+        except (ValidationError, ValueError, TypeError) as exc:
+            return [], DigifetchError(
+                code="upstream_error",
+                message=f"unexpected Polymarket payload shape: {exc}",
+                retryable=False,
+            )
+
+    def _fetch_kalshi_catalog(
+        self, limit: int
+    ) -> tuple[list[PredictionMarketRow], DigifetchError | None]:
+        raw = self._request_json(
+            "GET",
+            KALSHI_EVENTS_PATH,
+            params={"limit": str(limit), "status": "open"},
+            base_url=KALSHI_TRADE_BASE_URL,
+            label="Kalshi",
+        )
+        if isinstance(raw, DigifetchError):
+            return [], raw
+        try:
+            return _kalshi_rows(raw.data), None
+        except (ValidationError, ValueError, TypeError) as exc:
+            return [], DigifetchError(
+                code="upstream_error",
+                message=f"unexpected Kalshi payload shape: {exc}",
+                retryable=False,
+            )
+
     # -- internals ---------------------------------------------------------
 
     def _validate_input(
@@ -2206,27 +2520,37 @@ class GloomberbClient:
         # same fallback the TS client uses when it has not observed a name.
         return {name: raw for name in SESSION_COOKIE_NAMES}
 
-    def _map_http_error(self, exc: httpx.HTTPStatusError) -> DigifetchError:
+    def _map_http_error(
+        self, exc: httpx.HTTPStatusError, *, label: str = "Gloomberb"
+    ) -> DigifetchError:
         status = exc.response.status_code
+        if label != "Gloomberb" and status in (401, 402, 403):
+            # Anonymous venue reads carry no session: a gate here is an
+            # upstream change, not missing auth — never name the session env.
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} returned HTTP {status} on an anonymous read",
+                retryable=False,
+            )
         if status == 402:
             # Payment required: a plan gate, not a malformed request. Kept
             # non-retryable and distinct from the generic 4xx mapping.
             return DigifetchError(
                 code="auth_required",
-                message="Gloomberb returned HTTP 402 (payment required); this endpoint "
+                message=f"{label} returned HTTP 402 (payment required); this endpoint "
                 "needs a paid plan or a valid session",
                 retryable=False,
             )
         if status in (401, 403):
             return DigifetchError(
                 code="auth_required",
-                message=f"Gloomberb returned HTTP {status}; this endpoint needs "
+                message=f"{label} returned HTTP {status}; this endpoint needs "
                 f"{GLOOMBERB_SESSION_COOKIE_ENV}",
                 retryable=False,
             )
         if status == 404:
             return DigifetchError(
-                code="not_found", message="Gloomberb returned HTTP 404", retryable=False
+                code="not_found", message=f"{label} returned HTTP 404", retryable=False
             )
         if status == 429:
             retry_after = _parse_retry_after(exc.response.headers.get("retry-after"))
@@ -2242,16 +2566,16 @@ class GloomberbClient:
                     note = "; over the bounded wait, not slept"
             return DigifetchError(
                 code="rate_limited",
-                message=f"Gloomberb rate limit reached (HTTP 429){suffix}{note}",
+                message=f"{label} rate limit reached (HTTP 429){suffix}{note}",
                 retryable=False,
             )
         if status >= 500:
             return DigifetchError(
-                code="upstream_error", message=f"Gloomberb returned HTTP {status}", retryable=True
+                code="upstream_error", message=f"{label} returned HTTP {status}", retryable=True
             )
         return DigifetchError(
             code="invalid_input",
-            message=f"Gloomberb rejected the request with HTTP {status}",
+            message=f"{label} rejected the request with HTTP {status}",
             retryable=False,
         )
 
@@ -2291,6 +2615,8 @@ class GloomberbClient:
         pro_gated: bool = False,
         direct_payload: bool = False,
         retry_policy: RetryPolicy | None = None,
+        base_url: str | None = None,
+        label: str = "Gloomberb",
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -2308,7 +2634,7 @@ class GloomberbClient:
         breaker = self._breaker_error()
         if breaker is not None:
             return breaker
-        url = f"{self._base_url}{path}"
+        url = f"{base_url or self._base_url}{path}"
         cookies = self._session_cookies() if gated else None
 
         def attempt() -> FetchResult:
@@ -2333,7 +2659,7 @@ class GloomberbClient:
             result = with_retry(
                 attempt,
                 retry_policy or self._retry_policy,
-                description=f"gloomberb {method} {path}",
+                description=f"{label.lower()} {method} {path}",
             )
         except _ProxyStatusError as exc:
             # A proxied upstream 4xx is deterministic (bad input), so it is not
@@ -2350,7 +2676,7 @@ class GloomberbClient:
             plan_error = _plan_required_error(exc.response.text) if pro_gated else None
             if plan_error is not None:
                 return plan_error
-            error = self._map_http_error(exc)
+            error = self._map_http_error(exc, label=label)
             # Only upstream-health failures trip the breaker: a 401/404 (or any
             # other deterministic 4xx) is a caller/auth outcome, not service
             # degradation. A 429 counts (upstream overload).
@@ -2361,14 +2687,14 @@ class GloomberbClient:
             self._record_failure()
             return DigifetchError(
                 code="upstream_error",
-                message=f"Gloomberb request failed: {exc}",
+                message=f"{label} request failed: {exc}",
                 retryable=True,
             )
         except SsrfBlockedError as exc:
             # Deterministic URL refusal; do not open the breaker on it.
             return DigifetchError(
                 code="upstream_error",
-                message=f"Gloomberb request blocked by the SSRF guard: {exc}",
+                message=f"{label} request blocked by the SSRF guard: {exc}",
                 retryable=False,
             )
         except httpx.HTTPError as exc:
@@ -2377,7 +2703,7 @@ class GloomberbClient:
             self._record_failure()
             return DigifetchError(
                 code="upstream_error",
-                message=f"Gloomberb request failed: {exc}",
+                message=f"{label} request failed: {exc}",
                 retryable=False,
             )
         try:
@@ -2389,7 +2715,7 @@ class GloomberbClient:
             self._record_failure()
             return DigifetchError(
                 code="upstream_error",
-                message=f"Gloomberb returned a non-JSON body for {path}",
+                message=f"{label} returned a non-JSON body for {path}",
                 retryable=False,
             )
         self._record_success()
@@ -2406,7 +2732,7 @@ class GloomberbClient:
                 )
             return DigifetchError(
                 code="upstream_error",
-                message=f"Gloomberb returned an unexpected non-object payload for {path}",
+                message=f"{label} returned an unexpected non-object payload for {path}",
                 retryable=False,
             )
         if pro_gated:

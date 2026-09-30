@@ -776,6 +776,37 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 }
             return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
+    if tool.startswith("luxalgo_"):
+        # LuxAlgo hosted family (#4779 P0 Library, #4844 edge/trackers): one shared
+        # in-process dispatcher with the MCP + pipeline-agent surfaces, so hub
+        # callers get the same attribution envelope. The family is keyless, so
+        # every declared name is accepted here; the kill switch answers the typed
+        # disabled upstream_error envelope with no request, never a 400.
+        from digiquant.data.luxalgo.agent_tools import (
+            LUXALGO_DISPATCH,
+            build_luxalgo_tool_dispatcher,
+        )
+        from digiquant.data.luxalgo.client import luxalgo_error_message
+
+        if tool in LUXALGO_DISPATCH:
+            # The dispatcher returns {"content": <envelope json>, "ok": bool};
+            # unwrap the content so the hub response shape is unchanged.
+            result = build_luxalgo_tool_dispatcher()(tool, args)
+            payload = json.loads(result["content"] if isinstance(result, dict) else result)
+            error = luxalgo_error_message(payload.get("data"))
+            if error is None and payload.get("error"):
+                # Client-fault path: the dispatcher answers {"error": ...}, not an envelope.
+                error = str(payload["error"])
+            if error is not None:
+                return {
+                    "ok": False,
+                    "service": "digiquant",
+                    "tool": tool,
+                    "error": error,
+                    "data": payload,
+                }
+            return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
