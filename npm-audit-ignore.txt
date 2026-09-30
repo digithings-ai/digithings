@@ -72,3 +72,7 @@ GHSA-r28c-9q8g-f849
 # sharp (next optionalDependency) — high: inherited libvips / libheif CVEs.
 GHSA-f88m-g3jw-g9cj
 GHSA-rgj7-g3m4-5g8c
+
+# undici 7.29.0 (transitive: @ai-sdk/provider-utils in prod digichat server, jsdom + miniflare dev-only) — high: GHSA-rfgv needs undici WebSocket (unused anywhere in-repo), GHSA-w293 needs BalancedPool (unused; sole prod consumer uses plain Agent({connect}) + fetch). Refs #4838. Re-check on undici major bump or any new undici consumer.
+GHSA-rfgv-xxqx-mfg5
+GHSA-w293-vg96-wgc3
