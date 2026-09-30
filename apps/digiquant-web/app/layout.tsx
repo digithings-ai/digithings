@@ -2,7 +2,15 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
-import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/ui";
+import {
+  FooterCells,
+  HashScrollManager,
+  MotionProvider,
+  NavShell,
+  ThemeProvider,
+  themeInitScript,
+} from "@digithings/ui";
+import { Brand, DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
@@ -66,12 +74,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
-        <div className="grain" aria-hidden="true" />
-        <div className="glow" aria-hidden="true" />
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />
+            <NavShell
+              brand={<Brand />}
+              links={DQ_NAV_PRIMARY}
+              homeLabel="digiquant home"
+              skipTo="#main"
+            />
             {children}
+            <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
+
           </ThemeProvider>
         </MotionProvider>
       </body>
