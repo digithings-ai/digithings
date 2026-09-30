@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Classify CI ``needs`` results for the ``required-checks`` aggregator job.
 
-``score`` is an optional rubric (AGENTS.md / docs/scoring) — it still runs and
-can exit non-zero, but must not take down the develop merge gate. Every other
-job in ``ci.yml`` remains blocking on ``failure`` / ``cancelled``.
+Every job in ``ci.yml`` blocks on ``failure`` / ``cancelled``. The former
+``score`` advisory exception left with the score tooling (#4868) — review
+skills are the sole quality gate.
 """
 
 from __future__ import annotations
@@ -12,8 +12,10 @@ import json
 import os
 import sys
 
-# Job ids as listed under ``required-checks.needs`` in ``.github/workflows/ci.yml``.
-ADVISORY_JOBS: frozenset[str] = frozenset({"score"})
+# No advisory exceptions: every job under ``required-checks.needs`` in
+# ``.github/workflows/ci.yml`` blocks the merge gate. (The ``score`` advisory
+# set left with the score tooling in #4868.)
+ADVISORY_JOBS: frozenset[str] = frozenset()
 
 
 def classify_needs(

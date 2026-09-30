@@ -145,11 +145,6 @@ agent_capabilities:
     script: scripts/agents_init.py
     make_target: agents-init
 
-  - id: scorer
-    description: "Optional 4-dimension rubric on staged changes (human/CI; not an agent pre-flight)"
-    script: scripts/score.py
-    make_target: score
-
   - id: clean-imports
     description: "Remove unused Python imports with ruff (dry-run by default)"
     script: scripts/clean_imports.py
@@ -217,8 +212,6 @@ claude_code_surface:
       path: .claude/commands/normalize.md
     - name: /spec
       path: .claude/commands/spec.md
-    - name: /score
-      path: .claude/commands/score.md
     - name: /task
       path: .claude/commands/task.md
     - name: /opsx-propose

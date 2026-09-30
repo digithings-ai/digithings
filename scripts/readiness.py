@@ -3,8 +3,8 @@
 
 Prints eight metric rows (value + band) measuring how agentic-ready the repo
 is right now. Advisory ONLY: always exits 0, never a gate, never a pre-flight,
-never auto-merged. If you are looking for the 4-dimension PR rubric, that is
-scripts/score.py — a different tool measuring diffs, not the repo.
+never auto-merged. The 4-dimension PR rubric (`scripts/score.py`) was removed
+in #4868 — review skills are the sole quality gate.
 
 Usage:
     python3 scripts/readiness.py            # console table

@@ -1,7 +1,7 @@
-"""Unit tests for scripts/ci_required_checks_aggregate.py (#3528).
+"""Unit tests for scripts/ci_required_checks_aggregate.py.
 
-Pins that optional ``score`` failures stay advisory while real component
-failures still block ``Required checks passed``.
+Pins that every ``required-checks`` dependency blocks the develop merge gate.
+The former ``score`` advisory exception left with the score tooling (#4868).
 """
 
 from __future__ import annotations
@@ -32,30 +32,29 @@ def _load() -> Any:
 agg = _load()
 
 
-def test_score_is_listed_as_advisory() -> None:
-    assert "score" in agg.ADVISORY_JOBS
+def test_no_advisory_jobs_remain() -> None:
+    assert agg.ADVISORY_JOBS == frozenset()
 
 
-def test_score_failure_alone_is_advisory_not_blocking() -> None:
+def test_any_failure_blocks() -> None:
     results = {
         "changes": {"result": "success"},
-        "digigraph": {"result": "success"},
-        "score": {"result": "failure"},
+        "digigraph": {"result": "failure"},
         "ruff-and-scripts": {"result": "skipped"},
     }
     blocking, advisory = agg.classify_needs(results)
-    assert blocking == {}
-    assert advisory == {"score": "failure"}
+    assert blocking == {"digigraph": "failure"}
+    assert advisory == {}
 
 
 def test_component_failure_still_blocks() -> None:
     results = {
         "digigraph": {"result": "failure"},
-        "score": {"result": "failure"},
+        "ruff-and-scripts": {"result": "success"},
     }
     blocking, advisory = agg.classify_needs(results)
     assert blocking == {"digigraph": "failure"}
-    assert advisory == {"score": "failure"}
+    assert advisory == {}
 
 
 def test_cancelled_is_blocking_for_non_advisory() -> None:
@@ -65,17 +64,16 @@ def test_cancelled_is_blocking_for_non_advisory() -> None:
     assert advisory == {}
 
 
-def test_main_exits_zero_when_only_score_failed(
+def test_main_exits_zero_when_all_pass(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv(
         "RESULTS",
-        json.dumps({"score": {"result": "failure"}, "changes": {"result": "success"}}),
+        json.dumps({"digigraph": {"result": "success"}, "changes": {"result": "success"}}),
     )
     assert agg.main([]) == 0
     out = capsys.readouterr().out
-    assert "Advisory" in out
-    assert "score" in out
+    assert "All required jobs passed" in out
 
 
 def test_main_exits_one_on_blocking_failure(
@@ -83,7 +81,7 @@ def test_main_exits_one_on_blocking_failure(
 ) -> None:
     monkeypatch.setenv(
         "RESULTS",
-        json.dumps({"digibase": {"result": "failure"}, "score": {"result": "success"}}),
+        json.dumps({"digibase": {"result": "failure"}, "changes": {"result": "success"}}),
     )
     assert agg.main([]) == 1
     assert "Failed or cancelled required jobs" in capsys.readouterr().out

@@ -479,11 +479,10 @@ all" would overstate it. `scripts/check_frontend_canon.py` (the unconditional
 `frontend-canon` job) does scan this workspace for raw palette utilities, legacy
 vocabulary and colour literals. What it does *not* scan here is new CSS class
 families: digiweb is exempt from that census by design, because the reference is
-where new families are supposed to be born. `make score` also reaches this
-directory — only `packages/design/` sits in `score.py`'s skip list — but
-`ci.yml`'s `score` path filter excludes `apps/**` and `packages/**` (#1310), so the lane does
-not fire on a frontend-only PR. Note the distinction: the CI *filter* excludes
-`apps/**` and `packages/**`, the *tool* does not.
+where new families are supposed to be born. (The former `make score` lane also
+reached this directory, with only `packages/design/` in its skip list, while its
+CI path filter excluded `apps/**` and `packages/**` (#1310) — both the tool and
+the lane were removed in #4868.)
 
 The suite has no auth, crypto, or live-trading surface, so
 the human-gate items in `CLAUDE.md` do not apply to component work here (a

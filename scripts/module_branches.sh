@@ -138,7 +138,6 @@ $COMMITS
 
 ## Test plan
 - [ ] Module unit tests pass: \`pytest -m unit -k $mod -v\`
-- [ ] Score gate: \`make score\`
 - [ ] End-to-end smoke: \`make test-e2e\` (if stack up)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
