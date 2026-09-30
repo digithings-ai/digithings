@@ -177,8 +177,10 @@ def main() -> None:
                 best = shape
     if best is None:
         raise RuntimeError("no feasible gold shape under call-site gates")
-    print(f"search: {evaluations} evaluations, {feasible_count} feasible, "
-          f"winner worst_vs_flat={best_worst:.2f}% shape={best.model_dump()}")
+    print(
+        f"search: {evaluations} evaluations, {feasible_count} feasible, "
+        f"winner worst_vs_flat={best_worst:.2f}% shape={best.model_dump()}"
+    )
 
     # Gate the winner (develop's shape_from_params drops mid-tier keys —
     # the gate evaluates the single-knee projection; recorded, not hidden).
@@ -209,36 +211,45 @@ def main() -> None:
         }
         for fs in result.fold_scores
     ]
-    print(f"gate: mean_oos_vs_flat={result.mean_oos_vs_flat_dca_pct:+.2f}% "
-          f"beats_flat_dca_oos={result.beats_flat_dca_oos} "
-          f"sensitivity_stable={result.sensitivity.stable} "
-          f"(max_abs_delta={result.sensitivity.max_abs_delta_oos_pct:.2f})")
+    print(
+        f"gate: mean_oos_vs_flat={result.mean_oos_vs_flat_dca_pct:+.2f}% "
+        f"beats_flat_dca_oos={result.beats_flat_dca_oos} "
+        f"sensitivity_stable={result.sensitivity.stable} "
+        f"(max_abs_delta={result.sensitivity.max_abs_delta_oos_pct:.2f})"
+    )
     for f in per_fold:
-        print(f"  fold {f['fold']}: oos_vs_flat={f['oos_vs_flat_dca_pct']:+.2f}% "
-              f"max_dd={f['max_drawdown_pct']:.2f}% feasible={f['feasible']}")
+        print(
+            f"  fold {f['fold']}: oos_vs_flat={f['oos_vs_flat_dca_pct']:+.2f}% "
+            f"max_dd={f['max_drawdown_pct']:.2f}% feasible={f['feasible']}"
+        )
 
-    OUT_PATH.write_text(json.dumps({
-        "weights": weights.model_dump(),
-        "search": {
-            "num_shapes": len(shapes),
-            "num_evaluations": evaluations,
-            "num_feasible": feasible_count,
-            "worst_vs_flat_dca_pct": best_worst,
-            "shape": best.model_dump(),
-        },
-        "gate_projection_drops_mid_tier": mid_dropped,
-        "gated_shape": gated_shape.model_dump(),
-        "gate": {
-            "mean_oos_vs_flat_dca_pct": result.mean_oos_vs_flat_dca_pct,
-            "beats_flat_dca_oos": result.beats_flat_dca_oos,
-            "per_fold": per_fold,
-            "sensitivity_stable": result.sensitivity.stable,
-            "sensitivity_max_abs_delta": result.sensitivity.max_abs_delta_oos_pct,
-            # Develop's SensitivityReport has no worst-neighbor attribution (that is
-            # research-branch-only); neighbor count is the only extra field.
-            "sensitivity_neighbor_count": result.sensitivity.neighbor_count,
-        },
-    }, indent=2))
+    OUT_PATH.write_text(
+        json.dumps(
+            {
+                "weights": weights.model_dump(),
+                "search": {
+                    "num_shapes": len(shapes),
+                    "num_evaluations": evaluations,
+                    "num_feasible": feasible_count,
+                    "worst_vs_flat_dca_pct": best_worst,
+                    "shape": best.model_dump(),
+                },
+                "gate_projection_drops_mid_tier": mid_dropped,
+                "gated_shape": gated_shape.model_dump(),
+                "gate": {
+                    "mean_oos_vs_flat_dca_pct": result.mean_oos_vs_flat_dca_pct,
+                    "beats_flat_dca_oos": result.beats_flat_dca_oos,
+                    "per_fold": per_fold,
+                    "sensitivity_stable": result.sensitivity.stable,
+                    "sensitivity_max_abs_delta": result.sensitivity.max_abs_delta_oos_pct,
+                    # Develop's SensitivityReport has no worst-neighbor attribution (that is
+                    # research-branch-only); neighbor count is the only extra field.
+                    "sensitivity_neighbor_count": result.sensitivity.neighbor_count,
+                },
+            },
+            indent=2,
+        )
+    )
     print(f"wrote {OUT_PATH}")
 
 
