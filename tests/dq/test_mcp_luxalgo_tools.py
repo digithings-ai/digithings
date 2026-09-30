@@ -161,9 +161,10 @@ def test_tools_carry_free_entitlement_and_note() -> None:
 # ── manifest / in-process parity ──────────────────────────────────────────
 
 
-def test_tool_entitlements_declare_all_eight_as_free() -> None:
-    assert set(TOOL_ENTITLEMENTS) == LUXALGO_TOOL_NAMES
-    assert set(TOOL_ENTITLEMENTS.values()) == {"free"}
+def test_tool_entitlements_declare_library_eight_as_free() -> None:
+    assert LUXALGO_TOOL_NAMES <= set(TOOL_ENTITLEMENTS)
+    for name in LUXALGO_TOOL_NAMES:
+        assert TOOL_ENTITLEMENTS[name] == "free"
 
 
 def test_manifest_carries_entitlement_key_and_note() -> None:
@@ -187,7 +188,7 @@ def test_generated_schemas_match_manifest_order() -> None:
 def test_available_tools_gated_by_kill_switch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert len(available_luxalgo_tools()) == 8
+    assert len(available_luxalgo_tools()) == 14
     assert len(available_luxalgo_tools(RESEARCH_TOOLS)) == 8
     monkeypatch.setenv(LUXALGO_ENABLED_ENV, "0")
     assert available_luxalgo_tools() == []
