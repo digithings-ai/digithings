@@ -64,10 +64,16 @@ def load_latest(tool: str) -> str | None:
 
 def prune_tool(tool: str, *, keep: int = DEFAULT_KEEP_PER_TOOL) -> int:
     """Delete oldest dated pages beyond ``keep`` (latest.json never pruned). Returns removed count."""
-    pages = sorted((snapshot_root() / tool).glob("[0-9]*__*.json"))
+    tool_dir = snapshot_root() / tool
+    pages = sorted(
+        p for p in tool_dir.glob("[0-9]*__*.json") if not p.name.endswith(".metrics.json")
+    )
     doomed = pages[: max(len(pages) - keep, 0)]
     for path in doomed:
         path.unlink()
+        companion = path.parent / f"{path.stem}.metrics.json"
+        if companion.is_file():
+            companion.unlink()
     return len(doomed)
 
 

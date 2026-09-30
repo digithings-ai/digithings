@@ -55,6 +55,31 @@ def test_prune_tool_keeps_newest_n(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     )  # 2 pages + latest.json
 
 
+def test_prune_tool_removes_metrics_companion_with_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DIGIQUANT_ENRICHMENT_DIR", str(tmp_path))
+    pages = [
+        write_snapshot(
+            "digifetch_news", {"ticker": "GLD"}, "{}", fetched_at=f"2026-09-{day}T12:00:00Z"
+        )
+        for day in ("01", "02", "03")
+    ]
+    for page in pages:
+        (page.parent / f"{page.stem}.metrics.json").write_text("{}", encoding="utf-8")
+    removed = prune_tool("digifetch_news", keep=2)
+    assert removed == 1
+    assert not pages[0].exists()
+    assert not (pages[0].parent / f"{pages[0].stem}.metrics.json").exists()
+    tool_dir = snapshot_root() / "digifetch_news"
+    data_pages = [
+        p for p in tool_dir.glob("[0-9]*__*.json") if not p.name.endswith(".metrics.json")
+    ]
+    assert len(data_pages) == 2
+    assert len(list(tool_dir.glob("*.metrics.json"))) == 2
+    assert (tool_dir / "latest.json").is_file()
+
+
 def test_merge_series_page_appends_newer_obs_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
