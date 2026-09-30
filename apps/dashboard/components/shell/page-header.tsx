@@ -72,10 +72,14 @@ export function PageHeader() {
   const meta = data?.portfolio?.meta ?? null;
   const asOf = spec.asOf === undefined ? (meta?.last_updated ?? null) : spec.asOf;
 
+  // The sidebar already shows where you are, so the band only renders when a page
+  // registers a toolbar or crumbs. The h1 stays (sr-only) for a11y and static prerender.
+  if (!spec.actions && !spec.crumbs) return <h1 className="sr-only">{title}</h1>;
+
   return (
     <header
       data-print-hide
-      className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hair bg-surface px-4 py-1 md:min-h-11 md:px-6"
+      className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hair bg-surface px-4 py-1 md:px-6"
     >
       <div className="flex min-w-0 items-baseline gap-3">
         {crumbs.length > 0 ? (
