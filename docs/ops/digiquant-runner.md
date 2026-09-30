@@ -204,3 +204,8 @@ The same shape covers `12 0 * * *` (tearsheets), `5 22 * * *`
 Phases 1–2 do not run the house research chain and do not write the
 skip-if-done ledger. A same-day GitHub Actions manual house success does not
 write `pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
+
+The implementation plan is
+[docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md](../superpowers/plans/2026-09-30-digiquant-house-run-phase3.md).
+Chris lock: one class, `DigiQuantRunnerContainer`, `instance_type = "standard-2"`.
+This note does not flip cron and does not deploy.
