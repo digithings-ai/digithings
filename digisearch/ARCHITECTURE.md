@@ -1205,7 +1205,12 @@ digisearch/src/digisearch/
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
 ├── pipeline/
-│   └── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
+│   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
+│   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
+│                              # + fetch_json_feed (JSON feeds, e.g. trackers)
+├── trackers_ingest.py         # luxalgo market-trackers-data CC0 ingest (#4826):
+│                              # congress-trades fetch → normalize → index_chunks
+│                              # (fetch delegates to pipeline.url_ingest)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
 ├── client.py                  # digisearch Python client
@@ -1317,6 +1322,42 @@ digisearch/src/digisearch/
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
+
+### luxalgo market-trackers ingest (#4826)
+
+CC0 public-records layer **beside Gloomberg** (never replacing the terminal
+digest). `trackers_ingest.py` proves the per-dataset adapter pattern on the
+smallest dataset (congress-trades) for the remaining 17 to copy:
+
+- Fetch goes only through `pipeline.url_ingest.fetch_json_feed` — the single
+  URL-fetch site (digifetch `HttpFetcher` + `validate_fetch_url`;
+  `raw.githubusercontent.com` allowlisted, so validation is DNS-free). The
+  generic `ingest_url` HTML path is wrong for a JSON feed, so the JSON helper
+  reuses its identical guards minus extraction. The module never opens
+  sockets itself and never fetches directly. Manifest
+  (`market-trackers-data/main/manifest.json`, `datasets.<name>.stale`) is
+  checked first — an explicit `stale: true` raises `StaleDatasetError` before
+  any write; an unreadable manifest warns and proceeds (advisory signal).
+  Fetch/validation/shape failures raise `TrackersFetchError` (never confused
+  with a stale flag); a served-vs-manifest row-count mismatch warns and
+  proceeds.
+- `normalize_congress_trade` maps one live-schema row to
+  `{doc_id, text, metadata}` with `doc_id = {chamber}:{docId}:{rowIndex}` and
+  `provenance.sourceUrl → Document.source / metadata[source_url]` (every chunk
+  carries `source_url`; `needsReview → needs_review`). Null-ticker rows are
+  ingested, never dropped silently (`ticker` key simply absent post-Chroma
+  normalization).
+- Idempotency: `Document.id` reuses research_ingest's `_stable_doc_id`
+  (seeded by the natural key); chunk ids are
+  `luxalgo-trackers::congress-trades::<key>::<idx>`, so all backends upsert.
+  The `ingested`/`skipped` counts probe the stub index (exact in tests); on
+  production backends a rewritten row reports as ingested while storage still
+  dedupes. Same-key content updates are skip-not-replace (refresh = follow-up).
+- Default index `trackers` (`DIGISEARCH_TRACKERS_INDEX` override), separate
+  from the research `atlas` index. digigraph needs no new code (existing
+  digisearch tools).
+- Dataset expansion order: congress-trades (this spike) → insider-transactions
+  (runner-up, ~17.5k rows, same manifest) → remaining 16 per manifest order.
 
 ### Lazy package surface and install extras
 
