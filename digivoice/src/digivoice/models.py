@@ -7,11 +7,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 CheckStatus = Literal["ok", "missing", "info"]
+HistoryKind = Literal["dict", "speak"]
 
 
 class VoicePaths(BaseModel):
     data_dir: str
     models_dir: str
+    recordings_dir: str
     history_file: str
 
 
@@ -31,3 +33,39 @@ class CliResult(BaseModel):
     code: int
     stdout: str
     stderr: str
+
+
+class HistoryEntry(BaseModel):
+    """One JSONL line. `ts` is ISO-8601 UTC; `wav` is null when there is no file."""
+
+    ts: str
+    kind: HistoryKind
+    text: str
+    wav: str | None = None
+
+
+class HistoryRead(BaseModel):
+    entries: list[HistoryEntry] = Field(default_factory=list)
+    skipped: int = 0
+    present: bool = True
+
+
+class CaptureResult(BaseModel):
+    wav_path: str
+    tool: str
+    seconds: int
+    argv: list[str] = Field(default_factory=list)
+
+
+class Transcript(BaseModel):
+    text: str
+    model: str
+    model_path: str
+    wav_path: str
+    argv: list[str] = Field(default_factory=list)
+
+
+class PasteResult(BaseModel):
+    attempted: bool
+    pasted: bool
+    detail: str

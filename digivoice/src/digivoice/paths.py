@@ -8,6 +8,7 @@ from pathlib import Path
 from digivoice.models import VoicePaths
 
 APP_DIR_NAME = "digivoice"
+RECORDINGS_DIR_NAME = "recordings"
 # whisper.cpp weights for the snappy push-to-talk default.
 DEFAULT_MODEL = "ggml-base.en"
 DEFAULT_MODEL_FILE = "ggml-base.en.bin"
@@ -38,5 +39,6 @@ def resolve_paths(platform: str, home: Path, env: Mapping[str, str]) -> VoicePat
     return VoicePaths(
         data_dir=str(data_dir),
         models_dir=str(data_dir / "models"),
+        recordings_dir=str(data_dir / RECORDINGS_DIR_NAME),
         history_file=str(data_dir / "history.jsonl"),
     )
