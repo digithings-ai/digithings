@@ -28,6 +28,25 @@
 @source "../../../packages/ui/src/components/stages";
 @source "../../../packages/ui/src/ui";
 
+/* Hero wordmark (QuantWordmark): cells grow up from the baseline like bars. The
+   rects carry inline animations; [data-dq-anim] lets reduced motion switch them
+   off. Keyframes only, no classes. */
+@keyframes dq-rise {
+  from { opacity: 0; transform: scaleY(0); }
+  to { opacity: 1; transform: scaleY(1); }
+}
+@keyframes dq-stray {
+  0%, 100% { opacity: 0; }
+  1%, 99% { opacity: 0.25; }
+}
+@keyframes dq-glint {
+  0% { fill: var(--accent); }
+  6%, 100% { fill: currentColor; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-dq-anim] { animation: none !important; }
+}
+
 :root[data-theme] {
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
