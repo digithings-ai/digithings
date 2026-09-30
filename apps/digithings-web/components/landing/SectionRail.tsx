@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LANDING_SECTIONS, pad2 } from "./sections";
 
 /**
  * The landing page's wayfinding (Refs #4429): a terminal path set vertically
@@ -9,17 +10,7 @@ import { useEffect, useState } from "react";
  * to its band. It only renders where the gutter is wide enough to hold it.
  */
 
-const SECTIONS = [
-  { id: "architecture", label: "stack" },
-  { id: "why", label: "why" },
-  { id: "open-source", label: "open-source" },
-  { id: "digiquant", label: "digiquant" },
-  { id: "pricing", label: "pricing" },
-  { id: "faq", label: "faq" },
-  { id: "contact", label: "contact" },
-] as const;
-
-const pad2 = (n: number) => String(n).padStart(2, "0");
+const SECTIONS = LANDING_SECTIONS;
 
 export function SectionRail() {
   const [active, setActive] = useState(-1);
