@@ -4,7 +4,7 @@
     "concurrency": "market-data-refresh",
     "code_ref": "main",
     "alias_supabase": true,
-    "env": ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "FRED_API_KEY", "CORE_POSTGRES_URI", "CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
+    "env": ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "CORE_POSTGRES_URI", "CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
     "steps": [
       ["uv", "run", "--frozen", "--no-sync", "python", "scripts/refresh_market_data_r2.py", "--manifest-out", "/tmp/market-data-refresh.json"]
     ],
@@ -37,7 +37,7 @@
     "concurrency": "digiquant-eod-macro",
     "code_ref": "main",
     "alias_supabase": true,
-    "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY", "FRED_API_KEY"],
+    "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
     "steps": [
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "sync-calendar", "--venues", "NYSE,NASDAQ,CRYPTO,FX", "--start", "1950-01-01", "--end", "+5y", "--supabase"]},
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-macro", "--manifest", "digiquant/src/digiquant/research/config/macro_series.yaml", "--supabase"], "when_arg": "run_writers", "equals": "true"}

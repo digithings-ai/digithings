@@ -58,7 +58,9 @@ class FakeStore:
     def read_macro(self, source: str, series: str) -> pl.DataFrame:
         return self.history
 
-    def fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
+    def fetch_macro(
+        self, source: str, series: str, start: str, end: str, *, cadence=None
+    ) -> list[dict[str, Any]]:
         self.live_windows.append((start, end))
         # A monthly series with nothing inside the window: FRED answers 200 with
         # no observations, which _fetch_macro reports as "empty live window".
@@ -135,7 +137,9 @@ def test_monthly_observation_inside_the_window_lands_as_up_to_date() -> None:
     is not newer than the seal, and resolves to up-to-date (not a soft fail)."""
     store = FakeStore(monthly_history("2026-07-01"))
 
-    def fetch_same_row(source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
+    def fetch_same_row(
+        source: str, series: str, start: str, end: str, *, cadence=None
+    ) -> list[dict[str, Any]]:
         store.live_windows.append((start, end))
         return [
             {

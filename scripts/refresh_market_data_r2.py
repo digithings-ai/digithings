@@ -41,12 +41,17 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
 SystemExit message on missing credentials/URIs (fail closed, like backfill).
 
-Missing ``FRED_API_KEY`` (#4795) is not a stale failure. Those FRED series are
-omitted before the refresh loop, listed on the artifact as ``fred_skipped``,
-and left at their last seal. Yahoo FX, equities, and the rest of the universe
-still refresh, and the job exits 0 when they succeed. The skipped ``fred__*``
-generations stay stale until the Gloomberb migrate (#4794). A set key keeps
-the FRED fetch.
+No vendor API key is needed on this path: the macro panel is sealed from
+anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
+the newest page per series (``window_limit`` by cadence, a 1000-row tail on
+bootstrap) and merges it into the existing generation, keeping sealed rows
+older than the page. Only the 23 kept panel ids
+(``digiquant.data.prices.gloomberb_macro.KEPT_SERIES_IDS``) are refreshed;
+the 8 dropped ids are never fetched and their ``latest`` pointers keep
+serving the last seal. Yahoo FX, equities, and the rest of the universe
+still refresh, and the job exits 0 when they succeed. Dataset ids stay
+``fred__{SERIES}`` and the parquet ``source`` column stays ``"fred"`` — the
+prefix is the R2 dataset id, not the vendor.
 
 Core macro mirror (#3780): the writers-stop paused the Supabase macro writers,
 but ``macro_series_observations`` is a carve-out table still read directly by
@@ -134,7 +139,6 @@ MACRO_VALUE_COLS = ("obs_date", "value")
 # direct-PG SELECT of source,series_id,obs_date,value,unit — no meta).
 MACRO_COLUMNS = ("source", "series_id", "obs_date", "value", "unit")
 POSTGRES_URI_ENV = "CORE_POSTGRES_URI"
-FRED_API_KEY_ENV = "FRED_API_KEY"
 # Core Supabase REST creds for the macro mirror (same names the digiquant
 # prices workflow already uses, with the legacy fallbacks).
 CORE_SUPABASE_URL_ENV = "CORE_SUPABASE_URL"
@@ -864,6 +868,23 @@ def refresh_macro_series(
     start, end = _shift_days(run, -_live_window_days(cadence)), _shift_days(run, 1)
 
     def _fetch_full() -> pl.DataFrame:
+        if source == "fred":
+            # Gloomberb serves one newest page (no 1990 cursor): seal the
+            # 1000-row tail only. Rows before the page are whatever was
+            # already sealed — or nothing on a fresh bucket.
+            from digiquant.data.prices.gloomberb_macro import (
+                build_ingest_client,
+                fetch_gloomberb_series,
+            )
+
+            rows = fetch_gloomberb_series(
+                build_ingest_client(), series, unit=None, title=None, limit=1000
+            )
+            if not rows:
+                raise FetchError(name, "empty gloomberb page")
+            return _normalize_macro_rows(rows).filter(
+                pl.col("obs_date") <= pl.lit(run).cast(pl.Date)
+            )
         rows = store.fetch_macro_full(source, series, end)
         if not rows:
             raise FetchError(name, "empty full-window observations")
@@ -881,9 +902,12 @@ def refresh_macro_series(
             )
         top = _max_date(full, "obs_date")
         _put_macro(store, source, series, full, top)
-        return _outcome(name, MODE_FULL_REPULL, as_of=top, rows=full.height, note="bootstrap")
+        note = "bootstrap"
+        if source == "fred":
+            note = "bootstrap (truncated gloomberb page: 1000-row tail sealed)"
+        return _outcome(name, MODE_FULL_REPULL, as_of=top, rows=full.height, note=note)
     try:
-        rows = store.fetch_macro(source, series, start, end)
+        rows = store.fetch_macro(source, series, start, end, cadence=cadence)
     except FetchError as exc:
         return _outcome(
             name,
@@ -915,6 +939,42 @@ def refresh_macro_series(
         seal,
         ("value",),
     ):
+        if source == "fred":
+            # Short-page merge (#4794): overwrite only the dates present in
+            # the Gloomberb page and keep older sealed rows. Never
+            # full-replace history with one 1000-row page.
+            merged = (
+                pl.concat([hist, live]).unique(subset=["obs_date"], keep="last").sort("obs_date")
+            )
+            top = _max_date(merged, "obs_date")
+            try:
+                _put_macro(store, source, series, merged, top)
+            except ArchiveVerifyError:
+                try:
+                    new_key = _put_macro_restatement(store, source, series, merged, top)
+                except ArchiveVerifyError as exc:
+                    return _outcome(
+                        name,
+                        MODE_ERROR,
+                        as_of=seal,
+                        rows=hist.height,
+                        note=f"registry conflict, kept existing: {exc}",
+                    )
+                return _outcome(
+                    name,
+                    MODE_FULL_REPULL,
+                    as_of=top,
+                    rows=merged.height,
+                    note="window restatement; rows before the gloomberb page kept"
+                    f" (same-day revision {new_key})",
+                )
+            return _outcome(
+                name,
+                MODE_FULL_REPULL,
+                as_of=top,
+                rows=merged.height,
+                note="window restatement; rows before the gloomberb page kept",
+            )
         try:
             full = _fetch_full()
         except FetchError as exc:
@@ -1134,21 +1194,58 @@ class RefreshStore(_backfill.R2StoreAdapter):
             raise FetchError(ticker, "empty full-window fetch")
         return frame
 
-    def fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
-        return self._fetch_macro(source, series, start, end)
+    def fetch_macro(
+        self,
+        source: str,
+        series: str,
+        start: str,
+        end: str,
+        *,
+        cadence: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self._fetch_macro(source, series, start, end, cadence=cadence)
 
     def fetch_macro_full(self, source: str, series: str, end: str) -> list[dict[str, Any]]:
         return self._fetch_macro(source, series, FULL_HISTORY_START, end)
 
-    def _fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
+    def _fetch_macro(
+        self,
+        source: str,
+        series: str,
+        start: str,
+        end: str,
+        *,
+        cadence: str | None = None,
+    ) -> list[dict[str, Any]]:
         if source == "fred":
-            api_key = os.environ.get(FRED_API_KEY_ENV, "").strip()
-            if not api_key:
-                raise FetchError(f"{source}__{series}", f"missing {FRED_API_KEY_ENV}")
-            from digiquant.data.prices.macro_ingest import MacroManifest, fetch_fred
+            from digiquant.data.prices.gloomberb_macro import (
+                KEPT_SERIES_IDS,
+                GloomberbMacroError,
+                build_ingest_client,
+                fetch_gloomberb,
+                window_limit,
+            )
+            from digiquant.data.prices.macro_ingest import MacroManifest
 
-            manifest = MacroManifest(fred_series=[{"id": series}], fred_backfill_start=start)
-            rows = fetch_fred(manifest, api_key, start=start, end=end, only_series=series)
+            if series not in KEPT_SERIES_IDS:
+                raise FetchError(
+                    f"{source}__{series}",
+                    "not on the gloomberb panel; serving last seal",
+                )
+            manifest = MacroManifest(
+                fred_series=[{"id": series, "cadence": cadence}],
+                fred_backfill_start=start,
+            )
+            try:
+                rows = fetch_gloomberb(
+                    manifest,
+                    build_ingest_client(),
+                    only_series=series,
+                    limit_for=lambda _cadence: window_limit(cadence),
+                )
+            except (GloomberbMacroError, RuntimeError) as exc:
+                raise FetchError(f"{source}__{series}", str(exc)) from exc
+            rows = [r for r in rows if start <= str(r["obs_date"]) <= end]
         elif source == "yahoo":
             from digiquant.data.prices.macro_ingest import (
                 YAHOO_FX_DEFAULT,
@@ -1202,29 +1299,6 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
     return adapter, manifest
 
 
-def drop_fred_without_key(
-    specs: list[tuple[str, str, str | None]],
-) -> tuple[list[tuple[str, str, str | None]], list[str]]:
-    """Drop FRED series when ``FRED_API_KEY`` is unset (#4795).
-
-    A missing key used to raise ``FetchError`` per series, which the stale
-    gate treats as a failed run. Phase 1 cron has no key: skip the series,
-    keep Yahoo and prices, and record the ids. ``fred__*`` R2 generations
-    stay at the last seal until #4794. A non-empty key returns ``specs``
-    unchanged.
-    """
-    if os.environ.get(FRED_API_KEY_ENV, "").strip():
-        return specs, []
-    kept: list[tuple[str, str, str | None]] = []
-    skipped: list[str] = []
-    for source, series, cadence in specs:
-        if source == "fred":
-            skipped.append(f"fred__{series}")
-            continue
-        kept.append((source, series, cadence))
-    return kept, skipped
-
-
 def _resolve_macro_specs(
     cli_specs: list[str], manifest_path: str
 ) -> list[tuple[str, str, str | None]]:
@@ -1242,13 +1316,14 @@ def _resolve_macro_specs(
             out.append((source.lower(), series, None))
         return out
     try:
+        from digiquant.data.prices.gloomberb_macro import KEPT_SERIES_IDS
         from digiquant.data.prices.macro_ingest import YAHOO_FX_DEFAULT, MacroManifest
 
         macro_manifest = MacroManifest.from_yaml(manifest_path)
         fred = [
             ("fred", str(s.get("id")), s.get("cadence"))
             for s in macro_manifest.fred_series
-            if s.get("id")
+            if s.get("id") and str(s.get("id")) in KEPT_SERIES_IDS
         ]
         yahoo = [("yahoo", cfg["series_id"], None) for cfg in YAHOO_FX_DEFAULT.values()]
         return fred + yahoo
@@ -1302,13 +1377,14 @@ def main(argv: list[str] | None = None) -> int:
     macro_specs = (
         [] if args.skip_macro else _resolve_macro_specs(args.macro_series, args.macro_manifest)
     )
-    macro_specs, fred_skipped = drop_fred_without_key(macro_specs)
+    # No key skip (#4794): the macro panel fetches Gloomberb anonymously,
+    # so a missing key is normal. Dropped panel ids never reach this list
+    # (see _resolve_macro_specs); their pointers keep serving the last seal.
+    fred_skipped: list[str] = []
     print(
         f"universe: {len(universe)} tickers; {len(macro_specs)} macro series;"
         f" run={run} sealed={args.sealed}"
     )
-    if fred_skipped:
-        print(f"skip: FRED_API_KEY unset; {len(fred_skipped)} fred series left stale until #4794")
 
     if args.dry_run:
         for ticker in universe:

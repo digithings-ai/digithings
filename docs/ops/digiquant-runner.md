@@ -23,22 +23,21 @@ credentials, Alpaca keys, or `--execute`. twelve-x stays `workflow_dispatch`.
 `prices-fx-refresh-writers` is in the catalog and is not a cron row. Cron
 never sends `run_writers`. A kick can pass `args`.
 
-## FRED macro (#4795)
+## Macro panel (#4794)
 
-Phase 1 does not require `FRED_API_KEY`. Chris locked abandon-FRED. When the
-key is unset:
+`market-data-refresh` seals the macro panel from anonymous Gloomberb
+`econ_series` pages — no `FRED_API_KEY` is read, set, or required. Chris
+locked abandon-FRED; a set key does not dual-write.
 
-- `market-data-refresh` skips every `fred` series. Yahoo FX, equities, and
-  the universe still refresh. The job exits 0 when those succeed. The
-  artifact lists the omitted ids under `fred_skipped`.
-- `prices-eod-macro` with `run_writers=true` still runs `fetch-macro`, but
-  the `fred` source is skipped. Yahoo (and any other requested source)
-  continues. A fred-only run with no key exits 0.
-
-`fred__*` objects in R2 stay at the last seal and go stale until the
-Gloomberb migrate lands ([#4794](https://github.com/digithings-ai/digithings/issues/4794)).
-This change does not rewire ingest. A set key still fetches FRED; do not
-add one for Phase 1 smoke.
+- `market-data-refresh` refreshes the 23 kept panel ids
+  (`digiquant.data.prices.gloomberb_macro.KEPT_SERIES_IDS`): newest page per
+  series merged into the existing `fred__*` generation, sealed rows older
+  than the page kept. History before a 1000-row bootstrap tail is whatever
+  was already sealed.
+- The 8 dropped ids are never fetched. Their `latest` pointers keep serving
+  the last seal. Do not re-add them without a probe.
+- `prices-eod-macro` with `run_writers=true` runs `fetch-macro` the same way
+  (Gloomberb panel + Yahoo). The artifact records `fred_skipped: []`.
 
 `prices-intraday` is removed. Do not start a container to echo that no-op.
 
@@ -118,9 +117,8 @@ On digiquant-runner: `RUNNER_AUTH_TOKEN`, `R2_ACCOUNT_ID`, `R2_BUCKET`,
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `CORE_POSTGRES_URI`,
 `CORE_SUPABASE_URL`, `CORE_SUPABASE_SERVICE_KEY`.
 
-`FRED_API_KEY` is optional and not required for Phase 1 smoke. Leave it
-unset. `GH_ISSUE_TOKEN` is not used: the runner does not open or update
-GitHub issues.
+`FRED_API_KEY` is gone from this path and must stay unset. `GH_ISSUE_TOKEN`
+is not used: the runner does not open or update GitHub issues.
 
 On digithings-cron: the same `RUNNER_AUTH_TOKEN` value.
 
