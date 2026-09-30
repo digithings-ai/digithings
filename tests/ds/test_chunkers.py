@@ -322,13 +322,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 125 for #4849 (luxalgo market-trackers wave-2
     expansion table + trackers_wave2_ingest.py tree note in ARCHITECTURE.md)
     — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 126 for merge of #4849 (luxalgo wave-2, +3) and
+    #4856 (twin-identity priority note, +1) prose — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 125
+    assert len(chunks) == 126
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -341,9 +344,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "0a3a7b984057149d",
         "27f0ca91eb93d7e1",
         "ac22aad7e50a19a8",
-        "bd5783df8cad254d",
-        "1d58a13adc2f1766",
-        "f79f2f8493e2a01b",
+        "d85a3755cd5e8708",
+        "6bb725ee96409565",
+        "2496b0331a6908ca",
+        "d79c9e4802601817",
         "8135b004b65f5e71",
         "38ba575592a8ce18",
         "a08f56ac9059ac1b",

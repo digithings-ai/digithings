@@ -612,15 +612,25 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
 
 
 def _twin_entry(result: Any, position: int) -> dict[str, Any]:
-    """Extract the dedupe-relevant fields from one backend ``Result``."""
+    """Extract the dedupe-relevant fields from one backend ``Result``.
+
+    Identity comes from the vault namespace first (``vault_path``), then an
+    http(s) ``source_url`` (URL-ingested chunks carry a tmp-staging
+    ``metadata.path`` that must not shadow the shared URL, #4856 review),
+    then ``path``. A file-derived ``source_url`` is an ingest-location
+    artifact, never an identity. The http(s) URL doubles as the keep-signal
+    preserving the only citable link.
+    """
+    from digisearch.search.namespace_dedupe import is_http_url
+
     chunk = getattr(result, "chunk", None)
     metadata = dict(getattr(chunk, "metadata", None) or {})
+    source_url = metadata.get("source_url")
+    http_source = source_url if is_http_url(source_url) else None
     return {
-        "path": (
-            metadata.get("source_url") or metadata.get("path") or metadata.get("vault_path") or ""
-        ),
+        "path": metadata.get("vault_path") or http_source or metadata.get("path") or "",
         "content": getattr(chunk, "content", "") or "",
-        "url": getattr(result, "url", None) or metadata.get("url"),
+        "url": getattr(result, "url", None) or metadata.get("url") or http_source,
         "position": position,
     }
 
