@@ -712,11 +712,22 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   rate-limiter/breaker in this phase (low-volume research reads).
 - **Attribution + license boundary.** Every payload carries "Sourced from
   LuxAlgo Library" + the upstream canonical `url`/`md_url` (Library home when
-  no single page is addressed). Research reference only — never a pipeline
+  no single page is addressed), plus the `LUXALGO_COMMERCIAL_LICENSE` flag
+  state it was produced under (`commercial_license` + `license_state`, #4845).
+  Research reference only — never a pipeline
   primary. `library_get_source_code` is deliberately NOT wrapped (CC
   BY-NC-SA: no indicator source in paid surfaces); `broker_*` keys are never
   sent to the hosted MCP; `journal_*`/`edge_*`/`trackers_*`/`propfirms_*` are
   separate packages.
+- **License guard (#4845).** `data/luxalgo/license_guard.py` (stdlib-only) is
+  the enforcement point: default-OFF commercial flag, dispatcher runtime
+  refusal with no request while OFF, `source_code_violations` surface
+  assertions (only the dispatcher may add the 9th tool, and only when
+  licensed), `payload_contains_source_code` /
+  `assert_payload_has_no_source_code` for persist/render sinks, and the
+  repo-wide reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
+  (unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent, exit 1 on
+  violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
 - **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
   (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
   the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py` plus
