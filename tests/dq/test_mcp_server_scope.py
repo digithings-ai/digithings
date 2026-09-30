@@ -246,6 +246,6 @@ def test_read_scope_includes_luxalgo_family():
 
 @pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 107
+    assert len(READ_SCOPE_TOOLS) == 113
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 121
+    assert len(_tool_names(create_mcp_server())) == 127

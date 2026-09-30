@@ -488,8 +488,10 @@ def _require_mcp() -> type:
 
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
-#: evaluations, the coinmetrics catalog discovery tool, the 35 digifetch x
-#: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read), and the 14
+#: evaluations, the coinmetrics catalog discovery tool, the 89 digifetch x
+#: Gloomberb enrichment reads (#4069, #4110, #4837 130-coverage, spec §12.3
+#: scope=read — every digifetch tool is read-scope, including the 13 inert
+#: write-shaped workspace/broker tools), and the 14
 #: luxalgo hosted reads (#4779 P0 Library + #4844 edge/trackers, scope=read).
 #: Everything else (backtest / optimize / pipeline / export / fetches / fits /
 #: tearsheets / policy-replay runs) is compute or mutate and stays on
