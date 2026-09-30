@@ -152,12 +152,46 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 | `GET` | `/health` | None | Legacy health check; returns `{"status": "ok", "service": "digiquant"}` (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Liveness probe; returns `{"ok": true}` (auth-exempt, rate-limit-exempt; see AGENTS.md "Liveness vs status") |
 | `GET` | `/strategies` | `digiquant:backtest` | List registered strategies (name, aliases, description, default_params) |
+| `GET` | `/bars` | None (keyless) | OHLCV bars for dashboard charts (#4880); query params: `symbol` (required), `timeframe` (`1m`/`5m`/`15m`/`30m`/`1h`/`1d` default/`1wk`/`1mo`), `limit` (1–500, default 120). Returns `BarsResponse` (newest-last bars, `source: gloomberb`, `stale` + `delay_note`). See §3.1 |
 | `GET` | `/check_drift` | `digiquant:backtest` | ADDM drift check for a strategy; query params: `strategy_id`, `baseline_run_id` |
 | `POST` | `/run_backtest` | `digiquant:backtest` | Synchronous NautilusTrader backtest; returns `BacktestResult` |
 | `POST` | `/run_optimize` | `digiquant:optimize` | Parameter optimization (grid/bayesian/random); returns `OptimizeResult` |
 | `POST` | `/run_export` | `digiquant:backtest` | Export strategy config to artifact; returns `ExportResult` |
 | `POST` | `/run_pipeline` | `digiquant:backtest` + `digiquant:optimize` | Full pipeline via internal LangGraph; returns `{trace, backtest, optimize, export}` |
 | `POST` | `/v1/workflow` | `digiquant:backtest` + `digiquant:optimize` | Versioned alias for `/run_pipeline` |
+
+#### 3.1 Keyless bars (`GET /bars`, #4880)
+
+Display-only OHLCV for dashboard charts; feeds #4879 Vela wiring (dashboard
+fetches keyless, passes bars to Vela's offline `data` option — no keyed
+provider, no Pine/scripting).
+
+- **Keyless:** auth-exempt via `digiquant_path_scopes` (`GET /bars` → `None`;
+  every other method/path keeps its scope). Rate limit is the 30/min default.
+- **Read-only:** implemented in `digiquant/bars.py::fetch_bars` over the
+  **anonymous** Gloomberb `price_history` path — no session cookie, no API
+  keys, no order/broker imports. Symbols normalize to uppercase (same
+  convention as the orchestrator `_normalize_symbols`).
+- **Timeframe/range:** `timeframe` is exactly the Gloomberb resolution vocab
+  (`1m`…`1mo`); each maps to a contract-safe upstream range
+  (`DEFAULT_RANGE_BY_TIMEFRAME`: `1m`/`5m`→`1W`, `15m`→`1M`, `30m`→`6M`,
+  `1h`→`3M`, `1d`→`1Y`, `1wk`→`5Y`, `1mo`→`ALL` — each within its §5.2 cap).
+  Unknown timeframes are 422 with no request (rejected, never clamped).
+  The upstream read is tail-sliced to `limit` (1–500, default 120).
+- **Contract:** `BarsBar{timestamp, open, high, low, close, volume?}` +
+  `BarsResponse{symbol, timeframe, limit, count, bars, source="gloomberb",
+  stale, delay_note}` (`models.py`). Carries no Sharpe/PnL/drawdown — no
+  performance claims originate here.
+- **Errors:** typed envelope → HTTP (`invalid_input`→422, `not_found`→404,
+  `rate_limited`→429, anything else incl. kill-switch-disabled →502);
+  transport exceptions →502, never a raw traceback.
+- **Not a pipeline primary:** free-tier data may be delayed up to 15 minutes
+  (`delay_note`) — this stays a chart-display read and must never feed
+  backtest/optimize (the Gloomberb "enrichment only" rule). No MCP twin:
+  `digifetch_price_history` already covers the agent surface.
+- **Tests:** `tests/dq/test_bars.py` (offline — `httpx.MockTransport` into a
+  real `GloomberbClient` via the `digiquant.bars._build_gloomberb_client`
+  seam; never live HTTP).
 
 #### Async job endpoints
 
