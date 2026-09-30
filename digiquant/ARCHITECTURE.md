@@ -4058,6 +4058,20 @@ existing key, and run **once per run** inside `_segment_counts`. Note the split:
 `_segment_totals` is the pure counter used by `research_produced`, which the chain calls
 *mid-run* to gate portfolio — contributors must never see that half-populated state.
 
+## Stage contracts (ADR-0030)
+
+Swappable handoffs live in `digiquant.stages`. `ResearchDigest` is the stage-1
+briefing (`date`, `body`, `regime_label`) plus `source` and `composition_id`.
+`TradeIdeaSnapshot` is the stage-2 trade-idea row. `refuse_order_intent` raises
+`ExecutionOptInRequired` and does not build an `OrderIntent`.
+
+Consensus timeframes are `medium` and `long`. Other strings are display-only
+(`split_timeframe`). twelve-x trade generation stays in the twelve-x repo.
+twelve-x does not execute. `PortfolioState` remains an alias of `ResearchState`.
+The portfolio `--from-digest` CLI still loads a full `ResearchState`.
+
+Plan: `docs/plans/adr-0030/README.md`. Decision: ADR-0030.
+
 ## execution contracts
 
 `digiquant/src/digiquant/brokers/contracts.py` (K0, part of the dashboard execution/tenancy
