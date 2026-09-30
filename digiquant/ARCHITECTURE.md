@@ -264,6 +264,30 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `luxalgo_library_list_tags` | List Library tags (anonymous). No parameters. Research reference only |
 | `luxalgo_library_list_families` | List Library indicator families (anonymous). No parameters. Research reference only |
 | `luxalgo_library_get_family` | One Library indicator family by `family` name/slug (anonymous). Research reference only |
+| `luxalgo_edge_symbols` | Hosted Edge Stats coverage (anonymous, #4844): symbols, session calendars, coverage windows, session counts, nightly build time. No parameters. Precomputed statistics only — no raw vendor bars |
+| `luxalgo_edge_presets` | Hosted Edge Stats preset catalog (anonymous, #4844): gap fills, opening-range breakouts, day-of-week effects, and more. `category` narrows to one category; ids feed `luxalgo_edge_report` |
+| `luxalgo_edge_report` | One precomputed Edge Stats result (anonymous, #4844): P(outcome \| conditions) with N, Wilson 95% CI, sample guards, first/second-half stability split, per-year counts. Every result carries the honesty disclaimer in `data.disclaimer` and envelope `warnings` |
+| `luxalgo_trackers_datasets` | Market Trackers CC0 catalog (anonymous, #4844): row counts, freshness, years with data, ticker-searchability. `dataset` selects one dataset's field roster — read before composing filters |
+| `luxalgo_trackers_latest` | Newest ingestion day's rows for one Trackers dataset (anonymous, #4844): `dataset` required, `ticker`/`text`/`where` narrow, `sort` newest\|oldest, `limit` 1–100, `offset` pages. Freshness/ad-hoc lookups only — never a pipeline primary |
+| `luxalgo_trackers_ticker` | One ticker across every ticker-bearing Trackers dataset for one year (anonymous, #4844): `ticker` required, `year` 1900–2100, `limit` 1–25 per dataset. Ad-hoc lookups only — never a pipeline primary |
+
+**LuxAlgo license boundary (#4845).** The 9th hosted tool,
+`library_get_source_code`, serves indicator Pine source under CC BY-NC-SA and
+is deliberately unwrapped: no source payload may be persisted (Chroma /
+Supabase / `documents` rows) or rendered into paid surfaces (tearsheets,
+briefs, chat answers). Enforcement is `data/luxalgo/license_guard.py` —
+`LUXALGO_COMMERCIAL_LICENSE` opt-in flag (default OFF; only
+`1`/`true`/`yes`/`on` enable), dispatcher runtime refusal with a typed
+`invalid_input` envelope and no request while OFF, per-state attribution
+(`commercial_license` + `license_state` on every Library payload), the
+`source_code_violations` surface assertions (MCP full/read, read scope,
+manifest, entitlements, schemas, research subset stay at 14 even when licensed;
+only the dispatcher may add the 9th, and only with the license), and the
+repo-wide code-reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
+(unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent). Unknown
+`luxalgo_*` names (including a future source-code name) answer HTTP 400 at
+`/v1/orchestrator_invoke` until a dispatch row exists. No Pine vendoring, no
+procurement (owner-side).
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
@@ -1776,7 +1800,8 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
 | `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 34 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
-| `LUXALGO_ENABLED` | unset (ON) | Kill switch for the 8 `luxalgo_*` Library tools (#4779 P0). Only `1`/`true`/`yes`/`on` enable the family; any other explicit value disables it, and every call then returns a typed `upstream_error` without a request |
+| `LUXALGO_ENABLED` | unset (ON) | Kill switch for the 14 `luxalgo_*` hosted tools (#4779 P0 Library + #4844 edge/trackers). Only `1`/`true`/`yes`/`on` enable the family; any other explicit value disables it, and every call then returns a typed `upstream_error` without a request |
+| `LUXALGO_COMMERCIAL_LICENSE` | unset (OFF) | Commercial Library license flag for LuxAlgo indicator source code (#4845). Default OFF: unset, blank, or any non-truthy value keeps the 9th tool (`library_get_source_code`, CC BY-NC-SA) out of every surface — the dispatcher refuses it with a typed `invalid_input` envelope and no request. Only `1`/`true`/`yes`/`on` enable it, and even then only the dispatcher may carry the 9th tool (MCP, manifest, entitlements, read scope stay at 14). Procurement is owner-side; nothing is wired yet |
 | `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions, research search, statements, ticker tweets, tweet search, short interest, saved searches, equity diagnostic — screener is also gated and, like transcripts, additionally needs a Pro plan; 15 gated call sites in `client.py`). The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |

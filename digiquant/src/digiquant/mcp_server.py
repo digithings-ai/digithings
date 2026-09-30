@@ -489,10 +489,11 @@ def _require_mcp() -> type:
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
 #: evaluations, the coinmetrics catalog discovery tool, the 35 digifetch x
-#: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read), and the 8
-#: luxalgo Library research reads (#4779 P0, scope=read). Everything
-#: else (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
-#: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
+#: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read), and the 14
+#: luxalgo hosted reads (#4779 P0 Library + #4844 edge/trackers, scope=read).
+#: Everything else (backtest / optimize / pipeline / export / fetches / fits /
+#: tearsheets / policy-replay runs) is compute or mutate and stays on
+#: ``scope="full"`` only.
 READ_SCOPE_TOOLS: frozenset[str] = frozenset(
     {
         "digiquant_list_strategies",
@@ -548,6 +549,12 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "luxalgo_library_list_tags",
         "luxalgo_library_list_families",
         "luxalgo_library_get_family",
+        "luxalgo_edge_symbols",
+        "luxalgo_edge_presets",
+        "luxalgo_edge_report",
+        "luxalgo_trackers_datasets",
+        "luxalgo_trackers_latest",
+        "luxalgo_trackers_ticker",
     }
 )
 
@@ -571,7 +578,7 @@ def create_mcp_server(
     mcp = FastMCP("digiquant", host=host, port=port)
     enabled = READ_SCOPE_TOOLS if scope == "read" else None
     # Declared per-tool entitlements for the digifetch x Gloomberb family
-    # (#4110 phase 5) and the LuxAlgo Library family (#4779 P0). Attached to
+    # (#4110 phase 5) and the LuxAlgo hosted family (#4779 P0, #4844). Attached to
     # the registered function and appended to the description so MCP and the
     # orchestrator manifest cannot drift.
     from digiquant.data.gloomberb.entitlements import (
@@ -1666,12 +1673,12 @@ def create_mcp_server(
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
 
-    # ── LuxAlgo Library family (#4779 P0) ─────────────────────────────────
+    # ── LuxAlgo hosted family (#4779 P0, #4844) ──────────────────────────────
     #
-    # Thin wrap of the hosted LuxAlgo MCP (research reads only, keyless).
-    # Args are validated through the tool's Pydantic input model; invalid args
-    # answer a typed invalid_input envelope with no request (the same contract
-    # as the in-process dispatcher).
+    # Thin wrap of the hosted LuxAlgo MCP (Library + Edge + Trackers reads,
+    # all keyless). Args are validated through the tool's Pydantic input model;
+    # invalid args answer a typed invalid_input envelope with no request (the
+    # same contract as the in-process dispatcher).
 
     def _luxalgo_invalid_input(name: str, exc: Exception) -> str:
         from pydantic import ValidationError
@@ -1686,7 +1693,8 @@ def create_mcp_server(
                     message=f"invalid args for {name}: {detail}",
                     retryable=False,
                 )
-            )
+            ),
+            tool=name,
         )
 
     @_maybe_tool("luxalgo_library_search")
@@ -1827,6 +1835,150 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_edge_symbols")
+    def luxalgo_edge_symbols() -> str:
+        """Coverage of the hosted LuxAlgo Edge Stats store (anonymous).
+
+        Symbols, session calendars, coverage windows, session counts, and the
+        nightly build time. Takes no parameters. Precomputed statistics only.
+        """
+        try:
+            envelope = _build_luxalgo_client().edge_symbols()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_symbols")
+
+    @_maybe_tool("luxalgo_edge_presets")
+    def luxalgo_edge_presets(category: str | None = None) -> str:
+        """Catalog of hosted LuxAlgo Edge Stats preset questions (anonymous).
+
+        `category` narrows to one category. Preset ids feed edge_report.
+        """
+        from digiquant.data.luxalgo.models import EdgePresetsInput
+
+        try:
+            args = EdgePresetsInput(category=category)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_edge_presets", exc)
+        try:
+            envelope = _build_luxalgo_client().edge_presets(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_presets")
+
+    @_maybe_tool("luxalgo_edge_report")
+    def luxalgo_edge_report(preset: str, symbol: str) -> str:
+        """One precomputed LuxAlgo Edge Stats result (anonymous).
+
+        P(outcome | conditions) with N, Wilson 95% CI, sample guards, and the
+        stability split. `preset` comes from edge_presets, `symbol` from
+        edge_symbols. Historical conditional frequencies with sample sizes.
+        Not predictions, not advice.
+        """
+        from digiquant.data.luxalgo.models import EdgeReportInput
+
+        try:
+            args = EdgeReportInput(preset=preset, symbol=symbol)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_edge_report", exc)
+        try:
+            envelope = _build_luxalgo_client().edge_report(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_report")
+
+    @_maybe_tool("luxalgo_trackers_datasets")
+    def luxalgo_trackers_datasets(dataset: str | None = None) -> str:
+        """Market Trackers catalog of CC0 public-record datasets (anonymous).
+
+        `dataset` selects one dataset's full field roster. The dumps are the
+        source of record.
+        """
+        from digiquant.data.luxalgo.models import TrackersDatasetsInput
+
+        try:
+            args = TrackersDatasetsInput(dataset=dataset)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_trackers_datasets", exc)
+        try:
+            envelope = _build_luxalgo_client().trackers_datasets(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_datasets")
+
+    @_maybe_tool("luxalgo_trackers_latest")
+    def luxalgo_trackers_latest(
+        dataset: str,
+        ticker: str | None = None,
+        text: str | None = None,
+        where_json: str | None = None,
+        sort: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> str:
+        """Newest ingestion day's rows for one Trackers dataset (anonymous).
+
+        The cheapest freshness check. `dataset` is required; `ticker`/`text`
+        narrow the rows; `where_json` is an optional JSON object of exact field
+        matches (e.g. '{"code": "P"}'); `sort` is newest|oldest; `limit` is
+        1-100 (default 25); `offset` pages. Freshness/ad-hoc lookups only.
+        """
+        import json as _json
+
+        from digiquant.data.luxalgo.models import TrackersLatestInput
+
+        where: dict[str, Any] | None = None
+        if where_json is not None:
+            try:
+                parsed = _json.loads(where_json)
+            except Exception as exc:
+                return _luxalgo_invalid_input(
+                    "luxalgo_trackers_latest", ValueError(f"bad where_json: {exc}")
+                )
+            if not isinstance(parsed, dict):
+                return _luxalgo_invalid_input(
+                    "luxalgo_trackers_latest",
+                    ValueError("where_json must decode to a JSON object"),
+                )
+            where = parsed
+        try:
+            args = TrackersLatestInput(
+                dataset=dataset,
+                ticker=ticker,
+                text=text,
+                where=where,
+                sort=sort,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_trackers_latest", exc)
+        try:
+            envelope = _build_luxalgo_client().trackers_latest(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_latest")
+
+    @_maybe_tool("luxalgo_trackers_ticker")
+    def luxalgo_trackers_ticker(ticker: str, year: int | None = None, limit: int = 5) -> str:
+        """One ticker across every ticker-bearing Trackers dataset (anonymous).
+
+        A public-record dossier from primary sources for one year. `ticker` is
+        required; `year` is 1900-2100 (default the current year); `limit` is
+        1-25 newest rows per dataset (default 5). Ad-hoc lookups only.
+        """
+        from digiquant.data.luxalgo.models import TrackersTickerInput
+
+        try:
+            args = TrackersTickerInput(ticker=ticker, year=year, limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_trackers_ticker", exc)
+        try:
+            envelope = _build_luxalgo_client().trackers_ticker(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_ticker")
 
     @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(

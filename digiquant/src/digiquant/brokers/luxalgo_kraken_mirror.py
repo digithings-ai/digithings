@@ -1,4 +1,4 @@
-"""Read-only Python mirror of luxalgo broker-sdk Alpaca snapshots (#4829).
+"""Read-only Python mirror of luxalgo broker-sdk Kraken snapshots (#4847).
 
 Mirrors ``@luxalgo/broker-sdk@0.5.1`` (MIT) ``BrokerSnapshot`` shapes in Python and
 normalizes one SDK ``Account`` to digiquant broker contracts
@@ -7,9 +7,17 @@ handling in this module.
 
 Credential locality: API keys stay local to the caller. This module never sees
 keys, never phones home, and never touches the network; the caller fetches the
-snapshot (via the TypeScript SDK or the existing ``brokers/alpaca.py`` adapter)
-and passes the already-fetched dict in. Snapshots are caller-persisted; nothing
-here writes into ``positions`` (H9 terminal owns it) or any other table.
+snapshot (via the TypeScript SDK) and passes the already-fetched dict in.
+Snapshots are caller-persisted; nothing here writes into ``positions`` (H9
+terminal owns it) or any other table.
+
+Symbol normalization is SDK-side: Kraken's legacy asset codes (``XXBT``,
+``XETH``, ``ZUSD``) are normalized to ``BTC``/``ETH``/``USD`` by the SDK
+adapter upstream (see the ``kraken`` conformance vector — ``XXBT`` arrives as
+``BTC`` with ``assetClass: crypto``), so this mirror is a pass-through on
+symbols and never maps legacy codes itself. A position may carry no
+``marketValue`` (unpriced asset — e.g. ADA with no USD ticker); that maps to
+zero rather than a fabricated price.
 
 JS-number precision: SDK floats cross the boundary via ``Decimal(str(x))``,
 never float-through — ``0.1 + 0.2`` style artifacts must not become ledger
@@ -89,6 +97,8 @@ def snapshot_to_contracts(
     ``fetched_at`` is the parent ``BrokerSnapshot fetchedAt`` — the ``as_of``
     for the account snapshot and the fallback ``executed_at`` for trades that
     carry none. An account-level ``fetchedAt``/``asOf`` key wins when present.
+    Symbols pass through untouched: legacy Kraken codes are normalized to
+    ``BTC``/``ETH``/``USD`` upstream by the SDK adapter, never here.
     """
     stamped_at = _as_utc(account.get("fetchedAt", account.get("asOf", fetched_at)))
     acct_id = _account_id(account)
@@ -165,7 +175,7 @@ def summarize_mirror(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
     return {
-        "broker": str(snapshot.get("broker") or "alpaca"),
+        "broker": str(snapshot.get("broker") or "kraken"),
         "fetched_at": fetched_at.isoformat(),
         "accounts": rows,
         "total_positions": total_positions,
@@ -176,7 +186,7 @@ def enrich_briefing_with_mirror(
     briefing: Mapping[str, Any],
     snapshot: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Append-only briefing enrichment (read consumer for #4829).
+    """Append-only briefing enrichment (read consumer for #4847).
 
     Returns a copy of the ``digest_briefing_for_portfolio`` mapping with a
     read-only broker-mirror section appended to ``body``. The input mapping is
@@ -184,7 +194,7 @@ def enrich_briefing_with_mirror(
     """
     summary = summarize_mirror(snapshot)
     lines = [
-        "## Broker mirror (Alpaca, read-only)",
+        "## Broker mirror (Kraken, read-only)",
         "",
         f"Snapshot at {summary['fetched_at']} "
         f"covering {summary['total_positions']} open position(s).",

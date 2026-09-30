@@ -22,7 +22,9 @@
 #
 # ── Accepted risk: next@16.2.4 and the postcss/sharp it bundles (#4396) ──────
 #
-# All 30 advisories below share one remediation: `next@16.3.5`. We are
+# All 31 advisories below share one remediation: the #4396 upgrade. It was
+# scoped at `next@16.3.5`, but npm now offers `16.3.8` and GHSA-vcvr-r3jv-pc5j
+# is only patched at `>=16.3.6`, so #4396 must land at or above that. We are
 # deliberately pinned at 16.2.4 because the bump re-reds three Next builds with
 # ~79 pre-existing TypeScript errors (66 dashboard, 8 digichat, 5
 # digiquant-web). That upgrade — its acceptance criteria are "0 HIGH/CRITICAL"
@@ -64,6 +66,13 @@ GHSA-q8wf-6r8g-63ch
 GHSA-955p-x3mx-jcvp
 GHSA-p293-qw3h-jr36
 GHSA-2xp9-vwfh-vxw4
+# GHSA-vcvr-r3jv-pc5j — critical RCE in the Node.js `next/og` ImageResponse
+# (attacker-controlled SVG content/attributes/styles; Edge impl unaffected).
+# Unreachable in-repo: zero `next/og` / `ImageResponse` / opengraph-image
+# references in apps/* + packages/*. Published to the advisory DB 2026-09-30,
+# which is why develop re-reddened with no lockfile change. Re-check when
+# #4396 lands (needs next >=16.3.6; npm offers 16.3.8).
+GHSA-vcvr-r3jv-pc5j
 # postcss (next-bundled) — high: XSS, arbitrary file read, path traversal.
 GHSA-qx2v-qp2m-jg93
 GHSA-6g55-p6wh-862q

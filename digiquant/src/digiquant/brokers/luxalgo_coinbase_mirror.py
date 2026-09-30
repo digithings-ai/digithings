@@ -1,15 +1,22 @@
-"""Read-only Python mirror of luxalgo broker-sdk Alpaca snapshots (#4829).
+"""Read-only Python mirror of luxalgo broker-sdk Coinbase snapshots (#4843).
 
 Mirrors ``@luxalgo/broker-sdk@0.5.1`` (MIT) ``BrokerSnapshot`` shapes in Python and
 normalizes one SDK ``Account`` to digiquant broker contracts
 (``brokers/contracts.py``). Pure normalization — no I/O, no HTTP, no credential
 handling in this module.
 
-Credential locality: API keys stay local to the caller. This module never sees
-keys, never phones home, and never touches the network; the caller fetches the
-snapshot (via the TypeScript SDK or the existing ``brokers/alpaca.py`` adapter)
-and passes the already-fetched dict in. Snapshots are caller-persisted; nothing
-here writes into ``positions`` (H9 terminal owns it) or any other table.
+Credential locality: Coinbase creds are BYO-OAuth read scope — a wiring-side
+concern, NOT this issue. This module never sees keys, never phones home, and
+never touches the network; the caller fetches the snapshot (via the TypeScript
+SDK) and passes the already-fetched dict in. Snapshots are caller-persisted;
+nothing here writes into ``positions`` (H9 terminal owns it) or any other table.
+
+No FX fabrication: values are always stated in the account's own ``currency``.
+The SDK normalizes each Coinbase portfolio to a single-currency account, and
+this mirror maps per account without converting — a multi-currency snapshot is
+preserved as independent per-account rows, never summed across currencies.
+Positions include cash-class rows (a USD wallet normalizes to a ``USD``
+position); they map like any other position.
 
 JS-number precision: SDK floats cross the boundary via ``Decimal(str(x))``,
 never float-through — ``0.1 + 0.2`` style artifacts must not become ledger
@@ -89,6 +96,7 @@ def snapshot_to_contracts(
     ``fetched_at`` is the parent ``BrokerSnapshot fetchedAt`` — the ``as_of``
     for the account snapshot and the fallback ``executed_at`` for trades that
     carry none. An account-level ``fetchedAt``/``asOf`` key wins when present.
+    Values are never converted across currencies; each account keeps its own.
     """
     stamped_at = _as_utc(account.get("fetchedAt", account.get("asOf", fetched_at)))
     acct_id = _account_id(account)
@@ -148,7 +156,8 @@ def summarize_mirror(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     """Equity-by-account + position counts for the briefing payload.
 
     JSON-safe (Decimals rendered as strings). Mirrors the SDK ``computeStats``
-    shape minimally; no trade-stats port in this issue.
+    shape minimally; no trade-stats port in this issue. Per-account rows keep
+    their own currency — never summed across currencies.
     """
     fetched_at = _as_utc(snapshot.get("fetchedAt"))
     rows: list[dict[str, Any]] = []
@@ -165,7 +174,7 @@ def summarize_mirror(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
     return {
-        "broker": str(snapshot.get("broker") or "alpaca"),
+        "broker": str(snapshot.get("broker") or "coinbase"),
         "fetched_at": fetched_at.isoformat(),
         "accounts": rows,
         "total_positions": total_positions,
@@ -176,7 +185,7 @@ def enrich_briefing_with_mirror(
     briefing: Mapping[str, Any],
     snapshot: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Append-only briefing enrichment (read consumer for #4829).
+    """Append-only briefing enrichment (read consumer for #4843).
 
     Returns a copy of the ``digest_briefing_for_portfolio`` mapping with a
     read-only broker-mirror section appended to ``body``. The input mapping is
@@ -184,7 +193,7 @@ def enrich_briefing_with_mirror(
     """
     summary = summarize_mirror(snapshot)
     lines = [
-        "## Broker mirror (Alpaca, read-only)",
+        "## Broker mirror (Coinbase, read-only)",
         "",
         f"Snapshot at {summary['fetched_at']} "
         f"covering {summary['total_positions']} open position(s).",
