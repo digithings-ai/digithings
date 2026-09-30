@@ -68,6 +68,8 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "m2_weight": 0.0,
     "rs_eth_weight": 0.0,
     "dxy_weight": 0.0,
+    "gdx_gld_weight": 0.0,
+    "gld_slv_weight": 0.0,
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
     "sma_band_weight": 0.0,
@@ -187,6 +189,8 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     ig_path = _first_existing(base, ("BAMLC0A0CM.csv", "BAMLC0A0CM.parquet"))
     be5y_path = _first_existing(base, ("T5YIE.csv", "T5YIE.parquet"))
     nfci_path = _first_existing(base, ("NFCI.csv", "NFCI.parquet"))
+    gdx_path = _first_existing(base, ("GDX-USD.csv", "GDX-USD.parquet"))
+    slv_path = _first_existing(base, ("SLV.csv", "SLV.parquet"))
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
@@ -196,6 +200,8 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     ig_oas_dates, ig_oas_values = load_date_value_frame(ig_path) if ig_path else (None, None)
     be5y_dates, be5y_values = load_date_value_frame(be5y_path) if be5y_path else (None, None)
     nfci_dates, nfci_values = load_date_value_frame(nfci_path) if nfci_path else (None, None)
+    gdx_dates, gdx_close = load_date_value_frame(gdx_path) if gdx_path else (None, None)
+    slv_dates, slv_close = load_date_value_frame(slv_path) if slv_path else (None, None)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -215,6 +221,10 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         breakeven_5y_values=be5y_values,
         nfci_dates=nfci_dates,
         nfci_values=nfci_values,
+        gdx_dates=gdx_dates,
+        gdx_close=gdx_close,
+        slv_dates=slv_dates,
+        slv_close=slv_close,
     )
 
 
@@ -242,6 +252,10 @@ def drop_extras_missing_sources(
         payload["breakeven_5y"] = 0.0
     if payload["nfci"] > 0.0 and sources.nfci_dates is None:
         payload["nfci"] = 0.0
+    if payload["gdx_gld"] > 0.0 and sources.gdx_dates is None:
+        payload["gdx_gld"] = 0.0
+    if payload["gld_slv"] > 0.0 and sources.slv_dates is None:
+        payload["gld_slv"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 
@@ -256,7 +270,8 @@ def load_sdca_extra_z(
 
     Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
     plus the gold legs ``GVZCLS.csv``, ``WALCL.csv``, ``BAMLH0A0HYM2.csv``,
-    ``BAMLC0A0CM.csv``, ``T5YIE.csv``, ``NFCI.csv`` (each also accepted as parquet).
+    ``BAMLC0A0CM.csv``, ``T5YIE.csv``, ``NFCI.csv``, ``GDX-USD.csv``, ``SLV.csv``
+    (each also accepted as parquet).
     Missing files omit that extra (trials that need it are skipped).
     """
     root = Path(data_path).parent if data_path is not None else None

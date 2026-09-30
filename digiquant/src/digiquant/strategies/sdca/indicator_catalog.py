@@ -425,6 +425,36 @@ def nfci_z(
     )
 
 
+def gdx_gld_z(
+    dates: pl.Series,
+    gld_price: pl.Series,
+    gdx_dates: pl.Series,
+    gdx_close: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """``log(GDX/GLD)`` rolling-z. Miner participation confirms the bid → +z (no flip)."""
+    gdx = align_to_dates(dates, gdx_dates, gdx_close, forward_fill=False)
+    ratio = (gdx / gld_price).log()
+    return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("gdx_gld")
+
+
+def gld_slv_z(
+    dates: pl.Series,
+    gld_price: pl.Series,
+    slv_dates: pl.Series,
+    slv_close: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """``log(GLD/SLV)`` rolling-z. Silver weak vs gold = stress → +z (no flip)."""
+    slv = align_to_dates(dates, slv_dates, slv_close, forward_fill=False)
+    ratio = (gld_price / slv).log()
+    return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("gld_slv")
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -589,6 +619,38 @@ def build_extra_indicators(
                     min_samples=min_samples,
                 ),
                 weight=enabled["nfci"],
+            )
+        )
+    if "gdx_gld" in enabled:
+        gdx_dates = _require_pair(sources.gdx_dates, sources.gdx_close, "gdx_gld")
+        extras.append(
+            IndicatorWeight(
+                name="gdx_gld",
+                z=gdx_gld_z(
+                    dates,
+                    btc_price,
+                    gdx_dates,
+                    sources.gdx_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["gdx_gld"],
+            )
+        )
+    if "gld_slv" in enabled:
+        slv_dates = _require_pair(sources.slv_dates, sources.slv_close, "gld_slv")
+        extras.append(
+            IndicatorWeight(
+                name="gld_slv",
+                z=gld_slv_z(
+                    dates,
+                    btc_price,
+                    slv_dates,
+                    sources.slv_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["gld_slv"],
             )
         )
     if "weekly_rsi" in enabled:
@@ -782,6 +844,8 @@ __all__ = [
     "dxy_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
+    "gdx_gld_z",
+    "gld_slv_z",
     "gvz_z",
     "hy_oas_z",
     "ig_oas_z",
