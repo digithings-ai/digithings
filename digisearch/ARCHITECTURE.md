@@ -223,7 +223,12 @@ collapses hits whose full chunk bodies are byte-identical and whose
 metadata paths are suffix-related at a `/` boundary (live path plus
 tenant-prefixed copy, e.g. `clients/digithings/...` — an index can hold
 both because vector IDs are path-derived, so a re-sync under a new prefix
-adds copies instead of overwriting). Within a twin group the http(s)-URL
+adds copies instead of overwriting). Identity comes from the vault
+namespace (`metadata.vault_path`, then `metadata.path`): a file-derived
+`source_url` is an ingest-location artifact, never an identity — preferring
+it lets file-ingested twins slip through (#4856). An http(s)
+`source_url` is the identity fallback for URL-ingested chunks and doubles
+as the keep-signal. Within a twin group the http(s)-URL
 carrier wins, else the longest (tenant-prefixed) path; `total` still
 reports the backend count. Helper: `search/namespace_dedupe.py`.
 

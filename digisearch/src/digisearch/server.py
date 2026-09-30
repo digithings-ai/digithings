@@ -611,16 +611,27 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _is_http_url(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith(("http://", "https://"))
+
+
 def _twin_entry(result: Any, position: int) -> dict[str, Any]:
-    """Extract the dedupe-relevant fields from one backend ``Result``."""
+    """Extract the dedupe-relevant fields from one backend ``Result``.
+
+    Identity comes from the vault namespace (``vault_path``, then ``path``):
+    a file-derived ``source_url`` is an ingest-location artifact, never an
+    identity — preferring it lets twin copies slip through (#4856). An
+    http(s) ``source_url`` is the identity fallback for URL-ingested chunks
+    and doubles as the keep-signal preserving the only citable link.
+    """
     chunk = getattr(result, "chunk", None)
     metadata = dict(getattr(chunk, "metadata", None) or {})
+    source_url = metadata.get("source_url")
+    http_source = source_url if _is_http_url(source_url) else None
     return {
-        "path": (
-            metadata.get("source_url") or metadata.get("path") or metadata.get("vault_path") or ""
-        ),
+        "path": metadata.get("vault_path") or metadata.get("path") or http_source or "",
         "content": getattr(chunk, "content", "") or "",
-        "url": getattr(result, "url", None) or metadata.get("url"),
+        "url": getattr(result, "url", None) or metadata.get("url") or http_source,
         "position": position,
     }
 
