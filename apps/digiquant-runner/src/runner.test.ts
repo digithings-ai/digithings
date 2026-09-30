@@ -64,7 +64,9 @@ function harness(): {
   const session = new RunnerSession({
     kv: memoryKv(),
     port,
-    scheduleAlarm: (delayMs) => alarms.push(delayMs),
+    scheduleAlarm: async (delayMs) => {
+      alarms.push(delayMs);
+    },
     now: () => Date.parse("2026-09-29T13:00:00.000Z"),
   });
   return { session, starts, alarms, statuses };
