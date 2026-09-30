@@ -26,8 +26,9 @@ describe("scheduled", () => {
 
     await worker.scheduled(
       {
-        cron: "5 22 * * *",
-        scheduledTime: Date.UTC(2026, 8, 4, 22, 5),
+        // smoke-site stays workflow_dispatch. research-metrics is a container job.
+        cron: "17 6 * * *",
+        scheduledTime: Date.UTC(2026, 8, 4, 6, 17),
       } as ScheduledController,
       env,
       executionContext(pending),

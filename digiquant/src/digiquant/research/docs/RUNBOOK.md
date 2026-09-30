@@ -39,7 +39,7 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **GitHub — manual “Daily Price Update”:** **Retired** with the Supabase price tables (127, #4053). The manual path is now the R2 refresh: `python scripts/refresh_market_data_r2.py --dry-run --as-of 2025-08-29` (drop `--dry-run` to write generations); there is no `--supabase` market write left.
 
-**Macro + Treasury (automated):** After technicals, the workflow runs FRED (if **`FRED_API_KEY`**), Frankfurter, crypto Fear & Greed, and **Treasury yields** (`us_treasury` from Treasury XML when the feed returns data — often empty from CI; plus **`treasury_market`** from Yahoo ^IRX/^FVX/^TNX/^TYX for reliable 3M/5Y/10Y/30Y). Migrations: [`015`](supabase/migrations/015_macro_series_observations.sql); [`016`](supabase/migrations/016_sec_recent_filings.sql) / [`017`](supabase/migrations/017_drop_sec_recent_filings.sql) — **`sec_recent_filings`** is **dropped** by 017 (batch SEC ingest retired). Run **`supabase db push`** (or apply `017` in the SQL editor) so the table no longer exists. **One-time deep backfill:** manual workflow **backfill macro** (Treasury: Yahoo **`max`** for `treasury_market`; **`ingest_treasury_curve --backfill`** skips the Treasury.gov XML month crawl for speed — use **`--xml-months N`** locally if you need official XML rows). **Smoke tests:** `ingest_treasury_curve.py --dry-run`. Extra FRED series: [`config/macro_series.yaml`](config/macro_series.yaml); bad IDs log a warning and continue.
+**Macro + Treasury (automated):** After technicals, the workflow refreshes the sealed macro panel from gloomberb `econ_series` (no key; `DTWEXBGS`/`MANEMP`/vol ex-VIX/VIX3M no longer refreshed, #4794 PR3), plus Frankfurter, crypto Fear & Greed, and **Treasury yields** (`us_treasury` from Treasury XML when the feed returns data — often empty from CI; plus **`treasury_market`** from Yahoo ^IRX/^FVX/^TNX/^TYX for reliable 3M/5Y/10Y/30Y). Migrations: [`015`](supabase/migrations/015_macro_series_observations.sql); [`016`](supabase/migrations/016_sec_recent_filings.sql) / [`017`](supabase/migrations/017_drop_sec_recent_filings.sql) — **`sec_recent_filings`** is **dropped** by 017 (batch SEC ingest retired). Run **`supabase db push`** (or apply `017` in the SQL editor) so the table no longer exists. **One-time deep backfill:** manual workflow **backfill macro** (Treasury: Yahoo **`max`** for `treasury_market`; **`ingest_treasury_curve --backfill`** skips the Treasury.gov XML month crawl for speed — use **`--xml-months N`** locally if you need official XML rows). **Smoke tests:** `ingest_treasury_curve.py --dry-run`. Extra FRED series: [`config/macro_series.yaml`](config/macro_series.yaml); bad IDs log a warning and continue.
 
 **SEC / EDGAR (ad hoc, not in Supabase):** The watchlist is **ETF-heavy**, so batch filings ingest was low-signal. **Research / daily delta / deep dives** should **optionally** check **major operating companies** (8-K, 10-Q, 10-K, material items) when relevant to a sector, segment, or thesis — use [sec.gov](https://www.sec.gov/edgar) or the Cursor **`sec-edgar`** MCP (set **`SEC_EDGAR_USER_AGENT`** in [`config/mcp.secrets.env`](config/mcp.secrets.env); see [`.cursor/mcp.json`](.cursor/mcp.json)). No GitHub secret required for the daily price job.
 
@@ -366,7 +366,7 @@ search-cost work is structural — free-source ingestion replacing paid agentic
 searches — not narrowing. That program is **Phase D**: see
 [`PHASE-D.md`](PHASE-D.md) for the full architecture, PR sequence, and the
 retained paid fallbacks. PR-1 converts `alt-options-derivatives` to read the
-FRED vol complex (VIX/VIX3M/VXN/GVZ/OVX, in `config/macro_series.yaml`) via
+FRED vol complex (VIX/VIX3M, in `config/macro_series.yaml`) via
 `get_macro_series` instead of a paid `web_search` (#708).
 
 `run_diagnostics.est_cost_usd` tracks each run **attempt** (per-attempt keying since
@@ -512,7 +512,7 @@ pip install -r requirements.txt
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-4. **FRED API key** (free): [`FRED_API_KEY`](https://fred.stlouisfed.org/docs/api/api_key.html) — required for `ingest_fred.py` and for the GitHub **Daily Price Update** job to load FRED series. If unset in Actions, FRED is skipped with a warning; Frankfurter and Fear & Greed still run.
+4. **FRED API key** (free): [`FRED_API_KEY`](https://fred.stlouisfed.org/docs/api/api_key.html) — legacy scripts only (`ingest_fred.py` and ad-hoc research one-offs). The sealed macro panel path (`digiquant prices fetch-macro`, R2 refresh, `export_sdca_macro.py`) reads gloomberb `econ_series` / sealed R2 and needs no key. If unset in Actions, legacy FRED ingest is skipped with a warning; Frankfurter and Fear & Greed still run.
 
 5. **Unified local secrets (optional):** [`config/mcp.secrets.env`](config/mcp.secrets.env) (gitignored; copy from [`config/mcp.secrets.env.example`](config/mcp.secrets.env.example)) can hold **`FRED_API_KEY`**, optional **`COINGECKO_API_KEY`** / **`ALPHA_VANTAGE_API_KEY`**, and **`SEC_EDGAR_USER_AGENT`** (for **`sec-edgar`** MCP / ad-hoc EDGAR lookups only). Ingest scripts load it automatically next to `supabase.env`. For **GitHub Actions**, add repository secret **`FRED_API_KEY`**. **Cursor MCP** uses **`${env:…}`** in [`.cursor/mcp.json`](.cursor/mcp.json) — see [`config/MCP-SETUP.md`](config/MCP-SETUP.md).
 

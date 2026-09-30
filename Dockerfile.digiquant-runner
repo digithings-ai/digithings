@@ -3,9 +3,12 @@
 # image_build_context = "../.." from apps/digiquant-runner/wrangler.toml (#4046).
 #
 # The image code pin is the released main tree baked at build time.
-# The hot path inside commands.json is `uv run --frozen --no-sync`.
-# Sync installs digiquant with the prices and research extras only
-# (boto3 for the R2 publish). No nautilus extra. No house research chain.
+# The hot path inside commands.json is `uv run --frozen --no-sync`
+# except the tearsheet Coinbase step, which keeps `uv run --frozen --with ccxt`.
+# Sync installs digiquant with prices, research, and nautilus. Nautilus is
+# required by tearsheets and research-metrics. The 1.230.0 cp312 manylinux
+# x86_64 wheel is 182608916 bytes (uv.lock), so this stays one image class
+# on standard-2. No DigiQuantRunnerNautilusContainer. No house research chain.
 #
 # GIT_SHA defaults to unknown. wrangler does not pass build args here;
 # a non-wrangler build can set --build-arg GIT_SHA=<sha>. /healthz reports
@@ -33,8 +36,9 @@ COPY scripts/refresh_market_data_r2.py ./scripts/refresh_market_data_r2.py
 COPY apps/digiquant-runner/container/exec_job.py /opt/runner/exec_job.py
 COPY apps/digiquant-runner/commands.json /opt/runner/commands.json
 
-RUN uv sync --frozen --package digiquant --extra prices --extra research
+RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus
 COPY scripts/backfill_market_data_r2.py ./scripts/backfill_market_data_r2.py
+COPY scripts/execution_cron_check.py ./scripts/execution_cron_check.py
 
 ARG GIT_SHA=unknown
 ENV DIGIQUANT_RUNNER_GIT_SHA=${GIT_SHA}

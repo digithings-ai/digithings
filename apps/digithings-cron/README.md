@@ -68,8 +68,9 @@ session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
 intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type digiquant-baseline (Phase 1 does
-not move it onto the runner). Price jobs and market-data-refresh use
-`kind: container`. The runner command catalog is
+House-run uses repository_dispatch event_type digiquant-baseline (Phase 3).
+Price jobs, market-data-refresh, onchain, tearsheets, research-metrics, and
+execution-cron-check use `kind: container`. Those four Phase 2 workflows have
+no `schedule:` of their own. The runner command catalog is
 `apps/digiquant-runner/commands.json`. Operator notes:
 `docs/ops/digiquant-runner.md`.
