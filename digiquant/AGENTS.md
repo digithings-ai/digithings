@@ -684,6 +684,44 @@ stays a generic transport engine (no URLs, no env reads).
 
 ---
 
+## LuxAlgo Library thin wrap (#4779 P0)
+
+`src/digiquant/data/luxalgo/` is the LuxAlgo Library research layer, mirroring
+the Gloomberb layering (`attribution` / `entitlements` / `models` / `client` /
+`agent_tools`, same MCP + manifest + dispatcher surfaces). It is the **only**
+place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
+
+- **8 tools, read scope, default ON, all keyless (`free`).**
+  `luxalgo_library_search`, `luxalgo_library_get_concept`,
+  `luxalgo_library_get_indicator` (metadata only), `luxalgo_library_list_concepts`,
+  `luxalgo_library_list_indicators`, `luxalgo_library_list_tags`,
+  `luxalgo_library_list_families`, `luxalgo_library_get_family` are registered
+  in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
+  `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
+  `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
+  typed `upstream_error` with no request.
+- **Upstream contract.** One `tools/call` JSON-RPC round trip per tool over
+  streamable HTTP (SSE `data:` lines; bare JSON also accepted). Every upstream
+  tool requires a `context` string — the client injects the fixed generic
+  `LUXALGO_CONTEXT` server-side and always overwrites any caller value, so no
+  PII reaches the upstream. Upstream payloads pass through as envelope `data`
+  unchanged (shapes vary); errors map to `not_found` / `rate_limited` /
+  `upstream_error` / `invalid_input`. 900s size-bounded TTL cache; no
+  rate-limiter/breaker in this phase (low-volume research reads).
+- **Attribution + license boundary.** Every payload carries "Sourced from
+  LuxAlgo Library" + the upstream canonical `url`/`md_url` (Library home when
+  no single page is addressed). Research reference only — never a pipeline
+  primary. `library_get_source_code` is deliberately NOT wrapped (CC
+  BY-NC-SA: no indicator source in paid surfaces); `broker_*` keys are never
+  sent to the hosted MCP; `journal_*`/`edge_*`/`trackers_*`/`propfirms_*` are
+  separate packages.
+- **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
+  (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
+  the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py` plus
+  `pytest tests/dq/test_mcp_server_scope.py`.
+
+---
+
 ## research sandbox image (#396)
 
 `digiquant/Dockerfile.sandbox` is a **separate** image from the digiquant HTTP
