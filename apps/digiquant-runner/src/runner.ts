@@ -48,7 +48,9 @@ export class DigiQuantRunnerContainer extends Container<Env> {
       port: portFromContainer(this),
       scheduleAlarm: (delayMs: number) => {
         const seconds = Math.max(1, Math.round(delayMs / 1000));
-        void this.schedule(seconds, "heartbeat");
+        // Must await: void-schedule can drop the DO alarm registration when the
+        // request ends before INSERT/setAlarm completes (#4761 empty log_tail).
+        return this.schedule(seconds, "heartbeat").then(() => undefined);
       },
     });
   }

@@ -64,7 +64,9 @@ function harness(): {
   const session = new RunnerSession({
     kv: memoryKv(),
     port,
-    scheduleAlarm: (delayMs) => alarms.push(delayMs),
+    scheduleAlarm: async (delayMs) => {
+      alarms.push(delayMs);
+    },
     now: () => Date.parse("2026-09-29T13:00:00.000Z"),
   });
   return { session, starts, alarms, statuses };
@@ -171,5 +173,33 @@ describe("data plane env", () => {
     expect(keys).not.toContain("RUNNER_AUTH_TOKEN");
     expect(keys).not.toContain("GH_ISSUE_TOKEN");
     expect(keys).toContain("FRED_API_KEY");
+  });
+});
+
+describe("GET /v1/jobs/:id status refresh", () => {
+  it("applies container status on GET while the lock is held", async () => {
+    const { session, starts, statuses } = harness();
+    const accepted = await session.accept(
+      job({ idempotency_key: "market-data-refresh-morning:get-refresh" }),
+    );
+    const remote = statuses.get(starts[0]);
+    if (!remote) throw new Error("missing status");
+    remote.log_tail = "hello from container";
+    remote.git_sha = "deadbeef";
+    remote.started_at = "2026-09-29T13:00:01.123456+00:00";
+    const res = await session.fetch(
+      new Request(`https://digiquant-runner/v1/jobs/${accepted.run_id}`),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      log_tail: string;
+      git_sha: string;
+      started_at: string;
+      status: string;
+    };
+    expect(body.status).toBe("running");
+    expect(body.log_tail).toBe("hello from container");
+    expect(body.git_sha).toBe("deadbeef");
+    expect(body.started_at).toBe("2026-09-29T13:00:01.123456+00:00");
   });
 });
