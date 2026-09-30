@@ -31,6 +31,11 @@ def test_digiclaw_imports() -> None:
 
 
 @pytest.mark.baseline
+def test_digivoice_imports() -> None:
+    import digivoice  # noqa: F401
+
+
+@pytest.mark.baseline
 def test_digiquant_imports() -> None:
     import digiquant  # noqa: F401
 

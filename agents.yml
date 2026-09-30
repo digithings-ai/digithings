@@ -139,6 +139,13 @@ components:
     # No dedicated workflow yet; path matches digiskills/AGENTS.md + tests/dsk/.
     test_cmd: "pytest tests/dsk/ -m unit -v --tb=short"
 
+  - name: digivoice
+    port: null
+    description: "Local whisper.cpp and Piper CLI for dictation, speech, and session history"
+    agents_doc: digivoice/AGENTS.md
+    arch_doc: digivoice/ARCHITECTURE.md
+    test_cmd: "pytest tests/dvo/ -m unit -v --tb=short"
+
 agent_capabilities:
   - id: agents-init
     description: "Generate platform adapter files from agents.yml"
