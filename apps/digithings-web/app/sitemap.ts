@@ -11,7 +11,6 @@ const STATIC_ROUTES = [
   "/services",
   "/team",
   "/security",
-  "/quality",
   "/changelog",
   "/legal/privacy",
   "/docs",

@@ -30,7 +30,7 @@ export const Brand = () => (
  *  omitted here to avoid rendering it twice.
  *
  *  Four wayfinding entries, the last a NavGroup: the company pages (About,
- *  Team, Security, Quality) are a small index, not four more top-level slots —
+ *  Team, Security, Changelog) are a small index, not four more top-level slots —
  *  NavShell renders a group as a dropdown on the wide bar and as a labelled
  *  section inside the narrow sheet. "Contact" left the bar with them: it is an
  *  anchor on the home page and it lives in the footer. The website privacy
@@ -47,7 +47,6 @@ export const DT_NAV_PRIMARY: NavItem[] = [
       { label: "About", href: "/about" },
       { label: "Team", href: "/team" },
       { label: "Security", href: "/security" },
-      { label: "Quality", href: "/quality" },
       { label: "Changelog", href: "/changelog" },
     ],
   },
@@ -69,7 +68,6 @@ export const DT_FOOTER: NavLink[] = [
   { label: "About", href: "/about" },
   { label: "Team", href: "/team" },
   { label: "Security", href: "/security" },
-  { label: "Quality", href: "/quality" },
   { label: "Changelog", href: "/changelog" },
   { label: "Contact", href: "/#contact" },
   { label: "digichat", href: "/chat" },
