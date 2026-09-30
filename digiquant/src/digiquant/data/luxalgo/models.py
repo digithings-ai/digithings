@@ -44,6 +44,12 @@ __all__ = [
     "LibraryListTagsInput",
     "LibraryListFamiliesInput",
     "LibraryGetFamilyInput",
+    "EdgeSymbolsInput",
+    "EdgePresetsInput",
+    "EdgeReportInput",
+    "TrackersDatasetsInput",
+    "TrackersLatestInput",
+    "TrackersTickerInput",
     # concrete envelopes
     "LibrarySearchEnvelope",
     "LibraryGetConceptEnvelope",
@@ -53,6 +59,12 @@ __all__ = [
     "LibraryListTagsEnvelope",
     "LibraryListFamiliesEnvelope",
     "LibraryGetFamilyEnvelope",
+    "EdgeSymbolsEnvelope",
+    "EdgePresetsEnvelope",
+    "EdgeReportEnvelope",
+    "TrackersDatasetsEnvelope",
+    "TrackersLatestEnvelope",
+    "TrackersTickerEnvelope",
     "envelope_error",
 ]
 
@@ -176,6 +188,77 @@ class LibraryGetFamilyInput(_InputModel):
 
 
 # ---------------------------------------------------------------------------
+# Input models — Edge Stats preset reads (#4844)
+# ---------------------------------------------------------------------------
+#
+# Probe-verified 2026-09-30 against the hosted tools/list: edge_symbols takes
+# no parameters, edge_presets takes an optional category, edge_report takes a
+# preset id + symbol (both required).
+
+
+class EdgeSymbolsInput(_InputModel):
+    """Coverage of the hosted Edge Stats store (takes no parameters upstream)."""
+
+
+class EdgePresetsInput(_InputModel):
+    """Preset catalog; ``category`` narrows to one category when given."""
+
+    category: str | None = None
+
+
+class EdgeReportInput(_InputModel):
+    """One precomputed preset result (probe-verified: ``preset`` + ``symbol``)."""
+
+    preset: NonEmptyStr
+    symbol: NonEmptyStr
+
+
+# ---------------------------------------------------------------------------
+# Input models — Market Trackers live-query companions (#4844)
+# ---------------------------------------------------------------------------
+#
+# Probe-verified 2026-09-30: trackers_datasets takes an optional dataset id,
+# trackers_latest takes a required dataset plus ticker/text/where/sort/limit/
+# offset, trackers_ticker takes a required ticker plus year/limit. Bounds below
+# mirror the upstream input schemas (limit caps, ticker/text lengths, year
+# range); dataset membership itself is validated upstream so a newly published
+# dataset is never rejected client-side. trackers_query (ad-hoc dump search)
+# is deliberately NOT wrapped — dumps stay the source of record.
+
+TickerStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
+TrackerTextStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
+SortOrder = Literal["newest", "oldest"]
+
+
+class TrackersDatasetsInput(_InputModel):
+    """Trackers catalog; ``dataset`` selects one dataset's detailed view when given."""
+
+    dataset: NonEmptyStr | None = None
+
+
+class TrackersLatestInput(_InputModel):
+    """Newest ingestion day's rows for one dataset (freshness/ad-hoc lookups only)."""
+
+    dataset: NonEmptyStr
+    ticker: TickerStr | None = None
+    text: TrackerTextStr | None = None
+    where: dict[str, str | int | bool] | None = None
+    sort: SortOrder | None = None
+    limit: int = Field(default=25, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class TrackersTickerInput(_InputModel):
+    """One ticker's newest rows across every ticker-bearing dataset for one year."""
+
+    ticker: TickerStr
+    year: int | None = Field(default=None, ge=1900, le=2100)
+    limit: int = Field(default=5, ge=1, le=25)
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (data slot is the upstream payload, passed through)
 # ---------------------------------------------------------------------------
 
@@ -187,3 +270,9 @@ LibraryListIndicatorsEnvelope = LuxalgoEnvelope[Any]
 LibraryListTagsEnvelope = LuxalgoEnvelope[Any]
 LibraryListFamiliesEnvelope = LuxalgoEnvelope[Any]
 LibraryGetFamilyEnvelope = LuxalgoEnvelope[Any]
+EdgeSymbolsEnvelope = LuxalgoEnvelope[Any]
+EdgePresetsEnvelope = LuxalgoEnvelope[Any]
+EdgeReportEnvelope = LuxalgoEnvelope[Any]
+TrackersDatasetsEnvelope = LuxalgoEnvelope[Any]
+TrackersLatestEnvelope = LuxalgoEnvelope[Any]
+TrackersTickerEnvelope = LuxalgoEnvelope[Any]

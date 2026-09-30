@@ -14,15 +14,18 @@ Two upstream contracts the client handles:
   it is never tool input, so agent traffic cannot leak PII to the upstream.
 * **Streamable HTTP framing.** Responses are SSE ``data:`` lines; the client
   takes the JSON payload of the last ``data:`` line (a bare-JSON body is also
-  accepted for MockTransport-shaped test doubles).
+  accepted for MockTransport-shaped test doubles). Library tools answer
+  ``structuredContent``; the edge/trackers tools answer MCP content blocks
+  whose text part is the JSON payload — both shapes unwrap to the same
+  envelope ``data``.
 
 The kill switch is ``LUXALGO_ENABLED`` (default ON): only
 ``1``/``true``/``yes``/``on`` (case-insensitive) enable the family; any other
 explicit value fails closed to a typed ``upstream_error`` envelope with no
 request. No environment variables are read at import time.
 
-Thin-wrap notes: no rate limiter and no circuit breaker in this phase (8
-low-volume research reads; revisit if the family grows). ``transport`` is the
+Thin-wrap notes: no rate limiter and no circuit breaker in this phase (14
+low-volume keyless reads; revisit if the family grows). ``transport`` is the
 test seam (``httpx.MockTransport``); production callers omit it.
 """
 
@@ -37,6 +40,8 @@ from typing import Any, get_args  # score:allow untyped any — wire JSON
 
 import httpx
 from pydantic import ValidationError
+
+from digiquant.stats.honesty import DISCLAIMER as HONESTY_DISCLAIMER
 
 from .models import ErrorCode, LuxalgoEnvelope, LuxalgoError, envelope_error
 
@@ -95,8 +100,34 @@ def _parse_streamable_body(text: str) -> Any:
     raise ValueError("no JSON payload in streamable-HTTP body")
 
 
+def _extract_result_data(result: Any) -> Any:
+    """Unwrap a ``tools/call`` result into the envelope ``data`` payload.
+
+    Library tools answer ``structuredContent``; the edge/trackers tools answer
+    MCP content blocks whose first text part is the JSON payload itself
+    (probe-verified 2026-09-30). Either shape yields the parsed payload; an
+    unparseable body falls back to the raw result so the envelope still
+    carries what the upstream said.
+    """
+    if isinstance(result, dict) and "structuredContent" in result:
+        return result["structuredContent"]
+    if isinstance(result, dict) and isinstance(result.get("content"), list):
+        texts = [
+            block.get("text")
+            for block in result["content"]
+            if isinstance(block, dict) and isinstance(block.get("text"), str)
+        ]
+        joined = "\n".join(texts).strip()
+        if joined:
+            try:
+                return json.loads(joined)
+            except json.JSONDecodeError:
+                pass
+    return result.get("structuredContent", result) if isinstance(result, dict) else result
+
+
 class LuxAlgoClient:
-    """Thin JSON-RPC client for the hosted LuxAlgo MCP (Library subset)."""
+    """Thin JSON-RPC client for the hosted LuxAlgo MCP (Library + Edge + Trackers)."""
 
     def __init__(
         self,
@@ -200,7 +231,7 @@ class LuxAlgoClient:
                 return envelope_error("not_found", f"LuxAlgo MCP: {error_text}")
             return envelope_error("upstream_error", f"LuxAlgo MCP error: {error_text or message}")
         result = message["result"]
-        data = result.get("structuredContent", result) if isinstance(result, dict) else result
+        data = _extract_result_data(result)
         try:
             envelope = LuxalgoEnvelope[Any](data=data)
         except ValidationError as exc:
@@ -208,7 +239,7 @@ class LuxAlgoClient:
         self._cache_put(cache_key, json.dumps(envelope.data, default=str))
         return envelope
 
-    # -- Library tools (P0 subset; no source_code, no journal/edge/broker) --
+    # -- Library tools (P0 subset; no source_code, no journal/broker/propfirms) --
     #
     # Each method accepts a validated input model or a raw dict (the dispatcher
     # falls back to the raw payload on ValidationError so the client owns the
@@ -245,6 +276,49 @@ class LuxAlgoClient:
 
     def library_get_family(self, args: Any = None) -> LuxalgoEnvelope[Any]:
         return self._call("library_get_family", self._coerce_args(args))
+
+    # -- Edge Stats preset reads (#4844; keyless, read-only) --
+    #
+    # The upstream edge_report payload already carries the honesty disclaimer
+    # (identical to digiquant.stats.honesty.DISCLAIMER); the client also stamps
+    # it into the envelope warnings so every rendered preset stat carries it
+    # even when a caller reads warnings only.
+
+    def edge_symbols(self, args: Any = None) -> LuxalgoEnvelope[Any]:
+        return self._call("edge_symbols", self._coerce_args(args))
+
+    def edge_presets(self, args: Any = None) -> LuxalgoEnvelope[Any]:
+        return self._call("edge_presets", self._coerce_args(args))
+
+    def edge_report(self, args: Any = None) -> LuxalgoEnvelope[Any]:
+        envelope = self._call("edge_report", self._coerce_args(args))
+        if isinstance(envelope.data, LuxalgoError):
+            return envelope
+        warnings = list(envelope.warnings or [])
+        if HONESTY_DISCLAIMER not in warnings:
+            warnings.append(HONESTY_DISCLAIMER)
+        return envelope.model_copy(update={"warnings": warnings})
+
+    # -- Market Trackers live-query companions (#4844; keyless, read-only) --
+    #
+    # Freshness/ad-hoc lookups only: the CC0 dumps stay the source of record
+    # (trackers_query is deliberately NOT wrapped). An upstream ``stale`` flag
+    # on the payload folds into the envelope ``stale`` bit.
+
+    def _trackers_call(self, upstream_tool: str, args: Any) -> LuxalgoEnvelope[Any]:
+        envelope = self._call(upstream_tool, self._coerce_args(args))
+        if isinstance(envelope.data, dict) and envelope.data.get("stale") is True:
+            return envelope.model_copy(update={"stale": True})
+        return envelope
+
+    def trackers_datasets(self, args: Any = None) -> LuxalgoEnvelope[Any]:
+        return self._trackers_call("trackers_datasets", args)
+
+    def trackers_latest(self, args: Any = None) -> LuxalgoEnvelope[Any]:
+        return self._trackers_call("trackers_latest", args)
+
+    def trackers_ticker(self, args: Any = None) -> LuxalgoEnvelope[Any]:
+        return self._trackers_call("trackers_ticker", args)
 
 
 def luxalgo_error_message(data: Any) -> str | None:
