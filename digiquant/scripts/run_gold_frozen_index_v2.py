@@ -17,12 +17,20 @@ legs are excluded from the v2 vote.
 
 Writes `.scratch/gold_seed_v2.json` (full variant, default) or
 `.scratch/gold_seed_v2deep.json` (`--variant deep`: no gvz — the
-v1-comparable primary, Ruling 5) for the step-5 v2 gate loop.
-Research-only; touches nothing outside `.scratch/`.
+v1-comparable primary, Ruling 5) for the step-5 v2 gate loop, or
+`.scratch/gold_seed_v3.json` (`--variant uupswap`: v1 vote with the DXY leg
+swapped for the UUP dollar proxy — refreshability swap, not a new vote).
+
+UUPSWAP rationale: the DTWEXBGS FRED file is unrefreshable (dropped from the
+staging manifest + upstream miss + export script skip), so the DXY vote
+cannot be re-staged. UUP (Invesco DB USD Bull ETF, on-disk from 2007-03)
+tracks DXY at 0.86/0.88 (levels/63d changes, 4857 joint days) with the same
+sign convention (strong dollar → −z). Parity with the dxy leg, not
+outperformance, is success.
 
 Usage (gold worktree has no venv; research venv + src on PYTHONPATH):
     PYTHONPATH=digiquant/src <research-venv>/bin/python \\
-        digiquant/scripts/run_gold_frozen_index_v2.py [--variant {full,deep}]
+        digiquant/scripts/run_gold_frozen_index_v2.py [--variant {full,deep,uupswap}]
 """
 
 from __future__ import annotations
@@ -71,17 +79,28 @@ SEED_WEIGHTS_DEEP = SdcaCompositeWeights(
     gdx_gld=0.5,
     gld_slv=0.5,
 )
+SEED_WEIGHTS_UUPSWAP = SdcaCompositeWeights(
+    valuation=1.0,
+    m2=0.5,
+    uup=0.5,
+)
 VARIANT_PATHS = {
     "full": DIGIQUANT_ROOT / ".scratch" / "gold_seed_v2.json",
     "deep": DIGIQUANT_ROOT / ".scratch" / "gold_seed_v2deep.json",
+    "uupswap": DIGIQUANT_ROOT / ".scratch" / "gold_seed_v3.json",
+}
+VARIANT_WEIGHTS = {
+    "full": SEED_WEIGHTS_FULL,
+    "deep": SEED_WEIGHTS_DEEP,
+    "uupswap": SEED_WEIGHTS_UUPSWAP,
 }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gold GLD v2 seed frozen index")
-    parser.add_argument("--variant", choices=("full", "deep"), default="full")
+    parser.add_argument("--variant", choices=("full", "deep", "uupswap"), default="full")
     args = parser.parse_args()
-    seed_weights = SEED_WEIGHTS_FULL if args.variant == "full" else SEED_WEIGHTS_DEEP
+    seed_weights = VARIANT_WEIGHTS[args.variant]
     out_path = VARIANT_PATHS[args.variant]
     print(f"variant: {args.variant}")
 
