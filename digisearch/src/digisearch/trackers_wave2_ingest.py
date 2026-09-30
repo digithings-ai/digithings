@@ -62,7 +62,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol  # score:allow untyped any — heterogeneous JSON rows
 
 from pydantic import BaseModel, ConfigDict, Field
 
