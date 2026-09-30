@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ground-up rebuild of digiquant.io (`apps/digiquant-web`) and the digiquant dashboard (`apps/dashboard`) from the canonical kit, in the Gloomberg (gloom.sh) presentation, after digithings.ai lands. Not an in-place restyle of either app.
+**Goal:** Ground-up rebuild of digiquant.io (`apps/digiquant-web`) and the digiquant dashboard (`apps/dashboard`) from the canonical kit, in the Gloomberg (gloom.sh) presentation. Not an in-place restyle of either app. **Words were not enough:** follow [Zero-rebuild procedure](#zero-rebuild-procedure) and the [copy-paste Cursor prompts](#cursor-prompts). A restyle of existing pages is a failed slice, even if it looks denser.
 
 **Architecture:** New page trees assemble kit parts from `packages/ui` and specimens from `apps/reference`. Shared chrome (nav, footer, vertical section rail) is promoted once into the kit; each surface composes its own pages from those parts. digiquant marketing follows the gloom.sh document (1024px, flat, dense). The dashboard is a new dense multi-pane working surface: the sidebar stays in the flex row, and the database gate never replaces a static route with a blank card. Current routes and claims are the content inventory. Current presentation and app-local component families are not the implementation. Visual slices stop for Chris to check locally in Cursor. Mechanical slices are OpenCode packages with a failing test first.
 
 **Tech Stack:** Next.js static export (`next build --webpack`), `@digithings/ui`, design tokens in `packages/design/tokens.css`, Vitest, `scripts/check_frontend_canon.py`.
 
-**Status:** plan only. Written 2026-09-30 against `origin/develop` @ `83ec167c7`. Naming corrected the same day after squash `705a029bb` (PR #4801) wrote "Bloomberg" throughout. That word was a mishearing of **Gloomberg** (gloom.sh), the partner reference site. Later the same day Chris locked both apps as **ground-up rebuilds** (see Owner lock). No page in `apps/digiquant-web` or `apps/dashboard` is rebuilt by this document.
+**Status:** plan only. Written 2026-09-30 against `origin/develop` @ `83ec167c7`. Naming corrected the same day after squash `705a029bb` (PR #4801) wrote "Bloomberg" throughout. That word was a mishearing of **Gloomberg** (gloom.sh), the partner reference site. Later the same day Chris locked both apps as **ground-up rebuilds** (Owner lock; squash `7e76fdb82`, PR #4803). Evening amendment the same day: parallel Cursor sessions restyled existing pages anyway; those diffs are discarded; this file now carries a numbered zero-rebuild procedure, hard bans, objective ground-up checks, and copy-paste prompts. No page in `apps/digiquant-web` or `apps/dashboard` is rebuilt by this document.
 
 **Visual target:** Gloomberg, the site at gloom.sh, already specified in [`2026-09-18-sites-rebuild-from-reference.md`](2026-09-18-sites-rebuild-from-reference.md) §1 and §6. Feel only. This file is the Q1–Q3 execution re-baseline (kit parts, sequencing, dashboard contracts, honesty, discard vs port). It does not replace gloom.sh, and it does not treat the current apps as the design. digithings.ai stays on the opencode language in that plan. Epic [#4424](https://github.com/digithings-ai/digithings/issues/4424) stays open. Gloomberb (`term.gloom.sh`, `api.gloom.sh`) is a different surface and is not this reference.
 
@@ -27,7 +27,9 @@ Four references. Do not invent a fifth.
 | 3 | How to build (kit) | digiweb: `packages/ui` + `apps/reference`. `scripts/check_frontend_canon.py` stays green. | Same kit. Same canon guard. |
 | 4 | How to build (method) | Learnings from refactored digithings.ai on PR [#4791](https://github.com/digithings-ai/digithings/pull/4791), branch `claude/digithings-web-ui-refactor`: chrome patterns, short pages, kit promotion. Not the opencode visual language. | Same method. |
 
-**Sequence:** digithings #4791 merges first → R1 shared chrome in the kit → Q1 greenfield digiquant.io → then Q2/Q3 greenfield dashboard. The content inventory (M-claims) and the dashboard behavior contracts (M-shell) may be drafted once #4791 has merged, beside R1. They do not authorize a class-name restyle, and they do not pull the dashboard visual rebuild ahead of the Q1 Chris gate.
+**Sequence (preferred):** digithings #4791 merges first → R1 shared chrome in the kit → Q1 greenfield digiquant.io → then Q2/Q3 greenfield dashboard. The content inventory (M-claims) and the dashboard behavior contracts (M-shell) may be drafted once #4791 has merged, beside R1. They do not authorize a class-name restyle, and they do not pull the dashboard visual rebuild ahead of the Q1 Chris gate.
+
+**Sequence (allowed parallel, 2026-09-30 evening):** Chris may run Q1 / Q2 zero-rebuild sessions **in parallel** with #4791 polish. R1 kit chrome may still be incomplete. Do **not** wait forever, and do **not** restyle while waiting. Compose with the existing kit `NavShell` / `Footer` (and `autoHide="scroll"` until `"none"` exists). If a part is missing, promote it into `packages/ui` with an `apps/reference` specimen first (`packages/ui/MIGRATION.md` § Promotion playbook). Incomplete R1 is not a license to edit `components/landing/*` or `AppFrame` / `Sidebar` in place.
 
 ### Discard vs port
 
@@ -37,6 +39,232 @@ Four references. Do not invent a fifth.
 | Q2/Q3 `apps/dashboard` | Current routes, including redirects, and what each surface shows. DB-gate honesty. `/pipeline` reachable when the book is down. One `<main>`. Sidebar that does not cover content. Broker callback behavior. twelve-x product behavior (that surface is not rebuilt here). | The current shell as a design source. Do not dress `AppFrame` or `Sidebar` in place. Rebuild the shell and the live surfaces from kit parts. Do not pin today's Tailwind class strings as the visual contract. |
 
 twelve-x stays out of this visual rebuild. digichat stays untouched. digithings.ai is not restyled by this plan; #4791 owns that look. This plan borrows its method only.
+
+---
+
+## A. Lesson learned (2026-09-30)
+
+Parallel local Cursor sessions for digiquant.io (`apps/digiquant-web`) and the digiquant dashboard (`apps/dashboard`) finished as **in-place redesigns of existing pages**, not ground-up rebuilds. They did not compose from polished digiweb / `apps/reference` specimens and did not follow the design reference that unifies frontends. Quality was lacking.
+
+Those diffs are **discarded**. Do not continue, rebase, or "finish" them. The Owner lock and PR #4803 already said ground-up; words were not enough. This amendment exists so the next session **cannot** restyle in place: numbered procedure, hard bans, objective checks, and copy-paste prompts.
+
+Feel remains **Gloomberg** (gloom.sh). Not Bloomberg L.P. and not Bloomberg Terminal.
+
+<a id="zero-rebuild-procedure"></a>
+## B. Zero-rebuild procedure (mandatory order — numbered, non-skippable)
+
+For **each** of Q1 (`apps/digiquant-web`) and Q2/Q3 (`apps/dashboard`), the worker MUST run these steps in order. Skipping a step, combining them, or starting at "make it look Gloomberg" is a failed slice. Chris visual-gates **one** route or shell at a time.
+
+1. **Fresh worktree from `develop` tip** (or hard-reset the worktree to `origin/develop`). Do not continue a branch that already restyled pages. Suggested paths:
+   - Q1: `.worktrees/cursor/q1-digiquant-io-zero` · branch `cursor/q1-digiquant-io-zero`
+   - Q2: `.worktrees/cursor/q2-dashboard-shell-zero` · branch `cursor/q2-dashboard-shell-zero`
+   Cut with `git fetch origin develop` then `git worktree add -b <branch> <path> origin/develop`. If a prior restyle worktree exists, remove it (`git worktree remove`) and start again. Do not cherry-pick restyle commits onto the new branch.
+2. **Read-only orientation** before any write. Read `packages/ui/DESIGN.md`, `packages/ui/MIGRATION.md` (wiring + Promotion playbook), `packages/ui/MANIFEST.json`, `apps/reference/README.md`. Open the live reference routes that match the work: `/chrome`, `/layout-patterns`, `/controls`, `/data`, `/finance` (dashboard density). Marketing may open `/effects` **only** if a kit motion part already exists and this slice needs it — `/effects` is not a license to keep `HeroMesh` / `AmbientMesh`. Run the reference locally when possible: `npm run dev --workspace design-reference -- --port 4013` → `http://127.0.0.1:4013`.
+3. **Content inventory only** (routes, claims, copy, data contracts) written to a markdown inventory file. No TSX, CSS, or class-string edits in this step.
+   - Q1 → `docs/superpowers/plans/2026-09-30-digiquant-claim-inventory.md`
+   - Q2 → `docs/superpowers/plans/2026-09-30-dashboard-shell-inventory.md`
+   Inventory is what to show. It is not a list of Tailwind classes to preserve.
+4. **Scratch / delete presentation** in a **dedicated commit** before any new page composition lands. Remove or gut the discarded presentation trees in Discard vs port (landing meshes, `SiteNav` as the implementation, `AppFrame` / `Sidebar` as a design source, view components being rebuilt). Keep plumbing: sitemap, robots, redirects, `lib/live/*`, broker callback, twelve-x behavior, auth, static export, `basePath`. Commit message shape: `chore(website): scratch discarded <app> presentation`. A branch that adds new pages without this commit is a restyle, even if the PR title says rebuild.
+5. **Empty shells first**: routes render kit chrome only (`NavShell` / new shell parts) + a placeholder `<main>` — prove `next dev` and canon wiring (`web-theme.css` bridge, `@source`, `ThemeProvider` per `packages/ui/MIGRATION.md`) before composing content. For Q1, suggest port **3910**. For Q2, suggest port **3911**. Do not fill the placeholder until Chris has seen the empty shell *or* the prompt for this session explicitly allows filling home after the shell boots (Q1 prompt: home only, after the shell exists on the same branch).
+6. **Compose from kit + reference specimens only**. Before writing markup, name the matching `apps/reference` specimen **and** the `@digithings/ui` / `@digithings/ui/ui` export in the commit or PR note. Missing part → promote into `packages/ui` with an `apps/reference` specimen first (MIGRATION promotion playbook). Never invent a new app-local class family. Incomplete R1: use existing `NavShell` / `Footer`; promote `SectionRail` / `autoHide="none"` if this slice needs them; do not restyle old chrome instead.
+7. **One route / one visual slice**, then stop for Chris local Cursor visual gate (dark + light, ≥1280 and 390). Do not batch the whole site. Q1 this session: **home only** after scratch + shell. Q2 this session: **shell only**; live surfaces wait.
+
+## C. Hard bans (stop and ask One/Chris if tempted)
+
+Stop the session and ask. Do not "just this file."
+
+- Editing existing page compositions to "make them look Gloomberg" (class swaps, mesh removal while keeping the old layout, restyling `components/landing/*` or dashboard view files in place).
+- Treating current Tailwind class strings on `AppFrame` / `Sidebar` / landing as the visual contract.
+- Building new UI without first naming the matching `apps/reference` specimen or `@digithings/ui` / `@digithings/ui/ui` export.
+- App-local component families, raw hex / `rgb()`, palette utilities, app-local `cursor-*` (`apps/reference` excepted).
+- Cloning gloom.sh assets or inventing Bloomberg Terminal chrome (amber function-key palette, terminal skins, cloned SVGs).
+- Continuing a prior restyle branch instead of scratching.
+- Waiting on #4791 / R1 by restyling "temporarily." Compose from existing kit parts or promote; never restyle.
+
+If you catch yourself editing an existing landing or `AppFrame` file to restyle it, **STOP and delete instead.**
+
+<a id="ground-up-dod"></a>
+## D. Definition of done for "ground-up" (objective checks)
+
+A reviewer verifies these. CI green without them is not ground-up.
+
+- [ ] `git log` / the PR diff shows a **scratch commit** that deleted discarded presentation **before** new pages landed (`chore(website): scratch discarded …`). There is no "restyle then later delete" history on the branch used to ship.
+- [ ] New `page.tsx` files import from `@digithings/ui` / `@digithings/ui/ui` and do **not** import discarded landing/mesh families (`HeroMesh`, `HeroGraph`, `AmbientMesh`, `PipelineScene`, `DashboardScene`, `SiteNav` as impl).
+- [ ] Q2/Q3 new shell does not treat `apps/dashboard/components/app-frame.tsx` / `sidebar.tsx` class strings as the implementation. Behavior contracts in §4 survive; the old class list does not.
+- [ ] `python3 scripts/check_frontend_canon.py` exits 0.
+- [ ] For each rebuilt route, the PR description names the `apps/reference` specimen(s) used (route + specimen id / file).
+- [ ] Chris visual OK on dark + light, ≥1280 and 390, on the one slice this PR claims (not the whole site).
+- [ ] Plumbing still works: Q1 sitemap / robots / redirects / `lib/live`; Q2 broker callback / twelve-x behavior / auth / `basePath` `/dashboard`.
+- [ ] Worktree was cut from `origin/develop` tip (or hard-reset to it). The branch is not a continuation of a discarded restyle session.
+
+<a id="cursor-prompts"></a>
+## E. Appendix: copy-paste Cursor prompts
+
+Paste **one** prompt into a **fresh** local Cursor session on a **new** worktree. Do not paste both into the same session. Do not paste into a session that already restyled pages.
+
+### E.1 Q1 — digiquant.io zero-rebuild
+
+````markdown
+# Q1 digiquant.io zero-rebuild (scratch → inventory → shell → home only)
+
+You are a local Cursor agent on the digithings monorepo. Rebuild digiquant.io from zero. This is not a restyle.
+
+## Goal
+
+Ground-up rebuild of `apps/digiquant-web` (public origin https://digiquant.io) in the **Gloomberg** (gloom.sh) presentation, composed from `@digithings/ui` / `@digithings/ui/ui` and `apps/reference` specimens. Current site = content inventory only. Current `app/page.tsx` and `components/landing/*` = discarded presentation.
+
+**This session stops after home (`/`).** Do not batch strategies, subsystems, changelog, or contact.
+
+**If you catch yourself editing an existing landing or AppFrame file to restyle it, STOP and delete instead.**
+
+## Four references (do not invent a fifth)
+
+| # | Role | This session (Q1) |
+|---|---|---|
+| 1 | What to show | Current digiquant.io / `apps/digiquant-web`: routes, claims, product story. Inventory the live site. Do not invent marketing claims. |
+| 2 | How it should feel | Gloomberg / gloom.sh (flat, dense, 1024px, keycap chips, product screenshot hero). Not Bloomberg Terminal. |
+| 3 | How to build (kit) | digiweb: `packages/ui` + `apps/reference`. `scripts/check_frontend_canon.py` stays green. |
+| 4 | How to build (method) | Learnings from #4791 (chrome patterns, short pages, kit promotion). Not the opencode visual language. |
+
+Plan: `docs/superpowers/plans/2026-09-30-digiquant-gloomberg-ui.md` (Owner lock, Discard vs port, §1 Gloomberg feel, §3 home map, Zero-rebuild procedure). Epic #4424.
+
+## Lesson (2026-09-30)
+
+A parallel Cursor session restyled existing digiquant.io pages in place. That diff is discarded. You must scratch and rebuild. Ground-up in the plan was not enough last time.
+
+## Mandatory procedure (do not skip, do not reorder)
+
+1. **Fresh worktree from `develop` tip.** Do not continue a restyle branch.
+   ```bash
+   git fetch origin develop
+   git worktree add -b cursor/q1-digiquant-io-zero .worktrees/cursor/q1-digiquant-io-zero origin/develop
+   cd .worktrees/cursor/q1-digiquant-io-zero
+   ```
+   If `.worktrees/cursor/q1-digiquant-io-zero` or any branch that already restyled `apps/digiquant-web` exists, remove/reset it. Hard-reset to `origin/develop` if you are already in a dirty restyle tree. Do not cherry-pick restyle commits.
+
+2. **Read-only orientation** (no writes): `packages/ui/DESIGN.md`, `packages/ui/MIGRATION.md` (wiring + Promotion playbook), `packages/ui/MANIFEST.json`, `apps/reference/README.md`. Run reference when possible:
+   ```bash
+   npm run dev --workspace design-reference -- --port 4013
+   ```
+   Open `http://127.0.0.1:4013/chrome`, `/layout-patterns`, `/controls`, `/data`, `/finance`. Open `/effects` only if a kit motion part already exists and home needs it — not to keep HeroMesh.
+
+3. **Content inventory only.** Write `docs/superpowers/plans/2026-09-30-digiquant-claim-inventory.md` (routes, claims, copy, data contracts). No TSX edits in this step. Commit the inventory if it is new (`docs:`).
+
+4. **Scratch / delete presentation** in a dedicated commit. Gut/remove discarded trees from Discard vs port: `HeroMesh`, `HeroGraph`, `AmbientMesh`, `PipelineScene`, `DashboardScene`, scrolly track, `SiteNav` as implementation, in-place `components/landing/*`. Keep plumbing: `app/sitemap.ts`, `app/robots.ts`, `app/manifest.ts`, `public/_redirects`, static export, `lib/live/*`, tearsheet print, honesty chips source, `_pricing.ts`, `FLOW` facts. Commit: `chore(website): scratch discarded digiquant-web presentation`.
+
+5. **Empty shell first.** Home (and layout) render kit chrome only: `NavShell` + placeholder `<main>` + `Footer` / `Colophon`. Prove `next dev` and canon wiring (`web-theme.css` bridge, `@source`, ThemeProvider). Port **3910**:
+   ```bash
+   npm run dev --workspace digiquant-web -- --port 3910
+   ```
+   Incomplete R1 is fine: use existing `NavShell`/`Footer`. Promote missing parts (`autoHide="none"`, `SectionRail`) into `packages/ui` with an `apps/reference` specimen; do not restyle `SiteNav` while waiting on #4791.
+
+6. **Compose home from kit + reference specimens only.** Name each specimen and export in the PR/commit body. Follow plan §3 home section order (pinned nav, one-line h1, product screenshot + ticker, four figures, keycap pipeline, live book facts, strategy suite link, one WordReveal, pricing, contact, footer). Never invent an app-local class family. Missing part → promote first.
+
+7. **Stop after `/`.** Dark + light, ≥1280 and 390, for Chris. Do not start `/strategies` or other Q1 routes.
+
+## Hard bans
+
+- Class-swapping or mesh-removing the old layout to "make it look Gloomberg".
+- Treating current Tailwind on landing / SiteNav as the visual contract.
+- New UI without a named `apps/reference` specimen or `@digithings/ui` / `@digithings/ui/ui` export.
+- App-local component families, raw hex/rgb, palette utilities, app-local `cursor-*`.
+- Cloning gloom.sh assets or inventing Bloomberg Terminal chrome.
+- Continuing a prior restyle branch.
+- Waiting on #4791 by restyling temporarily.
+
+## Ground-up checks before you ping Chris
+
+- Scratch commit exists before new home composition.
+- New `page.tsx` imports kit, not discarded mesh/landing families.
+- `python3 scripts/check_frontend_canon.py` exits 0.
+- PR/note names reference specimens used for `/`.
+- Digi product names lowercase in prose (`digiquant`, `digithings`).
+
+Do not merge. Do not touch `apps/dashboard`, `apps/digichat`, `digikey/`, or `digiquant/brokers/`.
+````
+
+### E.2 Q2 — dashboard shell zero-rebuild
+
+````markdown
+# Q2 dashboard shell zero-rebuild (scratch → inventory → shell only; surfaces wait)
+
+You are a local Cursor agent on the digithings monorepo. Rebuild the digiquant dashboard **shell** from zero. This is not a restyle of AppFrame / Sidebar. Do not rebuild live surfaces (Q3) in this session.
+
+## Goal
+
+Ground-up rebuild of `apps/dashboard` chrome (served at `/dashboard/`) in **Gloomberg** (gloom.sh) density, composed from `@digithings/ui` / `@digithings/ui/ui` and `apps/reference` specimens. Current shell = behavior inventory (wayfinding, honest DB gate, one `<main>`, sidebar never covers content at md+). Current `components/app-frame.tsx` and `sidebar.tsx` class strings = discarded as a design source.
+
+**This session stops after the empty/new shell.** Brief, portfolio, pipeline graph, settings pages wait. twelve-x and broker callback behavior stay untouched.
+
+**If you catch yourself editing an existing landing or AppFrame file to restyle it, STOP and delete instead.**
+
+## Four references (do not invent a fifth)
+
+| # | Role | This session (Q2) |
+|---|---|---|
+| 1 | What to show | Current dashboard routes and what the shell does. Inventory; do not invent operator surfaces. |
+| 2 | How it should feel | Gloomberg / gloom.sh density (hairline panels, mono labels, tabular figures). Not Bloomberg Terminal. |
+| 3 | How to build (kit) | Same kit. Same canon guard. `/chrome`, `/layout-patterns`, `/controls`, `/data`, `/finance` on the reference. |
+| 4 | How to build (method) | #4791 method: promote chrome, then compose. Not digithings.ai's opencode look. |
+
+Plan: `docs/superpowers/plans/2026-09-30-digiquant-gloomberg-ui.md` (Owner lock, Discard vs port, §4 layout contract, Zero-rebuild procedure). Epic #4424. Preferred sequence puts Q2 after Q1 Chris gate; this prompt is a **shell-only** parallel start — do not pull Q3 surfaces forward.
+
+## Lesson (2026-09-30)
+
+A parallel Cursor session restyled the existing dashboard in place (class swaps on AppFrame/Sidebar/views). That diff is discarded. You must scratch and rebuild the shell. Do not resume that branch.
+
+## Mandatory procedure (do not skip, do not reorder)
+
+1. **Fresh worktree from `develop` tip.** Do not continue a restyle branch.
+   ```bash
+   git fetch origin develop
+   git worktree add -b cursor/q2-dashboard-shell-zero .worktrees/cursor/q2-dashboard-shell-zero origin/develop
+   cd .worktrees/cursor/q2-dashboard-shell-zero
+   ```
+   If a prior dashboard restyle worktree/branch exists, remove it. Hard-reset to `origin/develop`. Do not cherry-pick restyle commits.
+
+2. **Read-only orientation** (no writes): `packages/ui/DESIGN.md`, `packages/ui/MIGRATION.md`, `packages/ui/MANIFEST.json`, `apps/reference/README.md`. Run:
+   ```bash
+   npm run dev --workspace design-reference -- --port 4013
+   ```
+   Open `http://127.0.0.1:4013/chrome`, `/layout-patterns`, `/controls`, `/data`, `/finance`. Dashboard density lives on `/finance` and chrome specimens, not on today's AppFrame classes.
+
+3. **Content inventory only.** Write `docs/superpowers/plans/2026-09-30-dashboard-shell-inventory.md`: routes, what each surface shows, gate/exempt prefixes, sidebar IA, `DbUnavailable` copy, single-`<main>` rule, flex-row sidebar contract from plan §4. No TSX edits. Do not copy Tailwind class strings as requirements.
+
+4. **Scratch / delete presentation** in a dedicated commit. Gut AppFrame / Sidebar **as design source** (do not dress them in place). Keep plumbing: `basePath` `/dashboard`, redirects, broker callback `apps/dashboard/app/settings/brokers/callback/page.tsx`, twelve-x behavior, auth routes, `lib/nav.ts` data (behavior; Q2-M pipeline exemption may land as tests, not a restyle), DigichatPopup mount. Commit: `chore(website): scratch discarded dashboard presentation`.
+
+5. **Empty shell first.** New shell renders kit chrome only + placeholder `<main>`. Prove `next dev` and canon wiring (`web-theme.css`, `@source`, ThemeProvider). Port **3911**:
+   ```bash
+   npm run dev --workspace dashboard -- --port 3911
+   ```
+   Layout contract the new shell must meet (behavior, not old classes): at ≥ md, sidebar is a flex-row sibling of main (`flex-1 min-w-0`); below md, off-canvas overlay; exactly one `<main>` in the shell. Incomplete R1: compose with existing `NavShell`/`Footer` (or dashboard kit chrome parts); promote missing parts with a reference specimen. Do not restyle AppFrame while waiting on #4791.
+
+6. **Compose the shell from kit + reference specimens only.** Name each specimen/export. Honest `DbUnavailable` copy stays ("Live data is temporarily unavailable"; Retry reloads; do not claim automatic reconnect). Do not rebuild Brief/portfolio/pipeline views yet.
+
+7. **Stop after the shell.** Dark + light, ≥1280 (expanded + collapsed) and 390 (drawer closed + open), for Chris. Do not start Q3 surfaces.
+
+## Hard bans
+
+- Restyling AppFrame / Sidebar / view files in place to "look Gloomberg".
+- Pinning today's Tailwind (`md:relative`, `md:w-[260px]`, `md:w-[72px]`, …) as the visual contract.
+- New UI without a named `apps/reference` specimen or `@digithings/ui` / `@digithings/ui/ui` export.
+- App-local component families, raw hex/rgb, palette utilities, app-local `cursor-*`.
+- Cloning gloom.sh assets or inventing Bloomberg Terminal chrome.
+- Continuing a prior restyle branch.
+- Waiting on #4791 / Q1 by restyling the old shell "for now."
+- Editing `apps/dashboard/app/settings/brokers/callback/page.tsx`, `digiquant/brokers/`, `digikey/`, `apps/digichat`.
+
+## Ground-up checks before you ping Chris
+
+- Scratch commit exists before the new shell composition.
+- New shell imports kit; discarded class list is not the implementation.
+- `python3 scripts/check_frontend_canon.py` exits 0.
+- PR/note names reference specimens used for the shell.
+- `cd apps/dashboard && npx vitest run lib/nav.test.ts` still meaningful for gate behavior (add Q2-M tests if you touch prefixes).
+- Digi product names lowercase in prose (`digiquant`, `digichat`).
+
+Do not merge. Surfaces wait.
+````
 
 ## Global Constraints
 
@@ -63,7 +291,7 @@ twelve-x stays out of this visual rebuild. digichat stays untouched. digithings.
 | Q3 dashboard surfaces | **Not started** | 24 `page.tsx` files. Several are redirects. Two still nest `<main>`. |
 | C1 / C2 | **Not started** | Claim list in the 2026-09-18 plan §7 is the starting inventory, re-dated at audit time. |
 
-Owner sequence (2026-09-30): **#4791 first → R1 → Q1 greenfield digiquant.io → Q2/Q3 greenfield dashboard.** Feel stays Gloomberg (gloom.sh). digithings stays opencode. Q1 and Q2/Q3 are ground-up rebuilds (Owner lock), not restyles.
+Owner sequence (2026-09-30): **#4791 first → R1 → Q1 greenfield digiquant.io → Q2/Q3 greenfield dashboard.** Feel stays Gloomberg (gloom.sh). digithings stays opencode. Q1 and Q2/Q3 are ground-up rebuilds (Owner lock + Zero-rebuild procedure), not restyles. Chris may run Q1/Q2 **in parallel** with #4791 using existing `NavShell`/`Footer` and promoting missing parts; that is not permission to restyle.
 
 ---
 
@@ -150,7 +378,7 @@ Read from branch `claude/digithings-web-ui-refactor` (PR #4791), not from memory
 
 ## 3. Q1 — digiquant.io page map (greenfield)
 
-Q1 is a greenfield page tree for `apps/digiquant-web`. Inventory the current site first (M-claims: routes, claims, product story). Then compose new pages from kit parts. Do not restyle `app/page.tsx` or `components/landing/*` in place. If the current file is the only place a claim lives, copy the claim into the new page and delete the old composition once nothing imports it.
+Q1 is a greenfield page tree for `apps/digiquant-web`. **Run the Zero-rebuild procedure (steps 1–7) before any composition.** Inventory the current site first (M-claims: routes, claims, product story). Scratch discarded presentation in its own commit. Empty `NavShell` + placeholder `<main>` next. Then compose new pages from kit parts. Do not restyle `app/page.tsx` or `components/landing/*` in place. If the current file is the only place a claim lives, copy the claim into the inventory, then into the new page, and delete the old composition — do not edit it to look Gloomberg. First visual slice is `/` only (prompt E.1).
 
 Package: `apps/digiquant-web`. Public origin `https://digiquant.io`. Plumbing that stays: `app/sitemap.ts`, `app/robots.ts`, `app/manifest.ts`, `public/_redirects`, static export, `lib/live/*` stale-vs-live contract, tearsheet print. See Owner lock for the full discard-vs-port table.
 
@@ -185,7 +413,7 @@ Content width: 1024px, the gloom.sh measure. Prose blocks cap at 72ch inside tha
 
 ## 4. Q2 — dashboard shell, ground-up
 
-Q2 is a ground-up rebuild of the dashboard shell from kit parts, not a restyle of `apps/dashboard/components/app-frame.tsx` and `sidebar.tsx`. What to show is the current shell's job: wayfinding across the routes in §5, the honest unavailable panel, and a main column that is never painted under the sidebar. How it feels is Gloomberg density. How it is built is the kit, using the #4791 method (promote chrome, then compose). The current files are the behavior inventory. They are not a class list to preserve.
+Q2 is a ground-up rebuild of the dashboard shell from kit parts, not a restyle of `apps/dashboard/components/app-frame.tsx` and `sidebar.tsx`. **Run the Zero-rebuild procedure (steps 1–7).** What to show is the current shell's job: wayfinding across the routes in §5, the honest unavailable panel, and a main column that is never painted under the sidebar. How it feels is Gloomberg density. How it is built is the kit, using the #4791 method (promote chrome, then compose). The current files are the behavior inventory. They are not a class list to preserve. First visual slice is shell only (prompt E.2); Q3 surfaces wait.
 
 Package: `apps/dashboard`. Served at `/dashboard/` (`basePath` in `apps/dashboard/next.config.mjs` stays).
 
@@ -312,6 +540,8 @@ From the 2026-09-18 plan §8, still in force:
 
 ## 6. Parallelism
 
+Preferred (kit completeness):
+
 ```
 #4791 digithings (D1) ── must land first
         │
@@ -327,17 +557,19 @@ Q1 Chris sign-off
                     └─ C1 audit on the rebuilt pages, then C2 export certification
 ```
 
-After digithings lands, and not before:
+**Allowed parallel (2026-09-30 evening):** Chris may run Q1 (prompt E.1) and Q2 shell (prompt E.2) **while #4791 is still polishing.** R1 may be incomplete. Those sessions still cut a **fresh** worktree from `origin/develop`, scratch discarded presentation, and compose with **existing** `NavShell` / `Footer`, promoting missing parts. They do **not** restyle, and they do **not** start from a restyle branch. Q3 surfaces still wait for the Q2 shell Chris gate. Dashboard visual still should not race ahead of Q1 home unless Chris explicitly runs E.2 in parallel as shell-only.
+
+After digithings lands, and not before — except the allowed parallel zero-rebuild above:
 
 | Work | Needs R1? | Why |
 |---|---|---|
 | M-claims | No | Reads `_pricing.ts`, `FLOW`, `honesty.tsx`, sitemap. Writes a checklist. No components. |
 | M-shell | No | Dashboard shell is not the marketing nav. Locks the sidebar contract and the pipeline exemption before any visual pass. |
-| R1 | It is R1 | Rail and pinned-nav mode must exist in the kit or Q1 will grow an app-local family and fail the canon guard. |
-| Q1 pages | Yes | They import `NavShell` pinned mode and `SectionRail`. |
-| V-Q2 / Q3 | No (they need M-shell, and they wait for the Q1 Chris gate because the owner sequence puts the dashboard after marketing) | Greenfield dashboard shell and surfaces. They do not wait on the marketing rail. They do wait on the sequence. They are not a restyle of `AppFrame`. |
+| R1 | It is R1 | Rail and pinned-nav mode should exist in the kit. If Q1 starts in parallel, promote those parts in the Q1 worktree rather than growing an app-local family. |
+| Q1 pages | Prefer yes; parallel: compose with existing `NavShell`/`Footer` and promote gaps | They should import pinned `NavShell` and `SectionRail` once those exist. Incomplete R1 is not a restyle license. |
+| V-Q2 / Q3 | No (they need M-shell; visual dashboard still prefers the Q1 Chris gate) | Greenfield dashboard shell and surfaces. They do not wait on the marketing rail. Shell-only (E.2) may run in parallel with #4791 / Q1. They are not a restyle of `AppFrame`. |
 
-Do not start Q1 against the #4791 branch tip while that branch is still rebasing. Shared chrome extracted early will fork.
+Do not start Q1 against the #4791 branch tip while that branch is still rebasing. Shared chrome extracted early will fork. Cut Q1/Q2 from `origin/develop`.
 
 ---
 
@@ -353,16 +585,16 @@ Order:
 
 | # | ID | Kind | PR delivers | Depends on |
 |---|---|---|---|---|
-| 0 | DOC | docs | This plan. | — |
-| 1 | D1 | already open | #4791 merges. Not this plan's PR. | Chris on digithings. |
-| 2 | M-claims | OpenCode | `docs/superpowers/plans/2026-09-30-digiquant-claim-inventory.md` listing every numeric claim on the Q1 routes, the file that sources it, and the date checked. No app code. | D1 merged only so the worker is not editing a stale tree. The inventory can be drafted read-only before that. |
-| 3 | M-shell | OpenCode | `/pipeline` in `DB_EXEMPT_PREFIXES`, nav test updated, `DbUnavailable` render test, single-`<main>` shell contract. Behavior only. No class-name restyle and no pin of the current sidebar classes. | D1 merged. Parallel with R1. Visual shell still waits for Q1. |
-| 4 | R1 | OpenCode + one Chris look at the reference gallery | `SectionRail` in `packages/ui` (props: `sections: {id, label}[]`, `pathPrefix?: string`). Specimen on `apps/reference` chrome route. `NavShell` `autoHide="none"`. digithings switched off the app-local rail in a follow-up only if #4791 did not already promote it. | D1 merged. |
-| 5 | V-home | Chris gate | Q1 `/` composed per §3 as a new page from kit parts, from the M-claims inventory. Delete unused mesh and landing-family imports. | R1. |
-| 6 | V-strategies | Chris gate | `/strategies` and `/strategies/[id]` including print and honesty chips. | R1. Can follow V-home. |
-| 7 | V-rest | Chris gate | `/subsystems/[id]`, `/changelog`, `/contact`, `not-found`, pipeline redirect check. | R1. |
-| 8 | V-Q2 | Chris gate | Greenfield dashboard shell from kit parts. Sidebar, brief unavailable panel, pipeline still reachable with the backend unset. Not a restyle of `AppFrame`. | M-shell, and Chris has accepted V-home (sequence). |
-| 9 | V-Q3a | Chris gate | Brief, portfolio, performance, attribution, tickers. Nested mains removed. | V-Q2. |
+| 0 | DOC | docs | This plan, including the 2026-09-30 evening zero-rebuild procedure, hard bans, ground-up checks, and copy-paste prompts. | — |
+| 1 | D1 | already open | #4791 merges. Not this plan's PR. Parallel Q1/Q2 zero-rebuilds may start without waiting, using existing kit chrome. | Chris on digithings. |
+| 2 | M-claims | OpenCode | `docs/superpowers/plans/2026-09-30-digiquant-claim-inventory.md` listing every numeric claim on the Q1 routes, the file that sources it, and the date checked. No app code. This is procedure step 3 for Q1. | Can run on a fresh `develop` worktree; no UI. |
+| 3 | M-shell | OpenCode | `/pipeline` in `DB_EXEMPT_PREFIXES`, nav test updated, `DbUnavailable` render test, single-`<main>` shell contract. Behavior only. No class-name restyle and no pin of the current sidebar classes. | Parallel with R1. Visual shell still uses procedure 1–7. |
+| 4 | R1 | OpenCode + one Chris look at the reference gallery | `SectionRail` in `packages/ui` (props: `sections: {id, label}[]`, `pathPrefix?: string`). Specimen on `apps/reference` chrome route. `NavShell` `autoHide="none"`. digithings switched off the app-local rail in a follow-up only if #4791 did not already promote it. | D1 merged, or promote in the Q1 worktree if Q1 starts in parallel. |
+| 5 | V-home | Chris gate | Q1 `/` **after** scratch commit + empty shell, composed per §3 from kit parts, from the M-claims inventory. Procedure 1–7. Delete unused mesh and landing-family imports in the scratch commit, not as a restyle. Prompt E.1. | Fresh `develop` worktree. Prefer R1; else existing `NavShell`/`Footer` + promote. |
+| 6 | V-strategies | Chris gate | `/strategies` and `/strategies/[id]` including print and honesty chips. New pages; not an in-place restyle. One route family, then Chris gate. | V-home accepted. |
+| 7 | V-rest | Chris gate | `/subsystems/[id]`, `/changelog`, `/contact`, `not-found`, pipeline redirect check. Same: compose, do not restyle. | V-home accepted. |
+| 8 | V-Q2 | Chris gate | Greenfield dashboard shell from kit parts **after** scratch commit + empty shell. Sidebar, brief unavailable panel, pipeline still reachable with the backend unset. Not a restyle of `AppFrame`. Prompt E.2. | M-shell behavior. Shell-only may parallel Q1; Q3 waits. |
+| 9 | V-Q3a | Chris gate | Brief, portfolio, performance, attribution, tickers as **new** compositions. Nested mains removed. Scratch those view trees first; do not class-swap them. | V-Q2. |
 | 10 | V-Q3b | Chris gate | Greenfield pipeline graph, why, settings, house, login/signup from kit parts. No broker callback edits. twelve-x is not rebuilt in this epic. | V-Q2. |
 | 11 | C1 | OpenCode | Dated checklist per public digiquant page. M-claims updated against the shipped copy. | V-home, V-strategies, V-rest. |
 | 12 | C2 | OpenCode + Chris skim | Both exports build. Links resolve. Sitemap matches routes. No placeholder copy. | C1. |
@@ -379,12 +611,12 @@ Add the app's `next build --webpack` on slices that touch that app's `app/` tree
 
 Review: each code PR gets a fresh-context review file beside this plan, `docs/superpowers/plans/review-2026-09-30-digiquant-<slice>.md`, then the `<!-- in-session-review -->` comment and `reviewed:agent` when the policy requires a hatch. Author session does not review its own slice.
 
-UI workflow, repeated because it is the whole point of the visual rows:
+UI workflow, repeated because it is the whole point of the visual rows. **The Zero-rebuild procedure (B.1–B.7) is not optional.** A visual slice that skipped the scratch commit is invalid.
 
-1. One agent opens the branch, wires kit parts, and starts the dev server (`apps/digiquant-web` or `apps/dashboard`).
-2. The PR description lists the routes and the two viewports.
-3. Chris validates locally in Cursor.
-4. Only then does the slice count as accepted. Mechanical packages skip step 3.
+1. Fresh worktree from `origin/develop` (procedure 1). Read-only orientation (2). Inventory markdown (3). Scratch commit (4). Empty kit shell on the suggested port (5). Then one route composition from named specimens (6).
+2. The PR description lists the scratch commit sha, the routes, the reference specimens, and the two viewports (dark + light, ≥1280 and 390).
+3. Chris validates locally in Cursor. Stop. Do not batch the next route in the same un-gated push.
+4. Only then does the slice count as accepted. Mechanical packages skip step 3 but still must not restyle.
 
 ---
 
@@ -410,7 +642,7 @@ C1 re-checks the 2026-09-18 §7 numbers that appear on digiquant pages (strategy
 ## 9. Defer list
 
 - **digichat product.** `apps/digichat`, `packages/digichat-ui`, embed protocol, dashboard `DigichatPopup` behavior. Untouched.
-- **twelve-x / FX Hub visual.** Route stays. Restyle is a later epic slice.
+- **twelve-x / FX Hub visual.** Route stays. A later epic may ground-up rebuild it with the same four references; do not restyle it in this epic.
 - **digithings.ai page tree.** Owned by #4791 and the 2026-09-18 plan's D1. This plan consumes its chrome lessons after merge.
 - **Amber-on-black function-key palette.** Withdrawn with the naming correction. That palette was a Bloomberg reading. Phosphor (`--accent-digiquant`) stays.
 - **Fake or mesh hero.** V-home uses a real product screenshot, the gloom.sh hero device. No canvas stand-in.
@@ -429,16 +661,19 @@ C1 re-checks the 2026-09-18 §7 numbers that appear on digiquant pages (strategy
 3. **`/why` on the dashboard.** It is still a real page, and the sidebar highlights Pipeline when you are on it. Leave the route (this plan) or fold it into `/pipeline` in a later issue?
 4. **M-shell before Q1.** M-shell may land beside R1 as behavior tests for the shell this epic will replace with a greenfield one (pipeline exemption, honest panel, one `<main>`). The visual rebuild (V-Q2 / Q3) still waits until Q1 is accepted. Say if you want every dashboard diff, including those tests, to wait until Q1 is accepted.
 5. **Section rail on digiquant.io.** Promote it and use it on the home page only when four bands remain, or skip the rail on the marketing site entirely and keep it a digithings-only pattern?
-6. **#4791 merge bar.** Confirm digiquant waits for that PR to merge, not merely for a design freeze on the branch.
+6. **#4791 merge bar.** Preferred: wait for that PR to merge. Allowed: Q1/Q2 zero-rebuild in parallel using existing `NavShell`/`Footer` and promoting missing parts. Confirm you still want parallel sessions rather than waiting. Waiting is **not** a restyle license.
 
 ---
 
 ## 11. Definition of done (the epic, not this docs PR)
 
-- digithings #4791 has merged.
-- R1 is in the kit: pinned nav mode and a prop-driven section rail, with reference specimens and tests.
-- digiquant.io routes in §3 are a new page tree from kit parts, driven by the current site's content inventory. Canon guard green, meshes and app-local landing families gone, honesty copy intact. No in-place restyle of the current pages.
-- The dashboard shell and live surfaces in §4 and §5 are a new page tree from kit parts. Content and routes match the current dashboard. Content clears the sidebar at the widths in §5.4. `/pipeline` is exempt. Gated routes show the honest panel inside main. The old `AppFrame` / `Sidebar` class list is not the implementation.
+Ground-up for each visual PR is the checkbox list in **[§ D](#ground-up-dod)**. The epic is done when all of the following are true **and** every visual PR that landed it passed those checks:
+
+- digithings #4791 has merged (or Q1/Q2 parallel sessions promoted the chrome they needed).
+- R1 is in the kit: pinned nav mode and a prop-driven section rail, with reference specimens and tests — unless a Q1 PR already promoted those parts.
+- digiquant.io routes in §3 are a new page tree from kit parts, driven by the current site's content inventory. Scratch commit preceded new pages. Canon guard green, meshes and app-local landing families gone, honesty copy intact. No in-place restyle of the current pages.
+- The dashboard shell and live surfaces in §4 and §5 are a new page tree from kit parts. Scratch commit preceded the new shell. Content and routes match the current dashboard. Content clears the sidebar at the widths in §5.4. `/pipeline` is exempt. Gated routes show the honest panel inside main. The old `AppFrame` / `Sidebar` class list is not the implementation.
 - Q3 nested mains are gone. Redirects in §5.2 still redirect. twelve-x and digichat are visually untouched.
 - C1 checklist is dated. C2 exports build.
 - None of §5.4 regressions reproduce. Dark and light checked by Chris on the visual slices.
+- No shipped branch is a continuation of the 2026-09-30 discarded restyle sessions.

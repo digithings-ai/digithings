@@ -4,7 +4,9 @@ Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/de
 
 > **digiquant Q1–Q3 execution re-baselined 2026-09-30; naming corrected the same day.** Kit parts, sequencing, and dashboard contracts for digiquant.io and the dashboard follow [`2026-09-30-digiquant-gloomberg-ui.md`](2026-09-30-digiquant-gloomberg-ui.md). The visual model is still **Gloomberg (gloom.sh)** — the reference in §1 and §6 below. Squash `705a029bb` (PR #4801) wrote "Bloomberg" by mistake; that name is not the target. digithings.ai stays on the opencode language in §1 and on PR #4791.
 >
-> **Ground-up lock (2026-09-30).** Q1 (`apps/digiquant-web`) and Q2/Q3 (`apps/dashboard`) are greenfield rebuilds from the kit, not in-place restyles. Four references (content from the current site or dashboard, feel from gloom.sh, kit from `packages/ui` + `apps/reference`, method from #4791) and the discard-vs-port table live in that plan's Owner lock. Sequence for this work: **#4791 → R1 → Q1 → dashboard**. Where the execution order below still says Q2/Q3 can run in parallel with R1, the 2026-09-30 plan wins: behavior tests may sit beside R1; the dashboard visual rebuild waits until Q1 is accepted.
+> **Ground-up lock (2026-09-30).** Q1 (`apps/digiquant-web`) and Q2/Q3 (`apps/dashboard`) are greenfield rebuilds from the kit, not in-place restyles. Four references (content from the current site or dashboard, feel from gloom.sh, kit from `packages/ui` + `apps/reference`, method from #4791) and the discard-vs-port table live in that plan's Owner lock. Sequence for this work: **#4791 → R1 → Q1 → dashboard**. Where the execution order below still says Q2/Q3 can run in parallel with R1, the 2026-09-30 plan wins: behavior tests may sit beside R1; the dashboard visual rebuild waits until Q1 is accepted (shell-only Q2 may run in parallel as that plan now allows).
+>
+> **Zero-rebuild amendment (2026-09-30 evening).** Parallel Cursor sessions restyled existing digiquant.io and dashboard pages in place despite the ground-up lock. Those diffs are **discarded**. Soft restyle is **not** OK — not as a shortcut, not as a first pass, not while waiting on #4791 / R1. The next session must follow that plan's **Lesson learned**, **Zero-rebuild procedure** (fresh `develop` worktree → read-only orientation → inventory markdown → scratch commit → empty kit shell → compose from specimens → one slice then stop), **Hard bans**, **ground-up Definition of done**, and **copy-paste Cursor prompts**. Do not continue a restyle branch. Do not treat current page compositions or `AppFrame` / `Sidebar` class strings as the design. Incomplete R1: compose with existing `NavShell`/`Footer` and promote missing parts; never restyle.
 
 Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
 
@@ -30,7 +32,10 @@ Consequences, stated plainly because they overrule earlier readings of §6:
    facts, the general structure and what must be shown. The design comes from
    `apps/reference` + `packages/ui` (the shadcn canon) and the reference sites.
 2. **Rewrite, do not restyle.** "Chrome-only" deltas are withdrawn. Every page is
-   re-composed on the new language.
+   re-composed on the new language. For digiquant.io and the dashboard, the
+   2026-09-30 evening amendment makes this mechanical: scratch commit, empty kit
+   shell, then compose. An in-place class swap is a failed slice even if it looks
+   denser.
 3. **Utilitarian simplicity is the single most important steer.** Fewer sections, less
    decoration, flat surfaces, smaller type, no flourishes. If a section does not earn its
    place, cut it. The hero canvas meshes, the 480vh scrolly pipeline and the ambient meshes
@@ -68,8 +73,9 @@ sites sit on the kit — they were simply never rebuilt, which is precisely the 
 
 Execution order, by dependency: **R1 → (D1 ∥ Q1) → C1 → C2**, with **Q2/Q3** runnable in
 parallel with R1 since the dashboard has its own chrome. **Superseded for digiquant by the
-2026-09-30 Gloomberg plan:** #4791 → R1 → Q1 greenfield → Q2/Q3 greenfield. See the banner
-above this file.
+2026-09-30 Gloomberg plan (including the evening zero-rebuild amendment):** #4791 → R1 →
+Q1 greenfield → Q2/Q3 greenfield. Restyle-in-place is a failed slice. See the banner above
+this file and that plan's Zero-rebuild procedure + Cursor prompts.
 
 **The canonical-layer rule is enforced, not aspirational.** `scripts/check_frontend_canon.py`
 scans `apps/` + `packages/` and fails on raw palette utilities, pre-canon vocabulary, colour
@@ -129,6 +135,13 @@ Out of scope (do not modify):
 Per the decision taken: build **fresh page trees** rather than restyling the existing pages.
 Concretely each site keeps its package, build and deploy surface (§8) but its `app/**` is
 rebuilt: new layout, new chrome, new page compositions, all rendering kit parts.
+
+**digiquant.io and the dashboard:** "fresh page trees" is enforced by the
+[2026-09-30 plan's Zero-rebuild procedure](2026-09-30-digiquant-gloomberg-ui.md)
+(scratch commit that deletes discarded presentation **before** new pages; empty kit
+shell; compose from `apps/reference` specimens). Class swaps, mesh removal that keeps
+the old layout, or continuing a restyle branch are not a rebuild. Use the copy-paste
+Cursor prompts in that plan. Do not start from a session that already restyled pages.
 
 Retained deliberately (they are working plumbing, not presentation):
 
@@ -235,7 +248,7 @@ Nav/footer rebuilt once as a shared chrome module (no duplicated nav data betwee
 | `/subsystems/[id]` | Poster page on new chrome; kit `StackRow`; related chips. |
 | `/changelog`, `/contact` | Same treatment as digithings. |
 | `/pipeline` | Retained redirect. |
-| `/dashboard/**` (24 routes) | Sidebar/`main` layout rebuilt explicitly (**no implicit offset**); DB gate reworked so gated routes render an honest, styled "live data unavailable" panel *and* the static, non-DB surfaces stay readable; `/pipeline` becomes genuinely DB-exempt as its own comment claims; duplicated controls-layer imports re-pointed to `/ui`; nested `<main>` landmarks removed; dead-but-pinned components either wired or deleted. |
+| `/dashboard/**` (24 routes) | **Zero-rebuild** (2026-09-30 plan procedure + prompt E.2 for shell, then Q3). Sidebar/`main` layout rebuilt as a **new** shell (**no implicit offset**, no in-place class-swap of `AppFrame`/`Sidebar`); DB gate reworked so gated routes render an honest, styled "live data unavailable" panel *and* the static, non-DB surfaces stay readable; `/pipeline` becomes genuinely DB-exempt as its own comment claims; nested `<main>` landmarks removed. Do not re-point controls-layer imports in place as a substitute for new compositions. |
 
 Cross-site: one shared chrome/no duplication; counts and claims single-sourced (kit registries,
 data files) rather than hardcoded per page.
@@ -300,9 +313,9 @@ Team tooling is unavailable in this session; work runs through `task` subagents 
 | R0 | Reference consolidation | new IA, `/controls` complete, dedupe, docs fixed | lint/typecheck/build + route smoke test |
 | R1 | Shared chrome | nav/footer/module-card/CTA built once, single-sourced data | both sites build |
 | D1 | digithings-web page tree | all 13 routes rebuilt on the new language | build + content audit checklist |
-| Q1 | digiquant-web page tree | all 9 routes rebuilt on the new language | build + content audit checklist |
-| Q2 | dashboard chrome + gate | explicit sidebar layout, honest DB gate, `/pipeline` exempt | build + 24-route smoke |
-| Q3 | dashboard surfaces | re-point remaining controls-layer imports; remove nested mains; resolve dead components | build + tests |
+| Q1 | digiquant-web page tree | all 9 routes rebuilt on the new language **via zero-rebuild procedure** (scratch → inventory → shell → one route; not a restyle) | build + content audit checklist |
+| Q2 | dashboard chrome + gate | explicit **new** sidebar layout, honest DB gate, `/pipeline` exempt (prompt E.2: shell only first) | build + 24-route smoke |
+| Q3 | dashboard surfaces | greenfield live surfaces from kit parts; nested mains gone; dead components deleted. Not "re-point remaining imports" in place. | build + tests |
 | C1 | Content audit | signed checklist per public page | all claims verified & dated |
 | C2 | Release certification | links, metadata, honesty, placeholders | green on both exports |
 
@@ -310,6 +323,10 @@ Team tooling is unavailable in this session; work runs through `task` subagents 
 
 - Both public sites and the dashboard render entirely from canonical parts, with no app-local
   component duplicating a kit part and no raw native UI outside documented exemptions.
+- For digiquant Q1–Q3, each visual PR also passes the **ground-up checkboxes** in
+  [`2026-09-30-digiquant-gloomberg-ui.md`](2026-09-30-digiquant-gloomberg-ui.md) § D
+  (scratch commit before new pages, named `apps/reference` specimens, canon guard, Chris
+  visual OK). A restyle of existing pages does not count.
 - The reference's new IA is live, complete and test-guarded.
 - Every public page has a signed content-audit checklist; every claim is verified and dated.
 - None of the §8 regressions reproduce; dark and light both verified at desktop and narrow widths.
