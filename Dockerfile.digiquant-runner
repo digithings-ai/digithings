@@ -34,6 +34,7 @@ COPY apps/digiquant-runner/container/exec_job.py /opt/runner/exec_job.py
 COPY apps/digiquant-runner/commands.json /opt/runner/commands.json
 
 RUN uv sync --frozen --package digiquant --extra prices --extra research
+COPY scripts/backfill_market_data_r2.py ./scripts/backfill_market_data_r2.py
 
 ARG GIT_SHA=unknown
 ENV DIGIQUANT_RUNNER_GIT_SHA=${GIT_SHA}
