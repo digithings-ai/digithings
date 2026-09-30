@@ -10,7 +10,7 @@ import VelaSpikeChart, { type VelaSpikeBar } from '@/components/research/VelaSpi
  * deep-link. Time-boxed spike: if the embed earns its keep, a follow-up wires
  * a real digiquant bar endpoint.
  */
-function cannedFixtureBars(): VelaSpikeBar[] {
+const CANNED_FIXTURE_BARS: VelaSpikeBar[] = (() => {
   const start = Date.UTC(2026, 7, 1); // 2026-08-01
   const closes = [
     100, 102, 101, 104, 103, 106, 105, 108, 107, 110, 109, 111, 108, 112, 114,
@@ -27,7 +27,7 @@ function cannedFixtureBars(): VelaSpikeBar[] {
       v: 1000 + i * 25,
     };
   });
-}
+})();
 
 export default function VelaSpikePage() {
   return (
@@ -39,7 +39,7 @@ export default function VelaSpikePage() {
           SaaS calls
         </p>
       </div>
-      <VelaSpikeChart bars={cannedFixtureBars()} symbol="RESEARCH/BTCUSDT" timeframe="1D" />
+      <VelaSpikeChart bars={CANNED_FIXTURE_BARS} symbol="RESEARCH/BTCUSDT" timeframe="1D" />
       <p className="font-mono text-[10px] text-ink-mute">
         Bars above are a canned spike fixture. Compliance: Apache-2.0 LICENSE + Vela NOTICE ship
         with the dashboard (LICENSE.luxalgo-vela, NOTICE.luxalgo-vela); attribution stays visible
