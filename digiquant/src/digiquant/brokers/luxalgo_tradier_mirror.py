@@ -42,7 +42,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Mapping
+from typing import Any, Mapping  # score:allow untyped any — heterogeneous SDK snapshot payloads
 
 from digiquant.brokers.contracts import (
     BrokerAccountSnapshot,
