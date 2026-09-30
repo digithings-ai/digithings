@@ -43,14 +43,33 @@ def test_write_observation_csv_rejects_empty(tmp_path: Path) -> None:
         mod.write_observation_csv([], tmp_path / "M2SL.csv")
 
 
-def test_series_files_stage_m2sl_only() -> None:
-    assert mod.SERIES_FILES == {"M2SL": "M2SL.csv"}
-
-
 def test_no_fred_fetch_paths_remain() -> None:
     assert not hasattr(mod, "rows_from_fred_api")
     assert not hasattr(mod, "rows_from_fredgraph")
     assert not hasattr(mod, "fetch_fred_series")
+
+
+def test_series_files_match_load_sdca_extra_sources() -> None:
+    assert mod.SERIES_FILES == {
+        "M2SL": "M2SL.csv",
+        "GVZCLS": "GVZCLS.csv",
+        "WALCL": "WALCL.csv",
+        "BAMLH0A0HYM2": "BAMLH0A0HYM2.csv",
+        "BAMLC0A0CM": "BAMLC0A0CM.csv",
+        "T5YIE": "T5YIE.csv",
+        "NFCI": "NFCI.csv",
+    }
+
+
+def test_export_series_writes_gvz_staging_csv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mod, "rows_from_supabase", lambda _sid: [("2024-01-02", 18.5)])
+    dest, source, n = mod.export_series("GVZCLS", tmp_path)
+    assert source == "supabase"
+    assert n == 1
+    assert dest.name == "GVZCLS.csv"
+    assert dest.read_text(encoding="utf-8").splitlines()[0] == "observation_date,GVZCLS"
 
 
 def test_export_series_m2sl_from_r2_without_key(
