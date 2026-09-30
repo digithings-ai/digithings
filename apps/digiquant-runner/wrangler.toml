@@ -10,9 +10,8 @@
 #   RUNNER_AUTH_TOKEN          — Bearer on POST /v1/jobs (also set on digithings-cron)
 #   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 #   CORE_POSTGRES_URI, CORE_SUPABASE_URL, CORE_SUPABASE_SERVICE_KEY
-#   FRED_API_KEY               — optional. Unset skips fred__* (#4795). Those
-#                                generations stay stale until #4794. Do not add
-#                                GH_ISSUE_TOKEN; this Worker does not file issues.
+#   (no FRED key: the macro panel seals from anonymous Gloomberb econ_series,
+#   #4794. Do not add GH_ISSUE_TOKEN; this Worker does not file issues.)
 #
 # Not on this Worker in Phase 1: broker credentials, Alpaca keys, provider keys.
 name = "digiquant-runner"

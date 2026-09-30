@@ -170,6 +170,18 @@ describe("data plane env", () => {
     );
     expect(keys).not.toContain("RUNNER_AUTH_TOKEN");
     expect(keys).not.toContain("GH_ISSUE_TOKEN");
-    expect(keys).toContain("FRED_API_KEY");
+    // #4794: the macro panel needs no vendor key — pin the whitelist exactly.
+    expect([...keys].sort()).toEqual(
+      [
+        "CORE_POSTGRES_URI",
+        "CORE_SUPABASE_SERVICE_KEY",
+        "CORE_SUPABASE_URL",
+        "DIGIQUANT_RUNNER_GIT_SHA",
+        "R2_ACCESS_KEY_ID",
+        "R2_ACCOUNT_ID",
+        "R2_BUCKET",
+        "R2_SECRET_ACCESS_KEY",
+      ].sort(),
+    );
   });
 });

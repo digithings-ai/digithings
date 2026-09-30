@@ -476,18 +476,17 @@ prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
 `scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
 lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
-to span at least one publication period of the series (#4588). Exception
-(#4795): when `FRED_API_KEY` is unset, FRED series are omitted before that
-gate and listed on the refresh artifact as `fred_skipped`. They do not mark
-the run stale, so Yahoo FX and the price universe can still exit 0.
-`digiquant prices fetch-macro` skips the `fred` source the same way instead
-of raising when the key is missing. Those `fred__*` R2 generations stay at
-the last seal until the Gloomberb migrate (#4794). A set key still fetches.
-The #4794 panel adapter lives in `data/prices/gloomberb_macro.py` (frozen
-23-kept / 8-dropped id sets, per-cadence page limits, anonymous `econ_series`
-fetch over an injected client with `cache_ttl=0`) alongside the offline
-`scripts/probe_gloomberb_macro_panel.py` baseline probe; it is NOT wired yet,
-so the refresh and `fetch-macro` paths above are unchanged until the PR 2 wire.
+to span at least one publication period of the series (#4588). No `FRED_API_KEY`
+is read anywhere on this path (#4794): `source=="fred"` fetches the newest
+anonymous Gloomberb `econ_series` page per kept series (`window_limit` by
+cadence: 60/16/8/4; 1000-row tail on bootstrap, sealed with a `truncated` note)
+and merges it into the existing `fred__*` generation, keeping sealed rows older
+than the page. A same-seal revision takes the window-merge path, never a full
+1990 re-pull. Only the 23 kept panel ids
+(`data/prices/gloomberb_macro.py::KEPT_SERIES_IDS`) are selected; the 8 dropped
+ids are never fetched and their `latest` pointers keep serving the last seal.
+`digiquant prices fetch-macro` reads the same panel the same way (`--dry-run`
+prints ids without a client; `--backfill` is a 1000-row tail, not 1990).
 `LIVE_WINDOW_DAYS`
 (45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
 `CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag

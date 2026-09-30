@@ -1,12 +1,12 @@
-"""Gloomberb-backed macro panel adapter (#4794, PR 1).
+"""Gloomberb-backed macro panel writer (#4794, PR 2 wired).
 
 Library only: frozen panel sets, per-cadence page limits, observation mapping,
 and fetch entry points over an injected ``GloomberbClient``. No R2, no YAML
 I/O, no Supabase.
 
-NOT wired yet: ``scripts/refresh_market_data_r2.py`` and
-``digiquant prices fetch-macro`` still read FRED until the PR 2 wire lands,
-so cron stays on the #4796 missing-key skip. Dataset ids (``fred__{SERIES}``)
+Wired: ``scripts/refresh_market_data_r2.py`` and
+``digiquant prices fetch-macro`` seal the kept panel ids from anonymous
+``econ_series`` pages (``cache_ttl=0``). Dataset ids (``fred__{SERIES}``)
 and the parquet ``source="fred"`` column are unchanged by the swap.
 """
 
