@@ -218,6 +218,15 @@ Key request fields:
 
 Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
 
+Cross-namespace twin dedupe (#4823): before normalization, `run_query`
+collapses hits whose full chunk bodies are byte-identical and whose
+metadata paths are suffix-related at a `/` boundary (live path plus
+tenant-prefixed copy, e.g. `clients/digithings/...` — an index can hold
+both because vector IDs are path-derived, so a re-sync under a new prefix
+adds copies instead of overwriting). Within a twin group the http(s)-URL
+carrier wins, else the longest (tenant-prefixed) path; `total` still
+reports the backend count. Helper: `search/namespace_dedupe.py`.
+
 #### `POST /ingest`
 
 Auth required (`digisearch:ingest` scope). Rate limited: 30 req/min per IP.
