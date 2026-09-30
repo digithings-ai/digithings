@@ -56,7 +56,8 @@
   animation: mq-right var(--mq-speed, 34s) linear infinite;
 }
 
-.mq-row:hover .mq-track {
+.mq-row:hover .mq-track,
+.mq-row[data-paused="true"] .mq-track {
   animation-play-state: paused;
 }
 
@@ -79,5 +80,18 @@
   .mq-track--left,
   .mq-track--right {
     animation: none;
+  }
+}
+
+/* MarketBar tick flash (components/finance-composites/MarketBar): a keyed
+   overlay fades from a wash to nothing. Opacity only — the wash colour is a
+   utility on the element, the keyframe never names a colour. Reduced motion
+   hides the overlay outright (motion-reduce:hidden on the element). */
+@keyframes mb-flash {
+  from {
+    opacity: 0.22;
+  }
+  to {
+    opacity: 0;
   }
 }

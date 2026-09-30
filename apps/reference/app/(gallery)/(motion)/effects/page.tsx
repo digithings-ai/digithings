@@ -4,6 +4,7 @@ import { AmbientMesh } from "@/components/effects/ambient-mesh";
 import { ClipReveal } from "@/components/effects/clip-reveal";
 import { CrossfadeSections } from "@/components/effects/crossfade-sections";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
+import { HorizontalTrackReference } from "@/components/effects/horizontal-track-reference";
 import { PipelineReference } from "@/components/pipeline-reference";
 import { ResearchPipeline } from "@/components/effects/research-pipeline";
 import { RotatingPrompts } from "@/components/effects/rotating-prompts";
@@ -57,6 +58,7 @@ const JUMP_SECTIONS = [
   { id: "section-morph", label: "Zoom-morph" },
   { id: "stacking-panels", label: "Stacking panels" },
   { id: "crossfade-sections", label: "Cross-fade" },
+  { id: "horizontal-track", label: "Horizontal track" },
   { id: "routing-map", label: "Routing map" },
   { id: "rotating-prompts", label: "Rotating prompts" },
   { id: "clip-reveal", label: "Clip-reveal" },
@@ -169,6 +171,8 @@ export default function EffectsPage() {
       </section>
 
       <PipelineReference />
+
+      <HorizontalTrackReference />
 
       <section className="section-block" id="ambient-mesh">
         <p className="kicker">{"// ambient mesh"}</p>
