@@ -179,6 +179,17 @@ def test_count_winning_trades_from_series() -> None:
     assert count_winning_trades(None) is None
 
 
+def test_count_winning_trades_never_touches_pandas_bridge() -> None:
+    """A series exposing .to_pandas (raises without pyarrow) still counts."""
+
+    class _NoPyarrow(list):
+        def to_pandas(self):  # pragma: no cover - must never be called
+            raise ModuleNotFoundError("No module named 'pyarrow'")
+
+    series = _NoPyarrow([1.0, -2.0, 3.0, float("nan")])
+    assert count_winning_trades(series) == 2  # n=3 (NaN dropped)
+
+
 def _generator_module():
     import sys
     from pathlib import Path

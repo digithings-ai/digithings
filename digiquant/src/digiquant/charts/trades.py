@@ -16,31 +16,23 @@ from digiquant.stats.honesty import honest_rate
 
 
 def count_winning_trades(realized_pnls_series: Any) -> int | None:
-    """Count winning (PnL > 0) trades; None when the series is missing/empty."""
+    """Count winning (PnL > 0) trades; None when the series is missing/empty.
+
+    Goes through :func:`_extract_frame` (duck-typed ``.values`` / ``.to_list``
+    / ``.tolist`` / iterable — no imports) and counts ``> 0`` over the value
+    column. Never ``.to_pandas()``: that bridge needs pyarrow, which is not
+    installed, so it raised ``ModuleNotFoundError`` and — called unguarded
+    from ``tearsheet.py`` — crashed whole-tearsheet generation.
+    """
     if realized_pnls_series is None:
         return None
-    raw = (
-        realized_pnls_series.to_pandas()
-        if hasattr(realized_pnls_series, "to_pandas")
-        else realized_pnls_series
-    )
-    if hasattr(raw, "values"):
-        raw_vals = raw.values.tolist()
-    elif hasattr(raw, "tolist"):
-        raw_vals = raw.tolist()
-    else:
-        raw_vals = list(raw)
-    vals = []
-    for x in raw_vals:
-        try:
-            fv = float(x)
-            if not math.isnan(fv) and not math.isinf(fv):
-                vals.append(fv)
-        except (TypeError, ValueError):
-            pass
-    if not vals:
+    df = _extract_frame(realized_pnls_series)
+    if df is None or len(df) == 0:
         return None
-    return sum(1 for v in vals if v > 0)
+    try:
+        return int((df["value"] > 0).sum())
+    except Exception:
+        return None
 
 
 def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
