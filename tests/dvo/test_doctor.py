@@ -76,6 +76,7 @@ def test_missing_model_directory_names_both_platforms() -> None:
     paths = _check(report, "paths")
     assert "/Users/chris/Library/Application Support/digivoice/models" in paths
     assert "/Users/chris/.local/share/digivoice/models" in paths
+    assert "/Users/chris/Library/Application Support/digivoice/recordings" in paths
     assert "history.jsonl" in _check(report, "history")
     assert _check(report, "tcc").startswith("info ")
 

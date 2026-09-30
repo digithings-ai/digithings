@@ -60,7 +60,8 @@ def _paths(home: Path, paths: VoicePaths) -> DoctorCheck:
     linux_models = linux_data_dir(home, None) / "models"
     detail = (
         f"active data {paths.data_dir}; macOS {mac_models}; "
-        f"Linux {linux_models} (or $XDG_DATA_HOME/digivoice/models)"
+        f"Linux {linux_models} (or $XDG_DATA_HOME/digivoice/models); "
+        f"dictation wavs {paths.recordings_dir}"
     )
     return DoctorCheck(id="paths", status="info", detail=detail)
 
@@ -95,8 +96,9 @@ def doctor_checks(
             id="tcc",
             status="info",
             detail=(
-                "Mic and Accessibility prompts are not probed in this scaffold. "
-                "PR3 documents the macOS grants dictation paste needs."
+                "Mic and Accessibility prompts are not probed. dict records with a "
+                "bounded cap and degrades to stdout when a paste is denied; PR3 "
+                "documents the macOS grants."
             ),
         ),
     ]
