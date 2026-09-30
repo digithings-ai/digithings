@@ -1338,6 +1338,9 @@ logic, no env reads) and the site logic lives here:
 | `data/gloomberb/normalizers.py` | Ported §5.4 normalizers: GBp/GBX→GBP divisor, interval tokens, exchange-timezone bar dates, malformed-intraday rejection, day-range reconciliation, and the §5.3 freshness union (wire `stale` vs `dataSource`/`delayMinutes`) |
 | `data/gloomberb/client.py` | `GloomberbClient` on `digifetch.HttpFetcher`/`RateLimiter`/`with_retry`: endpoint map, wire→error mapping, 900s TTL cache, circuit breaker (half-open probe), kill switch, optional session cookie, Yahoo/yfinance earnings path |
 | `data/gloomberb/attribution.py` | §7 attribution: "Sourced from Gloomberb", delay notice, `term.gloom.sh/?ticker=` deep links |
+| `data/enrichment/` | Gold enrichment snapshot store (#4804): research staging for gloomberb pulls, JSON pages at `snapshots/<tool>/<YYYY-MM-DD>__<params12>.json` + `latest.json` (+ options `.metrics.json` sidecars), provenance-stamped (`tool`, `params`, `fetched_at`, `source`, delay notice, attribution). Gitignored staging — only the README is committed. Enrichment-only, never a pipeline input |
+| `scripts/pull_gold_enrichment.py` + `scripts/refresh_gold_enrichment.py` | Gold enrichment pulls → snapshot store (#4804): five subcommands (`options-skew`, `13f-gld`, `econ-calendar`, `gold-news`, hit-only `probe-lbma`) through the in-process digifetch dispatcher; the refresh runs the three fast pulls every run and 13F + LBMA probe only with `--include-slow`, pruning each tool dir to `--keep` (default 30) |
+| `.github/workflows/enrich-gold-refresh.yml` | Weekly `enrich-gold-refresh` (#4804): Mondays 09:00 UTC + `workflow_dispatch`, always `--include-slow`, no secrets (anonymous tools only), no Supabase/R2 writes |
 
 **Envelope and errors.** Every call returns the same envelope —
 `{source, provider_id, fetched_at, stale, delay_note, warnings, data}` — where
