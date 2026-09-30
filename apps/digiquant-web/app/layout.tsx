@@ -10,7 +10,10 @@ import {
   ThemeProvider,
   themeInitScript,
 } from "@digithings/ui";
-import { Brand, DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
+import { LayoutRails } from "./_chrome/LayoutRails";
+import { MarketBarShell } from "./_chrome/MarketBarShell";
+import { SectionRail } from "./_chrome/SectionRail";
+import { Brand,DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
@@ -84,7 +87,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               skipTo="#main"
             />
             {/* NavShell is fixed: reserve its height (nav-shell.css knob, 62px fallback). */}
-            <div className="pt-[var(--nav-shell-h,62px)]">{children}</div>
+            <LayoutRails />
+            <SectionRail />
+            <div className="pt-[var(--nav-shell-h,62px)]">
+              <MarketBarShell />
+              {children}
+            </div>
             <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
 
           </ThemeProvider>
