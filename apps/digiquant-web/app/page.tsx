@@ -6,12 +6,12 @@ import {
   Figure,
   GlyphList,
   GlyphRow,
+  NumberedStages,
   PageTitle,
   Section,
   subsystems,
 } from "@digithings/ui";
 import {
-  Badge,
   Table,
   TableBody,
   TableCell,
@@ -21,6 +21,8 @@ import {
   TableRowHeader,
   buttonVariants,
 } from "@digithings/ui/ui";
+import { PortfolioIsland } from "@/components/live/portfolio-island";
+import { StrategyLibraryLive } from "@/components/tearsheet/strategy-library-live";
 import { PRICING_FAQ, PRICING_TIERS } from "./_pricing";
 
 // Every line below is copied from shipped source (see
@@ -48,12 +50,18 @@ const PHASES: Record<string, string> = {
   execution: "backtest and optimize on NautilusTrader · paper adapters ship · live venues refused",
 };
 
-const PUBLISHED: { id: string; name: string; symbol: string }[] = [
-  { id: "btc_slapper", name: "BTC L/S", symbol: "BTC-USD" },
-  { id: "eth_slapper", name: "ETH L/S", symbol: "ETH-USD" },
-  { id: "sol_slapper", name: "SOL L/S", symbol: "SOL-USD" },
-  { id: "btc_sdca", name: "BTC-SDCA", symbol: "BTC-USD" },
+// Read-scope tools of the digiquant MCP server (digiquant/src/digiquant/mcp_server.py,
+// READ_SCOPE_TOOLS); the one-liners are that file's own docstrings.
+const MCP_TOOLS: { name: string; what: string }[] = [
+  { name: "digiquant_list_strategies", what: "List registered strategies — name, aliases, description, default params." },
+  { name: "digiquant_get_price_technicals", what: "Technicals for a ticker from the versioned R2 price history." },
+  { name: "digiquant_get_macro_series", what: "Macro observations for one or more series ids." },
+  { name: "digiquant_get_trade_levels", what: "Causal ATR / swing-pivot / Donchian trade levels for one direction." },
+  { name: "digiquant_query_research", what: "Query the research book: documents, snapshots, positions, NAV history, portfolio metrics." },
+  { name: "digifetch_quote / digifetch_quotes_batch", what: "Latest quote for one listing, or 1–20 at once." },
+  { name: "digifetch_price_history", what: "OHLCV bars for one listing." },
 ];
+const MCP_RUN = "python -m digiquant.mcp_server --stdio --scope read";
 
 // Gloomberg density: tighter block step than the kit default (--page-step).
 const DENSE = "py-[1.75rem]";
@@ -117,27 +125,18 @@ export default function Home() {
         </Section>
 
         <Section className={DENSE} id="pipeline" title="Pipeline" lede="Research to tearsheet in seven stages. Results are in-sample, and the tearsheets say so.">
-          <Table density="compact">
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>What it does</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {STAGES.map((s) => (
-                <TableRow key={s.n}>
-                  <TableCell className="text-ink-mute">{s.n}</TableCell>
-                  <TableRowHeader>
-                    {s.title}
-                    <span className="block font-normal text-ink-mute">{s.tool}</span>
-                  </TableRowHeader>
-                  <TableCell className="whitespace-normal text-ink-soft">{s.body}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <NumberedStages
+            stages={STAGES.map((s) => ({ num: s.n, title: s.title, mech: s.body, tag: s.tool }))}
+          />
+        </Section>
+
+        <Section
+          className={DENSE}
+          id="book"
+          title="The research book, live"
+          lede="Read from the same public seam the dashboard uses. It is a research/paper portfolio — nothing here is a live-traded fund."
+        >
+          <PortfolioIsland />
         </Section>
 
         <Section
@@ -175,35 +174,42 @@ export default function Home() {
           title="Strategies"
           lede="Backtest tearsheets — equity, drawdown, trade log, and risk metrics. Each run is a Nautilus backtest on Coinbase daily OHLCV."
         >
-          <Table density="compact">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Strategy</TableHead>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {PUBLISHED.map((s) => (
-                <TableRow key={s.id}>
-                  <TableRowHeader>
-                    <a className={LINK} href={`/strategies/${s.id}/`}>
-                      {s.name}
-                    </a>
-                  </TableRowHeader>
-                  <TableCell className="text-ink-soft">{s.symbol}</TableCell>
-                  <TableCell>
-                    <Badge variant="neutral">Backtest only</Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <StrategyLibraryLive />
           <p className="mt-[1rem] mb-0 text-[length:var(--type-body)] text-ink-soft">
             <Link className={LINK} href="/strategies/">
               Full strategy library →
             </Link>
           </p>
+        </Section>
+
+        <Section
+          className={DENSE}
+          id="mcp"
+          title="Drive it from your agent"
+          lede="The desk is also an MCP server. Point any MCP client at it and the same research, book and market reads are tools — read scope is the default hosted surface."
+        >
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-[1.2rem]">
+            <CopyCommand
+              ariaLabel="Run the digiquant MCP server"
+              samples={[{ label: "stdio", code: MCP_RUN, protocol: "mcp" }]}
+            />
+            <Table density="compact">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tool</TableHead>
+                  <TableHead>What it returns</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {MCP_TOOLS.map((t) => (
+                  <TableRow key={t.name}>
+                    <TableRowHeader className="whitespace-normal">{t.name}</TableRowHeader>
+                    <TableCell className="whitespace-normal text-ink-soft">{t.what}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </Section>
 
         <Section

@@ -8,6 +8,7 @@
 @import "@digithings/ui/styles/web-theme.css";
 @import "@digithings/ui/styles/controls-core.css";
 @import "@digithings/ui/styles/nav-shell.css";
+@import "@digithings/ui/styles/stages.css";
 /* finance-tearsheet family: .ts-* grammar incl. the @media print export grammar
    (self-layering, imported plainly). Kept for the tearsheet routes. */
 @import "@digithings/ui/styles/finance-tearsheet.css";
@@ -23,6 +24,8 @@
 @source "../../../packages/ui/src/components/contact";
 @source "../../../packages/ui/src/components/symbols";
 @source "../../../packages/ui/src/components/finance-tearsheet";
+@source "../../../packages/ui/src/components/finance-charts";
+@source "../../../packages/ui/src/components/stages";
 @source "../../../packages/ui/src/ui";
 
 :root[data-theme] {
