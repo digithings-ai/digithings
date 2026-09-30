@@ -80,6 +80,17 @@ DIGIFETCH_TOOLS = {
     "digifetch_dividend_yield",
     "digifetch_fx_cross_rates",
     "digifetch_vix_term_structure",
+    # portfolio-math compositions (130-coverage Task 3, unattributed derived math)
+    "digifetch_compare_performance",
+    "digifetch_correlation_matrix",
+    "digifetch_relationship_graph",
+    "digifetch_relative_valuation",
+    "digifetch_fundamental_graph",
+    "digifetch_valuation_graph",
+    "digifetch_custom_chart",
+    "digifetch_market_valuation",
+    "digifetch_money_markets",
+    "digifetch_rate_path",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -195,6 +206,38 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
                 ]
             },
         )
+    if host == "api.elections.kalshi.com" and request.url.path == "/trade-api/v2/markets":
+        # Live KXFED ladder shape for the rate-path composition (cents wire).
+        return httpx.Response(
+            200,
+            json={
+                "markets": [
+                    {
+                        "ticker": "KXFED-26DEC-450",
+                        "event_ticker": "KXFED-26DEC",
+                        "floor_strike": 4.5,
+                        "strike_type": "greater",
+                        "yes_bid": 90,
+                        "yes_ask": 92,
+                        "last_price": 91,
+                        "close_time": "2026-12-16T00:00:00Z",
+                        "status": "open",
+                    },
+                    {
+                        "ticker": "KXFED-26DEC-475",
+                        "event_ticker": "KXFED-26DEC",
+                        "floor_strike": 4.75,
+                        "strike_type": "greater",
+                        "yes_bid": 40,
+                        "yes_ask": 42,
+                        "last_price": 41,
+                        "close_time": "2026-12-16T00:00:00Z",
+                        "status": "open",
+                    },
+                ],
+                "cursor": "",
+            },
+        )
     path = request.url.path
     if path == "/market/quote":
         return _envelope(AAPL_QUOTE)
@@ -212,9 +255,36 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
             }
         )
     if path == "/market/history":
-        return _envelope([], currency="USD", providerMeta={"provider": "yahoo"})
+        symbol = request.url.params.get("symbol", "AAPL")
+        base = 200.0 if symbol == "MSFT" else 100.0
+        return _envelope(
+            [{"date": f"2026-09-{25 + i:02d}T00:00:00.000Z", "close": base + i} for i in range(5)],
+            currency="USD",
+            providerMeta={"provider": "yahoo"},
+        )
     if path == "/market/financials":
-        return _envelope({"quote": AAPL_QUOTE})
+        return _envelope(
+            {
+                "quote": AAPL_QUOTE,
+                "fundamentals": {
+                    "trailingPe": 30.0,
+                    "forwardPe": 25.0,
+                    "pegRatio": 1.5,
+                    "enterpriseToRevenue": 8.0,
+                    "dividendYield": 0.005,
+                },
+                "annualStatements": [
+                    {
+                        "date": "2025-09-27",
+                        "currency": "USD",
+                        "totalRevenue": 400.0,
+                        "netIncome": 100.0,
+                        "eps": 6.0,
+                    }
+                ],
+                "quarterlyStatements": [],
+            }
+        )
     if path == "/market/options":
         return _envelope(
             {"underlyingSymbol": "AAPL", "expirationDates": [], "calls": [], "puts": []}
@@ -508,8 +578,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_41_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 41
+def test_all_51_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 51
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -529,6 +599,18 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
         "digifetch_dividend_yield",
         "digifetch_fx_cross_rates",
         "digifetch_vix_term_structure",
+        # Portfolio-math compositions (130-coverage Task 3): derived math must
+        # not claim Gloomberb sourcing; the manifest names the math source.
+        "digifetch_compare_performance",
+        "digifetch_correlation_matrix",
+        "digifetch_relationship_graph",
+        "digifetch_relative_valuation",
+        "digifetch_fundamental_graph",
+        "digifetch_valuation_graph",
+        "digifetch_custom_chart",
+        "digifetch_market_valuation",
+        "digifetch_money_markets",
+        "digifetch_rate_path",
     }
     for name in sorted(DIGIFETCH_TOOLS - unattributed):
         description = rows[name]["function"]["description"]
@@ -551,6 +633,17 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
         "digifetch_dividend_yield": "corporate-actions",
         "digifetch_fx_cross_rates": "exchange-rate",
         "digifetch_vix_term_structure": "econ-series",
+        # Portfolio-math compositions (130-coverage Task 3).
+        "digifetch_compare_performance": "price_history",
+        "digifetch_correlation_matrix": "price_history",
+        "digifetch_relationship_graph": "price_history",
+        "digifetch_relative_valuation": "ticker_financials",
+        "digifetch_fundamental_graph": "ticker_financials",
+        "digifetch_valuation_graph": "ticker_financials",
+        "digifetch_custom_chart": "series list",
+        "digifetch_market_valuation": "Shiller",
+        "digifetch_money_markets": "econ-series",
+        "digifetch_rate_path": "Kalshi",
     }
     for name, source in math_sources.items():
         description = rows[name]["function"]["description"]
@@ -767,6 +860,19 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_dividend_yield": ("AAPL",),
     "digifetch_fx_cross_rates": (["EUR", "GBP"],),
     "digifetch_vix_term_structure": (),
+    # portfolio-math compositions (130-coverage Task 3)
+    "digifetch_compare_performance": (["AAPL", "MSFT"],),
+    "digifetch_correlation_matrix": (["AAPL", "MSFT"],),
+    "digifetch_relationship_graph": ("AAPL", "MSFT"),
+    "digifetch_relative_valuation": (["AAPL", "MSFT"],),
+    "digifetch_fundamental_graph": ("AAPL",),
+    "digifetch_valuation_graph": ("AAPL",),
+    "digifetch_custom_chart": (
+        '[{"source": "price", "symbol": "AAPL"}, {"source": "fred", "ref": "CPIAUCSL"}]',
+    ),
+    "digifetch_market_valuation": (),
+    "digifetch_money_markets": (),
+    "digifetch_rate_path": (),
 }
 
 
@@ -784,6 +890,22 @@ _TWO_REQUEST_TOOLS = {
     "digifetch_vix_term_structure",
 }
 
+#: Portfolio-math compositions (130-coverage Task 3): wire requests one sweep
+#: call makes (one per history/financials/series leg, one venue page for the
+#: rate path).
+_MULTI_REQUEST_TOOLS = {
+    "digifetch_compare_performance": [1, 1],
+    "digifetch_correlation_matrix": [1, 1],
+    "digifetch_relationship_graph": [1, 1],
+    "digifetch_relative_valuation": [1, 1],
+    "digifetch_fundamental_graph": [1],
+    "digifetch_valuation_graph": [1],
+    "digifetch_custom_chart": [1, 1],
+    "digifetch_market_valuation": [1],
+    "digifetch_money_markets": [1, 1, 1],
+    "digifetch_rate_path": [1],
+}
+
 
 def _expected_wire_calls(name: str, *, with_cookie: bool) -> list[int]:
     """Wire requests one sweep call makes (MockTransport request count).
@@ -795,6 +917,8 @@ def _expected_wire_calls(name: str, *, with_cookie: bool) -> list[int]:
     """
     if name == "digifetch_earnings_calendar" or name in _NO_WIRE_TOOLS:
         return []
+    if name in _MULTI_REQUEST_TOOLS:
+        return list(_MULTI_REQUEST_TOOLS[name])
     if name in _TWO_REQUEST_TOOLS:
         return [1, 1]
     if name == "digifetch_dividend_yield":
@@ -825,6 +949,18 @@ def test_every_tool_returns_attributed_json(
         "digifetch_dividend_yield",
         "digifetch_fx_cross_rates",
         "digifetch_vix_term_structure",
+        # Portfolio-math compositions (130-coverage Task 3): derived math must
+        # not claim Gloomberb sourcing.
+        "digifetch_compare_performance",
+        "digifetch_correlation_matrix",
+        "digifetch_relationship_graph",
+        "digifetch_relative_valuation",
+        "digifetch_fundamental_graph",
+        "digifetch_valuation_graph",
+        "digifetch_custom_chart",
+        "digifetch_market_valuation",
+        "digifetch_money_markets",
+        "digifetch_rate_path",
     }
     attributed = name not in unattributed
     if attributed:

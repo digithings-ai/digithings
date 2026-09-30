@@ -88,6 +88,18 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     "digifetch_dividend_yield": "free",
     "digifetch_fx_cross_rates": "free",
     "digifetch_vix_term_structure": "free",
+    # portfolio-math compositions (130-coverage Task 3) — derived math over
+    # existing reads, so all ten are anonymous reads like the other free tools
+    "digifetch_compare_performance": "free",
+    "digifetch_correlation_matrix": "free",
+    "digifetch_relationship_graph": "free",
+    "digifetch_relative_valuation": "free",
+    "digifetch_fundamental_graph": "free",
+    "digifetch_valuation_graph": "free",
+    "digifetch_custom_chart": "free",
+    "digifetch_market_valuation": "free",
+    "digifetch_money_markets": "free",
+    "digifetch_rate_path": "free",
     # session — GLOOMBERB_SESSION_COOKIE required (zero-HTTP auth_required without it)
     "digifetch_holders": "session",
     "digifetch_analyst_research": "session",

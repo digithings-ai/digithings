@@ -55,8 +55,11 @@ from .models import (
     AnalystResearchInput,
     BondCalcInput,
     CdsInput,
+    ComparePerfInput,
     CongressTradesInput,
     CorporateActionsInput,
+    CorrMatrixInput,
+    CustomChartInput,
     DigifetchEnvelope,
     DigifetchError,
     DividendYieldInput,
@@ -66,9 +69,12 @@ from .models import (
     EquityDiagnosticInput,
     ExchangeRateInput,
     FilingEventsInput,
+    FundGraphInput,
     FxMatrixInput,
     HoldersInput,
     KellyInput,
+    MarketValInput,
+    MoneyMarketsInput,
     NewsInput,
     OptionsCalcInput,
     OptionsChainInput,
@@ -77,6 +83,9 @@ from .models import (
     ProxyStatementsInput,
     QuoteInput,
     QuotesBatchInput,
+    RatePathInput,
+    RelGraphInput,
+    RelValInput,
     ResearchSearchInput,
     RiskReportsInput,
     SavedSearchesInput,
@@ -92,6 +101,7 @@ from .models import (
     TickerTweetsInput,
     TranscriptsInput,
     TweetSearchInput,
+    ValGraphInput,
     VenuesInput,
     VixTermInput,
     YieldCurveInput,
@@ -218,6 +228,13 @@ MACRO_TOOLS: tuple[str, ...] = (
     "digifetch_news",
     "digifetch_research_search",
     "digifetch_prediction_markets",
+    # portfolio-math compositions (130-coverage Task 3): valuation + funding
+    # context for the macro phase. compare_performance / correlation_matrix /
+    # relative_valuation stay MCP-only: EQUITY_TOOLS is at its 16-name prompt
+    # budget and evictions need owner sign-off.
+    "digifetch_market_valuation",
+    "digifetch_money_markets",
+    "digifetch_rate_path",
 )
 # ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
 # upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
@@ -385,6 +402,34 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     "digifetch_vix_term_structure": DigifetchDispatch(
         VixTermInput, "vix_term_structure", attributed=False
     ),
+    # Portfolio-math compositions (130-coverage Task 3): derived math over
+    # existing reads, never Cloud-sourced, so no deep link and no attribution.
+    "digifetch_compare_performance": DigifetchDispatch(
+        ComparePerfInput, "compare_performance", attributed=False
+    ),
+    "digifetch_correlation_matrix": DigifetchDispatch(
+        CorrMatrixInput, "correlation_matrix", attributed=False
+    ),
+    "digifetch_relationship_graph": DigifetchDispatch(
+        RelGraphInput, "relationship_graph", attributed=False
+    ),
+    "digifetch_relative_valuation": DigifetchDispatch(
+        RelValInput, "relative_valuation", attributed=False
+    ),
+    "digifetch_fundamental_graph": DigifetchDispatch(
+        FundGraphInput, "fundamental_graph", attributed=False
+    ),
+    "digifetch_valuation_graph": DigifetchDispatch(
+        ValGraphInput, "valuation_graph", attributed=False
+    ),
+    "digifetch_custom_chart": DigifetchDispatch(CustomChartInput, "custom_chart", attributed=False),
+    "digifetch_market_valuation": DigifetchDispatch(
+        MarketValInput, "market_valuation", attributed=False
+    ),
+    "digifetch_money_markets": DigifetchDispatch(
+        MoneyMarketsInput, "money_markets", attributed=False
+    ),
+    "digifetch_rate_path": DigifetchDispatch(RatePathInput, "rate_path", attributed=False),
 }
 
 

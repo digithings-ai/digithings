@@ -1631,6 +1631,339 @@ def build_digifetch_vix_term_structure_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_compare_performance_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_compare_performance",
+            "description": (
+                "Rebased multi-ticker performance over the price_history read. "
+                "Reads one history per ticker, inner-joins on trading dates, "
+                "and rebases every leg to 100 at the first common date with "
+                "total returns. Fewer than two tickers or an empty date "
+                "overlap is typed invalid_input, never clamped. Derived math "
+                "over enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tickers": {"type": "array", "items": {"type": "string"}},
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+                        "default": "1d",
+                    },
+                    "range": {
+                        "type": "string",
+                        "enum": ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"],
+                    },
+                },
+                "required": ["tickers"],
+            },
+        },
+    }
+
+
+def build_digifetch_correlation_matrix_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_correlation_matrix",
+            "description": (
+                "Pearson correlation matrix over date-aligned price_history "
+                "daily returns. Identical return paths correlate at 1.0; a "
+                "flat leg correlates with nothing (null — undefined, never a "
+                "clamped fill). Fewer than two tickers or an empty date "
+                "overlap is typed invalid_input. Derived math over enrichment "
+                "reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tickers": {"type": "array", "items": {"type": "string"}},
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+                        "default": "1d",
+                    },
+                    "range": {
+                        "type": "string",
+                        "enum": ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"],
+                    },
+                },
+                "required": ["tickers"],
+            },
+        },
+    }
+
+
+def build_digifetch_relationship_graph_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_relationship_graph",
+            "description": (
+                "Pair relationship over two price_history reads: indexed "
+                "prices (rebased to 100), the base-over-quote price ratio, "
+                "the rolling return correlation, and the returns beta. Base "
+                "and quote must be distinct; an empty date overlap is typed "
+                "invalid_input. Derived math over enrichment reads, never a "
+                "pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "base": {"type": "string"},
+                    "quote": {"type": "string"},
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+                        "default": "1d",
+                    },
+                    "range": {
+                        "type": "string",
+                        "enum": ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"],
+                    },
+                    "window": {"type": "integer", "default": 20},
+                },
+                "required": ["base", "quote"],
+            },
+        },
+    }
+
+
+def build_digifetch_relative_valuation_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_relative_valuation",
+            "description": (
+                "Peer trailing-multiples table over the ticker_financials "
+                "read: trailing/forward P/E, PEG, EV/revenue, and dividend "
+                "yield per peer plus the median trailing P/E. A failed leg "
+                "returns upstream_error naming the ticker. Derived math over "
+                "enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tickers": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["tickers"],
+            },
+        },
+    }
+
+
+def build_digifetch_fundamental_graph_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_fundamental_graph",
+            "description": (
+                "Statement-field time series over the ticker_financials read: "
+                "one revenue, income, cash-flow, balance-sheet, or EPS field "
+                "per period (annual or quarterly, oldest first). Derived math "
+                "over enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "field": {
+                        "type": "string",
+                        "enum": [
+                            "total_revenue",
+                            "net_income",
+                            "ebitda",
+                            "free_cash_flow",
+                            "total_assets",
+                            "total_liabilities",
+                            "total_equity",
+                            "eps",
+                        ],
+                        "default": "total_revenue",
+                    },
+                    "period": {
+                        "type": "string",
+                        "enum": ["annual", "quarterly"],
+                        "default": "annual",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_valuation_graph_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_valuation_graph",
+            "description": (
+                "Per-period valuation rows over the ticker_financials read: "
+                "statement EPS, revenue, and income per period plus the "
+                "latest-price trailing-multiples snapshot. Derived math over "
+                "enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "period": {
+                        "type": "string",
+                        "enum": ["annual", "quarterly"],
+                        "default": "annual",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_custom_chart_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_custom_chart",
+            "description": (
+                "Explicit series list aligned onto one date union (no catalog "
+                "search): each entry names its source — price (a listing "
+                "symbol), statement (a symbol plus a statement field), or "
+                "fred (an econ-series id) — and the tool returns the union of "
+                "dates with one aligned column per leg. A failed or empty leg "
+                "is upstream_error naming the leg. Derived math over "
+                "enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "series": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": {
+                                    "type": "string",
+                                    "enum": ["price", "statement", "fred"],
+                                },
+                                "symbol": {"type": "string"},
+                                "field": {"type": "string"},
+                                "ref": {"type": "string"},
+                                "resolution": {
+                                    "type": "string",
+                                    "enum": [
+                                        "1m",
+                                        "5m",
+                                        "15m",
+                                        "30m",
+                                        "1h",
+                                        "1d",
+                                        "1wk",
+                                        "1mo",
+                                    ],
+                                    "default": "1d",
+                                },
+                                "range": {
+                                    "type": "string",
+                                    "enum": [
+                                        "1D",
+                                        "1W",
+                                        "1M",
+                                        "3M",
+                                        "6M",
+                                        "1Y",
+                                        "5Y",
+                                        "ALL",
+                                    ],
+                                },
+                            },
+                            "required": ["source"],
+                        },
+                    },
+                },
+                "required": ["series"],
+            },
+        },
+    }
+
+
+def build_digifetch_market_valuation_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_market_valuation",
+            "description": (
+                "Market valuation snapshot over the Shiller CAPE series plus "
+                "optional econ-series ratios: the latest print of each "
+                "against its history thirds (cheap/fair/expensive). Derived "
+                "math over enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 240},
+                    "econ_series_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "ratio_limit": {"type": "integer", "default": 100},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_money_markets_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_money_markets",
+            "description": (
+                "Money-markets snapshot over three econ-series FRED reads "
+                "(SOFR/EFFR/reserves, ids overridable): latest prints plus "
+                "the SOFR-minus-EFFR spread. A failed leg returns "
+                "upstream_error naming the series. Derived math over "
+                "enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sofr_series": {"type": "string", "default": "SOFR"},
+                    "effr_series": {"type": "string", "default": "EFFR"},
+                    "reserves_series": {"type": "string", "default": "WRESBAL"},
+                    "limit": {"type": "integer", "default": 5},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_rate_path_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_rate_path",
+            "description": (
+                "US rate path over live Kalshi KXFED threshold markets "
+                "(venue-direct, anonymous polled read): per-meeting survival "
+                "ladders differenced into 25bp outcome distributions with "
+                "the fed-prob ladder semantics. Meetings with fewer than two "
+                "strikes are skipped with a warning. Derived math, never a "
+                "pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 200},
+                },
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -2139,6 +2472,16 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_dividend_yield_tool(),
         build_digifetch_fx_cross_rates_tool(),
         build_digifetch_vix_term_structure_tool(),
+        build_digifetch_compare_performance_tool(),
+        build_digifetch_correlation_matrix_tool(),
+        build_digifetch_relationship_graph_tool(),
+        build_digifetch_relative_valuation_tool(),
+        build_digifetch_fundamental_graph_tool(),
+        build_digifetch_valuation_graph_tool(),
+        build_digifetch_custom_chart_tool(),
+        build_digifetch_market_valuation_tool(),
+        build_digifetch_money_markets_tool(),
+        build_digifetch_rate_path_tool(),
         build_digifetch_saved_searches_tool(),
         build_luxalgo_library_search_tool(),
         build_luxalgo_library_get_concept_tool(),

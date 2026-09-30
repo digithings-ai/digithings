@@ -100,6 +100,18 @@ __all__ = [
     "DividendYieldInput",
     "FxMatrixInput",
     "VixTermInput",
+    # portfolio-math composition inputs (130-coverage Task 3)
+    "ComparePerfInput",
+    "CorrMatrixInput",
+    "RelGraphInput",
+    "RelValInput",
+    "FundGraphInput",
+    "ValGraphInput",
+    "CustomSeries",
+    "CustomChartInput",
+    "MarketValInput",
+    "MoneyMarketsInput",
+    "RatePathInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -216,6 +228,25 @@ __all__ = [
     "DividendYieldResult",
     "FxMatrixResult",
     "VixTermResult",
+    "STATEMENT_FIELDS",
+    "StatementField",
+    # portfolio-math composition payloads (130-coverage Task 3)
+    "ComparePerfResult",
+    "CorrMatrixResult",
+    "RelGraphResult",
+    "RelValRow",
+    "RelValResult",
+    "FundGraphPoint",
+    "FundGraphResult",
+    "ValGraphRow",
+    "ValGraphSnapshot",
+    "ValGraphResult",
+    "CustomChartResult",
+    "EconRatio",
+    "MarketValResult",
+    "MoneyMarketsResult",
+    "RateMeeting",
+    "RatePathResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -259,6 +290,17 @@ __all__ = [
     "DividendYieldEnvelope",
     "FxMatrixEnvelope",
     "VixTermEnvelope",
+    # portfolio-math composition envelopes (130-coverage Task 3)
+    "ComparePerfEnvelope",
+    "CorrMatrixEnvelope",
+    "RelGraphEnvelope",
+    "RelValEnvelope",
+    "FundGraphEnvelope",
+    "ValGraphEnvelope",
+    "CustomChartEnvelope",
+    "MarketValEnvelope",
+    "MoneyMarketsEnvelope",
+    "RatePathEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -2245,6 +2287,312 @@ class VixTermResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Portfolio-math composition inputs/payloads (130-coverage Task 3)
+# ---------------------------------------------------------------------------
+#
+# Ten compositions over existing reads (price history, ticker financials, econ
+# series, Shiller, and the Kalshi KXFED venue path). Every number is derived
+# locally — rebased returns, date-aligned inner joins, Pearson math, statement
+# multiples, CAPE zones, funding spreads, survival-ladder differences — so all
+# ten are unattributed: a derived number must not claim Cloud sourcing.
+
+
+class ComparePerfInput(_InputModel):
+    """Rebased performance comparison over two or more price histories."""
+
+    tickers: list[Symbol] = Field(min_length=2, max_length=20)
+    resolution: Resolution = "1d"
+    range: Range | None = None
+
+
+class ComparePerfResult(_CamelModel):
+    """Per-ticker series rebased to 100 at the first common date, plus totals."""
+
+    tickers: list[str] = Field(default_factory=list)
+    dates: list[str] = Field(default_factory=list)
+    base_date: str | None = None
+    series: dict[str, list[float]] = Field(default_factory=dict)
+    total_returns: dict[str, float] = Field(default_factory=dict)
+
+
+class CorrMatrixInput(_InputModel):
+    """Pearson correlation matrix over two or more price histories."""
+
+    tickers: list[Symbol] = Field(min_length=2, max_length=20)
+    resolution: Resolution = "1d"
+    range: Range | None = None
+
+
+class CorrMatrixResult(_CamelModel):
+    """Pairwise Pearson correlations of daily simple returns (None when flat)."""
+
+    tickers: list[str] = Field(default_factory=list)
+    matrix: dict[str, dict[str, float | None]] = Field(default_factory=dict)
+    common_dates: list[str] = Field(default_factory=list)
+
+
+class RelGraphInput(_InputModel):
+    """Pair relationship over two price histories (base vs quote)."""
+
+    base: Symbol
+    quote: Symbol
+    resolution: Resolution = "1d"
+    range: Range | None = None
+    window: int = Field(default=20, ge=2, le=250)
+
+    @model_validator(mode="after")
+    def _require_distinct_pair(self) -> RelGraphInput:
+        if self.base.strip().upper() == self.quote.strip().upper():
+            raise ValueError("base and quote must be distinct tickers")
+        return self
+
+
+class RelGraphResult(_CamelModel):
+    """Indexed prices, price ratio, rolling correlation, and returns beta."""
+
+    base: str
+    quote: str
+    dates: list[str] = Field(default_factory=list)
+    indexed_base: list[float] = Field(default_factory=list)
+    indexed_quote: list[float] = Field(default_factory=list)
+    ratio: list[float] = Field(default_factory=list)
+    beta: float | None = None
+    rolling_correlation: list[float | None] = Field(default_factory=list)
+
+
+class RelValInput(_InputModel):
+    """Peer multiples table over two or more ticker-financials reads."""
+
+    tickers: list[Symbol] = Field(min_length=2, max_length=20)
+
+
+class RelValRow(_CamelModel):
+    """One peer's trailing multiples (None when the read lacks the field)."""
+
+    symbol: str
+    price: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+    peg_ratio: float | None = None
+    ev_to_revenue: float | None = None
+    dividend_yield: float | None = None
+
+
+class RelValResult(_CamelModel):
+    """Peer rows plus the median trailing P/E across covered peers."""
+
+    rows: list[RelValRow] = Field(default_factory=list)
+    median_pe: float | None = None
+
+
+#: Statement fields addressable by the fundamental/valuation graph tools.
+STATEMENT_FIELDS: tuple[str, ...] = (
+    "total_revenue",
+    "net_income",
+    "ebitda",
+    "free_cash_flow",
+    "total_assets",
+    "total_liabilities",
+    "total_equity",
+    "eps",
+)
+
+StatementField = Literal[
+    "total_revenue",
+    "net_income",
+    "ebitda",
+    "free_cash_flow",
+    "total_assets",
+    "total_liabilities",
+    "total_equity",
+    "eps",
+]
+
+
+class FundGraphInput(_InputModel):
+    """One statement field's time series for one symbol (composition)."""
+
+    symbol: Symbol
+    field: StatementField = "total_revenue"
+    period: Literal["annual", "quarterly"] = "annual"
+
+
+class FundGraphPoint(_CamelModel):
+    """One statement period's value for the requested field."""
+
+    date: str
+    value: float
+
+
+class FundGraphResult(_CamelModel):
+    """The field's per-period values in statement order (oldest first)."""
+
+    symbol: str
+    field: str
+    period: str
+    points: list[FundGraphPoint] = Field(default_factory=list)
+
+
+class ValGraphInput(_InputModel):
+    """Per-period valuation rows for one symbol (composition)."""
+
+    symbol: Symbol
+    period: Literal["annual", "quarterly"] = "annual"
+
+
+class ValGraphRow(_CamelModel):
+    """One statement period's earnings scaffolding for multiples."""
+
+    date: str
+    eps: float | None = None
+    total_revenue: float | None = None
+    net_income: float | None = None
+
+
+class ValGraphSnapshot(_CamelModel):
+    """Latest price plus the trailing multiples snapshot."""
+
+    price: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+
+
+class ValGraphResult(_CamelModel):
+    """Per-period rows plus the latest-price multiples snapshot."""
+
+    symbol: str
+    period: str
+    rows: list[ValGraphRow] = Field(default_factory=list)
+    snapshot: ValGraphSnapshot = Field(default_factory=ValGraphSnapshot)
+
+
+class CustomSeries(_CamelModel):
+    """One explicit chart leg (no catalog search; the caller names the source).
+
+    ``price`` needs ``symbol``; ``statement`` needs ``symbol`` + ``field``;
+    ``fred`` needs ``ref`` (an econ-series id).
+    """
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+    source: Literal["price", "statement", "fred"]
+    symbol: Symbol | None = None
+    field: StatementField | None = None
+    ref: str | None = None
+    resolution: Resolution = "1d"
+    range: Range | None = None
+
+
+class CustomChartInput(_InputModel):
+    """Explicit series list aligned onto one date union (composition)."""
+
+    series: list[CustomSeries] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _require_leg_identity(self) -> CustomChartInput:
+        for leg in self.series:
+            if leg.source == "price" and leg.symbol is None:
+                raise ValueError("a price leg requires symbol")
+            if leg.source == "statement" and (leg.symbol is None or leg.field is None):
+                raise ValueError("a statement leg requires symbol and field")
+            if leg.source == "fred" and not (leg.ref or "").strip():
+                raise ValueError("a fred leg requires ref (an econ-series id)")
+        return self
+
+
+class CustomChartResult(_CamelModel):
+    """Union of dates with one aligned column per leg (None where absent)."""
+
+    dates: list[str] = Field(default_factory=list)
+    columns: dict[str, list[float | None]] = Field(default_factory=dict)
+
+
+class MarketValInput(_InputModel):
+    """Market valuation snapshot over Shiller CAPE + optional econ ratios."""
+
+    # Mirrors ShillerInput's bound: the full series is ~1869 rows from 1871.
+    limit: int = Field(default=240, ge=1, le=2000)
+    econ_series_ids: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    ] = Field(default_factory=list, max_length=10)
+    ratio_limit: int = Field(default=100, ge=1, le=1000)
+
+
+class EconRatio(_CamelModel):
+    """Latest print of one econ series against its history thirds."""
+
+    series_id: str
+    value: float | None = None
+    date: str | None = None
+    percentile: float | None = None
+    zone: Literal["cheap", "fair", "expensive"] | None = None
+
+
+class MarketValResult(_CamelModel):
+    """Latest CAPE against its history thirds, plus optional econ ratios."""
+
+    cape: float | None = None
+    cape_date: str | None = None
+    cape_percentile: float | None = None
+    zone: Literal["cheap", "fair", "expensive"] | None = None
+    n_observations: int = 0
+    ratios: list[EconRatio] = Field(default_factory=list)
+
+
+class MoneyMarketsInput(_InputModel):
+    """Money-markets snapshot over FRED funding/reserve series (ids overridable)."""
+
+    sofr_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "SOFR"
+    effr_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "EFFR"
+    reserves_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "WRESBAL"
+    limit: int = Field(default=5, ge=1, le=100)
+
+
+class MoneyMarketsResult(_CamelModel):
+    """Latest SOFR/EFFR/reserve prints plus the SOFR-minus-EFFR spread."""
+
+    sofr: float
+    effr: float
+    spread: float
+    reserves: float | None = None
+    sofr_date: str | None = None
+    effr_date: str | None = None
+    reserves_date: str | None = None
+
+
+class RatePathInput(_InputModel):
+    """US rate path over live Kalshi KXFED threshold markets (venue-direct)."""
+
+    # One page of open KXFED markets (the venue caps at 200 per page).
+    limit: int = Field(default=200, ge=1, le=1000)
+
+
+class RateMeeting(_CamelModel):
+    """One meeting's 25bp outcome distribution differenced from its ladder."""
+
+    meeting: str
+    distribution: dict[str, float] = Field(default_factory=dict)
+    most_likely: str | None = None
+    n_strikes: int = 0
+
+
+class RatePathResult(_CamelModel):
+    """Per-meeting distributions (meetings with <2 strikes are skipped)."""
+
+    meetings: list[RateMeeting] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -2288,6 +2636,16 @@ KellyEnvelope = DigifetchEnvelope[KellyResult]
 DividendYieldEnvelope = DigifetchEnvelope[DividendYieldResult]
 FxMatrixEnvelope = DigifetchEnvelope[FxMatrixResult]
 VixTermEnvelope = DigifetchEnvelope[VixTermResult]
+ComparePerfEnvelope = DigifetchEnvelope[ComparePerfResult]
+CorrMatrixEnvelope = DigifetchEnvelope[CorrMatrixResult]
+RelGraphEnvelope = DigifetchEnvelope[RelGraphResult]
+RelValEnvelope = DigifetchEnvelope[RelValResult]
+FundGraphEnvelope = DigifetchEnvelope[FundGraphResult]
+ValGraphEnvelope = DigifetchEnvelope[ValGraphResult]
+CustomChartEnvelope = DigifetchEnvelope[CustomChartResult]
+MarketValEnvelope = DigifetchEnvelope[MarketValResult]
+MoneyMarketsEnvelope = DigifetchEnvelope[MoneyMarketsResult]
+RatePathEnvelope = DigifetchEnvelope[RatePathResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:

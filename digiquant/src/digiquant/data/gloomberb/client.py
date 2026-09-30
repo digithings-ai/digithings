@@ -24,6 +24,7 @@ import json
 import math
 import os
 import re
+import statistics
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -42,6 +43,8 @@ from digifetch import (
 )
 from pydantic import BaseModel, ValidationError
 
+from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
+
 from . import normalizers as nz
 from .calculators import (
     black_scholes_iv,
@@ -59,12 +62,21 @@ from .models import (
     CdsEnvelope,
     CdsInput,
     CdsResult,
+    ComparePerfEnvelope,
+    ComparePerfInput,
+    ComparePerfResult,
     CongressTradesEnvelope,
     CongressTradesInput,
     CongressTradesResult,
     CorporateActionsEnvelope,
     CorporateActionsInput,
     CorporateActionsResult,
+    CorrMatrixEnvelope,
+    CorrMatrixInput,
+    CorrMatrixResult,
+    CustomChartEnvelope,
+    CustomChartInput,
+    CustomChartResult,
     DigifetchEnvelope,
     DigifetchError,
     DividendYieldEnvelope,
@@ -77,6 +89,7 @@ from .models import (
     EconCalendarEnvelope,
     EconCalendarInput,
     EconCalendarResult,
+    EconRatio,
     EconSeriesEnvelope,
     EconSeriesInput,
     EquityDiagnosticEnvelope,
@@ -86,6 +99,10 @@ from .models import (
     ExchangeRateInput,
     FilingEventsEnvelope,
     FilingEventsInput,
+    FundGraphEnvelope,
+    FundGraphInput,
+    FundGraphPoint,
+    FundGraphResult,
     Funds13FEnvelope,
     FxMatrixEnvelope,
     FxMatrixInput,
@@ -97,6 +114,12 @@ from .models import (
     KellyEnvelope,
     KellyInput,
     KellyResult,
+    MarketValEnvelope,
+    MarketValInput,
+    MarketValResult,
+    MoneyMarketsEnvelope,
+    MoneyMarketsInput,
+    MoneyMarketsResult,
     NewsEnvelope,
     NewsInput,
     NewsResult,
@@ -122,6 +145,17 @@ from .models import (
     QuotesBatchEnvelope,
     QuotesBatchInput,
     QuotesBatchResult,
+    RateMeeting,
+    RatePathEnvelope,
+    RatePathInput,
+    RatePathResult,
+    RelGraphEnvelope,
+    RelGraphInput,
+    RelGraphResult,
+    RelValEnvelope,
+    RelValInput,
+    RelValResult,
+    RelValRow,
     ResearchSearchEnvelope,
     ResearchSearchInput,
     RiskReportsEnvelope,
@@ -153,6 +187,11 @@ from .models import (
     TranscriptsResult,
     TweetSearchInput,
     TweetsEnvelope,
+    ValGraphEnvelope,
+    ValGraphInput,
+    ValGraphResult,
+    ValGraphRow,
+    ValGraphSnapshot,
     VenuesEnvelope,
     VenuesInput,
     VixTermEnvelope,
@@ -2673,6 +2712,772 @@ class GloomberbClient:
             )
 
         return self._cached("vix_term_structure", parsed, produce)
+
+    # -- portfolio-math compositions (130-coverage Task 3) -------------------
+    #
+    # Ten compositions over existing reads. Every number is derived locally
+    # (rebased returns, date-aligned inner joins, Pearson math, statement
+    # multiples, CAPE zones, funding spreads, survival-ladder differences), so
+    # all ten are unattributed: a derived number must not claim Cloud sourcing.
+
+    def _aligned_closes(
+        self, tickers: list[str], resolution: str, range: str | None
+    ) -> tuple[list[str], dict[str, list[float]], list[str]] | DigifetchError:
+        """Date-aligned inner join of daily closes, or a typed error.
+
+        Each leg is one ``price_history`` read. A failed leg (or a leg with no
+        bars) is an ``upstream_error`` naming the ticker; an empty date overlap
+        is an ``invalid_input`` — the join is rejected, never clamped.
+        """
+        per_ticker: dict[str, dict[str, float]] = {}
+        warnings: list[str] = []
+        for ticker in tickers:
+            env = self.price_history({"symbol": ticker, "resolution": resolution, "range": range})
+            warnings.extend(env.warnings)
+            if isinstance(env.data, DigifetchError):
+                return DigifetchError(
+                    code="upstream_error",
+                    message=f"price history unavailable for {ticker}: {env.data.message}",
+                    retryable=env.data.retryable,
+                )
+            closes = {
+                bar.date: bar.close
+                for bar in env.data.bars
+                if bar.close is not None and bar.close > 0.0
+            }
+            if not closes:
+                return DigifetchError(
+                    code="upstream_error",
+                    message=f"price history for {ticker} carries no closes",
+                    retryable=False,
+                )
+            per_ticker[ticker] = closes
+        dates = sorted(set.intersection(*(set(closes) for closes in per_ticker.values())))
+        if not dates:
+            return DigifetchError(
+                code="invalid_input",
+                message=(
+                    f"empty date overlap for {', '.join(tickers)} "
+                    "(the join is rejected, never clamped)"
+                ),
+                retryable=False,
+            )
+        aligned = {ticker: [per_ticker[ticker][day] for day in dates] for ticker in tickers}
+        return dates, aligned, warnings
+
+    @staticmethod
+    def _simple_returns(closes: list[float]) -> list[float]:
+        """Daily simple returns, skipping non-positive bases (noisy-row guard)."""
+        returns: list[float] = []
+        for prev, current in zip(closes, closes[1:], strict=False):
+            if prev > 0.0:
+                returns.append(current / prev - 1.0)
+        return returns
+
+    @staticmethod
+    def _pearson(first: list[float], second: list[float]) -> float | None:
+        """Pearson correlation, or None when either leg is flat (undefined)."""
+        try:
+            return statistics.correlation(first, second)
+        except statistics.StatisticsError:
+            return None
+
+    @staticmethod
+    def _history_zone(percentile: float) -> Literal["cheap", "fair", "expensive"]:
+        """History thirds: cheap ≤1/3, fair ≤2/3, expensive above."""
+        if percentile <= 1.0 / 3.0:
+            return "cheap"
+        if percentile <= 2.0 / 3.0:
+            return "fair"
+        return "expensive"
+
+    def compare_performance(
+        self, request: ComparePerfInput | Mapping[str, Any]
+    ) -> ComparePerfEnvelope:
+        """Rebased performance over two or more price histories (composition).
+
+        Reads one ``price_history`` per ticker, inner-joins on trading dates,
+        and rebases every leg to 100 at the first common date. Fewer than two
+        tickers or an empty date overlap is ``invalid_input``.
+        """
+        parsed = self._validate_input(ComparePerfInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ComparePerfEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ComparePerfEnvelope)
+
+        def produce() -> ComparePerfEnvelope:
+            joined = self._aligned_closes(parsed.tickers, parsed.resolution, parsed.range)
+            if isinstance(joined, DigifetchError):
+                return self._error_envelope(ComparePerfEnvelope, joined)
+            dates, aligned, warnings = joined
+            series = {
+                ticker: [close / closes[0] * 100.0 for close in closes]
+                for ticker, closes in aligned.items()
+            }
+            total_returns = {
+                ticker: closes[-1] / closes[0] - 1.0 for ticker, closes in aligned.items()
+            }
+            return ComparePerfEnvelope(
+                data=ComparePerfResult(
+                    tickers=list(parsed.tickers),
+                    dates=dates,
+                    base_date=dates[0],
+                    series=series,
+                    total_returns=total_returns,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("compare_performance", parsed, produce)
+
+    def correlation_matrix(
+        self, request: CorrMatrixInput | Mapping[str, Any]
+    ) -> CorrMatrixEnvelope:
+        """Pearson correlation matrix over date-aligned daily returns.
+
+        Identical return paths correlate at 1.0; a flat leg correlates with
+        nothing (None — undefined, never a clamped zero-fill claim).
+        """
+        parsed = self._validate_input(CorrMatrixInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CorrMatrixEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CorrMatrixEnvelope)
+
+        def produce() -> CorrMatrixEnvelope:
+            joined = self._aligned_closes(parsed.tickers, parsed.resolution, parsed.range)
+            if isinstance(joined, DigifetchError):
+                return self._error_envelope(CorrMatrixEnvelope, joined)
+            dates, aligned, warnings = joined
+            returns = {ticker: self._simple_returns(closes) for ticker, closes in aligned.items()}
+            matrix = {
+                base: {
+                    quote: (
+                        1.0
+                        if base == quote and len(returns[base]) >= 2
+                        else self._pearson(returns[base], returns[quote])
+                    )
+                    for quote in parsed.tickers
+                }
+                for base in parsed.tickers
+            }
+            return CorrMatrixEnvelope(
+                data=CorrMatrixResult(
+                    tickers=list(parsed.tickers),
+                    matrix=matrix,
+                    common_dates=dates,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("correlation_matrix", parsed, produce)
+
+    def relationship_graph(self, request: RelGraphInput | Mapping[str, Any]) -> RelGraphEnvelope:
+        """Pair relationship: indexed prices, ratio, rolling correlation, beta."""
+        parsed = self._validate_input(RelGraphInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RelGraphEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RelGraphEnvelope)
+
+        def produce() -> RelGraphEnvelope:
+            joined = self._aligned_closes(
+                [parsed.base, parsed.quote], parsed.resolution, parsed.range
+            )
+            if isinstance(joined, DigifetchError):
+                return self._error_envelope(RelGraphEnvelope, joined)
+            dates, aligned, warnings = joined
+            base_closes, quote_closes = aligned[parsed.base], aligned[parsed.quote]
+            indexed_base = [close / base_closes[0] * 100.0 for close in base_closes]
+            indexed_quote = [close / quote_closes[0] * 100.0 for close in quote_closes]
+            ratio = [
+                base / quote if quote > 0.0 else 0.0
+                for base, quote in zip(base_closes, quote_closes, strict=False)
+            ]
+            base_returns = self._simple_returns(base_closes)
+            quote_returns = self._simple_returns(quote_closes)
+            try:
+                beta: float | None = statistics.covariance(
+                    base_returns, quote_returns
+                ) / statistics.variance(quote_returns)
+            except (statistics.StatisticsError, ZeroDivisionError):
+                beta = None
+            rolling: list[float | None] = [None]
+            for end in range(1, len(base_returns) + 1):
+                window_base = base_returns[max(0, end - parsed.window) : end]
+                window_quote = quote_returns[max(0, end - parsed.window) : end]
+                rolling.append(
+                    self._pearson(window_base, window_quote) if len(window_base) >= 2 else None
+                )
+            return RelGraphEnvelope(
+                data=RelGraphResult(
+                    base=parsed.base,
+                    quote=parsed.quote,
+                    dates=dates,
+                    indexed_base=indexed_base,
+                    indexed_quote=indexed_quote,
+                    ratio=ratio,
+                    beta=beta,
+                    rolling_correlation=rolling,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("relationship_graph", parsed, produce)
+
+    def relative_valuation(self, request: RelValInput | Mapping[str, Any]) -> RelValEnvelope:
+        """Peer trailing-multiples table over ticker-financials reads."""
+        parsed = self._validate_input(RelValInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RelValEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RelValEnvelope)
+
+        def produce() -> RelValEnvelope:
+            rows: list[RelValRow] = []
+            warnings: list[str] = []
+            for ticker in parsed.tickers:
+                env = self.ticker_financials({"symbol": ticker})
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return RelValEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"financials unavailable for {ticker}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                financials = env.data.financials
+                fundamentals = financials.fundamentals
+                rows.append(
+                    RelValRow(
+                        symbol=ticker,
+                        price=financials.quote.price if financials.quote else None,
+                        trailing_pe=fundamentals.trailing_pe if fundamentals else None,
+                        forward_pe=fundamentals.forward_pe if fundamentals else None,
+                        peg_ratio=fundamentals.peg_ratio if fundamentals else None,
+                        ev_to_revenue=fundamentals.enterprise_to_revenue if fundamentals else None,
+                        dividend_yield=fundamentals.dividend_yield if fundamentals else None,
+                    )
+                )
+            covered = [row.trailing_pe for row in rows if row.trailing_pe is not None]
+            return RelValEnvelope(
+                data=RelValResult(
+                    rows=rows,
+                    median_pe=statistics.median(covered) if covered else None,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("relative_valuation", parsed, produce)
+
+    def _statement_frame(
+        self, symbol: str, period: str
+    ) -> tuple[Any, float | None, Any, list[str]] | DigifetchError:
+        """Ticker-financials statement rows + price + fundamentals, or an error."""
+        env = self.ticker_financials({"symbol": symbol})
+        if isinstance(env.data, DigifetchError):
+            return DigifetchError(
+                code="upstream_error",
+                message=f"financials unavailable for {symbol}: {env.data.message}",
+                retryable=env.data.retryable,
+            )
+        financials = env.data.financials
+        rows = sorted(
+            (
+                financials.annual_statements
+                if period == "annual"
+                else financials.quarterly_statements
+            ),
+            key=lambda row: row.date or "",
+        )
+        price = financials.quote.price if financials.quote else None
+        return rows, price, financials.fundamentals, list(env.warnings)
+
+    def fundamental_graph(self, request: FundGraphInput | Mapping[str, Any]) -> FundGraphEnvelope:
+        """One statement field's per-period series for one symbol."""
+        parsed = self._validate_input(FundGraphInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FundGraphEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FundGraphEnvelope)
+
+        def produce() -> FundGraphEnvelope:
+            frame = self._statement_frame(parsed.symbol, parsed.period)
+            if isinstance(frame, DigifetchError):
+                return self._error_envelope(FundGraphEnvelope, frame)
+            rows, _price, _fundamentals, warnings = frame
+            points = [
+                FundGraphPoint(date=row.date or "", value=value)
+                for row in rows
+                if row.date
+                for value in [getattr(row, parsed.field, None)]
+                if isinstance(value, (int, float)) and math.isfinite(value)
+            ]
+            if not points:
+                return self._error_envelope(
+                    FundGraphEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=(
+                            f"no {parsed.field} values in {parsed.period} statements "
+                            f"for {parsed.symbol}"
+                        ),
+                        retryable=False,
+                    ),
+                )
+            return FundGraphEnvelope(
+                data=FundGraphResult(
+                    symbol=parsed.symbol,
+                    field=parsed.field,
+                    period=parsed.period,
+                    points=points,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("fundamental_graph", parsed, produce)
+
+    def valuation_graph(self, request: ValGraphInput | Mapping[str, Any]) -> ValGraphEnvelope:
+        """Per-period earnings scaffolding plus the latest multiples snapshot."""
+        parsed = self._validate_input(ValGraphInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ValGraphEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ValGraphEnvelope)
+
+        def produce() -> ValGraphEnvelope:
+            frame = self._statement_frame(parsed.symbol, parsed.period)
+            if isinstance(frame, DigifetchError):
+                return self._error_envelope(ValGraphEnvelope, frame)
+            rows, price, fundamentals, warnings = frame
+            graph_rows = [
+                ValGraphRow(
+                    date=row.date or "",
+                    eps=row.eps,
+                    total_revenue=row.total_revenue,
+                    net_income=row.net_income,
+                )
+                for row in rows
+                if row.date
+            ]
+            if not graph_rows:
+                return self._error_envelope(
+                    ValGraphEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=(f"no {parsed.period} statements for {parsed.symbol}"),
+                        retryable=False,
+                    ),
+                )
+            return ValGraphEnvelope(
+                data=ValGraphResult(
+                    symbol=parsed.symbol,
+                    period=parsed.period,
+                    rows=graph_rows,
+                    snapshot=ValGraphSnapshot(
+                        price=price,
+                        trailing_pe=fundamentals.trailing_pe if fundamentals else None,
+                        forward_pe=fundamentals.forward_pe if fundamentals else None,
+                    ),
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("valuation_graph", parsed, produce)
+
+    def custom_chart(self, request: CustomChartInput | Mapping[str, Any]) -> CustomChartEnvelope:
+        """Explicit-series alignment onto one date union (no catalog search).
+
+        ``price`` legs read closes, ``statement`` legs read one statement
+        field, ``fred`` legs read econ-series values. A failed or empty leg is
+        an ``upstream_error`` naming the leg.
+        """
+        parsed = self._validate_input(CustomChartInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CustomChartEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CustomChartEnvelope)
+
+        def produce() -> CustomChartEnvelope:
+            leg_values: dict[str, dict[str, float]] = {}
+            warnings: list[str] = []
+            for leg in parsed.series:
+                key, values, leg_warnings, error = self._custom_chart_leg(leg)
+                warnings.extend(leg_warnings)
+                if error is not None:
+                    return self._error_envelope(CustomChartEnvelope, error)
+                assert values is not None
+                leg_values[key] = values
+            dates = sorted({day for values in leg_values.values() for day in values})
+            columns = {
+                key: [values.get(day) for day in dates] for key, values in leg_values.items()
+            }
+            return CustomChartEnvelope(
+                data=CustomChartResult(dates=dates, columns=columns),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("custom_chart", parsed, produce)
+
+    def _custom_chart_leg(
+        self, leg: Any
+    ) -> tuple[str, dict[str, float] | None, list[str], DigifetchError | None]:
+        """One explicit leg's (key, date->value): error names the leg, never generic."""
+        if leg.source == "price":
+            key = leg.symbol or "price"
+            env = self.price_history(
+                {"symbol": leg.symbol, "resolution": leg.resolution, "range": leg.range}
+            )
+            if isinstance(env.data, DigifetchError):
+                return (
+                    key,
+                    None,
+                    list(env.warnings),
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"price leg unavailable for {leg.symbol}: {env.data.message}",
+                        retryable=env.data.retryable,
+                    ),
+                )
+            values = {
+                bar.date: bar.close
+                for bar in env.data.bars
+                if bar.close is not None and math.isfinite(bar.close)
+            }
+            if not values:
+                return (
+                    key,
+                    None,
+                    list(env.warnings),
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"price leg for {leg.symbol} carries no closes",
+                        retryable=False,
+                    ),
+                )
+            return key, values, list(env.warnings), None
+        if leg.source == "statement":
+            key = f"{leg.symbol}:{leg.field}"
+            frame = self._statement_frame(leg.symbol or "", "annual")
+            if isinstance(frame, DigifetchError):
+                return key, None, [], frame
+            rows, _price, _fundamentals, frame_warnings = frame
+            values = {
+                row.date: value
+                for row in rows
+                if row.date
+                for value in [getattr(row, leg.field, None)]
+                if isinstance(value, (int, float)) and math.isfinite(value)
+            }
+            if not values:
+                return (
+                    key,
+                    None,
+                    frame_warnings,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"statement leg {key} carries no values",
+                        retryable=False,
+                    ),
+                )
+            return key, values, frame_warnings, None
+        key = f"FRED:{leg.ref}"
+        env = self.econ_series({"series_id": leg.ref or "", "limit": 100})
+        if isinstance(env.data, DigifetchError):
+            return (
+                key,
+                None,
+                list(env.warnings),
+                DigifetchError(
+                    code="upstream_error",
+                    message=f"fred leg unavailable for {leg.ref}: {env.data.message}",
+                    retryable=env.data.retryable,
+                ),
+            )
+        values = {
+            observation.date: observation.value
+            for observation in env.data.observations
+            if observation.value is not None and math.isfinite(observation.value)
+        }
+        if not values:
+            return (
+                key,
+                None,
+                list(env.warnings),
+                DigifetchError(
+                    code="upstream_error",
+                    message=f"fred leg {leg.ref} carries no values",
+                    retryable=False,
+                ),
+            )
+        return key, values, list(env.warnings), None
+
+    def market_valuation(self, request: MarketValInput | Mapping[str, Any]) -> MarketValEnvelope:
+        """Shiller CAPE plus optional econ ratios, each against history thirds."""
+        parsed = self._validate_input(MarketValInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(MarketValEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(MarketValEnvelope)
+
+        def produce() -> MarketValEnvelope:
+            env = self.shiller({"limit": parsed.limit})
+            warnings: list[str] = list(env.warnings)
+            if isinstance(env.data, DigifetchError):
+                return self._error_envelope(MarketValEnvelope, env.data)
+            capes = [
+                (observation.date, observation.cape)
+                for observation in env.data.observations
+                if observation.cape is not None and math.isfinite(observation.cape)
+            ]
+            if not capes:
+                return self._error_envelope(
+                    MarketValEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Shiller series carries no CAPE values",
+                        retryable=False,
+                    ),
+                )
+            cape_date, cape = capes[-1]
+            ranked = sum(1 for _, value in capes if value <= cape) / len(capes)
+            ratios: list[EconRatio] = []
+            for series_id in parsed.econ_series_ids:
+                leg = self.econ_series({"series_id": series_id, "limit": parsed.ratio_limit})
+                warnings.extend(leg.warnings)
+                if isinstance(leg.data, DigifetchError):
+                    warnings.append(f"ratio {series_id} skipped: {leg.data.message}")
+                    continue
+                prints = [
+                    (observation.date, observation.value)
+                    for observation in leg.data.observations
+                    if observation.value is not None and math.isfinite(observation.value)
+                ]
+                if not prints:
+                    warnings.append(f"ratio {series_id} skipped: no prints")
+                    continue
+                ratio_date, ratio_value = prints[0]
+                percentile = sum(1 for _, value in prints if value <= ratio_value) / len(prints)
+                ratios.append(
+                    EconRatio(
+                        series_id=series_id,
+                        value=ratio_value,
+                        date=ratio_date,
+                        percentile=percentile,
+                        zone=self._history_zone(percentile),
+                    )
+                )
+            return MarketValEnvelope(
+                data=MarketValResult(
+                    cape=cape,
+                    cape_date=cape_date,
+                    cape_percentile=ranked,
+                    zone=self._history_zone(ranked),
+                    n_observations=len(capes),
+                    ratios=ratios,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("market_valuation", parsed, produce)
+
+    def money_markets(self, request: MoneyMarketsInput | Mapping[str, Any]) -> MoneyMarketsEnvelope:
+        """SOFR/EFFR/reserve prints over FRED econ-series reads (composition).
+
+        Reports the latest prints plus the SOFR-minus-EFFR spread. A failed
+        leg (or one with no prints) is an ``upstream_error`` naming the series.
+        """
+        parsed = self._validate_input(MoneyMarketsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(MoneyMarketsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(MoneyMarketsEnvelope)
+
+        def produce() -> MoneyMarketsEnvelope:
+            legs = (
+                ("sofr", parsed.sofr_series),
+                ("effr", parsed.effr_series),
+                ("reserves", parsed.reserves_series),
+            )
+            prints: dict[str, tuple[str, float]] = {}
+            warnings: list[str] = []
+            for leg, series_id in legs:
+                env = self.econ_series(
+                    {"series_id": series_id, "limit": parsed.limit, "sort_order": "desc"}
+                )
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return MoneyMarketsEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series unavailable for {series_id}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                dated = [
+                    (observation.date, observation.value)
+                    for observation in env.data.observations
+                    if observation.value is not None and math.isfinite(observation.value)
+                ]
+                if not dated:
+                    return MoneyMarketsEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series {series_id} carries no prints",
+                            retryable=False,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                prints[leg] = dated[0]
+            (sofr_date, sofr), (effr_date, effr) = prints["sofr"], prints["effr"]
+            reserves_date, reserves = prints["reserves"]
+            return MoneyMarketsEnvelope(
+                data=MoneyMarketsResult(
+                    sofr=sofr,
+                    effr=effr,
+                    spread=sofr - effr,
+                    reserves=reserves,
+                    sofr_date=sofr_date,
+                    effr_date=effr_date,
+                    reserves_date=reserves_date,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("money_markets", parsed, produce)
+
+    @staticmethod
+    def _venue_prob(value: Any) -> float | None:
+        """Kalshi wire price in probability units (dollar-or-cent wire values)."""
+        prob = _venue_float(value)
+        if prob is None or prob < 0.0:
+            return None
+        if prob > 1.0:
+            prob = prob / 100.0
+        return prob if 0.0 <= prob <= 1.0 else None
+
+    @staticmethod
+    def _meeting_day(value: Any) -> str | None:
+        """Date part of a Kalshi ``close_time`` (the meeting-day anchor)."""
+        if not isinstance(value, str) or len(value) < 10:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            return value[:10] if value[:10].count("-") == 2 else None
+
+    def rate_path(self, request: RatePathInput | Mapping[str, Any]) -> RatePathEnvelope:
+        """US rate path over live Kalshi KXFED threshold markets (venue-direct).
+
+        Reads one page of open KXFED markets through the venue path, groups by
+        meeting day, and differences each survival ladder into a 25bp outcome
+        distribution with the fed-prob ladder semantics. Anonymous, polled —
+        enrichment only, never a pipeline primary.
+        """
+        parsed = self._validate_input(RatePathInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RatePathEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RatePathEnvelope)
+
+        def produce() -> RatePathEnvelope:
+            raw = self._request_json(
+                "GET",
+                "/markets",
+                params={
+                    "series_ticker": "KXFED",
+                    "status": "open",
+                    "limit": str(parsed.limit),
+                },
+                base_url=KALSHI_TRADE_BASE_URL,
+                label="Kalshi",
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(RatePathEnvelope, raw)
+            payload = raw.data if isinstance(raw.data, Mapping) else {}
+            markets = payload.get("markets")
+            if not isinstance(markets, list):
+                return self._error_envelope(
+                    RatePathEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Kalshi KXFED read returned an unexpected payload",
+                        retryable=False,
+                    ),
+                )
+            ladders: dict[str, dict[float, float]] = {}
+            for market in markets:
+                if not isinstance(market, Mapping):
+                    continue
+                meeting = self._meeting_day(market.get("close_time"))
+                strike_raw = market.get("floor_strike", market.get("strike"))
+                if strike_raw is None:
+                    strike_raw = market.get("floorStrike")
+                try:
+                    strike = float(strike_raw)  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(strike):
+                    continue
+                bid = self._venue_prob(market.get("yes_bid_dollars", market.get("yes_bid")))
+                ask = self._venue_prob(market.get("yes_ask_dollars", market.get("yes_ask")))
+                if bid is not None and ask is not None:
+                    prob: float | None = round((bid + ask) / 2.0, 4)
+                else:
+                    prob = self._venue_prob(
+                        market.get("last_price_dollars", market.get("last_price"))
+                    )
+                if meeting is None or prob is None:
+                    continue
+                ladders.setdefault(meeting, {})[strike] = prob
+            meetings: list[RateMeeting] = []
+            warnings: list[str] = []
+            for meeting in sorted(ladders):
+                derived = fed_distribution_from_ladder(ladders[meeting])
+                if not derived:
+                    warnings.append(f"{meeting}: fewer than two strikes, skipped")
+                    continue
+                meetings.append(
+                    RateMeeting(
+                        meeting=meeting,
+                        distribution=derived["distribution"],
+                        most_likely=derived["most_likely"],
+                        n_strikes=derived["n_strikes"],
+                    )
+                )
+            if not meetings:
+                return RatePathEnvelope(
+                    data=DigifetchError(
+                        code="upstream_error",
+                        message="no KXFED meeting carries a usable strike ladder",
+                        retryable=False,
+                    ),
+                    fetched_at=self._now(),
+                    warnings=warnings,
+                )
+            return RatePathEnvelope(
+                data=RatePathResult(meetings=meetings),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("rate_path", parsed, produce)
 
     # -- internals ---------------------------------------------------------
 

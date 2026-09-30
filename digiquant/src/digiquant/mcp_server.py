@@ -547,6 +547,16 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_dividend_yield",
         "digifetch_fx_cross_rates",
         "digifetch_vix_term_structure",
+        "digifetch_compare_performance",
+        "digifetch_correlation_matrix",
+        "digifetch_relationship_graph",
+        "digifetch_relative_valuation",
+        "digifetch_fundamental_graph",
+        "digifetch_valuation_graph",
+        "digifetch_custom_chart",
+        "digifetch_market_valuation",
+        "digifetch_money_markets",
+        "digifetch_rate_path",
         "luxalgo_library_search",
         "luxalgo_library_get_concept",
         "luxalgo_library_get_indicator",
@@ -1794,6 +1804,190 @@ def create_mcp_server(
             envelope = _build_gloomberb_client().vix_term_structure(
                 {"near_series": near_series, "far_series": far_series, "limit": limit}
             )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Portfolio-math compositions (130-coverage Task 3) ───────────────────
+    #
+    # Derived math over existing reads (price history, financials, econ
+    # series, Shiller, the Kalshi KXFED venue path). All ten are unattributed.
+
+    @_maybe_tool("digifetch_compare_performance")
+    def digifetch_compare_performance(
+        tickers: list[str], resolution: str = "1d", range: str | None = None
+    ) -> str:
+        """Rebased multi-ticker performance (composition).
+
+        NOT attributed to Gloomberb: the series are derived locally (one
+        history read per ticker, date-aligned inner join, rebased to 100).
+        Fewer than two tickers or an empty overlap is `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().compare_performance(
+                {"tickers": tickers, "resolution": resolution, "range": range}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_correlation_matrix")
+    def digifetch_correlation_matrix(
+        tickers: list[str], resolution: str = "1d", range: str | None = None
+    ) -> str:
+        """Pearson correlation matrix over aligned daily returns (composition).
+
+        NOT attributed to Gloomberb: the matrix is derived locally. A flat
+        leg correlates with nothing (null). Fewer than two tickers or an
+        empty overlap is `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().correlation_matrix(
+                {"tickers": tickers, "resolution": resolution, "range": range}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_relationship_graph")
+    def digifetch_relationship_graph(
+        base: str,
+        quote: str,
+        resolution: str = "1d",
+        range: str | None = None,
+        window: int = 20,
+    ) -> str:
+        """Pair relationship: indexed prices, ratio, rolling correlation, beta.
+
+        NOT attributed to Gloomberb: every number is derived locally over two
+        history reads. Base and quote must be distinct tickers.
+        """
+        try:
+            envelope = _build_gloomberb_client().relationship_graph(
+                {
+                    "base": base,
+                    "quote": quote,
+                    "resolution": resolution,
+                    "range": range,
+                    "window": window,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_relative_valuation")
+    def digifetch_relative_valuation(tickers: list[str]) -> str:
+        """Peer trailing-multiples table over financials reads (composition).
+
+        NOT attributed to Gloomberb: the table is derived locally. A failed
+        leg returns `upstream_error` naming the ticker.
+        """
+        try:
+            envelope = _build_gloomberb_client().relative_valuation({"tickers": tickers})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_fundamental_graph")
+    def digifetch_fundamental_graph(
+        symbol: str, field: str = "total_revenue", period: str = "annual"
+    ) -> str:
+        """One statement field's per-period series (composition).
+
+        NOT attributed to Gloomberb: the series is derived locally from the
+        financials read.
+        """
+        try:
+            envelope = _build_gloomberb_client().fundamental_graph(
+                {"symbol": symbol, "field": field, "period": period}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_valuation_graph")
+    def digifetch_valuation_graph(symbol: str, period: str = "annual") -> str:
+        """Per-period valuation rows plus the multiples snapshot (composition).
+
+        NOT attributed to Gloomberb: the rows are derived locally from the
+        financials read.
+        """
+        try:
+            envelope = _build_gloomberb_client().valuation_graph(
+                {"symbol": symbol, "period": period}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_custom_chart")
+    def digifetch_custom_chart(series_json: str) -> str:
+        """Explicit-series alignment onto one date union (composition).
+
+        `series_json` is a JSON array of legs — {"source": "price", "symbol"},
+        {"source": "statement", "symbol", "field"}, or {"source": "fred",
+        "ref"} — each optionally carrying its own resolution/range. NOT
+        attributed to Gloomberb: the columns are derived locally.
+        """
+        try:
+            legs = json.loads(series_json)
+            envelope = _build_gloomberb_client().custom_chart({"series": legs})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_market_valuation")
+    def digifetch_market_valuation(
+        limit: int = 240, econ_series_ids: list[str] | None = None
+    ) -> str:
+        """Shiller CAPE plus optional econ ratios vs history thirds.
+
+        NOT attributed to Gloomberb: zones are derived locally (cheap/fair/
+        expensive thirds of each series' window).
+        """
+        try:
+            envelope = _build_gloomberb_client().market_valuation(
+                {"limit": limit, "econ_series_ids": econ_series_ids or []}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_money_markets")
+    def digifetch_money_markets(
+        sofr_series: str = "SOFR",
+        effr_series: str = "EFFR",
+        reserves_series: str = "WRESBAL",
+        limit: int = 5,
+    ) -> str:
+        """SOFR/EFFR/reserve prints plus the funding spread (composition).
+
+        NOT attributed to Gloomberb: the spread is derived locally over three
+        econ-series reads. A failed leg returns `upstream_error` naming it.
+        """
+        try:
+            envelope = _build_gloomberb_client().money_markets(
+                {
+                    "sofr_series": sofr_series,
+                    "effr_series": effr_series,
+                    "reserves_series": reserves_series,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_rate_path")
+    def digifetch_rate_path(limit: int = 200) -> str:
+        """US rate path over live Kalshi KXFED markets (venue-direct).
+
+        NOT attributed to Gloomberb: the venue read is direct and the
+        distributions are derived locally with the fed-prob ladder semantics.
+        """
+        try:
+            envelope = _build_gloomberb_client().rate_path({"limit": limit})
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
