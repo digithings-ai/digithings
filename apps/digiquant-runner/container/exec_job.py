@@ -19,7 +19,7 @@ import urllib.parse
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 COMMANDS_PATH = Path("/opt/runner/commands.json")
 STATUS_DIR = Path("/tmp/runner")
@@ -70,30 +70,109 @@ def git_sha() -> str:
     return value or "unknown"
 
 
-def steps_for(
+class StepPlan(NamedTuple):
+    argv: list[str]
+    continue_on_error: bool = False
+    always: bool = False
+
+
+def _utc_today(today: str | None) -> str:
+    if today:
+        return today
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _arg_value(provided: dict[str, str], name: str) -> str:
+    return str(provided.get(name, "")).strip()
+
+
+def _resolve_step(
+    step: Any,
+    provided: dict[str, str],
+    *,
+    today: str,
+    workdir: Path,
+) -> StepPlan | None:
+    if isinstance(step, list):
+        return StepPlan([str(part) for part in step])
+    argv = [str(part) for part in step["argv"]]
+    when_arg = step.get("when_arg")
+    if when_arg is not None and provided.get(str(when_arg)) != step.get("equals"):
+        return None
+    empty_key = step.get("when_arg_empty")
+    if empty_key is not None and _arg_value(provided, str(empty_key)):
+        return None
+    set_key = step.get("when_arg_set")
+    if set_key is not None and not _arg_value(provided, str(set_key)):
+        return None
+    when_file = step.get("when_file")
+    if when_file is not None and not (workdir / str(when_file)).is_file():
+        return None
+    append = step.get("append_arg")
+    if append is not None:
+        argv.append(_arg_value(provided, str(append)))
+    if step.get("append_utc_date"):
+        argv.append(today)
+    return StepPlan(
+        argv,
+        continue_on_error=bool(step.get("continue_on_error")),
+        always=bool(step.get("always")),
+    )
+
+
+def plans_for(
     command: str,
     args: dict[str, str] | None = None,
     commands: dict[str, Any] | None = None,
-) -> list[list[str]]:
-    """Argv lists for this kick. `when_arg` steps run only when args match."""
+    *,
+    today: str | None = None,
+    workdir: Path | None = None,
+) -> list[StepPlan]:
+    """Selected steps for this kick, including continue/always flags."""
     catalog = commands if commands is not None else load_commands()
     spec = catalog.get(command)
     if spec is None:
         raise SystemExit(f"unknown command: {command}")
     provided = args or {}
-    selected: list[list[str]] = []
+    stamp = _utc_today(today)
+    root = workdir if workdir is not None else WORKDIR
+    selected: list[StepPlan] = []
     for step in spec.get("steps", []):
-        if isinstance(step, list):
-            selected.append([str(part) for part in step])
-            continue
-        argv = [str(part) for part in step["argv"]]
-        when_arg = step.get("when_arg")
-        if when_arg is None:
-            selected.append(argv)
-            continue
-        if provided.get(str(when_arg)) == step.get("equals"):
-            selected.append(argv)
+        plan = _resolve_step(step, provided, today=stamp, workdir=root)
+        if plan is not None:
+            selected.append(plan)
     return selected
+
+
+def steps_for(
+    command: str,
+    args: dict[str, str] | None = None,
+    commands: dict[str, Any] | None = None,
+    *,
+    today: str | None = None,
+    workdir: Path | None = None,
+) -> list[list[str]]:
+    """Argv lists for this kick. Gated steps run only when their predicate matches."""
+    return [plan.argv for plan in plans_for(command, args, commands, today=today, workdir=workdir)]
+
+
+def classify_step_exit(
+    code: int,
+    *,
+    continue_on_error: bool,
+    hard_failure: bool,
+    exit_code: int,
+) -> tuple[bool, int]:
+    """Return (hard_failure, exit_code) after one step.
+
+    continue_on_error does not fail the job. The first hard failure's exit
+    code sticks when a later step also fails.
+    """
+    if code == 0 or continue_on_error:
+        return hard_failure, exit_code
+    if hard_failure:
+        return True, exit_code
+    return True, code
 
 
 def build_child_env(
@@ -129,6 +208,10 @@ def build_child_env(
             child["SUPABASE_SERVICE_ROLE_KEY"] = core_key
     if spec.get("market_backend") == "r2":
         child["DIGIQUANT_MARKET_DATA_BACKEND"] = "r2"
+    for name, value in (spec.get("extra_env") or {}).items():
+        if name in _FORBIDDEN_ENV or not isinstance(value, str) or not value:
+            continue
+        child[str(name)] = value
     child["RUN_ID"] = run_id
     child.pop("RUNNER_AUTH_TOKEN", None)
     child.pop("GH_ISSUE_TOKEN", None)
@@ -173,6 +256,34 @@ def _read_status(run_id: str) -> dict[str, Any] | None:
         return None
     loaded["log_tail"] = _tail(_log_path(run_id))
     return loaded
+
+
+def _wait_argv(
+    argv: list[str],
+    child_env: dict[str, str],
+    log: Any,
+    timeout: float,
+) -> tuple[int, bool]:
+    """Run one argv. The bool is true when the step hit the deadline."""
+    proc = subprocess.Popen(
+        argv,
+        cwd=str(WORKDIR),
+        env=child_env,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    with _lock:
+        _current["pgid"] = proc.pid or 0
+    try:
+        code = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_group(proc)
+        return 124, True
+    finally:
+        with _lock:
+            _current["pgid"] = 0
+    return int(code), False
 
 
 def _kill_group(proc: subprocess.Popen[bytes]) -> None:
@@ -228,45 +339,39 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
         "reason": None,
     }
     _write_status(run_id, status)
-    steps = steps_for(command, args)
+    plans = plans_for(command, args)
     child_env = build_child_env(command, run_id=run_id)
     deadline = time.monotonic() + max(timeout_seconds, 0)
     exit_code = 0
     reason: str | None = None
     outcome = "succeeded"
+    hard_failure = False
     with log_path.open("ab") as log:
-        for argv in steps:
+        for plan in plans:
+            if hard_failure and not plan.always:
+                continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 outcome = "timed_out"
                 reason = "timeout"
                 exit_code = 124
                 break
-            proc = subprocess.Popen(
-                argv,
-                cwd=str(WORKDIR),
-                env=child_env,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-            with _lock:
-                _current["pgid"] = proc.pid or 0
-            try:
-                code = proc.wait(timeout=remaining)
-            except subprocess.TimeoutExpired:
-                _kill_group(proc)
+            code, timed_out = _wait_argv(plan.argv, child_env, log, remaining)
+            if timed_out:
                 outcome = "timed_out"
                 reason = "timeout"
                 exit_code = 124
                 break
-            finally:
-                with _lock:
-                    _current["pgid"] = 0
-            if code != 0:
+            if code != 0 and plan.continue_on_error:
+                log.write(f"\nstep exited {code} (continue_on_error)\n".encode())
+            hard_failure, exit_code = classify_step_exit(
+                code,
+                continue_on_error=plan.continue_on_error,
+                hard_failure=hard_failure,
+                exit_code=exit_code,
+            )
+            if hard_failure:
                 outcome = "failed"
-                exit_code = code
-                break
     if outcome == "succeeded" and spec.get("publish"):
         try:
             _publish(command, run_id, [str(path) for path in spec["publish"]])

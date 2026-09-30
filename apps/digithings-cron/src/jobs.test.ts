@@ -73,6 +73,26 @@ describe("jobsForCron", () => {
     }
   });
 
+  it("sends phase 2 clocks to digiquant-runner without a second schedule", () => {
+    const expected = [
+      ["onchain", "onchain-bitview", "40 22 * * *", 900],
+      ["tearsheets", "tearsheets", "12 0 * * *", 2700],
+      ["research-metrics", "research-metrics", "5 22 * * *", 1200],
+      ["execution-cron-check", "execution-cron-check", "15 12 * * *", 600],
+    ] as const;
+    for (const [id, command, cron, timeout] of expected) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.kind).toBe("container");
+      expect(job?.command).toBe(command);
+      expect(job?.cron).toBe(cron);
+      expect(job?.timeoutSeconds).toBe(timeout);
+      expect(job?.codeRef).toBe("main");
+      expect(job?.workflow).toBeTruthy();
+      expect(job?.ref).toBe("develop");
+    }
+    expect(JOBS.find((job) => job.id === "house-run-09")?.kind).toBe("repository_dispatch");
+  });
+
   it("runs house research/portfolio retries every day without a Sunday special", () => {
     for (const [id, cron] of [
       ["house-run-09", "17 9 * * *"],

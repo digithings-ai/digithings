@@ -27,6 +27,12 @@ from digiquant.data.gloomberb.agent_tools import (
 from digiquant.data.gloomberb.agent_tools import (
     gloomberb_envelope_json as _gloomberb_envelope_json,
 )
+from digiquant.data.luxalgo.agent_tools import (
+    build_luxalgo_client as _build_luxalgo_client,
+)
+from digiquant.data.luxalgo.agent_tools import (
+    luxalgo_envelope_json as _luxalgo_envelope_json,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -482,8 +488,9 @@ def _require_mcp() -> type:
 
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
-#: evaluations, the coinmetrics catalog discovery tool, and the 35 digifetch x
-#: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read). Everything
+#: evaluations, the coinmetrics catalog discovery tool, the 35 digifetch x
+#: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read), and the 8
+#: luxalgo Library research reads (#4779 P0, scope=read). Everything
 #: else (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
 #: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
 READ_SCOPE_TOOLS: frozenset[str] = frozenset(
@@ -533,6 +540,14 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_equity_diagnostic",
         "digifetch_saved_searches",
         "digifetch_prediction_markets",
+        "luxalgo_library_search",
+        "luxalgo_library_get_concept",
+        "luxalgo_library_get_indicator",
+        "luxalgo_library_list_concepts",
+        "luxalgo_library_list_indicators",
+        "luxalgo_library_list_tags",
+        "luxalgo_library_list_families",
+        "luxalgo_library_get_family",
     }
 )
 
@@ -556,23 +571,35 @@ def create_mcp_server(
     mcp = FastMCP("digiquant", host=host, port=port)
     enabled = READ_SCOPE_TOOLS if scope == "read" else None
     # Declared per-tool entitlements for the digifetch x Gloomberb family
-    # (#4110 phase 5). Attached to the registered function and appended to the
-    # description so MCP and the orchestrator manifest cannot drift.
-    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, with_entitlement_note
+    # (#4110 phase 5) and the LuxAlgo Library family (#4779 P0). Attached to
+    # the registered function and appended to the description so MCP and the
+    # orchestrator manifest cannot drift.
+    from digiquant.data.gloomberb.entitlements import (
+        TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
+    )
+    from digiquant.data.gloomberb.entitlements import (
+        with_entitlement_note as _gloomberb_note,
+    )
+    from digiquant.data.luxalgo.entitlements import TOOL_ENTITLEMENTS as _LUXALGO_ENTITLEMENTS
+    from digiquant.data.luxalgo.entitlements import with_entitlement_note as _luxalgo_note
 
     def _maybe_tool(name: str):
         """Register the tool unless a read scope excludes it.
 
-        A digifetch tool with a declared entitlement gets
+        A digifetch/luxalgo tool with a declared entitlement gets
         ``fn.entitlement`` and an entitlement sentence appended to the
         registered description.
         """
 
         def _register(fn):
-            entitlement = TOOL_ENTITLEMENTS.get(name)
+            entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
+            note_fn = _gloomberb_note
+            if entitlement is None:
+                entitlement = _LUXALGO_ENTITLEMENTS.get(name)
+                note_fn = _luxalgo_note
             if entitlement is not None:
                 fn.entitlement = entitlement
-                fn.__doc__ = with_entitlement_note(name, fn.__doc__ or "")
+                fn.__doc__ = note_fn(name, fn.__doc__ or "")
             if enabled is None or name in enabled:
                 return mcp.tool(name=name)(fn)
             return fn
@@ -1638,6 +1665,167 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
+    # ── LuxAlgo Library family (#4779 P0) ─────────────────────────────────
+    #
+    # Thin wrap of the hosted LuxAlgo MCP (research reads only, keyless).
+    # Args are validated through the tool's Pydantic input model; invalid args
+    # answer a typed invalid_input envelope with no request (the same contract
+    # as the in-process dispatcher).
+
+    def _luxalgo_invalid_input(name: str, exc: Exception) -> str:
+        from pydantic import ValidationError
+
+        from digiquant.data.luxalgo.models import LuxalgoEnvelope, LuxalgoError
+
+        detail = exc.errors(include_url=False) if isinstance(exc, ValidationError) else str(exc)
+        return _luxalgo_envelope_json(
+            LuxalgoEnvelope(
+                data=LuxalgoError(
+                    code="invalid_input",
+                    message=f"invalid args for {name}: {detail}",
+                    retryable=False,
+                )
+            )
+        )
+
+    @_maybe_tool("luxalgo_library_search")
+    def luxalgo_library_search(query: str, limit: int = 10) -> str:
+        """Full-text search over the LuxAlgo Library (concepts + indicators; anonymous).
+
+        `query` is free text; `limit` caps the page (1-50). Rows carry
+        kind/slug/name/family plus the canonical url/md_url. Research
+        reference only: attribute LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibrarySearchInput
+
+        try:
+            args = LibrarySearchInput(query=query, limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_search", exc)
+        try:
+            envelope = _build_luxalgo_client().library_search(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_get_concept")
+    def luxalgo_library_get_concept(slug: str) -> str:
+        """One LuxAlgo Library concept page by slug (e.g. rsi; anonymous).
+
+        Returns slug/name/family/aliases, the canonical url/md_url, and
+        content_markdown. Research reference only: attribute LuxAlgo and link
+        back.
+        """
+        from digiquant.data.luxalgo.models import LibraryGetConceptInput
+
+        try:
+            args = LibraryGetConceptInput(slug=slug)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_get_concept", exc)
+        try:
+            envelope = _build_luxalgo_client().library_get_concept(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_get_indicator")
+    def luxalgo_library_get_indicator(slug: str) -> str:
+        """One LuxAlgo Library indicator's metadata by slug (anonymous).
+
+        Metadata only — indicator source code is not exposed (CC BY-NC-SA).
+        Research reference only: attribute LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibraryGetIndicatorInput
+
+        try:
+            args = LibraryGetIndicatorInput(slug=slug)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_get_indicator", exc)
+        try:
+            envelope = _build_luxalgo_client().library_get_indicator(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_concepts")
+    def luxalgo_library_list_concepts(limit: int = 50) -> str:
+        """List LuxAlgo Library concept pages (anonymous).
+
+        `limit` bounds the page (1-200). Research reference only: attribute
+        LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibraryListConceptsInput
+
+        try:
+            args = LibraryListConceptsInput(limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_list_concepts", exc)
+        try:
+            envelope = _build_luxalgo_client().library_list_concepts(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_indicators")
+    def luxalgo_library_list_indicators(limit: int = 50) -> str:
+        """List LuxAlgo Library indicator entries (anonymous).
+
+        `limit` bounds the page (1-200). Entries are metadata only — no source
+        code. Research reference only.
+        """
+        from digiquant.data.luxalgo.models import LibraryListIndicatorsInput
+
+        try:
+            args = LibraryListIndicatorsInput(limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_list_indicators", exc)
+        try:
+            envelope = _build_luxalgo_client().library_list_indicators(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_tags")
+    def luxalgo_library_list_tags() -> str:
+        """List LuxAlgo Library tags (anonymous).
+
+        Takes no parameters. Research reference only.
+        """
+        try:
+            envelope = _build_luxalgo_client().library_list_tags()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_families")
+    def luxalgo_library_list_families() -> str:
+        """List LuxAlgo Library indicator families (anonymous).
+
+        Takes no parameters. Research reference only.
+        """
+        try:
+            envelope = _build_luxalgo_client().library_list_families()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_get_family")
+    def luxalgo_library_get_family(family: str) -> str:
+        """One LuxAlgo Library indicator family by name/slug (anonymous).
+
+        Research reference only: attribute LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibraryGetFamilyInput
+
+        try:
+            args = LibraryGetFamilyInput(family=family)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_get_family", exc)
+        try:
+            envelope = _build_luxalgo_client().library_get_family(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
 
     @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(

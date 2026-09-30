@@ -184,7 +184,7 @@ The **Daily Price Update** GitHub workflow (and local scripts) upsert long-horiz
 
 | Source | Script | Data |
 |--------|--------|------|
-| FRED | `scripts/ingest_fred.py` | Yields, spreads, breakevens, real yields, HY/IG OAS, VIX, broad USD, CPI/PCE/unemployment, etc. (see YAML) — `FRED_API_KEY` in GitHub Actions, `export`, or [`config/mcp.secrets.env`](../../config/mcp.secrets.env) (see [`config/MCP-SETUP.md`](../../config/MCP-SETUP.md); same name as **`fred`** MCP in [`.cursor/mcp.json`](../../.cursor/mcp.json)) |
+| FRED | `scripts/ingest_fred.py` (legacy) | Yields, spreads, breakevens, real yields, HY/IG OAS, VIX, CPI/PCE/unemployment, etc. (see YAML). The sealed-panel path (`digiquant prices fetch-macro`, R2 refresh) reads the gloomberb panel instead — no key. `FRED_API_KEY` survives only for legacy scripts: GitHub Actions, `export`, or [`config/mcp.secrets.env`](../../config/mcp.secrets.env) (see [`config/MCP-SETUP.md`](../../config/MCP-SETUP.md); same name as **`fred`** MCP in [`.cursor/mcp.json`](../../.cursor/mcp.json)) |
 | Frankfurter | `scripts/ingest_fx_frankfurter.py` | Daily FX vs USD (EUR, GBP, JPY, CAD) — no API key |
 | Alternative.me | `scripts/ingest_crypto_fng.py` | Crypto Fear & Greed index — no API key |
 | US Treasury / Yahoo | `scripts/ingest_treasury_curve.py` | `us_treasury` when Treasury XML has entries; always **`treasury_market`** (^IRX/^FVX/^TNX/^TYX) for 3M/5Y/10Y/30Y — no API key |
@@ -234,7 +234,7 @@ Configured in `.vscode/mcp.json` (VS Code Copilot) and `~/Library/Application Su
 | Macro (3) | `CPIAUCSL`, `PCEPI`, `UNRATE`, `GDP`, `GDPC1` | CPI, PCE, unemployment, GDP |
 | Bonds (4A) | `T10YIE`, `T5YIE`, `DFII10` | 10Y/5Y TIPS breakeven, 10Y real yield |
 | Bonds (4A) | `BAMLH0A0HYM2`, `BAMLC0A0CM` | HY OAS, IG OAS credit spreads |
-| Macro (3) | `VIXCLS`, `DTWEXBGS` | VIX close, broad USD trade-weighted index |
+| Macro (3) | `VIXCLS` | VIX close |
 
 ### Key CoinGecko Queries
 
