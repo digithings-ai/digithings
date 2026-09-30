@@ -1,4 +1,3 @@
-import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
@@ -46,10 +45,9 @@ const DATES = ['2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19', '2026-06-
 
 function render(series: FxConsensusSnapshotRow[], disputed?: ReadonlySet<string>): string {
   return renderToStaticMarkup(
-    createElement(TwelveXProvider, {
-      value: ctx,
-      children: createElement(ConsensusBoard, { series, disputedCurrencies: disputed }),
-    }),
+    <TwelveXProvider value={ctx}>
+      <ConsensusBoard series={series} disputedCurrencies={disputed} />
+    </TwelveXProvider>,
   );
 }
 
