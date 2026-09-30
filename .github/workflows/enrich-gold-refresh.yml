@@ -1,0 +1,28 @@
+# Weekly gold-enrichment snapshot refresh (#4804).
+#
+# Mirrors .github/workflows/pipeline-market-data-refresh.yml (checkout +
+# setup-uv + uv run) with these deltas: a weekly schedule (Monday 09:00 UTC)
+# plus workflow_dispatch; NO secrets (all five pulls use anonymous tools
+# only); NO Supabase/R2 writes (snapshots land in the local enrichment
+# store, pruned to the keep bound by the script itself).
+name: enrich-gold-refresh
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: enrich-gold-refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --package digiquant --extra prices --extra research
+      - run: uv run --frozen --no-sync python digiquant/scripts/refresh_gold_enrichment.py --include-slow
