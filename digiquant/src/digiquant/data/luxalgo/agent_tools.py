@@ -24,7 +24,10 @@ them).
 LuxAlgo Library reads are **research references, not pipeline primaries** —
 and the tools are read-scope. Every payload keeps the "Sourced from LuxAlgo
 Library" attribution + the upstream canonical URL where one page is addressed.
-Indicator source code is never exposed (CC BY-NC-SA license boundary).
+Indicator source code is never exposed (CC BY-NC-SA license boundary, #4845):
+the dispatcher refuses source-code tool names with a typed envelope and no
+request while ``LUXALGO_COMMERCIAL_LICENSE`` is OFF (default), and every
+payload states the flag state it was produced under.
 """
 
 from __future__ import annotations
@@ -44,6 +47,11 @@ from pydantic import BaseModel, ValidationError
 
 from .client import LUXALGO_ENABLED_ENV, luxalgo_enabled
 from .entitlements import TOOL_ENTITLEMENTS
+from .license_guard import (
+    SOURCE_CODE_TOOL_NAMES,
+    luxalgo_commercial_license_enabled,
+    source_code_refusal_message,
+)
 from .models import (
     LibraryGetConceptInput,
     LibraryGetFamilyInput,
@@ -254,6 +262,24 @@ def build_luxalgo_tool_dispatcher(
         return client if client is not None else build_luxalgo_client()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str | dict[str, Any]:
+        # License boundary (#4845): a source-code tool name is refused with a
+        # typed envelope and no request while the commercial flag is OFF — even
+        # if a dispatch row for it is ever added. Runs before the unknown-tool
+        # branch so the refusal names the license, not the wiring.
+        if name in SOURCE_CODE_TOOL_NAMES and not luxalgo_commercial_license_enabled():
+            logger.warning("luxalgo tool %s refused: no commercial Library license", name)
+            return {
+                "content": luxalgo_envelope_json(
+                    LuxalgoEnvelope(
+                        data=LuxalgoError(
+                            code="invalid_input",
+                            message=source_code_refusal_message(name),
+                            retryable=False,
+                        )
+                    )
+                ),
+                "ok": False,
+            }
         spec = LUXALGO_DISPATCH.get(name)
         if spec is None:
             return {"content": f"Error: unknown luxalgo tool {name!r}", "ok": False}
