@@ -79,6 +79,7 @@ export const SPECIMENS: Readonly<Record<string, SpecimenEntry>> = {
   "sparkline": { specimen: "components/chrome/spark-reference.tsx", route: "/chrome", marker: "Sparkline" },
   "status-strip": { specimen: "components/chrome/spark-reference.tsx", route: "/chrome", marker: "StatusStrip" },
   "composition-bar": { specimen: "components/chrome/spark-reference.tsx", route: "/chrome", marker: "CompositionBar" },
+  "donut": { specimen: "components/chrome/spark-reference.tsx", route: "/chrome", marker: "Donut" },
   "diverging-bars": { specimen: "components/chrome/diverging-bars-reference.tsx", route: "/chrome", marker: "DivergingBars" },
   "range-track": { specimen: "components/chrome/range-track-reference.tsx", route: "/chrome", marker: "RangeTrack" },
   "heat-grid": { specimen: "components/chrome/heat-grid-reference.tsx", route: "/chrome", marker: "HeatGrid" },

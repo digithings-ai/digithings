@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Spark specimens — Sparkline, StatusDot, StatusStrip and CompositionBar from
+ * Spark specimens — Sparkline, StatusDot, StatusStrip, CompositionBar and Donut from
  * @digithings/ui, live. All SVG/CSS, presentational: data comes in by props.
  * Health uses accent/warn/ink-mute; up/down stay reserved for P&L.
  */
@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import {
   CompositionBar,
+  Donut,
   Sparkline,
   StatusDot,
   StatusStrip,
@@ -62,6 +63,13 @@ export function SparkReference() {
         <div>
           <p className="mb-1.5">composition (share) with cash</p>
           <CompositionBar segments={MIX} legend onSelect={(s) => setPicked(s.label)} />
+        </div>
+        <div>
+          <p className="mb-1.5">donut with ranked legend (hover an arc or row)</p>
+          <Donut segments={MIX}>
+            <span className="text-lg font-semibold text-ink">82%</span>
+            <span className="text-[10px] uppercase tracking-widest text-ink-mute">invested</span>
+          </Donut>
         </div>
       </div>
     </section>

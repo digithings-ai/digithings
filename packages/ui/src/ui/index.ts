@@ -34,6 +34,7 @@ export * from "./sidebar";
 export * from "./skeleton";
 export * from "./slider";
 export * from "./sparkline";
+export * from "./donut";
 export * from "./stacked-area";
 export * from "./stat";
 export * from "./status-strip";

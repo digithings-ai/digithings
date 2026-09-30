@@ -15,6 +15,7 @@ import {
 import {
   Badge,
   CompositionBar,
+  Donut,
   DivergingBars,
   EmptyState,
   ScoreBar,
@@ -642,14 +643,18 @@ export function DailyBriefWorkspace({
             <PanelLabel>Book composition</PanelLabel>
             <h2 className="mt-0.5 text-sm font-semibold text-ink">Weights and cash</h2>
             {compSegments.length > 0 ? (
-              <CompositionBar
+              <Donut
                 className="mt-3"
-                mode="share"
-                height={14}
-                legend
+                size={148}
+                thickness={20}
                 segments={compSegments}
                 label="Book composition by weight, with cash"
-              />
+              >
+                <span className="font-mono text-lg font-semibold tabular-nums text-ink">
+                  {investedDisplay.toFixed(0)}%
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-ink-mute">invested</span>
+              </Donut>
             ) : (
               <p className="mt-3 text-sm text-ink-mute">No book weights to chart.</p>
             )}
