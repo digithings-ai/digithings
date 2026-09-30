@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChatPlayback } from "@digithings/ui";
+import { LocalLuxalgoWorkflow } from "@/components/luxalgo/local-luxalgo-workflow";
 import { Band } from "../_chrome/Band";
 import {
   STRATEGY_BADGE,
@@ -99,7 +100,7 @@ export function StrategyBand() {
       layout="split"
       status="in development"
       title="Strategy development"
-      takeaway="Describe a strategy in chat and the tools backtest, optimize and export it. Not live yet."
+      takeaway="Research with LuxAlgo, keep chart and journal context there, then use local tools to validate the idea. Not live yet."
     >
       <div ref={ref}>
         <div className="grid gap-3 md:grid-cols-[8.5rem_minmax(0,1fr)]">
@@ -112,6 +113,7 @@ export function StrategyBand() {
           />
         </div>
         <StatusLedger />
+        <LocalLuxalgoWorkflow />
       </div>
     </Band>
   );

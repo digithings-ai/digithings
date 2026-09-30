@@ -58,6 +58,10 @@ describe("validateGatewayUrl", () => {
     expect(validateGatewayUrl("http://localhost:8792#section")).toBe(false);
   });
 
+  it("returns false when a path is present", () => {
+    expect(validateGatewayUrl("http://localhost:8792/proxy")).toBe(false);
+  });
+
   it("returns false for a non-loopback hostname", () => {
     expect(validateGatewayUrl("http://example.com:8792")).toBe(false);
   });
@@ -197,6 +201,18 @@ describe("fetchHealthz", () => {
     const result = await fetchHealthz("localhost");
     expect(result).toEqual({ ok: true });
     expect(urls[0]).toBe("http://127.0.0.1:8792/healthz");
+  });
+
+  it("rejects a 200 response that is not the gateway health shape", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL", "http://127.0.0.1:8792");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: false }) })),
+    );
+    expect(await fetchHealthz("localhost")).toEqual({
+      ok: false,
+      error: "unexpected health response",
+    });
   });
 
   it("returns { ok: false, error } on a non-200 response", async () => {

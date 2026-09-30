@@ -20,6 +20,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Protocol
+from urllib.parse import urlsplit
 
 import httpx
 from starlette.applications import Starlette
@@ -1055,7 +1056,35 @@ def build_app(gw: Gateway, lifespan: Any = None) -> Starlette:
 
 def origins_from_env() -> tuple[str, ...]:
     raw = os.environ.get("DQ_GATEWAY_ORIGINS", "").strip()
-    return tuple(o.strip() for o in raw.split(",") if o.strip()) or DEFAULT_ORIGINS
+    origins = tuple(o.strip() for o in raw.split(",") if o.strip()) or DEFAULT_ORIGINS
+    loopback_hosts = {"localhost", "127.0.0.1", "::1"}
+    for origin in origins:
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname not in loopback_hosts
+            or parsed.username
+            or parsed.password
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "DQ_GATEWAY_ORIGINS accepts loopback HTTP origins only "
+                "(for example http://127.0.0.1:3910)"
+            )
+    return origins
+
+
+def port_from_env() -> int:
+    raw = os.environ.get("DQ_GATEWAY_PORT", str(DEFAULT_PORT))
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError("DQ_GATEWAY_PORT must be an integer from 1 to 65535") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError("DQ_GATEWAY_PORT must be an integer from 1 to 65535")
+    return port
 
 
 def make_default_app() -> Starlette:
@@ -1078,8 +1107,7 @@ def make_default_app() -> Starlette:
 def main() -> None:
     import uvicorn
 
-    port = int(os.environ.get("DQ_GATEWAY_PORT", DEFAULT_PORT))
-    uvicorn.run(make_default_app(), host=HOST, port=port, log_level="warning")
+    uvicorn.run(make_default_app(), host=HOST, port=port_from_env(), log_level="warning")
 
 
 if __name__ == "__main__":
