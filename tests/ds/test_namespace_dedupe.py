@@ -94,6 +94,39 @@ def test_does_not_mutate_input() -> None:
 
 
 @pytest.mark.unit
+def test_twin_entry_prefers_http_source_url_over_tmp_path() -> None:
+    """URL-ingested chunks carry a tmp-staging ``path`` alongside the shared
+    http ``source_url``; identity must be the URL or same-URL duplicates
+    regress (#4856 review)."""
+    from types import SimpleNamespace
+
+    from digisearch.server import _twin_entry
+
+    def url_result(tmp_path: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            chunk=SimpleNamespace(
+                content="spec body",
+                metadata={
+                    "source_url": "https://example.com/openapi.json",
+                    "path": tmp_path,
+                },
+            )
+        )
+
+    entries = [
+        _twin_entry(url_result("/tmp/ingest-a/page.md"), 0),
+        _twin_entry(url_result("/tmp/ingest-b/page.md"), 1),
+    ]
+    assert [e["path"] for e in entries] == [
+        "https://example.com/openapi.json",
+        "https://example.com/openapi.json",
+    ]
+    out = dedupe_namespace_copies(entries)
+    assert len(out) == 1
+    assert out[0]["url"] == "https://example.com/openapi.json"
+
+
+@pytest.mark.unit
 def test_twin_entry_prefers_vault_path_over_file_source_url() -> None:
     """File-ingested chunks carry a file-derived ``source_url`` (e.g. the
     ingest location); identity must come from the vault namespace (#4856)."""

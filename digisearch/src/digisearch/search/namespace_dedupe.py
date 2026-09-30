@@ -26,8 +26,8 @@ from __future__ import annotations
 from typing import Any
 
 
-def _is_http_url(value: Any) -> bool:
-    return isinstance(value, str) and value.startswith(("http://", "https://"))
+def is_http_url(value: Any) -> bool:
+    return isinstance(value, str) and value.lower().startswith(("http://", "https://"))
 
 
 def _norm_path(value: Any) -> str:
@@ -43,7 +43,7 @@ def _suffix_related(left: str, right: str) -> bool:
 
 
 def _carrier_url(entry: dict[str, Any]) -> bool:
-    return _is_http_url(entry.get("url")) or _is_http_url(entry.get("path"))
+    return is_http_url(entry.get("url")) or is_http_url(entry.get("path"))
 
 
 def _better(winner: dict[str, Any], challenger: dict[str, Any]) -> bool:
