@@ -134,6 +134,30 @@ class TestSnapshotToContracts:
         assert positions == []
         assert fills == []
 
+    def test_position_missing_symbol_raises(self) -> None:
+        account = dict(_golden_snapshot()["accounts"][0])
+        account["positions"] = [
+            {"quantity": 10.0, "marketValue": 1050.0, "averageEntryPrice": 100.0},
+        ]
+        with pytest.raises(ValueError, match="symbol"):
+            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+
+    def test_position_none_symbol_raises(self) -> None:
+        account = dict(_golden_snapshot()["accounts"][0])
+        account["positions"] = [
+            {"symbol": None, "quantity": 10.0, "marketValue": 1050.0, "averageEntryPrice": 100.0},
+        ]
+        with pytest.raises(ValueError, match="symbol"):
+            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+
+    def test_trade_missing_symbol_raises(self) -> None:
+        account = dict(_golden_snapshot()["accounts"][0])
+        account["trades"] = [
+            {"side": "buy", "quantity": 5.0, "price": 300.1},
+        ]
+        with pytest.raises(ValueError, match="symbol"):
+            snapshot_to_contracts(account, fetched_at=_golden_snapshot()["fetchedAt"])
+
 
 class TestSummarizeMirror:
     def test_equity_by_account_and_position_count(self) -> None:

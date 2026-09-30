@@ -106,9 +106,12 @@ def snapshot_to_contracts(
     positions: list[BrokerPosition] = []
     raw_positions = account.get("positions") or []
     for raw in raw_positions:
+        symbol = raw.get("symbol")
+        if not symbol:
+            raise ValueError("position is missing required field 'symbol'")
         positions.append(
             BrokerPosition(
-                symbol=str(raw.get("symbol")),
+                symbol=str(symbol),
                 quantity=_decimal(raw.get("quantity", 0)),
                 avg_entry_price=_decimal(raw.get("averageEntryPrice", 0)),
                 market_value=_decimal(raw.get("marketValue", 0)),
@@ -123,7 +126,10 @@ def snapshot_to_contracts(
         price = _decimal(raw.get("price", 0))
         if quantity <= 0 or price <= 0:
             continue
-        symbol = str(raw.get("symbol"))
+        symbol = raw.get("symbol")
+        if not symbol:
+            raise ValueError("trade is missing required field 'symbol'")
+        symbol = str(symbol)
         side = str(raw.get("side") or "buy").lower()
         fills.append(
             BrokerFill(
