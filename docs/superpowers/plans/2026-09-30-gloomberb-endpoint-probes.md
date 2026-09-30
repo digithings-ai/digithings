@@ -142,7 +142,7 @@ marked as such; live status is unverified throughout.
   `docs/research-data.md:220`).
 - Live: unverified.
 
-### CRD — Credit spreads — ROUTE (FRED proxy), fallback: compose board
+### CRD — Credit spreads — compose over econ_series via Cloud FRED proxy
 
 - No `/cloud/credit/*` spreads route; the CRD pane (`shortcut CRD`,
   "ICE BofA US corporate option-adjusted spreads from FRED",
@@ -154,8 +154,8 @@ marked as such; live status is unverified throughout.
   (`src/plugins/builtin/credit-conditions/model.ts:4-10`): `BAMLC0A0CM`
   (US IG), `BAMLC0A1CAAA`, `BAMLC0A2CAA`, `BAMLC0A3CA`, `BAMLC0A4CBBB`,
   `BAMLH0A0HYM2` (US HY).
-- Verdict: Cloud route exists (FRED proxy); board is a composition over
-  `econ_series`. Live: unverified.
+- Verdict: compose over `econ_series` via the Cloud FRED proxy (no new
+  transport; the six board ids above are the board). Live: unverified.
 
 ### CDX — Index CDS — ROUTE
 

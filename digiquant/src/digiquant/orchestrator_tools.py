@@ -1964,6 +1964,522 @@ def build_digifetch_rate_path_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_time_and_sales_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_time_and_sales",
+            "description": (
+                "Time and sales prints for one symbol (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE and "
+                "`exchange` — without either the call is a typed "
+                "auth_required/invalid_input with no request. Returns the "
+                "trades half of the tape snapshot (id/timestamp/price/size/"
+                "exchange/conditions/tape) plus the session high/low and "
+                "feed counters. Prices are delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol", "exchange"],
+            },
+        },
+    }
+
+
+def build_digifetch_quote_recap_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_quote_recap",
+            "description": (
+                "NBBO quote recap for one symbol (Gloomberb Cloud; "
+                "session-gated). Same tape route as time-and-sales (the "
+                "quotes tab of the same pane): requires "
+                "GLOOMBERB_SESSION_COOKIE and `exchange`. Returns the "
+                "quotes half of the snapshot (bid/ask in round lots, "
+                "venues, conditions, spread). Prices are delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol", "exchange"],
+            },
+        },
+    }
+
+
+def build_digifetch_estimate_revisions_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_estimate_revisions",
+            "description": (
+                "Earnings estimate revisions for one symbol (Gloomberb "
+                "Cloud; session-gated). Requires GLOOMBERB_SESSION_COOKIE. "
+                "Per-period current/recorded/lookback observations, 7/30d "
+                "revision breadth, surprises, guidance, and coverage/gaps. "
+                "Estimates are delayed and best-effort."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_short_volume_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_short_volume",
+            "description": (
+                "FINRA daily short volume for one symbol (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE. scope "
+                "is nms (default) or otc. Rows carry short/exempt/total "
+                "volume, the short ratio, markets, and the FINRA source "
+                "link, plus the latest row, change, percentile, and the "
+                "coverage window. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "scope": {
+                        "type": "string",
+                        "enum": ["nms", "otc"],
+                        "default": "nms",
+                    },
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_hiring_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_hiring",
+            "description": (
+                "Hiring data (Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE. mode=summary (default, needs "
+                "ticker, optional company name) returns the headcount "
+                "summary or a pending status; mode=postings (needs ticker) "
+                "pages the open postings with limit/offset; mode=movers "
+                "(no ticker) returns the market-wide hiring movers board "
+                "(openCount/employeeCount/change30d/new7d/topFunction). "
+                "Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["summary", "postings", "movers"],
+                        "default": "summary",
+                    },
+                    "ticker": {"type": "string"},
+                    "name": {"type": "string"},
+                    "limit": {"type": "integer", "default": 25},
+                    "offset": {"type": "integer", "default": 0},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_central_bank_rates_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_central_bank_rates",
+            "description": (
+                "Central-bank policy-rate board (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE. No "
+                "parameters. Rows carry the policy rate or target range, "
+                "FRED/BIS provenance series ids, percentiles and history, "
+                "next-meeting dates (US FOMC only), and stale/confirmed "
+                "states. Delayed."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_cdx_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_cdx",
+            "description": (
+                "Index-CDS board (Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE. 5Y on-the-run IG/HY/EM plus "
+                "iTraxx Main/Crossover with daily points (DTCC-built). "
+                "days sets the optional history depth. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer"},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_sovereign_cds_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_sovereign_cds",
+            "description": (
+                "Sovereign-CDS board (Gloomberb Cloud; session-gated). "
+                "Requires GLOOMBERB_SESSION_COOKIE. Per-sovereign 5Y "
+                "spread in bp with 1W/1M changes and daily points "
+                "(widest-1M-move first). days sets the optional history "
+                "depth. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer"},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_options_flow_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_options_flow",
+            "description": (
+                "Recorded options-flow history (Gloomberb Cloud; **requires "
+                "Gloomberb Pro**). Requires GLOOMBERB_SESSION_COOKIE and a "
+                "Pro plan — FLOW is the one scanner with no delayed tier, "
+                "so a denial surfaces as typed auth_required/pro_required "
+                "and never an empty success. Filters: before/limit/"
+                "min_premium/right/call-put/kind/sweep-block-split-trade/"
+                "min_vol_oi/max_expiry_days/symbols. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "before": {"type": "string"},
+                    "limit": {"type": "integer"},
+                    "min_premium": {"type": "number"},
+                    "right": {"type": "string", "enum": ["call", "put"]},
+                    "kind": {
+                        "type": "string",
+                        "enum": ["sweep", "block", "split", "trade"],
+                    },
+                    "min_vol_oi": {"type": "number"},
+                    "max_expiry_days": {"type": "integer"},
+                    "symbols": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_cot_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_cot",
+            "description": (
+                "CFTC positioning (Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE. report is legacy (default) or "
+                "disaggregated; trader_class selects a class slice; code "
+                "reads one contract (e.g. 134741 for 3M SOFR) instead of "
+                "the board. Futures-only Tuesday as-of rows with class "
+                "legs, net, and 1Y/3Y percentiles. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "report": {
+                        "type": "string",
+                        "enum": ["legacy", "disaggregated"],
+                        "default": "legacy",
+                    },
+                    "trader_class": {
+                        "type": "string",
+                        "enum": [
+                            "noncommercial",
+                            "commercial",
+                            "producer",
+                            "swap",
+                            "managed-money",
+                            "other-reportable",
+                            "nonreportable",
+                        ],
+                    },
+                    "code": {"type": "string"},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_crypto_markets_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_crypto_markets",
+            "description": (
+                "Crypto board (Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE. No parameters. Up to 100 coins "
+                "with price/change/day range/24h volume/market cap/supply/"
+                "52w range/year-ago price/30 daily closes; the "
+                "server-declared source passes through (no vendor "
+                "asserted here). Delayed."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_iv_screen_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_iv_screen",
+            "description": (
+                "IV rich/cheap screen over stored daily history (Gloomberb "
+                "Cloud; session-gated). Requires GLOOMBERB_SESSION_COOKIE. "
+                "symbols is a list of bare US symbols (option underlyings "
+                "since Feb 2024). Rows carry ready/queued status, iv30/iv90 "
+                "stats (value/date/rank/percentile), the latest reading, "
+                "and 25-delta skew. A server plan denial surfaces verbatim "
+                "(typed pro_required on a 402 plan body). Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbols": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["symbols"],
+            },
+        },
+    }
+
+
+def build_digifetch_iv_history_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_iv_history",
+            "description": (
+                "Stored daily implied-volatility history for one US option "
+                "underlying (Gloomberb Cloud; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE. Coverage status "
+                "(ready/backfilling/queued/unavailable), iv7/30/60/90/180/"
+                "365 term points per session, iv30/iv90 rank and percentile, "
+                "the latest reading, and warnings. A server plan denial "
+                "surfaces verbatim (typed pro_required on a 402 plan body). "
+                "Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "days": {"type": "integer", "default": 1100},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_iv_surface_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_iv_surface",
+            "description": (
+                "Stored volatility-close surface for one symbol (Gloomberb "
+                "Cloud; session-gated). Requires GLOOMBERB_SESSION_COOKIE. "
+                "Without date it lists the stored surface dates; with date "
+                "it reads that close surface (same views as the live "
+                "surface, which composes options_chain + yield_curve). A "
+                "server plan denial surfaces verbatim (typed pro_required "
+                "on a 402 plan body). Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "date": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_debt_maturities_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_debt_maturities",
+            "description": (
+                "US-GAAP debt maturities for one symbol (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE. Debt "
+                "facts with accession/filed/form provenance, total "
+                "principal, next-12M/3Y shares, interest expense and "
+                "borrowing cost, plus per-filing history points. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_session_movers_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_session_movers",
+            "description": (
+                "Pre-market / after-hours / gaps movers (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE. Same "
+                "screener route as digifetch_screener with the session "
+                "categories only (category premarket|afterhours|gaps, side "
+                "up|down|active). Rows carry price/change/ref-close/session "
+                "volume/rel-volume/gap%/VWAP/catalysts with the phase and "
+                "as-of. A server plan denial surfaces verbatim. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["premarket", "afterhours", "gaps"],
+                    },
+                    "side": {
+                        "type": "string",
+                        "enum": ["up", "down", "active"],
+                    },
+                    "count": {"type": "integer", "default": 25},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["cache-first", "refresh"],
+                        "default": "cache-first",
+                    },
+                },
+                "required": ["category", "side"],
+            },
+        },
+    }
+
+
+def build_digifetch_trending_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_trending",
+            "description": (
+                "Yahoo trending symbols hydrated with delayed quotes "
+                "(venue-direct, anonymous). Trend symbols come from Yahoo "
+                "Finance's public trending endpoint and quotes are delayed "
+                "reads; rows carry the Yahoo deep link and Yahoo-only "
+                "attribution, never the terminal sourcing block. limit "
+                "bounds the rows (default 10, max 20 — the quote-batch "
+                "cap). Enrichment only, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 10},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_substack_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_substack",
+            "description": (
+                "Own-account Substack reader (venue-direct). Reads the "
+                "publication's Substack API with your own account "
+                "(unofficial, ToS grey area) and carries Substack-only "
+                "attribution, never the terminal sourcing block. Requires "
+                "SUBSTACK_SESSION_COOKIE — without it the call is a typed "
+                "auth_required with login instructions and no request. "
+                "mode=feed (default) lists a publication's posts with "
+                "limit/offset; mode=post reads one post by post_id; "
+                "mode=inbox reads your reader home. Enrichment only."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "publication": {"type": "string"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["feed", "post", "inbox"],
+                        "default": "feed",
+                    },
+                    "post_id": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                    "offset": {"type": "integer", "default": 0},
+                },
+                "required": ["publication"],
+            },
+        },
+    }
+
+
+def build_digifetch_ipo_calendar_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_ipo_calendar",
+            "description": (
+                "Worldwide IPO calendar (Gloomberb Cloud, anonymous). No "
+                "session needed — the route is public. Filters: status, "
+                "region, type, from/to date (YYYY-MM-DD), limit. Deals "
+                "carry id/company/symbol/MIC/venue, lifecycle dates, price "
+                "range, offer size, status, and first-day open/close/"
+                "return. Delayed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string"},
+                    "region": {"type": "string"},
+                    "deal_type": {"type": "string"},
+                    "from_date": {"type": "string"},
+                    "to_date": {"type": "string"},
+                    "limit": {"type": "integer", "default": 50},
+                },
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -2482,6 +2998,25 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_market_valuation_tool(),
         build_digifetch_money_markets_tool(),
         build_digifetch_rate_path_tool(),
+        build_digifetch_time_and_sales_tool(),
+        build_digifetch_quote_recap_tool(),
+        build_digifetch_estimate_revisions_tool(),
+        build_digifetch_short_volume_tool(),
+        build_digifetch_hiring_tool(),
+        build_digifetch_central_bank_rates_tool(),
+        build_digifetch_cdx_tool(),
+        build_digifetch_sovereign_cds_tool(),
+        build_digifetch_options_flow_tool(),
+        build_digifetch_cot_tool(),
+        build_digifetch_crypto_markets_tool(),
+        build_digifetch_iv_screen_tool(),
+        build_digifetch_iv_history_tool(),
+        build_digifetch_iv_surface_tool(),
+        build_digifetch_debt_maturities_tool(),
+        build_digifetch_session_movers_tool(),
+        build_digifetch_trending_tool(),
+        build_digifetch_substack_tool(),
+        build_digifetch_ipo_calendar_tool(),
         build_digifetch_saved_searches_tool(),
         build_luxalgo_library_search_tool(),
         build_luxalgo_library_get_concept_tool(),

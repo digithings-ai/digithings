@@ -29,7 +29,7 @@ def _tool_names(server) -> set[str]:
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
-#: The 51 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
+#: The 70 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
 #: only, default-ON behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
@@ -84,6 +84,26 @@ DIGIFETCH_TOOLS = {
     "digifetch_market_valuation",
     "digifetch_money_markets",
     "digifetch_rate_path",
+    # probe-backed tools (130-coverage Task 5, one per Task 4 GO verdict)
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_central_bank_rates",
+    "digifetch_cdx",
+    "digifetch_sovereign_cds",
+    "digifetch_options_flow",
+    "digifetch_cot",
+    "digifetch_crypto_markets",
+    "digifetch_iv_screen",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
+    "digifetch_session_movers",
+    "digifetch_trending",
+    "digifetch_substack",
+    "digifetch_ipo_calendar",
 }
 
 #: The 14 LuxAlgo hosted reads (#4779 P0 Library + #4844 edge/trackers).
@@ -204,6 +224,6 @@ def test_read_scope_includes_luxalgo_family():
 
 @pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 69
+    assert len(READ_SCOPE_TOOLS) == 88
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 83
+    assert len(_tool_names(create_mcp_server())) == 102

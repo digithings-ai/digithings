@@ -36,12 +36,12 @@ calculators and compositions.
 | QQ | Quote monitor | DONE | digifetch_quotes_batch |
 | GP | Price chart | DONE | digifetch_price_history |
 | GIP | Intraday chart | DONE | digifetch_price_history |
-| TAS | Time and sales | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| QR | Quote recap | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| TAS | Time and sales | DONE | digifetch_time_and_sales — trades half of the shared Cloud tape snapshot (Task 5, Task 4 ROUTE) |
+| QR | Quote recap | DONE | digifetch_quote_recap — NBBO quotes half of the shared Cloud tape snapshot (Task 5, Task 4 ROUTE) |
 | G | Custom chart | COMP | digifetch_custom_chart — explicit series list, aligned columns (Phase A) |
 | CAT | Data catalog | DONE | digifetch_search |
 | FAM | Financial analysis | DONE | digifetch_statements |
-| DDIS | Debt maturities | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| DDIS | Debt maturities | DONE | digifetch_debt_maturities — US-GAAP debt facts over the Cloud route (Task 5, Task 4 ROUTE) |
 | HP | Historical prices | DONE | digifetch_price_history |
 | CMP | Compare performance | COMP | digifetch_compare_performance — rebased returns over price_history (Phase A) |
 | GFM | Fundamental graph | COMP | digifetch_fundamental_graph — statement fields over ticker_financials (Phase A) |
@@ -54,25 +54,25 @@ calculators and compositions.
 | OMON | Options monitor | DONE | digifetch_options_chain |
 | OVME | Options calculator | CALC | digifetch_options_calculator — Black-Scholes price / IV solve, no transport (Phase A) |
 | OSA | Options scenario | CALC | digifetch_options_scenario — multi-leg valuation over options_chain rows (Phase A) |
-| OVDV | Volatility surface | PROBE | Task 4 verdict incl. IV-history Pro gating (route + params + auth, or NO-ROUTE fallback) |
-| HIVG | Implied volatility history | PROBE | Task 4 verdict incl. Pro gating (route + params + auth, or NO-ROUTE fallback) |
-| HVG | Realized volatility | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| HVT | Volatility cone | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| VCA | Volatility rich/cheap | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| OVDV | Volatility surface | DONE | digifetch_iv_surface — dated stored close surfaces (Task 5, Task 4 ROUTE); a live surface composes over options_chain + yield_curve |
+| HIVG | Implied volatility history | DONE | digifetch_iv_history — stored daily IV history (Task 5, Task 4 ROUTE); server denial surfaces verbatim, 402-ready Pro gate |
+| HVG | Realized volatility | COMP | Compose over price_history (close-to-close/Parkinson/Garman-Klass/Rogers-Satchell/Yang-Zhang over 20/30-session windows) + options_chain for the current-ATM-IV overlay (Task 4 NO-ROUTE) |
+| HVT | Volatility cone | COMP | Compose over price_history (seven-window realized-vol distributions) + options_chain for the current-ATM-IV overlay (Task 4 NO-ROUTE) |
+| VCA | Volatility rich/cheap | DONE | digifetch_iv_screen — stored IV screen over bare US symbols (Task 5, Task 4 ROUTE) |
 | ANR | Analyst research | DONE | digifetch_analyst_research |
-| EE | Earnings estimates | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| EMM | Estimate revisions | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| EE | Earnings estimates | COMP | Compose over corporate_actions + analyst_research + ticker_financials (Task 4 NO-ROUTE, no dedicated Cloud route) |
+| EMM | Estimate revisions | DONE | digifetch_estimate_revisions — per-period revisions over the Cloud route (Task 5, Task 4 ROUTE) |
 | GUID | Company guidance | COMP | digifetch_company_guidance — best-effort quote harvesting over transcripts text, labeled as such, never advice (fallback: Task 4 PROBE verdict) |
 | EVT | Corporate actions | DONE | digifetch_corporate_actions |
 | DVD | Dividend yield | COMP | digifetch_dividend_yield — yield over corporate_actions + quote (Phase A) |
 | SI | Short interest | DONE | digifetch_short_interest |
-| SIV | Daily short volume | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| SIV | Daily short volume | DONE | digifetch_short_volume — FINRA daily rows over the Cloud route (Task 5, Task 4 ROUTE) |
 | DIAG | Equity diagnostic | DONE | digifetch_equity_diagnostic |
 | RISK | Risk factors | DONE | digifetch_risk_reports |
 | EXEC | Executives | DONE | digifetch_proxy_statements |
 | EK | 8-K filings | DONE | digifetch_filing_events |
 | CALLS | Earnings calls | DONE | digifetch_transcripts |
-| JOBS | Hiring | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| JOBS | Hiring | DONE | digifetch_hiring — summary / postings / movers over the Cloud routes (Task 5, Task 4 ROUTE) |
 | SRCH | Research search | DONE | digifetch_research_search |
 | AI | AI screener | OUT | BYOK key, no data endpoint |
 | AGENT | AI agent | OUT | BYOK key, no data endpoint |
@@ -88,7 +88,7 @@ calculators and compositions.
 | NI | Sector news | DONE | digifetch_news (sector feed) |
 | FIRST | Breaking news | DONE | digifetch_news (breaking feed) |
 | TWIT | X feed | DONE | digifetch_ticker_tweets / digifetch_tweet_search |
-| SUB | Substack | PROBE | Task 4 verdict — auth-gated reader, fail-soft when no own-account sign-in |
+| SUB | Substack | TOS | digifetch_substack — own-account venue-direct reader (SUBSTACK_SESSION_COOKIE), fail-soft auth_required without stored auth (Task 5, Task 4 venue-DIRECT) |
 | TV | Live TV | OUT | Live video pane, no tool surface |
 | HN | Hacker News | TOS | digifetch_hacker_news — public API reader, free, unattributed, per-row source URLs (Phase C) |
 
@@ -96,23 +96,23 @@ calculators and compositions.
 
 | Prefix | Docs title | Status | Mapped tool or reason |
 | ------ | ---------- | ------ | --------------------- |
-| MOST | Market movers | DONE + PROBE | Screener DONE via digifetch_screener; trending / pre-market / after-hours = Task 4 PROBE |
+| MOST | Market movers | DONE | digifetch_screener (gainers/losers/most-active) + digifetch_session_movers (premarket/afterhours/gaps Cloud categories) + digifetch_trending (Yahoo venue-direct, unattributed) (Task 5, Task 4 split verdict) |
 | WEI | World equity indices | COMP | Composition over digifetch_quotes_batch — index/ETF basket (Phase A) |
 | BI | Sector performance | COMP | Composition over digifetch_quotes_batch — sector ETF basket (Phase A) |
 | RRG | Relative rotation | COMP | Composition over digifetch_quotes_batch — strength vs benchmark with momentum trails (Phase A) |
 | HM | Market heatmap | COMP | Composition over digifetch_quotes_batch — cap-sized treemap rows (Phase A) |
 | FXC | FX cross rates | COMP | digifetch_fx_cross_rates — USD-pair matrix over exchange_rate (Phase A) |
-| CRYP | Crypto board | PROBE | Task 4 verdict — coin list source (route + params + auth, or NO-ROUTE fallback) |
+| CRYP | Crypto board | DONE | digifetch_crypto_markets — up-to-100-coin board over the Cloud route (Task 5, Task 4 ROUTE) |
 | FUT | Futures board | OUT | Yahoo continuous symbols, prior decision |
 | CTM | Futures curve | OUT | Yahoo continuous symbols, prior decision |
 | FNG | Fear and greed | TOS | digifetch_fear_greed — unofficial CNN read, ToS grey area, cross-check before citing (Phase C) |
-| COT | CFTC positioning | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| VIX | VIX term structure | COMP | digifetch_vix_term_structure — FRED composition over econ_series, contango/inversion (Phase A) |
+| COT | CFTC positioning | DONE | digifetch_cot — board or one contract over the Cloud routes (Task 5, Task 4 ROUTE) |
+| VIX | VIX term structure | COMP | digifetch_vix_term_structure — FRED composition over econ_series, contango/inversion (Phase A; far-leg default VXVCLS per Task 5 controller ruling — VIX3M is the ^VIX3M index symbol, not a FRED id) |
 | VOLS | Cross-asset volatility | COMP | digifetch_vix_term_structure — cross-asset board over econ_series (Phase A) |
-| HILO | New highs and lows | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| FLOW | Options flow | PROBE | Task 4 verdict incl. Pro gating (route + params + auth, or NO-ROUTE fallback) |
+| HILO | New highs and lows | OUT | Socket-only streaming scanner, no REST equivalent and no tool-shaped equivalent; 52-week extremes already in quotes/screener (Task 4 NO-ROUTE → OUT) |
+| FLOW | Options flow | DONE | digifetch_options_flow — recorded history route, Pro-gated, fails closed on denial (Task 5, Task 4 ROUTE) |
 | HALT | Market halts | TOS | digifetch_market_halts — Nasdaq Trader, delayed, free, unattributed (Phase C) |
-| IPO | IPO calendar | TOS | digifetch_ipo_calendar — Cloud-overlap check first (Task 4); direct if no Cloud route (Phase C) |
+| IPO | IPO calendar | DONE | digifetch_ipo_calendar — Cloud-overlap confirmed: public Cloud route, anonymous (Task 5, Task 4 Cloud-overlap YES) |
 | MAP | World venue map | DONE | digifetch_venues |
 | PM | Prediction markets | DONE | digifetch_prediction_markets (venue-direct precedent: provider_id="prediction-markets-venues", attributed=False, per-row venue URLs) |
 | POLL | Polls | TOS | digifetch_polls — VoteHub data © VoteHub contributors, CC BY 4.0, per-row attribution (Phase C) |
@@ -123,15 +123,15 @@ calculators and compositions.
 | ------ | ---------- | ------ | --------------------- |
 | ECO | Economic calendar | DONE | digifetch_econ_calendar |
 | ECST | Economic statistics | DONE | digifetch_econ_series |
-| CBR | Central bank rates | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| CBR | Central bank rates | DONE | digifetch_central_bank_rates — policy-rate board over the Cloud route (Task 5, Task 4 ROUTE) |
 | GC | Yield curve | DONE | digifetch_yield_curve |
 | WIRP | US rate path | COMP | digifetch_rate_path — fed-prob ladder over existing ingest + kalshi/polymarket reads (Phase A) |
-| CRD | Credit spreads | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| CRD | Credit spreads | COMP | Compose over econ_series via the Cloud FRED proxy — the six board ids (BAMLC0A0CM / BAMLC0A1CAAA / BAMLC0A2CAA / BAMLC0A3CA / BAMLC0A4CBBB / BAMLH0A0HYM2); no /cloud/credit spreads route (Task 4 compose verdict) |
 | AUCT | Treasury auctions | TOS | digifetch_treasury_auctions — Treasury Fiscal Data, public, free, unattributed (Phase C) |
 | BTMM | Money markets | COMP | digifetch_money_markets — SOFR/EFFR/reserves are FRED series via econ_series (Phase A) |
 | CDS | Single-name CDS | DONE | digifetch_cds |
-| CDX | Index CDS | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
-| SOVR | Sovereign CDS | PROBE | Task 4 verdict (route + params + auth, or NO-ROUTE fallback) |
+| CDX | Index CDS | DONE | digifetch_cdx — 5Y on-the-run board over the Cloud route (Task 5, Task 4 ROUTE) |
+| SOVR | Sovereign CDS | DONE | digifetch_sovereign_cds — per-sovereign 5Y board over the Cloud route (Task 5, Task 4 ROUTE) |
 | YAS | Bond calculator | CALC | digifetch_bond_calculator — price/yield, accrued, duration, convexity, DV01, no transport (Phase A) |
 | VAL | Market valuation | COMP | digifetch_market_valuation — Shiller CAPE + econ ratios vs history zones (Phase A) |
 | ERN | Earnings calendar | DONE | digifetch_earnings_calendar (Yahoo-backed, deliberately NOT attributed to Gloomberb) |
@@ -143,7 +143,7 @@ calculators and compositions.
 | SEC | SEC filings | DONE | digifetch_sec_filings |
 | HDS | Holders | DONE | digifetch_holders |
 | 13F | 13F funds | DONE | digifetch_13f_funds / digifetch_13f_holdings |
-| INS | Insider transactions | PROBE | Task 4 verdict — Form 4 (route + params + auth, or NO-ROUTE fallback) |
+| INS | Insider transactions | COMP | Compose over sec_filings filtered to Form 4/4-A + filing content (parsed form4 block) (Task 4 NO-ROUTE) |
 | CG | Congress trades | DONE | digifetch_congress_trades |
 
 ## Run a workspace (12)

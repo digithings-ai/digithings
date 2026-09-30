@@ -62,6 +62,14 @@ from .models import (
     CdsEnvelope,
     CdsInput,
     CdsResult,
+    CdxBoard,
+    CdxEnvelope,
+    CdxInput,
+    CdxResult,
+    CentralBankRate,
+    CentralBankRatesEnvelope,
+    CentralBankRatesInput,
+    CentralBankRatesResult,
     ComparePerfEnvelope,
     ComparePerfInput,
     ComparePerfResult,
@@ -74,9 +82,22 @@ from .models import (
     CorrMatrixEnvelope,
     CorrMatrixInput,
     CorrMatrixResult,
+    CotBoardResult,
+    CotContractResult,
+    CotEnvelope,
+    CotInput,
+    CotRow,
+    CryptoCoin,
+    CryptoMarketsEnvelope,
+    CryptoMarketsInput,
+    CryptoMarketsResult,
     CustomChartEnvelope,
     CustomChartInput,
     CustomChartResult,
+    DebtMaturitiesEnvelope,
+    DebtMaturitiesInput,
+    DebtMaturitiesResult,
+    DebtMaturityFiling,
     DigifetchEnvelope,
     DigifetchError,
     DividendYieldEnvelope,
@@ -95,10 +116,16 @@ from .models import (
     EquityDiagnosticEnvelope,
     EquityDiagnosticInput,
     EquityDiagnosticResult,
+    EstimateRevisionPeriod,
+    EstimateRevisionsEnvelope,
+    EstimateRevisionsInput,
+    EstimateRevisionsResult,
+    EstimateRevisionSurprise,
     ExchangeRateEnvelope,
     ExchangeRateInput,
     FilingEventsEnvelope,
     FilingEventsInput,
+    FlowEvent,
     FundGraphEnvelope,
     FundGraphInput,
     FundGraphPoint,
@@ -107,10 +134,29 @@ from .models import (
     FxMatrixEnvelope,
     FxMatrixInput,
     FxMatrixResult,
+    HiringEnvelope,
+    HiringInput,
+    HiringMover,
+    HiringResult,
     HoldersEnvelope,
     HoldersInput,
     HoldersResult,
     Holdings13FEnvelope,
+    IpoCalendarEnvelope,
+    IpoCalendarInput,
+    IpoCalendarResult,
+    IpoDeal,
+    IvHistoryEnvelope,
+    IvHistoryInput,
+    IvHistoryResult,
+    IvScreenEnvelope,
+    IvScreenInput,
+    IvScreenResult,
+    IvScreenRow,
+    IvSurfaceEnvelope,
+    IvSurfaceInput,
+    IvSurfaceResult,
+    JobPosting,
     KellyEnvelope,
     KellyInput,
     KellyResult,
@@ -129,6 +175,9 @@ from .models import (
     OptionsChainEnvelope,
     OptionsChainInput,
     OptionsChainResult,
+    OptionsFlowEnvelope,
+    OptionsFlowInput,
+    OptionsFlowResult,
     PredictionMarketRow,
     PredictionMarketsEnvelope,
     PredictionMarketsInput,
@@ -139,8 +188,12 @@ from .models import (
     PriceHistoryResult,
     ProxyStatementsEnvelope,
     ProxyStatementsInput,
+    Quote,
     QuoteEnvelope,
     QuoteInput,
+    QuoteRecapEnvelope,
+    QuoteRecapInput,
+    QuoteRecapResult,
     QuoteResult,
     QuotesBatchEnvelope,
     QuotesBatchInput,
@@ -170,21 +223,46 @@ from .models import (
     SecFilingsEnvelope,
     SecFilingsInput,
     SecFilingsResult,
+    SessionMover,
+    SessionMoversEnvelope,
+    SessionMoversInput,
+    SessionMoversResult,
     ShillerEnvelope,
     ShillerInput,
     ShortInterestEnvelope,
     ShortInterestInput,
+    ShortVolumeEnvelope,
+    ShortVolumeInput,
+    ShortVolumeResult,
+    ShortVolumeRow,
+    SovrEnvelope,
+    SovrInput,
+    SovrResult,
+    SovrRow,
     StatementsEnvelope,
     StatementsInput,
+    SubstackEnvelope,
+    SubstackInput,
+    SubstackPost,
+    SubstackResult,
+    TapeQuote,
+    TapeTrade,
     ThirteenFFundsInput,
     ThirteenFHoldingsInput,
     TickerFinancialsEnvelope,
     TickerFinancialsInput,
     TickerFinancialsResult,
     TickerTweetsInput,
+    TimeAndSalesEnvelope,
+    TimeAndSalesInput,
+    TimeAndSalesResult,
     TranscriptsEnvelope,
     TranscriptsInput,
     TranscriptsResult,
+    TrendingEnvelope,
+    TrendingInput,
+    TrendingResult,
+    TrendingRow,
     TweetSearchInput,
     TweetsEnvelope,
     ValGraphEnvelope,
@@ -206,6 +284,7 @@ __all__ = [
     "GLOOMBERB_BASE_URL",
     "GLOOMBERB_ENABLED_ENV",
     "GLOOMBERB_SESSION_COOKIE_ENV",
+    "SUBSTACK_SESSION_COOKIE_ENV",
     "SESSION_COOKIE_NAMES",
     "session_cache_fingerprint",
     "DEFAULT_CACHE_TTL_SECONDS",
@@ -315,6 +394,26 @@ ENDPOINTS: dict[str, str] = {
     "equity_diagnostic": "/research/equity-diagnostic",
     # coverage expansion (#4110 phase 4a)
     "saved_searches": "/cloud/search/saved",
+    # probe-backed tools (130-coverage Task 5): confirmed Cloud routes from
+    # the Task 4 GO verdicts only. Venue-direct tools (trending, substack)
+    # take no ENDPOINTS entry — their hosts live in the venue constants below.
+    "tape": "/cloud/tape",
+    "estimate_revisions": "/cloud/research/estimates",
+    "short_volume": "/cloud/short-volume",
+    "hiring": "/cloud/jobs",
+    "central_bank_rates": "/cloud/econ/central-bank-rates",
+    "cdx": "/cloud/credit/cdx",
+    "sovr": "/cloud/credit/sovr",
+    "flow_history": "/market/scanner/flow/history",
+    "cot_board": "/cloud/cot/board",
+    "cot_contracts": "/cloud/cot/contracts",
+    "crypto_markets": "/cloud/crypto/markets",
+    "iv_screen": "/cloud/iv/screen",
+    "iv_history": "/cloud/iv/history",
+    "iv_surface_dates": "/cloud/iv/surface-dates",
+    "iv_surface": "/cloud/iv/surface",
+    "debt_maturities": "/cloud/debt-maturities",
+    "ipo_calendar": "/cloud/ipo/calendar",
 }
 
 # Prediction-markets venue catalog (#4813). No Gloomberb Cloud route exists
@@ -336,6 +435,47 @@ PREDICTION_MARKETS_ATTRIBUTION = (
     "Prediction-markets catalog sourced directly from the venues' public APIs "
     "(Polymarket Gamma, Kalshi trade API). Anonymous, polled reads: quotes may "
     "lag the venue order book. Enrichment only, never a pipeline primary."
+)
+
+# Probe-backed venue-direct tools (130-coverage Task 5). No Gloomberb Cloud
+# route exists for these verdicts, so they read the venues directly through
+# the shared digifetch transport (pacing, retry, breaker, SSRF guard):
+#
+# * trending — the builtin market-movers pane hydrates Yahoo's trending list
+#   (``GET /v1/finance/trending/US``) with quotes; the tool mirrors that:
+#   trend symbols from Yahoo, delayed quotes from the Cloud batch read.
+# * substack — the plugin talks to substack.com directly with the reader's
+#   own account (magic-link/OTP sign-in harvesting ``substack.sid``); the
+#   tool attaches that cookie and fails soft to ``auth_required`` + login
+#   instructions without it, never an exception-shaped failure.
+YAHOO_TRENDING_BASE_URL = "https://query1.finance.yahoo.com"
+YAHOO_TRENDING_PATH = "/v1/finance/trending/US"
+YAHOO_QUOTE_URL = "https://finance.yahoo.com/quote/{symbol}"
+
+SUBSTACK_ORIGIN = "https://substack.com"
+SUBSTACK_SESSION_COOKIE_ENV = "SUBSTACK_SESSION_COOKIE"
+SUBSTACK_COOKIE_NAMES: tuple[str, ...] = (
+    "substack.sid",
+    "substack.lli",
+)
+
+TRENDING_ATTRIBUTION = (
+    "Trending symbols sourced directly from Yahoo Finance "
+    "(query1.finance.yahoo.com), hydrated with delayed Cloud quotes. "
+    "Enrichment only, never a pipeline primary."
+)
+
+SUBSTACK_ATTRIBUTION = (
+    "Posts sourced directly from Substack with the reader's own account "
+    "(own-account session cookie; unofficial, ToS grey area). "
+    "Enrichment only, never a pipeline primary."
+)
+
+SUBSTACK_LOGIN_HELP = (
+    "Substack sign-in required: open substack.com in a browser and sign in "
+    "(magic email link or 6-digit OTP code), then set SUBSTACK_SESSION_COOKIE "
+    "to the substack.sid cookie value (bare token or substack.sid=value). "
+    "Without it this tool returns auth_required and makes no request."
 )
 
 
@@ -512,6 +652,36 @@ def _filter_prediction_markets(
     elif tab == "top":
         rows = sorted(rows, key=lambda row: (row.volume_24h is None, -(row.volume_24h or 0.0)))
     return rows[:limit]
+
+
+def _yahoo_trending_symbols(payload: Any) -> list[str] | None:
+    """Trend symbols from Yahoo's ``/v1/finance/trending`` payload, or None.
+
+    ``None`` is an unexpected shape (typed ``upstream_error``); an empty list
+    is a valid-but-empty venue answer (the caller maps it the same way —
+    never an empty success).
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    finance = payload.get("finance")
+    if not isinstance(finance, Mapping):
+        return None
+    results = finance.get("result")
+    if not isinstance(results, list) or not results:
+        return []
+    first = results[0]
+    if not isinstance(first, Mapping):
+        return None
+    quotes = first.get("quotes")
+    if not isinstance(quotes, list):
+        return None
+    symbols: list[str] = []
+    for entry in quotes:
+        if isinstance(entry, Mapping):
+            symbol = entry.get("symbol")
+            if isinstance(symbol, str) and symbol.strip() and symbol not in symbols:
+                symbols.append(symbol.strip())
+    return symbols
 
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -706,6 +876,10 @@ class GloomberbClient:
         session_cookie:   Optional Gloom session cookie; ``None`` reads
                           ``GLOOMBERB_SESSION_COOKIE``. Accepts either a bare
                           token or ``name=value``. Never logged.
+        substack_cookie:  Optional own-account Substack cookie; ``None`` reads
+                          ``SUBSTACK_SESSION_COOKIE``. Same bare-or-named form;
+                          only the substack reader sends it, never the Cloud
+                          routes. Never logged.
         rate_limiter:     Minimum-interval gate (default 0.5s).
         retry_policy:     Composable retry policy; narrowed to timeouts/5xx.
         cache_ttl:        Seconds an envelope stays fresh (900s default).
@@ -728,6 +902,7 @@ class GloomberbClient:
         base_url: str = GLOOMBERB_BASE_URL,
         enabled: bool | None = None,
         session_cookie: str | None = None,
+        substack_cookie: str | None = None,
         rate_limiter: RateLimiter | None = None,
         retry_policy: RetryPolicy | None = None,
         cache_ttl: float = DEFAULT_CACHE_TTL_SECONDS,
@@ -753,6 +928,11 @@ class GloomberbClient:
             self._session_cookie: str | None = env_cookie or None
         else:
             self._session_cookie = session_cookie.strip() or None
+        if substack_cookie is None:
+            env_substack = os.environ.get(SUBSTACK_SESSION_COOKIE_ENV, "").strip()
+            self._substack_cookie: str | None = env_substack or None
+        else:
+            self._substack_cookie = substack_cookie.strip() or None
         self._rate_limiter = rate_limiter or RateLimiter(DEFAULT_MIN_INTERVAL_SECONDS)
         self._retry_policy = retry_policy or RetryPolicy(
             attempts=3,
@@ -2410,6 +2590,1202 @@ class GloomberbClient:
                 retryable=False,
             )
 
+    # -- probe-backed tools (130-coverage Task 5) -------------------------------
+    #
+    # One method per GO verdict in the Task 4 probe table. Every verdict
+    # carries a ``Live: unverified`` marker (no operator approval for any
+    # host), so payload models stay deliberately permissive — typed key
+    # fields with the long tail preserved as extras — until a live probe
+    # lands. NO-ROUTE verdicts (EE/INS/HVG/HVT/CRD/HILO) add no method here.
+
+    def time_and_sales(
+        self, request: TimeAndSalesInput | Mapping[str, Any]
+    ) -> TimeAndSalesEnvelope:
+        """Time and sales over the shared tape route (session-gated)."""
+        parsed = self._validate_input(TimeAndSalesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TimeAndSalesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TimeAndSalesEnvelope)
+
+        def produce() -> TimeAndSalesEnvelope:
+            path = f"{ENDPOINTS['tape']}/{quote(parsed.symbol, safe='')}"
+            raw = self._request_json("GET", path, params={"exchange": parsed.exchange}, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TimeAndSalesEnvelope, raw)
+            result = self._data_or_error(raw, f"Cloud tape is unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TimeAndSalesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tape")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TimeAndSalesEnvelope, payload)
+            try:
+                trades = [TapeTrade.model_validate(row) for row in payload.get("trades") or []]
+                result_obj = TimeAndSalesResult(
+                    symbol=parsed.symbol,
+                    exchange=parsed.exchange,
+                    trades=trades,
+                    session_high=payload.get("sessionHigh"),
+                    session_low=payload.get("sessionLow"),
+                    capacity=payload.get("capacity"),
+                    dropped=payload.get("dropped"),
+                    cancelled=payload.get("cancelled"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    TimeAndSalesEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected tape payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return TimeAndSalesEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("time_and_sales", parsed, produce)
+
+    def quote_recap(self, request: QuoteRecapInput | Mapping[str, Any]) -> QuoteRecapEnvelope:
+        """NBBO recap over the shared tape route (the quotes half of TAS)."""
+        parsed = self._validate_input(QuoteRecapInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(QuoteRecapEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(QuoteRecapEnvelope)
+
+        def produce() -> QuoteRecapEnvelope:
+            path = f"{ENDPOINTS['tape']}/{quote(parsed.symbol, safe='')}"
+            raw = self._request_json("GET", path, params={"exchange": parsed.exchange}, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(QuoteRecapEnvelope, raw)
+            result = self._data_or_error(raw, f"Cloud tape is unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(QuoteRecapEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tape")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(QuoteRecapEnvelope, payload)
+            try:
+                quotes = [TapeQuote.model_validate(row) for row in payload.get("quotes") or []]
+                result_obj = QuoteRecapResult(
+                    symbol=parsed.symbol, exchange=parsed.exchange, quotes=quotes
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    QuoteRecapEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected tape payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return QuoteRecapEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("quote_recap", parsed, produce)
+
+    def estimate_revisions(
+        self, request: EstimateRevisionsInput | Mapping[str, Any]
+    ) -> EstimateRevisionsEnvelope:
+        """Estimate revisions board (session-gated; pane shortcut EM)."""
+        parsed = self._validate_input(EstimateRevisionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EstimateRevisionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EstimateRevisionsEnvelope)
+
+        def produce() -> EstimateRevisionsEnvelope:
+            path = f"{ENDPOINTS['estimate_revisions']}/{quote(parsed.symbol, safe='')}"
+            params: dict[str, Any] = {}
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            raw = self._request_json("GET", path, params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EstimateRevisionsEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud estimate revisions are unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EstimateRevisionsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "estimate revisions")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(EstimateRevisionsEnvelope, payload)
+            try:
+                result_obj = EstimateRevisionsResult(
+                    symbol=parsed.symbol,
+                    exchange=parsed.exchange,
+                    periods=[
+                        EstimateRevisionPeriod.model_validate(row)
+                        for row in payload.get("periods") or []
+                    ],
+                    breadth_7d=payload.get("breadth7d") or {},
+                    breadth_30d=payload.get("breadth30d") or {},
+                    surprises=[
+                        EstimateRevisionSurprise.model_validate(row)
+                        for row in payload.get("surprises") or []
+                    ],
+                    guidance=payload.get("guidance"),
+                    coverage=list(payload.get("coverage") or []),
+                    gaps=list(payload.get("gaps") or []),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    EstimateRevisionsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected estimate-revisions payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return EstimateRevisionsEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("estimate_revisions", parsed, produce)
+
+    def short_volume(self, request: ShortVolumeInput | Mapping[str, Any]) -> ShortVolumeEnvelope:
+        """FINRA daily short volume, NMS or OTC scope (session-gated)."""
+        parsed = self._validate_input(ShortVolumeInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ShortVolumeEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ShortVolumeEnvelope)
+
+        def produce() -> ShortVolumeEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["short_volume"],
+                params={"symbol": parsed.symbol, "scope": parsed.scope},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ShortVolumeEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud short volume is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ShortVolumeEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "short volume")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ShortVolumeEnvelope, payload)
+            try:
+                result_obj = ShortVolumeResult(
+                    symbol=parsed.symbol,
+                    scope=parsed.scope,
+                    rows=[ShortVolumeRow.model_validate(row) for row in payload.get("rows") or []],
+                    latest=payload.get("latest") or {},
+                    change=payload.get("change"),
+                    percentile=payload.get("percentile"),
+                    coverage_start=payload.get("coverageStart"),
+                    coverage_end=payload.get("coverageEnd"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    ShortVolumeEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected short-volume payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return ShortVolumeEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("short_volume", parsed, produce)
+
+    def hiring(self, request: HiringInput | Mapping[str, Any]) -> HiringEnvelope:
+        """Hiring summary / postings / market-wide movers (session-gated)."""
+        parsed = self._validate_input(HiringInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(HiringEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(HiringEnvelope)
+
+        def produce() -> HiringEnvelope:
+            if parsed.mode == "movers":
+                path: str = ENDPOINTS["hiring"]
+                params: dict[str, Any] = {
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.mode == "postings":
+                ticker = (parsed.ticker or "").strip()
+                path = f"{ENDPOINTS['hiring']}/{quote(ticker, safe='')}/postings"
+                params = {"limit": str(parsed.limit), "offset": str(parsed.offset)}
+            else:
+                ticker = (parsed.ticker or "").strip()
+                path = f"{ENDPOINTS['hiring']}/{quote(ticker, safe='')}"
+                params = {}
+                if parsed.name:
+                    params["name"] = parsed.name
+            raw = self._request_json("GET", path, params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(HiringEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud hiring is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(HiringEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "hiring")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(HiringEnvelope, payload)
+            try:
+                result_obj = HiringResult(
+                    mode=parsed.mode,
+                    ticker=(parsed.ticker or "").strip() or None,
+                    status=payload.get("status"),
+                    summary={
+                        key: value
+                        for key, value in payload.items()
+                        if key not in ("postings", "total", "asOf", "covered", "movers")
+                    },
+                    postings=[
+                        JobPosting.model_validate(row) for row in payload.get("postings") or []
+                    ],
+                    total=payload.get("total"),
+                    as_of=payload.get("asOf"),
+                    covered=payload.get("covered"),
+                    movers=[HiringMover.model_validate(row) for row in payload.get("movers") or []],
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    HiringEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected hiring payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return HiringEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("hiring", parsed, produce)
+
+    def central_bank_rates(
+        self, request: CentralBankRatesInput | Mapping[str, Any]
+    ) -> CentralBankRatesEnvelope:
+        """Policy-rate board (session-gated; FRED/BIS provenance per row)."""
+        parsed = self._validate_input(CentralBankRatesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CentralBankRatesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CentralBankRatesEnvelope)
+
+        def produce() -> CentralBankRatesEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["central_bank_rates"], gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CentralBankRatesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud central-bank rates are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CentralBankRatesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "central-bank rates")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CentralBankRatesEnvelope, payload)
+            try:
+                result_obj = CentralBankRatesResult(
+                    rows=[CentralBankRate.model_validate(row) for row in payload.get("rows") or []]
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CentralBankRatesEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected central-bank-rates payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CentralBankRatesEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("central_bank_rates", parsed, produce)
+
+    def cdx(self, request: CdxInput | Mapping[str, Any]) -> CdxEnvelope:
+        """Index-CDS board (session-gated; DTCC-built 5Y on-the-run)."""
+        parsed = self._validate_input(CdxInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CdxEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CdxEnvelope)
+
+        def produce() -> CdxEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.days is not None:
+                params["days"] = str(parsed.days)
+            raw = self._request_json("GET", ENDPOINTS["cdx"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CdxEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud CDX board is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CdxEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "CDX board")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CdxEnvelope, payload)
+            try:
+                result_obj = CdxResult(
+                    boards=[CdxBoard.model_validate(row) for row in payload.get("boards") or []],
+                    points=list(payload.get("points") or []),
+                    days=parsed.days,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CdxEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected CDX payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CdxEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("cdx", parsed, produce)
+
+    def sovereign_cds(self, request: SovrInput | Mapping[str, Any]) -> SovrEnvelope:
+        """Sovereign-CDS board (session-gated; 5Y spreads in bp)."""
+        parsed = self._validate_input(SovrInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SovrEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SovrEnvelope)
+
+        def produce() -> SovrEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.days is not None:
+                params["days"] = str(parsed.days)
+            raw = self._request_json("GET", ENDPOINTS["sovr"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SovrEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud sovereign-CDS board is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SovrEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "sovereign-CDS board")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(SovrEnvelope, payload)
+            try:
+                result_obj = SovrResult(
+                    rows=[SovrRow.model_validate(row) for row in payload.get("rows") or []],
+                    days=parsed.days,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    SovrEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected sovereign-CDS payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return SovrEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("sovereign_cds", parsed, produce)
+
+    def options_flow(self, request: OptionsFlowInput | Mapping[str, Any]) -> OptionsFlowEnvelope:
+        """Recorded options-flow history (Pro; no delayed tier — fail closed).
+
+        A denial (``auth_required`` / ``pro_required``) is surfaced, never an
+        empty success: FLOW is the one scanner with no delayed tier.
+        """
+        parsed = self._validate_input(OptionsFlowInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsFlowEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsFlowEnvelope)
+
+        def produce() -> OptionsFlowEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.before:
+                params["before"] = parsed.before
+            if parsed.limit is not None:
+                params["limit"] = str(parsed.limit)
+            if parsed.min_premium is not None:
+                params["minPremium"] = str(parsed.min_premium)
+            if parsed.right:
+                params["right"] = parsed.right
+            if parsed.kind:
+                params["kind"] = parsed.kind
+            if parsed.min_vol_oi is not None:
+                params["minVolOi"] = str(parsed.min_vol_oi)
+            if parsed.max_expiry_days is not None:
+                params["maxExpiryDays"] = str(parsed.max_expiry_days)
+            if parsed.symbols:
+                params["symbols"] = ",".join(parsed.symbols)
+            raw = self._request_json(
+                "GET", ENDPOINTS["flow_history"], params=params, gated=True, pro_gated=True
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(OptionsFlowEnvelope, raw)
+            result = self._data_or_error(raw, "Recorded options flow is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(OptionsFlowEnvelope, result)
+            data, warnings = result
+            events: Any = data.get("events") if isinstance(data, Mapping) else data
+            try:
+                result_obj = OptionsFlowResult(
+                    events=[FlowEvent.model_validate(row) for row in events or []],
+                    has_more=bool(data.get("hasMore")) if isinstance(data, Mapping) else False,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    OptionsFlowEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected options-flow payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, data if isinstance(data, Mapping) else None)
+            return OptionsFlowEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("options_flow", parsed, produce)
+
+    def cot(self, request: CotInput | Mapping[str, Any]) -> CotEnvelope:
+        """CFTC positioning board, or one contract when code is given."""
+        parsed = self._validate_input(CotInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CotEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CotEnvelope)
+
+        def produce() -> CotEnvelope:
+            if parsed.code:
+                path = f"{ENDPOINTS['cot_contracts']}/{quote(parsed.code.strip(), safe='')}"
+                params: dict[str, Any] = {"report": parsed.report}
+            else:
+                path = ENDPOINTS["cot_board"]
+                params = {"report": parsed.report}
+                if parsed.trader_class:
+                    params["traderClass"] = parsed.trader_class
+            raw = self._request_json("GET", path, params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CotEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud COT board is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CotEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "COT board")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CotEnvelope, payload)
+            try:
+                rows = [CotRow.model_validate(row) for row in payload.get("rows") or []]
+                if parsed.code:
+                    result_obj: CotBoardResult | CotContractResult = CotContractResult(
+                        report=str(payload.get("report") or parsed.report),
+                        code=str(payload.get("code") or parsed.code.strip()),
+                        rows=rows,
+                    )
+                else:
+                    result_obj = CotBoardResult(
+                        report=str(payload.get("report") or parsed.report),
+                        trader_class=payload.get("traderClass") or parsed.trader_class,
+                        rows=rows,
+                    )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CotEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected COT payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CotEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("cot", parsed, produce)
+
+    def crypto_markets(
+        self, request: CryptoMarketsInput | Mapping[str, Any]
+    ) -> CryptoMarketsEnvelope:
+        """Crypto board (session-gated; pane refreshes every 15s upstream)."""
+        parsed = self._validate_input(CryptoMarketsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CryptoMarketsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CryptoMarketsEnvelope)
+
+        def produce() -> CryptoMarketsEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["crypto_markets"], gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CryptoMarketsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud crypto markets are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CryptoMarketsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "crypto markets")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CryptoMarketsEnvelope, payload)
+            try:
+                result_obj = CryptoMarketsResult(
+                    coins=[CryptoCoin.model_validate(row) for row in payload.get("coins") or []],
+                    source=payload.get("source") or {},
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CryptoMarketsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected crypto-markets payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CryptoMarketsEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("crypto_markets", parsed, produce)
+
+    def iv_screen(self, request: IvScreenInput | Mapping[str, Any]) -> IvScreenEnvelope:
+        """IV rich/cheap screen over stored daily history (session guess).
+
+        No Pro-gate evidence in source, but the route is ``pro_gated``: a
+        server denial surfaces verbatim, and a 402 plan body maps to the
+        typed ``pro_required`` (a bare 402 keeps the generic mapping).
+        """
+        parsed = self._validate_input(IvScreenInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IvScreenEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IvScreenEnvelope)
+
+        def produce() -> IvScreenEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["iv_screen"],
+                params={"symbols": ",".join(parsed.symbols)},
+                gated=True,
+                pro_gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IvScreenEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud IV screen is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IvScreenEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IV screen")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IvScreenEnvelope, payload)
+            try:
+                result_obj = IvScreenResult(
+                    rows=[IvScreenRow.model_validate(row) for row in payload.get("rows") or []]
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IvScreenEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IV-screen payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IvScreenEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("iv_screen", parsed, produce)
+
+    def iv_history(self, request: IvHistoryInput | Mapping[str, Any]) -> IvHistoryEnvelope:
+        """Stored daily IV history with rank/percentile (session guess).
+
+        Same denial contract as :meth:`iv_screen`: verbatim surfacing, ready
+        for a Pro gate on 402.
+        """
+        parsed = self._validate_input(IvHistoryInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IvHistoryEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IvHistoryEnvelope)
+
+        def produce() -> IvHistoryEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["iv_history"],
+                params={"symbol": parsed.symbol, "days": str(parsed.days)},
+                gated=True,
+                pro_gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IvHistoryEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud IV history is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IvHistoryEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IV history")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IvHistoryEnvelope, payload)
+            try:
+                result_obj = IvHistoryResult(
+                    symbol=parsed.symbol,
+                    days=parsed.days,
+                    status=payload.get("status"),
+                    points=list(payload.get("points") or []),
+                    iv30_rank=payload.get("iv30Rank"),
+                    iv30_percentile=payload.get("iv30Percentile"),
+                    iv90_rank=payload.get("iv90Rank"),
+                    iv90_percentile=payload.get("iv90Percentile"),
+                    latest=payload.get("latest"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IvHistoryEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IV-history payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IvHistoryEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("iv_history", parsed, produce)
+
+    def iv_surface(self, request: IvSurfaceInput | Mapping[str, Any]) -> IvSurfaceEnvelope:
+        """Stored close surface: dates list, or the surface for a date.
+
+        Same denial contract as :meth:`iv_screen`: verbatim surfacing, ready
+        for a Pro gate on 402. A live surface composes over
+        ``options_chain`` + ``yield_curve`` instead.
+        """
+        parsed = self._validate_input(IvSurfaceInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IvSurfaceEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IvSurfaceEnvelope)
+
+        def produce() -> IvSurfaceEnvelope:
+            if parsed.date:
+                raw = self._request_json(
+                    "GET",
+                    ENDPOINTS["iv_surface"],
+                    params={"symbol": parsed.symbol, "date": parsed.date},
+                    gated=True,
+                    pro_gated=True,
+                )
+            else:
+                raw = self._request_json(
+                    "GET",
+                    ENDPOINTS["iv_surface_dates"],
+                    params={"symbol": parsed.symbol},
+                    gated=True,
+                    pro_gated=True,
+                )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IvSurfaceEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud IV surface is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IvSurfaceEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IV surface")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IvSurfaceEnvelope, payload)
+            try:
+                result_obj = IvSurfaceResult(
+                    symbol=parsed.symbol,
+                    date=parsed.date or payload.get("date"),
+                    dates=list(payload.get("dates") or []),
+                    surface=payload.get("surface"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IvSurfaceEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IV-surface payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IvSurfaceEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("iv_surface", parsed, produce)
+
+    def debt_maturities(
+        self, request: DebtMaturitiesInput | Mapping[str, Any]
+    ) -> DebtMaturitiesEnvelope:
+        """US-GAAP debt maturities with filing provenance (session-gated)."""
+        parsed = self._validate_input(DebtMaturitiesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(DebtMaturitiesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(DebtMaturitiesEnvelope)
+
+        def produce() -> DebtMaturitiesEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["debt_maturities"],
+                params={"symbol": parsed.symbol},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(DebtMaturitiesEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud debt maturities are unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(DebtMaturitiesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "debt maturities")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(DebtMaturitiesEnvelope, payload)
+            try:
+                result_obj = DebtMaturitiesResult(
+                    symbol=parsed.symbol,
+                    total_principal=payload.get("totalPrincipal"),
+                    next_12m_share=payload.get("next12mShare"),
+                    next_3y_share=payload.get("next3yShare"),
+                    interest_expense=payload.get("interestExpense"),
+                    borrowing_cost=payload.get("borrowingCost"),
+                    filings=[
+                        DebtMaturityFiling.model_validate(row)
+                        for row in payload.get("filings") or []
+                    ],
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    DebtMaturitiesEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected debt-maturities payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return DebtMaturitiesEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("debt_maturities", parsed, produce)
+
+    def session_movers(
+        self, request: SessionMoversInput | Mapping[str, Any]
+    ) -> SessionMoversEnvelope:
+        """Pre-market / after-hours / gaps movers (session guess).
+
+        Same screener route, session categories only (gainers/losers/
+        most-active stay on ``digifetch_screener``). ``pro_gated`` so a
+        server plan denial surfaces verbatim either way.
+        """
+        parsed = self._validate_input(SessionMoversInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SessionMoversEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SessionMoversEnvelope)
+
+        def produce() -> SessionMoversEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["screener"],
+                params={
+                    "category": parsed.category,
+                    "side": parsed.side,
+                    "count": str(parsed.count),
+                    "mode": parsed.mode,
+                },
+                gated=True,
+                pro_gated=True,
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SessionMoversEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud session movers are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SessionMoversEnvelope, result)
+            data, warnings = result
+            rows: Any = data.get("movers") if isinstance(data, Mapping) else data
+            if rows is None and isinstance(data, Mapping):
+                rows = data.get("data")
+            try:
+                movers = [SessionMover.model_validate(row) for row in rows or []]
+                first = movers[0] if movers else None
+                result_obj = SessionMoversResult(
+                    category=parsed.category,
+                    side=parsed.side,
+                    # Phase/as-of ride the envelope in one shape and per row
+                    # in the other; prefer the envelope, fall back to the row.
+                    phase=(data.get("phase") if isinstance(data, Mapping) else None)
+                    or (first.phase if first else None),
+                    as_of=(data.get("asOf") if isinstance(data, Mapping) else None)
+                    or (first.as_of if first else None),
+                    movers=movers,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    SessionMoversEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected session-movers payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(
+                raw, data if isinstance(data, Mapping) else None, extra_stale=self._rows_stale(rows)
+            )
+            return SessionMoversEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("session_movers", parsed, produce)
+
+    def trending(
+        self, request: TrendingInput | Mapping[str, Any] | None = None
+    ) -> TrendingEnvelope:
+        """Yahoo trending symbols, hydrated with delayed Cloud quotes.
+
+        Venue-direct (the builtin pane hydrates the same way): trend symbols
+        come from Yahoo's trending endpoint, quotes from the anonymous Cloud
+        batch read. NOT attributed to Gloomberb; rows carry the Yahoo deep
+        link. An empty trending list is a typed ``upstream_error``, never an
+        empty success.
+        """
+        parsed = self._validate_input(TrendingInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TrendingEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TrendingEnvelope)
+
+        def produce() -> TrendingEnvelope:
+            warnings: list[str] = []
+            raw = self._request_json(
+                "GET",
+                YAHOO_TRENDING_PATH,
+                base_url=YAHOO_TRENDING_BASE_URL,
+                label="Yahoo",
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TrendingEnvelope, raw)
+            symbols = _yahoo_trending_symbols(raw.data)
+            if symbols is None:
+                return self._error_envelope(
+                    TrendingEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Yahoo trending returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            symbols = symbols[: parsed.limit]
+            if not symbols:
+                return self._error_envelope(
+                    TrendingEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Yahoo trending returned no symbols",
+                        retryable=False,
+                    ),
+                )
+            quotes: dict[str, Quote] = {}
+            batch = self.quotes_batch({"symbols": symbols})
+            if isinstance(batch.data, DigifetchError):
+                warnings.append(f"delayed quotes unavailable: {batch.data.message}")
+            else:
+                for item in batch.data.quotes:
+                    if item.quote is not None:
+                        quotes[item.symbol.upper()] = item.quote
+            rows: list[TrendingRow] = []
+            for rank, symbol in enumerate(symbols, start=1):
+                quote_data = quotes.get(symbol.upper())
+                rows.append(
+                    TrendingRow(
+                        symbol=symbol,
+                        rank=rank,
+                        price=quote_data.price if quote_data else None,
+                        change=quote_data.change if quote_data else None,
+                        change_percent=quote_data.change_percent if quote_data else None,
+                        volume=quote_data.volume if quote_data else None,
+                        market_state=quote_data.market_state if quote_data else None,
+                        venue_url=YAHOO_QUOTE_URL.format(symbol=symbol),
+                    )
+                )
+            return TrendingEnvelope(
+                data=TrendingResult(
+                    rows=rows,
+                    attribution=TRENDING_ATTRIBUTION,
+                    as_of=self._now().isoformat(),
+                ),
+                fetched_at=self._now(),
+                provider_id="yahoo-trending",
+                warnings=warnings,
+            )
+
+        return self._cached("trending", parsed, produce)
+
+    def substack(self, request: SubstackInput | Mapping[str, Any]) -> SubstackEnvelope:
+        """Own-account Substack reader (venue-direct, fail-soft).
+
+        No stored auth (``SUBSTACK_SESSION_COOKIE``) returns ``auth_required``
+        with login instructions and makes no request — the unauthenticated
+        pane renders the login view, never an error. An expired/rejected
+        session maps to ``auth_required`` (re-sign-in), never an
+        exception-shaped failure. NOT attributed to Gloomberb.
+        """
+        parsed = self._validate_input(SubstackInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SubstackEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SubstackEnvelope)
+
+        def produce() -> SubstackEnvelope:
+            if self._substack_cookie is None:
+                return self._error_envelope(
+                    SubstackEnvelope,
+                    DigifetchError(
+                        code="auth_required", message=SUBSTACK_LOGIN_HELP, retryable=False
+                    ),
+                )
+            cookies = self._substack_cookies()
+            host = f"{parsed.publication}.substack.com"
+            base_url = f"https://{host}"
+            if parsed.mode == "post":
+                post_id = (parsed.post_id or "").strip()
+                raw = self._request_json(
+                    "GET",
+                    f"/api/v1/posts/by-id/{quote(post_id, safe='')}",
+                    base_url=base_url,
+                    label="Substack",
+                    cookies=cookies,
+                )
+            elif parsed.mode == "inbox":
+                raw = self._request_json(
+                    "GET",
+                    "/api/v1/inbox/top",
+                    params={
+                        "inboxType": "inbox",
+                        "surface": "inbox_all",
+                        "limit": str(parsed.limit),
+                    },
+                    base_url=SUBSTACK_ORIGIN,
+                    label="Substack",
+                    cookies=cookies,
+                )
+            else:
+                raw = self._request_json(
+                    "GET",
+                    "/api/v1/posts",
+                    params={"limit": str(parsed.limit), "offset": str(parsed.offset)},
+                    base_url=base_url,
+                    label="Substack",
+                    cookies=cookies,
+                    allow_array=True,
+                )
+            if isinstance(raw, DigifetchError):
+                # An expired/rejected own-account session drops back to the
+                # login view: auth_required with re-sign-in help, never a
+                # generic upstream error.
+                if "HTTP 401" in raw.message or "HTTP 403" in raw.message:
+                    return self._error_envelope(
+                        SubstackEnvelope,
+                        DigifetchError(
+                            code="auth_required",
+                            message=(
+                                "Substack rejected the stored session (expired or "
+                                f"revoked); {SUBSTACK_LOGIN_HELP}"
+                            ),
+                            retryable=False,
+                        ),
+                    )
+                return self._error_envelope(SubstackEnvelope, raw)
+            result = self._data_or_error(raw, "Substack reader is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SubstackEnvelope, result)
+            data, warnings = result
+            try:
+                if parsed.mode == "post":
+                    post = data.get("post") if isinstance(data, Mapping) else None
+                    if not isinstance(post, Mapping):
+                        raise ValueError("post detail carries no post object")
+                    result_obj = SubstackResult(
+                        publication=parsed.publication,
+                        mode=parsed.mode,
+                        post_id=(parsed.post_id or "").strip(),
+                        post=dict(post),
+                        attribution=SUBSTACK_ATTRIBUTION,
+                    )
+                else:
+                    items: Any = data
+                    if isinstance(data, Mapping):
+                        items = data.get("posts", data)
+                    posts = [SubstackPost.model_validate(row) for row in items or []]
+                    result_obj = SubstackResult(
+                        publication=parsed.publication,
+                        mode=parsed.mode,
+                        posts=posts,
+                        attribution=SUBSTACK_ATTRIBUTION,
+                    )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    SubstackEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected Substack payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            return SubstackEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                provider_id="substack-venue",
+                warnings=warnings,
+            )
+
+        return self._cached("substack", parsed, produce)
+
+    def ipo_calendar(
+        self, request: IpoCalendarInput | Mapping[str, Any] | None = None
+    ) -> IpoCalendarEnvelope:
+        """Worldwide IPO calendar (Cloud; public, works signed out)."""
+        parsed = self._validate_input(IpoCalendarInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IpoCalendarEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IpoCalendarEnvelope)
+
+        def produce() -> IpoCalendarEnvelope:
+            params: dict[str, Any] = {"limit": str(parsed.limit)}
+            if parsed.status:
+                params["status"] = parsed.status
+            if parsed.region:
+                params["region"] = parsed.region
+            if parsed.deal_type:
+                params["type"] = parsed.deal_type
+            if parsed.from_date:
+                params["fromDate"] = parsed.from_date
+            if parsed.to_date:
+                params["toDate"] = parsed.to_date
+            raw = self._request_json("GET", ENDPOINTS["ipo_calendar"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IpoCalendarEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud IPO calendar is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IpoCalendarEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IPO calendar")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IpoCalendarEnvelope, payload)
+            try:
+                result_obj = IpoCalendarResult(
+                    deals=[IpoDeal.model_validate(row) for row in payload.get("deals") or []],
+                    status=parsed.status,
+                    region=parsed.region,
+                    deal_type=parsed.deal_type,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IpoCalendarEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IPO-calendar payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IpoCalendarEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("ipo_calendar", parsed, produce)
+
     # -- calculators + compositions (130-coverage Task 2) --------------------
     #
     # Pure calculators run local math only (no transport, no cookies). The
@@ -3585,9 +4961,15 @@ class GloomberbClient:
     ) -> EnvT:
         # Cache first: a warm enrichment read still serves during an upstream
         # outage, and the breaker only guards real requests. The key includes
-        # the session fingerprint: responses are entitlement-sensitive, so a
-        # cached preview/full report must never be served across sessions.
-        key = (name, session_cache_fingerprint(self._session_cookie), request.model_dump_json())
+        # both session fingerprints: responses are entitlement-sensitive, so a
+        # cached preview/full report must never be served across sessions —
+        # and the Substack reader is account-sensitive under its own cookie.
+        key = (
+            name,
+            session_cache_fingerprint(self._session_cookie),
+            session_cache_fingerprint(self._substack_cookie),
+            request.model_dump_json(),
+        )
         now = self._monotonic()
         with self._cache_lock:
             self._evict_expired(now)
@@ -3638,6 +5020,24 @@ class GloomberbClient:
         with self._breaker_lock:
             self._consecutive_failures = 0
             self._opened_at = None
+
+    def _substack_cookies(self) -> dict[str, str] | None:
+        """Own-account Substack cookies (bare token fans out over both names).
+
+        Only the Substack reader sends these; Cloud routes never see them.
+        Mirrors :meth:`_session_cookies` (bare token or ``name=value``).
+        """
+        raw = self._substack_cookie
+        if not raw:
+            return None
+        if "=" in raw:
+            name, _, value = raw.partition("=")
+            name, value = name.strip(), value.strip()
+            if name and value:
+                return {name: value}
+        # A bare token is sent under every upstream Substack cookie name, the
+        # same fallback the TS plugin uses when it has not observed a name.
+        return {name: raw for name in SUBSTACK_COOKIE_NAMES}
 
     def _session_cookies(self) -> dict[str, str] | None:
         raw = self._session_cookie
@@ -3749,6 +5149,7 @@ class GloomberbClient:
         retry_policy: RetryPolicy | None = None,
         base_url: str | None = None,
         label: str = "Gloomberb",
+        cookies: dict[str, str] | None = None,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -3767,7 +5168,10 @@ class GloomberbClient:
         if breaker is not None:
             return breaker
         url = f"{base_url or self._base_url}{path}"
-        cookies = self._session_cookies() if gated else None
+        # An explicit cookie jar (the own-account Substack reader) wins; gated
+        # Cloud routes attach the Gloom session cookie, ungated reads send none.
+        if cookies is None:
+            cookies = self._session_cookies() if gated else None
 
         def attempt() -> FetchResult:
             self._rate_limiter.acquire()

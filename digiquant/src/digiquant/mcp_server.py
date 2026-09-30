@@ -557,6 +557,25 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_market_valuation",
         "digifetch_money_markets",
         "digifetch_rate_path",
+        "digifetch_time_and_sales",
+        "digifetch_quote_recap",
+        "digifetch_estimate_revisions",
+        "digifetch_short_volume",
+        "digifetch_hiring",
+        "digifetch_central_bank_rates",
+        "digifetch_cdx",
+        "digifetch_sovereign_cds",
+        "digifetch_options_flow",
+        "digifetch_cot",
+        "digifetch_crypto_markets",
+        "digifetch_iv_screen",
+        "digifetch_iv_history",
+        "digifetch_iv_surface",
+        "digifetch_debt_maturities",
+        "digifetch_session_movers",
+        "digifetch_trending",
+        "digifetch_substack",
+        "digifetch_ipo_calendar",
         "luxalgo_library_search",
         "luxalgo_library_get_concept",
         "luxalgo_library_get_indicator",
@@ -1991,6 +2010,352 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Probe-backed tools (130-coverage Task 5) ─────────────────────────────
+    #
+    # One wrapper per Task 4 GO verdict (NO-ROUTE verdicts compose over
+    # shipped tools instead). Session-gated Cloud reads answer a typed
+    # auth_required with no request when the cookie is absent.
+
+    @_maybe_tool("digifetch_time_and_sales")
+    def digifetch_time_and_sales(symbol: str, exchange: str) -> str:
+        """Time and sales prints for one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE and `exchange`. Returns the trades
+        half of the tape snapshot plus the session high/low and feed
+        counters. Prices are delayed. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().time_and_sales(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_quote_recap")
+    def digifetch_quote_recap(symbol: str, exchange: str) -> str:
+        """NBBO quote recap for one symbol (Gloomberb Cloud; session-gated).
+
+        Same tape route as time-and-sales (the quotes tab of the same pane).
+        Requires GLOOMBERB_SESSION_COOKIE and `exchange`. Prices are delayed.
+        Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().quote_recap(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_estimate_revisions")
+    def digifetch_estimate_revisions(symbol: str, exchange: str | None = None) -> str:
+        """Estimate revisions for one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Per-period observations, 7/30d
+        revision breadth, surprises, guidance, coverage/gaps. Delayed. Adds
+        a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().estimate_revisions(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_short_volume")
+    def digifetch_short_volume(symbol: str, scope: str = "nms") -> str:
+        """FINRA daily short volume, NMS or OTC (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Rows carry the FINRA source link
+        plus the latest row, change, percentile, and coverage window.
+        Delayed. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().short_volume({"symbol": symbol, "scope": scope})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_hiring")
+    def digifetch_hiring(
+        mode: str = "summary",
+        ticker: str | None = None,
+        name: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> str:
+        """Hiring summary / postings / movers (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. mode=summary (needs ticker) or a
+        pending status; mode=postings (needs ticker) pages postings;
+        mode=movers needs no ticker. Delayed. Adds a term.gloom.sh deep
+        link when a ticker is given.
+        """
+        try:
+            envelope = _build_gloomberb_client().hiring(
+                {
+                    "mode": mode,
+                    "ticker": ticker,
+                    "name": name,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_central_bank_rates")
+    def digifetch_central_bank_rates() -> str:
+        """Central-bank policy-rate board (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. No parameters. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().central_bank_rates({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_cdx")
+    def digifetch_cdx(days: int | None = None) -> str:
+        """Index-CDS board (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `days` sets the history depth.
+        Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().cdx({"days": days})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_sovereign_cds")
+    def digifetch_sovereign_cds(days: int | None = None) -> str:
+        """Sovereign-CDS board, 5Y spreads in bp (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `days` sets the history depth.
+        Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().sovereign_cds({"days": days})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_options_flow")
+    def digifetch_options_flow(
+        before: str | None = None,
+        limit: int | None = None,
+        min_premium: float | None = None,
+        right: str | None = None,
+        kind: str | None = None,
+        min_vol_oi: float | None = None,
+        max_expiry_days: int | None = None,
+        symbols: list[str] | None = None,
+    ) -> str:
+        """Recorded options-flow history (Gloomberb Cloud; **requires Pro**).
+
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Pro plan — no delayed
+        tier, so a denial is typed auth_required/pro_required, never an
+        empty success. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().options_flow(
+                {
+                    "before": before,
+                    "limit": limit,
+                    "min_premium": min_premium,
+                    "right": right,
+                    "kind": kind,
+                    "min_vol_oi": min_vol_oi,
+                    "max_expiry_days": max_expiry_days,
+                    "symbols": symbols,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_cot")
+    def digifetch_cot(
+        report: str = "legacy",
+        trader_class: str | None = None,
+        code: str | None = None,
+    ) -> str:
+        """CFTC positioning board or one contract (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `code` reads one contract instead
+        of the board. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().cot(
+                {"report": report, "trader_class": trader_class, "code": code}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_crypto_markets")
+    def digifetch_crypto_markets() -> str:
+        """Crypto board, up to 100 coins (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. No parameters. The
+        server-declared source passes through (no vendor asserted here).
+        Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().crypto_markets({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_iv_screen")
+    def digifetch_iv_screen(symbols: list[str]) -> str:
+        """IV rich/cheap screen over stored history (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. A server plan denial surfaces
+        verbatim (typed pro_required on a 402 plan body). Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().iv_screen({"symbols": symbols})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_iv_history")
+    def digifetch_iv_history(symbol: str, days: int = 1100) -> str:
+        """Stored daily IV history with rank/percentile (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. A server plan denial surfaces
+        verbatim (typed pro_required on a 402 plan body). Delayed. Adds a
+        term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().iv_history({"symbol": symbol, "days": days})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_iv_surface")
+    def digifetch_iv_surface(symbol: str, date: str | None = None) -> str:
+        """Stored volatility-close surface (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Without `date` lists the stored
+        surface dates; with `date` reads that close surface. A server plan
+        denial surfaces verbatim (typed pro_required on a 402 plan body).
+        Delayed. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().iv_surface({"symbol": symbol, "date": date})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_debt_maturities")
+    def digifetch_debt_maturities(symbol: str) -> str:
+        """US-GAAP debt maturities with provenance (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Delayed. Adds a term.gloom.sh
+        deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().debt_maturities({"symbol": symbol})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_session_movers")
+    def digifetch_session_movers(
+        category: str, side: str, count: int = 25, mode: str = "cache-first"
+    ) -> str:
+        """Pre-market / after-hours / gaps movers (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Session categories only
+        (gainers/losers/most-active stay on digifetch_screener). A server
+        plan denial surfaces verbatim. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().session_movers(
+                {"category": category, "side": side, "count": count, "mode": mode}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_trending")
+    def digifetch_trending(limit: int = 10) -> str:
+        """Yahoo trending symbols with delayed quotes (venue-direct).
+
+        Trend symbols come from Yahoo Finance's public endpoint, rows carry
+        the Yahoo deep link and Yahoo-only attribution. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().trending({"limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_substack")
+    def digifetch_substack(
+        publication: str,
+        mode: str = "feed",
+        post_id: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> str:
+        """Own-account Substack reader (venue-direct).
+
+        Reads the publication's Substack API with your own account
+        (unofficial, ToS grey area) and carries Substack-only attribution.
+        Requires SUBSTACK_SESSION_COOKIE — without it the call is a typed
+        auth_required with login instructions and no request. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().substack(
+                {
+                    "publication": publication,
+                    "mode": mode,
+                    "post_id": post_id,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_ipo_calendar")
+    def digifetch_ipo_calendar(
+        status: str | None = None,
+        region: str | None = None,
+        deal_type: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 50,
+    ) -> str:
+        """Worldwide IPO calendar (Gloomberb Cloud, anonymous).
+
+        No session needed — the route is public. Filter by status/region/
+        type/date window. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().ipo_calendar(
+                {
+                    "status": status,
+                    "region": region,
+                    "deal_type": deal_type,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
 
     # ── LuxAlgo hosted family (#4779 P0, #4844) ──────────────────────────────
     #

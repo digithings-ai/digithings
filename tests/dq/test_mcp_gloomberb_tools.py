@@ -91,6 +91,26 @@ DIGIFETCH_TOOLS = {
     "digifetch_market_valuation",
     "digifetch_money_markets",
     "digifetch_rate_path",
+    # probe-backed tools (130-coverage Task 5, one per Task 4 GO verdict)
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_central_bank_rates",
+    "digifetch_cdx",
+    "digifetch_sovereign_cds",
+    "digifetch_options_flow",
+    "digifetch_cot",
+    "digifetch_crypto_markets",
+    "digifetch_iv_screen",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
+    "digifetch_session_movers",
+    "digifetch_trending",
+    "digifetch_substack",
+    "digifetch_ipo_calendar",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -111,6 +131,15 @@ LINKED_TOOLS = {
     "digifetch_risk_reports",
     "digifetch_short_interest",
     "digifetch_equity_diagnostic",
+    # probe-backed tools (130-coverage Task 5) addressing one listing
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
 }
 
 AAPL_QUOTE = {
@@ -148,7 +177,14 @@ def _envelope(data: Any, status: str = "success", **extra: Any) -> httpx.Respons
 def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) -> GloomberbClient:
     fetcher = HttpFetcher(
         transport=httpx.MockTransport(handler),
-        allowed_hosts=["api.gloom.sh"],
+        allowed_hosts=[
+            "api.gloom.sh",
+            # Venue-direct probe tools (130-coverage Task 5): Yahoo trending
+            # and the own-account Substack reader ride the same transport.
+            "query1.finance.yahoo.com",
+            "substack.com",
+            "examplepub.substack.com",
+        ],
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
@@ -416,6 +452,327 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
             200,
             json={"status": "success", "data": [{"symbol": "AAPL", "price": 200.0}]},
         )
+    # Probe-backed tools (130-coverage Task 5): one branch per Task 4 GO
+    # verdict route (shapes mirror tests/dq/data/test_gloomberb_probe_tools.py).
+    if path.startswith("/cloud/tape/"):
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "exchange": "NASDAQ",
+                "sessionHigh": 201.5,
+                "sessionLow": 198.0,
+                "trades": [
+                    {
+                        "id": "t1",
+                        "timestamp": "2026-09-30T19:59:00Z",
+                        "price": 200.5,
+                        "size": 100,
+                        "exchange": "NASDAQ",
+                        "conditions": ["@"],
+                        "tape": "C",
+                    }
+                ],
+                "quotes": [
+                    {
+                        "bid": 200.4,
+                        "ask": 200.6,
+                        "bidSize": 5,
+                        "askSize": 8,
+                        "venues": ["NASDAQ"],
+                        "conditions": ["R"],
+                    }
+                ],
+                "capacity": 1000,
+                "dropped": 0,
+                "cancelled": 0,
+            }
+        )
+    if path.startswith("/cloud/research/estimates/"):
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "periods": [
+                    {
+                        "period": "Q3-2026",
+                        "current": 1.75,
+                        "recorded": 1.70,
+                        "lookback": 1.68,
+                        "source": "yahoo",
+                    }
+                ],
+                "breadth7d": {"up": 5, "down": 2},
+                "surprises": [{"period": "Q2-2026", "actual": 1.9, "estimate": 1.8}],
+                "guidance": "raised",
+                "coverage": ["Q3-2026"],
+                "gaps": [],
+            }
+        )
+    if path == "/cloud/short-volume":
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "scope": "nms",
+                "rows": [
+                    {
+                        "date": "2026-09-29",
+                        "shortVolume": 1000.0,
+                        "shortExemptVolume": 10.0,
+                        "totalVolume": 5000.0,
+                        "ratioPercent": 20.0,
+                        "markets": ["NASDAQ"],
+                        "sourceUrl": "https://example.test/finra",
+                    }
+                ],
+                "latest": {"date": "2026-09-29", "ratioPercent": 20.0},
+                "change": 1.5,
+                "percentile": 80.0,
+                "coverageStart": "2026-09-01",
+                "coverageEnd": "2026-09-29",
+            }
+        )
+    if path == "/cloud/jobs":
+        return _envelope(
+            {
+                "asOf": "2026-09-30",
+                "covered": 500,
+                "movers": [
+                    {
+                        "ticker": "NVDA",
+                        "openCount": 900,
+                        "employeeCount": 30000,
+                        "change30d": 25,
+                        "new7d": 10,
+                        "topFunction": "Engineering",
+                    }
+                ],
+            }
+        )
+    if path.endswith("/postings"):
+        return _envelope(
+            {
+                "postings": [{"id": "p1", "title": "Engineer", "location": "Cupertino"}],
+                "total": 120,
+            }
+        )
+    if path.startswith("/cloud/jobs/"):
+        return _envelope({"ticker": "AAPL", "status": "ready", "openCount": 120})
+    if path == "/cloud/econ/central-bank-rates":
+        return _envelope(
+            {
+                "rows": [
+                    {
+                        "bank": "Federal Reserve",
+                        "rate": 4.5,
+                        "rangeLow": 4.25,
+                        "rangeHigh": 4.5,
+                        "sourceSeriesIds": ["FEDTARRR", "EFFR"],
+                        "nextMeeting": "2026-10-29",
+                        "state": "confirmed",
+                    }
+                ]
+            }
+        )
+    if path == "/cloud/credit/cdx":
+        return _envelope(
+            {
+                "boards": [{"name": "CDX IG", "spread": 65.0, "maturity": "5Y", "onTheRun": True}],
+                "points": [{"date": "2026-09-29", "spread": 65.0}],
+            }
+        )
+    if path == "/cloud/credit/sovr":
+        return _envelope(
+            {
+                "rows": [
+                    {
+                        "sovereign": "Italy",
+                        "spreadBp": 120.0,
+                        "change1w": 5.0,
+                        "change1m": -10.0,
+                        "points": [{"date": "2026-09-29", "spread": 120.0}],
+                    }
+                ]
+            }
+        )
+    if path == "/market/scanner/flow/history":
+        return httpx.Response(
+            200,
+            json={
+                "events": [
+                    {
+                        "id": "f1",
+                        "at": "2026-09-30T19:00:00Z",
+                        "underlying": "AAPL",
+                        "contract": "AAPL260116C00200000",
+                        "right": "C",
+                        "strike": 200.0,
+                        "expiry": "2026-01-16",
+                        "side": "ask",
+                        "kind": "sweep",
+                        "size": 50,
+                        "price": 2.5,
+                        "premium": 12500.0,
+                        "vol": 100,
+                        "openInterest": 500,
+                        "volOi": 0.2,
+                        "iv": 0.35,
+                    }
+                ],
+                "hasMore": True,
+            },
+        )
+    if path == "/cloud/cot/board":
+        return _envelope(
+            {
+                "report": "legacy",
+                "traderClass": "managed-money",
+                "rows": [
+                    {
+                        "code": "134741",
+                        "contract": "3M SOFR",
+                        "asOf": "2026-09-22",
+                        "traderClass": "managed-money",
+                        "long": 1000,
+                        "short": 800,
+                        "spreading": 50,
+                        "net": 200,
+                        "pct1y": 90.0,
+                        "pct3y": 75.0,
+                    }
+                ],
+            }
+        )
+    if path.startswith("/cloud/cot/contracts/"):
+        return _envelope({"report": "legacy", "code": "134741", "rows": []})
+    if path == "/cloud/crypto/markets":
+        return _envelope(
+            {
+                "coins": [
+                    {
+                        "symbol": "BTC",
+                        "name": "Bitcoin",
+                        "price": 110000.0,
+                        "change24h": 2.5,
+                        "dayHigh": 111000.0,
+                        "dayLow": 108000.0,
+                        "volume24h": 5e10,
+                        "marketCap": 2.1e12,
+                        "supply": 19.8e6,
+                        "range52w": [38000.0, 112000.0],
+                        "priceYearAgo": 65000.0,
+                        "closes30d": [100000.0, 101000.0],
+                    }
+                ],
+                "source": {"name": "venue", "url": "https://example.test/btc"},
+            }
+        )
+    if path == "/cloud/iv/screen":
+        return _envelope(
+            {
+                "rows": [
+                    {
+                        "symbol": "SPY",
+                        "status": "ready",
+                        "iv30Value": 15.2,
+                        "iv30Date": "2026-09-29",
+                        "iv30Rank": 30.0,
+                        "iv30Percentile": 28.0,
+                        "iv90Value": 16.1,
+                        "iv90Date": "2026-09-29",
+                        "iv90Rank": 35.0,
+                        "iv90Percentile": 33.0,
+                        "latest": 15.2,
+                        "skew25d": -2.1,
+                    }
+                ]
+            }
+        )
+    if path == "/cloud/iv/history":
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "days": 30,
+                "status": "ready",
+                "points": [{"date": "2026-09-29", "iv30": 22.5, "iv90": 24.0}],
+                "iv30Rank": 40.0,
+                "iv30Percentile": 38.0,
+                "iv90Rank": 45.0,
+                "iv90Percentile": 42.0,
+                "latest": 22.5,
+            }
+        )
+    if path == "/cloud/iv/surface-dates":
+        return _envelope({"symbol": "AAPL", "dates": ["2026-09-26", "2026-09-29"]})
+    if path == "/cloud/iv/surface":
+        return _envelope(
+            {"symbol": "AAPL", "date": "2026-09-29", "surface": {"expiries": ["2026-10-17"]}}
+        )
+    if path == "/cloud/debt-maturities":
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "totalPrincipal": 100e9,
+                "next12mShare": 0.08,
+                "next3yShare": 0.25,
+                "interestExpense": 4e9,
+                "borrowingCost": 0.04,
+                "filings": [
+                    {
+                        "accession": "0000320193-26-000001",
+                        "filed": "2026-08-01",
+                        "form": "10-Q",
+                        "principal": 10e9,
+                    }
+                ],
+            }
+        )
+    if path == "/cloud/ipo/calendar":
+        return _envelope(
+            {
+                "deals": [
+                    {
+                        "id": "d1",
+                        "company": "Acme",
+                        "symbol": "ACME",
+                        "mic": "XNYS",
+                        "venue": "NYSE",
+                        "status": "priced",
+                        "priceLow": 20.0,
+                        "priceHigh": 22.0,
+                        "offerSize": 500e6,
+                        "filedDate": "2026-06-01",
+                        "listedDate": "2026-09-28",
+                        "firstDayOpen": 25.0,
+                        "firstDayClose": 27.5,
+                        "firstDayReturn": 0.25,
+                    }
+                ]
+            }
+        )
+    if host == "query1.finance.yahoo.com" and path == "/v1/finance/trending/US":
+        return httpx.Response(
+            200,
+            json={
+                "finance": {
+                    "result": [{"count": 2, "quotes": [{"symbol": "NVDA"}, {"symbol": "TSLA"}]}],
+                    "error": None,
+                }
+            },
+        )
+    if host == "examplepub.substack.com" and path == "/api/v1/posts":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 123,
+                    "title": "Hello",
+                    "subtitle": "World",
+                    "slug": "hello",
+                    "post_date": "2026-09-29T10:00:00Z",
+                    "audience": "everyone",
+                    "canonical_url": "https://examplepub.substack.com/p/hello",
+                }
+            ],
+        )
     if path == "/cloud/sec/13f/funds":
         return httpx.Response(200, json=[{"name": "BERKSHIRE", "CIK": "0000949012"}])
     if path == "/cloud/sec/13f/topfunds":
@@ -578,8 +935,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_51_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 51
+def test_all_70_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 70
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -591,6 +948,10 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     unattributed = {
         "digifetch_earnings_calendar",
         "digifetch_prediction_markets",
+        # Venue-direct (130-coverage Task 5): Yahoo trending and the
+        # own-account Substack reader must not claim terminal sourcing.
+        "digifetch_trending",
+        "digifetch_substack",
         # Calculators + compositions (130-coverage Task 2): derived math must
         # not claim Gloomberb sourcing; the manifest names the math source.
         "digifetch_options_calculator",
@@ -625,6 +986,14 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     assert "Polymarket" in markets_description
     assert "Kalshi" in markets_description
     assert "Gloomberb" not in markets_description
+    # Venue-direct (130-coverage Task 5): the descriptions name the venue,
+    # never Gloomberb.
+    trending_description = rows["digifetch_trending"]["function"]["description"]
+    assert "Yahoo" in trending_description
+    assert "Gloomberb" not in trending_description
+    substack_description = rows["digifetch_substack"]["function"]["description"]
+    assert "Substack" in substack_description
+    assert "Gloomberb" not in substack_description
     # Calculator + composition descriptions name the math source, never Gloomberb.
     math_sources = {
         "digifetch_options_calculator": "Black-Scholes",
@@ -873,6 +1242,26 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_market_valuation": (),
     "digifetch_money_markets": (),
     "digifetch_rate_path": (),
+    # probe-backed tools (130-coverage Task 5)
+    "digifetch_time_and_sales": ("AAPL", "NASDAQ"),
+    "digifetch_quote_recap": ("AAPL", "NASDAQ"),
+    "digifetch_estimate_revisions": ("AAPL",),
+    "digifetch_short_volume": ("AAPL",),
+    "digifetch_hiring": ("summary", "AAPL"),
+    "digifetch_central_bank_rates": (),
+    "digifetch_cdx": (),
+    "digifetch_sovereign_cds": (),
+    "digifetch_options_flow": (),
+    "digifetch_cot": (),
+    "digifetch_crypto_markets": (),
+    "digifetch_iv_screen": (["SPY"],),
+    "digifetch_iv_history": ("AAPL",),
+    "digifetch_iv_surface": ("AAPL",),
+    "digifetch_debt_maturities": ("AAPL",),
+    "digifetch_session_movers": ("premarket", "up"),
+    "digifetch_trending": (),
+    "digifetch_substack": ("examplepub",),
+    "digifetch_ipo_calendar": (),
 }
 
 
@@ -888,6 +1277,8 @@ _TWO_REQUEST_TOOLS = {
     "digifetch_prediction_markets",
     "digifetch_fx_cross_rates",
     "digifetch_vix_term_structure",
+    # Yahoo trending hydrates its symbols with one quote-batch read.
+    "digifetch_trending",
 }
 
 #: Portfolio-math compositions (130-coverage Task 3): wire requests one sweep
@@ -941,6 +1332,10 @@ def test_every_tool_returns_attributed_json(
     unattributed = {
         "digifetch_earnings_calendar",
         "digifetch_prediction_markets",
+        # Venue-direct (130-coverage Task 5): Yahoo trending and the
+        # own-account Substack reader must not claim terminal sourcing.
+        "digifetch_trending",
+        "digifetch_substack",
         # Calculators + compositions (130-coverage Task 2): derived math must
         # not claim Gloomberb sourcing.
         "digifetch_options_calculator",
@@ -1681,6 +2076,9 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "pro"} == {
         "digifetch_transcripts",
         "digifetch_screener",
+        # Probe-backed (130-coverage Task 5): FLOW is the one scanner with no
+        # delayed tier — the recorded-history route fails closed on denial.
+        "digifetch_options_flow",
     }
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "preview"} == {
         "digifetch_equity_diagnostic"
@@ -1695,6 +2093,27 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
         "digifetch_tweet_search",
         "digifetch_short_interest",
         "digifetch_saved_searches",
+        # Probe-backed tools (130-coverage Task 5): Cloud reads behind the
+        # session gate (zero-HTTP auth_required without the cookie).
+        "digifetch_time_and_sales",
+        "digifetch_quote_recap",
+        "digifetch_estimate_revisions",
+        "digifetch_short_volume",
+        "digifetch_hiring",
+        "digifetch_central_bank_rates",
+        "digifetch_cdx",
+        "digifetch_sovereign_cds",
+        "digifetch_cot",
+        "digifetch_crypto_markets",
+        "digifetch_iv_screen",
+        "digifetch_iv_history",
+        "digifetch_iv_surface",
+        "digifetch_debt_maturities",
+        "digifetch_session_movers",
+    }
+    assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "venue_session"} == {
+        # Own-account Substack reader: fail-soft without SUBSTACK_SESSION_COOKIE.
+        "digifetch_substack",
     }
 
 
@@ -1740,6 +2159,9 @@ def test_entitlement_wire_access_with_a_session_cookie(
 
     assert name in TOOL_ENTITLEMENTS  # every digifetch tool declares one
     calls: list[int] = []
+    # The own-account Substack reader needs its venue cookie, not the
+    # Gloomberb one, to reach the wire.
+    monkeypatch.setenv("SUBSTACK_SESSION_COOKIE", "substack.sid=test")
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(1)

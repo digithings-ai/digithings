@@ -244,12 +244,15 @@ def _composition_handler(request: httpx.Request) -> httpx.Response:
                 "info": {"id": "VIXCLS", "title": "VIX"},
             },
         )
-    if path == "/cloud/econ/series/VIX3M":
+    # Controller ruling (130-coverage Task 5): the FRED far leg is VXVCLS
+    # (FRED 3M, labeled "VIX 3M"). VIX3M as such is the Yahoo/CBOE index
+    # symbol ^VIX3M, not a FRED id.
+    if path == "/cloud/econ/series/VXVCLS":
         return httpx.Response(
             200,
             json={
                 "observations": [{"date": "2026-09-29", "value": 22.0}],
-                "info": {"id": "VIX3M", "title": "3-Month VIX"},
+                "info": {"id": "VXVCLS", "title": "3-Month VIX"},
             },
         )
     raise AssertionError(f"unexpected request: {request.url}")
@@ -338,12 +341,12 @@ def test_vix_term_structure_reports_contango() -> None:
 
 def test_vix_term_structure_reports_inversion() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/cloud/econ/series/VIX3M":
+        if request.url.path == "/cloud/econ/series/VXVCLS":
             return httpx.Response(
                 200,
                 json={
                     "observations": [{"date": "2026-09-29", "value": 18.0}],
-                    "info": {"id": "VIX3M", "title": "3-Month VIX"},
+                    "info": {"id": "VXVCLS", "title": "3-Month VIX"},
                 },
             )
         return _composition_handler(request)
@@ -356,7 +359,7 @@ def test_vix_term_structure_reports_inversion() -> None:
 
 def test_vix_term_structure_upstream_error_when_a_series_is_missing() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/cloud/econ/series/VIX3M":
+        if request.url.path == "/cloud/econ/series/VXVCLS":
             return httpx.Response(404, json={"status": "error", "message": "no such series"})
         return _composition_handler(request)
 
