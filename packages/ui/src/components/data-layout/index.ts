@@ -5,5 +5,6 @@ export { DotMatrixStat, type DotMatrixStatProps } from "./DotMatrixStat";
 export { BentoGrid, BentoCell, type BentoSpan } from "./BentoGrid";
 export { ProductFrame, type ProductFrameProps } from "./ProductFrame";
 export { CardRail, type CardRailProps } from "./CardRail";
+export { MediaFrame, type MediaFrameProps } from "./MediaFrame";
 export { FeatureCell, type FeatureCellProps } from "./FeatureCell";
 export { TestimonialWall, type TestimonialQuote, type TestimonialWallProps } from "./TestimonialWall";
