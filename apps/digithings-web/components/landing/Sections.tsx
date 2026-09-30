@@ -43,7 +43,7 @@ import { OpenSourceLive } from "./OpenSourceLive";
 const FAQ: { q: string; a: string }[] = [
   {
     q: "What does it cost?",
-    a: "There is no license fee. The monorepo is MIT-licensed, readable without an account, and runs at $0 marginal on your hardware; model usage is billed by your own provider, on your own key. We charge for integration work only, with no hosted tier or usage bill.",
+    a: "You don't pay for the software. It runs on your hardware, with your own provider key; model usage is billed by that provider. We charge for integration work only, with no hosted tier.",
   },
   {
     q: "Where does my provider key live?",

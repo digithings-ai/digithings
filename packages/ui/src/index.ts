@@ -503,6 +503,7 @@ export {
   FooterCells,
   type FooterCell,
   type FooterCellsProps,
+  type FooterMetaLink,
 } from "./components/footer";
 
 // page-geometry family (D1, #4429) — the persistent page structure and the

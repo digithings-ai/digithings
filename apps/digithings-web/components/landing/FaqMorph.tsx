@@ -62,12 +62,11 @@ import { LiveAsk } from "./LiveAsk";
  * ## Fallbacks
  *
  * Below the grid's 960px two-column breakpoint and under `prefers-reduced-motion`
- * the effect never runs (`MORPH_MEDIA`), no inline height or transform is ever
- * written, and the band is today's static two-column layout (single column on
- * narrow screens). With no JS at all the same natural layout renders, because
- * the inline track height only ever comes from the effect. The `details`/
- * `summary` semantics, the h2, the `#faq` id and the `full screen chat` handoff
- * are untouched: the morph moves pixels, not markup.
+ * the effect never runs (`MORPH_MEDIA`). Narrowing the window cancels any
+ * frame already queued, and the CSS fallback clears a transform that landed
+ * anyway. The band is then the questions with the chat directly underneath,
+ * both in the flow and both clickable. With no JS at all the same layout
+ * renders, because the inline track height only ever comes from the effect.
  */
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -172,16 +171,17 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
       faq.style.pointerEvents = "";
     };
 
-    let ticking = false;
+    let enabled = false;
+    let raf = 0;
     const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
+      if (!enabled || raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (!enabled) return;
         const top = wrap.getBoundingClientRect().top;
         // The hold: p stays 0 for the first HOLD_VH of scroll (chat stays big
         // and askable), then runs 0→1 over the morph distance.
         apply(distance > 0 ? clamp((stickyTop - top - hold) / distance, 0, 1) : 0);
-        ticking = false;
       });
     };
 
@@ -193,6 +193,8 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
     let observer: ResizeObserver | undefined;
 
     const enable = () => {
+      if (enabled) return;
+      enabled = true;
       measure();
       onScroll();
       observer = new ResizeObserver(onResize);
@@ -202,9 +204,13 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
     };
 
     const disable = () => {
+      enabled = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
       observer?.disconnect();
+      observer = undefined;
       reset();
     };
 

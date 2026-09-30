@@ -228,4 +228,32 @@ describe("treemapAnchored", () => {
       }
     }
   });
+
+  it("keeps a side tile at its minimum when the focused tile would otherwise leave a sliver", () => {
+    const NW = 1100;
+    const NH = 700;
+    const tileMins = weights.map(() => ({ minW: 184, minH: 100 }));
+    const layout = treemapAreasConstrained(weights, NW, NH, tileMins);
+    const rects = treemapAnchored(weights, NW, NH, tileMins, layout, 0, { w: 900, h: 520 });
+    expect(rects).toHaveLength(weights.length);
+    rects.forEach((r, i) => {
+      expect(r.w).toBeGreaterThanOrEqual(tileMins[i].minW - 1);
+      expect(r.h).toBeGreaterThanOrEqual(tileMins[i].minH - 1);
+      expect(r.x).toBeGreaterThanOrEqual(-EPS);
+      expect(r.y).toBeGreaterThanOrEqual(-EPS);
+      expect(r.x + r.w).toBeLessThanOrEqual(NW + EPS);
+      expect(r.y + r.h).toBeLessThanOrEqual(NH + EPS);
+    });
+    for (let a = 0; a < rects.length; a++) {
+      for (let b = a + 1; b < rects.length; b++) {
+        const A = rects[a];
+        const B = rects[b];
+        const overlapX = Math.min(A.x + A.w, B.x + B.w) - Math.max(A.x, B.x);
+        const overlapY = Math.min(A.y + A.h, B.y + B.h) - Math.max(A.y, B.y);
+        expect(Math.min(overlapX, overlapY)).toBeLessThanOrEqual(EPS);
+      }
+    }
+    const total = rects.reduce((acc, r) => acc + r.w * r.h, 0);
+    expect(total).toBeCloseTo(NW * NH, 4);
+  });
 });

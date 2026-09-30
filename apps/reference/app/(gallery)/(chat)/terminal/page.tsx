@@ -3,6 +3,7 @@ import { ChatMessage, ChatTranscript, TerminalStepCaret, TerminalWordmark } from
 import { ChatResponseLoader } from "@/components/terminal/chat-response-loader";
 import { CodeReviewReference } from "@/components/code-review-reference";
 import { CodeSampleReference } from "@/components/code-sample-reference";
+import { CopyCommandReference } from "@/components/terminal/copy-command-reference";
 import { ContainerBootLoader } from "@/components/terminal/container-boot-loader";
 import { StreamTranscriptReference } from "@/components/stream-transcript-reference";
 import { TerminalBudgetReference } from "@/components/terminal-budget-reference";
@@ -99,6 +100,7 @@ export default function TerminalPage() {
       </section>
 
       <CodeReviewReference />
+      <CopyCommandReference />
       <CodeSampleReference />
     </main>
   );

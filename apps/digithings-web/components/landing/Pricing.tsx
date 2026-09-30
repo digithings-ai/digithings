@@ -32,7 +32,7 @@ import { REPO_URL } from "@/lib/repoActivity";
  * the work starts, what we need from you, and who owns the result — bringing it
  * to eleven rows without going back to the sixteen-row sprawl he cut.
  *
- * The only figure on the table is the true one: $0 for the MIT self-host path.
+ * The only figure on the table is the true one: $0 for the self-host path.
  * No `popular` column — flagging one of three would invent a recommendation —
  * and no billing toggle, because there is no billing cycle.
  *
@@ -74,7 +74,7 @@ const GROUPS: PricingMatrixGroup[] = [
     rows: [
       {
         label: "what you pay",
-        cells: ["$0 — MIT, no account", "scoped to the deployment", "scoped to the work"],
+        cells: ["$0 — no account", "scoped to the deployment", "scoped to the work"],
       },
       {
         label: "what it covers",
@@ -129,8 +129,8 @@ const GROUPS: PricingMatrixGroup[] = [
       {
         label: "who owns the result",
         cells: [
-          "you — MIT, so it stays yours",
-          "you, on the same MIT terms",
+          "you — it stays yours",
+          "you — the deployment stays yours",
           "you, and the custom work is handed over",
         ],
       },

@@ -24,7 +24,7 @@ function ask(id: string) {
 
 export function ModuleGrid() {
   return (
-    <section id="architecture" className="line-t line-b">
+    <section id="architecture" className="line-t line-b scroll-mt-[var(--dq-nav-h)]">
       <KitModuleGrid items={ITEMS} onAsk={ask} />
     </section>
   );

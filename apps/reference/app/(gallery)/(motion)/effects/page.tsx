@@ -1,6 +1,7 @@
 import "./effects.css";
 import { ScrollyGraph, Terminal, type TermLine } from "@digithings/ui";
 import { AmbientMesh } from "@/components/effects/ambient-mesh";
+import { PixelFieldReference } from "@/components/effects/pixel-field-reference";
 import { ClipReveal } from "@/components/effects/clip-reveal";
 import { CrossfadeSections } from "@/components/effects/crossfade-sections";
 import { HeroGraphReference } from "@/components/hero-graph-reference";
@@ -48,6 +49,7 @@ function plainLine(l: TermLine): string {
 // markup below. Plain anchor links: no JS, no scroll-spy — works with
 // scripts off like the rest of this page's own content-first philosophy.
 const JUMP_SECTIONS = [
+  { id: "pixel-field", label: "Pixel field" },
   { id: "typed-terminal", label: "Terminal" },
   { id: "hero-graph", label: "Reveal graph" },
   { id: "module-graph", label: "Module graph" },
@@ -87,11 +89,23 @@ export default function EffectsPage() {
         ))}
       </nav>
 
+      <section className="section-block" id="pixel-field">
+        <p className="kicker">{"// pixel field"}</p>
+        <h2 className="title">A market, under the word.</h2>
+        <p className="section-copy">
+          The digithings.ai welcome. A land mask and open markets pulse on a canvas, and a pointer
+          leaves a coloured trail. It reads <code>color</code> and <code>accent-color</code>, so
+          the field follows the theme. Move the pointer across the panel. Reduced motion holds the
+          field still. The lockup that sits on it lives with the wordmarks.
+        </p>
+        <PixelFieldReference />
+      </section>
+
       <section className="section-block" id="typed-terminal">
         <p className="kicker">{"// typed module terminal"}</p>
         <h2 className="title">The stack boots in front of you.</h2>
         <p className="section-copy">
-          The digithings.ai hero signature: the landing terminal replays the boot transcript line
+          The earlier digithings.ai hero: the landing terminal replays the boot transcript line
           by line with a blinking cursor — commands dwell longer than output, so the rhythm reads
           like a real shell. The component ships as <code>Terminal</code> in{" "}
           <code>@digithings/ui</code>; the script here is the actual hero content. One motion

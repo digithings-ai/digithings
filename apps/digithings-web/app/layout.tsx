@@ -94,8 +94,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
-        <div className="grain" aria-hidden="true" />
-        <div className="glow" aria-hidden="true" />
         {/* One pair for every route. Above page paint so a full-bleed
             surface still shows the rails; under the nav (z-index 210).
             DocumentFrame also mounts a pair — the style hides that copy.

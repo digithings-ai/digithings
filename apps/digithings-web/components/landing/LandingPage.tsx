@@ -4,6 +4,8 @@ import { ContactMailto, CopyCommand, CtaLink, Reveal, SocialRow } from "@digithi
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { ContactForm } from "@/components/landing/ContactForm";
+import { PixelField } from "@/components/landing/PixelField";
+import { PixelWordmark } from "@/components/landing/PixelWordmark";
 import { FaqMorph } from "@/components/landing/FaqMorph";
 import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
@@ -11,7 +13,7 @@ import { QuantSection } from "@/components/landing/QuantSection";
 import { SectionRail } from "@/components/landing/SectionRail";
 import { OpenSource } from "@/components/landing/Sections";
 import { WhyStack } from "@/components/landing/WhyStack";
-import { REPO_CLONE } from "@/lib/repoActivity";
+import { REPO_CLONE, REPO_URL } from "@/lib/repoActivity";
 
 /**
  * The landing page body (v15, #4429).
@@ -25,48 +27,40 @@ import { REPO_CLONE } from "@/lib/repoActivity";
  */
 
 /**
- * The hero: the statement piece, the mission, and the clone command.
+ * The hero: the pixel welcome, then the clone command.
  *
- * The owner's direction for this round: split the title over two lines, add a
- * one-to-two-sentence mission statement beneath it, then the clone command —
- * and remove the deployment terminal, with the module grid moving up to sit
- * directly under the hero. So this section is a single left-aligned column:
- * the two-line h1, the mission paragraph, and the clone command (which moves
- * up from the old `Boot` band. The clone box is natural width — just the
- * size of the text inside it (owner direction); no full-frame override.
- * The terminal, its glow and its frame are gone.
+ * The field and the pixel wordmark are the gloom lockup the owner picked.
+ * The clone box is only as wide as the command. GitHub and the module jump
+ * sit on the same row, to its right.
  */
+const HERO_ACTION =
+  "inline-flex h-auto items-center border border-hair bg-transparent px-[1rem] py-[0.85rem] font-mono text-[0.85rem] leading-[1.5] text-ink no-underline hover:bg-surface-2";
+
 function Hero() {
   return (
-    <section className="px-[var(--page-pad)] pb-[clamp(0.75rem,2vw,1.5rem)] pt-[clamp(3rem,6vw,5rem)]">
-      <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.4rem]">
-        <p className="animate-appear m-0 font-mono text-[0.75rem] tracking-[0.04em] text-ink-mute opacity-0">
-          ~/digithings · open core · MIT
-        </p>
-        <h1 className="animate-appear relative z-10 m-0 font-mono text-[clamp(1.45rem,3.1vw,2.6rem)] font-medium leading-[1.15] tracking-[-0.03em] text-ink opacity-0 [animation-delay:90ms]">
-          <span className="block">AI infrastructure,</span>
-          <span className="block text-accent">
-            in a glass box you own.
-            <span
-              className="ms-[0.25em] inline-block h-[0.82em] w-[0.5em] bg-accent align-[-0.08em] [animation:chat-cursor-blink_1.1s_steps(1)_infinite] motion-reduce:[animation:none]"
-              aria-hidden="true"
-            />
-          </span>
+    <section className="pixel-hero border-b border-hair">
+      <PixelField />
+      <div className="relative z-10 mx-auto flex max-w-[64rem] flex-col items-center px-[var(--page-pad)] pb-[4rem] pt-[2.5rem] text-center sm:px-[2.5rem] sm:pb-[5rem]">
+        <PixelWordmark />
+        <h1 className="m-0 mt-[2rem] font-mono text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-ink sm:text-[1.7rem]">
+          AI infrastructure, in a glass box you own.
         </h1>
-        <p className="animate-appear m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft opacity-0 [animation-delay:200ms]">
-          digithings is open-core AI infrastructure you run yourself: chat,
-          research and quant modules on your own keys and hardware. The code
-          is MIT-licensed. What we sell is the work of fitting it to your stack.
+        <p className="m-0 mt-[0.75rem] max-w-[42rem] font-mono text-[0.875rem] leading-[1.6] text-ink-soft">
+          Chat, research and quant modules on your own keys and hardware.
         </p>
-        {/* Natural width (owner direction): the box is only as wide as the
-            command text inside it. `CopyCommand` caps itself at the prose
-            measure on its own — no width override. */}
-        <div className="animate-appear opacity-0 [animation-delay:320ms]">
+        <div className="mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]">
           <CopyCommand
+            className="w-fit max-w-full"
             samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
             ariaLabel="Clone command"
             inline
           />
+          <CtaLink href={REPO_URL} external variant="ghost" className={HERO_ACTION}>
+            GitHub
+          </CtaLink>
+          <CtaLink href="#architecture" variant="ghost" className={HERO_ACTION}>
+            Modules
+          </CtaLink>
         </div>
       </div>
     </section>
@@ -94,8 +88,8 @@ function Contact() {
             You own the stack and the keys.
           </h2>
           <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
-            The monorepo is MIT-licensed and public. What we sell is the
-            integration work: fitting these modules to the systems you already run.
+            What we sell is the integration work: fitting these modules to the
+            systems you already run.
           </p>
           <div className="flex flex-wrap items-center gap-[0.8rem]">
             <ContactMailto
