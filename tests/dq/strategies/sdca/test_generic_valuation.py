@@ -200,3 +200,109 @@ class TestFullHistoryGenericRails:
         complete = frame.filter(pl.col("risk").is_not_null())
         assert complete.height == 2000
         assert complete["risk"].is_finite().all()
+
+
+def _bull_then_flat(n_bull: int = 2000, n_flat: int = 1100) -> tuple[pl.Series, pl.Series]:
+    """Synthetic bull (20%/yr) then flat regime — the fold-1 shape in miniature."""
+    import datetime as _dt
+
+    start = _dt.date(2004, 1, 1)
+    growth = 1.20 ** (1.0 / 365.25)
+    prices: list[float] = []
+    p = 100.0
+    for _ in range(n_bull):
+        prices.append(p)
+        p *= growth
+    for _ in range(n_flat):
+        prices.append(p)
+    dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n_bull + n_flat)])
+    return dates, pl.Series("price", prices, dtype=pl.Float64)
+
+
+def test_lookback_slices_window_mechanics() -> None:
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat()
+    is_dates, is_price = dates[:2000], price[:2000]
+    bounded = fit_generic_valuation(is_dates, is_price, fit_lookback_days=756)
+    assert bounded.fit_rows < 2000
+    assert str(bounded.fit_start) == str(is_dates[-756])
+    assert str(bounded.fit_end) == str(is_dates[-1])
+    assert "756" in bounded.notes
+
+
+def test_lookback_preserves_pure_trend_estimate() -> None:
+    """No-corruption: on single-regime IS both fits recover the same trendline."""
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat()
+    is_dates, is_price = dates[:2000], price[:2000]
+    oos_dates = dates[2000:]
+    full = fit_generic_valuation(is_dates, is_price)
+    bounded = fit_generic_valuation(is_dates, is_price, fit_lookback_days=756)
+    from digiquant.strategies.sdca.generic_valuation import GenericValuationRiskModel
+
+    full_med = GenericValuationRiskModel(full).rails(oos_dates)["median"].to_list()
+    bounded_med = GenericValuationRiskModel(bounded).rails(oos_dates)["median"].to_list()
+    assert abs(full_med[-1] / bounded_med[-1] - 1.0) < 0.001
+
+
+def test_lookback_adapts_to_recent_regime() -> None:
+    """Regime-sensitivity: on two-regime IS the trailing fit must DIFFER (direction-agnostic)."""
+    import datetime as _dt
+
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    start = _dt.date(2004, 1, 1)
+    growth = 1.20 ** (1.0 / 365.25)
+    prices: list[float] = []
+    p = 100.0
+    for _ in range(1800):
+        prices.append(p)
+        p *= growth
+    for _ in range(200):
+        prices.append(p)  # flat top: second regime inside IS
+    is_dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(2000)])
+    is_price = pl.Series("price", prices, dtype=pl.Float64)
+    oos_dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(2000, 2100)])
+    full = fit_generic_valuation(is_dates, is_price)
+    bounded = fit_generic_valuation(is_dates, is_price, fit_lookback_days=756)
+    from digiquant.strategies.sdca.generic_valuation import GenericValuationRiskModel
+
+    full_med = GenericValuationRiskModel(full).rails(oos_dates)["median"].to_list()
+    bounded_med = GenericValuationRiskModel(bounded).rails(oos_dates)["median"].to_list()
+    assert abs(full_med[-1] / bounded_med[-1] - 1.0) > 0.01
+
+
+def test_slope_cap_bounds_rails_growth() -> None:
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat()
+    is_dates, is_price = dates[:2000], price[:2000]
+    oos_dates = dates[2000:]
+    capped = fit_generic_valuation(is_dates, is_price, max_annual_trend=0.10)
+    from digiquant.strategies.sdca.generic_valuation import GenericValuationRiskModel
+
+    med = GenericValuationRiskModel(capped).rails(oos_dates)["median"].to_list()
+    years = (oos_dates[-1] - oos_dates[0]).days / 365.25
+    implied = (med[-1] / med[0]) ** (1.0 / years) - 1.0
+    assert implied <= 0.10 * 1.05
+
+
+def test_lookback_below_min_history_raises() -> None:
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat(n_bull=800, n_flat=100)
+    with pytest.raises(ValueError, match="[Ll]ookback"):
+        fit_generic_valuation(dates[:800], price[:800], fit_lookback_days=500)
+
+
+def test_defaults_unchanged_without_params() -> None:
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat()
+    a = fit_generic_valuation(dates[:2000], price[:2000])
+    b = fit_generic_valuation(
+        dates[:2000], price[:2000], fit_lookback_days=None, max_annual_trend=None
+    )
+    assert a.model_dump() == b.model_dump()

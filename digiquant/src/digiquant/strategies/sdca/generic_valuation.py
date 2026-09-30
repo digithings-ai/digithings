@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from digiquant.strategies.sdca.quantile_rails import (
     LABEL_BY_QUANTILE,
+    MIN_FIT_HISTORY_DAYS,
     QUANTILE_LABELS,
     QUANTILES,
     QuantileCoefficients,
@@ -73,6 +74,8 @@ def fit_generic_valuation(
     form: ValuationForm = "log_quadratic",
     notes: str = "",
     max_fit_rows: int | None = None,
+    fit_lookback_days: int | None = None,
+    max_annual_trend: float | None = None,
 ) -> GenericValuationCoefficients:
     """Fit 7 quantile rails of log10(price) vs calendar time from the first bar.
 
@@ -82,6 +85,29 @@ def fit_generic_valuation(
     ``fit_start``/``fit_end`` remain the full window; ``fit_rows`` is the
     QuantReg sample size. If ``log_quadratic`` IRLS does not converge,
     the fit retries as ``log_linear`` and records that in ``notes``.
+
+    ``fit_lookback_days`` keeps only rows with
+    ``(last_date - d).days < fit_lookback_days`` — a trailing window of the
+    caller-passed series, sliced BEFORE ``origin``/``mu``/design
+    construction so all provenance derives from the sliced window and
+    ``notes`` records ``lookback={fit_lookback_days}d``. The slice stays
+    within the in-sample series the caller passed, so per-fold refits
+    (#3173) remain OOS-clean by construction: the fitter never sees bars
+    beyond what the caller hands it, regardless of lookback. A sliced
+    window spanning fewer than ``MIN_FIT_HISTORY_DAYS`` raises
+    ``ValueError``. ``None`` (default) fits the full passed series —
+    existing callers' outputs are unchanged.
+
+    ``max_annual_trend`` post-fit caps the median rail's implied annual
+    growth at fit-end: with median ``(c, a, b)`` and ``x_last`` the last
+    fit bar's centered time, ``slope_per_day = a + 2*b*x_last`` (linear
+    form stores ``b=0``, same formula) and ``g = 10**(slope*365.25) - 1``.
+    If ``g`` exceeds the cap, every rail's ``(a, b)`` is scaled by
+    ``s = log10(1+cap)/log10(1+g)`` (``c`` kept — level preserved, growth
+    bounded, exact for linear) and ``notes`` records
+    ``trend_cap={cap} (scaled {s:.3f})``. Guarantee: post-scale
+    median-rail annualized growth at fit-end is ≤ cap. ``None`` (default)
+    leaves fitted coefficients untouched.
     """
     if form not in ("log_linear", "log_quadratic"):
         raise ValueError(f"form must be 'log_linear' or 'log_quadratic', got {form!r}")
@@ -91,6 +117,23 @@ def fit_generic_valuation(
         caller="fit_generic_valuation",
         fit_kind="log-price trend",
     )
+    lookback_note = ""
+    if fit_lookback_days is not None:
+        last_date = date_list[-1]
+        start_pos = len(date_list)
+        for i, d in enumerate(date_list):
+            if (last_date - d).days < fit_lookback_days:
+                start_pos = i
+                break
+        date_list = date_list[start_pos:]
+        price = price.slice(start_pos, len(date_list))
+        window_days = (date_list[-1] - date_list[0]).days if len(date_list) >= 2 else 0
+        if window_days < MIN_FIT_HISTORY_DAYS:
+            raise ValueError(
+                f"fit_lookback_days={fit_lookback_days} leaves a {window_days}-day window "
+                f"({len(date_list)} rows), below MIN_FIT_HISTORY_DAYS={MIN_FIT_HISTORY_DAYS}"
+            )
+        lookback_note = f"lookback={fit_lookback_days}d"
     origin = date_list[0]
     fit_span_days = (date_list[-1] - origin).days
     idx = evenly_spaced_fit_indices(len(date_list), max_fit_rows)
@@ -129,7 +172,26 @@ def fit_generic_valuation(
             f"QuantReg subsample {len(idx)}/{len(date_list)} evenly spaced bars; "
             "scored on every day in range."
         )
-    combined_notes = " ".join(p for p in (notes.strip(), fallback_note, subsample_note) if p)
+    trend_cap_note = ""
+    if max_annual_trend is not None:
+        import math
+
+        median = quantile_coeffs[LABEL_BY_QUANTILE[0.50]]
+        x_last = float((date_list[-1] - origin).days) - mu
+        slope_per_day = median.a + 2.0 * median.b * x_last
+        implied_growth = 10.0 ** (slope_per_day * 365.25) - 1.0
+        if implied_growth > max_annual_trend:
+            scale = math.log10(1.0 + max_annual_trend) / math.log10(1.0 + implied_growth)
+            quantile_coeffs = {
+                label: qc.model_copy(update={"a": qc.a * scale, "b": qc.b * scale})
+                for label, qc in quantile_coeffs.items()
+            }
+            trend_cap_note = f"trend_cap={max_annual_trend} (scaled {scale:.3f})"
+    combined_notes = " ".join(
+        p
+        for p in (notes.strip(), fallback_note, lookback_note, trend_cap_note, subsample_note)
+        if p
+    )
     return GenericValuationCoefficients(
         origin=origin,
         mu=mu,
