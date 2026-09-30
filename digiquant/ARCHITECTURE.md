@@ -482,7 +482,13 @@ gate and listed on the refresh artifact as `fred_skipped`. They do not mark
 the run stale, so Yahoo FX and the price universe can still exit 0.
 `digiquant prices fetch-macro` skips the `fred` source the same way instead
 of raising when the key is missing. Those `fred__*` R2 generations stay at
-the last seal until the Gloomberb migrate (#4794). A set key still fetches. `LIVE_WINDOW_DAYS`
+the last seal until the Gloomberb migrate (#4794). A set key still fetches.
+The #4794 panel adapter lives in `data/prices/gloomberb_macro.py` (frozen
+23-kept / 8-dropped id sets, per-cadence page limits, anonymous `econ_series`
+fetch over an injected client with `cache_ttl=0`) alongside the offline
+`scripts/probe_gloomberb_macro_panel.py` baseline probe; it is NOT wired yet,
+so the refresh and `fetch-macro` paths above are unchanged until the PR 2 wire.
+`LIVE_WINDOW_DAYS`
 (45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
 `CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
 plus the pending release puts the newest month up to ~90 days behind the run — so
