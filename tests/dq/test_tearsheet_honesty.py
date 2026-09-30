@@ -8,6 +8,7 @@ floors. African grey rule: every assertion names N.
 from __future__ import annotations
 
 import pytest
+from digiquant.charts.trades import _build_win_rate_donut, count_winning_trades
 from digiquant.models import BacktestResult
 from digiquant.stats.honesty import DISCLAIMER
 from digiquant.tearsheet_page import _build_page
@@ -140,3 +141,39 @@ def test_rendered_page_ships_disclaimer_verbatim() -> None:
     """Fixed disclaimer string is present on the rendered page (n=50)."""
     html = _page(0.6, 50)
     assert DISCLAIMER in html  # n=50
+
+
+def test_donut_uses_caller_wins_not_round() -> None:
+    """win_rate=0.5, n=10, num_wins=7 → slices [7, 3], not round(0.5*10)."""
+    fig = _build_win_rate_donut(0.5, 10, num_wins=7)
+    assert fig is not None  # n=10
+    assert list(fig.data[0].values) == [7, 3]  # k=7, n=10
+    ann = fig.layout.annotations[0].text
+    assert "n=10" in ann  # n=10
+    assert "CI" in ann  # n=10
+
+
+def test_donut_center_shows_honest_rate() -> None:
+    """Donut for k=30, n=50 centers the point estimate with N + CI."""
+    fig = _build_win_rate_donut(0.6, 50, num_wins=30)
+    assert fig is not None  # n=50
+    ann = fig.layout.annotations[0].text
+    assert "60.0%" in ann  # k=30, n=50
+    assert "n=50" in ann  # n=50
+
+
+def test_donut_refused_below_floor() -> None:
+    """Donut for n=5 shows REFUSED in the center, not a win-rate %."""
+    fig = _build_win_rate_donut(0.6, 5, num_wins=3)
+    assert fig is not None  # n=5
+    ann = fig.layout.annotations[0].text
+    assert "REFUSED" in ann  # n=5
+
+
+def test_count_winning_trades_from_series() -> None:
+    """3 positives in a 10-trade series → 7 wins is wrong, 3 is right."""
+    import polars as pl
+
+    series = pl.Series("value", [10.0, -5.0, 3.0, -1.0, 7.0])
+    assert count_winning_trades(series) == 3  # n=5
+    assert count_winning_trades(None) is None

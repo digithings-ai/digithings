@@ -12,6 +12,35 @@ from digiquant.charts.common import (
     _apply_layout,
     _extract_frame,
 )
+from digiquant.stats.honesty import honest_rate
+
+
+def count_winning_trades(realized_pnls_series: Any) -> int | None:
+    """Count winning (PnL > 0) trades; None when the series is missing/empty."""
+    if realized_pnls_series is None:
+        return None
+    raw = (
+        realized_pnls_series.to_pandas()
+        if hasattr(realized_pnls_series, "to_pandas")
+        else realized_pnls_series
+    )
+    if hasattr(raw, "values"):
+        raw_vals = raw.values.tolist()
+    elif hasattr(raw, "tolist"):
+        raw_vals = raw.tolist()
+    else:
+        raw_vals = list(raw)
+    vals = []
+    for x in raw_vals:
+        try:
+            fv = float(x)
+            if not math.isnan(fv) and not math.isinf(fv):
+                vals.append(fv)
+        except (TypeError, ValueError):
+            pass
+    if not vals:
+        return None
+    return sum(1 for v in vals if v > 0)
 
 
 def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
@@ -202,16 +231,39 @@ def _build_per_trade_pnl_bars(realized_pnls_series: Any) -> Any:
         return ChartUnavailable("Per-Trade PnL", str(exc))
 
 
-def _build_win_rate_donut(win_rate: float | None, num_trades: int) -> Any:
-    """Donut chart showing win/loss split."""
+def _build_win_rate_donut(
+    win_rate: float | None, num_trades: int, num_wins: int | None = None
+) -> Any:
+    """Donut chart showing win/loss split.
+
+    ``num_wins`` is the caller-counted (k, n) pair — preferred over
+    reconstructing wins from the rate. When omitted, falls back to the
+    legacy ``round(rate * n)`` reconstruction. The center annotation
+    always carries N + Wilson 95% CI, never a bare percentage.
+    """
     if win_rate is None:
         return None
     try:
         import plotly.graph_objects as go
 
-        wr = max(0.0, min(1.0, win_rate))
-        wins = round(wr * num_trades)
+        if num_wins is None:
+            wr = max(0.0, min(1.0, win_rate))
+            wins = round(wr * num_trades)
+        else:
+            wins = min(num_trades, max(0, num_wins))
         losses = num_trades - wins
+        hr = honest_rate(wins, num_trades)
+        if hr.refused or hr.estimate is None or hr.ci_lo is None or hr.ci_hi is None:
+            center = (
+                f"<b>REFUSED</b><br><span style='font-size:9px;color:#64748b'>n={num_trades}</span>"
+            )
+        else:
+            flag = " · LOW SAMPLE" if hr.low_sample else ""
+            center = (
+                f"<b>{hr.estimate * 100:.1f}%</b><br>"
+                f"<span style='font-size:9px;color:#64748b'>n={num_trades}, "
+                f"95% CI [{hr.ci_lo * 100:.1f}%, {hr.ci_hi * 100:.1f}%]{flag}</span>"
+            )
         fig = go.Figure(
             data=[
                 go.Pie(
@@ -227,7 +279,7 @@ def _build_win_rate_donut(win_rate: float | None, num_trades: int) -> Any:
             ]
         )
         fig.add_annotation(
-            text=f"<b>{wr * 100:.1f}%</b><br><span style='font-size:9px;color:#64748b'>WIN RATE</span>",
+            text=center,
             x=0.5,
             y=0.5,
             xref="paper",
