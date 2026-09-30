@@ -264,6 +264,8 @@ def main() -> None:
         {
             "fold": fs.fold.fold,
             "oos_vs_flat_dca_pct": fs.out_of_sample.vs_flat_dca_pct,
+            "oos_capital_deployed_pct": fs.out_of_sample.capital_deployed_pct,
+            "oos_capital_deployed_peak_pct": fs.out_of_sample.capital_deployed_peak_pct,
             "max_drawdown_pct": fs.out_of_sample.max_drawdown_pct,
             "feasible": fs.feasible,
         }
@@ -300,9 +302,10 @@ def main() -> None:
                     "per_fold": per_fold,
                     "sensitivity_stable": result.sensitivity.stable,
                     "sensitivity_max_abs_delta": result.sensitivity.max_abs_delta_oos_pct,
-                    # Develop's SensitivityReport has no worst-neighbor attribution (that is
-                    # research-branch-only); neighbor count is the only extra field.
+                    # Gate-level worst-neighbor attribution (mean-OOS design; per-fold
+                    # neighbor keys are explicitly out of scope).
                     "sensitivity_neighbor_count": result.sensitivity.neighbor_count,
+                    "sensitivity_worst_neighbor_key": result.sensitivity.worst_neighbor_key,
                 },
             },
             indent=2,
