@@ -114,6 +114,19 @@ describe('BriefPipelineHealth', () => {
     expect(html).not.toContain('brief-run-health-timeline');
   });
 
+  it('renders the healthy label with accent/ink, never the P&L up colour', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth: { ...runHealth, status: 'ok', segmentsCarried: 0, segmentsOk: 27 },
+        diagnostics: [diag()],
+      })
+    );
+    const label = html.match(/<p class="([^"]*)">Pipeline complete<\/p>/);
+    expect(label).not.toBeNull();
+    expect(label![1]).toContain('text-accent');
+    expect(label![1]).not.toContain('text-up');
+  });
+
   it('notes when a position date is newer than the committed snapshot', () => {
     const html = renderToStaticMarkup(
       createElement(BriefPipelineHealth, {

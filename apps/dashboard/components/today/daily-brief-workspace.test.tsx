@@ -491,6 +491,106 @@ describe('DailyBriefWorkspace', () => {
     );
     expect(html).toContain('137%');
     expect(html).toContain('12% cash · accounting tip');
-    expect(html).not.toMatch(/>Invested<\/dt><dd[^>]*>100%</);
+    const invested = html.match(
+      /data-slot="stat-label"[^>]*>Invested<\/span><span data-slot="stat-value"[^>]*>([^<]*)</
+    );
+    expect(invested).not.toBeNull(); // reader can fail if the Stat markup moves
+    expect(invested![1]).toBe('137%');
+    expect(invested![1]).not.toBe('100%');
+  });
+
+  describe('chart-forward visuals', () => {
+    const navPoints = Array.from({ length: 40 }, (_, i) => ({
+      date: new Date(Date.parse('2026-06-01T00:00:00Z') + i * 86_400_000).toISOString().slice(0, 10),
+      index: 100 + i * 0.3 - (i % 7) * 0.2,
+      day_return_pct: 0.1,
+    }));
+    const benchmarkHistory = navPoints.map((p, i) => ({ date: p.date, price: 500 + i }));
+
+    it('draws KPI sparklines, the NAV hero, composition and movers from persisted data', () => {
+      const html = renderToStaticMarkup(
+        <DailyBriefWorkspace
+          {...populatedProps}
+          returns={{ ...populatedProps.returns, sinceDate: navPoints[0].date }}
+          navPoints={navPoints}
+          benchmarkHistory={benchmarkHistory}
+        />
+      );
+      expect(html).toContain('data-slot="sparkline"');
+      expect(html).toContain('data-testid="brief-nav-chart"');
+      expect(html).toContain('NAV index, base 100');
+      expect(html).toContain('Drawdown');
+      expect(html).toContain('aria-label="NAV range"');
+      expect(html).toContain('data-slot="composition-bar"');
+      expect(html).toContain('data-testid="brief-composition"');
+      expect(html).toContain('data-testid="brief-movers"');
+      expect(html).toContain('Relative to SPY');
+      // No sparkline is ever labelled as live: charts are persisted-only.
+      expect(html).not.toContain('Trend: no data');
+    });
+
+    it('clips the excess series to the current run: a run too short for overlap fails closed', () => {
+      // Inception (run start) 30 days in leaves only ~10 shared points.
+      const html = renderToStaticMarkup(
+        <DailyBriefWorkspace
+          {...populatedProps}
+          returns={{ ...populatedProps.returns, sinceDate: navPoints[30].date }}
+          navPoints={navPoints}
+          benchmarkHistory={benchmarkHistory}
+        />
+      );
+      expect(html).not.toContain('Relative to SPY');
+    });
+
+    it('shows the honest empty chart state and no sparklines without NAV history', () => {
+      const html = renderToStaticMarkup(<DailyBriefWorkspace {...populatedProps} />);
+      expect(html).toContain('Not enough history');
+      expect(html).not.toContain('data-slot="sparkline"');
+      expect(html).not.toContain('Relative to');
+    });
+
+    it('sizes the rebalance as ScoreBar bullets without repeating the thesis prose', () => {
+      const html = renderToStaticMarkup(<DailyBriefWorkspace {...populatedProps} />);
+      expect(html).toContain('data-testid="brief-rebalance"');
+      expect(html).toContain('data-slot="score-bar"');
+      expect(html).toContain('8.0% → 6.0%');
+      expect(html).toContain('NVDA recommended weight');
+      expect(html.match(/Valuation stretched into earnings/g)?.length).toBe(1);
+    });
+
+    it('renders the pipeline run as a health StatusStrip (no P&L colours)', () => {
+      const html = renderToStaticMarkup(<DailyBriefWorkspace {...populatedProps} />);
+      const strip = html.match(/data-testid="brief-run-segments"[\s\S]*?<\/div>/)?.[0] ?? '';
+      expect(strip).toContain('data-slot="status-strip-cell"');
+      expect(strip.match(/data-tone="ok"/g)?.length).toBe(8);
+      expect(strip).not.toMatch(/\b(bg|text)-(up|down)\b/);
+      const failed = renderToStaticMarkup(
+        <DailyBriefWorkspace
+          {...populatedProps}
+          runHealth={{ ...populatedProps.runHealth!, status: 'failed', segmentsOk: 6, segmentsFailed: 2 }}
+        />
+      );
+      expect(failed).toContain('Pipeline needs attention');
+      expect(failed.match(/data-tone="warn"/g)?.length).toBeGreaterThanOrEqual(2);
+      const health = failed.match(/data-testid="brief-pipeline-health"[\s\S]*?data-testid="brief-run-health-week"/)?.[0] ?? '';
+      expect(health).not.toMatch(/\b(bg|text)-(up|down)\b/);
+    });
+
+    it('keeps charts behind the house_weights_nav gate for Observer', () => {
+      const html = renderToStaticMarkup(
+        <DailyBriefWorkspace {...populatedProps} tier="free" navPoints={navPoints} benchmarkHistory={benchmarkHistory} />
+      );
+      expect(html).not.toContain('data-testid="brief-nav-chart"');
+      expect(html).not.toContain('data-testid="brief-composition"');
+      expect(html).not.toContain('data-testid="brief-rebalance"');
+      expect(html).not.toContain('data-slot="stat"');
+    });
+
+    it('marks ledger events with health tones, not P&L colours', () => {
+      const html = renderToStaticMarkup(<DailyBriefWorkspace {...populatedProps} />);
+      const ledger = html.match(/data-testid="brief-ledger-day"[\s\S]*?<\/ul>/)?.[0] ?? '';
+      expect(ledger).toContain('data-slot="status-dot"');
+      expect(ledger).not.toMatch(/\b(bg|text)-(up|down)\b/);
+    });
   });
 });

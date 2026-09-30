@@ -16,7 +16,16 @@ import {
   shiftWeekStart,
 } from '@/lib/run-health-week';
 import { formatDuration } from '@/components/system/run-economics-row';
-import { Button, IconButton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/ui/ui';
+import {
+  Button,
+  IconButton,
+  StatusStrip,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@digithings/ui/ui';
+import { runSegmentCells } from '@/lib/brief-visuals';
 
 export interface BriefRunHealth {
   status: string | null;
@@ -35,12 +44,14 @@ const SEGMENT_COLOR: Record<RunOutcome, string> = {
   ok: 'bg-accent',
   recovered: 'bg-warn/80',
   degraded: 'bg-warn/60',
-  failed: 'bg-down',
+  // Health, not P&L: failures read warn, never the down colour.
+  failed: 'bg-warn',
 };
 
 function toneClass(tone: Tone): string {
-  if (tone === 'positive') return 'text-up';
-  if (tone === 'negative') return 'text-down';
+  // Health, not P&L: healthy reads accent, never the up colour.
+  if (tone === 'positive') return 'text-accent';
+  if (tone === 'negative') return 'text-warn';
   if (tone === 'warning') return 'text-warn';
   return 'text-ink';
 }
@@ -285,6 +296,7 @@ export function BriefPipelineHealth({
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
   const allowNextWeek = canGoToNextWeek(weekStart, now);
   const commitNote = unpublishedBookNote(snapshotDate, positionDates);
+  const segmentCells = runSegmentCells(runHealth);
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">
@@ -308,6 +320,15 @@ export function BriefPipelineHealth({
 
       <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>{pipeline.label}</p>
       <p className="mt-0.5 font-mono text-[10px] tabular-nums text-ink-mute">{pipeline.detail}</p>
+      {segmentCells.length > 0 ? (
+        <StatusStrip
+          data-testid="brief-run-segments"
+          className="mt-2"
+          height={10}
+          cells={segmentCells}
+          label={`Pipeline segments: ${pipeline.detail}`}
+        />
+      ) : null}
       {commitNote ? (
         <p data-testid="unpublished-book-note" className="mt-1 text-[11px] leading-snug text-ink-mute">
           {commitNote}

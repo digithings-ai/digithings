@@ -169,6 +169,8 @@ export default function OverviewPage() {
     perf.benchmark.ticker ??
     (excessPct != null ? DEFAULT_BRIEF_BENCHMARK_TICKER : null);
 
+  const benchHistory = benchTicker ? (data.benchmarks?.[benchTicker]?.history ?? null) : null;
+
   return (
     <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
       <DailyBriefWorkspace
@@ -217,6 +219,8 @@ export default function OverviewPage() {
         runHealth={latestDate ? runHealth : null}
         runDiagnostics={runDiagnostics}
         positionDates={positionDates}
+        navPoints={perf.nav.points}
+        benchmarkHistory={benchHistory}
       />
     </div>
   );
