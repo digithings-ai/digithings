@@ -19,6 +19,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from digiquant.stats.honesty import wilson
+
 # 1.1 — added optional ``ohlc_bars`` (price candlesticks) + per-trade signal type
 # carried in ``entry_label`` (MR/Trend/MR&T) on the nautilus path. Back-compatible:
 # 1.0 consumers ignore ``ohlc_bars``; 1.1 fixtures may carry an empty list.
@@ -32,7 +34,10 @@ from pydantic import BaseModel, Field
 # are omitted from slapper dumps via ``to_json()`` so those payloads stay unchanged.
 # Public-honesty extras (``beats_flat_dca_oos``) are optional on the same path —
 # absent means "do not claim an OOS win", never a silent true.
-SCHEMA_VERSION = "1.3"
+# 1.4 — added ``win_rate_n`` + ``win_rate_ci95`` on ``StatBlock`` (#4828):
+# Wilson 95% CI fractions backing every rendered win rate. Back-compatible:
+# both default to null, so 1.0–1.3 fixtures still validate.
+SCHEMA_VERSION = "1.4"
 
 # Extra keys set only on DCA publish. ``to_json`` drops them when unset so a
 # Slapper dump does not grow ``null`` fields (#3170 slapper identity).
@@ -154,6 +159,14 @@ class StatBlock(BaseModel):
     avg_trade: float = 0.0
     wins: int = 0
     losses: int = 0
+    # Honesty envelope (#4828): sample size + Wilson 95% CI fractions backing
+    # ``percent_profitable``. Null when the adapter has no (k, n) pair.
+    win_rate_n: int | None = Field(
+        default=None, description="Sample size behind percent_profitable"
+    )
+    win_rate_ci95: tuple[float, float] | None = Field(
+        default=None, description="Wilson 95% CI fractions (lo, hi)"
+    )
 
 
 class TradeRecord(BaseModel):
@@ -354,8 +367,15 @@ def _stat_block(block: Mapping[str, object] | None) -> StatBlock:
     """Build a StatBlock from a pine ``_dir_metrics`` dict (tolerant of gaps)."""
     if not block:
         return StatBlock()
+    n = int(block.get("trades", 0) or 0)
+    k = min(n, max(0, int(block.get("wins", 0) or 0)))
+    ci95: tuple[float, float] | None = None
+    if n > 0:
+        w = wilson(k, n)
+        if w is not None:
+            ci95 = (w.lo, w.hi)
     return StatBlock(
-        trades=int(block.get("trades", 0) or 0),
+        trades=n,
         net_profit=float(block.get("net_profit", 0.0) or 0.0),
         net_profit_pct=float(block.get("net_profit_pct", 0.0) or 0.0),
         gross_profit=_opt_float(block.get("gross_profit")),
@@ -365,6 +385,8 @@ def _stat_block(block: Mapping[str, object] | None) -> StatBlock:
         avg_trade=float(block.get("avg_trade", 0.0) or 0.0),
         wins=int(block.get("wins", 0) or 0),
         losses=int(block.get("losses", 0) or 0),
+        win_rate_n=n if n > 0 else None,
+        win_rate_ci95=ci95,
     )
 
 

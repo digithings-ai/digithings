@@ -674,6 +674,22 @@ Slapper dumps omit these keys.
 
 **Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
 
+**Tearsheet schema 1.4** (`tearsheet_data.SCHEMA_VERSION`, #4828) adds the
+honesty envelope to every `StatBlock`: `win_rate_n: int | None` (sample size
+behind `percent_profitable`) and `win_rate_ci95: tuple[float, float] | None`
+(Wilson 95% CI fractions). Both default to null, so 1.0–1.3 fixtures still
+validate. Ported from LuxAlgo edge-stats `stats.ts` (MIT — code only, no
+`data/`, no rebrand) into `digiquant.stats.honesty`: `wilson(k, n)`,
+`apply_guards(n)` (warn 30 / refuse 10, identical to upstream),
+`stability_split` (CI-overlap agree), Pydantic `HonestRate`, and the verbatim
+disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
+95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
+strip (thresholds act on the CI lower bound, not the point estimate), and the
+win/loss donut (caller-counted `(k, n)` from realized fills, never
+`round(rate * n)`). `BacktestResult` is untouched, so no model versioning was
+needed. Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+`tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
+
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
