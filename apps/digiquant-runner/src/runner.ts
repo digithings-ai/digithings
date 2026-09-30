@@ -80,6 +80,9 @@ function portFromContainer(container: DigiQuantRunnerContainer): ContainerPort {
       if (res.status === 400) {
         throw new Error("unknown command");
       }
+      if (res.status === 409) {
+        throw new Error("container /run HTTP 409 already_running");
+      }
       if (res.status !== 202 && !res.ok) {
         throw new Error(`container /run HTTP ${res.status}`);
       }

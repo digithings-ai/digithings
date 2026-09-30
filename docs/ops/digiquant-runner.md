@@ -134,6 +134,16 @@ One pinned Durable Object id: `runner-v1`. `max_instances = 1`,
 `instance_type = standard-2`. Idle `sleepAfter` is 2m; a held lock extends
 it to 30m. The heartbeat calls container `GET /status` about every 60s.
 
+Concurrency: the Durable Object ledger is primary (one lock per concurrency
+group, `MAX_INFLIGHT = 2`). The container also refuses a twin `POST /run` for
+the same command while a status file is still `running` (HTTP 409) — that
+backstops a premature DO watchdog timeout so two `market-data-refresh`
+processes cannot race the same R2 generation keys. The DO watchdog aligns to
+the container `started_at` and does not release a lock while `/status` still
+reports `running`; it only ledger-times-out when the container is unreachable
+past `timeout_seconds + 120s`. Artifact `publish` is bounded to 120s so status
+cannot stick on `running` forever.
+
 ## Rollback
 
 `GITHUB_OVERRIDE_JOBS` on digithings-cron defaults to empty, so migrated jobs

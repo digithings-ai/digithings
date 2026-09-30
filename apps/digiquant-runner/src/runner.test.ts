@@ -279,15 +279,18 @@ describe("accept seeds ledger from container (#4761 Kick2)", () => {
 });
 
 describe("watchdog and poll resilience", () => {
-  it("marks timed_out with exit 124 once past timeout + grace", async () => {
+  it("marks timed_out with exit 124 when unreachable past timeout + grace", async () => {
     const timeoutSeconds = 10;
-    const { session, clock, alarms } = harness();
+    const { session, clock, alarms, statuses, starts } = harness();
     const accepted = await session.accept(
       job({
         idempotency_key: "market-data-refresh-morning:watchdog",
         timeout_seconds: timeoutSeconds,
       }),
     );
+    // Unreachable container: ledger may clear a zombie lock. A still-running
+    // remote must NOT be timed out here (see next test).
+    statuses.delete(starts[0]);
     alarms.length = 0;
     clock.ms = T0 + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
     await session.alarm();
@@ -304,6 +307,32 @@ describe("watchdog and poll resilience", () => {
     expect(body.finished_at).toBe(new Date(clock.ms).toISOString());
     expect((await session.health()).running).toEqual([]);
     expect(alarms).toEqual([]);
+  });
+
+  it("keeps the lock while the container still reports running past deadline", async () => {
+    const timeoutSeconds = 10;
+    const { session, clock, alarms, starts, statuses } = harness();
+    await session.accept(
+      job({
+        idempotency_key: "market-data-refresh-morning:watchdog-alive",
+        timeout_seconds: timeoutSeconds,
+      }),
+    );
+    const remote = statuses.get(starts[0]);
+    if (!remote) throw new Error("missing status");
+    // Simulate cold-boot: container started mid-way through the accept clock.
+    remote.started_at = new Date(T0 + 5 * 60 * 1000).toISOString();
+    alarms.length = 0;
+    clock.ms = T0 + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
+    await session.alarm();
+    expect((await session.health()).running).toEqual([starts[0]]);
+    expect(alarms).toEqual([HEARTBEAT_MS]);
+    // After aligning to remote.started_at, the budget still has room.
+    clock.ms =
+      Date.parse(remote.started_at) + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
+    // Still running remotely — keep the lock even past the aligned deadline.
+    await session.alarm();
+    expect((await session.health()).running).toEqual([starts[0]]);
   });
 
   it("keeps the lock when readStatus throws during poll", async () => {

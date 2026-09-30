@@ -58,8 +58,64 @@ def main() -> int:
         raise SystemExit("prices-fx-candles must not call fetch-macro")
 
     _check_phase2(commands)
+    _check_busy_gate_and_publish_bound()
     print("ok")
     return 0
+
+
+def _check_busy_gate_and_publish_bound() -> None:
+    """Same-command /run must 409 while running; publish is wall-clock bounded."""
+    import json
+    import tempfile
+    import time
+    from unittest import mock
+
+    with tempfile.TemporaryDirectory() as tmp:
+        status_dir = Path(tmp)
+        previous = exec_job.STATUS_DIR
+        exec_job.STATUS_DIR = status_dir
+        try:
+            if exec_job._running_command("market-data-refresh") is not None:
+                raise SystemExit("empty status dir must report no busy command")
+            payload = {
+                "run_id": "run-alive",
+                "command": "market-data-refresh",
+                "status": "running",
+            }
+            (status_dir / "run-alive.status.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+            busy = exec_job._running_command("market-data-refresh")
+            if busy != "run-alive":
+                raise SystemExit(f"expected run-alive busy, got {busy!r}")
+            if exec_job._running_command("prices-at-open") is not None:
+                raise SystemExit("other commands must stay free")
+            payload["status"] = "succeeded"
+            (status_dir / "run-alive.status.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+            if exec_job._running_command("market-data-refresh") is not None:
+                raise SystemExit("terminal status must clear the busy gate")
+        finally:
+            exec_job.STATUS_DIR = previous
+
+    previous_timeout = exec_job.PUBLISH_TIMEOUT_SECONDS
+    exec_job.PUBLISH_TIMEOUT_SECONDS = 0.05
+
+    def _hang(*_args: object, **_kwargs: object) -> None:
+        time.sleep(1.0)
+
+    try:
+        with mock.patch.object(exec_job, "_publish", _hang):
+            try:
+                exec_job._publish_bounded("market-data-refresh", "run-1", ["/tmp/x"])
+            except TimeoutError as exc:
+                if "publish exceeded" not in str(exc):
+                    raise SystemExit(f"unexpected timeout message: {exc}") from exc
+            else:
+                raise SystemExit("hung publish must raise TimeoutError")
+    finally:
+        exec_job.PUBLISH_TIMEOUT_SECONDS = previous_timeout
 
 
 def _check_phase2(commands: dict[str, Any]) -> None:
