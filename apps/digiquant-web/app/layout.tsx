@@ -83,7 +83,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               homeLabel="digiquant home"
               skipTo="#main"
             />
-            {children}
+            {/* NavShell is fixed: reserve its height (nav-shell.css knob, 62px fallback). */}
+            <div className="pt-[var(--nav-shell-h,62px)]">{children}</div>
             <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
 
           </ThemeProvider>
