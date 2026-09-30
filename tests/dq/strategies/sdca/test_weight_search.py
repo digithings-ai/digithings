@@ -11,6 +11,7 @@ import pytest
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
+    GOLD_MACRO_NAMES,
     ExtraIndicatorSources,
     SdcaCompositeWeights,
 )
@@ -247,7 +248,10 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
             / "digiquant/src/digiquant/strategies/sdca/btc_composite_weights.json"
         ).read_text()
     )
-    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES)
+    # Gold legs added in #4804 postdate the BTC published search; they are
+    # excluded from the published BTC path by zero defaults. A BTC re-search
+    # covering them is future work, not this assertion's job.
+    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES) - set(GOLD_MACRO_NAMES)
     assert payload["num_evaluations"] >= 128
     kept = {k: v for k, v in payload["weights"].items() if k != "valuation" and v > 0}
     assert kept == {}

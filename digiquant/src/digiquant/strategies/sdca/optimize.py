@@ -181,9 +181,21 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_path = _first_existing(base, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
     eth_path = _first_existing(base, ("ETH-USD.csv", "ETH-USD.parquet"))
     dxy_path = _first_existing(base, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    gvz_path = _first_existing(base, ("GVZCLS.csv", "GVZCLS.parquet"))
+    walcl_path = _first_existing(base, ("WALCL.csv", "WALCL.parquet"))
+    hy_path = _first_existing(base, ("BAMLH0A0HYM2.csv", "BAMLH0A0HYM2.parquet"))
+    ig_path = _first_existing(base, ("BAMLC0A0CM.csv", "BAMLC0A0CM.parquet"))
+    be5y_path = _first_existing(base, ("T5YIE.csv", "T5YIE.parquet"))
+    nfci_path = _first_existing(base, ("NFCI.csv", "NFCI.parquet"))
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    gvz_dates, gvz_values = load_date_value_frame(gvz_path) if gvz_path else (None, None)
+    walcl_dates, walcl_values = load_date_value_frame(walcl_path) if walcl_path else (None, None)
+    hy_oas_dates, hy_oas_values = load_date_value_frame(hy_path) if hy_path else (None, None)
+    ig_oas_dates, ig_oas_values = load_date_value_frame(ig_path) if ig_path else (None, None)
+    be5y_dates, be5y_values = load_date_value_frame(be5y_path) if be5y_path else (None, None)
+    nfci_dates, nfci_values = load_date_value_frame(nfci_path) if nfci_path else (None, None)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -191,6 +203,18 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        gvz_dates=gvz_dates,
+        gvz_values=gvz_values,
+        walcl_dates=walcl_dates,
+        walcl_values=walcl_values,
+        hy_oas_dates=hy_oas_dates,
+        hy_oas_values=hy_oas_values,
+        ig_oas_dates=ig_oas_dates,
+        ig_oas_values=ig_oas_values,
+        breakeven_5y_dates=be5y_dates,
+        breakeven_5y_values=be5y_values,
+        nfci_dates=nfci_dates,
+        nfci_values=nfci_values,
     )
 
 
@@ -206,6 +230,18 @@ def drop_extras_missing_sources(
         payload["rs_eth"] = 0.0
     if payload["dxy"] > 0.0 and sources.dxy_dates is None:
         payload["dxy"] = 0.0
+    if payload["gvz"] > 0.0 and sources.gvz_dates is None:
+        payload["gvz"] = 0.0
+    if payload["walcl"] > 0.0 and sources.walcl_dates is None:
+        payload["walcl"] = 0.0
+    if payload["hy_oas"] > 0.0 and sources.hy_oas_dates is None:
+        payload["hy_oas"] = 0.0
+    if payload["ig_oas"] > 0.0 and sources.ig_oas_dates is None:
+        payload["ig_oas"] = 0.0
+    if payload["breakeven_5y"] > 0.0 and sources.breakeven_5y_dates is None:
+        payload["breakeven_5y"] = 0.0
+    if payload["nfci"] > 0.0 and sources.nfci_dates is None:
+        payload["nfci"] = 0.0
     return SdcaCompositeWeights(**payload)
 
 

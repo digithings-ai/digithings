@@ -51,6 +51,7 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "breakeven_5y",
     "nfci",
 )
+GOLD_MACRO_NAMES: tuple[str, ...] = ("gvz", "walcl", "hy_oas", "ig_oas", "breakeven_5y", "nfci")
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
 BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
@@ -294,6 +295,109 @@ def dxy_z(
     return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("dxy")
 
 
+def _macro_level_z(
+    dates: pl.Series,
+    src_dates: pl.Series,
+    src_values: pl.Series,
+    name: str,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Level rolling-z for fear-bid macro legs. Rising series → +z (buy gold)."""
+    aligned = align_to_dates(dates, src_dates, src_values, forward_fill=True)
+    return causal_rolling_z(aligned, window=window, min_samples=min_samples).alias(name)
+
+
+def gvz_z(
+    dates: pl.Series,
+    gvz_dates: pl.Series,
+    gvz_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Gold implied-vol level z. Spiking GVZ = stress = gold bid → +z (no flip)."""
+    return _macro_level_z(
+        dates, gvz_dates, gvz_values, "gvz", window=window, min_samples=min_samples
+    )
+
+
+def walcl_liquidity_z(
+    dates: pl.Series,
+    walcl_dates: pl.Series,
+    walcl_values: pl.Series,
+    *,
+    roc_days: int = 365,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """YoY Fed-balance-sheet growth, rolling-z. Expanding sheet → +z (buy).
+
+    Mirrors ``m2_liquidity_z``: WALCL trends monotonically, so a level-z is
+    meaningless and growth is the vote.
+    """
+    aligned = align_to_dates(dates, walcl_dates, walcl_values, forward_fill=True)
+    roc = aligned / aligned.shift(roc_days) - 1.0
+    return causal_rolling_z(roc, window=window, min_samples=min_samples).alias("walcl")
+
+
+def hy_oas_z(
+    dates: pl.Series,
+    hy_dates: pl.Series,
+    hy_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """HY spread level z. Widening = stress = gold bid → +z (no flip)."""
+    return _macro_level_z(
+        dates, hy_dates, hy_values, "hy_oas", window=window, min_samples=min_samples
+    )
+
+
+def ig_oas_z(
+    dates: pl.Series,
+    ig_dates: pl.Series,
+    ig_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """IG spread level z. Same fear-bid sign convention as ``hy_oas_z``."""
+    return _macro_level_z(
+        dates, ig_dates, ig_values, "ig_oas", window=window, min_samples=min_samples
+    )
+
+
+def breakeven_5y_z(
+    dates: pl.Series,
+    be_dates: pl.Series,
+    be_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """5Y breakeven level z. Rising inflation compensation → +z (no flip)."""
+    return _macro_level_z(
+        dates, be_dates, be_values, "breakeven_5y", window=window, min_samples=min_samples
+    )
+
+
+def nfci_z(
+    dates: pl.Series,
+    nfci_dates: pl.Series,
+    nfci_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """NFCI level z. Positive (tight) conditions = stress bid → +z (no flip)."""
+    return _macro_level_z(
+        dates, nfci_dates, nfci_values, "nfci", window=window, min_samples=min_samples
+    )
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -365,6 +469,99 @@ def build_extra_indicators(
                     min_samples=min_samples,
                 ),
                 weight=enabled["dxy"],
+            )
+        )
+    if "gvz" in enabled:
+        gvz_dates = _require_pair(sources.gvz_dates, sources.gvz_values, "gvz")
+        extras.append(
+            IndicatorWeight(
+                name="gvz",
+                z=gvz_z(
+                    dates,
+                    gvz_dates,
+                    sources.gvz_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["gvz"],
+            )
+        )
+    if "walcl" in enabled:
+        walcl_dates = _require_pair(sources.walcl_dates, sources.walcl_values, "walcl")
+        extras.append(
+            IndicatorWeight(
+                name="walcl",
+                z=walcl_liquidity_z(
+                    dates,
+                    walcl_dates,
+                    sources.walcl_values,  # type: ignore[arg-type]
+                    roc_days=roc_days,
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["walcl"],
+            )
+        )
+    if "hy_oas" in enabled:
+        hy_oas_dates = _require_pair(sources.hy_oas_dates, sources.hy_oas_values, "hy_oas")
+        extras.append(
+            IndicatorWeight(
+                name="hy_oas",
+                z=hy_oas_z(
+                    dates,
+                    hy_oas_dates,
+                    sources.hy_oas_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["hy_oas"],
+            )
+        )
+    if "ig_oas" in enabled:
+        ig_oas_dates = _require_pair(sources.ig_oas_dates, sources.ig_oas_values, "ig_oas")
+        extras.append(
+            IndicatorWeight(
+                name="ig_oas",
+                z=ig_oas_z(
+                    dates,
+                    ig_oas_dates,
+                    sources.ig_oas_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["ig_oas"],
+            )
+        )
+    if "breakeven_5y" in enabled:
+        be_dates = _require_pair(
+            sources.breakeven_5y_dates, sources.breakeven_5y_values, "breakeven_5y"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="breakeven_5y",
+                z=breakeven_5y_z(
+                    dates,
+                    be_dates,
+                    sources.breakeven_5y_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["breakeven_5y"],
+            )
+        )
+    if "nfci" in enabled:
+        nfci_dates = _require_pair(sources.nfci_dates, sources.nfci_values, "nfci")
+        extras.append(
+            IndicatorWeight(
+                name="nfci",
+                z=nfci_z(
+                    dates,
+                    nfci_dates,
+                    sources.nfci_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["nfci"],
             )
         )
     if "weekly_rsi" in enabled:
@@ -543,6 +740,7 @@ __all__ = [
     "DEFAULT_ROLLING_WINDOW",
     "EXTRA_INDICATOR_NAMES",
     "GENERIC_TECHNICAL_NAMES",
+    "GOLD_MACRO_NAMES",
     "MACRO_INDICATOR_NAMES",
     "PRICE_OSCILLATOR_NAMES",
     "WEIGHT_PARAM_BY_NAME",
@@ -551,16 +749,22 @@ __all__ = [
     "SdcaCompositeWeights",
     "align_to_dates",
     "build_extra_indicators",
+    "breakeven_5y_z",
     "causal_rolling_z",
     "composite_weights_from_params",
     "dxy_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
+    "gvz_z",
+    "hy_oas_z",
+    "ig_oas_z",
     "indicator_display_name",
     "load_date_value_frame",
     "m2_liquidity_z",
     "missing_extra_names",
+    "nfci_z",
     "parse_indicator_weights_json",
     "rs_eth_z",
     "sources_from_optional_paths",
+    "walcl_liquidity_z",
 ]
