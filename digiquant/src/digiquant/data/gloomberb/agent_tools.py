@@ -67,6 +67,7 @@ from .models import (
     HoldersInput,
     NewsInput,
     OptionsChainInput,
+    PredictionMarketsInput,
     PriceHistoryInput,
     ProxyStatementsInput,
     QuoteInput,
@@ -170,7 +171,7 @@ def gloomberb_envelope_json(
 
 # ── curated per-phase subsets (#4146) ─────────────────────────────────────────
 #
-# Not all 33 tools everywhere (prompt budget): the equity/sector research
+# Not all 35 tools everywhere (prompt budget): the equity/sector research
 # phases get company facts + analyst views, the macro phase gets rates/credit/
 # long-run valuation, and the portfolio PM (analyst + direction) gets a
 # PM-fit mix of quotes/news/analyst views plus macro context. Every name is
@@ -210,6 +211,7 @@ MACRO_TOOLS: tuple[str, ...] = (
     "digifetch_shiller",
     "digifetch_news",
     "digifetch_research_search",
+    "digifetch_prediction_markets",
 )
 # ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
 # upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
@@ -355,6 +357,9 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     "digifetch_short_interest": DigifetchDispatch(ShortInterestInput, "short_interest", "symbol"),
     "digifetch_equity_diagnostic": DigifetchDispatch(
         EquityDiagnosticInput, "equity_diagnostic", "symbol"
+    ),
+    "digifetch_prediction_markets": DigifetchDispatch(
+        PredictionMarketsInput, "prediction_markets", attributed=False
     ),
 }
 

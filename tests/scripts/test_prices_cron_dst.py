@@ -57,9 +57,9 @@ def workflow() -> dict:
 
 @pytest.fixture(scope="module")
 def worker_jobs() -> dict[str, str]:
-    """Read literal ``wd``/``rd`` job IDs and crons from the typed Worker map."""
+    """Read literal ``wd``/``rd``/``cj`` job IDs and crons from the typed Worker map."""
     pairs = re.findall(
-        r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        r'(?:wd|rd|cj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
         JOBS_SOURCE.read_text(encoding="utf-8"),
         flags=re.DOTALL,
     )
@@ -72,7 +72,6 @@ def worker_jobs() -> dict[str, str]:
 def crons(worker_jobs: dict[str, str]) -> dict[str, list[str]]:
     """Price clocks grouped by the behavior the DST assertions exercise."""
     return {
-        "intraday": [worker_jobs["prices-intraday"]],
         "fx-refresh": [
             worker_jobs["prices-fx-refresh"],
             worker_jobs["prices-fx-refresh-sun"],
@@ -145,25 +144,16 @@ def _configured_crons() -> list[str]:
 def test_every_scheduled_job_is_still_named_as_expected(crons: dict[str, list[str]]) -> None:
     """The three job names the assertions below key on, and their cron counts."""
     assert {name: len(found) for name, found in crons.items()} == {
-        "intraday": 1,
         "fx-refresh": 2,
         "eod-macro": 1,
         "at-open-clock": 2,
     }
 
 
-@pytest.mark.parametrize("day", ALL_DAYS)
-def test_intraday_covers_the_whole_et_session(crons: dict[str, list[str]], day: date) -> None:
-    """Quotes must refresh from the open through the close in both offsets.
-
-    The pre-#1775 ``*/15 13-20`` failed the close end under EST: its last tick was
-    15:45, so the final quarter hour of every winter session — the one the live
-    dashboard watches hardest — never refreshed.
-    """
-    ticks = [t.time() for cron in crons["intraday"] for t in _et_ticks(cron, day)]
-    assert ticks, f"no intraday ticks on {day}"
-    assert min(ticks) <= CASH_OPEN, f"{day}: first tick {min(ticks)} is after the 09:30 open"
-    assert max(ticks) >= CASH_CLOSE, f"{day}: last tick {max(ticks)} is before the 16:00 close"
+def test_prices_intraday_cron_is_retired(worker_jobs: dict[str, str]) -> None:
+    """Phase 1 does not start a container to echo the retired intraday no-op (#4761)."""
+    assert "prices-intraday" not in worker_jobs
+    assert "7,22,37,52 13-21 * * MON-FRI" not in _configured_crons()
 
 
 @pytest.mark.parametrize("day", ALL_DAYS)
@@ -181,24 +171,20 @@ def test_eod_runs_after_a_settled_close(crons: dict[str, list[str]], day: date) 
 
 
 @pytest.mark.parametrize("day", ALL_DAYS)
-def test_eod_finishes_before_the_metrics_cron_and_shares_no_minute_with_intraday(
+def test_eod_finishes_before_the_metrics_cron(
     crons: dict[str, list[str]],
     day: date,
 ) -> None:
-    """Two constraints that pin the EOD *minute* rather than its hour.
+    """The EOD minute must still land before research-metrics.
 
     ``pipeline-research-metrics.yml``'s ``0 22`` cron documents that it must run after
-    this ingest, and the job's own ``timeout-minutes`` bounds the worst case. And
-    since intraday now extends through hour 21, an EOD minute on the 15-minute grid
-    would collide with an intraday tick — ``digiquant-prices-intraday`` is a per-job
-    concurrency group and does not cover eod-macro, so that would be two concurrent
-    yfinance pulls over the same tickers.
+    this ingest, and the job's own timeout bounds the worst case. The intraday
+    quote clock is retired (#4761), so there is no second yfinance pull on this
+    minute to collide with.
     """
     (eod,) = [t for cron in crons["eod-macro"] for t in _utc_ticks(cron, day)]
-    intraday = {t for cron in crons["intraday"] for t in _utc_ticks(cron, day)}
     metrics_cron = datetime(day.year, day.month, day.day, 22, 0, tzinfo=timezone.utc)
     assert eod + timedelta(minutes=20) <= metrics_cron, "EOD can overrun the metrics cron"
-    assert eod not in intraday, "EOD shares a minute with an intraday tick"
 
 
 @pytest.mark.parametrize("day", ALL_DAYS)

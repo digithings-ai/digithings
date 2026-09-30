@@ -376,6 +376,10 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
     initial["enable_web_search"] = bool(req.enable_web_search)
+    # Per-request web_search engine (#4722). Raw string passthrough — the hub
+    # owns validation against its provider names; None/auto means in-house.
+    # Unconditional like effort above so a prior turn's engine never sticks.
+    initial["web_search_provider"] = req.search_engine
     # Unconditional — empty list must clear a prior tenant's MCP URLs.
     initial["mcp_servers"] = [
         s.model_dump(exclude_none=True, by_alias=True)

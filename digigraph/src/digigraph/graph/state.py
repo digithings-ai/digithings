@@ -71,6 +71,11 @@ class WorkflowState(TypedDict, total=False):
     disabled_tools: list[str] | None
     # Opt-in digillm web search (#3420). Default off — never silent RAG mix.
     enable_web_search: bool
+    # Per-request web_search engine (ChatCompletionRequest.search_engine /
+    # X-Digi-Search-Engine). Raw string; the hub validates. Must be declared
+    # so a prior turn's engine cannot stick on the checkpoint (#4722 — same
+    # sticky-key pitfall as effort, #2097).
+    web_search_provider: str | None
     # Per-request reasoning effort (X-Digi-Effort). Must be declared.
     effort: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).

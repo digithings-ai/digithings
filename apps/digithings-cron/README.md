@@ -6,27 +6,35 @@ Replaces unreliable GitHub Actions schedule triggers with Cloudflare Cron Trigge
 that dispatch workflow_dispatch / repository_dispatch on the default `develop` branch of
 digithings-ai/digithings and digithings-ai/twelve-x (FX Hub).
 
-Thin Worker only — no Containers / Durable Objects. Default branch stays develop.
+Price and market-data jobs (`kind: container`) POST the private digiquant-runner
+Worker over the `RUNNER` service binding (#4761). This Worker still has no
+Containers of its own. twelve-x stays `workflow_dispatch`. Default branch stays
+develop. `GITHUB_OVERRIDE_JOBS` defaults to empty; a listed job id falls back to
+workflow_dispatch and logs `github_override` at error.
 
 ## Layout
 
-- wrangler.toml — name digithings-cron, triggers crons, DRY_RUN var
-- src/jobs.ts — typed job map
-- src/dispatch.ts — GitHub API dispatch (204/200 ok; rate limits retry)
+- wrangler.toml — name digithings-cron, triggers crons, DRY_RUN, RUNNER binding
+- src/jobs.ts — typed job map (`kind` includes `container`)
+- src/dispatch.ts — GitHub API dispatch, or POST digiquant-runner
 - src/et-open.ts — season-specific America/New_York 09:30 gate
-- src/index.ts — scheduled + GET /healthz + optional POST /kick
+- src/index.ts — scheduled + GET /healthz + optional POST /kick and GET /runs/:id
 
 ## Env
 
-- Secret GH_DISPATCH_TOKEN (required for real dispatch)
-- Optional secret CRON_KICK_SECRET (enables POST /kick)
+- Secret GH_DISPATCH_TOKEN (required for real GitHub dispatch)
+- Optional secret CRON_KICK_SECRET (enables POST /kick and GET /runs/:id)
+- Secret RUNNER_AUTH_TOKEN (Bearer for kind `container`; required outside dry-run)
 - Var DRY_RUN = "0" by default; "1" logs intended POST only
+- Var GITHUB_OVERRIDE_JOBS = "" (comma-separated job ids that stay on GitHub)
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
 ## Unique crons
 
-34 unique cron expressions in wrangler.toml [triggers]. House research/portfolio
+`wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
+(38 expressions after #4761: prices-intraday removed, market-data morning
+`0 13 * * *` and evening `30 21 * * *` added). House research/portfolio
 retries (`house-run-09`…`12`) use daily `DOW=*`; twelve-x-new-york stays
 weekday-only on `17 12 * * MON-FRI`. At-open price clocks remain `MON-FRI` with
 the ET open gate.
@@ -60,4 +68,9 @@ session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
 intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type digiquant-baseline.
+House-run uses repository_dispatch event_type digiquant-baseline (Phase 3).
+Price jobs, market-data-refresh, onchain, tearsheets, research-metrics, and
+execution-cron-check use `kind: container`. Those four Phase 2 workflows have
+no `schedule:` of their own. The runner command catalog is
+`apps/digiquant-runner/commands.json`. Operator notes:
+`docs/ops/digiquant-runner.md`.

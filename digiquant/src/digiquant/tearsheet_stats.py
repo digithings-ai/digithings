@@ -6,6 +6,24 @@ from __future__ import annotations
 import math
 
 from digiquant.models import BacktestResult
+from digiquant.stats.honesty import format_honest_rate
+
+
+def _honest_win_rate_text(value: object, n: int) -> str:
+    """Honest win-rate string for a Nautilus ``Win Rate`` stat (fraction).
+
+    Returns an em-dash for missing/non-numeric input, ``REFUSED`` below
+    the refuse floor, and ``"{pct}% (k/n, n=N, 95% CI …)"`` otherwise —
+    never a bare percentage.
+    """
+    if not isinstance(value, (int, float)) or math.isnan(value):
+        return "—"
+    wr = float(value)
+    if wr > 1:  # tolerate percent-scale callers; Nautilus emits a fraction
+        wr /= 100.0
+    wr = max(0.0, min(1.0, wr))
+    k = min(n, max(0, round(wr * n)))
+    return format_honest_rate(k, n)
 
 
 def _build_categorized_stats(
@@ -71,9 +89,10 @@ def _build_categorized_stats(
         + row("Volatility", "Returns Volatility (252 days)", ".4f")
         + row("Value at Risk", "Value at Risk", ".4f")
     )
+    win_rate_html = _honest_win_rate_text(combined.get("Win Rate"), result.num_trades)
     trade_stats = (
         row("# Trades", "Total Trades", ".0f")
-        + row("Win Rate", "Win Rate", ".2f", True)
+        + f'<tr><td class="sk">Win Rate</td><td class="sv">{win_rate_html}</td></tr>'
         + row("Avg Winner", "Avg Winner", ",.2f")
         + row("Avg Loser", "Avg Loser", ",.2f")
         + row("Max Winner", "Max Winner", ",.2f")
@@ -119,7 +138,10 @@ def _build_full_stats_table(
         if isinstance(v, (int, float)) and not math.isnan(v):
             rows.append((k, _fmt(v)))
     for k, v in (stats_general or {}).items():
-        if isinstance(v, (int, float)) and not math.isnan(v):
+        if k == "Win Rate":
+            if isinstance(v, (int, float)) and not math.isnan(v):
+                rows.append((k, _honest_win_rate_text(v, result.num_trades)))
+        elif isinstance(v, (int, float)) and not math.isnan(v):
             rows.append((k, _fmt(v)))
     if result.max_drawdown_pct is not None and not any("Max Drawdown" in r[0] for r in rows):
         rows.append(("Max Drawdown %", f"{result.max_drawdown_pct:.1f}%"))
@@ -162,7 +184,10 @@ def _build_risk_metrics_table(
     for k in risk_keys:
         v = combined.get(k)
         if v is not None and isinstance(v, (int, float)) and not math.isnan(v):
-            rows.append((k, _fmt(v)))
+            if k == "Win Rate":
+                rows.append((k, _honest_win_rate_text(v, result.num_trades)))
+            else:
+                rows.append((k, _fmt(v)))
     if result.max_drawdown_pct is not None and not any("Max Drawdown" in r[0] for r in rows):
         rows.insert(0, ("Max Drawdown %", f"{result.max_drawdown_pct:.1f}%"))
     trs = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in rows)

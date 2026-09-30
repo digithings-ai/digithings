@@ -565,7 +565,29 @@ in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
 for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
 of the turn dead-ending. The upstream `message` is never relayed on that path:
 digigraph's text for `byok_default_model_provider_mismatch` reflects the
-caller's own `X-BYOK-Provider` header back at them.
+caller's own `X-BYOK-Provider` header back at them. A digigraph 429 is the
+second exception (#4777): the adapter relays code `rate_limit_exceeded` with
+server-composed copy `Rate limit reached, retry in N seconds.` (N from the
+`Retry-After` header; `Rate limit reached, please try again shortly.` when the
+header is absent), so the visitor sees when to retry instead of the generic
+unavailable-message. The message is composed server-side — only the parsed
+integer crosses the trust boundary — never relayed from the upstream body, and
+the branch is status-gated (never body-parsed) so a bare proxy 429 takes the
+same path.
+
+Upstream 503s retry on two budgets (#4753). A 503 carrying the stack worker's
+`container_booting` code (JSON body + `Retry-After` header) means the container
+is still waking: the BFF extends the retry budget to ~250s (elapsed + attempt
+caps), honoring the server-sent `Retry-After` exactly (clamped to 1–30s, zero
+floored) and falling back to exponential backoff with jitter otherwise. While
+those boot-retries are in flight the stream carries a `data-connection`
+`warming_up` part (same `digigraph-connection` id as `connecting`/`connected`)
+so the thread shows a warming-up indicator instead of ending in the
+unavailable-message. Every other 503 — real outage, digigraph overload, or a
+pre-`container_booting` plain-text worker body — keeps the ~15s budget (4
+attempts, fixed 2s/5s/8s delays, `Retry-After` ignored) and the
+unavailable-message + Retry path. The chat route's `maxDuration` (300s) must
+outlive the boot budget or a slow cold boot is cut off mid-retry.
 
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
@@ -866,7 +888,7 @@ send `X-Digi-Enable-Web-Search`, so the turn stays corpus-only.
 Menu pick inserts `/digisearch ` (trailing space) and does not fire immediately.
 Extra YAML/MCP catalog ids (`/datatap`) use the same pattern. Disabled catalog ids travel
 as `X-Digi-Disabled-Tools` (BFF allowlists, digigraph subtracts). `/mcp`, `/models`, `/effort`,
-`/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
+`/search-engine`, `/language`, `/provider`, and `/settings` open the same opaque composer-docked menu (`EmbedComposerMenu`);
 `/mcp` starts on the operator/session MCP list (status: Active / Disabled / Needs auth).
 Enter opens JSON + field editors (`/mcp new` adds a session MCP). The **id** field stays a
 text input (custom ids allowed). Focus or typing opens a compact in-menu dropdown just
@@ -883,10 +905,10 @@ Picking a row (click or Enter on a highlight) autofills
 `label` / `url` / `auth` (token kept unless the id changes). Custom ids still type freely;
 operator rows keep id/url locked and hide the catalog. Snapshot only — no live Smithery / PulseMCP / registry
 fetch, and `@assistant-ui/react-mcp` is not installed. `/tools` lists every
-connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/language`,
+connected tool as On/Off. Exclusive lists (`/models`, `/effort`, `/search-engine`, `/language`,
 and the `/provider` roster) mark the current choice with the same filled disc as
 dropdown radio items (`CircleIcon`) — never the word “on”. Enter or click commits
-the choice and closes the menu. `/models`, `/effort`,
+the choice and closes the menu. `/models`, `/effort`, `/search-engine`,
 and `/language` start on their nested lists. Keyboard: Up/Down, Enter
 to toggle, enter a nested list, or commit an exclusive pick, Left/Right on `/language` to cycle the full ISO map, Escape
 (the `escape` control) to go back or close.
@@ -927,9 +949,13 @@ only when `mcp.allowUserServers` is true (`https://` + SSRF + count/size caps; o
 may still use `http` for docker DNS). Session URLs never echo
 back in the client config projection. `@assistant-ui/react-mcp` is not installed — visitor MCP
 is BFF-proxied, not browser MCP. The model can call `session_*` tools (same trust as slash) to
-mutate language/model/effort/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
+mutate language/model/effort/search-engine/tools/MCP; `session_upsert_mcp` cannot plant a new session URL
 when `allowUserMcp` is false (operator token attach still works). The client applies them to `EmbedChatPrefsApi`.
-`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. digisearch / digivault / web_search
+`X-Digi-Effort` (low/medium/high) is forwarded to digigraph. `X-Digi-Search-Engine`
+(auto/internal/exa/tavily/parallel/firecrawl/tinyfish) is forwarded with it: effective
+engine is the user pref, else the tenant `gate.searchEngine` default. An unset pref
+sends nothing (follow-tenant); an explicit `auto` is sent literally by the browser
+but omitted by the BFF, so it still beats a tenant default (#4724). digisearch / digivault / web_search
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
 variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is

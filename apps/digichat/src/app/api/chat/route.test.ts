@@ -473,6 +473,144 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(call?.headers?.["X-Digi-Language"]).toBeUndefined();
   });
 
+  it("forwards X-Digi-Search-Engine to digigraph upstream headers", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-search-engine": "exa",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Search-Engine"]).toBe("exa");
+  });
+
+  it("drops X-Digi-Search-Engine for unknown, blank, or auto engines", async () => {
+    for (const engine of ["not-an-engine", "", "   ", "auto", "AUTO"]) {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-search-engine": engine,
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Search-Engine"]).toBeUndefined();
+    }
+  });
+
+  it("forwards tenant default search engine when browser sends none", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "test",
+        backend: { type: "digigraph" },
+        gate: { searchEngine: "tavily" },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Search-Engine"]).toBe("tavily");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("browser search engine beats tenant default", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "test",
+        backend: { type: "digigraph" },
+        gate: { searchEngine: "tavily" },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-search-engine": "exa",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Search-Engine"]).toBe("exa");
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
+  it("explicit browser auto beats tenant default via omission", async () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "test",
+        backend: { type: "digigraph" },
+        gate: { searchEngine: "tavily" },
+      },
+    });
+    setDigichatConfigForTests(cfg);
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/chat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-digi-search-engine": "auto",
+          },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+          }),
+        })
+      );
+      expect(res.status).toBe(200);
+      const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+        headers?: Record<string, string>;
+      };
+      expect(call?.headers?.["X-Digi-Search-Engine"]).toBeUndefined();
+    } finally {
+      resetDigichatConfigForTests();
+    }
+  });
+
   it("forwards X-Digi-Force-Tool to digigraph upstream headers", async () => {
     setDigichatConfigForTests(catalogWithSearchVault());
     try {

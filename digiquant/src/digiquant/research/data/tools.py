@@ -38,8 +38,8 @@ DATA_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "get_macro_series",
             "description": (
-                "Latest values + recent window for FRED macro series ids (e.g. M2SL, DFF, "
-                "DGS10, T10Y2Y, VIXCLS, DTWEXBGS, T10YIE). Use to ground macro-regime claims."
+                "Latest values + recent window for macro series ids (e.g. M2SL, DFF, "
+                "DGS10, T10Y2Y, VIXCLS, DGS2, T10YIE). Use to ground macro-regime claims."
             ),
             "parameters": {
                 "type": "object",

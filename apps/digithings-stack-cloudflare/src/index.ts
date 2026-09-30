@@ -125,7 +125,7 @@ export class DigiStackContainer extends Container {
     DIGISEARCH_INDEX: env.DIGISEARCH_INDEX ?? "digithings_docs",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from digisearch index `occ_help`\\nand/or digivault_search_notes under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 call digivault_get_note with its doc_id and read\\nthe whole thing before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you loaded the full note\\nand looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket questions go to the read-only zammad tools (per-request MCP union),\\nnot the document corpus. Classify the question first, then run the recipe:\\n\\n- Ranking / counting (\\"who reports most\\", \\"how many are open\\", \\"who closed most\\"):\\n  aggregate_tickets with group_by=customer|owner|state|group|priority|title and\\n  metric=count|open_count|closed_count over since_days. Open/closed comes from\\n  state types inside the tool \\u2014 never state.name:open. Owner rankings exclude\\n  automation accounts automatically.\\n- Fix / resolution (\\"how was X fixed\\", \\"is X resolved\\"): resolved-first \\u2014 one\\n  title:<term> / article.body:<term> search per question term with\\n  state_category=\\"closed\\", rank hits by coverage then recency, read the top 3-5\\n  with get_ticket, and cross-check the occ_help docs before answering.\\n- History / thread (\\"what did <customer> report\\", \\"what happened in #<n>\\"):\\n  customer.email:<addr> finds the latest ticket, get_ticket reads the thread\\n  (owner name and open|closed|pending category included).\\n- Status (\\"what\\u0027s open, what\\u0027s new\\"): ticket_report, optionally windowed with\\n  since_days and grouped with group_by=state|group|priority.\\n\\nWindows are created_at date ranges (since_days); customer emails stay masked;\\ninternal ticket notes are never shown. If neither corpus nor tickets ground\\nthe answer, say so clearly."}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from digisearch index `occ_help`\\nand/or digivault_search_notes under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 call digivault_get_note with its doc_id and read\\nthe whole thing before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you loaded the full note\\nand looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket questions go to the read-only zammad tools (per-request MCP union; exposed as zammad_<name> -- always use the full prefixed name),\\nnot the document corpus. Classify the question first, then run the recipe:\\n\\n- Ranking / counting (\\"who reports most\\", \\"how many are open\\", \\"who closed most\\"):\\n  zammad_aggregate_tickets with group_by=customer|owner|state|group|priority|title and\\n  metric=count|open_count|closed_count over since_days. Open/closed comes from\\n  state types inside the tool \\u2014 never state.name:open. Owner rankings exclude\\n  automation accounts automatically.\\n- Fix / resolution (\\"how was X fixed\\", \\"is X resolved\\"): resolved-first \\u2014 one\\n  zammad_search_tickets call per question term (title:<term> / article.body:<term> queries) with\\n  state_category=\\"closed\\", rank hits by coverage then recency, read the top 3-5\\n  with zammad_get_ticket, and cross-check the occ_help docs before answering.\\n- History / thread (\\"what did <customer> report\\", \\"what happened in #<n>\\"):\\n  zammad_search_tickets with customer.email:<addr> finds the latest ticket; zammad_get_ticket reads the thread\\n  (owner name and open|closed|pending category included).\\n- Status (\\"what\\u0027s open, what\\u0027s new\\"): zammad_ticket_report, optionally windowed with\\n  since_days and grouped with group_by=state|group|priority.\\n\\nWindows are created_at date ranges (since_days); customer emails stay masked;\\ninternal ticket notes are never shown. If neither corpus nor tickets ground\\nthe answer, say so clearly."}}',
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -176,9 +176,7 @@ export class DigiStackContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`stack container not ready: ${message}`, {
-        status: 503,
-      });
+      return containerBootingResponse("stack", message);
     }
     return this.containerFetch(request, targetPort);
   }
@@ -234,9 +232,7 @@ export class DigiQuantMcpContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`mcp container not ready: ${message}`, {
-        status: 503,
-      });
+      return containerBootingResponse("mcp", message);
     }
     return this.containerFetch(request, DIGIQUANT_MCP_PORT);
   }
@@ -320,9 +316,7 @@ export class DigiChatContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(`digichat container not ready: ${message}`, {
-        status: 503,
-      });
+      return containerBootingResponse("digichat", message);
     }
     return this.containerFetch(request, targetPort);
   }
@@ -337,6 +331,37 @@ function targetPortFromRequest(request: Request): number {
     }
   }
   return DIGIGRAPH_PORT;
+}
+
+/**
+ * Machine-readable boot code for container-not-ready 503s (#4753).
+ *
+ * The digichat BFF keys its extended cold-boot retry budget off this code:
+ * only a 503 carrying `container_booting` (plus `Retry-After`) gets the ~250s
+ * budget; every other 503 keeps the 15s budget. Never reuse this code for a
+ * real outage — the BFF would wait out the budget instead of failing fast.
+ */
+export const CONTAINER_BOOTING_CODE = "container_booting";
+
+/**
+ * Poll hint (seconds) for a booting container. Small enough that a ready
+ * container is picked up promptly, large enough that a full ~240s boot costs
+ * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ */
+const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
+
+/** JSON 503 with the boot code + Retry-After for all three containers. */
+export function containerBootingResponse(
+  service: "stack" | "mcp" | "digichat",
+  message: string,
+): Response {
+  return Response.json(
+    { code: CONTAINER_BOOTING_CODE, message: `${service} container not ready: ${message}` },
+    {
+      status: 503,
+      headers: { "Retry-After": String(CONTAINER_BOOT_RETRY_AFTER_SECONDS) },
+    },
+  );
 }
 
 export interface Env {

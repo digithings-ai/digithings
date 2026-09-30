@@ -76,8 +76,8 @@ research = [
     "psycopg[binary]>=3.1",
 ]
 optimize = ["optuna>=3.0"]
-# M2 Liquidity strategy: global M2 money-supply from FRED + FX rates from yfinance.
-# Requires FRED_API_KEY (free) for live fetches; unit tests mock the clients.
+# M2 Liquidity strategy: global M2 money-supply (sealed R2 fred__M2SL via the
+# gloomberb panel, #4794) + FX rates from yfinance. Unit tests mock the clients.
 m2 = ["fredapi>=0.5", "yfinance>=0.2"]
 all = ["digiquant[nautilus]"]
 # Pulls in research runtime deps too, so `pytest tests/dq/research/` works whenever
@@ -94,7 +94,7 @@ dev = ["digiquant[research]", "digiquant[indicators]", "digiquant[m2]"]
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
 # yfinance backs digifetch_earnings_calendar (the one Yahoo-backed tool in the
 # digifetch family, #4069). Declared on this extra so the MCP image
-# ([research,mcp]) serves all 33 tools instead of 32 + a typed upstream_error.
+# ([research,mcp]) serves all 34 tools instead of 33 + a typed upstream_error.
 mcp = ["mcp>=1.2,<2", "yfinance>=0.2"]
 otel = ["digibase[otel]"]
 # Alpaca paper Trading API adapter (K1). Cap to the current 0.x major — a broker
