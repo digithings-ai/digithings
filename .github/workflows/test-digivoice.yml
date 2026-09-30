@@ -1,0 +1,29 @@
+name: "Test: digivoice"
+
+# Local CLI scaffold (#4818). Installs from the committed uv.lock.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Ruff
+        run: |
+          uv run --frozen --no-sync ruff check digivoice/src tests/dvo
+          uv run --frozen --no-sync ruff format --check digivoice/src tests/dvo
+
+      - name: Pytest
+        run: uv run --frozen --no-sync pytest tests/dvo/ -m unit -v --tb=short

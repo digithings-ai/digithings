@@ -27,6 +27,7 @@ WORKFLOW_BY_COMPONENT = {
     "digibase": "test-digibase.yml",
     "digikey": "test-digikey.yml",
     "digichat": "test-digichat.yml",
+    "digivoice": "test-digivoice.yml",
 }
 
 # Flags / tokens that are not path selectors (CI may add cov; agents.yml may omit).
