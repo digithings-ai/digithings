@@ -1,6 +1,7 @@
 import "./chrome.css";
 import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
 import { BreadcrumbsReference } from "@/components/chrome/breadcrumbs-reference";
+import { SidebarReference } from "@/components/chrome/sidebar-reference";
 import { CtaReference } from "@/components/chrome/cta-reference";
 import { KbdReference } from "@/components/chrome/kbd-reference";
 import { CommandPaletteReference } from "@/components/command-palette-reference";
@@ -40,6 +41,7 @@ export default function ChromePage() {
       <KbdReference />
       <NavMenuReference />
       <BreadcrumbsReference />
+      <SidebarReference />
       <PaginationReference />
       <ReleaseRailReference />
       <FooterCellsReference />

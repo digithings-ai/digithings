@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -12,6 +13,7 @@ import {
 const COLLAPSED_KEY = 'dashboard-sidebar-collapsed';
 /** Pre-rebrand key. Read once so a collapsed sidebar survives the rename; removed on first toggle. */
 const LEGACY_COLLAPSED_KEY = 'research-sidebar-collapsed';
+const WIDTH_KEY = 'dashboard-sidebar-width';
 const DEFAULT_KEY = 'dashboard-sidebar-default';
 const GROUPS_KEY = 'dashboard-sidebar-groups';
 const STATUS_KEY = 'dashboard-sidebar-status';
@@ -23,12 +25,13 @@ export type SidebarDefault = 'expanded' | 'collapsed';
 type AppShellContextValue = {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  /** Expanded sidebar width in px (drag the edge to change); kit clamps to its bounds. */
+  sidebarWidth: number;
+  setSidebarWidth: (width: number) => void;
   /** Initial state when no explicit collapse choice is stored. */
   sidebarDefault: SidebarDefault;
   setSidebarDefault: (v: SidebarDefault) => void;
-  /** Drawer open state for the mobile navigation sheet (< md). */
-  mobileNavOpen: boolean;
-  setMobileNavOpen: (open: boolean) => void;
   /** Group ids the visitor expanded by hand (the active route's group is always open). */
   openGroups: readonly string[];
   toggleGroup: (id: string) => void;
@@ -83,25 +86,48 @@ function readGroups(): string[] {
 }
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(readCollapsed);
-  const [sidebarDefault, setSidebarDefaultState] = useState<SidebarDefault>(readDefault);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<string[]>(readGroups);
-  const [statusOpen, setStatusOpen] = useState(() => read(STATUS_KEY) !== '0');
-  const [density, setDensityState] = useState<Density>(() =>
-    read(DENSITY_KEY) === 'comfortable' ? 'comfortable' : 'compact'
-  );
+  // Server and first client render use defaults so the prerendered HTML always
+  // matches; stored device prefs are applied right after mount.
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
+  const [sidebarWidth, setSidebarWidthState] = useState(240);
+  const [sidebarDefault, setSidebarDefaultState] = useState<SidebarDefault>('expanded');
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const [statusOpen, setStatusOpen] = useState(true);
+  const [density, setDensityState] = useState<Density>('compact');
+
+  useEffect(() => {
+    const width = Number(read(WIDTH_KEY));
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time post-mount read of device prefs */
+    setSidebarCollapsedState(readCollapsed());
+    if (Number.isFinite(width) && width > 0) setSidebarWidthState(width);
+    setSidebarDefaultState(readDefault());
+    setOpenGroups(readGroups());
+    setStatusOpen(read(STATUS_KEY) !== '0');
+    setDensityState(read(DENSITY_KEY) === 'comfortable' ? 'comfortable' : 'compact');
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
   const closeCommandPalette = useCallback(() => setCommandPaletteOpen(false), []);
 
   const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((c) => {
+    setSidebarCollapsedState((c) => {
       const next = !c;
       write(COLLAPSED_KEY, next ? '1' : '0');
       write(LEGACY_COLLAPSED_KEY, null);
       return next;
     });
+  }, []);
+
+  const setSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setSidebarCollapsedState(collapsed);
+    write(COLLAPSED_KEY, collapsed ? '1' : '0');
+    write(LEGACY_COLLAPSED_KEY, null);
+  }, []);
+
+  const setSidebarWidth = useCallback((width: number) => {
+    setSidebarWidthState(width);
+    write(WIDTH_KEY, String(width));
   }, []);
 
   const setSidebarDefault = useCallback((v: SidebarDefault) => {
@@ -133,10 +159,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     () => ({
       sidebarCollapsed,
       toggleSidebar,
+      setSidebarCollapsed,
+      sidebarWidth,
+      setSidebarWidth,
       sidebarDefault,
       setSidebarDefault,
-      mobileNavOpen,
-      setMobileNavOpen,
       openGroups,
       toggleGroup,
       statusOpen,
@@ -150,9 +177,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     [
       sidebarCollapsed,
       toggleSidebar,
+      setSidebarCollapsed,
+      sidebarWidth,
+      setSidebarWidth,
       sidebarDefault,
       setSidebarDefault,
-      mobileNavOpen,
       openGroups,
       toggleGroup,
       statusOpen,

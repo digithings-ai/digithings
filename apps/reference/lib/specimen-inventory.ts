@@ -76,6 +76,7 @@ export const SPECIMENS: Readonly<Record<string, SpecimenEntry>> = {
   select: { specimen: "components/controls/select-reference.tsx", route: "/controls", marker: "Select" },
   separator: { specimen: "components/controls/kit-surface-reference.tsx", route: "/controls", marker: "Separator" },
   sheet: { specimen: "components/controls/kit-surface-reference.tsx", route: "/controls", marker: "Sheet" },
+  sidebar: { specimen: "components/chrome/sidebar-reference.tsx", route: "/chrome", marker: "Sidebar" },
   skeleton: { specimen: "components/controls/skeleton-reference.tsx", route: "/controls", marker: "Skeleton" },
   slider: { specimen: "components/controls/slider-reference.tsx", route: "/controls", marker: "Slider" },
   switch: { specimen: "components/controls/form-fields-reference.tsx", route: "/controls", marker: "Switch" },

@@ -20,21 +20,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
+  SidebarMenuButton,
 } from '@digithings/ui/ui';
 import { useAppShell, type Density } from '@/components/app-shell-context';
 import { useDashboardTheme, type DashboardTheme } from '@/components/theme-provider';
 import { useAuth } from '@/lib/auth-context';
 import { usePlanTier } from '@/lib/use-entitlement';
 
-const TRIGGER =
-  'flex w-full items-center gap-2 border-none bg-transparent p-2 text-start font-mono text-[0.78rem] text-ink-soft outline-none hover:bg-accent-weak hover:text-ink focus-visible:ring-1 focus-visible:ring-ring/50';
-
 /**
  * Account footer. With auth: identity + tier badge. Without: a plain "Preferences"
  * trigger. Either way the menu is the device-local quick-settings surface
  * (theme, density, sidebar default) — full settings live at /settings.
  */
-export default function SidebarAccount({ collapsed }: { collapsed: boolean }) {
+export default function SidebarAccount() {
   const { authEnabled, user, signOut } = useAuth();
   const { theme, setTheme } = useDashboardTheme();
   const { density, setDensity, sidebarDefault, setSidebarDefault, openCommandPalette } = useAppShell();
@@ -66,7 +64,7 @@ export default function SidebarAccount({ collapsed }: { collapsed: boolean }) {
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger
-          className={`${TRIGGER} ${collapsed ? 'justify-center' : ''}`}
+          render={<SidebarMenuButton size="lg" tooltip={signedIn ? identity : 'Preferences'} />}
           aria-label={signedIn ? `Account menu, ${identity}` : 'Preferences'}
         >
           {signedIn ? (
@@ -74,17 +72,17 @@ export default function SidebarAccount({ collapsed }: { collapsed: boolean }) {
               <AvatarFallback>{identity.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
           ) : (
-            <SlidersHorizontal className="size-4 shrink-0" aria-hidden />
+            <SlidersHorizontal aria-hidden />
           )}
-          {collapsed ? null : signedIn ? (
+          {signedIn ? (
             <>
-              <span className="min-w-0 flex-1 truncate" title={identity} data-testid="sidebar-auth-identity">
+              <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden" title={identity} data-testid="sidebar-auth-identity">
                 {identity}
               </span>
-              <Badge variant="neutral">{tier}</Badge>
+              <Badge variant="neutral" className="group-data-[collapsible=icon]:hidden">{tier}</Badge>
             </>
           ) : (
-            <span className="flex-1">Preferences</span>
+            <span className="flex-1 group-data-[collapsible=icon]:hidden">Preferences</span>
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="w-56">

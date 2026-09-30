@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
-import { TooltipProvider } from '@digithings/ui/ui';
+import { useEffect } from 'react';
+import { SidebarInset, SidebarProvider, TooltipProvider } from '@digithings/ui/ui';
 import { useAppShell } from '@/components/app-shell-context';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
@@ -13,7 +14,7 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { isDbExempt } from '@/lib/nav';
 import MobileBar from './mobile-bar';
 import { PageHeader, PageHeaderProvider, usePageLayout } from './page-header';
-import Sidebar from './sidebar';
+import DashboardSidebar from './sidebar';
 
 const MAIN_BY_LAYOUT = {
   contained: `${SUBPAGE_MAX} py-4 md:py-6 group-data-[density=comfortable]/shell:py-8`,
@@ -21,17 +22,41 @@ const MAIN_BY_LAYOUT = {
   canvas: 'w-full overflow-hidden',
 } as const;
 
+/** '/' opens the palette unless the visitor is typing or a dialog owns the keyboard. */
+function useSlashPalette(open: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest('[role="dialog"]'))) return;
+      e.preventDefault();
+      open();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+}
+
 function ShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { dbStatus } = useDashboard();
-  const { density } = useAppShell();
+  const shell = useAppShell();
   const layout = usePageLayout();
   const gated = dbStatus !== 'ok' && !isDbExempt(pathname);
+  useSlashPalette(shell.openCommandPalette);
 
   return (
-    <div data-density={density} className="group/shell flex h-dvh bg-bg font-mono text-ink">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+    <SidebarProvider
+      open={!shell.sidebarCollapsed}
+      onOpenChange={(open) => shell.setSidebarCollapsed(!open)}
+      width={shell.sidebarWidth}
+      onWidthChange={shell.setSidebarWidth}
+      data-density={shell.density}
+      suppressHydrationWarning
+      className="group/shell bg-bg font-mono text-ink"
+    >
+      <DashboardSidebar />
+      <SidebarInset>
         <MobileBar />
         <PageHeader />
         <main
@@ -42,11 +67,11 @@ function ShellFrame({ children }: { children: ReactNode }) {
             {gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>}
           </div>
         </main>
-      </div>
+      </SidebarInset>
       <CommandPalette />
       {/* Desk+ research/portfolio digichat popup (#3422); no-ops when env off. */}
       <DigichatPopup />
-    </div>
+    </SidebarProvider>
   );
 }
 

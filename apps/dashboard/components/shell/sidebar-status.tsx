@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@digithings/ui/ui';
+import { Button } from '@digithings/ui/ui';
 import { useAppShell } from '@/components/app-shell-context';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { useDashboard } from '@/lib/dashboard-context';
@@ -16,7 +16,7 @@ const BUILD = process.env.NEXT_PUBLIC_DASHBOARD_VERSION ?? 'v0.1 · dev';
  * Carries the old settings popover's Status/About rows so they're always in view.
  * The dot uses accent (ok) or warn (DB down) — never up/down, which are P&L colours.
  */
-export default function SidebarStatus({ collapsed }: { collapsed: boolean }) {
+export default function SidebarStatus() {
   const { statusOpen, toggleStatus } = useAppShell();
   const { data, dbStatus } = useDashboard();
   const { fxHubOnlyInvitee } = useFxHubOnlyInvitee();
@@ -24,38 +24,24 @@ export default function SidebarStatus({ collapsed }: { collapsed: boolean }) {
   const dbOk = dbStatus === 'ok';
   const dot = dbOk ? 'bg-accent' : 'bg-warn';
 
-  if (collapsed) {
-    return (
-      <div className="flex justify-center border-t border-hair py-2">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span
-                role="img"
-                aria-label={dbOk ? 'Data backend ok' : 'Data backend unavailable'}
-                className="flex size-6 items-center justify-center"
-              />
-            }
-          >
-            <span className={`size-2 ${dot}`} />
-          </TooltipTrigger>
-          <TooltipContent side="right" hideArrow>
-            {dbOk ? 'Backend ok' : 'Backend unavailable'}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-    );
-  }
-
   const runType = meta?.latest_snapshot_run_type;
   const lastRun = meta?.last_run_at ?? meta?.last_updated ?? null;
   const host = dataSourceHost();
 
   return (
+    <>
+      <div
+        role="img"
+        title={dbOk ? 'Backend ok' : 'Backend unavailable'}
+        aria-label={dbOk ? 'Data backend ok' : 'Data backend unavailable'}
+        className="hidden justify-center border-t border-hair py-2 group-data-[collapsible=icon]:flex"
+      >
+        <span className={`size-2 ${dot}`} />
+      </div>
     <section
       aria-label="Status"
       data-testid="sidebar-status"
-      className="shrink-0 border-t border-hair px-2 py-1.5 font-mono text-[0.68rem] text-ink-mute"
+      className="shrink-0 border-t border-hair px-2 py-1.5 font-mono text-[0.68rem] text-ink-mute group-data-[collapsible=icon]:hidden"
     >
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2">
@@ -113,5 +99,6 @@ export default function SidebarStatus({ collapsed }: { collapsed: boolean }) {
         </dl>
       ) : null}
     </section>
+    </>
   );
 }

@@ -34,6 +34,16 @@ import {
   Sheet,
   SheetContent,
   SheetTrigger,
+  Sidebar,
+  SidebarContent,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarProvider,
+  SidebarRail,
   Skeleton,
   SkeletonGroup,
   Slider,
@@ -917,5 +927,65 @@ describe("kit parts promoted from the controls layer (#4306, batch K2)", () => {
     // the status badge anchors to the inline end, not the physical right
     expect(html).toContain("end-0");
     expect(html).not.toContain("right-0");
+  });
+});
+
+describe("Sidebar (adjustable app-shell spine)", () => {
+  const tree = (props = {}) =>
+    renderToStaticMarkup(
+      <SidebarProvider width={280} {...props}>
+        <Sidebar>
+          <SidebarContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive tooltip="Brief">
+                  <span>Brief</span>
+                </SidebarMenuButton>
+                <SidebarMenuSub>
+                  <SidebarMenuSubButton isActive>Holdings</SidebarMenuSubButton>
+                </SidebarMenuSub>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarRail />
+        </Sidebar>
+        <SidebarInset>body</SidebarInset>
+      </SidebarProvider>
+    );
+
+  it("renders in flow with the width as a css variable and no fixed positioning", () => {
+    const html = tree();
+    expect(html).toContain('data-slot="sidebar"');
+    expect(html).toContain("--sidebar-width:280px");
+    expect(html).toContain("sticky");
+    expect(html).not.toContain("fixed");
+    expect(html).toContain('data-slot="sidebar-inset"');
+    expect(html).not.toContain("<main");
+  });
+
+  it("marks the active row and stays on kit tokens (no stock --sidebar palette)", () => {
+    const html = tree();
+    expect(html).toContain('data-active');
+    expect(html).toContain("border-s-accent");
+    expect(html).not.toContain("bg-sidebar");
+    expect(html).not.toContain("text-sidebar");
+  });
+
+  it("exposes the resize handle as an ARIA separator with bounds", () => {
+    const html = tree();
+    expect(html).toContain('role="separator"');
+    expect(html).toContain('aria-orientation="vertical"');
+    expect(html).toContain('aria-valuenow="280"');
+    expect(html).toContain('aria-valuemin="176"');
+    expect(html).toContain('aria-valuemax="400"');
+    expect(html).toContain("cursor-col-resize");
+    expect(html).toContain("-end-1");
+  });
+
+  it("clamps a controlled width into the bounds and drops the rail when collapsed", () => {
+    expect(tree({ width: 9999 })).toContain('aria-valuenow="400"');
+    const collapsed = tree({ open: false });
+    expect(collapsed).toContain('data-collapsible="icon"');
+    expect(collapsed).not.toContain('role="separator"');
   });
 });

@@ -39,10 +39,11 @@ vi.mock('@/components/app-shell-context', () => ({
   useAppShell: () => ({
     sidebarCollapsed: state.collapsed,
     toggleSidebar: vi.fn(),
+    setSidebarCollapsed: vi.fn(),
+    sidebarWidth: 240,
+    setSidebarWidth: vi.fn(),
     sidebarDefault: 'expanded',
     setSidebarDefault: vi.fn(),
-    mobileNavOpen: false,
-    setMobileNavOpen: vi.fn(),
     openGroups: [],
     toggleGroup: vi.fn(),
     statusOpen: true,
@@ -92,11 +93,17 @@ describe('AppShell', () => {
     expect(html).toContain('data-testid="sidebar-gloomberb-link"');
   });
 
-  it('collapses to a narrow rail without labels', () => {
+  it('renders the adjustable width and a resize handle when expanded', () => {
+    const html = render();
+    expect(html).toContain('--sidebar-width:240px');
+    expect(html).toContain('role="separator"');
+  });
+
+  it('collapses to the icon rail', () => {
     state.collapsed = true;
     const html = render();
-    expect(html).toContain('w-14');
-    expect(html).not.toContain('Gloomberb Terminal</span>');
+    expect(html).toContain('data-collapsible="icon"');
+    expect(html).not.toContain('role="separator"');
   });
 
   it('DB down: gates a non-exempt route but keeps the shell; /settings stays live', () => {
