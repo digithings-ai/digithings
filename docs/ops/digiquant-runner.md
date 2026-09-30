@@ -158,9 +158,10 @@ Phase 2 adds `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
 closed (exit 2). Research-metrics and tearsheets do not need LLM, digikey,
 or LangSmith keys. Those stay off this Worker until the house run.
 
-`FRED_API_KEY` is gone from this path and must stay unset. Tearsheet
-`export_sdca_macro.py` may still mention FRED until #4794 PR3 and falls
-through without a key; do not put `FRED_API_KEY` back on the runner.
+`FRED_API_KEY` is gone from this path and must stay unset. #4794 PR3
+(#4817) removed the last FRED callers, including tearsheet
+`export_sdca_macro.py`, which stages M2SL from Supabase or sealed R2 and
+does not call `fetch_fred`. Do not put `FRED_API_KEY` back on the runner.
 `GH_ISSUE_TOKEN` is not used: the runner does not open or update GitHub
 issues.
 
