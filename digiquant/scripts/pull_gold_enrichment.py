@@ -34,6 +34,11 @@ def _now_utc() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _unwrap_content(result):
+    """Live dispatcher answers {"content": <JSON str>, "ok": bool}; tests answer raw."""
+    return result["content"] if isinstance(result, dict) else result
+
+
 def snapshot_options_skew(
     symbol: str = "GLD", expiration: int | None = None, *, fetched_at: str | None = None
 ) -> tuple[str, dict]:
@@ -47,9 +52,7 @@ def snapshot_options_skew(
     if expiration is not None:
         params["expiration"] = expiration
     result = _dispatcher()("digifetch_options_chain", params)
-    # Live dispatcher answers {"content": <JSON str>, "ok": bool}
-    # (agent_tools.py); offline tests answer the JSON string directly.
-    raw = result["content"] if isinstance(result, dict) else result
+    raw = _unwrap_content(result)
     chain = json.loads(raw)["data"]["chain"]  # shape per Task 0 table; KeyError surfaces drift
     legs = chain["calls"] + chain["puts"]
     by_expiry: dict[str, dict] = {}
@@ -74,6 +77,64 @@ def snapshot_options_skew(
     return str(path), metrics
 
 
+def snapshot_13f_gld(*, fetched_at: str | None = None) -> str:
+    """GLD institutional map via 13F funds tickers-branch (anon).
+
+    Known upstream caveat: the funds ``holders`` branch 400s on every period
+    format probed — this pull uses ``what="tickers"`` only and never calls it.
+    """
+    params = {"what": "tickers", "tickers": ["GLD"]}
+    raw = _unwrap_content(_dispatcher()("digifetch_13f_funds", params))
+    return str(
+        write_snapshot("digifetch_13f_funds", params, raw, fetched_at=fetched_at or _now_utc())
+    )
+
+
+def snapshot_econ_calendar(*, fetched_at: str | None = None) -> str:
+    """Econ calendar window (~105 rows, no params)."""
+    params: dict = {}
+    raw = _unwrap_content(_dispatcher()("digifetch_econ_calendar", params))
+    return str(
+        write_snapshot("digifetch_econ_calendar", params, raw, fetched_at=fetched_at or _now_utc())
+    )
+
+
+def snapshot_gold_news(limit: int = 50, *, fetched_at: str | None = None) -> str:
+    """Gold news tape (ticker feed)."""
+    params = {"feed": "ticker", "ticker": "GLD", "limit": limit}
+    raw = _unwrap_content(_dispatcher()("digifetch_news", params))
+    return str(write_snapshot("digifetch_news", params, raw, fetched_at=fetched_at or _now_utc()))
+
+
+LBMA_CANDIDATES = ("GOLDPMGBD228NLBM", "GOLDAMGBD228NLBM")
+
+
+def probe_lbma_series(*, fetched_at: str | None = None) -> dict[str, str | None]:
+    """Probe the upstream econ catalog for LBMA fix series; snapshot hits only.
+
+    Misses (error envelopes) are recorded as None and never snapshotted.
+    A hit here is enrichment-only — promoting it to the native FRED manifest
+    is a Plan-4 candidate, not this task.
+    """
+    out: dict[str, str | None] = {}
+    for series_id in LBMA_CANDIDATES:
+        params = {"series_id": series_id, "limit": 5, "sort_order": "desc"}
+        raw = _unwrap_content(_dispatcher()("digifetch_econ_series", params))
+        try:
+            obs = json.loads(raw)["data"]["observations"]
+        except (KeyError, TypeError, ValueError):
+            obs = []
+        if obs:
+            out[series_id] = str(
+                write_snapshot(
+                    "digifetch_econ_series", params, raw, fetched_at=fetched_at or _now_utc()
+                )
+            )
+        else:
+            out[series_id] = None
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gold enrichment pulls → snapshot store")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -81,11 +142,24 @@ def main() -> None:
     p_skew.add_argument(
         "--expiration", type=int, default=None, help="Epoch seconds (default: all expiries)"
     )
+    sub.add_parser("13f-gld")
+    sub.add_parser("econ-calendar")
+    p_news = sub.add_parser("gold-news")
+    p_news.add_argument("--limit", type=int, default=50, help="Stories to fetch (1-100)")
+    sub.add_parser("probe-lbma")
     args = parser.parse_args()
     if args.command == "options-skew":
         path, metrics = snapshot_options_skew(expiration=args.expiration)
         print(f"snapshot: {path}")
         print(json.dumps(metrics, indent=2))
+    elif args.command == "13f-gld":
+        print(f"snapshot: {snapshot_13f_gld()}")
+    elif args.command == "econ-calendar":
+        print(f"snapshot: {snapshot_econ_calendar()}")
+    elif args.command == "gold-news":
+        print(f"snapshot: {snapshot_gold_news(limit=args.limit)}")
+    elif args.command == "probe-lbma":
+        print(json.dumps(probe_lbma_series(), indent=2))
 
 
 if __name__ == "__main__":
