@@ -87,6 +87,14 @@ class SensitivityReport(BaseModel):
     max_abs_delta_oos_pct: float
     stable: bool
     neighbor_count: int = Field(ge=0)
+    worst_neighbor_key: str | None = Field(
+        default=None,
+        description=(
+            "Gate-level attribution only ('<param>:<sign><pct>', e.g. 'buy_max_rate:+5%'). "
+            "Mean-OOS design: per-fold neighbor keys are explicitly out of scope. "
+            "None when no neighbors were evaluated."
+        ),
+    )
 
 
 class SdcaWalkForwardResult(BaseModel):
@@ -391,6 +399,26 @@ def run_sdca_walk_forward(
     )
 
 
+def _worst_neighbor_key(
+    best_params: dict[str, float | int | str],
+    worst_neighbor: dict[str, float | int | str] | None,
+) -> str | None:
+    """Derive '<param>:<sign><pct>' from the argmax neighbor (None if unevaluated)."""
+    if worst_neighbor is None:
+        return None
+    diffs = [key for key in worst_neighbor if worst_neighbor[key] != best_params.get(key)]
+    if len(diffs) != 1:
+        raise ValueError(
+            f"sensitivity neighbor must differ from best_params in exactly one key, "
+            f"got {len(diffs)} differing keys: {sorted(str(k) for k in diffs)}"
+        )
+    key = diffs[0]
+    best_val = float(best_params[key])  # type: ignore[arg-type]
+    neighbor_val = float(worst_neighbor[key])  # type: ignore[arg-type]
+    rel_pct = (neighbor_val - best_val) / best_val * 100.0 if best_val != 0.0 else 0.0
+    return f"{key}:{rel_pct:+g}%"
+
+
 def _sensitivity_of(
     best_params: dict[str, float | int | str],
     mean_oos: float,
@@ -405,6 +433,8 @@ def _sensitivity_of(
 ) -> SensitivityReport:
     deltas: list[float] = []
     neighbors = sensitivity_neighbors(best_params, frac=frac)
+    worst_delta = float("-inf")
+    worst_neighbor: dict[str, float | int | str] | None = None
     for neighbor in neighbors:
         if missing_extra_names(composite_weights_from_params(neighbor), extra_z):
             continue
@@ -418,7 +448,11 @@ def _sensitivity_of(
             objective,
             extra_z=extra_z,
         )
-        deltas.append(abs(_mean_oos(scores) - mean_oos))
+        delta = abs(_mean_oos(scores) - mean_oos)
+        deltas.append(delta)
+        if delta > worst_delta:
+            worst_delta = delta
+            worst_neighbor = neighbor
     max_delta = max(deltas) if deltas else 0.0
     return SensitivityReport(
         frac=frac,
@@ -426,6 +460,7 @@ def _sensitivity_of(
         max_abs_delta_oos_pct=max_delta,
         stable=max_delta <= SENSITIVITY_SPIKE_PCT,
         neighbor_count=len(neighbors),
+        worst_neighbor_key=_worst_neighbor_key(best_params, worst_neighbor),
     )
 
 

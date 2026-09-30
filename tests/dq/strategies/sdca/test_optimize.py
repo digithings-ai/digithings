@@ -172,6 +172,7 @@ class TestWalkForwardSearch:
         assert result.is_oos_gap_pct != 0.0
         assert result.holdout_metrics is not None
         assert result.sensitivity.neighbor_count > 0
+        assert result.sensitivity.worst_neighbor_key == "buy_max_rate:+5%"
 
     def test_optimize_result_message_states_oos(self) -> None:
         dates = _dates()
