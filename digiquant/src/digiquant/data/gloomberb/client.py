@@ -526,6 +526,18 @@ PREDICTION_MARKETS_ATTRIBUTION = (
 YAHOO_TRENDING_BASE_URL = "https://query1.finance.yahoo.com"
 YAHOO_TRENDING_PATH = "/v1/finance/trending/US"
 YAHOO_QUOTE_URL = "https://finance.yahoo.com/quote/{symbol}"
+YAHOO_REFERER = "https://finance.yahoo.com/"
+YAHOO_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+# Yahoo's trending pane answers 403 to non-browser clients (live-verified
+# #4876), so the browser User-Agent + Yahoo referer are not optional.
+YAHOO_TRENDING_HEADERS: dict[str, str] = {
+    "Accept": "application/json,text/plain,*/*",
+    "User-Agent": YAHOO_USER_AGENT,
+    "Referer": YAHOO_REFERER,
+}
 
 SUBSTACK_ORIGIN = "https://substack.com"
 SUBSTACK_SESSION_COOKIE_ENV = "SUBSTACK_SESSION_COOKIE"
@@ -4059,6 +4071,7 @@ class GloomberbClient:
                 YAHOO_TRENDING_PATH,
                 base_url=YAHOO_TRENDING_BASE_URL,
                 label="Yahoo",
+                headers=YAHOO_TRENDING_HEADERS,
             )
             if isinstance(raw, DigifetchError):
                 return self._error_envelope(TrendingEnvelope, raw)
