@@ -247,8 +247,8 @@ export function ConnectionsSection({
 
   return (
     <div className="space-y-4" data-testid="settings-connections">
-      <span id="brokers" className="block scroll-mt-20" aria-hidden />
-      <span id="keys" className="block scroll-mt-20" aria-hidden />
+      {hasBroker ? <span id="brokers" className="block scroll-mt-20" aria-hidden /> : null}
+      {hasLlm ? <span id="keys" className="block scroll-mt-20" aria-hidden /> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p

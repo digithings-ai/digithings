@@ -247,4 +247,12 @@ describe('ConnectionsSection SSR', () => {
     expect(html).toContain('id="keys"');
     expect(html).not.toMatch(/sk-|secret":/);
   });
+
+  it('omits the anchor for a kind the viewer cannot use', () => {
+    const html = renderToStaticMarkup(
+      createElement(ConnectionsSection, { api: null, visibleTabs: ['brokers'] }),
+    );
+    expect(html).toContain('id="brokers"');
+    expect(html).not.toContain('id="keys"');
+  });
 });

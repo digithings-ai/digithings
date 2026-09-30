@@ -199,4 +199,23 @@ describe('Settings page sections', () => {
     });
     expect(q(container, 'settings-search-results')?.textContent).toContain('No matching settings');
   });
+
+  it('search never offers a setting the tier cannot reach', async () => {
+    entitlement.tier = 'desk';
+    await render();
+    const input = container.querySelector('input') as HTMLInputElement;
+    const type = async (value: string) => {
+      await act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      return [...container.querySelectorAll('[data-testid="settings-search-hit"]')].map(
+        (h) => h.textContent,
+      );
+    };
+    expect(await type('openai')).toEqual([]);
+    expect(await type('risk tolerance')).toEqual([]);
+    expect((await type('alpaca')).join(' ')).toContain('Brokers');
+  });
 });

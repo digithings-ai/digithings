@@ -1,6 +1,6 @@
 'use client';
 
-import { Kbd, SegmentedControl, Switch } from '@digithings/ui/ui';
+import { Button, Kbd, SegmentedControl, Switch } from '@digithings/ui/ui';
 import { useAppShell, type Density } from '@/components/app-shell-context';
 import { useDashboardTheme, type DashboardTheme } from '@/components/theme-provider';
 
@@ -51,14 +51,16 @@ export function AppearanceSection() {
       </Row>
       {openCommandPalette ? (
         <Row label="Command palette" hint="Jump to any page or setting.">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={openCommandPalette}
-            className="inline-flex items-center gap-2 border border-hair bg-surface px-3 py-1.5 font-mono text-xs text-ink-soft"
+            className="gap-2 font-mono text-ink-soft"
             data-testid="appearance-open-palette"
           >
             Open <Kbd>⌘K</Kbd>
-          </button>
+          </Button>
         </Row>
       ) : null}
     </div>

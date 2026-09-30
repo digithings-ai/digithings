@@ -1,9 +1,12 @@
 /**
  * Static settings search index (client-only; works in the static export).
- * Every entry jumps to an anchor id that exists on the page.
+ * Every entry jumps to an anchor id that exists on the page for the viewer:
+ * gating reuses the deep-link alias table, so search can never offer a jump
+ * that `#<anchor>` would refuse.
  */
+import type { SettingsTabId } from '@/lib/entitlements';
 import type { SettingsSectionId } from '@/lib/settings-sections';
-import { SETTINGS_SECTIONS } from '@/lib/settings-sections';
+import { SECTION_ALIASES, SETTINGS_SECTIONS, visibleSections } from '@/lib/settings-sections';
 
 export type SettingsIndexEntry = {
   id: string;
@@ -37,20 +40,31 @@ function tokens(q: string): string[] {
   return q.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
+function reachable(
+  entry: SettingsIndexEntry,
+  sections: readonly SettingsSectionId[],
+  visibleTabIds: readonly SettingsTabId[],
+): boolean {
+  if (!sections.includes(entry.section)) return false;
+  const tab = SECTION_ALIASES[entry.anchor]?.tab;
+  return !tab || visibleTabIds.includes(tab);
+}
+
 /**
  * Entries matching every query token (label, keywords or section name),
- * restricted to sections the viewer can see. Empty query returns [].
+ * restricted to what the viewer's tabs can reach. Empty query returns [].
  */
 export function filterSettingsIndex(
   query: string,
-  visible: readonly SettingsSectionId[],
+  visibleTabIds: readonly SettingsTabId[],
 ): SettingsIndexEntry[] {
   const toks = tokens(query);
   if (toks.length === 0) return [];
+  const sections = visibleSections(visibleTabIds).map((s) => s.id);
   const sectionLabel = new Map(SETTINGS_SECTIONS.map((s) => [s.id, s.label.toLowerCase()]));
   const scored: { entry: SettingsIndexEntry; score: number }[] = [];
   for (const entry of SETTINGS_INDEX) {
-    if (!visible.includes(entry.section)) continue;
+    if (!reachable(entry, sections, visibleTabIds)) continue;
     const label = entry.label.toLowerCase();
     const hay = `${label} ${entry.keywords} ${sectionLabel.get(entry.section) ?? ''}`;
     if (!toks.every((t) => hay.includes(t))) continue;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Alert, AlertDescription, SearchBar } from '@digithings/ui/ui';
+import { Alert, AlertDescription, Button, SearchBar } from '@digithings/ui/ui';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { usePageHeader } from '@/components/shell/page-header';
 import { AccountIdentity } from '@/components/settings/account-section';
@@ -28,16 +28,6 @@ import {
   visibleSections,
   type SettingsSectionId,
 } from '@/lib/settings-sections';
-
-const SECTION_BLURB: Record<SettingsSectionId, string> = {
-  account: 'Who you are signed in as, and your investment profile.',
-  pipeline: 'Overlay research knobs, the weekly schedule, and recent runs.',
-  connections: 'Brokers and model keys in one place. Secrets are never shown after save.',
-  plan: 'Where you are on the ladder, and what the next rung unlocks.',
-  notifications: 'Digests and alerts, and when they last went out.',
-  appearance: 'Device-local display preferences. Applied immediately.',
-  system: 'Last run, build, data source, and the remaining-hop proof.',
-};
 
 function scrollToAnchor(anchor: string) {
   if (typeof document === 'undefined') return;
@@ -134,7 +124,7 @@ export default function SettingsPage() {
     scrollToAnchor(id);
   }, []);
 
-  const hits = useMemo(() => filterSettingsIndex(query, sectionIds), [query, sectionIds]);
+  const hits = useMemo(() => filterSettingsIndex(query, visibleTabIds), [query, visibleTabIds]);
 
   const api: SettingsApiOptions | null = useMemo(() => {
     const token = session?.access_token;
@@ -271,9 +261,10 @@ export default function SettingsPage() {
               ) : (
                 hits.map((hit) => (
                   <li key={hit.id}>
-                    <button
+                    <Button
                       type="button"
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-ink-soft hover:bg-accent-weak hover:text-ink"
+                      variant="ghost"
+                      className="h-auto w-full justify-between gap-3 px-3 py-2 text-left text-sm font-normal text-ink-soft hover:bg-accent-weak hover:text-ink dark:hover:bg-accent-weak"
                       onClick={() => {
                         jump(hit.anchor, hit.section);
                         setQuery('');
@@ -284,7 +275,7 @@ export default function SettingsPage() {
                       <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
                         {sections.find((s) => s.id === hit.section)?.label}
                       </span>
-                    </button>
+                    </Button>
                   </li>
                 ))
               )}
@@ -300,20 +291,21 @@ export default function SettingsPage() {
           data-testid="settings-rail"
         >
           {sections.map((s) => (
-            <button
+            <Button
               key={s.id}
               type="button"
+              variant="ghost"
               onClick={() => jump(s.id, s.id)}
               aria-current={activeSection === s.id ? 'true' : undefined}
               data-testid={`settings-section-${s.id}`}
-              className={`shrink-0 border-s-2 px-3 py-1.5 text-left font-mono text-xs transition-colors ${
+              className={`h-auto shrink-0 justify-start border-s-2 px-3 py-1.5 text-left font-mono text-xs font-normal ${
                 activeSection === s.id
-                  ? 'border-s-accent bg-accent-weak text-ink'
-                  : 'border-s-transparent text-ink-mute hover:text-ink-soft'
+                  ? 'border-s-accent bg-accent-weak text-ink hover:bg-accent-weak dark:hover:bg-accent-weak'
+                  : 'border-s-transparent text-ink-mute hover:bg-transparent hover:text-ink-soft dark:hover:bg-transparent'
               }`}
             >
               {s.label}
-            </button>
+            </Button>
           ))}
         </nav>
 
@@ -333,7 +325,7 @@ export default function SettingsPage() {
                 >
                   {s.label}
                 </h2>
-                <p className="mt-1 text-xs text-ink-mute">{SECTION_BLURB[s.id]}</p>
+                <p className="mt-1 text-xs text-ink-mute">{s.blurb}</p>
               </div>
               {body(s.id)}
             </section>

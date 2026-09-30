@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { settingsTabsVisible, SETTINGS_TAB_DEFS } from '@/lib/entitlements';
 import { filterSettingsIndex, SETTINGS_INDEX } from '@/lib/settings-index';
-import { SETTINGS_SECTIONS, SECTION_ALIASES } from '@/lib/settings-sections';
+import { SECTION_ALIASES } from '@/lib/settings-sections';
 
-const ALL = SETTINGS_SECTIONS.map((s) => s.id);
+const ALL = SETTINGS_TAB_DEFS.map((t) => t.id);
+const tabsFor = (tier: Parameters<typeof settingsTabsVisible>[0]) =>
+  settingsTabsVisible(tier).map((t) => t.id);
 
 describe('filterSettingsIndex', () => {
   it('empty query returns nothing', () => {
@@ -20,9 +23,20 @@ describe('filterSettingsIndex', () => {
   });
 
   it('omits entries from sections the viewer cannot see', () => {
-    const observer = ALL.filter((s) => s !== 'connections' && s !== 'pipeline');
+    const observer = tabsFor('free');
     expect(filterSettingsIndex('alpaca', observer)).toEqual([]);
     expect(filterSettingsIndex('alpaca', ALL).length).toBeGreaterThan(0);
+  });
+
+  it('omits gated anchors inside a visible section', () => {
+    // Desk sees Connections (brokers) and Account, but not model keys or the profile.
+    const desk = tabsFor('desk');
+    expect(desk).toContain('brokers');
+    expect(desk).not.toContain('keys');
+    expect(filterSettingsIndex('openai', desk)).toEqual([]);
+    expect(filterSettingsIndex('risk tolerance', desk)).toEqual([]);
+    expect(filterSettingsIndex('alpaca', desk).map((e) => e.anchor)).toEqual(['brokers']);
+    expect(filterSettingsIndex('openai', ALL).map((e) => e.anchor)).toEqual(['keys']);
   });
 
   it('ranks a label prefix above a keyword-only hit', () => {

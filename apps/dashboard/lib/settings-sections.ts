@@ -21,18 +21,55 @@ export type SettingsSectionId =
 export type SettingsSectionDef = {
   id: SettingsSectionId;
   label: string;
+  /** One line under the section heading: what lives here. */
+  blurb: string;
   /** Legacy tab ids that feed this section. Empty = always visible. */
   sources: readonly SettingsTabId[];
 };
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
-  { id: 'account', label: 'Account', sources: [] },
-  { id: 'pipeline', label: 'Pipeline', sources: ['pipeline'] },
-  { id: 'connections', label: 'Connections', sources: ['keys', 'brokers'] },
-  { id: 'plan', label: 'Plan & billing', sources: ['billing'] },
-  { id: 'notifications', label: 'Notifications', sources: ['notifications'] },
-  { id: 'appearance', label: 'Appearance', sources: [] },
-  { id: 'system', label: 'System', sources: ['about'] },
+  {
+    id: 'account',
+    label: 'Account',
+    blurb: 'Who you are signed in as, and your investment profile.',
+    sources: [],
+  },
+  {
+    id: 'pipeline',
+    label: 'Pipeline',
+    blurb: 'Overlay research knobs, the weekly schedule, and recent runs.',
+    sources: ['pipeline'],
+  },
+  {
+    id: 'connections',
+    label: 'Connections',
+    blurb: 'Brokers and model keys in one place. Secrets are never shown after save.',
+    sources: ['keys', 'brokers'],
+  },
+  {
+    id: 'plan',
+    label: 'Plan & billing',
+    blurb: 'Where you are on the ladder, and what the next rung unlocks.',
+    sources: ['billing'],
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    blurb: 'Digests and alerts, and when they last went out.',
+    sources: ['notifications'],
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    blurb: 'Device-local display preferences. Applied immediately.',
+    sources: [],
+  },
+  {
+    id: 'system',
+    label: 'System',
+    blurb: 'Last run, build, data source, and the remaining-hop proof.',
+    sources: ['about'],
+  },
 ];
 
 /** Hash / ?tab= id -> section plus the in-section anchor to scroll to. */

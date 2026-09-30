@@ -21,9 +21,9 @@ import {
   signedPct,
   type BookAttributionView,
 } from '@/lib/portfolio-performance-view';
-import type { TableRow } from '@/lib/database.types';
+import type { TableRow as DbRow } from '@/lib/database.types';
 
-type AttributionRow = TableRow<'position_attribution'>;
+type AttributionRow = DbRow<'position_attribution'>;
 
 const pct = (n: number) => signedPct(n);
 
