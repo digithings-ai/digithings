@@ -95,7 +95,8 @@ type Ledger = {
 export type SessionDeps = {
   kv: RunnerKv;
   port: ContainerPort;
-  scheduleAlarm: (delayMs: number) => void;
+  /** May be sync or async; callers always await. */
+  scheduleAlarm: (delayMs: number) => void | Promise<void>;
   now?: () => number;
 };
 
@@ -235,7 +236,7 @@ export class RunnerSession {
     if (inflight >= MAX_INFLIGHT) {
       ledger.queue.push(run.run_id);
       await this.save(ledger);
-      this.deps.scheduleAlarm(HEARTBEAT_MS);
+      await Promise.resolve(this.deps.scheduleAlarm(HEARTBEAT_MS));
       return { ok: true, run_id: run.run_id, status: "accepted" };
     }
     this.holdLock(ledger, run);
@@ -251,7 +252,18 @@ export class RunnerSession {
       await this.rollback(run.run_id);
       throw err;
     }
-    this.deps.scheduleAlarm(HEARTBEAT_MS);
+    // Seed ledger from container immediately so GET /v1/jobs/:id has
+    // started_at/log_tail before the first heartbeat.
+    try {
+      const remote = await this.deps.port.readStatus(run.run_id);
+      if (remote) {
+        this.applyRemote(run, remote);
+        await this.save(ledger);
+      }
+    } catch {
+      // Heartbeat / GET poll will retry.
+    }
+    await Promise.resolve(this.deps.scheduleAlarm(HEARTBEAT_MS));
     return { ok: true, run_id: run.run_id, status: "accepted" };
   }
 
@@ -265,13 +277,24 @@ export class RunnerSession {
     reschedule = (await this.promote(ledger)) || reschedule;
     await this.save(ledger);
     if (reschedule || ledger.queue.length > 0 || Object.keys(ledger.locks).length > 0) {
-      this.deps.scheduleAlarm(HEARTBEAT_MS);
+      await Promise.resolve(this.deps.scheduleAlarm(HEARTBEAT_MS));
     }
   }
 
   async getRun(runId: string): Promise<RunRecord | null> {
     const ledger = await this.load();
-    return ledger.runs[runId] ?? null;
+    const run = ledger.runs[runId];
+    if (!run) return null;
+    // Operator GET must not wait for the 60s heartbeat. Refresh from the
+    // container while this run still holds its concurrency lock (#4761 Kick2
+    // timed out with empty log_tail because ledger was never applyRemote'd).
+    const lock = Object.values(ledger.locks).find((item) => item.run_id === runId);
+    if (lock) {
+      await this.pollLock(ledger, lock.concurrency);
+      await this.save(ledger);
+      return ledger.runs[runId] ?? run;
+    }
+    return run;
   }
 
   private freshRun(request: RunJobRequest): RunRecord {
