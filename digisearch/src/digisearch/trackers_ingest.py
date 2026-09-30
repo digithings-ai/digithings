@@ -126,8 +126,11 @@ def _fetch_feed_json(
         raise TrackersFetchError(f"trackers fetch failed for {url!r}: {exc}") from exc
 
 
-def _manifest_dataset_entry(manifest: Any) -> Mapping[str, Any] | None:
-    """congress-trades entry of the manifest ``datasets`` section, any shape.
+def _manifest_dataset_entry(
+    manifest: Any,
+    dataset: str = CONGRESS_TRADES_DATASET,
+) -> Mapping[str, Any] | None:
+    """*dataset* entry of the manifest ``datasets`` section, any shape.
 
     Returns ``None`` when the manifest has no entry for this dataset, so a
     manifest reshape degrades to warn-and-proceed rather than blocking ingest
@@ -137,34 +140,34 @@ def _manifest_dataset_entry(manifest: Any) -> Mapping[str, Any] | None:
     if isinstance(manifest, Mapping):
         datasets = manifest.get("datasets")
     if isinstance(datasets, Mapping):
-        entry = datasets.get(CONGRESS_TRADES_DATASET)
+        entry = datasets.get(dataset)
         return entry if isinstance(entry, Mapping) else None
     if isinstance(datasets, list):
         for entry in datasets:
             if not isinstance(entry, Mapping):
                 continue
             name = entry.get("name") or entry.get("id") or entry.get("dataset")
-            if name == CONGRESS_TRADES_DATASET:
+            if name == dataset:
                 return entry
     return None
 
 
-def _manifest_dataset_stale(manifest: Any) -> bool | None:
-    """Return the ``stale`` flag for congress-trades, or ``None`` when unknown.
+def _manifest_dataset_stale(manifest: Any, dataset: str = CONGRESS_TRADES_DATASET) -> bool | None:
+    """Return the ``stale`` flag for *dataset*, or ``None`` when unknown.
 
     Handles the verified manifest shape (``{"datasets": {name: {...}}}``) and
     degrades to ``None`` — warn-and-proceed — for anything else, so a manifest
     reshape never silently blocks ingest nor silently passes a stale flag.
     """
-    entry = _manifest_dataset_entry(manifest)
+    entry = _manifest_dataset_entry(manifest, dataset)
     if entry is not None and "stale" in entry:
         return bool(entry.get("stale"))
     return None
 
 
-def _manifest_expected_rows(manifest: Any) -> int | None:
-    """Manifest-declared row count for congress-trades, or ``None`` unknown."""
-    entry = _manifest_dataset_entry(manifest)
+def _manifest_expected_rows(manifest: Any, dataset: str = CONGRESS_TRADES_DATASET) -> int | None:
+    """Manifest-declared row count for *dataset*, or ``None`` unknown."""
+    entry = _manifest_dataset_entry(manifest, dataset)
     rows = entry.get("rows") if entry is not None else None
     if isinstance(rows, bool) or not isinstance(rows, int) or rows < 0:
         return None
@@ -175,8 +178,9 @@ def check_manifest_not_stale(
     fetcher: _FetcherLike | None = None,
     *,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
+    dataset: str = CONGRESS_TRADES_DATASET,
 ) -> Any | None:
-    """Refuse congress-trades ingest when the manifest flags it ``stale``.
+    """Refuse ingest when the manifest flags *dataset* ``stale``.
 
     A missing/unreachable/unparseable manifest warns and proceeds (advisory
     signal); an explicit ``stale: true`` raises :class:`StaleDatasetError`.
@@ -195,15 +199,14 @@ def check_manifest_not_stale(
             },
         )
         return None
-    stale = _manifest_dataset_stale(manifest)
+    stale = _manifest_dataset_stale(manifest, dataset)
     if stale is True:
         raise StaleDatasetError(
-            f"dataset {CONGRESS_TRADES_DATASET!r} flagged stale in"
-            f" {TRACKERS_MANIFEST_URL} — ingest refused"
+            f"dataset {dataset!r} flagged stale in {TRACKERS_MANIFEST_URL} — ingest refused"
         )
     if stale is None:
         logger.warning(
-            "trackers manifest has no freshness entry for congress-trades — proceeding",
+            f"trackers manifest has no freshness entry for {dataset} — proceeding",
             extra={"operation": "check_manifest_not_stale", "outcome": "degraded"},
         )
     return manifest
@@ -340,6 +343,9 @@ def _natural_keys_in_index(index_name: str) -> set[str]:
     """Natural keys already present in the in-memory stub index (test path).
 
     Production backends dedupe by stable chunk id at write time instead.
+    Bulk callers build this set **once** and thread it through
+    ``_known_keys`` — rescanning per row is O(n²) over the index and falls
+    over on the 100k+ row datasets (#4849).
     """
     keys: set[str] = set()
     for chunk in _stub_index.get(index_name, []):
@@ -354,16 +360,21 @@ def ingest_congress_trade(
     *,
     index_name: str | None = None,
     chunker: Chunker | None = None,
+    _known_keys: set[str] | None = None,
 ) -> str | None:
     """Index one congress-trade row; return its ``Document.id``.
 
     Returns ``None`` when the row's natural key is already indexed (idempotent
     skip). Raises :class:`ValueError` for rows without a natural key.
+    ``_known_keys`` is the bulk-run memo: callers ingesting many rows pass the
+    set built once by :func:`_natural_keys_in_index` (each newly indexed key
+    is added); single-row callers omit it and pay one scan.
     """
     normalized = normalize_congress_trade(row)
     key = str(normalized["doc_id"])
     target_index = (index_name or TRACKERS_INDEX_NAME).strip() or TRACKERS_INDEX_NAME
-    if key in _natural_keys_in_index(target_index):
+    known = _known_keys if _known_keys is not None else _natural_keys_in_index(target_index)
+    if key in known:
         logger.info(
             "trackers ingest skipped — row already indexed",
             extra={
@@ -399,6 +410,7 @@ def ingest_congress_trade(
     for chunk in chunks:
         chunk.metadata = normalize_metadata_for_chroma(chunk.metadata)
     index_chunks(target_index, chunks)
+    known.add(key)
     logger.info(
         "trackers ingest done",
         extra={
@@ -445,6 +457,9 @@ def ingest_congress_trades(
         )
     target_index = (index_name or TRACKERS_INDEX_NAME).strip() or TRACKERS_INDEX_NAME
 
+    # One stub-index scan per bulk run (not per row): the 100k+ row datasets
+    # would otherwise rescan the whole index for every row — O(n²) (#4849).
+    known_keys = _natural_keys_in_index(target_index)
     ingested = 0
     skipped = 0
     for row in rows:
@@ -460,7 +475,9 @@ def ingest_congress_trades(
             skipped += 1
             continue
         try:
-            doc_id = ingest_congress_trade(row, index_name=target_index, chunker=chunker)
+            doc_id = ingest_congress_trade(
+                row, index_name=target_index, chunker=chunker, _known_keys=known_keys
+            )
         except ValueError as exc:
             logger.warning(
                 f"trackers ingest skipped — {exc}",
