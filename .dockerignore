@@ -20,6 +20,10 @@ scripts
 # Dockerfile.digithings-stack-cloudflare (Cloudflare Containers, root context)
 # needs this one file; re-include it without un-ignoring the rest of scripts/.
 !scripts/merge_litellm_cheaperinference.py
+# digiquant-runner (Dockerfile.digiquant-runner) runs this refresh entrypoint.
+!scripts/refresh_market_data_r2.py
+# refresh dynamically loads this sibling for R2StoreAdapter / parquet helpers.
+!scripts/backfill_market_data_r2.py
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp

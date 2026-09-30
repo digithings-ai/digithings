@@ -440,3 +440,26 @@ class TestWindowEviction:
         # The 5th call crosses the interval and sweeps.
         assert limiter.check(other_req, max_requests=10, window=60) is None
         assert "203.0.113.53" not in limiter._windows
+
+
+class TestChatCompletionsLimit:
+    """#4776: /v1/chat/completions runs 60 req/min per IP (was 10), and the
+    429 carries machine-readable retry info (Retry-After + code) that the
+    digichat follow-up renders as retry-in-N-seconds UI copy."""
+
+    def test_chat_completions_limit_is_60_per_minute(self):
+        from digigraph import server as digigraph_server
+
+        assert digigraph_server._RATE_LIMITS["/v1/chat/completions"] == (60, 60)
+
+    def test_429_carries_retry_after_header_and_machine_code(self):
+        import json
+
+        limiter = RateLimiter()
+        req = _make_request("203.0.113.99")
+        assert limiter.check(req, max_requests=1, window=60) is None
+        result = limiter.check(req, max_requests=1, window=60)
+        assert result is not None
+        assert result.status_code == 429
+        assert result.headers["retry-after"] == "60"
+        assert json.loads(result.body)["error"]["code"] == "rate_limit_exceeded"

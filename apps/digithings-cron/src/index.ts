@@ -1,28 +1,56 @@
 /**
- * digithings-cron — org-wide Cloudflare Worker production clocks (#3579).
- * Cron Triggers fire workflow_dispatch / repository_dispatch on the default branch.
+ * digithings-cron — org-wide Cloudflare Worker production clocks (#3579, #4761).
+ * Cron Triggers fire workflow_dispatch / repository_dispatch, or POST the
+ * private digiquant-runner when the job kind is "container".
+ * scheduled() returns in seconds: waitUntil covers the POST and does not
+ * await the container job.
  */
-import { dispatch } from "./dispatch";
+import { dispatch, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
+
+export type StartedRun = {
+  job_id: string;
+  status: string;
+  run_id?: string;
+};
+
+type RunOptions = {
+  /** Skip etOpenGate for this kick only. Cron triggers never set this. */
+  force?: boolean;
+  /** Optional kick args (for example run_writers=true). Cron sends none. */
+  args?: Record<string, string>;
+  /** POST /kick awaits so the response can include run ids. */
+  awaitDispatch?: boolean;
+};
+
+function startedRun(job: Job, result: DispatchResult): StartedRun {
+  const run: StartedRun = {
+    job_id: job.id,
+    status: result.container_status ?? (result.dry_run ? "dry_run" : "dispatched"),
+  };
+  if (result.run_id) run.run_id = result.run_id;
+  return run;
+}
 
 async function runJobsForCron(
   cron: string,
   scheduledTime: number,
   env: Env,
   ctx: ExecutionContext,
-): Promise<{ started: string[]; skipped: string[] }> {
+  opts: RunOptions = {},
+): Promise<{ started: string[]; skipped: string[]; runs: StartedRun[] }> {
   const jobs = jobsForCron(cron);
   const started: string[] = [];
   const skipped: string[] = [];
-  const pending: Promise<unknown>[] = [];
+  const pending: Promise<StartedRun>[] = [];
 
   if (jobs.length === 0) {
     console.error(JSON.stringify({ cron, error: "unmapped_cron" }));
   }
   for (const job of jobs) {
-    if (job.etOpenGate && !shouldDispatchAtOpen(cron, scheduledTime)) {
+    if (job.etOpenGate && !opts.force && !shouldDispatchAtOpen(cron, scheduledTime)) {
       skipped.push(job.id);
       console.log(
         JSON.stringify({
@@ -38,17 +66,24 @@ async function runJobsForCron(
     }
     started.push(job.id);
     pending.push(
-      dispatch(env, job, cron).catch((err: unknown) => {
+      dispatch(env, job, cron, scheduledTime, { args: opts.args }).then((result) =>
+        startedRun(job, result),
+      ).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ cron, job: job.id, error: msg }));
         throw err;
       }),
     );
   }
-  if (pending.length > 0) {
-    ctx.waitUntil(Promise.all(pending));
+  if (pending.length === 0) {
+    return { started, skipped, runs: [] };
   }
-  return { started, skipped };
+  if (opts.awaitDispatch) {
+    const runs = await Promise.all(pending);
+    return { started, skipped, runs };
+  }
+  ctx.waitUntil(Promise.all(pending));
+  return { started, skipped, runs: [] };
 }
 
 function normalizePath(pathname: string): string {
@@ -56,6 +91,22 @@ function normalizePath(pathname: string): string {
     return pathname.slice(0, -1);
   }
   return pathname || "/";
+}
+
+function authorized(request: Request, env: Env): boolean {
+  const expected = `Bearer ${env.CRON_KICK_SECRET}`;
+  return (request.headers.get("Authorization") ?? "") === expected;
+}
+
+function parseStringArgs(value: unknown): Record<string, string> | null {
+  if (value === undefined) return {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item !== "string") return null;
+    out[key] = item;
+  }
+  return out;
 }
 
 export default {
@@ -82,26 +133,63 @@ export default {
       );
     }
 
+    if (request.method === "GET" && path.startsWith("/runs/")) {
+      if (!env.CRON_KICK_SECRET) {
+        return new Response("Not Found", { status: 404 });
+      }
+      if (!authorized(request, env)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const runId = decodeURIComponent(path.slice("/runs/".length));
+      if (!runId || runId.includes("/")) {
+        return new Response("Not Found", { status: 404 });
+      }
+      if (!env.RUNNER || !env.RUNNER_AUTH_TOKEN) {
+        return Response.json({ error: "runner_unconfigured" }, { status: 503 });
+      }
+      return env.RUNNER.fetch(
+        `https://digiquant-runner/v1/jobs/${encodeURIComponent(runId)}`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${env.RUNNER_AUTH_TOKEN}` },
+        },
+      );
+    }
+
     if (request.method === "POST" && path === "/kick") {
       if (!env.CRON_KICK_SECRET) {
         return new Response("Not Found", { status: 404 });
       }
-      const auth = request.headers.get("Authorization") ?? "";
-      const expected = `Bearer ${env.CRON_KICK_SECRET}`;
-      if (auth !== expected) {
+      if (!authorized(request, env)) {
         return new Response("Unauthorized", { status: 401 });
       }
       let cron = "";
+      let force = false;
+      let args: Record<string, string> = {};
       try {
-        const body = (await request.json()) as { cron?: string };
+        const body = (await request.json()) as {
+          cron?: unknown;
+          force?: unknown;
+          args?: unknown;
+        };
         cron = typeof body.cron === "string" ? body.cron : "";
+        force = body.force === true;
+        const parsedArgs = parseStringArgs(body.args);
+        if (parsedArgs === null) {
+          return Response.json({ error: "invalid_args" }, { status: 400 });
+        }
+        args = parsedArgs;
       } catch {
         return Response.json({ error: "invalid_json" }, { status: 400 });
       }
       if (!cron) {
         return Response.json({ error: "cron_required" }, { status: 400 });
       }
-      const result = await runJobsForCron(cron, Date.now(), env, ctx);
+      const result = await runJobsForCron(cron, Date.now(), env, ctx, {
+        force,
+        args,
+        awaitDispatch: true,
+      });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }
 

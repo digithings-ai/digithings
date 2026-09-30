@@ -60,7 +60,11 @@ import {
 import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
 import { uiMessagesForUpstream } from "@/lib/ui-stream-parts";
 
-export const maxDuration = 120;
+// #4753: the boot-retry budget in adapters/digithings/stream.ts runs up to
+// ~250s (stack portReady 180s + instanceGet 60s + margin). The route must
+// outlive it or a slow cold boot is cut off mid-retry; 300s leaves headroom
+// for the answer stream that follows.
+export const maxDuration = 300;
 
 function rateLimitResponse(message: string, retryAfterSec: number): Response {
   return new Response(

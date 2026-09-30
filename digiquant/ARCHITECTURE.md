@@ -476,7 +476,18 @@ prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
 `scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
 lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
-to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+to span at least one publication period of the series (#4588). No `FRED_API_KEY`
+is read anywhere on this path (#4794): `source=="fred"` fetches the newest
+anonymous Gloomberb `econ_series` page per kept series (`window_limit` by
+cadence: 60/16/8/4; 1000-row tail on bootstrap, sealed with a `truncated` note)
+and merges it into the existing `fred__*` generation, keeping sealed rows older
+than the page. A same-seal revision takes the window-merge path, never a full
+1990 re-pull. Only the 23 kept panel ids
+(`data/prices/gloomberb_macro.py::KEPT_SERIES_IDS`) are selected; the 8 dropped
+ids are never fetched and their `latest` pointers keep serving the last seal.
+`digiquant prices fetch-macro` reads the same panel the same way (`--dry-run`
+prints ids without a client; `--backfill` is a 1000-row tail, not 1990).
+`LIVE_WINDOW_DAYS`
 (45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
 `CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
 plus the pending release puts the newest month up to ~90 days behind the run — so
@@ -693,7 +704,10 @@ python digiquant/scripts/verify_strategy_calibrations_rls.py
 The separate `pipeline-digiquant-prices.yml` job owns `position_events` writes at the
 market open and the surviving macro ingest; price/technicals ingest moved to the R2
 refresh (`pipeline-market-data-refresh.yml`) and migration 127 dropped the Supabase
-`price_history`/`price_technicals` tables (#4053). It does
+`price_history`/`price_technicals` tables (#4053). Phase 1 of #4761 moves those
+clocks onto digithings-cron `kind: container` → the private digiquant-runner
+Worker (`docs/ops/digiquant-runner.md`). The market-data workflow keeps
+`workflow_dispatch` and has no `schedule`. It does
 **not** regenerate these public tearsheets. Two UTC crons cover New York daylight
 and standard time. `market_open_gate.py` selects the season-correct cron and keeps
 it valid after the open even when GitHub delivers it late, while rejecting the
@@ -4042,6 +4056,20 @@ Contributors are pure, fail-soft (an exception is logged and swallowed), may not
 existing key, and run **once per run** inside `_segment_counts`. Note the split:
 `_segment_totals` is the pure counter used by `research_produced`, which the chain calls
 *mid-run* to gate portfolio — contributors must never see that half-populated state.
+
+## Stage contracts (ADR-0030)
+
+Swappable handoffs live in `digiquant.stages`. `ResearchDigest` is the stage-1
+briefing (`date`, `body`, `regime_label`) plus `source` and `composition_id`.
+`TradeIdeaSnapshot` is the stage-2 trade-idea row. `refuse_order_intent` raises
+`ExecutionOptInRequired` and does not build an `OrderIntent`.
+
+Consensus timeframes are `medium` and `long`. Other strings are display-only
+(`split_timeframe`). twelve-x trade generation stays in the twelve-x repo.
+twelve-x does not execute. `PortfolioState` remains an alias of `ResearchState`.
+The portfolio `--from-digest` CLI still loads a full `ResearchState`.
+
+Plan: `docs/plans/adr-0030/README.md`. Decision: ADR-0030.
 
 ## execution contracts
 

@@ -1,0 +1,44 @@
+# digiquant-runner — Phase 1 batch image (issue #4761).
+# Build context is the monorepo root. wrangler pins
+# image_build_context = "../.." from apps/digiquant-runner/wrangler.toml (#4046).
+#
+# The image code pin is the released main tree baked at build time.
+# The hot path inside commands.json is `uv run --frozen --no-sync`.
+# Sync installs digiquant with the prices and research extras only
+# (boto3 for the R2 publish). No nautilus extra. No house research chain.
+#
+# GIT_SHA defaults to unknown. wrangler does not pass build args here;
+# a non-wrangler build can set --build-arg GIT_SHA=<sha>. /healthz reports
+# the sha from the latest job status, which reads DIGIQUANT_RUNNER_GIT_SHA.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:/usr/local/bin:${PATH}" \
+    RUNNER_WORKDIR=/app
+
+RUN pip install --upgrade pip && pip install uv
+
+COPY pyproject.toml uv.lock ./
+COPY digibase ./digibase
+COPY digikey ./digikey
+COPY digifetch ./digifetch
+COPY digiquant ./digiquant
+COPY scripts/refresh_market_data_r2.py ./scripts/refresh_market_data_r2.py
+COPY apps/digiquant-runner/container/exec_job.py /opt/runner/exec_job.py
+COPY apps/digiquant-runner/commands.json /opt/runner/commands.json
+
+RUN uv sync --frozen --package digiquant --extra prices --extra research
+COPY scripts/backfill_market_data_r2.py ./scripts/backfill_market_data_r2.py
+
+ARG GIT_SHA=unknown
+ENV DIGIQUANT_RUNNER_GIT_SHA=${GIT_SHA}
+
+EXPOSE 8080
+
+CMD ["python", "/opt/runner/exec_job.py", "serve"]

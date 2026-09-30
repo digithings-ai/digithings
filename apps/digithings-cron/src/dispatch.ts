@@ -1,5 +1,8 @@
 /**
- * GitHub Actions dispatch helpers for digithings-cron.
+ * Dispatch helpers for digithings-cron.
+ * workflow_dispatch / repository_dispatch stay on GitHub.
+ * kind "container" POSTs the private digiquant-runner over the RUNNER binding
+ * unless the job id is listed in GITHUB_OVERRIDE_JOBS (default empty).
  */
 import type { Env } from "./env";
 import type { Job } from "./jobs";
@@ -7,11 +10,16 @@ import type { Job } from "./jobs";
 const GH_API = "https://api.github.com";
 const GH_API_VERSION = "2022-11-28";
 const MAX_ATTEMPTS = 3;
+const RUNNER_URL = "https://digiquant-runner/v1/jobs";
 
 export type DispatchResult = {
   ok: boolean;
   status: number;
   dry_run: boolean;
+  /** Present only on a container accept. Omitted on the GitHub path. */
+  run_id?: string;
+  /** accepted | already_running | duplicate. Omitted on the GitHub path. */
+  container_status?: string;
 };
 
 export function workflowDispatchUrl(repo: string, workflow: string): string {
@@ -52,17 +60,162 @@ function logLine(fields: Record<string, unknown>): void {
   console.log(JSON.stringify(fields));
 }
 
+/** Comma-separated job ids. Empty (the default) never calls api.github.com. */
+export function githubOverrideIds(env: Env): string[] {
+  return (env.GITHUB_OVERRIDE_JOBS ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function usesGithub(job: Job, env: Env): boolean {
+  if (job.kind !== "container") return true;
+  return githubOverrideIds(env).includes(job.id);
+}
+
+type ContainerAccept = {
+  ok?: boolean;
+  run_id?: string;
+  status?: string;
+};
+
+function isContainerSuccess(
+  status: number,
+  body: ContainerAccept,
+): body is { ok: true; run_id: string; status: "accepted" | "already_running" | "duplicate" } {
+  return (
+    status === 202 &&
+    body.ok === true &&
+    typeof body.run_id === "string" &&
+    (body.status === "accepted" ||
+      body.status === "already_running" ||
+      body.status === "duplicate")
+  );
+}
+
+async function dispatchContainer(
+  env: Env,
+  job: Job,
+  cron: string,
+  scheduledTime: number,
+  args: Record<string, string>,
+): Promise<DispatchResult> {
+  if (!job.command || !job.concurrency || job.timeoutSeconds === undefined) {
+    throw new Error(`job ${job.id}: container requires command, concurrency, and timeoutSeconds`);
+  }
+  const body = {
+    job_id: job.id,
+    command: job.command,
+    args,
+    concurrency: job.concurrency,
+    timeout_seconds: job.timeoutSeconds,
+    code_ref: "main" as const,
+    cron,
+    scheduled_time: scheduledTime,
+    idempotency_key: `${job.id}:${scheduledTime}`,
+  };
+  if (env.DRY_RUN === "1") {
+    logLine({
+      cron,
+      repo: job.repo,
+      job: job.id,
+      command: job.command,
+      github_status: null,
+      dry_run: true,
+      body,
+    });
+    return { ok: true, status: 0, dry_run: true };
+  }
+  const token = env.RUNNER_AUTH_TOKEN;
+  if (!token) {
+    throw new Error("RUNNER_AUTH_TOKEN is required");
+  }
+  if (!env.RUNNER) {
+    throw new Error("RUNNER service binding is required");
+  }
+  const res = await env.RUNNER.fetch(RUNNER_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text().catch(() => "");
+  let parsed: ContainerAccept = {};
+  try {
+    parsed = JSON.parse(text) as ContainerAccept;
+  } catch {
+    parsed = {};
+  }
+  if (isContainerSuccess(res.status, parsed)) {
+    logLine({
+      cron,
+      repo: job.repo,
+      job: job.id,
+      command: job.command,
+      github_status: null,
+      runner_status: res.status,
+      container_status: parsed.status,
+      run_id: parsed.run_id,
+      dry_run: false,
+    });
+    return {
+      ok: true,
+      status: res.status,
+      dry_run: false,
+      run_id: parsed.run_id,
+      container_status: parsed.status,
+    };
+  }
+  logLine({
+    cron,
+    repo: job.repo,
+    job: job.id,
+    github_status: null,
+    runner_status: res.status,
+    dry_run: false,
+    error: text.slice(0, 500),
+  });
+  throw new Error(`digiquant-runner dispatch failed for ${job.id}: HTTP ${res.status}`);
+}
+
 /**
- * Dispatch one job. Treats 200/204 as success and retries rate limits.
- * A 422 that explicitly says the workflow is already queued/running is benign.
- * DRY_RUN=1 logs the intended POST without calling GitHub.
+ * Dispatch one job.
+ * Container jobs POST digiquant-runner. 202 accepted / already_running / duplicate
+ * is success (the same idea as a benign GitHub 422). DRY_RUN=1 logs and does not call.
+ * A job id in GITHUB_OVERRIDE_JOBS uses workflow_dispatch and logs github_override.
  */
-export async function dispatch(env: Env, job: Job, cron: string): Promise<DispatchResult> {
+export async function dispatch(
+  env: Env,
+  job: Job,
+  cron: string,
+  scheduledTime = 0,
+  opts: { args?: Record<string, string> } = {},
+): Promise<DispatchResult> {
+  if (!usesGithub(job, env)) {
+    return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
+  }
+  if (job.kind === "container") {
+    console.error(
+      JSON.stringify({
+        cron,
+        repo: job.repo,
+        job: job.id,
+        github_override: true,
+        error: "github_override",
+      }),
+    );
+  }
+  return dispatchGithub(env, job, cron);
+}
+
+async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
   const dryRun = env.DRY_RUN === "1";
   let url: string;
   let body: Record<string, unknown>;
 
-  if (job.kind === "workflow_dispatch") {
+  if (job.kind === "workflow_dispatch" || job.kind === "container") {
     if (!job.workflow || !job.ref) {
       throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
     }

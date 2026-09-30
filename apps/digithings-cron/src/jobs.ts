@@ -2,17 +2,26 @@
  * Typed job map for digithings-cron.
  * Each enabled job.cron must appear in wrangler.toml [triggers] crons.
  */
+export type JobKind = "workflow_dispatch" | "repository_dispatch" | "container";
+
 export type Job = {
   id: string;
   cron: string;
   repo: "digithings-ai/digithings" | "digithings-ai/twelve-x";
-  kind: "workflow_dispatch" | "repository_dispatch";
+  kind: JobKind;
   workflow?: string;
   inputs?: Record<string, string>;
   event_type?: string;
   ref?: "develop" | "main";
   etOpenGate?: boolean;
   enabled: boolean;
+  /** Set when kind is "container". Must exist in digiquant-runner commands.json. */
+  command?: string;
+  /** Same-group overlap returns already_running (benign, like GHA 422). */
+  concurrency?: string;
+  timeoutSeconds?: number;
+  /** Image pin. Phase 1 jobs use "main". */
+  codeRef?: "main";
 };
 
 const DIGITHINGS = "digithings-ai/digithings" as const;
@@ -60,33 +69,101 @@ function rd(
   };
 }
 
+/** Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+function cj(
+  id: string,
+  cron: string,
+  workflow: string,
+  command: string,
+  concurrency: string,
+  timeoutSeconds: number,
+  opts: {
+    inputs?: Record<string, string>;
+    etOpenGate?: boolean;
+  } = {},
+): Job {
+  return {
+    id,
+    cron,
+    repo: DIGITHINGS,
+    kind: "container",
+    workflow,
+    inputs: opts.inputs,
+    ref: DEVELOP,
+    etOpenGate: opts.etOpenGate,
+    enabled: true,
+    command,
+    concurrency,
+    timeoutSeconds,
+    codeRef: "main",
+  };
+}
+
 /** All org production clocks. Source of truth alongside wrangler [triggers]. */
 export const JOBS: readonly Job[] = [
-  // --- digithings: digiquant prices ---
-  wd("prices-at-open-13", "40 13 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
-    inputs: { mode: "at-open" },
-    etOpenGate: true,
-  }),
-  wd("prices-at-open-14", "40 14 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
-    inputs: { mode: "at-open" },
-    etOpenGate: true,
-  }),
-  wd(
-    "prices-intraday",
-    "7,22,37,52 13-21 * * MON-FRI",
-    DIGITHINGS,
+  // --- digithings: digiquant prices + market-data (container, #4761) ---
+  // inputs stay for the GITHUB_OVERRIDE_JOBS workflow_dispatch path only.
+  cj(
+    "prices-at-open-13",
+    "40 13 * * MON-FRI",
     "pipeline-digiquant-prices.yml",
-    { inputs: { mode: "intraday" } },
+    "prices-at-open",
+    "digiquant-at-open",
+    900,
+    { inputs: { mode: "at-open" }, etOpenGate: true },
   ),
-  wd("prices-fx-refresh", "19 */2 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
-    inputs: { mode: "fx-refresh" },
-  }),
-  wd("prices-fx-refresh-sun", "19 22 * * SUN", DIGITHINGS, "pipeline-digiquant-prices.yml", {
-    inputs: { mode: "fx-refresh" },
-  }),
-  wd("prices-eod-macro", "27 21 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
-    inputs: { mode: "eod-macro" },
-  }),
+  cj(
+    "prices-at-open-14",
+    "40 14 * * MON-FRI",
+    "pipeline-digiquant-prices.yml",
+    "prices-at-open",
+    "digiquant-at-open",
+    900,
+    { inputs: { mode: "at-open" }, etOpenGate: true },
+  ),
+  cj(
+    "prices-fx-refresh",
+    "19 */2 * * MON-FRI",
+    "pipeline-digiquant-prices.yml",
+    "prices-fx-candles",
+    "digiquant-fx-candles",
+    600,
+    { inputs: { mode: "fx-refresh" } },
+  ),
+  cj(
+    "prices-fx-refresh-sun",
+    "19 22 * * SUN",
+    "pipeline-digiquant-prices.yml",
+    "prices-fx-candles",
+    "digiquant-fx-candles",
+    600,
+    { inputs: { mode: "fx-refresh" } },
+  ),
+  cj(
+    "prices-eod-macro",
+    "27 21 * * MON-FRI",
+    "pipeline-digiquant-prices.yml",
+    "prices-eod-macro",
+    "digiquant-eod-macro",
+    1200,
+    { inputs: { mode: "eod-macro" } },
+  ),
+  cj(
+    "market-data-refresh-morning",
+    "0 13 * * *",
+    "pipeline-market-data-refresh.yml",
+    "market-data-refresh",
+    "market-data-refresh",
+    1800,
+  ),
+  cj(
+    "market-data-refresh-evening",
+    "30 21 * * *",
+    "pipeline-market-data-refresh.yml",
+    "market-data-refresh",
+    "market-data-refresh",
+    1800,
+  ),
 
   // --- digithings: house-run via repository_dispatch digiquant-baseline ---
   // Research/portfolio retries run every day; ordinary source cadence decides

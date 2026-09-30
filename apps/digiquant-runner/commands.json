@@ -1,0 +1,56 @@
+{
+  "market-data-refresh": {
+    "timeout_seconds": 1800,
+    "concurrency": "market-data-refresh",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "env": ["R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "CORE_POSTGRES_URI", "CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
+    "steps": [
+      ["uv", "run", "--frozen", "--no-sync", "python", "scripts/refresh_market_data_r2.py", "--manifest-out", "/tmp/market-data-refresh.json"]
+    ],
+    "publish": ["/tmp/market-data-refresh.json"]
+  },
+  "prices-fx-candles": {
+    "timeout_seconds": 600,
+    "concurrency": "digiquant-fx-candles",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
+    "steps": [
+      ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-fx-intraday", "--supabase"],
+      ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-fx-intraday", "--interval", "5m", "--period", "60d", "--supabase"]
+    ]
+  },
+  "prices-at-open": {
+    "timeout_seconds": 900,
+    "concurrency": "digiquant-at-open",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "market_backend": "r2",
+    "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY", "R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"],
+    "steps": [
+      ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/research/execute_at_open.py", "--prior-trading-day-rebalance", "--require-ledger"]
+    ]
+  },
+  "prices-eod-macro": {
+    "timeout_seconds": 1200,
+    "concurrency": "digiquant-eod-macro",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
+    "steps": [
+      {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "sync-calendar", "--venues", "NYSE,NASDAQ,CRYPTO,FX", "--start", "1950-01-01", "--end", "+5y", "--supabase"]},
+      {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-macro", "--manifest", "digiquant/src/digiquant/research/config/macro_series.yaml", "--supabase"], "when_arg": "run_writers", "equals": "true"}
+    ]
+  },
+  "prices-fx-refresh-writers": {
+    "timeout_seconds": 600,
+    "concurrency": "digiquant-fx-refresh",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "env": ["CORE_SUPABASE_URL", "CORE_SUPABASE_SERVICE_KEY"],
+    "steps": [
+      {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-macro", "--sources", "yahoo", "--manifest", "digiquant/src/digiquant/research/config/macro_series.yaml", "--latest-only", "--supabase"], "when_arg": "run_writers", "equals": "true"}
+    ]
+  }
+}
