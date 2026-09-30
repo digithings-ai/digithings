@@ -2,6 +2,14 @@
 
 import { StatusDot, StatusStrip, Skeleton } from '@digithings/ui/ui';
 import { summariseRunStrip, type RunStripCell } from '@/lib/pipeline-run-strip';
+import { runStatusView } from '@/lib/run-status';
+
+const LEGEND = [
+  { tone: 'ok', text: 'complete (carry is normal)', title: `${runStatusView('complete').meaning} ${runStatusView('complete-with-carry').meaning}` },
+  { tone: 'warn', text: 'retried or failed', title: `${runStatusView('attention').meaning} ${runStatusView('failed').meaning}` },
+  { tone: 'off', text: 'no telemetry', title: runStatusView('no-telemetry').meaning },
+  { tone: 'idle', text: 'no run', title: runStatusView('no-run').meaning },
+] as const;
 
 export interface PipelineRunStripProps {
   cells: RunStripCell[];
@@ -13,13 +21,14 @@ export interface PipelineRunStripProps {
 /**
  * 30-day run strip: one cell per calendar day, toned by outcome. Doubles as the
  * date selector (a run day is clickable; a no-run day is inert). Health tones
- * only: accent = ok, warn = recovered/degraded/failed, mute = no telemetry,
- * hollow = no run.
+ * only, from the shared run-status vocabulary (same reading as the Brief): accent = complete
+ * (carry alone is normal for delta runs), warn = retried/degraded/failed, mute = no telemetry,
+ * hollow = no run. The legend spells this out.
  */
 export default function PipelineRunStrip({ cells, selectedDate, onSelect, loading = false }: PipelineRunStripProps) {
   const n = cells.length || 1;
   const selectedIdx = cells.findIndex((c) => c.date === selectedDate);
-  const { runs, healthy, attention } = summariseRunStrip(cells);
+  const { runs, healthy, attention, carried } = summariseRunStrip(cells);
 
   if (loading) {
     return (
@@ -45,7 +54,7 @@ export default function PipelineRunStrip({ cells, selectedDate, onSelect, loadin
           <div className="relative">
             <StatusStrip
               height={18}
-              label={`Run outcome, last ${n} days: ${healthy} healthy, ${attention} need attention, ${runs} run days`}
+              label={`Run outcome, last ${n} days: ${healthy} complete, ${carried} complete with carry, ${attention} need attention, ${runs} run days`}
               cells={cells.map((c) => ({ key: c.key, tone: c.tone, label: c.label }))}
             />
             <div className="absolute inset-px flex gap-px" data-testid="pipeline-run-strip-actions">
@@ -77,16 +86,18 @@ export default function PipelineRunStrip({ cells, selectedDate, onSelect, loadin
             )}
           </div>
         </div>
-        <ul className="hidden shrink-0 items-center gap-3 font-mono text-[0.62rem] text-ink-mute md:flex">
-          <li className="flex items-center gap-1"><StatusDot tone="ok" size="sm" />ok</li>
-          <li className="flex items-center gap-1"><StatusDot tone="warn" size="sm" />attention</li>
-          <li className="flex items-center gap-1"><StatusDot tone="off" size="sm" />no telemetry</li>
-          <li className="flex items-center gap-1"><StatusDot tone="idle" size="sm" />no run</li>
-        </ul>
       </div>
-      <div className="mt-0.5 flex justify-between font-mono text-[0.6rem] tabular-nums text-ink-mute" aria-hidden>
-        <span>{cells[0]?.date}</span>
-        <span>{cells[cells.length - 1]?.date}</span>
+      <div className="mt-0.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[0.6rem] text-ink-mute">
+        <span className="tabular-nums" aria-hidden>{cells[0]?.date}</span>
+        <ul data-testid="pipeline-run-strip-legend" className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.62rem]">
+          {LEGEND.map((item) => (
+            <li key={item.text} title={item.title} className="flex items-center gap-1">
+              <StatusDot tone={item.tone} size="sm" />
+              {item.text}
+            </li>
+          ))}
+        </ul>
+        <span className="tabular-nums" aria-hidden>{cells[cells.length - 1]?.date}</span>
       </div>
     </div>
   );

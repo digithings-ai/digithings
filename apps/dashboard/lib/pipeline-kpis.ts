@@ -1,5 +1,6 @@
 import { parsePhaseHealth, type PhaseHealth } from './run-phase-health';
-import { addDays, RUN_STRIP_DAYS, worstEpisode } from './pipeline-run-strip';
+import { addDays, episodeKind, RUN_STRIP_DAYS, worstEpisode } from './pipeline-run-strip';
+import type { RunStatusKind } from './run-status';
 import type { RunEpisode } from './run-episodes';
 
 /** Minimum prior run days before a delta-vs-median is shown. */
@@ -9,8 +10,12 @@ export interface PipelineDayKpis {
   /** False when no run_health episode exists for the date (cells render as em dashes). */
   hasTelemetry: boolean;
   status: string | null;
+  /** Shared status vocabulary (lib/run-status); same reading as the Brief. */
+  kind: RunStatusKind;
+  /** The run_type the duration delta was compared within (null when none / unknown). */
+  runType: string | null;
   durationS: number | null;
-  /** Percent change vs the median of prior days; null under MIN_DELTA_BASELINE_DAYS. */
+  /** Percent change vs the median of prior runs of the SAME run_type; null under MIN_DELTA_BASELINE_DAYS. */
   durationDeltaPct: number | null;
   /** Trailing per-day duration, oldest first; null = no telemetry (gap, not zero). */
   durationSeries: Array<number | null>;
@@ -48,20 +53,27 @@ export function buildDayKpis(input: {
   }
 
   const durationSeries: Array<number | null> = [];
+  const today = worstEpisode(byDate.get(input.date) ?? []);
+  // A delta run is not comparable to a full run: only same-run_type priors count.
   const prior: number[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(input.date, -i);
     const worst = worstEpisode(byDate.get(d) ?? []);
     const dur = num(worst?.latest.duration_s);
     durationSeries.push(dur);
-    if (i > 0 && dur != null) prior.push(dur);
+    if (i > 0 && today) {
+      const sameType = (byDate.get(d) ?? []).find((e) => e.runType === today.runType && num(e.latest.duration_s) != null);
+      const sameDur = num(sameType?.latest.duration_s);
+      if (sameDur != null) prior.push(sameDur);
+    }
   }
 
-  const today = worstEpisode(byDate.get(input.date) ?? []);
   if (!today) {
     return {
       hasTelemetry: false,
       status: null,
+      kind: 'no-telemetry',
+      runType: null,
       durationS: null,
       durationDeltaPct: null,
       durationSeries,
@@ -80,6 +92,8 @@ export function buildDayKpis(input: {
   return {
     hasTelemetry: true,
     status: today.latest.status ?? null,
+    kind: episodeKind(today),
+    runType: today.runType,
     durationS,
     durationDeltaPct,
     durationSeries,

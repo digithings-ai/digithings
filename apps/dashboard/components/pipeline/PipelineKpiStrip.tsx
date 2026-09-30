@@ -1,47 +1,67 @@
 'use client';
 
-import { CompositionBar, Sparkline, Stat } from '@digithings/ui/ui';
+import type { ReactNode } from 'react';
+import { Badge, CompositionBar, Sparkline } from '@digithings/ui/ui';
 import { formatDuration } from '@/components/system/run-economics-row';
 import { formatDeltaPct, type PipelineDayKpis } from '@/lib/pipeline-kpis';
 
-function show(n: number | null): string | null {
-  return n == null ? null : String(n);
+function show(n: number | null): string {
+  return n == null ? '—' : String(n);
 }
 
-/** Per-day KPI tiles + segment/phase composition bars. Null-safe: missing telemetry is an em dash, never zero. */
+type ChipVariant = 'neutral' | 'accent' | 'warn';
+
+function Chip({ label, children, variant = 'neutral', testId }: { label: string; children: ReactNode; variant?: ChipVariant; testId?: string }) {
+  return (
+    <Badge variant={variant} data-testid={testId} className="gap-1.5 font-mono tabular-nums">
+      <span className="text-[0.6rem] uppercase tracking-wider text-ink-mute">{label}</span>
+      <span>{children}</span>
+    </Badge>
+  );
+}
+
+/**
+ * Single dense inline row of run KPIs (~one badge tall): duration (+ sparkline, + delta only when
+ * comparable), segments ok/total, carried, failed, attempts, artifacts. Null-safe: missing
+ * telemetry is an em dash, never zero. Carried is informational (mute); only failures and
+ * retries are warn.
+ */
 export default function PipelineKpiStrip({ kpis }: { kpis: PipelineDayKpis }) {
   const { segments: s } = kpis;
   const hasSpark = kpis.durationSeries.some((v) => v != null);
+  const delta = formatDeltaPct(kpis.durationDeltaPct);
+
+  return (
+    <div data-testid="pipeline-kpi-strip" className="flex flex-wrap items-center gap-1.5">
+      <Chip label="Duration" variant={kpis.durationDeltaPct != null && kpis.durationDeltaPct > 25 ? 'warn' : 'neutral'}>
+        {kpis.durationS != null ? formatDuration(kpis.durationS) : '—'}
+        {delta ? <span className="text-ink-mute"> {delta}{kpis.runType ? ` (${kpis.runType})` : ''}</span> : null}
+      </Chip>
+      {hasSpark && (
+        <Sparkline values={kpis.durationSeries} width={56} height={16} tone="accent" label="Run duration, last 30 days" />
+      )}
+      <Chip label="Segments">{s.ok != null && s.total != null ? `${s.ok}/${s.total}` : '—'}</Chip>
+      <Chip label="Carried">{show(s.carried)}</Chip>
+      <Chip label="Failed" variant={s.failed ? 'warn' : 'neutral'}>
+        {show(s.failed)}
+      </Chip>
+      <Chip label="Attempts" variant={kpis.attempts != null && kpis.attempts > 1 ? 'warn' : 'neutral'}>
+        {show(kpis.attempts)}
+      </Chip>
+      <Chip label="Artifacts">{String(kpis.artifacts)}</Chip>
+    </div>
+  );
+}
+
+/** Expanded detail behind the run-health collapse: segment composition + per-phase bars. */
+export function PipelineKpiDetail({ kpis }: { kpis: PipelineDayKpis }) {
+  const { segments: s } = kpis;
   const segOk = s.ok ?? 0;
   const segCarried = s.carried ?? 0;
   const segFailed = s.failed ?? 0;
 
   return (
-    <div data-testid="pipeline-kpi-strip" className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
-        <Stat
-          label="Duration"
-          value={kpis.durationS != null ? formatDuration(kpis.durationS) : null}
-          delta={formatDeltaPct(kpis.durationDeltaPct)}
-          deltaTone={kpis.durationDeltaPct != null && kpis.durationDeltaPct > 25 ? 'warn' : 'mute'}
-          spark={
-            hasSpark ? (
-              <Sparkline values={kpis.durationSeries} width={64} height={20} tone="accent" label="Run duration, last 30 days" />
-            ) : undefined
-          }
-        />
-        <Stat label="Segments ok" value={s.ok != null && s.total != null ? `${s.ok}/${s.total}` : null} />
-        <Stat label="Carried" value={show(s.carried)} />
-        <Stat label="Failed" value={show(s.failed)} delta={s.failed ? 'needs attention' : null} deltaTone="warn" />
-        <Stat
-          label="Attempts"
-          value={show(kpis.attempts)}
-          delta={kpis.attempts != null && kpis.attempts > 1 ? 'retried' : null}
-          deltaTone="warn"
-        />
-        <Stat label="Artifacts" value={String(kpis.artifacts)} />
-      </div>
-
+    <div data-testid="pipeline-kpi-detail" className="space-y-3">
       {s.total != null && s.total > 0 && (
         <CompositionBar
           mode="stacked"

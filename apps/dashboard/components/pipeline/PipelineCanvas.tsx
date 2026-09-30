@@ -37,6 +37,9 @@ export interface PipelineCanvasProps {
   onNodeActivate: (node: LaidOutNode) => void;
 }
 
+/** Initial fit may scale the graph UP (to the kit camera's readable range) so a wide viewport is used. */
+const FIT_MAX_SCALE = 1.6;
+
 const DEFAULT_EXPANSION: ExpansionState = {
   expandedStages: new Set(),
   expandedFanouts: new Set(),
@@ -338,6 +341,7 @@ export default function PipelineCanvas({
     fit(
       { width: layout.width, height: layout.height },
       { width: viewport.clientWidth, height: viewport.clientHeight },
+      FIT_MAX_SCALE,
     );
   }, [fit, layout.height, layout.width, viewportRef]);
 

@@ -8,7 +8,7 @@ vi.mock('@/lib/observability-queries', () => ({
 }));
 
 import PipelineRunStrip from './PipelineRunStrip';
-import PipelineKpiStrip from './PipelineKpiStrip';
+import PipelineKpiStrip, { PipelineKpiDetail } from './PipelineKpiStrip';
 import PipelineRunHealth from './PipelineRunHealth';
 import PipelineNode from './PipelineNode';
 import { PipelineTimelineView } from './PipelineTimeline';
@@ -52,7 +52,12 @@ describe('PipelineRunStrip', () => {
     expect(html).not.toMatch(/<button[^>]*data-slot="status-strip-cell"/);
     const buttons = html.match(/data-testid="pipeline-run-strip-select"/g) ?? [];
     expect(buttons.length).toBe(2);
-    expect(html).toContain('aria-label="Open 2026-09-30: ok, 2 attempts"');
+    // Legend says what each colour means, including that carry is normal.
+    expect(html).toContain('data-testid="pipeline-run-strip-legend"');
+    expect(html).toContain('complete (carry is normal)');
+    expect(html).toContain('retried or failed');
+    expect(html).toContain('no telemetry');
+    expect(html).toContain('aria-label="Open 2026-09-30: failed, 2 attempts"');
     expect(html).toContain('aria-label="Open 2026-09-29: run recorded, no telemetry"');
     expect(html).not.toContain('aria-label="Open 2026-09-28: no run"');
   });
@@ -64,22 +69,45 @@ describe('PipelineRunStrip', () => {
 });
 
 describe('PipelineKpiStrip', () => {
-  it('renders KPI tiles, the segment composition bar and phase bars', () => {
+  it('renders one compact inline row of KPI chips with the duration sparkline (no composition bars)', () => {
     const kpis = buildDayKpis({ date: '2026-09-30', episodes: [episode('2026-09-30')], artifactCount: 41 });
     const html = renderToStaticMarkup(createElement(PipelineKpiStrip, { kpis }));
     expect(html).toContain('12m 34s');
     expect(html).toContain('12/14');
     expect(html).toContain('>41<');
-    expect(html).toContain('data-slot="composition-bar"');
-    expect(html).toContain('data-testid="pipeline-phase-health"');
-    expect(html).toContain('Segments: 12 ok, 1 carried, 1 failed of 14');
+    expect(html).toContain('Run duration, last 30 days');
+    expect(html).not.toContain('data-slot="composition-bar"');
+    expect(html).not.toContain('data-slot="stat"');
+  });
+
+  it('shows the duration delta only when it is comparable (same run_type, >= 5 priors)', () => {
+    const priors = [1, 2, 3, 4, 5].map((i) => episode(`2026-09-${20 + i}`, { duration_s: 100 }));
+    const kpis = buildDayKpis({ date: '2026-09-30', episodes: [...priors, episode('2026-09-30', { duration_s: 150 })], artifactCount: 0 });
+    expect(renderToStaticMarkup(createElement(PipelineKpiStrip, { kpis }))).toContain('+50% vs median');
+    const delta = { ...episode('2026-09-30', { duration_s: 5 }), runType: 'delta' };
+    const hidden = buildDayKpis({ date: '2026-09-30', episodes: [...priors, delta], artifactCount: 0 });
+    expect(renderToStaticMarkup(createElement(PipelineKpiStrip, { kpis: hidden }))).not.toContain('vs median');
   });
 
   it('renders em dashes, never zeros, without telemetry', () => {
     const kpis = buildDayKpis({ date: '2026-09-30', episodes: [], artifactCount: 0 });
     const html = renderToStaticMarkup(createElement(PipelineKpiStrip, { kpis }));
     expect(html).toContain('—');
-    expect(html).not.toContain('data-slot="composition-bar"');
+  });
+});
+
+describe('PipelineKpiDetail', () => {
+  it('renders the segment composition bar and phase bars', () => {
+    const kpis = buildDayKpis({ date: '2026-09-30', episodes: [episode('2026-09-30')], artifactCount: 41 });
+    const html = renderToStaticMarkup(createElement(PipelineKpiDetail, { kpis }));
+    expect(html).toContain('data-slot="composition-bar"');
+    expect(html).toContain('data-testid="pipeline-phase-health"');
+    expect(html).toContain('Segments: 12 ok, 1 carried, 1 failed of 14');
+  });
+
+  it('draws no composition bar without telemetry', () => {
+    const kpis = buildDayKpis({ date: '2026-09-30', episodes: [], artifactCount: 0 });
+    expect(renderToStaticMarkup(createElement(PipelineKpiDetail, { kpis }))).not.toContain('data-slot="composition-bar"');
   });
 });
 
@@ -111,7 +139,7 @@ describe('PipelineRunHealth', () => {
 
   it('header status comes from the worst episode, same source as the KPIs', () => {
     const bad = episode('2026-09-30', { status: 'failed', run_type: 'delta' });
-    const good = episode('2026-09-30', { status: 'ok' });
+    const good = episode('2026-09-30', { status: 'ok', segments_failed: 0, segments_carried: 0 });
     // The ok row is first; a dayRuns[0] header would say "ok".
     const diagnostics = [good.latest, bad.latest];
     const html = renderToStaticMarkup(
@@ -119,7 +147,52 @@ describe('PipelineRunHealth', () => {
     );
     const kpis = buildDayKpis({ date: '2026-09-30', episodes: groupRunEpisodes(diagnostics), artifactCount: 0 });
     expect(kpis.status).toBe('failed');
-    expect(html).toContain('2026-09-30 · failed');
+    expect(html).toContain('data-status-kind="failed"');
+    expect(html).toContain('>Failed<');
+  });
+
+  it('is collapsed by default: KPI row visible, detail (phase bars, composition) not rendered', () => {
+    const d = episode('2026-09-30', { run_type: 'b', created_at: '2026-09-30T06:00:00Z' }).latest;
+    const html = renderToStaticMarkup(
+      createElement(PipelineRunHealth, { date: '2026-09-30', tier: 'desk', state: { diagnostics: [d], loading: false } }),
+    );
+    expect(html).toContain('data-testid="pipeline-kpi-strip"');
+    expect(html).not.toContain('data-testid="pipeline-phase-health"');
+    expect(html).not.toContain('data-slot="composition-bar"');
+  });
+
+  it('reads a carry-only day as complete-with-carry (accent), matching the Brief', () => {
+    const d = episode('2026-09-30', { status: 'degraded', segments_failed: 0, segments_carried: 4, run_type: 'delta' }).latest;
+    const html = renderToStaticMarkup(
+      createElement(PipelineRunHealth, { date: '2026-09-30', tier: 'desk', state: { diagnostics: [d], loading: false } }),
+    );
+    expect(html).toContain('data-status-kind="complete-with-carry"');
+    expect(html).toContain('Complete with carry');
+    expect(html).not.toContain('degraded');
+  });
+
+  it('gates the economics chips below Desk but keeps status and freshness visible', () => {
+    const d = episode('2026-09-30', { status: 'ok', segments_failed: 0, segments_carried: 0, run_type: 'b' }).latest;
+    const html = renderToStaticMarkup(
+      createElement(PipelineRunHealth, { date: '2026-09-30', tier: 'free', state: { diagnostics: [d], loading: false } }),
+    );
+    expect(html).not.toContain('data-testid="pipeline-kpi-strip"');
+    expect(html).toContain('data-status-kind="complete"');
+    expect(html).toContain('data-testid="pipeline-freshness"');
+  });
+
+  it('folds freshness into the row and warns when the day has no successful run', () => {
+    const ok = episode('2026-09-30', { status: 'ok', segments_failed: 0, run_type: 'b', created_at: '2026-09-30T06:00:00Z' }).latest;
+    const okHtml = renderToStaticMarkup(
+      createElement(PipelineRunHealth, { date: '2026-09-30', tier: 'desk', state: { diagnostics: [ok], loading: false } }),
+    );
+    expect(okHtml).toContain('data-testid="pipeline-freshness"');
+    expect(okHtml).toContain('Last successful run');
+    const bad = episode('2026-09-30', { status: 'failed' }).latest;
+    const badHtml = renderToStaticMarkup(
+      createElement(PipelineRunHealth, { date: '2026-09-30', tier: 'desk', state: { diagnostics: [bad], loading: false } }),
+    );
+    expect(badHtml).toContain('No successful run on 2026-09-30');
   });
 });
 

@@ -1,4 +1,5 @@
-import type { RunEpisode, RunOutcome } from './run-episodes';
+import type { RunEpisode } from './run-episodes';
+import { classifyRunStatus, RUN_STATUS_SEVERITY, runStatusView, type RunStatusKind } from './run-status';
 
 export type RunStripTone = 'ok' | 'warn' | 'off' | 'idle';
 
@@ -8,22 +9,33 @@ export interface RunStripCell {
   tone: RunStripTone;
   /** Tooltip + accessible name. */
   label: string;
+  /** Shared vocabulary (lib/run-status), identical to the Brief's reading of the same day. */
+  kind: RunStatusKind;
   /** null = no run recorded that day. */
-  outcome: RunOutcome | 'no-telemetry' | null;
+  outcome: RunEpisode['outcome'] | 'no-telemetry' | null;
   attempts: number;
 }
 
 export const RUN_STRIP_DAYS = 30;
 
-/** Health tones only (accent/warn/mute); never up/down. */
-const OUTCOME_TONE: Record<RunOutcome, RunStripTone> = {
-  ok: 'ok',
-  recovered: 'warn',
-  degraded: 'warn',
-  failed: 'warn',
+/** Health tones only (accent/warn/mute); never up/down. Carry is accent: normal for delta runs. */
+const TONE: Record<ReturnType<typeof runStatusView>['tone'], RunStripTone> = {
+  accent: 'ok',
+  warn: 'warn',
+  mute: 'off',
+  idle: 'idle',
 };
 
-const SEVERITY: Record<RunOutcome, number> = { ok: 0, recovered: 1, degraded: 2, failed: 3 };
+/** Shared classification of one episode (status, carry, failures, retries). */
+export function episodeKind(e: RunEpisode): RunStatusKind {
+  return classifyRunStatus({
+    status: e.latest.status,
+    segmentsCarried: e.latest.segments_carried,
+    segmentsFailed: e.latest.segments_failed,
+    attempts: e.attempts,
+    outcome: e.outcome,
+  });
+}
 
 export function addDays(iso: string, delta: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -35,7 +47,7 @@ export function addDays(iso: string, delta: number): string {
 export function worstEpisode(episodes: readonly RunEpisode[]): RunEpisode | null {
   let worst: RunEpisode | null = null;
   for (const e of episodes) {
-    if (!worst || SEVERITY[e.outcome] > SEVERITY[worst.outcome]) worst = e;
+    if (!worst || RUN_STATUS_SEVERITY[episodeKind(e)] > RUN_STATUS_SEVERITY[episodeKind(worst)]) worst = e;
   }
   return worst;
 }
@@ -66,33 +78,42 @@ export function buildRunStrip(input: {
     const worst = worstEpisode(byDate.get(date) ?? []);
     if (worst) {
       const attempts = worst.attempts;
+      const view = runStatusView(episodeKind(worst), worst.latest.status);
       cells.push({
         key: date,
         date,
-        tone: OUTCOME_TONE[worst.outcome],
+        tone: TONE[view.tone],
+        kind: view.kind,
         outcome: worst.outcome,
         attempts,
-        label: `${date}: ${worst.outcome}${attempts > 1 ? `, ${attempts} attempts` : ''}`,
+        label: `${date}: ${view.label.toLowerCase()}${attempts > 1 ? `, ${attempts} attempts` : ''}`,
       });
     } else if (runSet.has(date)) {
-      cells.push({ key: date, date, tone: 'off', outcome: 'no-telemetry', attempts: 0, label: `${date}: run recorded, no telemetry` });
+      cells.push({ key: date, date, tone: 'off', kind: 'no-telemetry', outcome: 'no-telemetry', attempts: 0, label: `${date}: run recorded, no telemetry` });
     } else {
-      cells.push({ key: date, date, tone: 'idle', outcome: null, attempts: 0, label: `${date}: no run` });
+      cells.push({ key: date, date, tone: 'idle', kind: 'no-run', outcome: null, attempts: 0, label: `${date}: no run` });
     }
   }
   return cells;
 }
 
-/** Count of run days by health, for the strip legend. */
-export function summariseRunStrip(cells: readonly RunStripCell[]): { runs: number; healthy: number; attention: number } {
+/** Count of run days by health, for the strip legend. Carry is healthy; only retried/degraded/failed need attention. */
+export function summariseRunStrip(cells: readonly RunStripCell[]): {
+  runs: number;
+  healthy: number;
+  attention: number;
+  carried: number;
+} {
   let runs = 0;
   let healthy = 0;
   let attention = 0;
+  let carried = 0;
   for (const c of cells) {
-    if (c.outcome === null) continue;
+    if (c.kind === 'no-run') continue;
     runs++;
-    if (c.outcome === 'ok') healthy++;
-    else if (c.outcome !== 'no-telemetry') attention++;
+    if (c.kind === 'complete') healthy++;
+    else if (c.kind === 'complete-with-carry') carried++;
+    else if (c.kind === 'attention' || c.kind === 'failed') attention++;
   }
-  return { runs, healthy, attention };
+  return { runs, healthy, attention, carried };
 }

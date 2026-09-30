@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { addDays, buildRunStrip, summariseRunStrip, worstEpisode } from './pipeline-run-strip';
 import type { RunEpisode } from './run-episodes';
 
-function ep(runDate: string, outcome: RunEpisode['outcome'], attempts = 1, runType = 'baseline'): RunEpisode {
-  return { key: `${runDate}|${runType}`, runDate, runType, attempts, outcome, latest: {} as RunEpisode['latest'], errorSummary: null };
+function ep(runDate: string, outcome: RunEpisode['outcome'], attempts = 1, runType = 'baseline', latest: Partial<RunEpisode['latest']> = {}): RunEpisode {
+  return { key: `${runDate}|${runType}`, runDate, runType, attempts, outcome, latest: latest as RunEpisode['latest'], errorSummary: null };
 }
 
 describe('pipeline-run-strip', () => {
@@ -28,6 +28,7 @@ describe('pipeline-run-strip', () => {
       days: 3,
     });
     expect(cells.map((c) => c.tone)).toEqual(['off', 'ok', 'warn']);
+    expect(cells.map((c) => c.kind)).toEqual(['no-telemetry', 'complete', 'failed']);
     expect(cells[2].label).toContain('3 attempts');
     expect(cells[1].label).not.toContain('attempt');
   });
@@ -44,6 +45,29 @@ describe('pipeline-run-strip', () => {
       end: '2026-09-30',
       days: 3,
     });
-    expect(summariseRunStrip(cells)).toEqual({ runs: 2, healthy: 1, attention: 1 });
+    expect(summariseRunStrip(cells)).toEqual({ runs: 2, healthy: 1, attention: 1, carried: 0 });
+  });
+
+  it('reads a carry-only day as ok (accent), matching the Brief, and not as attention', () => {
+    const carry = ep('2026-09-30', 'degraded', 1, 'delta', { status: 'degraded', segments_carried: 4, segments_failed: 0 });
+    const cells = buildRunStrip({ runDates: ['2026-09-30'], episodes: [carry], end: '2026-09-30', days: 1 });
+    expect(cells[0].kind).toBe('complete-with-carry');
+    expect(cells[0].tone).toBe('ok');
+    expect(cells[0].label).toBe('2026-09-30: complete with carry');
+    expect(summariseRunStrip(cells)).toEqual({ runs: 1, healthy: 0, attention: 0, carried: 1 });
+  });
+
+  it('a retried day and a failed day are warn; failed outranks a carry run on the same date', () => {
+    const cells = buildRunStrip({
+      runDates: ['2026-09-29', '2026-09-30'],
+      episodes: [
+        ep('2026-09-29', 'recovered', 2, 'baseline', { status: 'ok' }),
+        ep('2026-09-30', 'degraded', 1, 'delta', { status: 'degraded', segments_carried: 2 }),
+        ep('2026-09-30', 'failed', 1, 'baseline', { status: 'failed' }),
+      ],
+      end: '2026-09-30',
+      days: 2,
+    });
+    expect(cells.map((c) => [c.kind, c.tone])).toEqual([['attention', 'warn'], ['failed', 'warn']]);
   });
 });
