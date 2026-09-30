@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { modules } from "../../data/modules";
-import { ModuleGrid, type ModuleGridItem } from "./ModuleGrid";
+import { ModuleGrid, moduleFocusIndex, type ModuleGridItem } from "./ModuleGrid";
 
 const byId = (id: string) => {
   const found = modules.find((m) => m.id === id);
@@ -34,5 +34,16 @@ describe("ModuleGrid", () => {
 
   it("names each tile's facts on its focus control", () => {
     expect(html).toContain("178,900 lines · 41 endpoints");
+  });
+});
+
+describe("moduleFocusIndex", () => {
+  it("holds the first tile longer than each later one", () => {
+    expect(moduleFocusIndex(0, 11)).toBe(0);
+    expect(moduleFocusIndex(0.1, 11)).toBe(0);
+    expect(moduleFocusIndex(0.2, 11)).toBe(1);
+    const first = 1.75 / (1.75 + 10);
+    expect(moduleFocusIndex(first - 0.001, 11)).toBe(0);
+    expect(moduleFocusIndex(first + 0.001, 11)).toBe(1);
   });
 });

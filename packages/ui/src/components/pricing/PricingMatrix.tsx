@@ -93,11 +93,58 @@ export function PricingMatrix({
         </div>
       ) : null}
 
+      {/* Narrow screens cannot hold four columns, so each tier is its own
+          card. The comparison table returns at md, where 640px fits. */}
+      <div className="grid gap-[0.85rem] md:hidden">
+        {tiers.map((tier, i) => (
+          <section
+            key={i}
+            className={cx(
+              "border border-hair bg-surface px-[1rem] py-[1.05rem]",
+              tier.popular && "border-t-2 border-t-accent bg-accent/6",
+            )}
+          >
+            <h3 className="m-0 text-[1.05rem] font-medium text-ink">{tier.name}</h3>
+            <p className="mt-[0.2rem] mb-[0.75rem] font-mono text-[0.8rem] text-ink-soft">
+              {priceOf(tier)}
+            </p>
+            <div className="[&_a]:flex [&_a]:w-full [&_a]:justify-center">{tier.cta}</div>
+            {tier.popular && popularLabel != null ? (
+              <p className="mt-[0.5rem] mb-0 font-mono text-[0.58rem] uppercase tracking-[0.08em] text-accent">
+                {popularLabel}
+              </p>
+            ) : null}
+            {groups.map((group, gi) => (
+              <div key={gi} className="mt-[1rem]">
+                <p className="m-0 font-mono text-[0.62rem] font-normal uppercase tracking-[0.1em] text-ink-mute">
+                  {group.label}
+                </p>
+                <dl className="m-0">
+                  {group.rows.map((row, ri) => (
+                    <div key={ri} className="border-b border-hair/60 py-[0.5rem]">
+                      <dt className="text-[0.78rem] text-ink-mute">{row.label}</dt>
+                      <dd
+                        className={cx(
+                          "m-0 mt-[0.12rem] font-mono text-[0.86rem] text-ink",
+                          row.cells[i] === "—" && "text-ink-mute",
+                        )}
+                      >
+                        {row.cells[i]}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </section>
+        ))}
+      </div>
+
       <div
         tabIndex={0}
         role="region"
-        aria-label="Pricing comparison, scrollable horizontally"
-        className={cx("overflow-x-auto", className)}
+        aria-label="Pricing comparison"
+        className={cx("hidden overflow-x-auto md:block", className)}
       >
         <table className="w-full min-w-[640px] border-collapse text-[0.82rem]">
           <thead>

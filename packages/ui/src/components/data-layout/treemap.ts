@@ -183,9 +183,12 @@ export function treemapAreasConstrained(
  * Tiles go to the strip holding their rest centre (nearest strip wins ties
  * and covers centres swallowed by the grown focused rect); each strip is
  * filled by its own constrained solve, so weight ratios hold within a strip.
- * Strips too thin to hold anything are skipped and their tiles fall through
- * to the nearest usable strip, so the field always stays a full partition —
- * best-effort minimums, never overlaps, never NaNs.
+ * A strip only receives a tile when it is at least that tile's minimum, so a
+ * focused card cannot leave a neighbour a sliver with a clipped title. A
+ * strip nothing can use is folded back into the focused card. When the
+ * requested focus size still starves a neighbour, the focus shrinks toward
+ * its own minimum until the others fit, and only then gives up (best-effort,
+ * still a full partition, never overlaps, never NaNs).
  */
 export function treemapAnchored(
   weights: number[],
@@ -196,29 +199,27 @@ export function treemapAnchored(
   focusIndex: number,
   focusedSize: { w: number; h: number },
 ): TreemapRect[] {
-  const out: TreemapRect[] = new Array(weights.length);
   const anchor = rest[focusIndex];
   if (!anchor) return treemapAreasConstrained(weights, W, H, mins);
-  const min = mins[focusIndex];
-  const fw = Math.min(Math.max(focusedSize.w, min?.minW ?? 0), W);
-  const fh = Math.min(Math.max(focusedSize.h, min?.minH ?? 0), H);
-  const fx = Math.min(Math.max(anchor.x, 0), Math.max(W - fw, 0));
-  const fy = Math.min(Math.max(anchor.y, 0), Math.max(H - fh, 0));
-  out[focusIndex] = { x: fx, y: fy, w: fw, h: fh };
+  const focusMin = mins[focusIndex] ?? { minW: 0, minH: 0 };
+  const floorW = Math.min(Math.max(focusMin.minW, 0), W);
+  const floorH = Math.min(Math.max(focusMin.minH, 0), H);
+  const targetW = Math.min(Math.max(focusedSize.w, floorW), W);
+  const targetH = Math.min(Math.max(focusedSize.h, floorH), H);
 
   interface Strip {
     x: number;
     y: number;
     w: number;
     h: number;
+    side: "top" | "bottom" | "left" | "right";
   }
-  const strips: Strip[] = [
-    { x: 0, y: 0, w: W, h: fy },
-    { x: 0, y: fy + fh, w: W, h: H - fy - fh },
-    { x: 0, y: fy, w: fx, h: fh },
-    { x: fx + fw, y: fy, w: W - fx - fw, h: fh },
-  ].filter((s) => s.w > 4 && s.h > 4);
-  if (strips.length === 0) return out;
+
+  const fits = (s: Strip, i: number) => {
+    const m = mins[i];
+    if (!m) return true;
+    return s.w + 0.5 >= m.minW && s.h + 0.5 >= m.minH;
+  };
 
   const centre = (i: number) => {
     const r = rest[i];
@@ -231,45 +232,137 @@ export function treemapAnchored(
     const dy = Math.max(s.y - p.y, 0, p.y - (s.y + s.h));
     return dx * dx + dy * dy;
   };
-  const buckets: number[][] = strips.map(() => []);
-  weights.forEach((_, i) => {
-    if (i === focusIndex) return;
-    const p = centre(i);
-    let best = 0;
-    let bestScore: number | null = null;
-    strips.forEach((s, k) => {
-      const score = contains(s, p) ? -1 : distance(s, p);
-      if (bestScore === null || score < bestScore) {
-        bestScore = score;
-        best = k;
+
+  const pack = (wantW: number, wantH: number) => {
+    let fw = Math.min(Math.max(wantW, floorW), W);
+    let fh = Math.min(Math.max(wantH, floorH), H);
+    let fx = Math.min(Math.max(anchor.x, 0), Math.max(W - fw, 0));
+    let fy = Math.min(Math.max(anchor.y, 0), Math.max(H - fh, 0));
+    const others = weights.map((_, i) => i).filter((i) => i !== focusIndex);
+
+    const build = (): Strip[] =>
+      (
+        [
+          { x: 0, y: 0, w: W, h: fy, side: "top" },
+          { x: 0, y: fy + fh, w: W, h: H - fy - fh, side: "bottom" },
+          { x: 0, y: fy, w: fx, h: fh, side: "left" },
+          { x: fx + fw, y: fy, w: W - fx - fw, h: fh, side: "right" },
+        ] as Strip[]
+      ).filter((s) => s.w > 4 && s.h > 4);
+
+    let strips = build();
+    for (let guard = 0; guard < 4 && strips.length > 0; guard++) {
+      const claimed = new Set<number>();
+      const buckets = strips.map(() => [] as number[]);
+      others.forEach((i) => {
+        let best = -1;
+        let bestScore: number | null = null;
+        strips.forEach((s, k) => {
+          if (!fits(s, i)) return;
+          const p = centre(i);
+          const score = contains(s, p) ? -1 : distance(s, p);
+          if (bestScore === null || score < bestScore) {
+            bestScore = score;
+            best = k;
+          }
+        });
+        if (best >= 0) {
+          buckets[best].push(i);
+          claimed.add(i);
+        }
+      });
+      const empty = strips.filter((_, k) => buckets[k].length === 0);
+      if (empty.length === 0 || claimed.size < others.length) break;
+      const sides = new Set(empty.map((s) => s.side));
+      if (sides.has("top")) {
+        fh += fy;
+        fy = 0;
       }
-    });
-    buckets[best].push(i);
-  });
-
-  strips.forEach((s, k) => {
-    const members = buckets[k];
-    if (members.length === 0) return;
-    if (members.length === 1) {
-      out[members[0]] = { ...s };
-      return;
+      if (sides.has("bottom")) fh = H - fy;
+      if (sides.has("left")) {
+        fw += fx;
+        fx = 0;
+      }
+      if (sides.has("right")) fw = W - fx;
+      fw = Math.min(Math.max(fw, floorW), W - fx);
+      fh = Math.min(Math.max(fh, floorH), H - fy);
+      strips = build();
     }
-    const sub = treemapAreasConstrained(
-      members.map((i) => weights[i]),
-      s.w,
-      s.h,
-      members.map((i) => mins[i]),
-    );
-    members.forEach((id, j) => {
-      const r = sub[j];
-      out[id] = { x: s.x + r.x, y: s.y + r.y, w: r.w, h: r.h };
-    });
-  });
 
-  /* A tile lands here only when every strip was unusable — unreachable while
-     the focused tile leaves any room, but a full partition beats a hole. */
-  weights.forEach((_, i) => {
-    out[i] ??= { ...out[focusIndex] };
-  });
-  return out;
+    const out: TreemapRect[] = new Array(weights.length);
+    out[focusIndex] = { x: fx, y: fy, w: fw, h: fh };
+    if (strips.length === 0) {
+      others.forEach((i) => {
+        out[i] = { ...out[focusIndex] };
+      });
+      return { rects: out, ok: others.length === 0 };
+    }
+
+    const buckets = strips.map(() => [] as number[]);
+    let ok = true;
+    others.forEach((i) => {
+      const p = centre(i);
+      let best = 0;
+      let bestScore: number | null = null;
+      let bestFit = 0;
+      let bestFitScore: number | null = null;
+      strips.forEach((s, k) => {
+        const score = contains(s, p) ? -1 : distance(s, p);
+        if (bestScore === null || score < bestScore) {
+          bestScore = score;
+          best = k;
+        }
+        if (!fits(s, i)) return;
+        if (bestFitScore === null || score < bestFitScore) {
+          bestFitScore = score;
+          bestFit = k;
+        }
+      });
+      if (bestFitScore === null) ok = false;
+      buckets[bestFitScore === null ? best : bestFit].push(i);
+    });
+
+    strips.forEach((s, k) => {
+      const members = buckets[k];
+      if (members.length === 0) return;
+      if (members.length === 1) {
+        const only = members[0];
+        out[only] = { x: s.x, y: s.y, w: s.w, h: s.h };
+        if (!fits(s, only)) ok = false;
+        return;
+      }
+      const sub = treemapAreasConstrained(
+        members.map((i) => weights[i]),
+        s.w,
+        s.h,
+        members.map((i) => mins[i]),
+      );
+      members.forEach((id, j) => {
+        const r = sub[j];
+        const m = mins[id];
+        out[id] = { x: s.x + r.x, y: s.y + r.y, w: r.w, h: r.h };
+        if (m && (r.w + 0.5 < m.minW || r.h + 0.5 < m.minH)) ok = false;
+      });
+    });
+
+    others.forEach((i) => {
+      out[i] ??= { ...out[focusIndex] };
+    });
+    return { rects: out, ok };
+  };
+
+  let best = pack(floorW, floorH);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) / 2;
+    const attempt = pack(floorW + (targetW - floorW) * mid, floorH + (targetH - floorH) * mid);
+    if (attempt.ok) {
+      best = attempt;
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return best.rects;
 }

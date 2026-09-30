@@ -25,7 +25,7 @@ describe("digithings.ai socials import", () => {
   it("mounts the same primitive in the shared site footer", () => {
     const footer = load("./DtFooter.tsx");
     expect(footer).toContain("<SocialRow");
-    expect(footer).toContain("<Footer");
+    expect(footer).toContain("<FooterCells");
     expect(footer).not.toMatch(/Discord/i);
   });
 });

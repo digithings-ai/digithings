@@ -6,8 +6,14 @@ import type { ModuleNode } from "../../data/modules";
 import { Reveal } from "../../motion/primitives";
 import { useScrollyFeatures } from "../../motion/scrolly";
 import { scrollyTrackHeightVh } from "../../motion/scrolly-core";
+import { CopyCommand } from "../docs/CopyCommand";
 import { StackRow } from "../StackLogo";
-import { treemapAnchored, treemapAreasConstrained, type TreemapMins } from "./treemap";
+import {
+  treemapAnchored,
+  treemapAreasConstrained,
+  type TreemapMins,
+  type TreemapRect,
+} from "./treemap";
 
 /**
  * The module mosaic: one angular tile per module, each tile's area its share
@@ -20,13 +26,15 @@ import { treemapAnchored, treemapAreasConstrained, type TreemapMins } from "./tr
  * - **Packing.** A squarified treemap (`treemapAreasConstrained`) solved in
  *   pixels against the measured box. The rest layout is solved once and never
  *   moves; the focused tile keeps its rest top-left and grows there while the
- *   others repack around it (`treemapAnchored`). Rects ease on the CSS
- *   left/top/width/height transition in `web-theme.css` (`.dg-cell`).
- * - **Focus.** `useScrollyFeatures` maps the pinned track's progress to a
- *   tile. Focus only engages while the stage is centred in the viewport, and
- *   clicking a tile jumps the scroll to its step (instant, so exactly one tile
- *   animates). The focused tile shows its facts, lead, packages, the compose
- *   command (click to copy) and, with `onAsk`, an "ask digichat" control.
+ *   others repack around it (`treemapAnchored`). The open card is measured
+ *   before that solve, so the morph eases once onto the size the copy needs
+ *   (`web-theme.css`, `.dg-mosaic--rows .dg-cell`).
+ * - **Focus.** The pinned track's progress maps to a tile. The first tile
+ *   holds longer than each later one. Focus only engages while the stage is
+ *   centred in the viewport, and clicking a tile jumps the scroll to its step
+ *   (instant, so exactly one tile animates). The focused tile shows its facts,
+ *   lead, packages, the compose command (click to copy) and, with `onAsk`, an
+ *   "ask digichat" control.
  * - **Small screens / reduced motion.** `useScrollyFeatures` flips to
  *   `stepper`: the same tiles stack one per row, all open, and the one at the
  *   focal line lights (all of them under reduced motion) — paint only, so the column
@@ -73,13 +81,24 @@ const ROADMAP_WEIGHT = WEIGHT_FLOOR * 0.5;
  */
 const FOCUS_MULT = 1.3;
 const FOCUS_FLOOR = 0.5;
-/** Rest tiles fit name + version; focused tiles fit their detail (refined per module by `needExtra`). */
-const REST_MIN: TreemapMins = { minW: 150, minH: 84 };
+/**
+ * Rest tiles fit the longest module name at full size, plus the tile padding,
+ * with the version free to wrap under it. The anchored solve honours this
+ * floor, so a focused neighbour cannot squeeze a title past the box edge.
+ * Focused tiles fit their detail (refined per module by `needExtra`).
+ */
+const REST_MIN: TreemapMins = { minW: 176, minH: 96 };
 const FOCUS_MIN: TreemapMins = { minW: 300, minH: 260 };
 /** The gutter between packed tiles, in px — each rect is inset by half. */
 const TREEMAP_GAP = 8;
 /** The stacked face's focal line, as a share of the viewport height. */
 const STACK_FOCAL = 0.38;
+/**
+ * The first tile's scroll share, relative to each later tile. A flat walk
+ * plus the old 8% lead-in spent almost the whole first step before focus
+ * engaged, so the biggest module (digiquant) flashed past.
+ */
+const FIRST_DWELL = 1.75;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /** Hydration-safe reduced-motion read: `false` on the server and first client render. */
@@ -129,47 +148,148 @@ function factsLine(item: ModuleGridItem): string {
   return [size, item.counts].filter(Boolean).join(" · ");
 }
 
+/** Scroll units for the pinned track: the first tile holds `FIRST_DWELL`, the rest one each. */
+function dwellUnits(count: number): number {
+  if (count <= 1) return 1;
+  return FIRST_DWELL + (count - 1);
+}
+
 /**
- * Move the page so `index` is the step the pin shows: the centre of step
- * `index` sits at `(index + 0.5) / count` of the track's scroll span. Instant,
- * not smooth — a smooth scroll would walk the focus through every tile between.
+ * Which tile owns this 0..1 track progress. The first tile's window is
+ * `FIRST_DWELL` times a later tile's, so it stays open longer.
+ */
+export function moduleFocusIndex(progress: number, count: number): number {
+  if (count <= 1) return 0;
+  const total = dwellUnits(count);
+  const p = Math.min(Math.max(progress, 0), 0.999999);
+  let cursor = 0;
+  for (let i = 0; i < count; i++) {
+    cursor += (i === 0 ? FIRST_DWELL : 1) / total;
+    if (p < cursor) return i;
+  }
+  return count - 1;
+}
+
+/** Centre of tile `index` on the 0..1 track, matching `moduleFocusIndex`. */
+function moduleFocusCenter(index: number, count: number): number {
+  if (count <= 1) return 0.5;
+  const total = dwellUnits(count);
+  let start = 0;
+  for (let i = 0; i < index; i++) start += (i === 0 ? FIRST_DWELL : 1) / total;
+  const share = (index === 0 ? FIRST_DWELL : 1) / total;
+  return start + share / 2;
+}
+
+/**
+ * Move the page so `index` is the step the pin shows: the centre of that
+ * tile's dwell. Instant, not smooth — a smooth scroll would walk the focus
+ * through every tile between.
  */
 function focusModule(track: HTMLElement | null, index: number, count: number) {
   if (!track) return;
   const top = track.getBoundingClientRect().top + window.scrollY;
   const span = Math.max(track.offsetHeight - window.innerHeight, 1);
-  const target = top + ((index + 0.5) / count) * span;
+  const target = top + moduleFocusCenter(index, count) * span;
   window.scrollTo({ top: Math.max(target, 0), behavior: "auto" });
 }
 
-/**
- * Copy text via the Clipboard API, falling back to a hidden textarea. Resolves
- * to whether the copy happened, so a refused copy never claims success.
- */
-async function copyText(text: string): Promise<boolean> {
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-  if (clipboard?.writeText) {
-    try {
-      await clipboard.writeText(text);
-      return true;
-    } catch {
-      /* fall through to the textarea path */
+type ContentNeed = { h: number; w: number };
+
+function restTileMins(count: number): TreemapMins[] {
+  return Array.from({ length: count }, () => ({
+    minW: REST_MIN.minW + TREEMAP_GAP,
+    minH: REST_MIN.minH + TREEMAP_GAP,
+  }));
+}
+
+function focusTileMins(
+  count: number,
+  focusIndex: number,
+  extra: ContentNeed | undefined,
+): TreemapMins[] {
+  return Array.from({ length: count }, (_, i) => {
+    if (i !== focusIndex) {
+      return { minW: REST_MIN.minW + TREEMAP_GAP, minH: REST_MIN.minH + TREEMAP_GAP };
     }
-  }
-  try {
-    const el = document.createElement("textarea");
-    el.value = text;
-    el.setAttribute("readonly", "");
-    el.style.position = "fixed";
-    el.style.top = "-9999px";
-    document.body.appendChild(el);
-    el.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(el);
-    return ok;
-  } catch {
-    return false;
-  }
+    const need = extra ?? { h: 0, w: 0 };
+    return {
+      minW: Math.max(FOCUS_MIN.minW, need.w) + TREEMAP_GAP,
+      minH: Math.max(FOCUS_MIN.minH, need.h) + TREEMAP_GAP,
+    };
+  });
+}
+
+/**
+ * Rest rects stay solved in the fixed mosaic, so a focused tile keeps the
+ * top-left the reader is looking at. The mosaic box itself never grows —
+ * the open card takes more of that same box, and content past the box
+ * scrolls inside the card.
+ */
+function mosaicLayout(
+  baseWeights: number[],
+  focusIndex: number,
+  natural: { w: number; h: number },
+  extra: ContentNeed | undefined,
+): TreemapRect[] {
+  const rest = treemapAreasConstrained(
+    baseWeights,
+    natural.w,
+    natural.h,
+    restTileMins(baseWeights.length),
+  );
+  if (focusIndex < 0) return rest;
+  const weights = baseWeights.map((w, i) =>
+    i === focusIndex ? Math.max(w * FOCUS_MULT, FOCUS_FLOOR) : w,
+  );
+  const mins = focusTileMins(baseWeights.length, focusIndex, extra).map((min) => ({
+    minW: Math.min(min.minW, natural.w),
+    minH: Math.min(min.minH, natural.h),
+  }));
+  const size = treemapAreasConstrained(weights, natural.w, natural.h, mins)[focusIndex];
+  if (!size) return rest;
+  return treemapAnchored(weights, natural.w, natural.h, mins, rest, focusIndex, {
+    w: size.w,
+    h: size.h,
+  });
+}
+
+/** Border-box width the focused tile will be given for this box and content floor. */
+function focusedContentWidth(
+  baseWeights: number[],
+  focusIndex: number,
+  natural: { w: number; h: number },
+  extra: ContentNeed | undefined,
+): number {
+  const rect = mosaicLayout(baseWeights, focusIndex, natural, extra)[focusIndex];
+  if (!rect) return FOCUS_MIN.minW;
+  return Math.max(rect.w - TREEMAP_GAP, FOCUS_MIN.minW);
+}
+
+/**
+ * The mosaic's unforced box. An explicit height (the focused card is taller
+ * than the stage) must not feed back into the treemap or the solve chases itself.
+ */
+function naturalMosaicBox(mosaic: HTMLElement): { w: number; h: number } {
+  const w = mosaic.clientWidth;
+  const stage = mosaic.closest<HTMLElement>(".dg-stage--mosaic");
+  if (!stage) return { w, h: mosaic.clientHeight };
+  const stageStyle = getComputedStyle(stage);
+  const pad =
+    (parseFloat(stageStyle.paddingTop) || 0) + (parseFloat(stageStyle.paddingBottom) || 0);
+  const inner = Math.max(stage.clientHeight - pad, 0);
+  const maxRaw = getComputedStyle(mosaic).maxHeight;
+  const maxH = maxRaw.endsWith("px") ? parseFloat(maxRaw) : Number.POSITIVE_INFINITY;
+  return { w, h: Math.min(inner, Number.isFinite(maxH) ? maxH : inner) };
+}
+
+function readProbe(probe: HTMLElement, width: number): ContentNeed {
+  /* Floor, so a fractional tile width cannot hide a wrap the live card then
+     grows a second time to reveal. */
+  const w = Math.max(Math.floor(width), FOCUS_MIN.minW);
+  probe.style.width = `${w}px`;
+  const wantH = Math.ceil(probe.scrollHeight + 8);
+  const wantW = probe.scrollWidth > w + 4 ? Math.ceil(probe.scrollWidth + 8) : 0;
+  return { h: wantH, w: wantW };
 }
 
 export function ModuleGrid({
@@ -184,9 +304,9 @@ export function ModuleGrid({
   const count = ordered.length;
 
   const trackRef = useRef<HTMLDivElement>(null);
-  const { activeIndex, stepper } = useScrollyFeatures(trackRef, { slideCount: count });
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const copyTimer = useRef<number | null>(null);
+  const probeRef = useRef<HTMLDivElement>(null);
+  const measuredWidth = useRef<Record<string, string>>({});
+  const { stepper } = useScrollyFeatures(trackRef, { slideCount: count });
   const reduced = usePrefersReducedMotion();
 
   /* The stacked face opens the tile nearest the focal line; the first tile
@@ -194,10 +314,17 @@ export function ModuleGrid({
   const stackRefs = useRef<Array<HTMLElement | null>>([]);
   const [stackActive, setStackActive] = useState(0);
 
-  /* Focus engages only while the stage is centred (middle third, with a wider
-     release skirt against flapping) and a little way into the walk. Gate on the
-     stage box: the mosaic's own box is what grows, so gating on it deadlocks. */
+  /* Focus engages while the stage is centred (middle third, with a wider
+     release skirt against flapping). Gate on the stage box: the mosaic's own
+     box is what grows, so gating on it deadlocks. The walk index is weighted
+     so the first tile holds longer than the ones after it. */
   const [engaged, setEngaged] = useState(false);
+  const [walkIndex, setWalkIndex] = useState(0);
+  /* The tile the layout actually shows. It lags the scroll index until the
+     open card has been measured, so the morph has one target, not a minimum
+     and then a correction. */
+  const [focus, setFocus] = useState(-1);
+  const [needExtra, setNeedExtra] = useState<Record<string, ContentNeed>>({});
   const readyRef = useRef(false);
   useEffect(() => {
     let raf = 0;
@@ -218,8 +345,9 @@ export function ModuleGrid({
       readyRef.current = inside;
       const span = Math.max(track.offsetHeight - vh, 1);
       const progress = (window.scrollY - top) / span;
-      if (inside && progress > 0.08) setEngaged(true);
-      else if (!inside) setEngaged(false);
+      const index = moduleFocusIndex(progress, count);
+      setWalkIndex((prev) => (prev === index ? prev : index));
+      setEngaged((prev) => (prev === inside ? prev : inside));
     };
     const onScroll = () => {
       if (raf === 0) raf = window.requestAnimationFrame(check);
@@ -232,16 +360,7 @@ export function ModuleGrid({
       window.removeEventListener("resize", onScroll);
       if (raf !== 0) window.cancelAnimationFrame(raf);
     };
-  }, []);
-
-  const copyCommand = (id: string, cmd: string) => {
-    void copyText(cmd).then((ok) => {
-      if (!ok) return;
-      setCopiedId(id);
-      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-      copyTimer.current = window.setTimeout(() => setCopiedId(null), 1400);
-    });
-  };
+  }, [count]);
 
   useEffect(() => {
     if (!stepper || reduced) return;
@@ -274,7 +393,7 @@ export function ModuleGrid({
     };
   }, [stepper, reduced]);
 
-  const focus = engaged ? Math.max(activeIndex, 0) : -1;
+  const requestedFocus = !stepper && engaged ? walkIndex : -1;
 
   /* Density tiers from measured width and height, with an 8px hysteresis skirt
      per dimension. Written to data-tier directly: pure presentation, no state. */
@@ -313,7 +432,6 @@ export function ModuleGrid({
     const item = ordered[index];
     const m = item.module;
     const dockerCmd = m.dockerCmd;
-    const copied = copiedId === m.id;
     return (
       <>
         <button
@@ -351,17 +469,11 @@ export function ModuleGrid({
           {on ? (
             <span className="dg-mosaic-foot">
               {dockerCmd ? (
-                <button
-                  type="button"
-                  className={`dg-docker${copied ? " is-copied" : ""}`}
-                  aria-label={copied ? "Copied" : `Copy command: ${dockerCmd}`}
-                  onClick={() => copyCommand(m.id, dockerCmd)}
-                >
-                  <span className="prompt" aria-hidden="true">
-                    {copied ? "✓" : "$"}
-                  </span>{" "}
-                  {copied ? "copied" : dockerCmd}
-                </button>
+                <CopyCommand
+                  inline
+                  ariaLabel={`${m.id} compose command`}
+                  samples={[{ label: m.id, protocol: "docker compose", code: dockerCmd }]}
+                />
               ) : null}
               {onAsk ? (
                 <button
@@ -387,10 +499,15 @@ export function ModuleGrid({
   useEffect(() => {
     const el = mosaicRef.current;
     if (!el) return;
-    const apply = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    const apply = () => {
+      const next = naturalMosaicBox(el);
+      setBox((prev) => (prev.w === next.w && prev.h === next.h ? prev : next));
+    };
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
+    const stage = el.closest(".dg-stage--mosaic");
+    if (stage) ro.observe(stage);
     return () => ro.disconnect();
   }, [stepper]);
 
@@ -416,66 +533,102 @@ export function ModuleGrid({
     };
   }, [box.w, box.h, stepper]);
 
-  const weights = baseWeights.map((w, i) => (i === focus ? Math.max(w * FOCUS_MULT, FOCUS_FLOOR) : w));
-
-  /* Measured top-up per module: one settle-tick after focus lands, the focused
-     body's true shortfall raises that module's minimum. Monotonic, so the
-     re-measure loop always terminates. */
-  const [needExtra, setNeedExtra] = useState<Record<string, number>>({});
-  useEffect(() => {
-    if (stepper) return;
-    let timer: number | null = null;
-    const measure = () => {
-      timer = null;
-      const tile = trackRef.current?.querySelector<HTMLElement>(".dg-cell.on");
-      const body = tile?.querySelector<HTMLElement>(".dg-cell-body");
-      if (!tile || !body) return;
-      const shortfall = body.scrollHeight - body.clientHeight;
-      if (shortfall > 4) {
-        const id = tile.dataset.mod ?? "";
-        setNeedExtra((prev) => {
-          const want = Math.ceil(tile.clientHeight + shortfall + 32);
-          return want > (prev[id] ?? 0) ? { ...prev, [id]: want } : prev;
-        });
-      }
-    };
-    /* Past the rect morph (0.45s) and the body fade (0.28s). */
-    timer = window.setTimeout(measure, 650);
-    return () => {
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [focus, stepper, box, needExtra]);
-
-  const mins = baseWeights.map((_, i) => {
-    if (i === focus) {
-      const extra = needExtra[ordered[i].module.id] ?? 0;
-      return {
-        minW: FOCUS_MIN.minW + TREEMAP_GAP,
-        minH: Math.max(FOCUS_MIN.minH, extra) + TREEMAP_GAP,
-      };
+  /* Measure the card the scroll is asking for before the mosaic commits to
+     it. Measuring after the morph had started grew the tile to the focus
+     floor, then again to the copy — two motions. The layout effect below
+     publishes one size, and the CSS transition eases onto that once. */
+  useLayoutEffect(() => {
+    if (requestedFocus < 0) {
+      if (focus !== -1) setFocus(-1);
+      return;
     }
-    return { minW: REST_MIN.minW + TREEMAP_GAP, minH: REST_MIN.minH + TREEMAP_GAP };
-  });
-  const restMins = baseWeights.map(() => ({
-    minW: REST_MIN.minW + TREEMAP_GAP,
-    minH: REST_MIN.minH + TREEMAP_GAP,
-  }));
+    if (box.w <= 0 || box.h <= 0) return;
+    const id = ordered[requestedFocus].module.id;
+    const boxKey = `${Math.round(box.w)}x${Math.round(box.h)}`;
+    if (measuredWidth.current[id] === boxKey) {
+      if (focus !== requestedFocus) setFocus(requestedFocus);
+      return;
+    }
+    const probe = probeRef.current;
+    if (!probe) return;
+
+    const natural = { w: box.w, h: box.h };
+    let extra: ContentNeed = { h: 0, w: 0 };
+    let width = focusedContentWidth(baseWeights, requestedFocus, natural, undefined);
+    for (let i = 0; i < 4; i++) {
+      const next = readProbe(probe, width);
+      /* Keep the taller reading. A wider pass hides a wrap the narrower card
+         then has to grow again to show. */
+      next.h = Math.max(next.h, extra.h);
+      next.w = Math.max(next.w, extra.w);
+      extra = next;
+      const renderWidth = focusedContentWidth(baseWeights, requestedFocus, natural, extra);
+      if (Math.abs(renderWidth - width) <= 1) break;
+      width = Math.min(width, renderWidth);
+    }
+
+    measuredWidth.current[id] = `${Math.round(box.w)}x${Math.round(box.h)}`;
+    setNeedExtra((prev) => {
+      const cur = prev[id];
+      if (cur && cur.h === extra.h && cur.w === extra.w) return prev;
+      return { ...prev, [id]: extra };
+    });
+    if (focus !== requestedFocus) setFocus(requestedFocus);
+  }, [requestedFocus, focus, box.w, box.h, ordered, baseWeights]);
+
+  const focusExtra = focus >= 0 ? needExtra[ordered[focus]?.module.id ?? ""] : undefined;
   const solvable = !stepper && box.w > 0 && box.h > 0;
-  const restRects = solvable ? treemapAreasConstrained(baseWeights, box.w, box.h, restMins) : null;
-  let rects = restRects;
-  if (solvable && focus >= 0 && restRects) {
-    const size = treemapAreasConstrained(weights, box.w, box.h, mins)[focus];
-    if (size) {
-      rects = treemapAnchored(weights, box.w, box.h, mins, restRects, focus, { w: size.w, h: size.h });
+  const rects = solvable
+    ? mosaicLayout(baseWeights, focus, { w: box.w, h: box.h }, focusExtra)
+    : null;
+
+  /* The mosaic is a fixed box. Drop any height a previous focus wrote onto
+     it, so a hot reload cannot leave the grid taller than the stage. */
+  useLayoutEffect(() => {
+    const stage = trackRef.current?.querySelector<HTMLElement>(".dg-stage--mosaic");
+    const mosaic = mosaicRef.current;
+    if (stage) stage.style.overflowY = "";
+    if (mosaic) {
+      mosaic.style.height = "";
+      mosaic.style.flexShrink = "";
     }
-  }
+  }, [stepper]);
+
+  const probeId = requestedFocus >= 0 ? ordered[requestedFocus].module.id : "";
+  const probeOpen =
+    requestedFocus >= 0 &&
+    box.w > 0 &&
+    box.h > 0 &&
+    measuredWidth.current[probeId] !== `${Math.round(box.w)}x${Math.round(box.h)}`;
 
   return (
-    <div
-      ref={trackRef}
-      className={className}
-      style={stepper ? undefined : { height: `${scrollyTrackHeightVh(count, vhPerModule)}vh` }}
-    >
+    <>
+      {probeOpen ? (
+        <div
+          ref={probeRef}
+          className="dg-cell on"
+          aria-hidden="true"
+          inert
+          style={{
+            position: "fixed",
+            left: -10000,
+            top: 0,
+            visibility: "hidden",
+            height: "auto",
+            overflow: "visible",
+            pointerEvents: "none",
+            boxSizing: "border-box",
+            width: FOCUS_MIN.minW,
+          }}
+        >
+          {tileContent(requestedFocus, true, -2)}
+        </div>
+      ) : null}
+      <div
+        ref={trackRef}
+        className={className}
+        style={stepper ? undefined : { height: `${scrollyTrackHeightVh(dwellUnits(count), vhPerModule)}vh` }}
+      >
       <div className={stepper ? "dg-stack-wrap" : "dg-stage dg-stage--mosaic"}>
         <div
           ref={mosaicRef}
@@ -536,5 +689,6 @@ export function ModuleGrid({
         </div>
       </div>
     </div>
+    </>
   );
 }

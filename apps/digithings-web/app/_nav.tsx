@@ -52,25 +52,55 @@ export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
-/** Footer stays a flat NavLink[] — <Footer/> takes links, not groups — and it
- *  is where the long tail lives: the company pages and the website privacy
- *  notice. Software use is governed by the repository's MIT licence; paid
- *  services use their own signed agreement, so neither needs generic site
- *  terms. Company profiles (GitHub, X, LinkedIn) are the shared <SocialRow/>,
- *  slotted through <DtFooter/>, not a Connect column here. */
-export const DT_FOOTER: NavLink[] = [
-  { label: "Docs", href: "/docs" },
-  { label: "API", href: "/docs/api" },
-  { label: "Wiki", href: "/openwiki" },
-  { label: "Services", href: "/services" },
-  { label: "About", href: "/about" },
-  { label: "Team", href: "/team" },
-  { label: "Security", href: "/security" },
-  { label: "Changelog", href: "/changelog" },
-  { label: "digichat", href: "/chat" },
+/** One row of boxes. None of these are the top-bar links (Docs, API, Wiki,
+ *  Services, the company menu, digiquant.io, the GitHub icon, or ask digichat). */
+export const DT_FOOTER_BOXES: NavLink[] = [
+  { label: "Contact", href: `mailto:${DT_CONTACT_EMAIL}` },
   { label: "Privacy", href: "/legal/privacy" },
-  { label: "digiquant.io", href: "https://digiquant.io", external: true },
-  { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
+  { label: "X", href: "https://x.com/digithingsai", external: true },
+  { label: "LinkedIn", href: "https://www.linkedin.com/company/digithingsai/", external: true },
+];
+
+/** The full map, in gloom-style columns. The top bar is a short menu; this is
+ *  where every page is listed, grouped. Live is the running products. */
+export const DT_SITEMAP: { label: string; links: NavLink[] }[] = [
+  {
+    label: "Live",
+    links: [
+      { label: "digichat", href: "/chat" },
+      { label: "digiquant", href: "https://digiquant.io", external: true },
+      { label: "dashboard", href: "https://digiquant.io/dashboard/", external: true },
+    ],
+  },
+  {
+    label: "Product",
+    links: [
+      { label: "Docs", href: "/docs" },
+      { label: "API", href: "/docs/api" },
+      { label: "Wiki", href: "/openwiki" },
+      { label: "Services", href: "/services" },
+    ],
+  },
+  {
+    label: "Company",
+    links: [
+      { label: "About", href: "/about" },
+      { label: "Team", href: "/team" },
+      { label: "Security", href: "/security" },
+      { label: "Changelog", href: "/changelog" },
+    ],
+  },
+  {
+    label: "Connect",
+    links: [
+      { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
+      { label: DT_CONTACT_EMAIL, href: `mailto:${DT_CONTACT_EMAIL}` },
+    ],
+  },
+  {
+    label: "Legal",
+    links: [{ label: "Privacy", href: "/legal/privacy" }],
+  },
 ];
 
 export const DT_FOOTER_META = "© 2026 digithings · open core";

@@ -96,6 +96,9 @@
    hide, the CTA dress). Without this line the skip link renders permanently
    visible: its `-translate-y-[200%]` is never generated. */
 @source "../../../packages/ui/src/components/chrome.tsx";
+/* FooterCells is utility-only (the hairline box row). Without this line the
+   cells render as an unpadded two-column list. */
+@source "../../../packages/ui/src/components/footer";
 @source "../../../packages/ui/src/components/TerminalManifest.tsx";
 @source "../../../packages/ui/src/components/docs";
 @source "../../../packages/ui/src/components/chat";
@@ -177,24 +180,8 @@
 :root[data-theme="light"] {
   --accent: var(--ink);
   --on-accent: var(--surface);
-  /* stronger than dark-mode 12% so the fixed .glow wash reads on --bg */
   --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
 }
-
-/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
-   which leaves a faint un-tinted strip at the very top edge — most visible on
-   subpages and when the auto-hiding nav uncovers the top. Anchor it here so the
-   page shading always reaches the top border. (The shared file also feeds
-   digiquant.io, so we don't touch it.) */
-.glow { animation: none; transform: none; }
-
-/* The landing page (main.landing) drops both fixed washes — the noise `.grain`
-   and the radial `.glow` — so the page reads as a clean ground under the layout
-   lines rather than a tinted, textured one. Scoped by `:has(main.landing)` so
-   every other route keeps them (the /chat boot loader deliberately lets both
-   show through — see the note further down). */
-body:has(main.landing) .grain,
-body:has(main.landing) .glow { display: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
@@ -270,13 +257,10 @@ html {
    (buttonVariants), so the `.dc-nav-cta` family is gone — one CTA treatment in
    the canon, not one per site (R1). */
 
-/* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
-   fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's
-   shared .tl-boot class fills var(--bg) by default (right for its usual mode:
-   pinned over an app that has not rendered, with nothing behind it) -- scoped
-   override for this usage only, so .grain/.glow stay visible through the
-   loading phase instead of disappearing behind a flat rectangle that then pops
-   away once digichat itself loads. */
+/* digichat embed boot loader (ChatEmbedShell.tsx) sits on the page ground.
+   ContainerBootLoader's shared .tl-boot class fills var(--bg) by default, which
+   paints a second rectangle over the same ground and pops when the embed
+   loads. Keep this one transparent so the boot and the page are one surface. */
 .tl-boot.dc-embed-boot { background: transparent; }
 
 /* The boot dock mirrors the real composer: the loader's dboot default caps at
@@ -325,8 +309,14 @@ html {
 .doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
 .doc-inline-link:hover { text-decoration: underline; }
 
-/* Wide shell for OpenAPI explorer (Swagger needs horizontal room). */
-.docs-shell--wide { max-width: 1180px; }
+/* Docs and the API explorer fill the column between the site rails.
+   The shell's outer edge meets the lines; --page-pad is the air inside
+   them, the same inset the home page uses. */
+.docs-shell.docs-shell {
+  width: 100%;
+  max-width: calc(var(--frame-w) + 2 * var(--page-pad));
+  padding-inline: var(--page-pad);
+}
 
 /* ---- Swagger UI (vendored CSS) — re-tint toward site tokens; hide try-it chrome ---- */
 .docs-swagger .swagger-ui { font-family: var(--font-sans); color: var(--ink); }
@@ -483,15 +473,27 @@ html {
 }
 
 /* Below the grid's two-column breakpoint and under reduced motion the morph is
-   off: the pin releases, the track is the band's natural height, and the grid
-   renders exactly as it did before the morph existed. */
+   off. Questions come first and the chat sits under them, both in the flow
+   and both clickable. The !important rules beat a transform the scroll
+   handler may have written before the viewport narrowed. */
 @media (max-width: 959.98px), (prefers-reduced-motion: reduce) {
+  .faq-morph {
+    height: auto !important;
+  }
+
   .faq-morph__pin {
     position: static;
   }
 
-  .faq-morph__chat-inner,
   .faq-morph__faq {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
+    will-change: auto;
+  }
+
+  .faq-morph__chat-inner {
+    transform: none !important;
     will-change: auto;
   }
 }
@@ -880,4 +882,78 @@ html {
   font-size: 0.74rem;
   line-height: 1.6;
   color: var(--ink-soft);
+}
+
+/* Welcome hero. The canvas samples `color` and `accent-color` each frame
+   so the land mask and open markets follow the active theme. */
+.pixel-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 27rem;
+}
+
+.pixel-field {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--ink);
+  accent-color: var(--accent);
+}
+
+.pixel-word {
+  display: block;
+  width: 264px;
+  height: auto;
+  margin-top: 2.25rem;
+  color: var(--ink);
+  shape-rendering: crispEdges;
+  --glint: var(--accent);
+}
+
+@media (min-width: 380px) {
+  .pixel-word { width: 352px; }
+}
+
+@media (min-width: 640px) {
+  .pixel-word { width: 528px; }
+}
+
+@media (min-width: 768px) {
+  .pixel-word { width: 616px; }
+}
+
+.pixel-word .c { opacity: var(--f); }
+.pixel-word .n { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pixel-word .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word .g {
+    animation:
+      pixel-build var(--t) linear var(--d) both,
+      pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  .pixel-word .n { animation: pixel-stray var(--t) linear var(--d) both; }
+}
+
+@keyframes pixel-build {
+  0% { opacity: 0; }
+  0.1%, 33% { opacity: var(--a); }
+  33.1%, 66% { opacity: var(--b); }
+  66.1%, 99.9% { opacity: var(--c); }
+  100% { opacity: var(--f); }
+}
+
+@keyframes pixel-stray {
+  0% { opacity: 0; }
+  0.1%, 99.9% { opacity: 0.25; }
+  100% { opacity: 0; }
+}
+
+@keyframes pixel-glint {
+  0% { fill: var(--glint); opacity: 1; }
+  5%, 100% { fill: currentColor; opacity: var(--f); }
 }

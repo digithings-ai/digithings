@@ -343,7 +343,7 @@ body {
 
 .dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-cell:hover { opacity: 0.85; }
-.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; }
+.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; overflow-x: hidden; overflow-y: auto; }
 
 /* Name left, version right: the tile's identity line. The version sits in the
    top-right corner where a reader scanning the mosaic can compare releases down
@@ -381,9 +381,15 @@ body {
 /* The packages sit at the foot of every tile, expanded or resting. `margin-top:
    auto` pins them to the bottom so the boxes line up whether or not the tile is
    open; the chips print their names, because the owner asked for the packages to
-   be readable "in the non-expanded view". */
+   be readable "in the non-expanded view". On the focused tile they pack to the
+   right, directly above the compose line. */
 .dg-mosaic-stack { display: block; margin-top: auto; min-width: 0; }
 .dg-mosaic-stack .stack-row { margin-top: 0; }
+/* Focused tiles: the chips shrink to their own width and sit in the bottom-right,
+   just above the compose line. The cap wraps a long row into that corner
+   instead of stretching it across the card. */
+.dg-cell.on .dg-mosaic-stack { align-self: flex-end; width: fit-content; max-width: min(100%, 26rem); }
+.dg-cell.on .dg-mosaic-stack .stack-row { justify-content: flex-end; }
 /* Collapsed tiles keep the logo-only row on one scrolling line: wrapping
    would spend unpredictable vertical room in narrow tiles (measured as a
    46px overflow), while a horizontal scroll matches the docker chip grammar
@@ -408,10 +414,10 @@ body {
 .dg-seam-word {
   opacity: clamp(0, calc(var(--seam-fill, 1) * var(--n) - var(--i)), 1);
 }
-/* The compose command and the CTA share the last line. A tile is only as tall
-   as one grid row, and stacking them cost a line the smallest modules did not
-   have — the command was the thing getting clipped. */
-.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: auto; min-width: 0; flex: 0 0 auto; }
+/* The compose command and the CTA share the last line. The command wraps
+   on the focused tile so a zoomed page lengthens the card instead of
+   cutting the line off. */
+.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0; min-width: 0; flex: 0 0 auto; }
 .dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
 .dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
 button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
@@ -424,13 +430,18 @@ button.dg-docker { cursor: pointer; text-align: left; }
 button.dg-docker:hover { border-color: var(--hair-2); }
 button.dg-docker.is-copied { color: var(--accent); }
 
-/* The detail is clipped rather than allowed to push the tile: a tile that grew
-   with its content would take its row's height with it and break the mosaic's
-   fixed outline. The focused tile is sized to hold its detail — its own weight
-   boost and its row's — so anything past that is a bug to fix, not to scroll. */
+/* Resting tiles clip detail that does not fit their share of the mosaic.
+   The focused tile unclamps its copy and grows inside the fixed grid.
+   Text that still exceeds that grid scrolls inside the card. */
 .dg-cell .dg-mosaic-detail { overflow: hidden; flex: 1 1 auto; min-height: 0; }
-.dg-cell.on .dg-mosaic-detail { min-height: 0; }
-.dg-cell.on .dg-docker { margin-top: 0; overflow: hidden; }
+.dg-cell.on .dg-mosaic-detail { overflow: visible; flex: 0 1 auto; min-height: auto; }
+.dg-cell.on .dg-docker { margin-top: 0; overflow: visible; white-space: normal; }
+.dg-cell.on .dg-mosaic-serves {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
 
 /* The deeper description paragraphs: what the module is for, in its own words.
    Only on the focused tile — a resting tile is a fraction of a row tall, so it

@@ -322,11 +322,10 @@ export function ChatEmbedShell({
         width: "100%",
         // Full-bleed: the chat fills the page area edge-to-edge (the DataTap
         // layout), so the themed background reads as one solid surface.
-        // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
-        // z-index 0) sit behind this shell, and an opaque fill here paints a visible
-        // rectangle over them. The white-flash guard lives on the frame itself
-        // (`.dc-chat-frame` paints --chat-frame-canvas pre-paint) and inside the
-        // iframe's own boot, so nothing here needs a solid fill.
+        // Transparent, not a second var(--bg) fill: the page ground is already
+        // that color, and an opaque rectangle here flashes when the embed loads.
+        // The white-flash guard lives on the frame itself (`.dc-chat-frame`
+        // paints --chat-frame-canvas pre-paint) and inside the iframe's own boot.
         background: "transparent",
         colorScheme: shellTheme,
       }}
@@ -357,9 +356,8 @@ export function ChatEmbedShell({
             position: "absolute",
             inset: 0,
             zIndex: 1,
-            // Crossfade to the real frame on ready; transparent so the page's
-            // .grain/.glow layers keep showing through (same reasoning as the
-            // shell div above).
+            // Crossfade to the real frame on ready; transparent so the page
+            // ground keeps showing through (same reasoning as the shell above).
             opacity: embedReady ? 0 : 1,
             transition: "opacity 320ms ease",
             pointerEvents: embedReady ? "none" : "auto",

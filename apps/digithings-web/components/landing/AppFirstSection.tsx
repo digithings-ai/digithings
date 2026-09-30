@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArchitectureTour } from "@digithings/ui";
 
+import { architectureEntrance } from "@/components/landing/architectureEntrance";
 import { APP_PRESETS } from "@/lib/appPresets";
 import {
   DIGI_LAYERS,
@@ -89,10 +90,11 @@ export function AppFirstSection() {
   const menuRef = useRef<HTMLDivElement>(null);
   const [tourStep, setTourStep] = useState(0);
   const [tourMode, setTourMode] = useState<string>("static");
-  /* The graph draws itself the first time it scrolls into view and again on
-     every app switch; `run` is bumped per build so a quick second switch
-     restarts the timer. Reduced motion is handled in diagrams.css: the
-     pending hide and the build keyframes are both switched off there. */
+  /* The graph draws itself the first time the reader scrolls down into the
+     band. A refresh or a back navigation that lands inside or below the band
+     paints the finished drawing — the pending hide would otherwise leave the
+     diagram on screen blank until the first frame scrolled back in. Reduced
+     motion is handled in diagrams.css. */
   const [build, setBuild] = useState<{ state: "pending" | "run" | "done"; run: number }>({
     state: "pending",
     run: 0,
@@ -177,20 +179,52 @@ export function AppFirstSection() {
 
   useEffect(() => {
     if (build.state !== "pending") return;
-    const frame = sectionRef.current?.querySelector(".arch-tour__frame, .arch-figure");
-    if (!frame) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    const finish = () =>
+      setBuild((b) => (b.state === "pending" ? { state: "done", run: b.run } : b));
+    const play = () =>
+      setBuild((b) => (b.state === "pending" ? { state: "run", run: b.run + 1 } : b));
+
+    let io: IntersectionObserver | undefined;
+    let raf = 0;
+    let frames = 0;
+
+    const arm = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      io?.disconnect();
+      io = undefined;
+      const rect = section.getBoundingClientRect();
+      const gate = architectureEntrance(rect, window.innerHeight);
+      if (gate === "wait" && rect.height <= 0 && frames < 8) {
+        frames += 1;
+        raf = requestAnimationFrame(arm);
+        return;
+      }
+      if (gate === "done") {
+        finish();
+        return;
+      }
+      io = new IntersectionObserver(([entry]) => {
         if (!entry?.isIntersecting) return;
-        io.disconnect();
-        setBuild((b) => ({ state: "run", run: b.run + 1 }));
-      },
-      { rootMargin: "0px 0px -20% 0px" },
-    );
-    io.observe(frame);
-    return () => io.disconnect();
-    /* The tour swaps its static render for the camera one after mount, which
-       replaces the frame node; re-observe so the build is never left pending. */
+        io?.disconnect();
+        play();
+      });
+      io.observe(section);
+    };
+
+    arm();
+    const onPageShow = () => arm();
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      io?.disconnect();
+      window.removeEventListener("pageshow", onPageShow);
+    };
+    /* tourMode swaps the static stack for the camera after mount. Re-arm so
+       a band that is already on screen is never left hidden. */
   }, [build.state, tourMode]);
 
   useEffect(() => {
@@ -298,8 +332,8 @@ export function AppFirstSection() {
         header={
           <div className="flex w-full min-w-0 flex-col gap-[0.7rem]">
             <h2 className={HEADLINE}>
-              <span className="why-rent">Their AI stack,</span>{" "}
-              <span className="why-own">or one you compose.</span>
+              <span className="why-rent">Anyones AI stack,</span>{" "}
+              <span className="why-own">or a digithings stack</span>
             </h2>
             {tourMode === "static" ? (
               <p className={LEDE}>

@@ -49,7 +49,6 @@ export default async function OpenApiServicePage({
         <DocsLayout
           nav={apiDocsNav(entry.id)}
           ariaLabel="api docs"
-          className="docs-shell--wide"
           hero={{
             kicker: "// openapi",
             title: <ServiceWordmark id={entry.id} />,

@@ -33,9 +33,14 @@ import { embedOriginForChat } from "@/lib/security-headers.mjs";
 export const metadata: Metadata = {
   title: "digithings — AI infrastructure in a glass box",
   description:
-    "Open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already "
+    "AI infrastructure you run yourself: nine modules that plug into the stack you already "
     + "run, rather than replacing it. Self-host on your own hosts, with your own keys and providers, "
     + "and a traced request path.",
+  openGraph: {
+    description:
+      "AI infrastructure you self-host: nine modules that drop into the stack you already run. "
+      + "Your own keys and providers, every step traceable.",
+  },
 };
 
 export default function Home() {
