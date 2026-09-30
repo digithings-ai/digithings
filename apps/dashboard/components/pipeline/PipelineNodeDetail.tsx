@@ -5,6 +5,8 @@ import { Skeleton, SkeletonGroup } from '@digithings/ui/ui';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import { apiDb } from '@/lib/api-query';
 import { isApiConfigured } from '@/lib/api-client';
+import { applyPipelineScope } from '@/lib/pipeline-scope';
+import type { PipelineScope } from '@/lib/pipelines';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
@@ -17,6 +19,8 @@ export interface PipelineNodeDetailProps {
   node?: LaidOutNode | null;
   documentKey: string | null;
   date: string;
+  /** Optional pipeline scope; defaults to baseline. */
+  scope?: PipelineScope;
   onClose: () => void;
 }
 
@@ -24,6 +28,7 @@ export default function PipelineNodeDetail({
   node = null,
   documentKey,
   date,
+  scope,
   onClose,
 }: PipelineNodeDetailProps) {
   const [doc, setDoc] = useState<LibraryDocumentResult | null>(null);
@@ -49,7 +54,7 @@ export default function PipelineNodeDetail({
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchByDocumentKey(documentKey, date);
+        const result = await fetchByDocumentKey(documentKey, date, scope);
         if (!cancelled) {
           setDoc(result);
           setLoading(false);
@@ -63,7 +68,7 @@ export default function PipelineNodeDetail({
     })();
 
     return () => { cancelled = true; };
-  }, [documentKey, date]);
+  }, [documentKey, date, scope?.pipelineId]); // eslint-disable-line react-hooks/exhaustive-deps -- scope keyed by id
 
   if (!documentKey) return null;
 
@@ -169,6 +174,7 @@ export default function PipelineNodeDetail({
 async function fetchByDocumentKey(
   documentKey: string,
   date: string,
+  scope?: PipelineScope,
 ): Promise<LibraryDocumentResult | null> {
   if (!isApiConfigured()) return null;
 
@@ -176,9 +182,7 @@ async function fetchByDocumentKey(
   // row, which rendered as "No output found" — the same failure class as the
   // #1538 digest headline (a retried/backfilled publish can duplicate a
   // (document_key, date) pair even though none exist today).
-  const { data, error } = await apiDb
-    .from('documents')
-    .select('id')
+  const { data, error } = await applyPipelineScope(apiDb.from('documents').select('id'), 'documents', scope)
     .eq('document_key', documentKey)
     .eq('date', date)
     // Deterministic tiebreaker only — documents has no created_at column.

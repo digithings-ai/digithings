@@ -1,81 +1,86 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  CompositionBar,
   EmptyState,
   Skeleton,
   SkeletonGroup,
 } from '@digithings/ui/ui';
 import { FreshnessBanner, latestSuccessfulRun } from '@/components/system/freshness-banner';
-import { RunEconomicsRow } from '@/components/system/run-economics-row';
 import { EntitledSurface } from '@/components/entitled-surface';
-import { fetchResearchRunDiagnostics } from '@/lib/observability-queries';
+import { buildDayKpis } from '@/lib/pipeline-kpis';
+import { groupRunEpisodes } from '@/lib/run-episodes';
+import type { PipelineScope } from '@/lib/pipelines';
 import type { ResearchRunDiagnostics } from '@/lib/types';
 import type { PlanTier } from '@/lib/entitlements';
+import PipelineKpiStrip from './PipelineKpiStrip';
+import { useRunDiagnostics, type RunDiagnosticsState } from './use-run-diagnostics';
 
 function forDate(diagnostics: ResearchRunDiagnostics[], date: string): ResearchRunDiagnostics[] {
   return diagnostics.filter((d) => d.run_date === date);
 }
 
-function summaryLine(dayRuns: ResearchRunDiagnostics[]): string {
-  if (!dayRuns.length) return 'No run telemetry for this date';
-  const latest = dayRuns[0];
-  const segs =
-    latest.segments_ok != null && latest.segments_total != null
-      ? `${latest.segments_ok}/${latest.segments_total} segments`
-      : null;
-  const status = latest.status ?? 'unknown';
-  return [status, segs].filter(Boolean).join(' · ');
-}
-
-/** Collapsible run-health stats for the Pipeline date selector. */
+/** Collapsible run-health panel for the selected date: freshness + KPI tiles + composition bars. */
 export default function PipelineRunHealth({
   date,
   tier,
+  scope,
+  state,
+  artifactCount = 0,
 }: {
   date: string;
   /** Test override for the economics strip gate. */
   tier?: PlanTier;
+  scope?: PipelineScope;
+  /** Diagnostics owned by the parent (avoids a second fetch); fetched here when omitted. */
+  state?: RunDiagnosticsState;
+  artifactCount?: number;
 }) {
-  const [diagnostics, setDiagnostics] = useState<ResearchRunDiagnostics[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const own = useRunDiagnostics(scope, state === undefined);
+  const { diagnostics, loading, unavailable = false } = state ?? own;
 
-  useEffect(() => {
-    let alive = true;
-    // Initial `loading` is already true — avoid setState in the effect body
-    // (react-hooks/set-state-in-effect). Writes stay in async callbacks.
-    fetchResearchRunDiagnostics()
-      .then((d) => alive && setDiagnostics(d))
-      .catch(() => alive && setDiagnostics([]))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const dayRuns = useMemo(
-    () => (diagnostics ? forDate(diagnostics, date) : []),
-    [diagnostics, date]
-  );
+  const dayRuns = useMemo(() => (diagnostics ? forDate(diagnostics, date) : []), [diagnostics, date]);
   const dayOk = useMemo(() => latestSuccessfulRun(dayRuns), [dayRuns]);
-  const summary = loading ? 'Loading…' : summaryLine(dayRuns);
+  const kpis = useMemo(
+    () => buildDayKpis({ date, episodes: groupRunEpisodes(diagnostics ?? []), artifactCount }),
+    [diagnostics, date, artifactCount],
+  );
+  const segTotal = kpis.segments.total;
 
   return (
-    <Collapsible
-      data-testid="pipeline-run-health"
-      className="group border-b border-hair bg-surface"
-    >
+    <Collapsible data-testid="pipeline-run-health" defaultOpen className="group border-b border-hair bg-surface">
       <CollapsibleTrigger className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-ink/[0.02] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 md:px-4">
         <span className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.1em] text-ink-mute">
           Run health
         </span>
         <span className="min-w-0 flex-1 truncate font-mono text-xs tabular-nums text-ink-soft">
-          {date} · {summary}
+          {date} · {loading
+            ? 'Loading…'
+            : unavailable
+              ? 'Run data unavailable'
+              : kpis.hasTelemetry
+                ? (kpis.status ?? 'unknown')
+                : 'No run telemetry'}
         </span>
+        {!loading && !unavailable && segTotal ? (
+          <CompositionBar
+            mode="stacked"
+            total={segTotal}
+            height={6}
+            className="hidden w-28 shrink-0 md:block"
+            label={`Segments: ${kpis.segments.ok ?? 0} ok of ${segTotal}`}
+            segments={[
+              { key: 'ok', label: 'ok', value: kpis.segments.ok ?? 0, tone: 'accent' },
+              { key: 'carried', label: 'carried', value: kpis.segments.carried ?? 0, tone: 'mute' },
+              { key: 'failed', label: 'failed', value: kpis.segments.failed ?? 0, tone: 'warn' },
+            ]}
+          />
+        ) : null}
         <ChevronDown
           size={14}
           className="shrink-0 text-ink-mute transition-transform group-data-open:rotate-180"
@@ -87,12 +92,19 @@ export default function PipelineRunHealth({
         {loading ? (
           <SkeletonGroup aria-label="Loading run diagnostics" className="flex flex-col gap-4">
             <Skeleton variant="block" className="h-12 w-full" />
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {Array.from({ length: 4 }, (_, i) => (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+              {Array.from({ length: 6 }, (_, i) => (
                 <Skeleton key={i} variant="block" className="h-16 w-full" />
               ))}
             </div>
           </SkeletonGroup>
+        ) : unavailable ? (
+          <EmptyState
+            dress="glass"
+            variant="error"
+            title="Run data unavailable"
+            body="Run telemetry could not be read, so run health is not shown. This is not the same as a date with no run."
+          />
         ) : !dayRuns.length ? (
           <EmptyState
             dress="glass"
@@ -111,7 +123,7 @@ export default function PipelineRunHealth({
             )}
             {/* glassbox_economics: Baseline+. Freshness/status stay visible to Observer. */}
             <EntitledSurface artifactClass="glassbox_economics" tier={tier}>
-              <RunEconomicsRow latest={dayRuns[0]} />
+              <PipelineKpiStrip kpis={kpis} />
             </EntitledSurface>
           </>
         )}

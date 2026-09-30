@@ -93,3 +93,26 @@ export function buildPipelineDayData(docs: PipelineDocumentRow[]): PipelineDayDa
     artifacts,
   };
 }
+
+export interface FanoutCompleteness {
+  present: number;
+  total: number;
+  /** present === total; a surplus (present > total) is NOT complete. */
+  complete: boolean;
+}
+
+/**
+ * Present-vs-expected branch count for a fan-out, or undefined when it cannot be
+ * stated honestly. Only a RECORDED run can be judged: no run, loading and API-down
+ * days (runRecorded falsy) yield undefined so nothing reads as "complete".
+ * `buildPipelineDayData` omits zero counts, so a missing entry on a recorded run
+ * is a real zero (empty bar), not "unknown".
+ */
+export function fanoutCompleteness(
+  day: Pick<PipelineDayData, 'runRecorded' | 'fanoutCounts'>,
+  fanout: { id: string; defaultCount: number },
+): FanoutCompleteness | undefined {
+  if (!day.runRecorded || !(fanout.defaultCount > 0)) return undefined;
+  const present = day.fanoutCounts[fanout.id] ?? 0;
+  return { present, total: fanout.defaultCount, complete: present === fanout.defaultCount };
+}
