@@ -25,16 +25,19 @@ sidecar records both the searched shape and the gated projection; a
 single-knee grid variant is always in the running so at least one candidate
 gates exactly.
 
-Reads `.scratch/gold_seed.json` (frozen index); writes
-`.scratch/gold_curve_search.json`. Research-only; touches nothing else.
+Reads `.scratch/gold_seed.json` (frozen index) by default, or the seed file
+given via ``--seed-path`` (v2 gate: ``gold_seed_v2deep.json`` /
+``gold_seed_v2.json``); writes `.scratch/gold_curve_search.json`.
+Research-only; touches nothing else.
 
 Usage (gold worktree has no venv; research venv + src on PYTHONPATH):
     PYTHONPATH=digiquant/src <research-venv>/bin/python \\
-        digiquant/scripts/run_gold_curve_search.py
+        digiquant/scripts/run_gold_curve_search.py [--seed-path <seed.json>]
 """
 
 from __future__ import annotations
 
+import argparse
 import itertools
 import json
 from datetime import date
@@ -52,9 +55,13 @@ from digiquant.strategies.sdca.generic_valuation import (
     GenericValuationRiskModel,
     fit_generic_valuation,
 )
-from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
+from digiquant.strategies.sdca.indicator_catalog import (
+    WEIGHT_PARAM_BY_NAME,
+    SdcaCompositeWeights,
+    extra_z_vectors,
+)
 from digiquant.strategies.sdca.optimize import (
-    load_sdca_extra_z,
+    load_sdca_extra_sources,
     run_sdca_walk_forward,
 )
 from digiquant.strategies.sdca.risk_model import RiskModel
@@ -70,15 +77,8 @@ DATA_PATH = DIGIQUANT_ROOT / "data" / "price-history" / "GLD-USD.csv"
 OUT_PATH = DIGIQUANT_ROOT / ".scratch" / "gold_curve_search.json"
 
 INITIAL_CASH = 10_000.0
-SEED_WEIGHT_PARAMS = {
-    "valuation_weight": 1.0,
-    "m2_weight": 0.5,
-    "dxy_weight": 0.5,
-    "rs_eth_weight": 0.0,
-    "weekly_rsi_weight": 0.0,
-    "weekly_macd_weight": 0.0,
-    "sma_band_weight": 0.0,
-}
+# NOTE (#4804): seed vote params are derived from the seed file's weights at
+# runtime (see main) so file and params cannot diverge — no hardcoded copy.
 
 GRID = {
     "buy_max_rate": (10.0, 20.0, 35.0),
@@ -129,11 +129,17 @@ def iter_grid() -> list[SdcaCurveShape]:
 
 
 def main() -> None:
-    seed = json.loads(SEED_PATH.read_text())
+    parser = argparse.ArgumentParser(description="Gold GLD tiered curve search + gate")
+    parser.add_argument("--seed-path", default=str(SEED_PATH))
+    args = parser.parse_args()
+    seed = json.loads(Path(args.seed_path).read_text())
     dates = [date.fromisoformat(d) for d in seed["dates"]]
     prices = list(seed["prices"])
     risk = seed["risk"]
     weights = SdcaCompositeWeights(**seed["weights"])
+    seed_weight_params = {
+        WEIGHT_PARAM_BY_NAME[name]: value for name, value in weights.model_dump().items()
+    }
     print(f"gold seed: {dates[0]}..{dates[-1]} ({len(dates)} bars), weights={weights.model_dump()}")
 
     date_s = pl.Series("date", dates, dtype=pl.Date)
@@ -184,7 +190,7 @@ def main() -> None:
 
     # Gate the winner (develop's shape_from_params drops mid-tier keys —
     # the gate evaluates the single-knee projection; recorded, not hidden).
-    winner_params = dict(SEED_WEIGHT_PARAMS)
+    winner_params = dict(seed_weight_params)
     for key, value in best.model_dump().items():
         if value is not None:
             winner_params[key] = value
@@ -192,7 +198,8 @@ def main() -> None:
     mid_dropped = gated_shape.model_dump() != best.model_dump()
     print(f"gate projection drops mid-tier keys: {mid_dropped}")
 
-    extra_z = load_sdca_extra_z(dates, prices, data_path=DATA_PATH, data_dir=None)
+    sources = load_sdca_extra_sources(DATA_PATH.parent)
+    extra_z = extra_z_vectors(date_s, price_s, weights, sources)
     result = run_sdca_walk_forward(
         dates,
         prices,
