@@ -55,7 +55,7 @@ vi.mock('@/components/app-shell-context', () => ({
     createElement('div', { 'data-shell': '1' }, children),
 }));
 
-vi.mock('@/components/shell/dashboard-shell', () => ({
+vi.mock('@/components/shell/app-shell', () => ({
   default: ({ children }: { children: ReactNode }) =>
     createElement('div', { 'data-frame': '1' }, children),
 }));

@@ -18,7 +18,6 @@
 /* NavShell state machinery (settle/yield, dropdown, portal sheet) — the
    dashboard shell's top bar. Imported PLAINLY: the sheet manages its own
    layering (see its header). */
-@import "@digithings/ui/styles/nav-shell.css";
 /* Shared controls dress (Select/Sheet/Dialog/Table parts the kit lacks).
    Wave-2 (#4206): the F4 Badge shim moved to the kit Badge, but the controls
    layer still dresses Select/Sheet/Dialog/Table/EmptyState/Skeleton here.
@@ -84,8 +83,6 @@
    this app renders (load-bearing; see MIGRATION.md rule 3). Paths stay
    file-relative on purpose: the scanner does not traverse the node_modules
    workspace symlink. */
-@source "../../../packages/ui/src/components/NavShell.tsx";
-@source "../../../packages/ui/src/components/chrome.tsx";
 @source "../../../packages/ui/src/components/stages";
 @source "../../../packages/ui/src/components/effects-chrome";
 
@@ -143,10 +140,6 @@ html {
      var(--cp-z, 40); dashboard's shipped palette stacks at 2000, above the
      sticky nav / sidebar drawer chrome. */
   --cp-z: 2000;
-  /* Shell bar height (Gloomberg density): NavShell reads it, main reserves it. */
-  --nav-shell-h: 3rem;
-  /* NavShell's row width — align the bar with SUBPAGE_MAX (layout-constants.ts). */
-  --wrap: 1600px;
 }
 html.light {
   --shadow-overlay: 0 18px 40px -30px rgba(0, 0, 0, 0.18);

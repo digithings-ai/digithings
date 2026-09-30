@@ -34,7 +34,7 @@ export const NAV: NavItem[] = [
  * System and absorbs the research/library/observability/architecture routes;
  * Portfolio absorbs the old Performance route (now a tab).
  */
-const NAV_ALIASES: Record<string, readonly string[]> = {
+export const NAV_ALIASES: Record<string, readonly string[]> = {
   '/portfolio': ['/portfolio', '/performance'],
   '/pipeline': ['/pipeline', '/why', '/research', '/library', '/system', '/observability', '/architecture'],
   '/twelve-x': ['/twelve-x'],
