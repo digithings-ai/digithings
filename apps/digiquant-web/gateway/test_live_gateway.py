@@ -201,6 +201,46 @@ def test_scrubbed_env_has_no_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     assert set(lg.scrubbed_env()) <= {"PATH", "HOME", "LANG", "PYTHONPATH"}
 
 
+def test_origins_from_env_accepts_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "DQ_GATEWAY_ORIGINS",
+        "http://localhost:3910,http://127.0.0.1:3910,http://[::1]:3910",
+    )
+    assert lg.origins_from_env() == (
+        "http://localhost:3910",
+        "http://127.0.0.1:3910",
+        "http://[::1]:3910",
+    )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://localhost:3910",
+        "http://0.0.0.0:3910",
+        "http://192.168.1.10:3910",
+        "http://digiquant.io",
+        "http://localhost:3910/path",
+        "http://user@localhost:3910",
+    ],
+)
+def test_origins_from_env_rejects_nonlocal_or_malformed_values(
+    monkeypatch: pytest.MonkeyPatch, origin: str
+) -> None:
+    monkeypatch.setenv("DQ_GATEWAY_ORIGINS", origin)
+    with pytest.raises(ValueError, match="loopback HTTP origins"):
+        lg.origins_from_env()
+
+
+@pytest.mark.parametrize("raw", ["0", "65536", "abc"])
+def test_port_from_env_rejects_invalid_values(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("DQ_GATEWAY_PORT", raw)
+    with pytest.raises(ValueError, match="DQ_GATEWAY_PORT"):
+        lg.port_from_env()
+
+
 def test_catalog_lists_probes() -> None:
     c, _, _ = _client({})
     ids = {p["id"] for p in c.get("/v1/catalog").json()["probes"]}

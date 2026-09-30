@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
+    "dev:local": "next dev --hostname 127.0.0.1 --port 3910",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",

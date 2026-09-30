@@ -83,6 +83,7 @@ export function validateGatewayUrl(raw: string): boolean {
   }
   if (url.protocol !== "http:") return false;
   if (url.username || url.password) return false;
+  if (url.pathname !== "/") return false;
   if (url.search) return false;
   if (url.hash) return false;
   // url.hostname normalises "[::1]" to "[::1]" for IPv6 literals.
@@ -141,7 +142,10 @@ export async function fetchHealthz(pageHostname?: string): Promise<HealthzResult
   try {
     const res = await fetch(`${state.baseUrl}/healthz`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    return { ok: true };
+    const body = (await res.json()) as { ok?: unknown };
+    return body.ok === true
+      ? { ok: true }
+      : { ok: false, error: "unexpected health response" };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

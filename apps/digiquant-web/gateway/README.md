@@ -4,6 +4,8 @@ A tiny read-only HTTP gateway so the static digiquant.io site can make real live
 calls to the digiquant MCP server without any secret reaching the browser.
 
 - **Local only.** Binds `127.0.0.1` (default port 8792, env `DQ_GATEWAY_PORT`).
+  `DQ_GATEWAY_ORIGINS` rejects anything except exact loopback HTTP origins, and
+  the browser client independently rejects non-loopback gateway URLs and pages.
   Production exposure is a human decision per `digiquant/ARCHITECTURE.md` and the
   `HUMAN GATE` notes in `wrangler.toml` (digikey JWT at the edge). Do not deploy
   this file as-is.
@@ -17,11 +19,33 @@ calls to the digiquant MCP server without any secret reaching the browser.
 - LuxAlgo probes return metadata only (never Pine/indicator source), with the
   upstream `attribution` and `license_note` in the envelope's `attribution[]`.
 
-## Run
+## Run the local pair (`:3910` + `:8792`)
 
-```
+Terminal 1, from the repo root:
+
+```sh
 PYTHONPATH=digiquant/src python apps/digiquant-web/gateway/live_gateway.py
 ```
+
+Terminal 2, from the repo root:
+
+```sh
+cp apps/digiquant-web/.env.local.example apps/digiquant-web/.env.local
+npm run dev:local --workspace digiquant-web
+```
+
+Open `http://127.0.0.1:3910`. The site uses the gateway for the LuxAlgo Library
+search handoff and for the existing market-data seam. Keep both public variables
+pointed at loopback:
+
+```dotenv
+NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL=http://127.0.0.1:8792
+NEXT_PUBLIC_MARKET_DATA_URL=http://127.0.0.1:8792
+```
+
+Do not set `NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL` in production or staging. Even if
+it is set accidentally, the browser client refuses to connect from a non-loopback
+page or to a non-loopback URL.
 
 Env: `DQ_GATEWAY_PORT` (8792), `DQ_GATEWAY_ORIGINS` (comma list, exact match;
 default `http://localhost:3910,http://127.0.0.1:3910`). Port 3005 is not used.
@@ -35,6 +59,16 @@ default `http://localhost:3910,http://127.0.0.1:3910`). Port 3005 is not used.
   `NEXT_PUBLIC_MARKET_DATA_URL` at the gateway.
 
 Limits: 30 req/min per IP, 15 s tool timeout, 200 KB payload cap, per-probe TTL cache.
+
+## Human-gate blockers before any non-local wire
+
+- design and review digikey JWT enforcement at the edge;
+- replace the loopback bind and origin policy only as part of that reviewed design;
+- confirm Gloomberb public-use terms and required attribution;
+- define hosted rate limits, abuse controls, observability and secret handling;
+- review deployment and network exposure with One/Chris.
+
+Until those are resolved, this gateway is a local development adapter only.
 
 ## Test
 
