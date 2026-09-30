@@ -29,8 +29,8 @@ def _tool_names(server) -> set[str]:
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
-#: The 33 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
-#: only, default-ON behind GLOOMBERB_ENABLED.
+#: The 89 digifetch x Gloomberb tools (#4069, #4110, 130-coverage through Task 8)
+#: are read-scope only, default-ON behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
     "digifetch_quotes_batch",
@@ -66,6 +66,66 @@ DIGIFETCH_TOOLS = {
     "digifetch_short_interest",
     "digifetch_equity_diagnostic",
     "digifetch_saved_searches",
+    # calculators + compositions (130-coverage Task 2, unattributed derived math)
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+    "digifetch_dividend_yield",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
+    # options scenario (130-coverage Task 8: OSA, unattributed derived math)
+    "digifetch_options_scenario",
+    # portfolio-math compositions (130-coverage Task 3, unattributed derived math)
+    "digifetch_compare_performance",
+    "digifetch_correlation_matrix",
+    "digifetch_relationship_graph",
+    "digifetch_relative_valuation",
+    "digifetch_fundamental_graph",
+    "digifetch_valuation_graph",
+    "digifetch_custom_chart",
+    "digifetch_market_valuation",
+    "digifetch_money_markets",
+    "digifetch_rate_path",
+    # probe-backed tools (130-coverage Task 5, one per Task 4 GO verdict)
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_central_bank_rates",
+    "digifetch_cdx",
+    "digifetch_sovereign_cds",
+    "digifetch_options_flow",
+    "digifetch_cot",
+    "digifetch_crypto_markets",
+    "digifetch_iv_screen",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
+    "digifetch_session_movers",
+    "digifetch_trending",
+    "digifetch_substack",
+    "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6, venue-direct, unattributed)
+    "digifetch_fear_greed",
+    "digifetch_polls",
+    "digifetch_treasury_auctions",
+    "digifetch_market_halts",
+    "digifetch_hacker_news",
+    # Workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "digifetch_portfolio_view",
+    "digifetch_watchlist_add",
+    "digifetch_watchlist_remove",
+    "digifetch_portfolio_add",
+    "digifetch_portfolio_remove",
+    "digifetch_alert_add",
+    "digifetch_alert_list",
+    "digifetch_note_add",
+    "digifetch_thesis_add",
+    "digifetch_view_add",
+    "digifetch_broker_positions",
+    "digifetch_ibkr_preview_order",
+    "digifetch_ibkr_execute_order",
 }
 
 #: The 14 LuxAlgo hosted reads (#4779 P0 Library + #4844 edge/trackers).
@@ -186,6 +246,6 @@ def test_read_scope_includes_luxalgo_family():
 
 @pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 59
+    assert len(READ_SCOPE_TOOLS) == 113
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 73
+    assert len(_tool_names(create_mcp_server())) == 127
