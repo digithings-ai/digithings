@@ -47,6 +47,21 @@ def test_black_scholes_iv_round_trip() -> None:
     ) == pytest.approx(0.25, rel=1e-6)
 
 
+def test_black_scholes_iv_rejects_below_floor_price() -> None:
+    from digiquant.data.gloomberb.calculators import black_scholes_iv
+
+    # Intrinsic floor for spot=strike=100, rate=0.05, T=1 is ~4.877; 1.0 is below it.
+    with pytest.raises(ValueError):
+        black_scholes_iv(
+            price=1.0,
+            spot=100.0,
+            strike=100.0,
+            rate=0.05,
+            expiry_years=1.0,
+            kind="call",
+        )
+
+
 def test_bond_metrics_par_bond_prices_at_face() -> None:
     from digiquant.data.gloomberb.calculators import bond_metrics
 

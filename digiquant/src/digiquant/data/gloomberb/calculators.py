@@ -36,6 +36,8 @@ def black_scholes_price(
         raise ValueError(f"vol must be positive, got {vol}")
     if expiry_years <= 0.0:
         raise ValueError(f"expiry_years must be positive, got {expiry_years}")
+    # Negative rates pass through (e.g. negative-rate regimes); Task 2 maps
+    # contract violations to invalid_input.
 
     sqrt_t = math.sqrt(expiry_years)
     d1 = (math.log(spot / strike) + (rate + 0.5 * vol * vol) * expiry_years) / (vol * sqrt_t)
@@ -65,6 +67,16 @@ def black_scholes_iv(
 
     low = 1e-6
     high = 10.0
+    floor = black_scholes_price(
+        spot=spot,
+        strike=strike,
+        rate=rate,
+        vol=low,
+        expiry_years=expiry_years,
+        kind=kind,
+    )
+    if price < floor:
+        raise ValueError(f"price {price} is below the intrinsic floor {floor}")
     if (
         black_scholes_price(
             spot=spot,
@@ -122,6 +134,8 @@ def bond_metrics(
         raise ValueError(f"freq must be a positive integer, got {freq}")
     if coupon < 0.0:
         raise ValueError(f"coupon must be non-negative, got {coupon}")
+    # Negative ytm passes through (discounting is still well-defined); Task 2
+    # maps contract violations to invalid_input.
 
     periods = int(round(years * freq))
     if periods < 1:
@@ -132,7 +146,7 @@ def bond_metrics(
     def _discount(t: int) -> float:
         return (1.0 + y) ** -t
 
-    if y == 0.0:
+    if abs(y) < 1e-12:
         price = payment * periods + face
         pv_weights = [payment] * periods
         pv_face = face
