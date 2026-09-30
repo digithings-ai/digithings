@@ -1,10 +1,57 @@
-import { Band, Slot } from "../_chrome/Band";
+import { HorizontalScrollTrack, HorizontalTrackStepper } from "@digithings/ui";
+import { Badge } from "@digithings/ui/ui";
+import { ExecutionCard, StageCard } from "@/components/pipeline/StageCard";
+import { getLatestRun } from "@/lib/run-snapshot";
+import { Band } from "../_chrome/Band";
 import { EXECUTION_STAGE, PIPELINE_STAGES } from "../_stages";
 
+/** The page's only pin. The frame chrome above the cards says what the data is:
+ *  a recorded run (date, run type) or, when none was captured, that there is none. */
 export function PipelineBand() {
+  const latest = getLatestRun();
+  const snap = latest.snapshot;
+  const total = PIPELINE_STAGES.length + 1;
+  const badge = snap ? `recorded · ${snap.runDate} · ${snap.runType ?? "run type unknown"}` : "no recorded run";
+  const labels = [...PIPELINE_STAGES, EXECUTION_STAGE.name];
+
+  const frame = (
+    <div className="mx-6 flex flex-wrap items-center gap-x-3 gap-y-1 border border-hair px-3 py-2 font-mono text-[0.68rem] text-ink-mute">
+      <span>~/digiquant/run</span>
+      <Badge variant="neutral">{badge}</Badge>
+      <span className="text-ink-soft">
+        {snap ? "a recorded run, not live" : "no run was captured for this build; stages below are the pipeline's structure"}
+      </span>
+      <span className="ms-auto hidden sm:inline">metadata only · captured {latest.capturedAt.slice(0, 10)}</span>
+    </div>
+  );
+
   return (
-    <Band id="pipeline" tint title="The pipeline, stage by stage" takeaway="A recorded run, not live: six stages from inputs to learning.">
-      <Slot height="22rem" label={`${PIPELINE_STAGES.join(" → ")} · ${EXECUTION_STAGE.name}: ${EXECUTION_STAGE.status}`} />
+    <Band
+      id="pipeline"
+      tint
+      status={snap ? "recorded" : "no recorded run"}
+      title="The pipeline, stage by stage"
+      takeaway="A recorded run, not live: six stages from inputs to learning."
+    >
+      <HorizontalScrollTrack
+        ariaLabel="Pipeline stages"
+        pinTop={62}
+        header={frame}
+        footer={<HorizontalTrackStepper labels={labels} />}
+        itemClassName="flex w-[min(82vw,21rem)]"
+      >
+        {PIPELINE_STAGES.map((name, i) => (
+          <StageCard
+            key={name}
+            index={i}
+            total={total}
+            name={name}
+            hasRun={snap !== null}
+            recorded={snap?.stages.find((s) => s.name === name)}
+          />
+        ))}
+        <ExecutionCard index={PIPELINE_STAGES.length} total={total} status={EXECUTION_STAGE.status} />
+      </HorizontalScrollTrack>
     </Band>
   );
 }

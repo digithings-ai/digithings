@@ -6,6 +6,7 @@ export { Odometer, OdometerStrip, type OdometerStat } from "./Odometer";
 export { DotMatrixStat, type DotMatrixStatProps } from "./DotMatrixStat";
 export { BentoGrid, BentoCell, type BentoSpan } from "./BentoGrid";
 export { ProductFrame, type ProductFrameProps } from "./ProductFrame";
+export { CardRail, type CardRailProps } from "./CardRail";
 export { FeatureCell, type FeatureCellProps } from "./FeatureCell";
 export { TestimonialWall, type TestimonialQuote, type TestimonialWallProps } from "./TestimonialWall";
 export { ModuleGrid, type ModuleGridItem, type ModuleGridProps } from "./ModuleGrid";

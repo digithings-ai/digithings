@@ -1,178 +1,148 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { IconButton } from "../../ui";
+import { cn } from "../../lib/utils";
+import { clamp, nearestIndex } from "../effects-chrome/horizontal-track-core";
 
 /**
- * The horizontal card rail — a row that scrolls sideways, snaps, and fades at
- * both edges so it reads as a strip that continues past the frame.
+ * CardRail — a horizontal rail of cards on NATIVE scroll-snap: swipe, wheel,
+ * arrow keys, or the prev / next buttons (one card per press). Edge fades read
+ * the strip as continuing past the frame. No pin, no transform, no JS needed to
+ * scroll — the buttons are an enhancement over a fully working native rail.
  *
- * Promoted from the design reference's changelog rail (`apps/reference`, the
- * data page's "Content that scrolls sideways"), which the owner pointed at as
- * the treatment he wants for the strategy cards and the per-module releases:
- * "put them all in a horizontal scrollable pane like you'll find in the data
- * page ... it's the changelog rail". The mechanics (snap, hidden scrollbar,
- * edge fade, paging arrows) lived in the reference app's own CSS; they live
- * here now so both rails in digithings-web are the same component.
+ * Re-authored from the design reference's changelog rail (and the refactor
+ * branch's rail) as a utilities-only part: no CSS sheet, no `.cr-*` classes.
+ * The edge fade is a mask over token stops (alpha only, no raw colour).
  *
- * The rail knows nothing about its children. Give each child a flex basis and
- * `snap-start` and it pages; the reference does it with
- * `flex-[0_0_16.5rem] snap-start`.
+ * Each child is wrapped in a `role="listitem"` snap target. The wrapper carries
+ * `data-active="true"` on the card at the leading edge (a `group/card`, so a
+ * child can style `group-data-[active=true]/card:border-accent` without the rail
+ * knowing anything about it). The wrapper is not a tab stop — put links and
+ * buttons inside the cards; focusing one scrolls the rail natively. The track
+ * itself is focusable so a keyboard user can scroll it with the arrow keys.
  *
- * STEPPING, ONE CARD AT A TIME. The arrows move exactly one card, not a
- * viewport: the owner, "the arrows for the different tier sheet cards in the
- * horizontal scroll should cycle between one at a time. Right now it just goes
- * to the end of the horizontal scroll. Initially we should have the first
- * strategy selected and then with the arrow you scroll to the right or to the
- * left." So the rail tracks which card sits at the leading edge (the first one
- * at rest), an arrow steps to the next or previous card and scrolls it flush to
- * that edge, and the left arrow is disabled while the first card is selected.
- * The active card is marked `data-active` so a consumer can style the selection
- * (the strategy rail does, in `card-rail.css`); dragging the track re-syncs the
- * selection to whichever card it snaps to, so the mark never lies.
+ * Reveal-safe: the track carries vertical padding so a `Reveal` child's rise
+ * (translateY) is not clipped by the rail's overflow, and wrappers never
+ * transform. With no JS and under reduced motion every card is reachable.
  *
- * Arrows are a convenience, not the only way through: the track is focusable
- * and scrolls with the keyboard, and it is the sanctioned mobile fallback for
- * any band too wide to stack.
+ * Stepping is instant under `prefers-reduced-motion` (CSS `scroll-behavior`
+ * smooth is applied only when motion is allowed).
+ *
+ * Wiring (in the consuming app):
+ *   globals.css   @source "<path-to>/packages/ui/src/components/data-layout";
  */
 export type CardRailProps = {
+  /** The cards. Each direct child becomes one snap item. */
   children: ReactNode;
-  /** Accessible name for the scroll region, e.g. "Flagship strategies". */
+  /** Accessible name for the scroll region, e.g. "Strategy tearsheets". */
   ariaLabel: string;
+  /** Left of the prev / next buttons (a title, a count). */
+  header?: ReactNode;
+  /** Classes on each snap-item wrapper (sets the card width). */
+  itemClassName?: string;
+  /** Classes on the outermost element. */
   className?: string;
+  /** Accessible names for the two buttons. */
+  prevLabel?: string;
+  nextLabel?: string;
 };
 
-export function CardRail({ children, ariaLabel, className }: CardRailProps) {
-  const railRef = useRef<HTMLDivElement | null>(null);
+// Alpha stops through a token — a mask reads alpha only, so no raw colour.
+const FADE =
+  "[mask-image:linear-gradient(90deg,transparent,var(--ink)_1.5rem,var(--ink)_calc(100%_-_1.5rem),transparent)]";
+
+function offsetsOf(track: HTMLElement): number[] {
+  const kids = Array.from(track.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+  const base = kids[0]?.offsetLeft ?? 0;
+  return kids.map((k) => k.offsetLeft - base);
+}
+
+export function CardRail({
+  children,
+  ariaLabel,
+  header,
+  itemClassName,
+  className,
+  prevLabel = "Previous card",
+  nextLabel = "Next card",
+}: CardRailProps) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const items = Children.toArray(children);
+  const [active, setActive] = useState(0);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [count, setCount] = useState(0);
 
-  /** The rail's cards, in order. Anything non-element is ignored. */
-  const cards = useCallback((): HTMLElement[] => {
-    const el = railRef.current;
-    if (!el) return [];
-    return Array.from(el.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
-  }, []);
-
-  /** One card's width plus the gap after it — the distance an arrow travels. */
-  const cardStep = useCallback((): number => {
-    const [first, second] = cards();
-    if (!first) return railRef.current?.clientWidth ?? 0;
-    const width = first.getBoundingClientRect().width;
-    const gap = second
-      ? second.getBoundingClientRect().left - first.getBoundingClientRect().right
-      : 0;
-    return width + Math.max(gap, 0);
-  }, [cards]);
-
-  const update = useCallback(() => {
-    const el = railRef.current;
+  const sync = useCallback(() => {
+    const el = trackRef.current;
     if (!el) return;
     setAtStart(el.scrollLeft <= 1);
     setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
-    /* The selected card is the one whose leading edge sits nearest the track's
-       own leading edge — after a snap that is unambiguous, and it keeps the mark
-       honest when the track is dragged rather than stepped. */
-    const list = cards();
-    setCount(list.length);
-    if (list.length === 0) return;
-    const base = el.getBoundingClientRect().left;
-    let best = 0;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    list.forEach((card, index) => {
-      const distance = Math.abs(card.getBoundingClientRect().left - base);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = index;
-      }
-    });
-    setActiveIndex(best);
-  }, [cards]);
+    setActive(nearestIndex(offsetsOf(el), el.scrollLeft));
+  }, []);
 
   useEffect(() => {
-    const el = railRef.current;
+    const el = trackRef.current;
     if (!el) return;
-    update();
-    /* A rail opens at its first card. Scroll-snap can restore a previous offset
-       and a padded track can settle a pixel or two in, either of which faded the
-       first card on load — the owner: "it should default to being scrolled all
-       the way to the left ... it fades out the first card". Re-asserted after
-       the first paint, because the snap position is applied after layout. */
-    el.scrollLeft = 0;
-    const raf = requestAnimationFrame(() => {
-      el.scrollLeft = 0;
-      update();
-    });
-    el.addEventListener("scroll", update, { passive: true });
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    sync();
+    el.addEventListener("scroll", sync, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
     observer?.observe(el);
     return () => {
-      cancelAnimationFrame(raf);
-      el.removeEventListener("scroll", update);
+      el.removeEventListener("scroll", sync);
       observer?.disconnect();
     };
-  }, [update]);
+  }, [sync, items.length]);
 
-  /* Mark the selected card. Deps include `children` so the mark is re-applied
-     when the list itself is replaced (e.g. the live strategy read landing). */
-  useEffect(() => {
-    cards().forEach((card, index) => {
-      if (index === activeIndex) card.setAttribute("data-active", "true");
-      else card.removeAttribute("data-active");
-    });
-  }, [activeIndex, cards, children]);
-
-  /** Step one card. Clamped at both ends, so the arrows never overrun. */
   const step = (direction: 1 | -1) => {
-    const el = railRef.current;
-    const list = cards();
-    if (!el || list.length === 0) return;
-    const next = Math.max(0, Math.min(list.length - 1, activeIndex + direction));
-    if (next === activeIndex) return;
-    setActiveIndex(next);
-    /* Straight to the target card rather than to the last one: when the live
-       read swaps the list, `activeIndex` and the DOM can disagree for a frame,
-       and measuring sideways is what makes the arrow land where it says. */
-    el.scrollBy({
-      left: direction * Math.abs(cardStep()) * Math.abs(next - activeIndex),
-      behavior: "smooth",
-    });
+    const el = trackRef.current;
+    if (!el) return;
+    const offsets = offsetsOf(el);
+    const next = clamp(active + direction, 0, offsets.length - 1);
+    el.scrollTo({ left: offsets[next] ?? 0 });
   };
 
-  const lastIndex = Math.max(0, count - 1);
-
   return (
-    <div className={["cr", className].filter(Boolean).join(" ")} data-active-index={activeIndex}>
-      <div className="cr-nav">
-        <button
-          type="button"
-          className="cr-arrow"
-          onClick={() => step(-1)}
-          disabled={atStart || activeIndex <= 0}
-          aria-label="Scroll left"
-        >
-          <span aria-hidden="true">←</span>
-        </button>
-        <button
-          type="button"
-          className="cr-arrow"
-          onClick={() => step(1)}
-          disabled={atEnd || activeIndex >= lastIndex}
-          aria-label="Scroll right"
-        >
-          <span aria-hidden="true">→</span>
-        </button>
+    <div className={cn("grid gap-3", className)} data-card-rail="">
+      <div className="flex items-end justify-between gap-4">
+        <div className="min-w-0">{header}</div>
+        <div className="flex shrink-0 gap-[0.4rem]">
+          <IconButton
+            aria-label={prevLabel}
+            onClick={() => step(-1)}
+            disabled={atStart}
+            className="border border-hair"
+          >
+            <span aria-hidden="true">{"←"}</span>
+          </IconButton>
+          <IconButton
+            aria-label={nextLabel}
+            onClick={() => step(1)}
+            disabled={atEnd}
+            className="border border-hair"
+          >
+            <span aria-hidden="true">{"→"}</span>
+          </IconButton>
+        </div>
       </div>
-      <div className="cr-mask">
+      <div className={FADE}>
         <div
-          ref={railRef}
-          className="cr-track"
+          ref={trackRef}
           role="list"
           aria-label={ariaLabel}
           tabIndex={0}
+          className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-ps-6 px-6 py-4 outline-none [scrollbar-width:none] motion-safe:scroll-smooth focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-accent [&::-webkit-scrollbar]:hidden"
         >
-          {children}
+          {items.map((child, i) => (
+            <div
+              key={i}
+              role="listitem"
+              data-active={i === active ? "true" : undefined}
+              className={cn("group/card relative flex-none snap-start w-[min(82vw,17rem)]", itemClassName)}
+            >
+              {child}
+            </div>
+          ))}
         </div>
       </div>
     </div>
