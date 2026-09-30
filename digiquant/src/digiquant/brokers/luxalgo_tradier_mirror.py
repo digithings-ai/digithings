@@ -1,15 +1,29 @@
-"""Read-only Python mirror of luxalgo broker-sdk Alpaca snapshots (#4829).
+"""Read-only Python mirror of luxalgo broker-sdk Tradier snapshots (#4848).
 
 Mirrors ``@luxalgo/broker-sdk@0.5.1`` (MIT) ``BrokerSnapshot`` shapes in Python and
 normalizes one SDK ``Account`` to digiquant broker contracts
 (``brokers/contracts.py``). Pure normalization — no I/O, no HTTP, no credential
-handling in this module.
+handling in this module. Mirror only: Tradier is the only other ``supportsBars``
+broker besides Alpaca, but bars fetching is out of scope here — this module
+takes already-fetched Account/Position/Trade dicts and contains no bars code.
 
 Credential locality: API keys stay local to the caller. This module never sees
 keys, never phones home, and never touches the network; the caller fetches the
-snapshot (via the TypeScript SDK or the existing ``brokers/alpaca.py`` adapter)
-and passes the already-fetched dict in. Snapshots are caller-persisted; nothing
-here writes into ``positions`` (H9 terminal owns it) or any other table.
+snapshot (via the TypeScript SDK) and passes the already-fetched dict in.
+Snapshots are caller-persisted; nothing here writes into ``positions`` (H9
+terminal owns it) or any other table. Tradier's sandbox is the sole
+observe-safe orders-evaluation target — that evaluation is a later,
+separately-gated decision, NOT in scope here.
+
+Tradier quirks handled upstream by the SDK adapter (never reimplemented here):
+the single-position-object quirk (one position arrives as a bare object, not an
+array), dividend-event filtering (history mixes trades with dividends — only
+``type: trade`` rows become trades), and sell normalization (sells carry
+negative quantities upstream and arrive as ``side: sell`` with a positive
+quantity). Positions carry no ``marketValue`` because Tradier reports cost
+basis, not market value — so it stays unset upstream and maps to zero here
+(more honest than a guessed price); ``averageEntryPrice`` is derived upstream
+from cost basis per unit.
 
 JS-number precision: SDK floats cross the boundary via ``Decimal(str(x))``,
 never float-through — ``0.1 + 0.2`` style artifacts must not become ledger
@@ -89,6 +103,8 @@ def snapshot_to_contracts(
     ``fetched_at`` is the parent ``BrokerSnapshot fetchedAt`` — the ``as_of``
     for the account snapshot and the fallback ``executed_at`` for trades that
     carry none. An account-level ``fetchedAt``/``asOf`` key wins when present.
+    No FX fabrication: values stay in the account's own currency, never
+    converted. No bars code: this function maps positions/trades only.
     """
     stamped_at = _as_utc(account.get("fetchedAt", account.get("asOf", fetched_at)))
     acct_id = _account_id(account)
@@ -148,7 +164,8 @@ def summarize_mirror(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     """Equity-by-account + position counts for the briefing payload.
 
     JSON-safe (Decimals rendered as strings). Mirrors the SDK ``computeStats``
-    shape minimally; no trade-stats port in this issue.
+    shape minimally; no trade-stats port in this issue. Per-account rows keep
+    their own currency — never summed across currencies.
     """
     fetched_at = _as_utc(snapshot.get("fetchedAt"))
     rows: list[dict[str, Any]] = []
@@ -165,7 +182,7 @@ def summarize_mirror(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             }
         )
     return {
-        "broker": str(snapshot.get("broker") or "alpaca"),
+        "broker": str(snapshot.get("broker") or "tradier"),
         "fetched_at": fetched_at.isoformat(),
         "accounts": rows,
         "total_positions": total_positions,
@@ -176,7 +193,7 @@ def enrich_briefing_with_mirror(
     briefing: Mapping[str, Any],
     snapshot: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Append-only briefing enrichment (read consumer for #4829).
+    """Append-only briefing enrichment (read consumer for #4848).
 
     Returns a copy of the ``digest_briefing_for_portfolio`` mapping with a
     read-only broker-mirror section appended to ``body``. The input mapping is
@@ -184,7 +201,7 @@ def enrich_briefing_with_mirror(
     """
     summary = summarize_mirror(snapshot)
     lines = [
-        "## Broker mirror (Alpaca, read-only)",
+        "## Broker mirror (Tradier, read-only)",
         "",
         f"Snapshot at {summary['fetched_at']} "
         f"covering {summary['total_positions']} open position(s).",
