@@ -380,6 +380,9 @@ def _run_main(
     run: str,
 ) -> tuple[int, dict[str, Any]]:
     store.manifest = {"version": 1, "as_of": run, "datasets": {}}
+    # FakeStore never calls the real FRED API; the dummy key keeps
+    # drop_fred_without_key() from stripping the mocked fred specs (#4796).
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
     monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, store.manifest))
     monkeypatch.setattr(refresh_mod, "_resolve_macro_specs", lambda cli, path: macro_specs)
     rc = refresh_mod.main(
