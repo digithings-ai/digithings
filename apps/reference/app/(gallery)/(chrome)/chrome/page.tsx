@@ -1,6 +1,14 @@
 import "./chrome.css";
 import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
 import { BreadcrumbsReference } from "@/components/chrome/breadcrumbs-reference";
+import { SparkReference } from "@/components/chrome/spark-reference";
+import { DivergingBarsReference } from "@/components/chrome/diverging-bars-reference";
+import { RangeTrackReference } from "@/components/chrome/range-track-reference";
+import { HeatGridReference } from "@/components/chrome/heat-grid-reference";
+import { StackedAreaReference } from "@/components/chrome/stacked-area-reference";
+import { TreemapReference } from "@/components/chrome/treemap-reference";
+import { WaterfallReference } from "@/components/chrome/waterfall-reference";
+import { MetersReference } from "@/components/chrome/meters-reference";
 import { SidebarReference } from "@/components/chrome/sidebar-reference";
 import { CtaReference } from "@/components/chrome/cta-reference";
 import { KbdReference } from "@/components/chrome/kbd-reference";
@@ -42,6 +50,14 @@ export default function ChromePage() {
       <NavMenuReference />
       <BreadcrumbsReference />
       <SidebarReference />
+      <SparkReference />
+      <DivergingBarsReference />
+      <RangeTrackReference />
+      <HeatGridReference />
+      <StackedAreaReference />
+      <TreemapReference />
+      <WaterfallReference />
+      <MetersReference />
       <PaginationReference />
       <ReleaseRailReference />
       <FooterCellsReference />
