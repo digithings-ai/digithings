@@ -297,6 +297,22 @@ def test_lookback_below_min_history_raises() -> None:
         fit_generic_valuation(dates[:800], price[:800], fit_lookback_days=500)
 
 
+def test_nonpositive_lookback_raises() -> None:
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat(n_bull=800, n_flat=100)
+    with pytest.raises(ValueError, match=r"fit_lookback_days.*> 0"):
+        fit_generic_valuation(dates[:800], price[:800], fit_lookback_days=0)
+    with pytest.raises(ValueError, match=r"fit_lookback_days.*> 0"):
+        fit_generic_valuation(dates[:800], price[:800], fit_lookback_days=-100)
+    # 730 is positive so it passes the new guard; on a long fixture it reaches
+    # the MIN_FIT_HISTORY floor (730 daily rows span 729 days), proving the
+    # guard — not the floor — is what the nonpositive inputs hit.
+    long_dates, long_price = _bull_then_flat()
+    with pytest.raises(ValueError, match="MIN_FIT_HISTORY"):
+        fit_generic_valuation(long_dates[:2000], long_price[:2000], fit_lookback_days=730)
+
+
 def test_defaults_unchanged_without_params() -> None:
     from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
 

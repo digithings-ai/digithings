@@ -105,8 +105,10 @@ def fit_generic_valuation(
     If ``g`` exceeds the cap, every rail's ``(a, b)`` is scaled by
     ``s = log10(1+cap)/log10(1+g)`` (``c`` kept — level preserved, growth
     bounded, exact for linear) and ``notes`` records
-    ``trend_cap={cap} (scaled {s:.3f})``. Guarantee: post-scale
-    median-rail annualized growth at fit-end is ≤ cap. ``None`` (default)
+    ``trend_cap={cap} (scaled {s:.3f})``. Guarantee scope: post-scale
+    median-rail annualized growth *at fit-end* is ≤ cap by construction
+    (rescaling math); OOS evaluated rails inherit it only approximately —
+    quadratic curvature and span widening can add slack. ``None`` (default)
     leaves fitted coefficients untouched.
     """
     if form not in ("log_linear", "log_quadratic"):
@@ -119,6 +121,8 @@ def fit_generic_valuation(
     )
     if max_annual_trend is not None and max_annual_trend < 0:
         raise ValueError(f"max_annual_trend must be >= 0, got {max_annual_trend!r}")
+    if fit_lookback_days is not None and fit_lookback_days <= 0:
+        raise ValueError(f"fit_lookback_days must be > 0, got {fit_lookback_days!r}")
     lookback_note = ""
     if fit_lookback_days is not None:
         last_date = date_list[-1]
