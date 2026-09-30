@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { DocumentFrame, PageTitle } from "@digithings/ui";
 
 // Retired standalone page — pipeline content lives at /#pipeline on the homepage.
@@ -13,7 +14,7 @@ export default function PipelineRedirect() {
     <main id="main" tabIndex={-1}>
       <DocumentFrame>
         <PageTitle title="Pipeline">
-          Redirecting to <a href="/#pipeline">/#pipeline</a>…
+          Redirecting to <Link href="/#pipeline">/#pipeline</Link>…
         </PageTitle>
       </DocumentFrame>
     </main>
