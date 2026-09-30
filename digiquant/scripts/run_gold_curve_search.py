@@ -67,6 +67,7 @@ from digiquant.strategies.sdca.optimize import (
 )
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
+    SdcaOptimizeObjective,
     make_walk_forward_folds,
     shape_from_params,
     window_slice,
@@ -169,6 +170,8 @@ def main() -> None:
         choices=sorted(RAILS_FITTERS),
         default="default",
     )
+    parser.add_argument("--deployed-floor", type=float, default=None)
+    parser.add_argument("--dd-cap", type=float, default=None)
     args = parser.parse_args()
     seed = json.loads(Path(args.seed_path).read_text())
     dates = [date.fromisoformat(d) for d in seed["dates"]]
@@ -239,6 +242,14 @@ def main() -> None:
     sources = load_sdca_extra_sources(DATA_PATH.parent)
     extra_z = extra_z_vectors(date_s, price_s, weights, sources)
     print(f"rails-variant: {args.rails_variant}")
+    objective = None
+    if args.deployed_floor is not None or args.dd_cap is not None:
+        objective = SdcaOptimizeObjective(
+            capital_deployed_floor_pct=args.deployed_floor
+            if args.deployed_floor is not None
+            else 10.0,
+            max_drawdown_cap_pct=args.dd_cap if args.dd_cap is not None else 50.0,
+        )
     result = run_sdca_walk_forward(
         dates,
         prices,
@@ -247,6 +258,7 @@ def main() -> None:
         evaluator=evaluate_sdca_trial_curve_sim,
         evaluator_label="curve_simulator",
         extra_z=extra_z,
+        objective=objective,
     )
     per_fold = [
         {
