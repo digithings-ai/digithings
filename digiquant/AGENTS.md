@@ -512,6 +512,11 @@ stays a generic transport engine (no URLs, no env reads).
   (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
   past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
   delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
+  **Panel exception (owner lock 2026-09-29, #4794):** anonymous `econ_series`
+  is the writer for the 23 kept macro ids sealed to R2 `fred__*` generations
+  (`data/prices/gloomberb_macro.py`). Delay on econ prints is publisher lag
+  (a monthly CPI print), not the 15-minute equity delay — do not stamp
+  "delayed up to 15 minutes" on these parquet rows.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
   either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
   `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the

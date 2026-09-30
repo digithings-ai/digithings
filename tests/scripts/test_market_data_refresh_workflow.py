@@ -162,7 +162,9 @@ class FakeStore:
         except KeyError:
             raise LookupError(f"unknown macro {source}/{series}") from None
 
-    def fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict[str, Any]]:
+    def fetch_macro(
+        self, source: str, series: str, start: str, end: str, *, cadence=None
+    ) -> list[dict[str, Any]]:
         self.macro_windows.append((source, series, start, end))
         return list(self.macro_live_rows(source, series, start, end))
 
@@ -371,7 +373,8 @@ def test_macro_registry_conflict_retries_once_then_errors() -> None:
     result = refresh_macro_series("fred", "DGS10", store, manifest(), as_of="2026-01-06")
     assert result["mode"] == "error"
     assert "conflict" in result["note"]
-    assert store.macro_full_calls[("fred", "DGS10")] == 2
+    # #4794: a fred restatement merges the short page — it never full-repulls.
+    assert store.macro_full_calls.get(("fred", "DGS10"), 0) == 0
     assert store.puts == []
     assert store.pointers == {}
 
@@ -714,9 +717,11 @@ def test_workflow_secrets_wired() -> None:
         "R2_BUCKET",
         "R2_ACCESS_KEY_ID",
         "R2_SECRET_ACCESS_KEY",
-        "FRED_API_KEY",
     ):
         assert name in env, name
+    # #4794: the macro panel seals from anonymous Gloomberb econ_series, so the
+    # refresh job carries no FRED key (it must not be able to dual-write).
+    assert "FRED_API_KEY" not in env
     # Recorded deviation (Task 6 report): the store seam needs the direct-PG
     # registry insert, so the workflow wires one extra secret past the brief pins.
     assert env["CORE_POSTGRES_URI"] == "${{ secrets.CORE_POSTGRES_URI }}"
@@ -772,27 +777,31 @@ def _macro_row(source: str, series: str, day: str, value: float) -> dict[str, An
     return {"source": source, "series_id": series, "obs_date": day, "value": value}
 
 
-def test_main_skips_fred_without_api_key_and_exits_zero(
+def test_main_fetches_fred_without_api_key_and_exits_zero(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """#4795: unset FRED_API_KEY skips fred__* and still exits 0.
+    """#4794: no FRED key is normal — fred__* refreshes, nothing is skipped.
 
-    Yahoo FX and the price universe keep refreshing. Skipped series are
-    recorded, not counted as stale, until the Gloomberb migrate (#4794).
+    Yahoo FX and the price universe keep refreshing. The artifact records an
+    empty ``fred_skipped`` list.
     """
     import scripts.refresh_market_data_r2 as refresh_mod
 
     live = price_rows(HIST_DEFAULT) + price_rows([("2026-01-05", 105.0)])
     yahoo_hist = [_macro_row("yahoo", "FX/EUR", "2026-01-02", 1.1)]
+    fred_hist = [_macro_row("fred", "DGS10", "2026-01-02", 4.1)]
     store = FakeStore(
         histories={"SPY": price_rows(HIST_DEFAULT)},
         lives={"SPY": live},
-        macros={("yahoo", "FX/EUR"): yahoo_hist},
-        macro_lives={("yahoo", "FX/EUR"): yahoo_hist},
+        macros={("yahoo", "FX/EUR"): yahoo_hist, ("fred", "DGS10"): fred_hist},
+        macro_lives={
+            ("yahoo", "FX/EUR"): yahoo_hist,
+            ("fred", "DGS10"): fred_hist,
+        },
     )
     manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
     store.manifest = manifest_doc
-    monkeypatch.setenv("FRED_API_KEY", "   ")
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
     monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
     out = tmp_path / "refresh.json"
     rc = refresh_mod.main(
@@ -815,15 +824,15 @@ def test_main_skips_fred_without_api_key_and_exits_zero(
     assert rc == 0
     artifact = json.loads(out.read_text())
     assert artifact["stale"] is False
-    assert artifact["fred_skipped"] == ["fred__DGS10"]
+    assert artifact["fred_skipped"] == []
     assert "fred__DGS10" not in artifact["failed"]
     sources = {window[0] for window in store.macro_windows}
-    assert "fred" not in sources
+    assert "fred" in sources
     assert "yahoo" in sources
     by_ticker = {o["ticker"]: o for o in artifact["outcomes"]}
     assert by_ticker["SPY"]["mode"] == "incremental"
     assert by_ticker["yahoo__FX/EUR"]["mode"] == "up-to-date"
-    assert "fred__DGS10" not in by_ticker
+    assert by_ticker["fred__DGS10"]["mode"] == "up-to-date"
 
 
 def test_main_still_refreshes_fred_when_api_key_is_set(
@@ -863,9 +872,10 @@ def test_main_still_refreshes_fred_when_api_key_is_set(
     assert ("fred", "DGS10") == (store.macro_windows[0][0], store.macro_windows[0][1])
 
 
-def test_main_price_failure_still_exits_nonzero_when_fred_is_skipped(
+def test_main_price_failure_still_exits_nonzero_without_fred_skip(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """A dead price feed still fails the run; fred is attempted, never skipped."""
     import scripts.refresh_market_data_r2 as refresh_mod
 
     store = FakeStore(
@@ -894,8 +904,8 @@ def test_main_price_failure_still_exits_nonzero_when_fred_is_skipped(
     )
     assert rc == 1
     artifact = json.loads((tmp_path / "refresh.json").read_text())
-    assert artifact["fred_skipped"] == ["fred__DGS10"]
-    assert artifact["failed"] == ["SPY"]
+    assert artifact["fred_skipped"] == []
+    assert "SPY" in artifact["failed"]
 
 
 def test_main_marks_stale_and_exits_nonzero_on_ticker_failure(
