@@ -28,6 +28,11 @@ digiclaw:
   - tests/dc/**
   - .github/workflows/test-digiclaw.yml
 
+digivoice:
+  - digivoice/**
+  - tests/dvo/**
+  - .github/workflows/test-digivoice.yml
+
 digiquant:
   - digiquant/**
   - tests/dq/**

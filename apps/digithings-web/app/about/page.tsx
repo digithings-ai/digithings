@@ -229,9 +229,6 @@ export default function AboutPage() {
               >
                 Browse the repository
               </a>
-              <Link className={buttonVariants({ variant: "ghost" })} href="/quality">
-                How it is tested
-              </Link>
             </div>
           </div>
         </section>

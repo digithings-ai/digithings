@@ -8,6 +8,7 @@ When editing paths under **Prefix**, read the **Doc** row first, then run **Test
 | `digiquant/` | [digiquant/AGENTS.md](../../digiquant/AGENTS.md) | [digiquant/ARCHITECTURE.md](../../digiquant/ARCHITECTURE.md) | 8001 | `pytest tests/dq/ -m unit -v --tb=short` |
 | `digisearch/` | [digisearch/AGENTS.md](../../digisearch/AGENTS.md) | [digisearch/ARCHITECTURE.md](../../digisearch/ARCHITECTURE.md) | 8002 | `pytest tests/ds/ -m unit -v --tb=short` |
 | `digiclaw/` | [digiclaw/AGENTS.md](../../digiclaw/AGENTS.md) | [digiclaw/ARCHITECTURE.md](../../digiclaw/ARCHITECTURE.md) | — (heartbeat profile) | `pytest tests/dc/ -m unit -v --tb=short` |
+| `digivoice/` | [digivoice/AGENTS.md](../../digivoice/AGENTS.md) | [digivoice/ARCHITECTURE.md](../../digivoice/ARCHITECTURE.md) | — (local CLI) | `pytest tests/dvo/ -m unit -v --tb=short` |
 | `digismith/` | [digismith/AGENTS.md](../../digismith/AGENTS.md) | [digismith/ARCHITECTURE.md](../../digismith/ARCHITECTURE.md) | 8003 | `pytest tests/dsm/ -m unit -v --tb=short` |
 | `digikey/` | [digikey/AGENTS.md](../../digikey/AGENTS.md) | [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) | 8005 | `pytest tests/dk/ -m unit -v --tb=short` |
 | `digibase/` | [digibase/AGENTS.md](../../digibase/AGENTS.md) | [digibase/ARCHITECTURE.md](../../digibase/ARCHITECTURE.md) | TBD (library today) | `pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short` |
