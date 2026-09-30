@@ -17,17 +17,18 @@ export const Brand = () => (
 );
 
 export const DQ_NAV_PRIMARY: NavLink[] = [
+  { label: "Products", href: "/#products" },
   { label: "Pipeline", href: "/#pipeline" },
-  { label: "Desk", href: "/#desk" },
-  { label: "Strategies", href: "/#strategies" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Tearsheets", href: "/#tearsheets" },
+  { label: "Strategy", href: "/#strategy" },
+  { label: "Dashboard", href: "/#dashboard" },
   { label: "Changelog", href: "/changelog" },
   { label: "digithings.ai", href: "https://digithings.ai", external: true },
 ];
 
 export const DQ_FOOTER_CELLS: FooterCell[] = [
   { label: "Strategies", href: "/strategies" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "Get started", href: "/#start" },
   { label: "Changelog", href: "/changelog" },
   { label: "Built on digithings", href: "https://digithings.ai", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
