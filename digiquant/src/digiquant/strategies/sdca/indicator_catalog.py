@@ -50,8 +50,19 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "ig_oas",
     "breakeven_5y",
     "nfci",
+    "gdx_gld",
+    "gld_slv",
 )
-GOLD_MACRO_NAMES: tuple[str, ...] = ("gvz", "walcl", "hy_oas", "ig_oas", "breakeven_5y", "nfci")
+GOLD_MACRO_NAMES: tuple[str, ...] = (
+    "gvz",
+    "walcl",
+    "hy_oas",
+    "ig_oas",
+    "breakeven_5y",
+    "nfci",
+    "gdx_gld",
+    "gld_slv",
+)
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
 BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
@@ -70,6 +81,8 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "ig_oas": "ig_oas_weight",
     "breakeven_5y": "breakeven_5y_weight",
     "nfci": "nfci_weight",
+    "gdx_gld": "gdx_gld_weight",
+    "gld_slv": "gld_slv_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -87,6 +100,8 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "ig_oas": "IG credit spread",
     "breakeven_5y": "5Y breakeven",
     "nfci": "financial conditions (NFCI)",
+    "gdx_gld": "GDX/GLD participation",
+    "gld_slv": "gold/silver ratio",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -113,6 +128,8 @@ class SdcaCompositeWeights(BaseModel):
     ig_oas: float = Field(0.0, ge=0.0)
     breakeven_5y: float = Field(0.0, ge=0.0)
     nfci: float = Field(0.0, ge=0.0)
+    gdx_gld: float = Field(0.0, ge=0.0)
+    gld_slv: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -134,6 +151,8 @@ class SdcaCompositeWeights(BaseModel):
             ("ig_oas", self.ig_oas),
             ("breakeven_5y", self.breakeven_5y),
             ("nfci", self.nfci),
+            ("gdx_gld", self.gdx_gld),
+            ("gld_slv", self.gld_slv),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -171,6 +190,10 @@ class ExtraIndicatorSources(BaseModel):
     breakeven_5y_values: pl.Series | None = None
     nfci_dates: pl.Series | None = None
     nfci_values: pl.Series | None = None
+    gdx_dates: pl.Series | None = None
+    gdx_close: pl.Series | None = None
+    slv_dates: pl.Series | None = None
+    slv_close: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -186,6 +209,8 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         ig_oas=float(params.get("ig_oas_weight", 0.0)),
         breakeven_5y=float(params.get("breakeven_5y_weight", 0.0)),
         nfci=float(params.get("nfci_weight", 0.0)),
+        gdx_gld=float(params.get("gdx_gld_weight", 0.0)),
+        gld_slv=float(params.get("gld_slv_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -211,6 +236,8 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         ig_oas=float(payload.get("ig_oas", 0.0)),
         breakeven_5y=float(payload.get("breakeven_5y", 0.0)),
         nfci=float(payload.get("nfci", 0.0)),
+        gdx_gld=float(payload.get("gdx_gld", 0.0)),
+        gld_slv=float(payload.get("gld_slv", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
