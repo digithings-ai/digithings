@@ -71,6 +71,8 @@ DIGIFETCH_TOOLS = {
     "digifetch_equity_diagnostic",
     # coverage expansion (#4110 phase 4a)
     "digifetch_saved_searches",
+    # prediction-markets venue catalog (#4813)
+    "digifetch_prediction_markets",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -138,6 +140,54 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
 
 
 def _sweep_handler(request: httpx.Request) -> httpx.Response:
+    host = request.url.host
+    if host == "gamma-api.polymarket.com" and request.url.path == "/events":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "1001",
+                    "title": "Fed December decision",
+                    "slug": "fed-december-decision",
+                    "tags": [{"label": "Macro"}],
+                    "markets": [
+                        {
+                            "question": "25bp hike in December?",
+                            "outcomes": '["Yes", "No"]',
+                            "outcomePrices": '["0.25", "0.75"]',
+                            "volume": "1234.5",
+                            "liquidity": "567.8",
+                            "endDate": "2026-12-16T00:00:00Z",
+                        }
+                    ],
+                }
+            ],
+        )
+    if host == "api.elections.kalshi.com" and request.url.path == "/trade-api/v2/events":
+        return httpx.Response(
+            200,
+            json={
+                "events": [
+                    {
+                        "event_ticker": "FED-26",
+                        "title": "Fed December decision",
+                        "category": "Economics",
+                        "markets": [
+                            {
+                                "ticker": "FED-26-Y1",
+                                "yes_bid": 24,
+                                "yes_ask": 26,
+                                "last_price": 25,
+                                "volume": 1000,
+                                "open_interest": 500,
+                                "close_time": "2026-12-16T00:00:00Z",
+                                "status": "open",
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
     path = request.url.path
     if path == "/market/quote":
         return _envelope(AAPL_QUOTE)
@@ -451,8 +501,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_34_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 34
+def test_all_35_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 35
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -461,13 +511,20 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
     missing = DIGIFETCH_TOOLS - set(rows)
     assert not missing, f"missing orchestrator tools: {sorted(missing)}"
-    for name in sorted(DIGIFETCH_TOOLS - {"digifetch_earnings_calendar"}):
+    unattributed = {"digifetch_earnings_calendar", "digifetch_prediction_markets"}
+    for name in sorted(DIGIFETCH_TOOLS - unattributed):
         description = rows[name]["function"]["description"]
         assert "Gloomberb" in description, f"{name} description must name the source"
     # The earnings calendar is Yahoo-backed; it must not claim Gloomberb.
     earnings_description = rows["digifetch_earnings_calendar"]["function"]["description"]
     assert "Yahoo" in earnings_description
     assert "Gloomberb" not in earnings_description
+    # Prediction markets are venue-direct; the description names the venues,
+    # never Gloomberb.
+    markets_description = rows["digifetch_prediction_markets"]["function"]["description"]
+    assert "Polymarket" in markets_description
+    assert "Kalshi" in markets_description
+    assert "Gloomberb" not in markets_description
 
 
 def test_anon_quote_returns_attributed_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -671,6 +728,7 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_risk_reports": ("AAPL",),
     "digifetch_short_interest": ("AAPL",),
     "digifetch_equity_diagnostic": ("AAPL",),
+    "digifetch_prediction_markets": (),
 }
 
 
@@ -686,11 +744,19 @@ def test_every_tool_returns_attributed_json(
     )
     payload = json.loads(_mcp(name)(*args))
     assert "data" in payload, f"{name} returned no data slot"
-    attributed = name != "digifetch_earnings_calendar"
+    unattributed = {"digifetch_earnings_calendar", "digifetch_prediction_markets"}
+    attributed = name not in unattributed
     if attributed:
         assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
         assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
         assert ("source_url" in payload) is (name in LINKED_TOOLS), f"{name} deep-link mismatch"
+    elif name == "digifetch_prediction_markets":
+        # Venue-direct: venue attribution lives inside data, never top-level,
+        # and no term.gloom.sh link is emitted for venue rows.
+        assert "attribution" not in payload
+        assert "source_url" not in payload
+        assert "Polymarket" in payload["data"]["attribution"]
+        assert payload["data"]["markets"], f"{name} returned no venue rows"
     else:
         # Yahoo-backed: must not claim Gloomberb attribution.
         assert "attribution" not in payload
@@ -1433,7 +1499,13 @@ def test_entitlement_zero_http_gating_matches_the_declaration(
     _patch_client(monkeypatch, handler, earnings_provider=lambda symbol: [])
     payload = json.loads(_mcp(name)(*args))
     # The Yahoo-backed earnings calendar never touches the Cloud transport.
-    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    # Prediction markets fans out to one request per venue (Polymarket + Kalshi).
+    if name == "digifetch_earnings_calendar":
+        expected_calls = []
+    elif name == "digifetch_prediction_markets":
+        expected_calls = [1, 1]
+    else:
+        expected_calls = [1]
     if entitlement == "free":
         # Anonymous tools are never gated: the request goes out and succeeds.
         assert calls == expected_calls, name
@@ -1466,7 +1538,12 @@ def test_entitlement_wire_access_with_a_session_cookie(
         earnings_provider=lambda symbol: [],
     )
     payload = json.loads(_mcp(name)(*args))
-    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    if name == "digifetch_earnings_calendar":
+        expected_calls = []
+    elif name == "digifetch_prediction_markets":
+        expected_calls = [1, 1]
+    else:
+        expected_calls = [1]
     assert calls == expected_calls, name
     assert "code" not in payload["data"], name
 

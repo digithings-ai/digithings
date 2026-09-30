@@ -482,7 +482,7 @@ def _require_mcp() -> type:
 
 #: Tools safe for the dashboard-chat surface: latest/historical runs, published
 #: research reads, prices/technicals, macro, the house book, read-only gate
-#: evaluations, the coinmetrics catalog discovery tool, and the 34 digifetch x
+#: evaluations, the coinmetrics catalog discovery tool, and the 35 digifetch x
 #: Gloomberb enrichment reads (#4069, #4110, spec §12.3 scope=read). Everything
 #: else (backtest / optimize / pipeline / export / fetches / fits / tearsheets /
 #: policy-replay runs) is compute or mutate and stays on ``scope="full"`` only.
@@ -532,6 +532,7 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_short_interest",
         "digifetch_equity_diagnostic",
         "digifetch_saved_searches",
+        "digifetch_prediction_markets",
     }
 )
 
@@ -1606,6 +1607,37 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_prediction_markets")
+    def digifetch_prediction_markets(
+        venue: str = "all",
+        query: str | None = None,
+        category: str | None = None,
+        tab: str = "top",
+        limit: int = 20,
+    ) -> str:
+        """Prediction-markets catalog across Polymarket + Kalshi (venue-direct).
+
+        No Cloud route exists for prediction markets, so this tool is NOT
+        attributed to Gloomberb: it reads the venues' public APIs anonymously
+        and normalizes the catalog rows. `venue` selects all/polymarket/kalshi;
+        `query`/`category`/`tab` filter client-side; `limit` bounds the rows
+        (1-100). A failing venue lands in `warnings`; rows carry the venue deep
+        link. Enrichment only, never a pipeline primary.
+        """
+        try:
+            envelope = _build_gloomberb_client().prediction_markets(
+                {
+                    "venue": venue,
+                    "query": query,
+                    "category": category,
+                    "tab": tab,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
 
     @_maybe_tool("digiquant_fit_btc_power_law")
     def digiquant_fit_btc_power_law(
