@@ -75,3 +75,35 @@ class ExportResult(BaseModel):
     artifact_path: str | None = Field(None, description="Path to exported artifact if written")
     status: str = Field("ok", description="ok | partial | error")
     message: str = Field("", description="Optional message")
+
+
+class BarsBar(BaseModel):
+    """One OHLCV bar for dashboard charts (display only — never a backtest input)."""
+
+    timestamp: str = Field(..., description="Bar timestamp (ISO date or datetime from upstream)")
+    open: float | None = Field(None, description="Opening price")
+    high: float | None = Field(None, description="High price")
+    low: float | None = Field(None, description="Low price")
+    close: float = Field(..., description="Closing price")
+    volume: float | None = Field(None, description="Volume (if reported upstream)")
+
+
+class BarsResponse(BaseModel):
+    """Keyless OHLCV bars for dashboard charts (GET /bars).
+
+    Display-only read over the anonymous Gloomberb price-history path:
+    free-tier data may be delayed (see ``delay_note``) and must never feed
+    the validate → backtest → optimize → export pipeline. Carries no Sharpe,
+    PnL, or drawdown — no performance claims originate here.
+    """
+
+    symbol: str = Field(..., description="Requested symbol (as normalized upstream)")
+    timeframe: str = Field(..., description="Requested timeframe (Gloomberb resolution)")
+    limit: int = Field(..., description="Requested max bars")
+    count: int = Field(..., description="Bars actually returned (<= limit)")
+    bars: list[BarsBar] = Field(default_factory=list, description="Newest-last OHLCV bars")
+    source: str = Field("gloomberb", description="Upstream family (Sourced from Gloomberb)")
+    stale: bool = Field(False, description="Upstream cache-stale signal")
+    delay_note: str | None = Field(
+        None, description="Free-tier delay notice (up to 15 minutes on equities)"
+    )
