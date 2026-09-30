@@ -74,13 +74,13 @@ describe('PerformanceTearsheetView', () => {
   it('leads with percentage returns — single excess metric, no relative-gain duplicate', () => {
     const out = html();
     expect(out).not.toContain('>NAV index<');
-    expect(out).toContain('Portfolio return');
-    expect(out).toContain('Excess return');
+    expect(out).toContain('>Portfolio<');
+    expect(out).toContain('>Excess<');
     expect(out).not.toContain('Relative gain');
-    expect(out).toContain('12.50%');
-    expect(out).toContain('4.25%');
-    expect(out).toContain('SPY return');
-    expect(out).toContain('8.25%');
+    expect(out).toContain('+12.50%');
+    expect(out).toContain('+4.25%');
+    expect(out).toContain('>SPY<');
+    expect(out).toContain('+8.25%');
     expect(out).toContain('>period<');
     expect(out).toContain('2026-07-17–2026-08-03');
     expect(out).not.toContain('paper NAV index 112.50');
@@ -105,8 +105,8 @@ describe('PerformanceTearsheetView', () => {
     const out = html();
     expect(out).toContain('data-testid="performance-insight-band"');
     expect(out).toContain('>Alpha<');
-    expect(out).toContain('Information ratio');
-    expect(out).toContain('daily excess');
+    expect(out).toContain('Info ratio');
+    expect(out).toContain('tracking error');
   });
 
   it('renders one additive contribution and exact portfolio-return chart', () => {
@@ -118,7 +118,6 @@ describe('PerformanceTearsheetView', () => {
     expect(out).toContain('data-series="AAA"');
     expect(out).not.toContain('data-testid="portfolio-return-chart"');
     expect(out).not.toContain('data-testid="position-return-chart"');
-    expect(out.toLowerCase()).not.toContain('drawdown');
   });
 
   it('uses an icon-only accessible PDF control', () => {
@@ -212,7 +211,51 @@ describe('headline vs realized presentation (#1664)', () => {
     const out = html();
     expect(out).not.toContain('data-testid="realized-summary"');
     expect(out).not.toContain('Realized · closed positions');
-    expect(out).toContain('activity lives on Ledger');
+    expect(out).toContain('Open ledger');
+  });
+});
+
+describe('visual-first performance panes', () => {
+  it('draws NAV vs benchmark, drawdown and monthly returns with text summaries', () => {
+    const out = html();
+    expect(out).toContain('data-testid="performance-nav-chart"');
+    expect(out).toContain('aria-label="Portfolio cumulative return versus benchmark"');
+    expect(out).toContain('Portfolio +12.50% from 2026-07-17 to 2026-08-03, SPY +8.25%.');
+    expect(out).toContain('data-testid="performance-drawdown"');
+    expect(out).toContain('Max drawdown');
+    expect(out).toContain('data-testid="performance-returns-matrix"');
+  });
+
+  it('offers a range switch and ranks open positions as bars', () => {
+    const out = html();
+    expect(out).toContain('aria-label="Performance range"');
+    expect(out).toContain('>1M<');
+    expect(out).toContain('aria-label="Unrealized return by open position, percent');
+    expect(out).toContain('aria-label="Realized return by exit or trim, percent');
+  });
+
+  it('shows the lookback attribution empty state without rows and the bridge with rows', () => {
+    expect(html()).toContain('No current-book lookback rows yet');
+    const row = {
+      id: 'a',
+      date: '2026-08-03',
+      ticker: 'AAA',
+      sector_bucket: null,
+      weight_pct: 20,
+      position_return_pct: 6,
+      benchmark_return_pct: 4,
+      contribution_pct: 1.2,
+      selection_effect_pct: 0.4,
+      allocation_effect_pct: null,
+      total_attribution_pct: 0.4,
+      metrics_as_of: null,
+      created_at: null,
+    };
+    const out = renderToStaticMarkup(
+      createElement(PerformanceTearsheetView, { data: sample, ssot: null, attribution: [row] })
+    );
+    expect(out).toContain('data-testid="attribution-bridge"');
+    expect(out).toContain('not realized daily contribution');
   });
 });
 

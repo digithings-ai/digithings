@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Button, Card } from '@digithings/ui/ui';
 import { CalendarClock } from 'lucide-react';
 import type {
+  FxIdeaEvalRow,
   FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
@@ -11,10 +12,12 @@ import type {
   FxTradeIdeaRow,
 } from '@/lib/twelve-x/types';
 import { eventLocalDateKey } from '@/lib/twelve-x/fetch';
+import { deriveTodayKpis } from '@/lib/twelve-x/kpis';
 import { countDisputedTradeIdeas, disputedTradeIdeaRanks } from '@/lib/twelve-x/divergence';
 import TradeIdeasPanel from './TradeIdeasPanel';
 import DigestBrief from './DigestBrief';
-import TodayConsensusChart from './TodayConsensusChart';
+import ConsensusBoard from './ConsensusBoard';
+import TodayKpiStrip from './TodayKpiStrip';
 import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
 import { useTwelveX } from './context';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
@@ -29,6 +32,7 @@ export default function TodayTab({
   events,
   series,
   divergenceByCurrency = {},
+  ideaEval = [],
   onSeeAllBriefs,
 }: {
   digest: DigestData;
@@ -38,6 +42,7 @@ export default function TodayTab({
   events: FxEconomicCalendarRow[];
   series: FxConsensusSnapshotRow[];
   divergenceByCurrency?: Record<string, FxConsensusDivergence>;
+  ideaEval?: FxIdeaEvalRow[];
   onSeeAllBriefs: () => void;
 }) {
   const { openBrief } = useTwelveX();
@@ -52,6 +57,26 @@ export default function TodayTab({
     if (!highlightDisputed) return undefined;
     return new Set(disputedTradeIdeaRanks(tradeIdeas, divergenceByCurrency));
   }, [highlightDisputed, tradeIdeas, divergenceByCurrency]);
+
+  const disputedCurrencies = useMemo(
+    () => (highlightDisputed ? new Set(Object.keys(divergenceByCurrency)) : undefined),
+    [highlightDisputed, divergenceByCurrency],
+  );
+
+  const kpis = useMemo(
+    () =>
+      deriveTodayKpis({
+        runDate: tradeIdeas[0]?.run_date ?? digest?.run_date ?? null,
+        ideas: tradeIdeas,
+        disputedCount: disputeCount,
+        briefs,
+        digest,
+        events,
+        ideaEval,
+        now: new Date(),
+      }),
+    [tradeIdeas, digest, disputeCount, briefs, events, ideaEval],
+  );
 
   const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
 
@@ -83,6 +108,8 @@ export default function TodayTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
       </div>
 
+      <TodayKpiStrip kpis={kpis} />
+
       {disputeCount > 0 ? (
         <p className="px-1 text-sm text-ink-soft">
           <Button
@@ -108,7 +135,7 @@ export default function TodayTab({
           ideaHistory={tradeIdeaHistory}
           highlightRanks={highlightRanks}
         />
-          <TodayConsensusChart series={series} />
+          <ConsensusBoard series={series} disputedCurrencies={disputedCurrencies} />
         </div>
 
         <div className="min-w-0 lg:relative lg:self-stretch">

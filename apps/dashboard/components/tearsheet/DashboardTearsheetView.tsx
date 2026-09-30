@@ -1,35 +1,33 @@
 'use client';
 
-import type React from 'react';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Download } from 'lucide-react';
 import {
+  MultiTimeSeries,
+  ReturnsMatrix,
+  annualizedVolPct,
+  dailyReturnsFromEquity,
   fmtNum,
-  fmtPct,
   relativeMetricsFromReturnSeries,
   runTearsheetPrint,
-  toneClass,
 } from '@digithings/ui';
 import {
+  DivergingBars,
   IconButton,
   Label,
+  SegmentedControl,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Stat,
 } from '@digithings/ui/ui';
-import type { PerformanceTearsheet, PerformanceHoldingRow } from './types';
-import {
-  PortfolioContributionChart,
-} from './PortfolioPerformanceCharts';
+import type { TableRow as AttributionRow } from '@/lib/database.types';
+import type { PerformanceTearsheet } from './types';
+import { PortfolioContributionChart } from './PortfolioPerformanceCharts';
+import { BookAttribution } from '@/components/portfolio/BookAttribution';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 import { ledgerHref } from '@/lib/portfolio-url-state';
 import {
@@ -37,167 +35,82 @@ import {
   navContractBadgeLabel,
   type PerformanceSsotMeta,
 } from '@/lib/performance-ssot';
+import {
+  PERFORMANCE_RANGES,
+  alignedBenchmark,
+  drawdownFromReturns,
+  navSummary,
+  realizedBars,
+  signedPct,
+  unrealizedBars,
+  windowReturns,
+  type PerformanceRange,
+} from '@/lib/portfolio-performance-view';
 
-function ReturnValue({ value }: { value: number | null }) {
-  if (value == null) return <>—</>;
-  return (
-    <span className={toneClass(value)}>
-      {value > 0 ? '+' : ''}
-      {fmtPct(value)}
-    </span>
-  );
-}
+/** Sign tone for P&L-style figures only (returns, excess). */
+const pnlTone = (v: number | null | undefined): 'up' | 'down' | 'mute' =>
+  v == null || v === 0 ? 'mute' : v > 0 ? 'up' : 'down';
 
-function HoldingsPerformanceTable({
-  rows,
-  emptyMessage,
-}: {
-  rows: PerformanceHoldingRow[];
-  emptyMessage: string;
-}) {
-  if (!rows.length) {
-    return <p className="px-6 py-12 text-center text-sm text-ink-mute">{emptyMessage}</p>;
-  }
-
-  return (
-    <div className="max-h-[22rem] overflow-auto print:max-h-none print:overflow-visible [&>div]:overflow-visible">
-      <Table className="min-w-[680px] border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
-        <TableHeader className="sticky top-0 z-10 bg-surface print:static">
-          <TableRow className="border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute hover:bg-transparent">
-            <TableHead className="h-auto px-5 py-2.5 font-normal">Holding</TableHead>
-            <TableHead className="h-auto px-3 py-2.5 font-normal">Category</TableHead>
-            <TableHead numeric className="h-auto px-3 py-2.5 font-normal">Weight</TableHead>
-            <TableHead numeric className="h-auto px-3 py-2.5 font-normal">Unrealized</TableHead>
-            <TableHead numeric className="h-auto px-5 py-2.5 font-normal">As of</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody className="divide-y divide-hair">
-          {rows.map((row) => (
-            <TableRow
-              key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}-${row.disposition ?? 'open'}`}
-              className="border-0 hover:bg-ink/[0.02]"
-            >
-              <TableCell className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</TableCell>
-              <TableCell className="px-3 py-2.5 text-ink-soft">
-                {formatAllocationCategory(row.category)}
-              </TableCell>
-              <TableCell numeric className="px-3 py-2.5 text-ink">
-                {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
-              </TableCell>
-              <TableCell numeric className="px-3 py-2.5">
-                <ReturnValue value={row.unrealizedReturnPct} />
-              </TableCell>
-              <TableCell numeric className="px-5 py-2.5 text-ink-mute">
-                {row.attributionDate ?? '—'}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  format = 'percent',
-  note,
-}: {
-  label: string;
-  value: number | null;
-  format?: 'percent' | 'number' | 'ratio';
-  note?: string | null;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col justify-center gap-1 border-r border-hair px-4 py-4 last:border-r-0">
-      <dt className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">{label}</dt>
-      <dd className="m-0 font-mono text-2xl font-medium tabular-nums text-ink">
-        {format === 'number' ? (
-          value != null ? value.toFixed(2) : '—'
-        ) : format === 'ratio' ? (
-          value != null ? fmtNum(value, 2) : '—'
-        ) : (
-          <ReturnValue value={value} />
-        )}
-      </dd>
-      {note ? <p className="m-0 font-mono text-[0.58rem] text-ink-mute">{note}</p> : null}
-    </div>
-  );
-}
-
-function OpenHoldingsPanel({ rows }: { rows: PerformanceHoldingRow[] }) {
-  return (
-    <section className="border-x border-b border-hair bg-surface" data-testid="open-positions-panel">
-      <div className="flex items-center justify-between gap-3 border-b border-hair px-5 py-3">
-        <h2 className="font-display text-xl font-normal text-ink">Open positions</h2>
-        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-          open book · unrealized
-        </span>
-      </div>
-      <HoldingsPerformanceTable
-        rows={rows}
-        emptyMessage="No open position performance is stored yet."
-      />
-    </section>
-  );
-}
+const pct = (n: number) => signedPct(n);
 
 /**
- * Compact doorway to Ledger (SSOT for exits/trims). Replaces the former Closed
- * positions tearsheet tab so realized fills are not duplicated.
+ * Performance: one SVG finance-tearsheet page (NAV vs benchmark, drawdown,
+ * returns calendar, contribution, attribution bridge, open/realized bars).
+ * Stays SVG-only under `.ts-print-root` so PDF export keeps working.
  */
-function LedgerDoorway({ sellCount }: { sellCount: number }) {
-  const noun =
-    sellCount === 1 ? '1 recorded exit or trim' : `${sellCount} recorded exits & trims`;
-  return (
-    <div
-      data-testid="ledger-doorway"
-      className="flex flex-wrap items-center justify-between gap-3 border-x border-b border-hair bg-surface px-5 py-2.5 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
-    >
-      <span>
-        {sellCount > 0 ? noun : 'No recorded exits or trims'}
-        {' · '}activity lives on Ledger
-      </span>
-      <Link
-        href={ledgerHref()}
-        className="font-medium text-accent hover:underline"
-        data-testid="ledger-doorway-link"
-      >
-        Open ledger
-      </Link>
-    </div>
-  );
-}
-
 export function PerformanceTearsheetView({
   data,
   ssot = null,
+  attribution = [],
 }: {
   data: PerformanceTearsheet;
   /** Optional full SSOT meta from `getPerformanceBundle` (#3580). */
   ssot?: PerformanceSsotMeta | null;
+  /** Latest current-book lookback rows (fail-soft; empty when unavailable). */
+  attribution?: readonly AttributionRow<'position_attribution'>[];
 }) {
   const [, setPrinting] = useState(false);
+  const [range, setRange] = useState<PerformanceRange>('all');
   const [benchmarkTicker, setBenchmarkTicker] = useState(
-    data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
-      data.benchmarkTicker
+    data.benchmarkComparisons.find((c) => c.ticker === 'SPY')?.ticker ?? data.benchmarkTicker
   );
-  const benchmark =
-    data.benchmarkComparisons.find((comparison) => comparison.ticker === benchmarkTicker) ?? null;
-  const benchmarkReturnPct = benchmark?.returnPct ?? data.benchmarkReturnPct;
-  const portfolioReturnPct = data.netReturnPct;
+  const benchmark = data.benchmarkComparisons.find((c) => c.ticker === benchmarkTicker) ?? null;
+
+  const navWindow = useMemo(
+    () => windowReturns(data.navSeries.map((p) => ({ date: p.date, returnPct: p.returnPct })), range),
+    [data.navSeries, range]
+  );
+  const benchWindow = useMemo(
+    () => alignedBenchmark(navWindow, benchmark?.series ?? []),
+    [navWindow, benchmark]
+  );
+  const drawdown = useMemo(() => drawdownFromReturns(navWindow), [navWindow]);
+
+  const isAll = range === 'all';
+  const tip = (s: { returnPct: number }[]) => (s.length ? s[s.length - 1].returnPct : null);
+  const portfolioReturnPct = isAll ? data.netReturnPct : tip(navWindow);
+  const benchmarkReturnPct = isAll
+    ? (benchmark?.returnPct ?? data.benchmarkReturnPct)
+    : tip(benchWindow);
+
   const relative = useMemo(
     () =>
       relativeMetricsFromReturnSeries(
         portfolioReturnPct,
         benchmarkReturnPct,
-        data.navSeries.map((p) => p.returnPct),
-        benchmark?.series.map((p) => p.returnPct) ?? []
+        navWindow.map((p) => p.returnPct),
+        benchWindow.map((p) => p.returnPct)
       ),
-    [portfolioReturnPct, benchmarkReturnPct, data.navSeries, benchmark]
+    [portfolioReturnPct, benchmarkReturnPct, navWindow, benchWindow]
   );
-  const relativeReturnPct = relative.excessReturnPct ?? data.relativeReturnPct;
+  const excessPct = relative.excessReturnPct ?? (isAll ? data.relativeReturnPct : null);
+
+  const equity = useMemo(
+    () => navWindow.map((p) => ({ t: p.date, v: 100 * (1 + p.returnPct / 100) })),
+    [navWindow]
+  );
+  const volPct = useMemo(() => annualizedVolPct(dailyReturnsFromEquity(equity)), [equity]);
+
   const periodEnd = ssot?.navAsOf ?? data.metricsAsOf;
   const performancePeriod =
     data.inceptionDate && periodEnd ? `${data.inceptionDate}–${periodEnd}` : null;
@@ -210,11 +123,34 @@ export function PerformanceTearsheetView({
       ? 'metrics lag'
       : null;
 
+  const navSeries = [
+    {
+      id: 'portfolio',
+      label: 'Portfolio',
+      tone: 'accent' as const,
+      points: navWindow.map((p) => ({ t: p.date, v: p.returnPct })),
+    },
+    ...(benchmark && benchWindow.length
+      ? [
+          {
+            id: 'benchmark',
+            label: benchmark.ticker,
+            tone: 'mute' as const,
+            dashed: true,
+            points: benchWindow.map((p) => ({ t: p.date, v: p.returnPct })),
+          },
+        ]
+      : []),
+  ];
+  const unrealized = unrealizedBars(data.currentHoldings);
+  const realized = realizedBars(data.historicalHoldings);
+  const matrixPoints = data.navSeries.map((p) => ({ t: p.date, v: p.nav }));
+
   return (
-    <div className="ts-print-root space-y-0">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-hair pb-3">
+    <div className="ts-print-root flex flex-col gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hair pb-3">
         <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 print:hidden">
           {navContract && navContract !== 'empty' ? (
             <span
               data-testid="tearsheet-nav-contract-badge"
@@ -232,6 +168,13 @@ export function PerformanceTearsheetView({
               {ssot?.metricsAsOf ? ` · ${ssot.metricsAsOf}` : ''}
             </span>
           ) : null}
+          <SegmentedControl
+            dress="accent"
+            aria-label="Performance range"
+            options={PERFORMANCE_RANGES.map((r) => ({ value: r.value, label: r.label }))}
+            value={range}
+            onChange={setRange}
+          />
           {data.benchmarkComparisons.length ? (
             <Label
               data-testid="global-benchmark-control"
@@ -251,9 +194,9 @@ export function PerformanceTearsheetView({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {data.benchmarkComparisons.map((comparison) => (
-                    <SelectItem key={comparison.ticker} value={comparison.ticker}>
-                      {comparison.ticker}
+                  {data.benchmarkComparisons.map((c) => (
+                    <SelectItem key={c.ticker} value={c.ticker}>
+                      {c.ticker}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -263,9 +206,7 @@ export function PerformanceTearsheetView({
           <IconButton
             aria-label="Download performance tear sheet as PDF"
             title="Download PDF"
-            onClick={() =>
-              runTearsheetPrint({ documentTitle: 'digiquant performance', setPrinting })
-            }
+            onClick={() => runTearsheetPrint({ documentTitle: 'digiquant performance', setPrinting })}
           >
             <Download size={17} aria-hidden />
           </IconButton>
@@ -274,53 +215,115 @@ export function PerformanceTearsheetView({
 
       <section
         data-testid="performance-command-band"
-        aria-label="Portfolio returns"
-        className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
+        aria-label="Key performance metrics"
+        className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7"
       >
-        <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
-          <Metric label="Portfolio return" value={portfolioReturnPct} note="since inception" />
-          <Metric
-            label={benchmark ? `${benchmark.ticker} return` : 'Benchmark return'}
-            value={benchmarkReturnPct}
-          />
-          <Metric
-            label="Excess return"
-            value={relativeReturnPct}
-            note={benchmark ? `Rp − ${benchmark.ticker}` : 'Rp − Rb'}
-          />
-        </dl>
-        <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
-          <span>{performancePeriod ? 'period' : periodEnd ? 'as of' : 'status'}</span>
-          <strong className="font-medium text-accent">
-            {performancePeriod ?? periodEnd ?? 'awaiting persisted metrics'}
-          </strong>
-          {ssot?.navAsOf && ssot.navAsOf !== data.metricsAsOf ? (
-            <span data-testid="tearsheet-nav-as-of">nav tip {ssot.navAsOf}</span>
-          ) : null}
-        </div>
+        <Stat
+          label="Portfolio"
+          value={signedPct(portfolioReturnPct)}
+          deltaTone={pnlTone(portfolioReturnPct)}
+          hint={isAll ? 'since inception' : `last ${range.toUpperCase()}`}
+        />
+        <Stat
+          label={benchmark ? benchmark.ticker : 'Benchmark'}
+          value={signedPct(benchmarkReturnPct)}
+        />
+        <Stat
+          label="Excess"
+          value={signedPct(excessPct)}
+          hint={benchmark ? `Rp − ${benchmark.ticker}` : 'Rp − Rb'}
+        />
+        <Stat
+          data-testid="performance-insight-band"
+          label="Alpha"
+          value={signedPct(relative.alphaPct)}
+          hint="Jensen, β from daily overlap"
+        />
+        <Stat
+          label="Info ratio"
+          value={relative.informationRatio == null ? null : fmtNum(relative.informationRatio, 2)}
+          hint="ann. excess / tracking error"
+        />
+        <Stat
+          label="Max drawdown"
+          value={navWindow.length > 1 ? signedPct(drawdown.maxDrawdownPct) : null}
+          hint={drawdown.troughDate ? `trough ${drawdown.troughDate}` : undefined}
+        />
+        <Stat
+          label="Volatility"
+          value={volPct == null ? null : `${volPct.toFixed(1)}%`}
+          hint="annualized, daily NAV"
+        />
       </section>
+      <p
+        data-region="stamp"
+        className="m-0 flex flex-wrap items-center gap-x-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute"
+      >
+        <span>{performancePeriod ? 'period' : periodEnd ? 'as of' : 'status'}</span>
+        <strong className="font-medium text-accent">
+          {performancePeriod ?? periodEnd ?? 'awaiting persisted metrics'}
+        </strong>
+        {ssot?.navAsOf && ssot.navAsOf !== data.metricsAsOf ? (
+          <span data-testid="tearsheet-nav-as-of">nav tip {ssot.navAsOf}</span>
+        ) : null}
+      </p>
 
       <section
-        data-testid="performance-insight-band"
-        aria-label="Risk-adjusted insight metrics"
-        className="border-x border-b border-hair bg-surface"
+        aria-label="Cumulative return versus benchmark"
+        className="border border-hair bg-surface p-4"
+        data-testid="performance-nav-chart"
       >
-        <dl className="m-0 grid grid-cols-1 sm:grid-cols-2">
-          <Metric
-            label="Alpha"
-            value={relative.alphaPct}
-            note="Jensen · Rp − β·Rb (β from daily overlap)"
-          />
-          <Metric
-            label="Information ratio"
-            value={relative.informationRatio}
-            format="ratio"
-            note="ann. mean(daily excess) / tracking error"
-          />
-        </dl>
+        <h2 className="m-0 mb-2 font-display text-xl font-normal text-ink">
+          Cumulative return{benchmark ? ` vs ${benchmark.ticker}` : ''}
+        </h2>
+        <MultiTimeSeries
+          series={navSeries}
+          height={300}
+          fmt={(v) => `${v.toFixed(1)}%`}
+          zeroBaseline
+          interactive={false}
+          ariaLabel="Portfolio cumulative return versus benchmark"
+        />
+        <p className="sr-only">{navSummary(navWindow, benchWindow, benchmark?.ticker ?? null)}</p>
       </section>
 
-      <LedgerDoorway sellCount={sellCount} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section
+          aria-label="Drawdown"
+          className="border border-hair bg-surface p-4"
+          data-testid="performance-drawdown"
+        >
+          <h2 className="m-0 mb-2 font-display text-xl font-normal text-ink">Drawdown</h2>
+          <MultiTimeSeries
+            series={[
+              {
+                id: 'drawdown',
+                label: 'Drawdown',
+                tone: 'down',
+                fill: true,
+                points: drawdown.series.map((p) => ({ t: p.date, v: p.returnPct })),
+              },
+            ]}
+            height={200}
+            fmt={(v) => `${v.toFixed(1)}%`}
+            interactive={false}
+            ariaLabel="Portfolio drawdown from running peak"
+          />
+          <p className="sr-only">
+            Max drawdown {signedPct(drawdown.maxDrawdownPct)}
+            {drawdown.troughDate ? ` on ${drawdown.troughDate}` : ''}; currently{' '}
+            {signedPct(drawdown.currentPct)} below peak.
+          </p>
+        </section>
+        <section
+          aria-label="Monthly returns"
+          className="border border-hair bg-surface p-4"
+          data-testid="performance-returns-matrix"
+        >
+          <h2 className="m-0 mb-2 font-display text-xl font-normal text-ink">Monthly returns</h2>
+          <ReturnsMatrix points={matrixPoints} period="monthly" />
+        </section>
+      </div>
 
       <PortfolioContributionChart
         points={data.contributionSeries}
@@ -329,9 +332,103 @@ export function PerformanceTearsheetView({
         startsOn={data.contributionStartsOn}
       />
 
-      <OpenHoldingsPanel rows={data.currentHoldings} />
+      <BookAttribution rows={attribution} />
 
-      <p className="mt-3 text-right font-mono text-[0.62rem] text-ink-mute">
+      <section
+        className="border border-hair bg-surface p-4"
+        data-testid="open-positions-panel"
+        aria-label="Open positions"
+      >
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="m-0 font-display text-xl font-normal text-ink">Open positions</h2>
+          <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+            open book · unrealized
+          </span>
+        </div>
+        {unrealized.length ? (
+          <DivergingBars
+            items={unrealized.map((b) => ({
+              id: b.id,
+              label: b.label,
+              value: b.value,
+              display: pct(b.value),
+            }))}
+            sort="abs"
+            label="Unrealized return by open position, percent"
+          />
+        ) : (
+          <p className="m-0 py-8 text-center text-sm text-ink-mute">
+            No open position performance is stored yet.
+          </p>
+        )}
+        {data.currentHoldings.length ? (
+          <div className="mt-3 max-h-[22rem] overflow-auto print:max-h-none print:overflow-visible">
+              <table className="mt-2 w-full border-collapse font-mono text-[0.75rem] tabular-nums">
+                <thead>
+                  <tr className="text-left text-[0.58rem] uppercase tracking-wider text-ink-mute">
+                    <th className="py-1 font-normal">Holding</th>
+                    <th className="py-1 font-normal">Category</th>
+                    <th className="py-1 text-right font-normal">Weight</th>
+                    <th className="py-1 text-right font-normal">Unrealized</th>
+                    <th className="py-1 text-right font-normal">As of</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.currentHoldings.map((row) => (
+                    <tr key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}`} className="border-t border-hair">
+                      <td className="py-1 font-semibold text-ink">{row.ticker}</td>
+                      <td className="py-1 text-ink-soft">{formatAllocationCategory(row.category)}</td>
+                      <td className="py-1 text-right">
+                        {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="py-1 text-right">
+                        {row.unrealizedReturnPct != null ? pct(row.unrealizedReturnPct) : '—'}
+                      </td>
+                      <td className="py-1 text-right text-ink-mute">{row.attributionDate ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        data-testid="ledger-doorway"
+        aria-label="Realized exits and trims"
+        className="border border-hair bg-surface p-4"
+      >
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="m-0 font-display text-xl font-normal text-ink">Realized</h2>
+          <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+            {sellCount > 0
+              ? `${sellCount} recorded ${sellCount === 1 ? 'exit or trim' : 'exits & trims'}`
+              : 'No recorded exits or trims'}
+            {' · '}
+            <Link
+              href={ledgerHref()}
+              className="font-medium text-accent hover:underline print:hidden"
+              data-testid="ledger-doorway-link"
+            >
+              Open ledger
+            </Link>
+          </span>
+        </div>
+        {realized.length ? (
+          <DivergingBars
+            items={realized.map((b) => ({
+              id: b.id,
+              label: b.label,
+              value: b.value,
+              display: pct(b.value),
+            }))}
+            sort="abs"
+            label="Realized return by exit or trim, percent"
+          />
+        ) : null}
+      </section>
+
+      <p className="m-0 text-right font-mono text-[0.62rem] text-ink-mute">
         Holdings as of {data.holdingsAsOf ?? '—'}
       </p>
     </div>

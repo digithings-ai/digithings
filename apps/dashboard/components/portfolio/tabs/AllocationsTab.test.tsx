@@ -51,7 +51,7 @@ describe('AllocationsTab', () => {
   it('fills the available page height while keeping a minimum workspace height', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
     expect(html).toContain(
-      'data-region="holdings-frame" class="flex min-h-[28rem] flex-1 flex-col overflow-hidden"',
+      'data-region="holdings-frame" class="flex min-h-[28rem] flex-1 flex-col gap-4 overflow-hidden"',
     );
   });
 
@@ -68,6 +68,24 @@ describe('AllocationsTab', () => {
     expect(html).toContain('55.0%');
     expect(html).toContain('45.0%'); // cash = 100 − invested
     expect(html).not.toContain('60.0%');
+  });
+
+  it('composes stats, composition and the positions pane by default', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain('data-testid="command-band"');
+    expect(html).toContain('data-testid="book-composition"');
+    expect(html).toContain('data-region="ledger"');
+    expect(html).not.toContain('data-testid="book-activity"');
+  });
+
+  it('swaps the positions table for position-event activity on pane=activity', () => {
+    const events = [
+      { id: 'e1', date: '2026-06-23', ticker: 'NVDA', event: 'OPEN' },
+    ] as unknown as NonNullable<Parameters<typeof AllocationsTab>[0]['events']>;
+    const html = renderToStaticMarkup(createElement(AllocationsTab, { ...base, pane: 'activity', events }));
+    expect(html).toContain('data-testid="book-activity"');
+    expect(html).not.toContain('data-region="ledger"');
+    expect(html).toContain('data-testid="command-band"');
   });
 
   it('shows locked surface for Observer (free) instead of weights', () => {

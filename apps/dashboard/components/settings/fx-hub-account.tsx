@@ -15,7 +15,7 @@ export function FxHubAccount({ fxHubGranted }: { fxHubGranted: boolean }) {
   const email = user?.email ?? null;
   return (
     <div
-      className="border border-hair bg-term-bg/50 divide-y divide-hair"
+      className="border border-hair bg-surface divide-y divide-hair"
       data-testid="fx-hub-account"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
@@ -39,7 +39,7 @@ export function FxHubAccount({ fxHubGranted }: { fxHubGranted: boolean }) {
         onClick={() => {
           void signOut();
         }}
-        className="h-auto w-full justify-start gap-2 rounded-none px-3 py-2.5 text-xs font-medium text-ink-soft hover:bg-ink/[0.04] hover:text-ink transition-colors"
+        className="h-auto w-full justify-start gap-2 rounded-none px-3 py-2.5 text-xs font-medium text-ink-soft hover:bg-surface hover:text-ink transition-colors"
         data-testid="fx-hub-sign-out"
       >
         <LogOut size={14} className="shrink-0 text-ink-mute" aria-hidden />

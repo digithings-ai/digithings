@@ -218,7 +218,7 @@ describe('ConsensusTab Table view', () => {
   it('hides the Charts-view containers when on the Table view', () => {
     const html = render();
     // The line/area chart containers are only mounted in the Charts view.
-    expect(html).not.toContain('data-chart="line"');
+    expect(html).not.toContain('data-chart="small-multiples"');
   });
 
   it('does NOT render the removed Biggest shift banner', () => {
@@ -237,9 +237,10 @@ describe('ConsensusTab Table view', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('ConsensusTab Charts view', () => {
-  it('shows the single full-width score-over-time chart', () => {
+  it('shows one small multiple per currency', () => {
     const html = render({ initialView: 'charts' });
-    expect(html).toContain('data-chart="line"');
+    expect(html).toContain('data-chart="small-multiples"');
+    for (const ccy of G10_CURRENCIES) expect(html).toContain(`data-ccy="${ccy}"`);
     expect(html).toContain('Consensus score over time');
   });
 
@@ -267,12 +268,9 @@ describe('ConsensusTab Charts view', () => {
     expect(html).not.toContain('data-ccy-chip=');
   });
 
-  it('renders an interactive custom legend with aria-pressed', () => {
+  it('each small multiple is a button that opens the drilldown', () => {
     const html = render({ initialView: 'charts' });
-    // The legend should have buttons for each currency.
-    for (const ccy of G10_CURRENCIES.slice(0, 3)) {
-      expect(html).toMatch(new RegExp(`aria-pressed="(true|false)"[^>]*>${ccy}`));
-    }
+    expect(html).toMatch(/title="USD: [^"]*open drilldown"/);
   });
 
   it('does NOT render the removed Biggest shift card in Charts view', () => {

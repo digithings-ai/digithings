@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
+import { decisionsHref } from '@/lib/portfolio-url-state';
 import PageSkeleton from '@/components/page-skeleton';
 import { ConvictionMeter } from '@digithings/ui';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
@@ -29,7 +29,7 @@ const CONFIDENCE_PIPS = 4;
  * rendered on — linking there would bounce through the hub redirect and cost a
  * second navigation to reach the same place.
  */
-const THESES_TAB_HREF = '/portfolio?tab=theses';
+const THESES_TAB_HREF = decisionsHref('theses');
 
 function confidenceToPips(confidence: number | null): number {
   if (confidence == null) return 0;
@@ -123,7 +123,6 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   if (thesisId !== '_unlinked' && !thesis) {
     return (
       <div className="flex min-h-full flex-col">
-        <PortfolioSectionNav active="theses" />
         <div className={`${SUBPAGE_MAX} space-y-4 py-8`}>
           <Link
             href={THESES_TAB_HREF}
@@ -143,7 +142,6 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   if (thesisId === '_unlinked') {
     return (
       <div className="flex min-h-full flex-col">
-        <PortfolioSectionNav active="theses" />
         <div className={`${SUBPAGE_MAX} flex-1 space-y-8 py-6 md:py-8`}>
           <div className="space-y-3">
             <Link
@@ -171,7 +169,6 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
 
   return (
     <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active="theses" />
       <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-6 md:py-8`}>
         <Link
           href={THESES_TAB_HREF}

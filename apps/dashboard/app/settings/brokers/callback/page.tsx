@@ -11,6 +11,7 @@ import {
   connectBrokerOAuth,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import { brokersReturnHref } from '@/lib/settings-sections';
 import { useAuth } from '@/lib/auth-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 
@@ -71,10 +72,10 @@ export default function AlpacaOAuthCallbackPage() {
         if (cancelled) return;
         setStatus('ok');
         setDetail(
-          `Connected ${row.broker} (${row.env}) — fingerprint ${row.fingerprint}. Returning to Brokers…`,
+          `Connected ${row.broker} (${row.env}) — fingerprint ${row.fingerprint}. Returning to Brokers and connections…`,
         );
         window.setTimeout(() => {
-          window.location.assign(settingsHomeHref());
+          window.location.assign(brokersReturnHref(settingsHomeHref()));
         }, 1200);
       } catch (err: unknown) {
         // Leave nonce in place so the user can retry from Brokers (fresh state).

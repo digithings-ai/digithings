@@ -5,17 +5,19 @@ const portfolio = WORKSPACE.find((g) => g.id === 'portfolio')!;
 const fx = WORKSPACE.find((g) => g.id === 'twelve-x')!;
 
 describe('activeChildId', () => {
-  it('defaults to Holdings on /portfolio and Today on /twelve-x', () => {
-    expect(activeChildId(portfolio, '/portfolio', '', '')).toBe('holdings');
+  it('defaults to Book on /portfolio and Today on /twelve-x', () => {
+    expect(activeChildId(portfolio, '/portfolio', '', '')).toBe('book');
     expect(activeChildId(fx, '/twelve-x', '', '')).toBe('today');
   });
 
   it('follows ?tab= and sub-routes', () => {
-    expect(activeChildId(portfolio, '/portfolio', '?tab=theses', '')).toBe('theses');
-    expect(activeChildId(portfolio, '/portfolio/theses/abc', '', '')).toBe('theses');
-    expect(activeChildId(portfolio, '/portfolio/performance', '', '')).toBe('tearsheet');
-    expect(activeChildId(portfolio, '/performance', '', '')).toBe('tearsheet');
-    expect(activeChildId(portfolio, '/portfolio/attribution', '', '')).toBe('attribution');
+    expect(activeChildId(portfolio, '/portfolio', '?tab=decisions', '')).toBe('decisions');
+    expect(activeChildId(portfolio, '/portfolio/theses', '?thesis=abc', '')).toBe('decisions');
+    expect(activeChildId(portfolio, '/portfolio/performance', '', '')).toBe('performance');
+    expect(activeChildId(portfolio, '/performance', '', '')).toBe('performance');
+    expect(activeChildId(portfolio, '/portfolio/attribution', '', '')).toBe('decisions');
+    expect(activeChildId(portfolio, '/portfolio/ledger', '', '')).toBe('book');
+    expect(activeChildId(portfolio, '/portfolio/tickers', '?ticker=SPY', '')).toBe('book');
     expect(activeChildId(fx, '/twelve-x', '?tab=matrix', '')).toBe('matrix');
   });
 
@@ -35,7 +37,7 @@ describe('activeChildId', () => {
 
 describe('childHref / titleFor / layoutFor', () => {
   it('builds query and hash hrefs', () => {
-    expect(childHref(portfolio.children[1]!)).toBe('/portfolio?tab=theses');
+    expect(childHref(portfolio.children[2]!)).toBe('/portfolio?tab=decisions');
     expect(childHref(settingsGroup('enterprise').children[0]!)).toMatch(/^\/settings#/);
   });
 

@@ -32,7 +32,7 @@ describe('ProfileTab', () => {
       }),
     );
     expect(html).toContain('settings-profile-tab');
-    expect(html).toContain('Investment profile');
+    expect(html).toContain('Posture and asset preferences');
   });
 
   it('valid save appends version (mock asserts payload)', async () => {

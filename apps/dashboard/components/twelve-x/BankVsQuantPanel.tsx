@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Button,
   Card,
+  ScoreBar,
   Table,
   TableBody,
   TableCell,
@@ -13,9 +14,8 @@ import {
 } from '@digithings/ui/ui';
 import type { FxConsensusDivergence } from '@/lib/twelve-x/types';
 import type { ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
-import { currencyColor } from '@/lib/twelve-x/consensus-bar';
+import { consensusScoreBarProps } from '@/lib/twelve-x/consensus-bar';
 import { fmtSigned } from '@/lib/twelve-x/format';
-import { ConsensusScoreBar } from './ConsensusScoreBars';
 import DivergencePanel from './DivergencePanel';
 
 export interface BankVsQuantRow {
@@ -110,10 +110,7 @@ export function BankVsQuantPanel({
                   className="h-auto justify-start gap-0 p-0 text-left"
                   title={row.label || row.currency}
                 >
-                  <span
-                    className="font-mono font-semibold text-[13px]"
-                    style={{ color: currencyColor(row.currency) }}
-                  >
+                  <span className="font-mono text-[13px] font-semibold text-ink">
                     {row.currency}
                   </span>
                   {row.isDivergent ? (
@@ -126,7 +123,7 @@ export function BankVsQuantPanel({
               <TableCell className="px-3 py-2">
                 <div className="flex items-center gap-2">
                   <div className="flex min-w-[100px] flex-1">
-                    <ConsensusScoreBar value={row.streetScore} />
+                    <ScoreBar label={`${row.currency} street`} {...consensusScoreBarProps(row.streetScore)} />
                   </div>
                   <span className="font-mono tabular-nums text-ink-soft">
                     {fmtSigned(row.streetScore)}
@@ -136,7 +133,7 @@ export function BankVsQuantPanel({
               <TableCell className="px-3 py-2">
                 <div className="flex items-center gap-2">
                   <div className="flex min-w-[100px] flex-1">
-                    <ConsensusScoreBar value={row.quantScore} />
+                    <ScoreBar label={`${row.currency} quant`} {...consensusScoreBarProps(row.quantScore)} />
                   </div>
                   <span className="font-mono tabular-nums text-ink-soft">
                     {fmtSigned(row.quantScore)}

@@ -24,6 +24,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Skeleton,
 } from '@digithings/ui/ui';
 import {
   SETTINGS_LOAD_ERROR_MESSAGE,
@@ -209,25 +210,26 @@ export function ProfileTab({
   return (
     <div className="space-y-5" data-testid="settings-profile-tab">
       <div>
-        <h2 className="font-display text-xl text-ink tracking-tight">Investment profile</h2>
-        <p className="mt-1 text-sm text-ink-soft">
+        <p className="text-sm text-ink-soft">
           Posture and asset preferences become a versioned overlay pin. The digithings house
           profile stays untouched.
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-ink-soft" data-testid="profile-loading">
-          Loading saved overlay…
-        </p>
+        <div data-testid="profile-loading" className="space-y-1.5">
+          <Skeleton variant="line" />
+          <Skeleton variant="line" />
+          <span className="sr-only">Loading saved overlay</span>
+        </div>
       ) : null}
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Overlay key
         </span>
         <Input
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink font-mono"
           value={profileKey}
           onChange={(e) => setProfileKey(e.target.value)}
           data-testid="profile-key-input"
@@ -235,11 +237,11 @@ export function ProfileTab({
       </Label>
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Label
         </span>
         <Input
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
         />
@@ -254,14 +256,14 @@ export function ProfileTab({
           testId="risk-tolerance"
         />
         <Label className="block space-y-1">
-          <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+          <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
             Horizon (years)
           </span>
           <Input
             type="number"
             min={1}
             max={50}
-            className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+            className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink font-mono"
             value={investment.horizon_years}
             onChange={(e) =>
               setInvestment((s) => ({ ...s, horizon_years: Number(e.target.value) }))
@@ -296,11 +298,11 @@ export function ProfileTab({
       </div>
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Excluded tickers
         </span>
         <Input
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink font-mono"
           placeholder="TSLA, GME"
           value={excludedTickers}
           onChange={(e) => setExcludedTickers(e.target.value)}
@@ -354,7 +356,7 @@ function SelectField({
 }) {
   return (
     <Label className="block space-y-1">
-      <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+      <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
         {label}
       </span>
       <Select
@@ -364,7 +366,7 @@ function SelectField({
         }}
       >
         <SelectTrigger
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink"
           data-testid={testId}
         >
           <SelectValue />

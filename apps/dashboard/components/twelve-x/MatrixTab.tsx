@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Button, Card } from '@digithings/ui/ui';
+import { Button, Card, CompositionBar, HeatGrid } from '@digithings/ui/ui';
 import { Grid3x3 } from 'lucide-react';
 
 import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
 import type { MatrixCell } from '@/lib/twelve-x/types';
 import { directionStyle, formatTargets, convictionOpacity } from '@/lib/twelve-x/matrix-format';
+import { deriveMatrixHeat, matrixHeatSummary } from '@/lib/twelve-x/matrix-heat';
 import BrokerProfilePanel from './BrokerProfilePanel';
 import MatrixCellHistoryPanel from './MatrixCellHistoryPanel';
 
@@ -38,6 +39,7 @@ export default function MatrixTab({
     return m;
   }, [cells]);
 
+  const heat = useMemo(() => deriveMatrixHeat(cells), [cells]);
   const hasData = brokers.length > 0;
 
   // Sticky broker label column + one column per G10 currency (fixed 8).
@@ -60,6 +62,53 @@ export default function MatrixTab({
         colored by direction and shaded by conviction; click a cell to open its source brief, or a
         desk name to see that broker&apos;s full standing-view profile.
       </p>
+
+      {hasData ? (
+        <Card data-reveal className="gap-3 p-4" data-testid="matrix-heat">
+          <p className="sr-only">{matrixHeatSummary(heat)}</p>
+          <div className="overflow-x-auto">
+            <HeatGrid
+              label="Desk conviction by currency"
+              rows={heat.brokers}
+              cols={[...heat.columns]}
+              values={heat.values}
+              scale="diverging"
+              domain={[-1, 1]}
+              midpoint={0}
+              cellWidth={44}
+              cellHeight={18}
+              labelWidth={140}
+            />
+          </div>
+          <ul
+            className="grid grid-cols-4 gap-x-3 gap-y-2 sm:grid-cols-8"
+            aria-label="Crowd lean by currency"
+          >
+            {heat.crowd.map((c) => (
+              <li key={c.column} className="min-w-0">
+                <p className="flex items-baseline justify-between font-mono text-[10px] text-ink-soft">
+                  <span>{c.column}</span>
+                  <span className="text-ink-mute">{c.total}</span>
+                </p>
+                <CompositionBar
+                  height={5}
+                  label={`${c.column} crowd: ${c.bull} bullish, ${c.bear} bearish, ${c.watch} watch, ${c.neutral} neutral`}
+                  segments={[
+                    { key: 'bull', label: 'Bullish', value: c.bull, tone: 'accent' },
+                    { key: 'bear', label: 'Bearish', value: c.bear, tone: 'warn' },
+                    { key: 'watch', label: 'Watch', value: c.watch, tone: 'soft' },
+                    { key: 'neutral', label: 'Neutral', value: c.neutral, tone: 'mute' },
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
+          <p className="font-mono text-[10px] text-ink-mute">
+            Overview: signed conviction (bullish +, bearish −) · bars show each currency&apos;s crowd
+            split. Open a cell below for its brief or history.
+          </p>
+        </Card>
+      ) : null}
 
       {hasData ? (
         <Card data-reveal className="gap-0 overflow-hidden p-0">

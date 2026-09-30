@@ -534,6 +534,7 @@ export default function TwelveXClient() {
             events={data?.todayEvents ?? []}
             series={data?.consensusSeries ?? []}
             divergenceByCurrency={data?.divergenceByCurrency ?? {}}
+            ideaEval={data?.ideaEval ?? []}
             onSeeAllBriefs={openBriefsIndex}
           />
         );

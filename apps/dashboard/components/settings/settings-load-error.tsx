@@ -34,7 +34,7 @@ export function SettingsLoadError({
   return (
     <Alert
       data-testid={testId}
-      className={`flex items-start justify-between gap-4 bg-term-bg/40 px-3 py-2 ${
+      className={`flex items-start justify-between gap-4 bg-surface px-3 py-2 ${
         soft ? 'border-warn/40' : 'border-down/40'
       }`}
     >

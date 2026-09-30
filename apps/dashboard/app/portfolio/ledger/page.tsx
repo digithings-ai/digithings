@@ -1,7 +1,6 @@
 'use client';
 
-import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
+import BookActivity from '@/components/portfolio/BookActivity';
 import PageSkeleton from '@/components/page-skeleton';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { Button, EmptyState } from '@digithings/ui/ui';
@@ -25,7 +24,6 @@ export default function PortfolioLedgerPage() {
   if (!can(tier, 'house_weights_nav')) {
     return (
       <div className="flex min-h-full flex-col" data-testid="ledger-locked">
-        <PortfolioSectionNav active="ledger" />
         <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
           <div>
             <h1 className="font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
@@ -49,7 +47,6 @@ function LedgerBody() {
   if (error || !data) {
     return (
       <div className="flex min-h-full flex-col">
-        <PortfolioSectionNav active="ledger" />
         <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
           <EmptyState
             variant="error"
@@ -76,7 +73,6 @@ function LedgerBody() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active="ledger" />
       <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
         <div>
           <h1 className="font-display text-xl font-normal tracking-tight text-ink">Ledger</h1>
@@ -85,11 +81,7 @@ function LedgerBody() {
             service_role-only — this surface shows the public event stream only.
           </p>
         </div>
-        {events.length === 0 ? (
-          <p className="text-sm text-ink-mute">No position events recorded yet.</p>
-        ) : (
-          <HoldingsActivityTable events={events} />
-        )}
+        <BookActivity events={events} />
       </div>
     </div>
   );

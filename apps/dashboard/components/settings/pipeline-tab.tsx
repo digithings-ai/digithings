@@ -34,7 +34,10 @@ import {
   TableHeader,
   TableRow,
   TableRowHeader,
+  Skeleton,
+  StatusStrip,
 } from '@digithings/ui/ui';
+import { jobsToStrip, nextScheduledDay, scheduleSummary } from '@/lib/settings-runs';
 import {
   STAGE_LABELS,
   STAGES,
@@ -103,6 +106,8 @@ export function PipelineTab({
   const [loading, setLoading] = useState(false);
   const [savedVersion, setSavedVersion] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobRunView[]>([]);
+  // Clock is read post-hydration so the prerendered readout never disagrees with the client.
+  const [now, setNow] = useState<number | null>(null);
 
   const applyTip = useCallback(
     (next: ProfileTip) => {
@@ -147,6 +152,7 @@ export function PipelineTab({
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- hydrate tip after mount */
+    setNow(Date.now());
     void hydrate();
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [hydrate]);
@@ -229,28 +235,32 @@ export function PipelineTab({
     }
   }
 
+  const runs = jobsToStrip(jobs, 20);
+  const next = now === null ? null : nextScheduledDay(schedule, now);
+
   return (
     <div className="space-y-5" data-testid="settings-pipeline-tab">
       <div>
-        <h2 className="font-display text-xl text-ink tracking-tight">Pipeline</h2>
-        <p className="mt-1 text-sm text-ink-soft">
+        <p className="text-sm text-ink-soft">
           Overlay research knobs for your workspace run. The digithings house pipeline stays
           always-on and immutable.
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-ink-soft" data-testid="pipeline-loading">
-          Loading overlay knobs…
-        </p>
+        <div data-testid="pipeline-loading" className="space-y-1.5">
+          <Skeleton variant="line" />
+          <Skeleton variant="line" />
+          <span className="sr-only">Loading overlay knobs</span>
+        </div>
       ) : null}
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Watchlist tickers
         </span>
         <Input
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm font-mono text-ink"
           value={watchlist}
           onChange={(e) => setWatchlist(e.target.value)}
           placeholder="AAPL, MSFT"
@@ -259,11 +269,11 @@ export function PipelineTab({
       </Label>
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Themes
         </span>
         <Input
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink"
           value={themes}
           onChange={(e) => setThemes(e.target.value)}
           placeholder="ai, energy"
@@ -272,11 +282,11 @@ export function PipelineTab({
       </Label>
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Research budget (USD)
         </span>
         <Input
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm font-mono text-ink"
           value={budget}
           onChange={(e) => setBudget(e.target.value)}
           placeholder="Leave blank for none"
@@ -292,7 +302,7 @@ export function PipelineTab({
         <div>
           <h3
             id="pipeline-schedule-heading"
-            className="text-[10px] font-medium uppercase tracking-widest text-ink-mute"
+            className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute"
           >
             Stage schedule
           </h3>
@@ -302,6 +312,27 @@ export function PipelineTab({
             closed.
           </p>
         </div>
+        <p
+          className="font-mono text-xs text-ink-soft"
+          data-testid="pipeline-schedule-summary"
+          role="status"
+        >
+          {scheduleSummary(schedule)}
+          {next ? (
+            <>
+              {' · next: '}
+              <span className="text-ink">
+                {next.offset === 0 ? 'today' : WEEKDAY_LABELS[next.day]} (
+                {next.stages.map((st) => STAGE_LABELS[st].toLowerCase()).join(', ')})
+              </span>
+              {next.stages.includes('execution') ? (
+                <span className="text-warn"> · execution defers on closed sessions</span>
+              ) : null}
+            </>
+          ) : now !== null ? (
+            ' · no runs scheduled'
+          ) : null}
+        </p>
         <Table className="min-w-[28rem] border-collapse text-sm">
           <TableCaption className="sr-only">
             Enable research, deliberation, and execution by weekday
@@ -331,7 +362,13 @@ export function PipelineTab({
                   const checked = schedule[day][stage];
                   const id = `pipeline-stage-${day}-${stage}`;
                   return (
-                    <TableCell key={day} className="border border-hair px-2 py-1.5 text-center">
+                    <TableCell
+                      key={day}
+                      data-on={checked ? 'true' : 'false'}
+                      className={`border border-hair px-2 py-1.5 text-center ${
+                        checked ? (stage === 'execution' ? 'bg-warn/15' : 'bg-accent-weak') : ''
+                      }`}
+                    >
                       <Checkbox
                         id={id}
                         aria-label={`${STAGE_LABELS[stage]} on ${WEEKDAY_LABELS[day]}`}
@@ -357,7 +394,7 @@ export function PipelineTab({
         <div>
           <h3
             id="pipeline-execution-heading"
-            className="text-[10px] font-medium uppercase tracking-widest text-ink-mute"
+            className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute"
           >
             Execution policy
           </h3>
@@ -368,7 +405,7 @@ export function PipelineTab({
         </div>
 
         <div
-          className="space-y-1 border border-hair bg-term-bg/40 px-3 py-2"
+          className="space-y-1 border border-hair bg-surface px-3 py-2"
           data-testid="pipeline-calendar-guard"
         >
           <p className="text-sm text-ink">
@@ -405,7 +442,7 @@ export function PipelineTab({
           )}
         </div>
 
-        <div className="flex select-none items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+        <div className="flex select-none items-center justify-between gap-3 border border-hair bg-surface px-3 py-2">
           <span className="text-sm text-ink-soft">Respect early close</span>
           <Switch
             checked={policy.respect_early_close}
@@ -418,11 +455,11 @@ export function PipelineTab({
         </div>
 
         <Label className="block space-y-1">
-          <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+          <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
             Preferred venues
           </span>
           <Input
-            className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+            className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm font-mono text-ink"
             value={venuesInput}
             onChange={(e) => setVenuesInput(e.target.value)}
             placeholder="Empty = no preference filter"
@@ -466,25 +503,30 @@ export function PipelineTab({
       ) : null}
 
       <div className="space-y-2" data-testid="pipeline-runs">
-        <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Overlay runs
         </p>
+        <StatusStrip
+          cells={runs.cells}
+          label={runs.summary}
+          height={14}
+          data-testid="pipeline-runs-strip"
+        />
+        <p className="font-mono text-xs text-ink-soft" data-testid="pipeline-runs-summary">
+          {runs.summary}
+        </p>
         <p className="text-xs text-ink-mute">
-          Scheduled overlay jobs for this workspace. Skip reasons such as
-          <span className="font-mono"> no_credentials</span> mean the Keys tab still needs a
-          sealed BYOK row. <span className="font-mono">succeeded</span> is the remaining-hop
-          proof; persist-off finishes <span className="font-mono">persist_disabled</span>.
+          Skip reasons such as <span className="font-mono">no_credentials</span> mean Connections
+          still needs a sealed model key. <span className="font-mono">succeeded</span> is the
+          remaining-hop proof; persist-off finishes{' '}
+          <span className="font-mono">persist_disabled</span>.
         </p>
         {jobs.length === 0 ? (
           <p className="text-sm text-ink-mute">No overlay runs yet.</p>
         ) : (
           <ul className="divide-y divide-hair border border-hair">
-            {jobs.map((job) => (
-              <li
-                key={job.id}
-                className="px-3 py-2 text-sm"
-                data-testid="pipeline-run-row"
-              >
+            {jobs.slice(0, 8).map((job) => (
+              <li key={job.id} className="px-3 py-2 text-sm" data-testid="pipeline-run-row">
                 <p className="font-mono text-ink">
                   {job.status}
                   {job.error ? ` · ${job.error}` : ''}

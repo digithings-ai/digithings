@@ -46,17 +46,15 @@ const portfolio: NavGroupItem = {
   layout: 'contained',
   title: 'Portfolio',
   children: [
-    { id: 'holdings', label: 'Holdings', path: '/portfolio', isDefault: true },
+    { id: 'book', label: 'Book', path: '/portfolio', isDefault: true },
+    { id: 'performance', label: 'Performance', path: '/portfolio/performance', alsoPaths: ['/performance', '/portfolio/period'] },
     {
-      id: 'theses',
-      label: 'Theses',
+      id: 'decisions',
+      label: 'Decisions',
       path: '/portfolio',
-      param: { key: 'tab', value: 'theses' },
-      alsoPaths: ['/portfolio/theses'],
+      param: { key: 'tab', value: 'decisions' },
+      alsoPaths: ['/portfolio/theses', '/portfolio/attribution'],
     },
-    { id: 'tearsheet', label: 'Tearsheet', path: '/portfolio/performance', alsoPaths: ['/performance'] },
-    { id: 'attribution', label: 'Attribution', path: '/portfolio/attribution' },
-    { id: 'ledger', label: 'Ledger', path: '/portfolio/ledger' },
   ],
 };
 

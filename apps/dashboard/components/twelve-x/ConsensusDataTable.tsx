@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Button,
   Card,
+  ScoreBar,
   Table,
   TableBody,
   TableCell,
@@ -16,14 +17,13 @@ import {
 import {
   LEAN_BAND,
   STRONG_BAND,
-  currencyColor,
+  consensusScoreBarProps,
   scoreColorClass,
   scoreLabel,
 } from '@/lib/twelve-x/consensus-bar';
 import type { ConsensusDeltaSet, FxConsensusDivergence, FxConsensusSnapshotRow } from '@/lib/twelve-x/types';
 import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { fmtNEff, fmtSigned } from '@/lib/twelve-x/format';
-import { ConsensusScoreBar } from './ConsensusScoreBars';
 import DeltaChip from './DeltaChip';
 import DivergenceChip from './DivergenceChip';
 
@@ -261,10 +261,7 @@ export function ConsensusDataTable({
                   className="text-sm hover:bg-ink/[0.02]"
                 >
                   <TableRowHeader className="px-3.5 py-2.5">
-                    <span
-                      className="font-mono font-semibold text-[13px]"
-                      style={{ color: currencyColor(row.currency) }}
-                    >
+                    <span className="font-mono text-[13px] font-semibold text-ink">
                       {row.currency}
                     </span>
                   </TableRowHeader>
@@ -296,7 +293,7 @@ export function ConsensusDataTable({
                   </TableCell>
                   <TableCell className="px-3.5 py-2.5">
                     <div className="flex min-w-[120px]">
-                      <ConsensusScoreBar value={score} />
+                      <ScoreBar label={`${row.currency} consensus`} {...consensusScoreBarProps(score)} />
                     </div>
                   </TableCell>
                   <TableCell className="px-3.5 py-2.5 text-center">

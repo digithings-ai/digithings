@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  barFillPct,
-  currencyColor,
+  consensusScoreBarProps,
   LEAN_BAND,
   SCORE_MAX,
   scoreColorClass,
   scoreLabel,
   STRONG_BAND,
-  tickPct,
 } from './consensus-bar';
 
 describe('consensus-bar constants', () => {
@@ -59,56 +57,35 @@ describe('scoreLabel', () => {
   });
 });
 
-describe('currencyColor', () => {
-  it('returns the stable G10 color', () => {
-    expect(currencyColor('USD')).toBe('#3B82F6');
-    expect(currencyColor('NOK')).toBe('#14B8A6');
+describe('consensusScoreBarProps', () => {
+  it('uses the symmetric consensus axis', () => {
+    const p = consensusScoreBarProps(1);
+    expect(p.min).toBe(-SCORE_MAX);
+    expect(p.max).toBe(SCORE_MAX);
+    expect(p.value).toBe(1);
   });
 
-  it('falls back to slate for unknown currencies', () => {
-    expect(currencyColor('XXX')).toBe('#94a3b8');
-  });
-});
-
-describe('barFillPct', () => {
-  it('is 0 at a zero score', () => {
-    expect(barFillPct(0)).toBe(0);
+  it('is accent for bullish and warn for bearish, never up/down', () => {
+    expect(consensusScoreBarProps(0.5).tone).toBe('accent');
+    expect(consensusScoreBarProps(0).tone).toBe('accent');
+    expect(consensusScoreBarProps(-0.5).tone).toBe('warn');
   });
 
-  it('reaches 50 at the score extremes', () => {
-    expect(barFillPct(SCORE_MAX)).toBe(50);
-    expect(barFillPct(-SCORE_MAX)).toBe(50);
+  it('draws the empty track for non-finite values', () => {
+    expect(consensusScoreBarProps(null).value).toBeNull();
+    expect(consensusScoreBarProps(Number.NaN).value).toBeNull();
+    expect(consensusScoreBarProps(undefined).tone).toBe('accent');
   });
 
-  it('clamps magnitudes beyond the max', () => {
-    expect(barFillPct(5)).toBe(50);
-    expect(barFillPct(-5)).toBe(50);
+  it('adds one labelled reference tick only when an actual is given', () => {
+    expect(consensusScoreBarProps(1).ticks).toEqual([]);
+    const p = consensusScoreBarProps(1, { value: 1.4, label: "Today's actual" });
+    expect(p.ticks).toEqual([{ value: 1.4, label: "Today's actual", tone: 'ink' }]);
   });
 
-  it('is linear in between', () => {
-    expect(barFillPct(1)).toBe(25);
-  });
-});
-
-describe('tickPct', () => {
-  it('centers at 50 for a zero value', () => {
-    expect(tickPct(0)).toBe(50);
-  });
-
-  it('maps the positive extreme to 100', () => {
-    expect(tickPct(2)).toBe(100);
-  });
-
-  it('maps the negative extreme to 0', () => {
-    expect(tickPct(-2)).toBe(0);
-  });
-
-  it('clamps out-of-range values', () => {
-    expect(tickPct(5)).toBe(100);
-    expect(tickPct(-5)).toBe(0);
-  });
-
-  it('is linear in between', () => {
-    expect(tickPct(1)).toBe(75);
+  it('formats signed to two decimals', () => {
+    const p = consensusScoreBarProps(1);
+    expect(p.format(0.5)).toBe('+0.50');
+    expect(p.format(-1.234)).toBe('-1.23');
   });
 });

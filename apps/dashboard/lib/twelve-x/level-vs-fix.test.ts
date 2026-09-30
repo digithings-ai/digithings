@@ -3,6 +3,7 @@ import {
   buildLevelFixSeries,
   composeFixSeries,
   fixWindowDays,
+  levelFixRange,
   normalizeFixPair,
   pairFixSpec,
   type FxFixPoint,
@@ -196,5 +197,43 @@ describe('fixWindowDays', () => {
 
   it('clamps unparseable run dates to the floor', () => {
     expect(fixWindowDays('not-a-date', '2026-06-12')).toBe(90);
+  });
+});
+
+describe('levelFixRange', () => {
+  const base = {
+    pair: 'EUR/USD',
+    entryLow: 1.08,
+    entryHigh: 1.085,
+    stop: 1.07,
+    targets: [1.1],
+    entryDate: null,
+    exitDate: null,
+    entryFix: null,
+    exitFix: null,
+    points: pts(['2026-06-13', '2026-06-14'], [1.082, 1.09]),
+    anchorsOnly: false,
+  };
+
+  it('spans levels and fixes with padding and marks the latest fix', () => {
+    const r = levelFixRange(base)!;
+    expect(r.low).toBeLessThan(1.07);
+    expect(r.high).toBeGreaterThan(1.1);
+    expect(r.markers.map((m) => m.kind)).toEqual(['entry', 'entry', 'stop', 'target', 'current']);
+    expect(r.markers.at(-1)?.value).toBe(1.09);
+  });
+
+  it('widens to include a fix that overshoots the levels', () => {
+    const r = levelFixRange({ ...base, points: pts(['2026-06-13'], [1.2]) })!;
+    expect(r.high).toBeGreaterThan(1.2);
+  });
+
+  it('has no range with a single value or nothing', () => {
+    expect(
+      levelFixRange({ ...base, entryLow: 1.08, entryHigh: null, stop: null, targets: [], points: [] }),
+    ).toBeNull();
+    expect(
+      levelFixRange({ ...base, entryLow: null, entryHigh: null, stop: null, targets: [], points: [] }),
+    ).toBeNull();
   });
 });

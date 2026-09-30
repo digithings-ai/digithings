@@ -2,22 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import PageSkeleton from '@/components/page-skeleton';
-import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { PerformanceTearsheetView } from '@/components/tearsheet/DashboardTearsheetView';
 import { EntitledSurface } from '@/components/entitled-surface';
-import { getPerformanceBundle } from '@/lib/observability-queries';
+import { fetchPortfolioAttribution, getPerformanceBundle } from '@/lib/observability-queries';
 import type { PerformanceSsotMeta } from '@/lib/performance-ssot';
+import type { TableRow } from '@/lib/database.types';
 import { useCan } from '@/lib/use-entitlement';
 import type { PerformanceTearsheet } from '@/components/tearsheet/types';
 
 /**
- * Tearsheet — persisted cumulative returns and stored holding-attribution
- * windows. Loads via `getPerformanceBundle` (same NAV adapter as Brief #3580).
- * The screen does not recalculate headline metrics from raw NAV outside that
- * shared builder.
+ * Performance: persisted cumulative returns, NAV vs benchmark, drawdown,
+ * contribution and the current-book lookback bridge. Loads via
+ * `getPerformanceBundle` (same NAV adapter as Brief #3580); the screen does not
+ * recalculate headline metrics from raw NAV outside that shared builder. The
+ * attribution fetch is fail-soft: without it the bridge shows its empty state.
  *
- * Tier: `house_weights_nav` (Baseline+). Skip the tearsheet fetch when locked
+ * Tier: `house_weights_nav` (Baseline+). Skip fetches when locked
  * (fail-closed + saves quota).
  */
 export default function PerformancePage() {
@@ -25,6 +26,7 @@ export default function PerformancePage() {
   const [data, setData] = useState<PerformanceTearsheet | null>(null);
   const [ssot, setSsot] = useState<PerformanceSsotMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attribution, setAttribution] = useState<TableRow<'position_attribution'>[]>([]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -39,30 +41,38 @@ export default function PerformancePage() {
       .catch((e: unknown) => {
         if (alive) setError(e instanceof Error ? e.message : 'Failed to load performance data');
       });
+    fetchPortfolioAttribution()
+      .then((res) => {
+        if (alive) setAttribution(res.attribution);
+      })
+      .catch(() => {
+        /* fail-soft: bridge renders its empty state */
+      });
     return () => {
       alive = false;
     };
   }, [allowed]);
 
   return (
-    <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active="tearsheet" />
-      {/* No py-* utilities here: .ts-page owns the vertical padding. Under the
-          old unlayered sheet they were dead declarations; against the family
-          sheet's @layer components defaults they would win and shrink the
-          shipped clamp() padding. */}
-      <div className={`${SUBPAGE_MAX} ts-page flex-1`}>
-        <EntitledSurface artifactClass="house_weights_nav">
-          {error ? (
+    // No py-* utilities here: .ts-page owns the vertical padding (family sheet
+    // @layer components defaults would lose to, or shrink, the shipped clamp()).
+    <div className={`${SUBPAGE_MAX} ts-page flex-1`}>
+      <EntitledSurface artifactClass="house_weights_nav">
+        {error ? (
+          <>
+            <h1 className="sr-only">Performance</h1>
             <p className="ts-status ts-status-error">{error}</p>
-          ) : !data ? (
-            // bare: .ts-page already owns the container + padding (#1548)
+          </>
+        ) : !data ? (
+          <>
+            <h1 className="sr-only">Performance</h1>
+            {/* bare: .ts-page already owns the container + padding (#1548) */}
             <PageSkeleton bare />
-          ) : (
-            <PerformanceTearsheetView data={data} ssot={ssot} />
-          )}
-        </EntitledSurface>
-      </div>
+          </>
+        ) : (
+          <PerformanceTearsheetView data={data} ssot={ssot} attribution={attribution} />
+        )}
+      </EntitledSurface>
     </div>
   );
 }

@@ -5,12 +5,17 @@ import { createElement, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BillingTab } from './billing-tab';
+import { PlanSection } from './plan-section';
 
-describe('BillingTab (static)', () => {
+function clickInterval(el: HTMLElement, index: number) {
+  const buttons = el.querySelectorAll('[data-testid="billing-interval"] button');
+  (buttons[index] as HTMLButtonElement).click();
+}
+
+describe('PlanSection (static)', () => {
   it('renders billing not configured when envs absent', () => {
     const html = renderToStaticMarkup(
-      createElement(BillingTab, { api: null, configured: false }),
+      createElement(PlanSection, { api: null, configured: false }),
     );
     expect(html).toContain('billing-not-configured');
     expect(html).toContain('Billing is not configured');
@@ -18,11 +23,12 @@ describe('BillingTab (static)', () => {
 
   it('defaults to annual and shows annual prices with discount', () => {
     const html = renderToStaticMarkup(
-      createElement(BillingTab, {
+      createElement(PlanSection, {
         api: { accessToken: 'tok' },
         configured: true,
         checkoutFn: vi.fn(),
         portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
       }),
     );
     expect(html).toContain('data-interval="annual"');
@@ -39,7 +45,7 @@ describe('BillingTab (static)', () => {
   });
 });
 
-describe('BillingTab (interval)', () => {
+describe('PlanSection (interval)', () => {
   let root: Root | null = null;
   let host: HTMLElement | null = null;
 
@@ -65,21 +71,22 @@ describe('BillingTab (interval)', () => {
   it('switches to monthly list prices and checks out on the selected interval', async () => {
     const checkoutFn = vi.fn(async () => ({ url: null }));
     const el = await mount(
-      createElement(BillingTab, {
+      createElement(PlanSection, {
         api: { accessToken: 'tok' },
         configured: true,
         checkoutFn,
         portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
       }),
     );
     expect(
-      el.querySelector('[data-testid="settings-billing-tab"]')?.getAttribute('data-interval'),
+      el.querySelector('[data-testid="settings-plan-section"]')?.getAttribute('data-interval'),
     ).toBe('annual');
 
     await act(async () => {
-      (el.querySelector('[data-testid="billing-interval-monthly"]') as HTMLButtonElement).click();
+      clickInterval(el, 0);
     });
-    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
     expect(tab?.getAttribute('data-interval')).toBe('monthly');
     expect(tab?.textContent).toContain('$10/mo');
     expect(tab?.textContent).toContain('$30/mo');
@@ -97,7 +104,7 @@ describe('BillingTab (interval)', () => {
     );
 
     await act(async () => {
-      (el.querySelector('[data-testid="billing-interval-annual"]') as HTMLButtonElement).click();
+      clickInterval(el, 1);
     });
     await act(async () => {
       (el.querySelector('[data-testid="billing-checkout-studio"]') as HTMLButtonElement).click();
@@ -113,21 +120,22 @@ describe('BillingTab (interval)', () => {
       throw { code: 'PRICE_NOT_CONFIGURED', message: 'STRIPE_PRICE_BRIEF_ANNUAL is not set on Edge Function secrets' };
     });
     const el = await mount(
-      createElement(BillingTab, {
+      createElement(PlanSection, {
         api: { accessToken: 'tok' },
         configured: true,
         checkoutFn,
         portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
       }),
     );
     expect(
-      el.querySelector('[data-testid="settings-billing-tab"]')?.getAttribute('data-interval'),
+      el.querySelector('[data-testid="settings-plan-section"]')?.getAttribute('data-interval'),
     ).toBe('annual');
 
     await act(async () => {
       (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
     });
-    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
     expect(tab?.getAttribute('data-interval')).toBe('monthly');
     expect(tab?.textContent).toContain('Annual pricing is not configured');
     expect(tab?.textContent).toContain('$10/mo');
@@ -139,17 +147,18 @@ describe('BillingTab (interval)', () => {
       throw { code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe is not configured' };
     });
     const el = await mount(
-      createElement(BillingTab, {
+      createElement(PlanSection, {
         api: { accessToken: 'tok' },
         configured: true,
         checkoutFn,
         portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
       }),
     );
     await act(async () => {
       (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
     });
-    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
     expect(tab?.textContent).toContain('Stripe is not configured');
   });
 
@@ -158,17 +167,18 @@ describe('BillingTab (interval)', () => {
       throw { code: 'NO_STRIPE_CUSTOMER', message: 'No Stripe customer on workspace' };
     });
     const el = await mount(
-      createElement(BillingTab, {
+      createElement(PlanSection, {
         api: { accessToken: 'tok' },
         configured: true,
         checkoutFn,
         portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
       }),
     );
     await act(async () => {
       (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
     });
-    const tab = el.querySelector('[data-testid="settings-billing-tab"]');
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
     expect(tab?.textContent).toContain('No Stripe customer on workspace');
   });
 });

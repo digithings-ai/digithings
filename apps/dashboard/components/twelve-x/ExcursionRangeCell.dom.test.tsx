@@ -43,11 +43,8 @@ describe('ExcursionRangeCell (happy-dom)', () => {
     // Spoken label describes observed extremes — never stop/target levels.
     expect(text).toContain('Observed extremes -0.8% to +2.0% vs entry, close mark +1.2%.');
     expect(text).not.toMatch(/stop|target/i);
-    // Track is decorative; the marker sits at the hold position:
-    // lo=-0.008, hi=0.02 → (0.012+0.008)/0.028 ≈ 71.4%.
-    const marker = el.querySelector('span.bg-ink') as HTMLElement;
-    expect(marker).toBeTruthy();
-    expect(parseFloat(marker.style.left)).toBeCloseTo(71.4, 1);
+    // The kit RangeTrack carries the picture and its own spoken summary.
+    expect(el.querySelector('[role="img"]')).toBeTruthy();
   });
 
   it('falls back to an em dash with no excursion data', async () => {
@@ -71,6 +68,6 @@ describe('ExcursionRangeCell (happy-dom)', () => {
     );
     const text = el.textContent ?? '';
     expect(text).toContain('no close mark');
-    expect(el.querySelector('span.bg-ink')).toBeNull();
+    expect(el.textContent).not.toContain('Close mark');
   });
 });

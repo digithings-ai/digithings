@@ -6,7 +6,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NotifyTab } from './notify-tab';
-import { BillingTab } from './billing-tab';
 import { SettingsHttpError } from '@/lib/settings-api';
 
 let root: Root | null = null;
@@ -320,30 +319,5 @@ describe('NotifyTab', () => {
     expect(html).toContain('Email when holdings change');
     expect(html).toContain('Execution alerts');
     expect(html).toContain('Email when orders/executions happen');
-  });
-});
-
-describe('BillingTab', () => {
-  it('links Brief / Desk / Studio checkout when configured', () => {
-    const html = renderToStaticMarkup(
-      createElement(BillingTab, {
-        api: { accessToken: 'tok' },
-        configured: true,
-        checkoutFn: vi.fn(),
-        portalFn: vi.fn(),
-      }),
-    );
-    expect(html).toContain('billing-checkout-studio');
-    expect(html).toContain('billing-checkout-desk');
-    expect(html).toContain('billing-checkout-brief');
-    expect(html).toContain('billing-portal');
-    expect(html).not.toContain('billing-not-configured');
-    const briefAt = html.indexOf('billing-checkout-brief');
-    const deskAt = html.indexOf('billing-checkout-desk');
-    const studioAt = html.indexOf('billing-checkout-studio');
-    expect(briefAt).toBeGreaterThan(-1);
-    expect(deskAt).toBeGreaterThan(briefAt);
-    expect(studioAt).toBeGreaterThan(deskAt);
-    expect(html).toContain('Annual · 20% off');
   });
 });
