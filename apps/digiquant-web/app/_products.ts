@@ -14,9 +14,9 @@ import type { TerminalManifestRow } from "@digithings/ui";
  *    1.231.0 (digiquant/pyproject.toml pins >=1.190,<2). The app FAQ in _pricing.ts
  *    says "see the NautilusTrader repository for its current license terms".
  *  - MCP: digiquant/src/digiquant/mcp_server.py --stdio; no hosted endpoint exists.
- *  - LuxAlgo: stays "in development" until PR #4779 merges (not resolvable from this
- *    checkout). Library research concepts and indicator metadata only, never signals
- *    or source code. */
+ *  - LuxAlgo: #4779 is present on this branch. The local gateway exposes Library
+ *    research concepts and indicator metadata only, never signals or source code.
+ *    Charting and journaling stay in LuxAlgo rather than being rebuilt here. */
 export const PRODUCT_ROWS: TerminalManifestRow[] = [
   {
     id: "research",
@@ -82,7 +82,7 @@ export const INTEGRATIONS: IntegrationRow[] = [
   {
     id: "luxalgo",
     name: "LuxAlgo",
-    status: "in development",
-    what: "Library research: concepts and indicator metadata only. No signals, no source code.",
+    status: "integrated",
+    what: "Chart and journal workspace. The local gateway adds Library concepts and indicator metadata only. No signals, no source code.",
   },
 ];
