@@ -1,9 +1,16 @@
-"""Unit tests for SDCA macro CSV staging (#3453)."""
+"""Unit tests for SDCA macro CSV staging (#3453, #4794 PR3).
+
+The gloomberb panel does not serve DTWEXBGS, so the script no longer touches
+the FRED observations API or fredgraph.csv: M2SL stages from the existing
+Supabase rows or the sealed R2 ``fred__M2SL`` generation, and DTWEXBGS is
+omitted with one warning so the dxy weight zeros loudly in the SDCA loader.
+No network, no key.
+"""
 
 from __future__ import annotations
 
 import importlib.util
-from io import BytesIO
+import logging
 from pathlib import Path
 
 import pytest
@@ -36,42 +43,42 @@ def test_write_observation_csv_rejects_empty(tmp_path: Path) -> None:
         mod.write_observation_csv([], tmp_path / "M2SL.csv")
 
 
-def test_rows_from_fredgraph_parses_observation_date() -> None:
-    csv = b"observation_date,DTWEXBGS\n2024-01-02,120.5\n2024-01-03,.\n2024-01-04,121.0\n"
-
-    class _Resp(BytesIO):
-        def __enter__(self) -> _Resp:
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            return None
-
-    def opener(_url: str) -> _Resp:
-        return _Resp(csv)
-
-    rows = mod.rows_from_fredgraph("DTWEXBGS", opener=opener)
-    assert rows == [("2024-01-02", 120.5), ("2024-01-04", 121.0)]
+def test_series_files_stage_m2sl_only() -> None:
+    assert mod.SERIES_FILES == {"M2SL": "M2SL.csv"}
 
 
-def test_series_files_match_load_sdca_extra_sources() -> None:
-    assert mod.SERIES_FILES == {"M2SL": "M2SL.csv", "DTWEXBGS": "DTWEXBGS.csv"}
+def test_no_fred_fetch_paths_remain() -> None:
+    assert not hasattr(mod, "rows_from_fred_api")
+    assert not hasattr(mod, "rows_from_fredgraph")
+    assert not hasattr(mod, "fetch_fred_series")
 
 
-def test_export_series_falls_through_when_fred_api_raises(
+def test_export_series_m2sl_from_r2_without_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
     monkeypatch.setattr(mod, "rows_from_supabase", lambda _sid: [])
-
-    def _boom(_sid: str, _key: str) -> list[tuple[str, float]]:
-        raise RuntimeError("fred 500")
-
-    monkeypatch.setattr(mod, "rows_from_fred_api", _boom)
-    monkeypatch.setattr(mod, "rows_from_fredgraph", lambda _sid: [("2024-01-02", 1.0)])
+    monkeypatch.setattr(
+        mod, "rows_from_r2", lambda _sid: [("2024-01-01", 20800.5), ("2024-02-01", 20850.0)]
+    )
     dest, source, n = mod.export_series("M2SL", tmp_path)
-    assert source == "fredgraph"
-    assert n == 1
-    assert dest.is_file()
+    assert source == "r2"
+    assert n == 2
+    assert dest is not None and dest.is_file()
+
+
+def test_export_series_dtwexbgs_warns_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.setattr(
+        mod, "rows_from_supabase", lambda _sid: (_ for _ in ()).throw(AssertionError("no read"))
+    )
+    with caplog.at_level(logging.WARNING, logger=mod.logger.name):
+        dest, source, n = mod.export_series("DTWEXBGS", tmp_path)
+    assert (dest, source, n) == (None, "skipped", 0)
+    assert "DTWEXBGS is not on the gloomberb panel; dxy sibling CSV skipped" in caplog.text
+    assert not (tmp_path / "DTWEXBGS.csv").exists()
 
 
 def test_btc_sdca_is_not_a_slapper_calibration_target() -> None:

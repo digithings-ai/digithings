@@ -137,13 +137,16 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
 
 @pytest.mark.unit
 def test_macro_series_yaml_has_volatility_complex():
-    # The FRED vol series alt-options-derivatives reads must be in the manifest.
+    # Only VIXCLS + VXVCLS stay on the gloomberb panel (#4794 PR3):
+    # VXNCLS/GVZCLS/OVXCLS are not served, so they must not be re-added.
     import yaml
+    from digiquant.data.prices.gloomberb_macro import DROPPED_SERIES_IDS
     from digiquant.research.graph import _research_config_root
 
     raw = yaml.safe_load((_research_config_root() / "macro_series.yaml").read_text())
     ids = {s["id"] for s in raw["fred"]["series"]}
-    assert {"VIXCLS", "VXVCLS", "VXNCLS", "GVZCLS", "OVXCLS"} <= ids
+    assert {"VIXCLS", "VXVCLS"} <= ids
+    assert ids.isdisjoint(DROPPED_SERIES_IDS)
 
 
 @pytest.mark.unit

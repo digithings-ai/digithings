@@ -245,7 +245,7 @@ def export(
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=Path("data/price-history"),
     show_default=True,
-    help="Coinbase/FRED cache (BTC-USD.csv plus M2SL/DTWEXBGS siblings)",
+    help="Coinbase/extra cache (BTC-USD.csv plus the M2SL sibling)",
 )
 @click.option("--signal-delay-days", type=int, default=3, show_default=True)
 @click.option("--trade-start", type=str, default="2018-01-01", show_default=True)

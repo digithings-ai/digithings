@@ -6,7 +6,8 @@ Public surface:
     - fetchers.fetch_quotes / fetch_batch
     - technicals.compute_indicators / TECHNICAL_COLUMNS
     - history_cache.load_cached / save_cached / incremental_update
-    - macro_ingest.fetch_fred / fetch_fx_yahoo (default daily pipeline)
+    - macro_ingest.fetch_fx_yahoo (default daily pipeline; the FRED API
+      fetchers were removed in #4794 PR3 — the panel seals from gloomberb)
     - supabase_writer.upsert_price_history / upsert_price_technicals / upsert_macro_observations
     - calendar_sync.build_rows / upsert_trading_calendar (issue #337)
     - ticker_venues.CORE_TICKER_VENUES / venue_for (issue #337)
