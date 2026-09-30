@@ -254,6 +254,19 @@ def test_dispatcher_dry_call_ok(
     assert payload["data"]["slug"] == "rsi"
 
 
+def test_upstream_request_sends_streamable_accept_header() -> None:
+    """The hosted MCP answers HTTP 406 unless Accept lists json + event-stream."""
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept"] = request.headers.get("accept", "")
+        return _sse_result(SEARCH_RESULT)
+
+    _client(handler).library_search({"query": "rsi"})
+    assert "application/json" in seen["accept"]
+    assert "text/event-stream" in seen["accept"]
+
+
 def test_dispatcher_invalid_args_no_request() -> None:
     dispatch = build_luxalgo_tool_dispatcher(_client(_fail_handler))
     result = dispatch("luxalgo_library_search", {"query": "", "limit": 10})
