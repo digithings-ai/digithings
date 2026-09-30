@@ -42,7 +42,6 @@ const RECHARTS_SANCTIONED = [
   'components/portfolio/sleeve-stacked-chart.tsx',
   'components/observability/AttributionTab.tsx',
   'components/observability/DecisionScorecardTab.tsx',
-  'components/twelve-x/ConsensusTab.tsx',
 ];
 
 describe('chart engine ruling (lib/CHARTS.md, #1420)', () => {
@@ -80,6 +79,11 @@ describe('chart engine ruling (lib/CHARTS.md, #1420)', () => {
         `${rel} must not import lightweight-charts — it has no categorical grammar`
       ).toBe(false);
     }
+  });
+
+  it('every recharts importer is on the sanctioned list (CHARTS.md stays the inventory)', () => {
+    const importers = ALL_COMPONENTS.filter((rel) => read(rel).includes("from 'recharts'"));
+    expect([...importers].sort()).toEqual([...RECHARTS_SANCTIONED].sort());
   });
 
   it('components never call createChart directly — the scaffold owns the lifecycle', () => {
