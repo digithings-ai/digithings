@@ -170,6 +170,33 @@ def test_donut_refused_below_floor() -> None:
     assert "REFUSED" in ann  # n=5
 
 
+def test_donut_without_wins_renders_unknown_center() -> None:
+    """No caller count → unknown center (rate + n), never a pseudo k/n."""
+    fig = _build_win_rate_donut(0.6, 50)
+    assert fig is not None  # n=50
+    assert list(fig.data[0].values) == [30, 20]  # n=50: slices stay rate-derived
+    ann = fig.layout.annotations[0].text
+    assert "n=50" in ann  # n=50
+    assert "uncounted" in ann  # n=50
+    assert "30/50" not in ann  # n=50: no reconstructed count as observed
+    assert "95%" not in ann  # n=50: no interval off a reconstructed k
+
+
+def test_donut_without_wins_clamps_percent_scale() -> None:
+    """Percent-scale 60.0 without a count normalizes like the KPI path."""
+    fig = _build_win_rate_donut(60.0, 50)
+    assert fig is not None  # n=50
+    assert list(fig.data[0].values) == [30, 20]  # k=30 slice, n=50
+    assert "6000.0%" not in fig.layout.annotations[0].text  # n=50
+
+
+def test_donut_without_wins_still_refuses_tiny_n() -> None:
+    """No caller count with n=5 keeps the REFUSED guard (guard is about n)."""
+    fig = _build_win_rate_donut(0.6, 5)
+    assert fig is not None  # n=5
+    assert "REFUSED" in fig.layout.annotations[0].text  # n=5
+
+
 def test_count_winning_trades_from_series() -> None:
     """3 positives in a 10-trade series → 7 wins is wrong, 3 is right."""
     import polars as pl
