@@ -254,7 +254,9 @@ def load_sdca_extra_z(
 ) -> dict[str, list[float | None]]:
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
-    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``.
+    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
+    plus the gold legs ``GVZCLS.csv``, ``WALCL.csv``, ``BAMLH0A0HYM2.csv``,
+    ``BAMLC0A0CM.csv``, ``T5YIE.csv``, ``NFCI.csv`` (each also accepted as parquet).
     Missing files omit that extra (trials that need it are skipped).
     """
     root = Path(data_path).parent if data_path is not None else None

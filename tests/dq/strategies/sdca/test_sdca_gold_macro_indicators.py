@@ -19,7 +19,9 @@ from digiquant.strategies.sdca.indicator_catalog import (
     extra_z_vectors,
     gvz_z,
     hy_oas_z,
+    ig_oas_z,
     indicator_display_name,
+    nfci_z,
     walcl_liquidity_z,
 )
 from digiquant.strategies.sdca.optimize import (
@@ -87,6 +89,13 @@ def test_spread_and_breakeven_levels_vote_positive_when_rising() -> None:
     assert breakeven_5y_z(dates, dates, src, window=30, min_samples=10)[-1] > 1.0
 
 
+def test_ig_spread_and_nfci_levels_vote_positive_when_rising() -> None:
+    dates = _daily(300)
+    src = pl.Series("v", [1.0 + 0.01 * i for i in range(300)], dtype=pl.Float64)
+    assert ig_oas_z(dates, dates, src, window=30, min_samples=10)[-1] > 1.0
+    assert nfci_z(dates, dates, src, window=30, min_samples=10)[-1] > 1.0
+
+
 def test_positive_weight_without_source_raises() -> None:
     dates = _daily(300)
     price = pl.Series("p", [100.0] * 300, dtype=pl.Float64)
@@ -121,7 +130,7 @@ def test_loader_picks_up_new_sibling_csvs(tmp_path: Path) -> None:
     assert sources.m2_dates is None and sources.dxy_dates is None
 
 
-def test_btc_vectors_unchanged_without_new_weights() -> None:
+def test_btc_vectors_unchanged_without_new_weights(tmp_path: Path) -> None:
     dates = _daily(400)
     price = pl.Series("p", [100.0 + 0.1 * i for i in range(400)], dtype=pl.Float64)
     sources = ExtraIndicatorSources()
@@ -129,3 +138,14 @@ def test_btc_vectors_unchanged_without_new_weights() -> None:
     after = extra_z_vectors(dates, price, SdcaCompositeWeights(valuation=1.0, m2=0.0), sources)
     assert before == after
     assert all(k not in before for k in NEW_MACRO)
+    # New-leg CSVs sitting in the shared staging dir stay inert under plain BTC weights.
+    (tmp_path / "GVZCLS.csv").write_text(
+        "observation_date,GVZCLS\n2024-01-02,18.5\n2024-01-03,19.0\n", encoding="utf-8"
+    )
+    (tmp_path / "WALCL.csv").write_text(
+        "observation_date,WALCL\n2024-01-03,7750.0\n2024-01-10,7760.0\n", encoding="utf-8"
+    )
+    staged = load_sdca_extra_sources(tmp_path)
+    assert staged.gvz_dates is not None and staged.walcl_dates is not None
+    btc_vectors = extra_z_vectors(dates, price, SdcaCompositeWeights(valuation=1.0), staged)
+    assert all(k not in btc_vectors for k in NEW_MACRO)
