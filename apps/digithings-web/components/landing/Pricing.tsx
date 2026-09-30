@@ -148,13 +148,18 @@ const GROUPS: PricingMatrixGroup[] = [
 
 export function Pricing() {
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col gap-[1.25rem]">
       <PricingMatrix
         tiers={TIERS}
         groups={GROUPS}
         featureColumnLabel="the detail"
         className="min-w-0 [&_table]:text-[0.94rem] [&_th]:text-[1rem] [&_td]:text-[0.86rem]"
       />
+      <p className="m-0 max-w-[var(--measure-prose)] font-mono text-[0.78rem] leading-[1.65] text-ink-mute">
+        <span aria-hidden="true">{"// "}</span>
+        The software costs nothing on any tier. What differs is who does the work. Your keys
+        and your hardware stay yours throughout.
+      </p>
     </div>
   );
 }
