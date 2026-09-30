@@ -66,7 +66,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: themeInitScript legitimately flips data-theme
   // pre-hydration for system-light visitors; scoped to this element only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} accent-digiquant no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
