@@ -177,3 +177,37 @@ def test_count_winning_trades_from_series() -> None:
     series = pl.Series("value", [10.0, -5.0, 3.0, -1.0, 7.0])
     assert count_winning_trades(series) == 3  # n=5
     assert count_winning_trades(None) is None
+
+
+def _generator_module():
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[2] / "digiquant" / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import generate_tearsheets
+
+    return generate_tearsheets
+
+
+def test_generate_log_win_rate_carries_n_and_ci() -> None:
+    """Log helper for 55% over n=20 carries N + CI + LOW SAMPLE."""
+    gt = _generator_module()
+    s = gt._honest_win_rate_log(55.0, 20)
+    assert "n=20" in s  # n=20
+    assert "CI" in s  # n=20
+    assert "LOW SAMPLE" in s  # n=20
+
+
+def test_generate_log_win_rate_none_is_na() -> None:
+    """Log helper with no win rate (n=0, DCA) stays n/a."""
+    gt = _generator_module()
+    assert gt._honest_win_rate_log(None, 0) == "n/a"  # n=0
+
+
+def test_generate_log_win_rate_refused_below_floor() -> None:
+    """Log helper for 60% over n=5 renders REFUSED."""
+    gt = _generator_module()
+    s = gt._honest_win_rate_log(60.0, 5)
+    assert "REFUSED" in s  # n=5
