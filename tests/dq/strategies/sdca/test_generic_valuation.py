@@ -306,3 +306,13 @@ def test_defaults_unchanged_without_params() -> None:
         dates[:2000], price[:2000], fit_lookback_days=None, max_annual_trend=None
     )
     assert a.model_dump() == b.model_dump()
+
+
+def test_negative_trend_cap_raises() -> None:
+    from digiquant.strategies.sdca.generic_valuation import fit_generic_valuation
+
+    dates, price = _bull_then_flat()
+    with pytest.raises(ValueError, match="(?i)trend"):
+        fit_generic_valuation(dates[:2000], price[:2000], max_annual_trend=-0.5)
+    # Boundary: 0.0 is valid (flat-rails maximum) and must not raise.
+    fit_generic_valuation(dates[:2000], price[:2000], max_annual_trend=0.0)

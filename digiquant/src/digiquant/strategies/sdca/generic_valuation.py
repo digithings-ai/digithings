@@ -117,6 +117,8 @@ def fit_generic_valuation(
         caller="fit_generic_valuation",
         fit_kind="log-price trend",
     )
+    if max_annual_trend is not None and max_annual_trend < 0:
+        raise ValueError(f"max_annual_trend must be >= 0, got {max_annual_trend!r}")
     lookback_note = ""
     if fit_lookback_days is not None:
         last_date = date_list[-1]
