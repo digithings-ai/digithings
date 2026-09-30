@@ -95,7 +95,12 @@ def load_settings() -> dict:
 
 
 def _honest_win_rate_log(win_rate_pct: float | None, total_trades: int) -> str:
-    """Honest one-line win-rate for the publish log — N + CI, never bare %."""
+    """Honest one-line win-rate for the publish log — N + CI, never bare %.
+
+    NOTE: k here is reconstructed as round(pct / 100 * n) — no fills are
+    available in this context, so the count is an estimate, not observed.
+    (Contrast the tearsheet donut, which takes caller-counted (k, n).)
+    """
     if win_rate_pct is None:
         return "n/a"
     from digiquant.stats.honesty import format_honest_rate

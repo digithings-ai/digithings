@@ -89,9 +89,10 @@ def _build_categorized_stats(
         + row("Volatility", "Returns Volatility (252 days)", ".4f")
         + row("Value at Risk", "Value at Risk", ".4f")
     )
+    win_rate_html = _honest_win_rate_text(combined.get("Win Rate"), result.num_trades)
     trade_stats = (
-        row("# Trades", "Total Trades", ".0f") + f'<tr><td class="sk">Win Rate</td><td class="sv">'
-        f"{_honest_win_rate_text(combined.get('Win Rate'), result.num_trades)}</td></tr>"
+        row("# Trades", "Total Trades", ".0f")
+        + f'<tr><td class="sk">Win Rate</td><td class="sv">{win_rate_html}</td></tr>'
         + row("Avg Winner", "Avg Winner", ",.2f")
         + row("Avg Loser", "Avg Loser", ",.2f")
         + row("Max Winner", "Max Winner", ",.2f")
