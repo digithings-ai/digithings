@@ -19,6 +19,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     gdx_gld_z,
     gld_slv_z,
     indicator_display_name,
+    parse_indicator_weights_json,
 )
 from digiquant.strategies.sdca.optimize import (
     drop_extras_missing_sources,
@@ -48,6 +49,13 @@ def test_new_ratio_names_in_tuples_and_param_map() -> None:
 
 def test_composite_weights_from_params_reads_new_ratios() -> None:
     w = composite_weights_from_params({"gdx_gld_weight": 0.5, "gld_slv_weight": 0.25})
+    assert w.gdx_gld == 0.5
+    assert w.gld_slv == 0.25
+    assert w.gvz == 0.0
+
+
+def test_parse_indicator_weights_json_reads_new_ratios() -> None:
+    w = parse_indicator_weights_json('{"gdx_gld": 0.5, "gld_slv": 0.25}')
     assert w.gdx_gld == 0.5
     assert w.gld_slv == 0.25
     assert w.gvz == 0.0
@@ -103,9 +111,17 @@ def test_loader_picks_up_ratio_sibling_csvs(tmp_path: Path) -> None:
         "2024-01-03,40.5,41.5,40,41.0,1100,GDX-USD\n",
         encoding="utf-8",
     )
+    (tmp_path / "SLV.csv").write_text(
+        "timestamp,open,high,low,close,volume,symbol\n"
+        "2024-01-02,25,25.5,24.5,25.2,2000,SLV\n"
+        "2024-01-03,25.2,25.8,25,25.6,2100,SLV\n",
+        encoding="utf-8",
+    )
     sources = load_sdca_extra_sources(tmp_path)
     assert sources.gdx_dates is not None and len(sources.gdx_dates) == 2
-    assert sources.slv_dates is None
+    assert sources.gdx_close is not None and len(sources.gdx_close) == 2
+    assert sources.slv_dates is not None and len(sources.slv_dates) == 2
+    assert sources.slv_close is not None and len(sources.slv_close) == 2
 
 
 def test_btc_vectors_ignore_ratio_files_on_disk(tmp_path: Path) -> None:

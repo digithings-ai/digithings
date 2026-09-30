@@ -101,11 +101,22 @@ def main() -> None:
         if getattr(sources, f"{k}_dates") is not None
     ]
     print(f"new legs present: {present}")
-    _SOURCE_KEY = {"gdx_gld": "gdx", "gld_slv": "slv"}
+    _SOURCE_STEMS: dict[str, str] = {
+        "m2": "m2",
+        "dxy": "dxy",
+        "gvz": "gvz",
+        "walcl": "walcl",
+        "hy_oas": "hy_oas",
+        "ig_oas": "ig_oas",
+        "breakeven_5y": "breakeven_5y",
+        "nfci": "nfci",
+        "gdx_gld": "gdx",
+        "gld_slv": "slv",
+    }
     missing = {
         leg
         for leg in set(FULL.enabled_extras()) - {"valuation"} - {"m2", "dxy"}
-        if _SOURCE_KEY.get(leg, leg) not in present
+        if _SOURCE_STEMS[leg] not in present
     }
     if missing:
         raise SystemExit(f"missing staged series for {sorted(missing)} — rerun Task 1")
