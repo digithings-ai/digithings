@@ -1665,6 +1665,7 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
+
     # ── LuxAlgo Library family (#4779 P0) ─────────────────────────────────
     #
     # Thin wrap of the hosted LuxAlgo MCP (research reads only, keyless).
