@@ -686,39 +686,53 @@ stays a generic transport engine (no URLs, no env reads).
 
 ---
 
-## LuxAlgo Library thin wrap (#4779 P0)
+## LuxAlgo hosted thin wrap (#4779 P0, #4844 companions)
 
 `src/digiquant/data/luxalgo/` is the LuxAlgo Library research layer, mirroring
 the Gloomberb layering (`attribution` / `entitlements` / `models` / `client` /
 `agent_tools`, same MCP + manifest + dispatcher surfaces). It is the **only**
 place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
 
-- **8 tools, read scope, default ON, all keyless (`free`).**
+- **8 Library tools + 6 edge/trackers companions, read scope, default ON, all
+  keyless (`free`).**
   `luxalgo_library_search`, `luxalgo_library_get_concept`,
   `luxalgo_library_get_indicator` (metadata only), `luxalgo_library_list_concepts`,
   `luxalgo_library_list_indicators`, `luxalgo_library_list_tags`,
-  `luxalgo_library_list_families`, `luxalgo_library_get_family` are registered
-  in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
-  `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
+  `luxalgo_library_list_families`, `luxalgo_library_get_family`, plus the #4844
+  companions `luxalgo_edge_symbols`, `luxalgo_edge_presets`,
+  `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
+  `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
+  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0 dumps) are
+  registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
+  in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
   `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
   typed `upstream_error` with no request.
 - **Upstream contract.** One `tools/call` JSON-RPC round trip per tool over
   streamable HTTP (SSE `data:` lines; bare JSON also accepted). Every upstream
   tool requires a `context` string — the client injects the fixed generic
   `LUXALGO_CONTEXT` server-side and always overwrites any caller value, so no
-  PII reaches the upstream. Upstream payloads pass through as envelope `data`
-  unchanged (shapes vary); errors map to `not_found` / `rate_limited` /
-  `upstream_error` / `invalid_input`. 900s size-bounded TTL cache; no
-  rate-limiter/breaker in this phase (low-volume research reads).
-- **Attribution + license boundary.** Every payload carries "Sourced from
-  LuxAlgo Library" + the upstream canonical `url`/`md_url` (Library home when
-  no single page is addressed), plus the `LUXALGO_COMMERCIAL_LICENSE` flag
-  state it was produced under (`commercial_license` + `license_state`, #4845).
-  Research reference only — never a pipeline
-  primary. `library_get_source_code` is deliberately NOT wrapped (CC
-  BY-NC-SA: no indicator source in paid surfaces); `broker_*` keys are never
-  sent to the hosted MCP; `journal_*`/`edge_*`/`trackers_*`/`propfirms_*` are
-  separate packages.
+  PII reaches the upstream. Library results answer `structuredContent`; the
+  edge/trackers tools answer MCP content blocks whose text part is the JSON
+  payload — both shapes unwrap to the same envelope `data`. Upstream payloads
+  pass through unchanged (shapes vary); errors map to `not_found` /
+  `rate_limited` / `upstream_error` / `invalid_input`. 900s size-bounded TTL
+  cache; no rate-limiter/breaker in this phase (low-volume keyless reads). An
+  upstream `stale` flag on a trackers payload folds into the envelope `stale`
+  bit.
+- **Attribution + license boundary.** Every payload carries a per-family
+  "Sourced from LuxAlgo ..." attribution (`attribution_fields_for` in
+  `attribution.py`; the edge/trackers families do NOT reuse the Library
+  sentence) plus a canonical link. Library payloads additionally state the
+  `LUXALGO_COMMERCIAL_LICENSE` flag state they were produced under
+  (`commercial_license` + `license_state`, #4845). Every `edge_report` result
+  carries the honesty disclaimer (`digiquant.stats.honesty.DISCLAIMER`) in both
+  the upstream `data.disclaimer` field and the envelope `warnings`. Research
+  reference only — never a pipeline primary. `library_get_source_code` is
+  deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
+  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0 dumps stay
+  the source of record — live queries are freshness checks only);
+  `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
+  are separate packages.
 - **License guard (#4845).** `data/luxalgo/license_guard.py` (stdlib-only) is
   the enforcement point: default-OFF commercial flag, dispatcher runtime
   refusal with no request while OFF, `source_code_violations` surface
@@ -730,7 +744,8 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
 - **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
   (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
-  the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py` plus
+  the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py
+  tests/dq/test_mcp_luxalgo_edge_trackers_tools.py` plus
   `pytest tests/dq/test_mcp_server_scope.py`.
 
 ---

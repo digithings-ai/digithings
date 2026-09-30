@@ -252,13 +252,14 @@ PRUNE_DIRS = frozenset(
 
 #: Repo-relative code paths allowed to reference the upstream tool: the
 #: boundary package itself (governed by the surface assertions + dispatcher
-#: gate) and the guard's own tests.
+#: gate) and the luxalgo tool tests (absence pins name the unwrapped tool).
 SCAN_ALLOWLIST = frozenset(
     {
         "digiquant/src/digiquant/data/luxalgo/license_guard.py",
         "digiquant/src/digiquant/data/luxalgo/attribution.py",
         "digiquant/src/digiquant/data/luxalgo/entitlements.py",
         "tests/dq/test_mcp_luxalgo_tools.py",
+        "tests/dq/test_mcp_luxalgo_edge_trackers_tools.py",
         "tests/dq/test_luxalgo_license_guard.py",
     }
 )
