@@ -1969,6 +1969,57 @@ def build_digifetch_vix_term_structure_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_options_scenario_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_options_scenario",
+            "description": (
+                "Multi-leg European option scenario over the options_chain read "
+                "(composition). Each leg (expiry epoch seconds, strike, kind, "
+                "qty) must match a listed chain contract exactly for its "
+                "implied vol and last-price cost basis — near-misses are "
+                "rejected, never snapped. Values the book over the "
+                "spot/date/vol-shift grid with European Black-Scholes math "
+                "(intrinsic at/after a leg's expiry), reporting grid value "
+                "plus P&L against premium paid, the expiry-payoff curve with "
+                "bisected breakevens, and finite-difference Greeks at the "
+                "first spot and date with no vol shift. European exercise "
+                "only. Derived math over an enrichment read, never a pipeline "
+                "primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "legs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "expiry": {"type": "number"},
+                                "strike": {"type": "number"},
+                                "kind": {"type": "string", "enum": ["call", "put"]},
+                                "qty": {"type": "number"},
+                            },
+                            "required": ["expiry", "strike", "kind", "qty"],
+                        },
+                    },
+                    "rate": {"type": "number"},
+                    "spots": {"type": "array", "items": {"type": "number"}},
+                    "valuation_dates": {"type": "array", "items": {"type": "string"}},
+                    "vol_shifts": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "default": [0.0],
+                    },
+                },
+                "required": ["symbol", "legs", "rate", "spots", "valuation_dates"],
+            },
+        },
+    }
+
+
 def build_digifetch_compare_performance_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -3451,6 +3502,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_dividend_yield_tool(),
         build_digifetch_fx_cross_rates_tool(),
         build_digifetch_vix_term_structure_tool(),
+        build_digifetch_options_scenario_tool(),
         build_digifetch_compare_performance_tool(),
         build_digifetch_correlation_matrix_tool(),
         build_digifetch_relationship_graph_tool(),

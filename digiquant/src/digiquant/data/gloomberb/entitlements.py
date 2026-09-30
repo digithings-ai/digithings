@@ -94,6 +94,11 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     "digifetch_dividend_yield": "free",
     "digifetch_fx_cross_rates": "free",
     "digifetch_vix_term_structure": "free",
+    # options scenario (130-coverage Task 8: OSA) — derived math over the
+    # options_chain read, never Cloud-sourced, so anonymous like the Task 2
+    # compositions. MCP-only: all three curated subsets are at their 16-name
+    # prompt-budget caps.
+    "digifetch_options_scenario": "free",
     # portfolio-math compositions (130-coverage Task 3) — derived math over
     # existing reads, so all ten are anonymous reads like the other free tools
     "digifetch_compare_performance": "free",

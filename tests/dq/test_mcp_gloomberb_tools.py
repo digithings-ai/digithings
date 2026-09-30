@@ -80,6 +80,8 @@ DIGIFETCH_TOOLS = {
     "digifetch_dividend_yield",
     "digifetch_fx_cross_rates",
     "digifetch_vix_term_structure",
+    # options scenario (130-coverage Task 8: OSA, unattributed derived math)
+    "digifetch_options_scenario",
     # portfolio-math compositions (130-coverage Task 3, unattributed derived math)
     "digifetch_compare_performance",
     "digifetch_correlation_matrix",
@@ -468,7 +470,24 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
         )
     if path == "/market/options":
         return _envelope(
-            {"underlyingSymbol": "AAPL", "expirationDates": [], "calls": [], "puts": []}
+            {
+                "underlyingSymbol": "AAPL",
+                "expirationDates": [1800000000.0],
+                # Options-scenario sweep leg (130-coverage Task 8: OSA): the
+                # scenario TOOL_CALLS entry matches this call row exactly.
+                "calls": [
+                    {
+                        "contractSymbol": "AAPL270115C00100000",
+                        "strike": 100.0,
+                        "expiration": 1800000000.0,
+                        "impliedVolatility": 0.25,
+                        "lastPrice": 10.4,
+                        "bid": 10.2,
+                        "ask": 10.6,
+                    }
+                ],
+                "puts": [],
+            }
         )
     if path == "/cloud/sec/filings":
         return httpx.Response(200, json={"filings": [], "hasMore": False, "nextOffset": 0})
@@ -1080,8 +1099,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_88_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 88
+def test_all_89_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 89
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -1113,6 +1132,9 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
         "digifetch_dividend_yield",
         "digifetch_fx_cross_rates",
         "digifetch_vix_term_structure",
+        # Options scenario (130-coverage Task 8: OSA): derived math over the
+        # options_chain read; the manifest names the math source.
+        "digifetch_options_scenario",
         # Portfolio-math compositions (130-coverage Task 3): derived math must
         # not claim Gloomberb sourcing; the manifest names the math source.
         "digifetch_compare_performance",
@@ -1168,6 +1190,8 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
         "digifetch_dividend_yield": "corporate-actions",
         "digifetch_fx_cross_rates": "exchange-rate",
         "digifetch_vix_term_structure": "econ-series",
+        # Options scenario (130-coverage Task 8: OSA).
+        "digifetch_options_scenario": "options_chain",
         # Portfolio-math compositions (130-coverage Task 3).
         "digifetch_compare_performance": "price_history",
         "digifetch_correlation_matrix": "price_history",
@@ -1395,6 +1419,16 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_dividend_yield": ("AAPL",),
     "digifetch_fx_cross_rates": (["EUR", "GBP"],),
     "digifetch_vix_term_structure": (),
+    # options scenario (130-coverage Task 8: OSA) — legs_json matches the
+    # sweep chain fixture below (call 100 @ 1800000000).
+    "digifetch_options_scenario": (
+        "AAPL",
+        '[{"expiry": 1800000000, "strike": 100.0, "kind": "call", "qty": 1.0}]',
+        0.05,
+        [90.0, 100.0, 110.0, 120.0],
+        ["2026-09-30"],
+        [0.0],
+    ),
     # portfolio-math compositions (130-coverage Task 3)
     "digifetch_compare_performance": (["AAPL", "MSFT"],),
     "digifetch_correlation_matrix": (["AAPL", "MSFT"],),
@@ -1529,6 +1563,9 @@ def test_every_tool_returns_attributed_json(
         "digifetch_dividend_yield",
         "digifetch_fx_cross_rates",
         "digifetch_vix_term_structure",
+        # Options scenario (130-coverage Task 8: OSA): derived math over the
+        # options_chain read must not claim Gloomberb sourcing.
+        "digifetch_options_scenario",
         # Portfolio-math compositions (130-coverage Task 3): derived math must
         # not claim Gloomberb sourcing.
         "digifetch_compare_performance",

@@ -100,6 +100,7 @@ from .models import (
     OptionsCalcInput,
     OptionsChainInput,
     OptionsFlowInput,
+    OptionsScenarioInput,
     PollsInput,
     PortfolioAddInput,
     PortfolioRemoveInput,
@@ -476,6 +477,13 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     ),
     "digifetch_vix_term_structure": DigifetchDispatch(
         VixTermInput, "vix_term_structure", attributed=False
+    ),
+    # Options scenario (130-coverage Task 8: OSA): derived math over the
+    # options_chain read, never Cloud-sourced, so no deep link and no
+    # attribution. MCP-only: all three curated subsets are at their 16-name
+    # prompt-budget caps.
+    "digifetch_options_scenario": DigifetchDispatch(
+        OptionsScenarioInput, "options_scenario", attributed=False
     ),
     # Portfolio-math compositions (130-coverage Task 3): derived math over
     # existing reads, never Cloud-sourced, so no deep link and no attribution.

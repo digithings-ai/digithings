@@ -547,6 +547,7 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_dividend_yield",
         "digifetch_fx_cross_rates",
         "digifetch_vix_term_structure",
+        "digifetch_options_scenario",
         "digifetch_compare_performance",
         "digifetch_correlation_matrix",
         "digifetch_relationship_graph",
@@ -1843,6 +1844,46 @@ def create_mcp_server(
         try:
             envelope = _build_gloomberb_client().vix_term_structure(
                 {"near_series": near_series, "far_series": far_series, "limit": limit}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Options scenario (130-coverage Task 8: OSA) ──────────────────────────
+    #
+    # Derived math over the options_chain read (European Black-Scholes grid,
+    # expiry payoff, breakevens, Greeks). Unattributed; MCP-only (all three
+    # curated subsets are at their 16-name prompt-budget caps).
+
+    @_maybe_tool("digifetch_options_scenario")
+    def digifetch_options_scenario(
+        symbol: str,
+        legs_json: str,
+        rate: float,
+        spots: list[float],
+        valuation_dates: list[str],
+        vol_shifts: list[float] | None = None,
+    ) -> str:
+        """Multi-leg European option scenario over the options_chain read.
+
+        `legs_json` is a JSON array of legs — {"expiry": epoch seconds,
+        "strike", "kind": "call"/"put", "qty": +long/-short} — each matched to
+        a listed chain contract for its implied vol and last-price cost basis.
+        Values the book over the spot/date/vol-shift grid with European
+        Black-Scholes math (intrinsic at/after expiry). NOT attributed to
+        Gloomberb: every number is derived locally.
+        """
+        try:
+            legs = json.loads(legs_json)
+            envelope = _build_gloomberb_client().options_scenario(
+                {
+                    "symbol": symbol,
+                    "legs": legs,
+                    "rate": rate,
+                    "spots": spots,
+                    "valuation_dates": valuation_dates,
+                    "vol_shifts": vol_shifts if vol_shifts is not None else [0.0],
+                }
             )
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

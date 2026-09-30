@@ -216,6 +216,14 @@ from .models import (
     OptionsFlowEnvelope,
     OptionsFlowInput,
     OptionsFlowResult,
+    OptionsScenarioEnvelope,
+    OptionsScenarioExpiryPoint,
+    OptionsScenarioGridPoint,
+    OptionsScenarioInput,
+    OptionsScenarioLegDetail,
+    OptionsScenarioLegGreeks,
+    OptionsScenarioPortfolioGreeks,
+    OptionsScenarioResult,
     PollAnswer,
     PollRow,
     PollsEnvelope,
@@ -387,6 +395,10 @@ SEARCH_LIMIT_CAP = 10
 # de-dupes concurrent requests, but that is unverified, so pin one attempt.
 # (The shared policy still retries everything else.)
 _SINGLE_ATTEMPT_POLICY = RetryPolicy(attempts=1)
+
+# Seconds per year for the options-scenario tau math (365.25-day year, the
+# same day-count the valuation epochs are differenced in).
+_SECONDS_PER_YEAR = 365.25 * 24 * 3600
 
 # Upstream session cookie names (api-client/request.ts SESSION_COOKIE_NAMES).
 SESSION_COOKIE_NAMES: tuple[str, ...] = (
@@ -5136,6 +5148,306 @@ class GloomberbClient:
             )
 
         return self._cached("vix_term_structure", parsed, produce)
+
+    # -- options scenario (130-coverage Task 8: OSA) ---------------------------
+    #
+    # A multi-leg European book over the options_chain read. Legs match listed
+    # contracts exactly (expiry/strike/kind) for their implied vol and
+    # last-price cost basis; every number is then derived locally with the
+    # Task 1 Black-Scholes core, so the tool is unattributed: a derived number
+    # must not claim Cloud sourcing.
+
+    @staticmethod
+    def _scenario_intrinsic(kind: str, spot: float, strike: float, qty: float) -> float:
+        """European expiry payoff for one leg (qty included)."""
+        if kind == "call":
+            return max(spot - strike, 0.0) * qty
+        return max(strike - spot, 0.0) * qty
+
+    @staticmethod
+    def _scenario_leg_value(
+        kind: str, spot: float, strike: float, rate: float, vol: float, tau: float, qty: float
+    ) -> float:
+        """One leg at one grid node: Black-Scholes before expiry, intrinsic at/after."""
+        if tau <= 0.0:
+            return GloomberbClient._scenario_intrinsic(kind, spot, strike, qty)
+        return qty * black_scholes_price(
+            spot=spot,
+            strike=strike,
+            rate=rate,
+            vol=vol,
+            expiry_years=tau,
+            kind=kind,  # type: ignore[arg-type]
+        )
+
+    def options_scenario(
+        self, request: OptionsScenarioInput | Mapping[str, Any]
+    ) -> OptionsScenarioEnvelope:
+        """Multi-leg European scenario over the options_chain read (composition).
+
+        Reads one chain for ``symbol``, matches each leg to a listed contract
+        for its implied vol and last-price cost basis, and values the book over
+        the spot/date/vol-shift grid with European Black-Scholes math
+        (intrinsic at/after a leg's expiry). Reports grid value plus P&L
+        against premium paid, the expiry-payoff curve with bisected
+        breakevens, and finite-difference Greeks at the first spot and date
+        with no vol shift. Warns and returns ``upstream_error`` when the chain
+        leg errors or carries no usable IV; unmatched legs and non-positive
+        shifted vols are ``invalid_input``, never clamped.
+        """
+        parsed = self._validate_input(OptionsScenarioInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsScenarioEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsScenarioEnvelope)
+
+        def produce() -> OptionsScenarioEnvelope:
+            chain_env = self.options_chain({"symbol": parsed.symbol})
+            warnings: list[str] = list(chain_env.warnings)
+            if isinstance(chain_env.data, DigifetchError):
+                warnings.append(
+                    f"options chain unavailable for {parsed.symbol}: {chain_env.data.message}"
+                )
+                return OptionsScenarioEnvelope(
+                    data=DigifetchError(
+                        code="upstream_error",
+                        message=(
+                            f"options scenario unavailable for {parsed.symbol} "
+                            f"({'; '.join(warnings)})"
+                        ),
+                        retryable=chain_env.data.retryable,
+                    ),
+                    fetched_at=self._now(),
+                    warnings=warnings,
+                )
+            contracts = [*chain_env.data.chain.calls, *chain_env.data.chain.puts]
+            details: list[OptionsScenarioLegDetail] = []
+            for index, leg in enumerate(parsed.legs):
+                match = next(
+                    (
+                        contract
+                        for contract in contracts
+                        if contract.side == leg.kind
+                        and contract.strike == leg.strike
+                        and contract.expiration == leg.expiry
+                    ),
+                    None,
+                )
+                if match is None:
+                    return self._error_envelope(
+                        OptionsScenarioEnvelope,
+                        DigifetchError(
+                            code="invalid_input",
+                            message=(
+                                f"leg {index} ({leg.kind} {leg.strike} @ {leg.expiry}) "
+                                f"matches no listed {parsed.symbol} contract "
+                                "(legs match exactly, never snapped)"
+                            ),
+                            retryable=False,
+                        ),
+                    )
+                if not (
+                    isinstance(match.implied_volatility, float | int)
+                    and math.isfinite(match.implied_volatility)
+                    and match.implied_volatility > 0.0
+                ):
+                    return OptionsScenarioEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=(
+                                f"leg {index} ({leg.kind} {leg.strike} @ {leg.expiry}) "
+                                "carries no usable chain implied vol"
+                            ),
+                            retryable=False,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                premium = leg.qty * match.last_price
+                details.append(
+                    OptionsScenarioLegDetail(
+                        expiry=leg.expiry,
+                        strike=leg.strike,
+                        kind=leg.kind,
+                        qty=leg.qty,
+                        implied_vol=match.implied_volatility,
+                        premium=premium,
+                    )
+                )
+            floor_vol = min(
+                detail.implied_vol + shift for detail in details for shift in parsed.vol_shifts
+            )
+            if not math.isfinite(floor_vol) or floor_vol <= 0.0:
+                return self._error_envelope(
+                    OptionsScenarioEnvelope,
+                    DigifetchError(
+                        code="invalid_input",
+                        message=(
+                            "a vol shift drives a leg vol to a non-positive value "
+                            f"(floor {floor_vol}); shifts are rejected, never clamped"
+                        ),
+                        retryable=False,
+                    ),
+                )
+            epochs = [
+                datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp()
+                for day in parsed.valuation_dates
+            ]
+            premium_paid = sum(detail.premium for detail in details)
+            grid: list[OptionsScenarioGridPoint] = []
+            for day, epoch in zip(parsed.valuation_dates, epochs, strict=True):
+                label = day.isoformat()
+                for spot in parsed.spots:
+                    for shift in parsed.vol_shifts:
+                        value = sum(
+                            self._scenario_leg_value(
+                                kind=detail.kind,
+                                spot=spot,
+                                strike=detail.strike,
+                                rate=parsed.rate,
+                                vol=detail.implied_vol + shift,
+                                tau=(detail.expiry - epoch) / _SECONDS_PER_YEAR,
+                                qty=detail.qty,
+                            )
+                            for detail in details
+                        )
+                        grid.append(
+                            OptionsScenarioGridPoint(
+                                spot=spot,
+                                valuation_date=label,
+                                vol_shift=shift,
+                                value=value,
+                                pnl=value - premium_paid,
+                            )
+                        )
+            ordered_spots = sorted(set(parsed.spots))
+
+            def _expiry_pnl(spot: float) -> float:
+                return (
+                    sum(
+                        self._scenario_intrinsic(detail.kind, spot, detail.strike, detail.qty)
+                        for detail in details
+                    )
+                    - premium_paid
+                )
+
+            expiry_payoff: list[OptionsScenarioExpiryPoint] = []
+            for spot in ordered_spots:
+                payoff = _expiry_pnl(spot) + premium_paid
+                expiry_payoff.append(
+                    OptionsScenarioExpiryPoint(spot=spot, payoff=payoff, pnl=payoff - premium_paid)
+                )
+
+            breakevens: list[float] = []
+            for low, high in zip(ordered_spots, ordered_spots[1:], strict=False):
+                pnl_low, pnl_high = _expiry_pnl(low), _expiry_pnl(high)
+                if pnl_low == 0.0:
+                    breakevens.append(low)
+                if pnl_low * pnl_high < 0.0:
+                    root = self._bisect_expiry_pnl(_expiry_pnl, low, high)
+                    breakevens.append(root)
+            if ordered_spots and _expiry_pnl(ordered_spots[-1]) == 0.0:
+                breakevens.append(ordered_spots[-1])
+            breakevens = sorted({round(root, 9) for root in breakevens})
+
+            ref_spot = parsed.spots[0]
+            ref_epoch = epochs[0]
+            ref_label = parsed.valuation_dates[0].isoformat()
+            leg_greeks: list[OptionsScenarioLegGreeks] = []
+            for index, detail in enumerate(details):
+                tau = (detail.expiry - ref_epoch) / _SECONDS_PER_YEAR
+                leg_greeks.append(
+                    OptionsScenarioLegGreeks(
+                        leg_index=index,
+                        **self._scenario_greeks(
+                            kind=detail.kind,
+                            spot=ref_spot,
+                            strike=detail.strike,
+                            rate=parsed.rate,
+                            vol=detail.implied_vol,
+                            tau=tau,
+                            qty=detail.qty,
+                        ),
+                    )
+                )
+            portfolio = OptionsScenarioPortfolioGreeks(
+                delta=sum(entry.delta for entry in leg_greeks),
+                gamma=sum(entry.gamma for entry in leg_greeks),
+                theta=sum(entry.theta for entry in leg_greeks),
+                vega=sum(entry.vega for entry in leg_greeks),
+            )
+            return OptionsScenarioEnvelope(
+                data=OptionsScenarioResult(
+                    symbol=parsed.symbol,
+                    legs=details,
+                    premium_paid=premium_paid,
+                    valuation_epochs=epochs,
+                    grid=grid,
+                    expiry_payoff=expiry_payoff,
+                    breakevens=breakevens,
+                    greeks_at_spot=ref_spot,
+                    greeks_valuation_date=ref_label,
+                    leg_greeks=leg_greeks,
+                    portfolio_greeks=portfolio,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("options_scenario", parsed, produce)
+
+    @staticmethod
+    def _bisect_expiry_pnl(
+        pnl: Callable[[float], float], low: float, high: float, iterations: int = 100
+    ) -> float:
+        """Bisection root of the continuous expiry-P&L curve on a bracket."""
+        pnl_low = pnl(low)
+        for _ in range(iterations):
+            mid = 0.5 * (low + high)
+            if pnl_low * pnl(mid) <= 0.0:
+                high = mid
+            else:
+                low, pnl_low = mid, pnl(mid)
+        return 0.5 * (low + high)
+
+    @staticmethod
+    def _scenario_greeks(
+        *, kind: str, spot: float, strike: float, rate: float, vol: float, tau: float, qty: float
+    ) -> dict[str, float]:
+        """Finite-difference delta/gamma/theta/vega for one leg (qty included).
+
+        Central differences on the Task 1 Black-Scholes core at (spot, tau,
+        vol); ``theta`` is the value change for one day's passage of time and
+        ``vega`` per unit vol. An expired leg prices intrinsic: step delta,
+        zero gamma/theta/vega.
+        """
+        if tau <= 0.0:
+            up = GloomberbClient._scenario_intrinsic(kind, spot + 1e-4, strike, qty)
+            down = GloomberbClient._scenario_intrinsic(kind, spot - 1e-4, strike, qty)
+            slope = (up - down) / 2e-4
+            return {"delta": slope, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
+
+        def price(at_spot: float, at_tau: float, at_vol: float) -> float:
+            return GloomberbClient._scenario_leg_value(
+                kind, at_spot, strike, rate, at_vol, at_tau, qty
+            )
+
+        bump = min(max(spot * 0.01, 0.01), spot * 0.5)
+        base = price(spot, tau, vol)
+        delta = (price(spot + bump, tau, vol) - price(spot - bump, tau, vol)) / (2.0 * bump)
+        gamma = (price(spot + bump, tau, vol) - 2.0 * base + price(spot - bump, tau, vol)) / (
+            bump * bump
+        )
+        day = 1.0 / 365.25
+        theta = price(spot, tau - day, vol) - base
+        vol_bump = 0.01
+        if vol - vol_bump <= 0.0:
+            vega = (price(spot, tau, vol + vol_bump) - base) / vol_bump
+        else:
+            vega = (price(spot, tau, vol + vol_bump) - price(spot, tau, vol - vol_bump)) / (
+                2.0 * vol_bump
+            )
+        return {"delta": delta, "gamma": gamma, "theta": theta, "vega": vega}
 
     # -- portfolio-math compositions (130-coverage Task 3) -------------------
     #

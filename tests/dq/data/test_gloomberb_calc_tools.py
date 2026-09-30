@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -20,6 +21,7 @@ from digiquant.data.gloomberb import GloomberbClient  # noqa: E402
 from digiquant.data.gloomberb.agent_tools import (  # noqa: E402
     build_digifetch_tool_dispatcher,
 )
+from digiquant.data.gloomberb.calculators import black_scholes_price  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 
@@ -419,5 +421,200 @@ def test_calc_dispatch_never_claims_gloomberb_sourcing() -> None:
     assert result["ok"] is True
     payload = json.loads(str(result["content"]))
     assert payload["data"]["fraction"] == pytest.approx(0.4)
+    assert "attribution" not in payload
+    assert "source_url" not in payload
+
+
+# ── options scenario (130-coverage Task 8: OSA) ──────────────────────────────
+#
+# Multi-leg European valuation over options_chain rows + the Task 1
+# Black-Scholes core. The fixture chain carries one call (strike 100, expiry
+# 1800000000 = 2027-01-15T08:00Z, IV 0.2, last 10.4).
+
+_SCENARIO_EXPIRY = 1800000000.0
+
+_SCENARIO_CHAIN = {
+    "underlyingSymbol": "AAPL",
+    "expirationDates": [_SCENARIO_EXPIRY],
+    "calls": [
+        {
+            "contractSymbol": "AAPL270115C00100000",
+            "strike": 100.0,
+            "expiration": _SCENARIO_EXPIRY,
+            "impliedVolatility": 0.2,
+            "lastPrice": 10.4,
+            "bid": 10.2,
+            "ask": 10.6,
+        }
+    ],
+    "puts": [],
+}
+
+
+def _scenario_handler(request: httpx.Request) -> httpx.Response:
+    if request.url.path == "/market/options":
+        return _envelope(dict(_SCENARIO_CHAIN))
+    raise AssertionError(f"unexpected request: {request.url}")
+
+
+def _scenario_args(**overrides: Any) -> dict[str, Any]:
+    args: dict[str, Any] = {
+        "symbol": "AAPL",
+        "legs": [{"expiry": _SCENARIO_EXPIRY, "strike": 100.0, "kind": "call", "qty": 1.0}],
+        "rate": 0.05,
+        "spots": [100.0],
+        "valuation_dates": ["2026-09-30"],
+        "vol_shifts": [0.0],
+    }
+    args.update(overrides)
+    return args
+
+
+def _scenario_tau(valuation_date: str = "2026-09-30") -> float:
+    epoch = datetime.strptime(valuation_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+    return (_SCENARIO_EXPIRY - epoch) / (365.25 * 24 * 3600)
+
+
+def test_options_scenario_single_long_call_matches_black_scholes_at_spot_equals_strike() -> None:
+    client = make_client(_scenario_handler)
+    result = client.options_scenario(_scenario_args()).data
+    expected = black_scholes_price(
+        spot=100.0,
+        strike=100.0,
+        rate=0.05,
+        vol=0.2,
+        expiry_years=_scenario_tau(),
+        kind="call",
+    )
+    assert result.grid[0].value == pytest.approx(expected, rel=1e-9)
+    assert result.grid[0].pnl == pytest.approx(expected - 10.4, rel=1e-9)
+
+
+def test_options_scenario_breakeven_is_strike_plus_premium() -> None:
+    client = make_client(_scenario_handler)
+    result = client.options_scenario(_scenario_args(spots=[80.0, 90.0, 100.0, 110.0, 120.0])).data
+    assert result.premium_paid == pytest.approx(10.4)
+    assert result.breakevens == pytest.approx([110.4], rel=1e-9)
+
+
+def test_options_scenario_long_call_greeks_have_the_right_signs() -> None:
+    client = make_client(_scenario_handler)
+    result = client.options_scenario(_scenario_args()).data
+    assert result.greeks_at_spot == pytest.approx(100.0)
+    assert result.greeks_valuation_date == "2026-09-30"
+    leg = result.leg_greeks[0]
+    assert 0.0 < leg.delta < 1.0
+    assert leg.gamma > 0.0
+    assert leg.vega > 0.0
+    assert leg.theta < 0.0
+    assert result.portfolio_greeks.delta == pytest.approx(leg.delta)
+
+
+def test_options_scenario_expired_leg_values_intrinsic() -> None:
+    client = make_client(_scenario_handler)
+    result = client.options_scenario(
+        _scenario_args(spots=[110.0], valuation_dates=["2027-06-30"])
+    ).data
+    assert result.grid[0].value == pytest.approx(10.0)
+    assert result.grid[0].pnl == pytest.approx(-0.4)
+
+
+def test_options_scenario_vol_shift_bumps_value() -> None:
+    client = make_client(_scenario_handler)
+    result = client.options_scenario(_scenario_args(vol_shifts=[0.0, 0.05])).data
+    base = [point for point in result.grid if point.vol_shift == 0.0][0]
+    bumped = [point for point in result.grid if point.vol_shift == 0.05][0]
+    assert bumped.value > base.value
+
+
+def test_options_scenario_unknown_leg_is_invalid_input() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return _scenario_handler(request)
+
+    client = make_client(handler)
+    envelope = client.options_scenario(
+        _scenario_args(
+            legs=[{"expiry": _SCENARIO_EXPIRY, "strike": 999.0, "kind": "call", "qty": 1.0}]
+        )
+    )
+    assert envelope.data.code == "invalid_input"
+    assert calls == ["/market/options"]
+
+
+def test_options_scenario_zero_qty_is_invalid_input_without_a_request() -> None:
+    calls: list[int] = []
+
+    def _fail(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        raise AssertionError("contract violations must not reach the wire")
+
+    client = make_client(_fail)
+    envelope = client.options_scenario(
+        _scenario_args(
+            legs=[{"expiry": _SCENARIO_EXPIRY, "strike": 100.0, "kind": "call", "qty": 0.0}]
+        )
+    )
+    assert envelope.data.code == "invalid_input"
+    assert calls == []
+
+
+def test_options_scenario_negative_vol_from_shift_is_invalid_input() -> None:
+    client = make_client(_scenario_handler)
+    envelope = client.options_scenario(_scenario_args(vol_shifts=[-0.25]))
+    assert envelope.data.code == "invalid_input"
+
+
+def test_options_scenario_chain_failure_is_a_warned_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+
+    client = make_client(handler)
+    envelope = client.options_scenario(_scenario_args())
+    assert envelope.data.code == "upstream_error"
+    assert envelope.warnings, "a failed leg must warn, not just error"
+
+
+def test_options_scenario_honors_the_kill_switch_without_a_request() -> None:
+    calls: list[int] = []
+
+    def _fail(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        raise AssertionError("a disabled family must not reach the wire")
+
+    client = make_client(_fail, enabled=False)
+    envelope = client.options_scenario(_scenario_args())
+    assert envelope.data.code == "upstream_error"
+    assert "disabled" in envelope.data.message
+    assert calls == []
+
+
+def test_options_scenario_result_is_cached() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _scenario_handler(request)
+
+    client = make_client(handler)
+    first = client.options_scenario(_scenario_args())
+    second = client.options_scenario(_scenario_args())
+    assert first.data.grid[0].value == pytest.approx(second.data.grid[0].value)
+    # One chain read; the repeat serves the envelope cache.
+    assert len(calls) == 1
+
+
+def test_scenario_dispatch_never_claims_gloomberb_sourcing() -> None:
+    execute = build_digifetch_tool_dispatcher(client=make_client(_scenario_handler))
+    result = execute(
+        "digifetch_options_scenario",
+        _scenario_args(spots=[80.0, 90.0, 100.0, 110.0, 120.0]),
+    )
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    payload = json.loads(str(result["content"]))
+    assert payload["data"]["breakevens"] == pytest.approx([110.4], rel=1e-6)
     assert "attribution" not in payload
     assert "source_url" not in payload

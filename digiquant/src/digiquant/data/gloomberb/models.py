@@ -26,6 +26,7 @@ dropped. Input models forbid unknown fields so a typo fails loudly.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime, timezone
 from typing import Annotated, Any, Generic, Literal, TypeVar  # score:allow untyped any — wire JSON
@@ -116,6 +117,9 @@ __all__ = [
     "DividendYieldInput",
     "FxMatrixInput",
     "VixTermInput",
+    # options-scenario composition inputs (130-coverage Task 8: OSA)
+    "OptionsScenarioLeg",
+    "OptionsScenarioInput",
     # portfolio-math composition inputs (130-coverage Task 3)
     "ComparePerfInput",
     "CorrMatrixInput",
@@ -261,6 +265,13 @@ __all__ = [
     "DividendYieldResult",
     "FxMatrixResult",
     "VixTermResult",
+    # options-scenario composition payloads (130-coverage Task 8: OSA)
+    "OptionsScenarioLegDetail",
+    "OptionsScenarioGridPoint",
+    "OptionsScenarioExpiryPoint",
+    "OptionsScenarioLegGreeks",
+    "OptionsScenarioPortfolioGreeks",
+    "OptionsScenarioResult",
     "STATEMENT_FIELDS",
     "StatementField",
     # portfolio-math composition payloads (130-coverage Task 3)
@@ -337,6 +348,8 @@ __all__ = [
     "DividendYieldEnvelope",
     "FxMatrixEnvelope",
     "VixTermEnvelope",
+    # options-scenario composition envelope (130-coverage Task 8: OSA)
+    "OptionsScenarioEnvelope",
     # portfolio-math composition envelopes (130-coverage Task 3)
     "ComparePerfEnvelope",
     "CorrMatrixEnvelope",
@@ -2337,6 +2350,173 @@ class VixTermResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Options-scenario composition inputs/payloads (130-coverage Task 8: OSA)
+# ---------------------------------------------------------------------------
+#
+# A multi-leg European book valued over a spot/date/vol-shift grid. Legs are
+# matched to listed options_chain contracts (exact expiry/strike/kind) for
+# their implied vol and last-price cost basis; every number is then derived
+# locally with the Task 1 Black-Scholes core, so the tool is unattributed.
+
+
+class OptionsScenarioLeg(_CamelModel):
+    """One book leg: a listed contract address plus a signed quantity.
+
+    ``expiry`` is epoch seconds matching ``OptionContract.expiration`` (the
+    millisecond ceiling from ``OptionsChainInput`` applies — a millisecond
+    timestamp is rejected, never reinterpreted). ``qty`` is signed (+ long /
+    - short) and must be nonzero.
+    """
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+    expiry: float
+    strike: float = Field(gt=0.0)
+    kind: Literal["call", "put"]
+    qty: float
+
+    @model_validator(mode="after")
+    def _reject_millisecond_expiry(self) -> OptionsScenarioLeg:
+        if self.expiry >= EPOCH_SECONDS_CEILING:
+            raise ValueError(
+                "expiry must be epoch seconds, not milliseconds "
+                f"(got {self.expiry}); multiply seconds by 1000 only if you "
+                "meant milliseconds"
+            )
+        return self
+
+
+class OptionsScenarioInput(_InputModel):
+    """Multi-leg European scenario over the options_chain read (composition).
+
+    ``spots`` is the valuation grid (each positive), ``valuation_dates`` the
+    decay grid (strict ISO ``YYYY-MM-DD``), ``vol_shifts`` additive bumps to
+    each leg's chain implied vol (default [0.0]). Negative rates pass through;
+    every other contract violation is ``invalid_input``, never clamped.
+    """
+
+    symbol: Symbol
+    legs: list[OptionsScenarioLeg] = Field(min_length=1, max_length=8)
+    rate: float
+    spots: list[float] = Field(min_length=1, max_length=21)
+    valuation_dates: list[date] = Field(min_length=1, max_length=7)
+    vol_shifts: list[float] = Field(default_factory=lambda: [0.0], min_length=1, max_length=5)
+
+    @field_validator("valuation_dates", mode="before")
+    @classmethod
+    def _only_strict_iso_dates(cls, value: object) -> object:
+        """Accept only ``YYYY-MM-DD`` strings (or real ``date``s), per item."""
+        if not isinstance(value, list):
+            return value
+        checked: list[object] = []
+        for item in value:
+            if isinstance(item, date) and not isinstance(item, datetime):
+                checked.append(item)
+            elif isinstance(item, str) and re.fullmatch(_ISO_DATE_PATTERN, item.strip()):
+                checked.append(item.strip())
+            else:
+                raise ValueError(
+                    "valuation_dates must be ISO YYYY-MM-DD date strings (or dates); "
+                    f"got {type(item).__name__} {item!r}"
+                )
+        return checked
+
+    @model_validator(mode="after")
+    def _require_finite_positive_math(self) -> OptionsScenarioInput:
+        for spot in self.spots:
+            if not math.isfinite(spot) or spot <= 0.0:
+                raise ValueError(f"spots must be finite and positive, got {spot!r}")
+        if not math.isfinite(self.rate):
+            raise ValueError(f"rate must be finite, got {self.rate!r}")
+        for shift in self.vol_shifts:
+            if not math.isfinite(shift):
+                raise ValueError(f"vol_shifts must be finite, got {shift!r}")
+        for leg in self.legs:
+            if not math.isfinite(leg.expiry):
+                raise ValueError(f"leg expiry must be finite, got {leg.expiry!r}")
+            if not math.isfinite(leg.strike):
+                raise ValueError(f"leg strike must be finite, got {leg.strike!r}")
+            if not math.isfinite(leg.qty) or leg.qty == 0.0:
+                raise ValueError(f"leg qty must be finite and nonzero, got {leg.qty!r}")
+        return self
+
+
+class OptionsScenarioLegDetail(_CamelModel):
+    """A leg resolved against the chain: the IV priced and the premium paid."""
+
+    expiry: float
+    strike: float
+    kind: Literal["call", "put"]
+    qty: float
+    implied_vol: float
+    premium: float
+
+
+class OptionsScenarioGridPoint(_CamelModel):
+    """Book value and P&L at one (spot, date, vol-shift) grid node."""
+
+    spot: float
+    valuation_date: str
+    vol_shift: float
+    value: float
+    pnl: float
+
+
+class OptionsScenarioExpiryPoint(_CamelModel):
+    """Expiry payoff and P&L per grid spot (the curve breakevens bisect)."""
+
+    spot: float
+    payoff: float
+    pnl: float
+
+
+class OptionsScenarioLegGreeks(_CamelModel):
+    """Finite-difference Greeks for one leg (qty included)."""
+
+    leg_index: int
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+
+
+class OptionsScenarioPortfolioGreeks(_CamelModel):
+    """Book Greeks: the leg-Greek sums at the reference corner."""
+
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+
+
+class OptionsScenarioResult(_CamelModel):
+    """Grid values, expiry payoff, breakevens, and corner Greeks.
+
+    Greeks are evaluated at the first spot and first valuation date with no
+    vol shift (``greeks_at_spot`` / ``greeks_valuation_date``); ``theta`` is
+    the value change for one day's passage of time (negative for long
+    premium), ``vega`` per unit vol. European exercise throughout: intrinsic
+    value at/after a leg's expiry.
+    """
+
+    symbol: str
+    legs: list[OptionsScenarioLegDetail] = Field(default_factory=list)
+    premium_paid: float
+    valuation_epochs: list[float] = Field(default_factory=list)
+    grid: list[OptionsScenarioGridPoint] = Field(default_factory=list)
+    expiry_payoff: list[OptionsScenarioExpiryPoint] = Field(default_factory=list)
+    breakevens: list[float] = Field(default_factory=list)
+    greeks_at_spot: float
+    greeks_valuation_date: str
+    leg_greeks: list[OptionsScenarioLegGreeks] = Field(default_factory=list)
+    portfolio_greeks: OptionsScenarioPortfolioGreeks | None = None
+
+
+# ---------------------------------------------------------------------------
 # Portfolio-math composition inputs/payloads (130-coverage Task 3)
 # ---------------------------------------------------------------------------
 #
@@ -2686,6 +2866,7 @@ KellyEnvelope = DigifetchEnvelope[KellyResult]
 DividendYieldEnvelope = DigifetchEnvelope[DividendYieldResult]
 FxMatrixEnvelope = DigifetchEnvelope[FxMatrixResult]
 VixTermEnvelope = DigifetchEnvelope[VixTermResult]
+OptionsScenarioEnvelope = DigifetchEnvelope[OptionsScenarioResult]
 ComparePerfEnvelope = DigifetchEnvelope[ComparePerfResult]
 CorrMatrixEnvelope = DigifetchEnvelope[CorrMatrixResult]
 RelGraphEnvelope = DigifetchEnvelope[RelGraphResult]
