@@ -50,7 +50,7 @@ subagent policy for the full reasoning.
 
 | Name | Source file | When to invoke |
 |------|-------------|----------------|
-| `finish-task` | `finish-task/SKILL.md` | End-of-task pipeline: score staged diff, commit, open PR. |
+| `finish-task` | `finish-task/SKILL.md` | End-of-task pipeline: run tests, commit, open PR. |
 | `triage` | `triage/SKILL.md` | Diagnose PR CI failures — fetch checks, bucket by type, emit minimal fix commands. Triggers on "/triage", "why is CI failing". |
 | `ci-triage` | `ci-triage/SKILL.md` | Same intent as `triage` for agents that load skills by name; bucket CI failures with minimal fix commands. |
 
@@ -60,7 +60,6 @@ subagent policy for the full reasoning.
 |---------|-------------|-------------|
 | `/normalize` | `normalize.md` | Invoke `dictation-normalizer` subagent. |
 | `/spec` | `spec.md` | Invoke `spec-writer` subagent. |
-| `/score` | `score.md` | Optional `make score` rubric on staged changes (not a pre-PR gate). |
 | `/task` | `task.md` | Start a backlog task via `make task ISSUE=N`. |
 | `/triage` | `triage.md` | Triage CI failures for a PR number. |
 | `/review` | `review.md` | Run the review lens fan-out (correctness, claim accuracy, regression, security, CI/deploy) for a PR number, in-session when Bugbot is unavailable. |

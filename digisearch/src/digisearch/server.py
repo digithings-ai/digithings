@@ -611,6 +611,44 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _twin_entry(result: Any, position: int) -> dict[str, Any]:
+    """Extract the dedupe-relevant fields from one backend ``Result``.
+
+    Identity comes from the vault namespace first (``vault_path``), then an
+    http(s) ``source_url`` (URL-ingested chunks carry a tmp-staging
+    ``metadata.path`` that must not shadow the shared URL, #4856 review),
+    then ``path``. A file-derived ``source_url`` is an ingest-location
+    artifact, never an identity. The http(s) URL doubles as the keep-signal
+    preserving the only citable link.
+    """
+    from digisearch.search.namespace_dedupe import is_http_url
+
+    chunk = getattr(result, "chunk", None)
+    metadata = dict(getattr(chunk, "metadata", None) or {})
+    source_url = metadata.get("source_url")
+    http_source = source_url if is_http_url(source_url) else None
+    return {
+        "path": metadata.get("vault_path") or http_source or metadata.get("path") or "",
+        "content": getattr(chunk, "content", "") or "",
+        "url": getattr(result, "url", None) or metadata.get("url") or http_source,
+        "position": position,
+    }
+
+
+def _drop_namespace_twins(results: list[Any]) -> list[Any]:
+    """Drop stale cross-namespace twin hits (#4823).
+
+    Full chunk bodies only exist pre-normalization, so this runs on backend
+    ``Result`` objects: entries collapse on exact body equality plus
+    suffix-related metadata paths, and survivors flow into ``normalize``.
+    """
+    from digisearch.search.namespace_dedupe import dedupe_namespace_copies
+
+    entries = [_twin_entry(result, position) for position, result in enumerate(results)]
+    keep = {entry["position"] for entry in dedupe_namespace_copies(entries)}
+    return [result for position, result in enumerate(results) if position in keep]
+
+
 def run_query(req: QueryRequest) -> QueryResponse:
     """Core query implementation; shared by ``POST /query`` and orchestrator invoke."""
     from digisearch.core.standard_hits import normalize_query_hit
@@ -642,6 +680,7 @@ def run_query(req: QueryRequest) -> QueryResponse:
     )
     response = query_index(q, index_name=req.index_name)
     results = response.results
+    results = _drop_namespace_twins(results)
     out_results: list[dict] = [normalize_query_hit(r, content_preview_max=500) for r in results]
     summary: dict[str, Any] | None = None
     use_summary = (req.response_mode or "").strip().lower() == "summary" or (

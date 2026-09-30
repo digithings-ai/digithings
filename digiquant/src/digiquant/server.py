@@ -777,11 +777,11 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
     if tool.startswith("luxalgo_"):
-        # LuxAlgo Library family (#4779 P0): one shared in-process dispatcher
-        # with the MCP + pipeline-agent surfaces, so hub callers get the same
-        # attribution envelope. The family is keyless, so every declared name
-        # is accepted here; the kill switch answers the typed disabled
-        # upstream_error envelope with no request, never a 400.
+        # LuxAlgo hosted family (#4779 P0 Library, #4844 edge/trackers): one shared
+        # in-process dispatcher with the MCP + pipeline-agent surfaces, so hub
+        # callers get the same attribution envelope. The family is keyless, so
+        # every declared name is accepted here; the kill switch answers the typed
+        # disabled upstream_error envelope with no request, never a 400.
         from digiquant.data.luxalgo.agent_tools import (
             LUXALGO_DISPATCH,
             build_luxalgo_tool_dispatcher,

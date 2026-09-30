@@ -218,6 +218,20 @@ Key request fields:
 
 Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
 
+Cross-namespace twin dedupe (#4823): before normalization, `run_query`
+collapses hits whose full chunk bodies are byte-identical and whose
+metadata paths are suffix-related at a `/` boundary (live path plus
+tenant-prefixed copy, e.g. `clients/digithings/...` — an index can hold
+both because vector IDs are path-derived, so a re-sync under a new prefix
+adds copies instead of overwriting). Identity comes from the vault
+namespace first (`metadata.vault_path`), then an http(s) `source_url`
+(URL-ingested chunks carry a tmp-staging `metadata.path` that must not
+shadow the shared URL, #4856 review), then `metadata.path`. A file-derived
+`source_url` is an ingest-location artifact, never an identity. The http(s)
+URL doubles as the keep-signal. Within a twin group the http(s)-URL
+carrier wins, else the longest (tenant-prefixed) path; `total` still
+reports the backend count. Helper: `search/namespace_dedupe.py`.
+
 #### `POST /ingest`
 
 Auth required (`digisearch:ingest` scope). Rate limited: 30 req/min per IP.
@@ -1196,7 +1210,15 @@ digisearch/src/digisearch/
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
 ├── pipeline/
-│   └── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
+│   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
+│   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
+│                              # + fetch_json_feed (JSON feeds, e.g. trackers)
+├── trackers_ingest.py         # luxalgo market-trackers-data CC0 ingest (#4826):
+│                              # congress-trades fetch → normalize → index_chunks
+│                              # (fetch delegates to pipeline.url_ingest)
+├── trackers_wave2_ingest.py   # wave-2 ticker datasets (#4849): insider →
+│                              # 13F → short-volume → lobbying → gov-contracts
+│                              # (same pattern via a TRACKER_DATASETS table)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
 ├── client.py                  # digisearch Python client
@@ -1308,6 +1330,77 @@ digisearch/src/digisearch/
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
+
+### luxalgo market-trackers ingest (#4826)
+
+CC0 public-records layer **beside Gloomberg** (never replacing the terminal
+digest). `trackers_ingest.py` proves the per-dataset adapter pattern on the
+smallest dataset (congress-trades) for the remaining 17 to copy:
+
+- Fetch goes only through `pipeline.url_ingest.fetch_json_feed` — the single
+  URL-fetch site (digifetch `HttpFetcher` + `validate_fetch_url`;
+  `raw.githubusercontent.com` allowlisted, so validation is DNS-free). The
+  generic `ingest_url` HTML path is wrong for a JSON feed, so the JSON helper
+  reuses its identical guards minus extraction. The module never opens
+  sockets itself and never fetches directly. Manifest
+  (`market-trackers-data/main/manifest.json`, `datasets.<name>.stale`) is
+  checked first — an explicit `stale: true` raises `StaleDatasetError` before
+  any write; an unreadable manifest warns and proceeds (advisory signal).
+  Fetch/validation/shape failures raise `TrackersFetchError` (never confused
+  with a stale flag); a served-vs-manifest row-count mismatch warns and
+  proceeds.
+- `normalize_congress_trade` maps one live-schema row to
+  `{doc_id, text, metadata}` with `doc_id = {chamber}:{docId}:{rowIndex}` and
+  `provenance.sourceUrl → Document.source / metadata[source_url]` (every chunk
+  carries `source_url`; `needsReview → needs_review`). Null-ticker rows are
+  ingested, never dropped silently (`ticker` key simply absent post-Chroma
+  normalization).
+- Idempotency: `Document.id` reuses research_ingest's `_stable_doc_id`
+  (seeded by the natural key); chunk ids are
+  `luxalgo-trackers::congress-trades::<key>::<idx>`, so all backends upsert.
+  The `ingested`/`skipped` counts probe the stub index (exact in tests); on
+  production backends a rewritten row reports as ingested while storage still
+  dedupes. Same-key content updates are skip-not-replace (refresh = follow-up).
+- Default index `trackers` (`DIGISEARCH_TRACKERS_INDEX` override), separate
+  from the research `atlas` index. digigraph needs no new code (existing
+  digisearch tools).
+- Dataset expansion order: congress-trades (#4826 spike) → wave 2 (#4849):
+  insider-transactions → thirteenf-holdings → short-volume →
+  lobbying-filings → gov-contracts. Remaining non-ticker datasets (bills,
+  hearings, fed-communications, patents, trials, FEC, wiki-pageviews) and
+  `cot-reports` (upstream `rows: 0, stale: true` — skipped until fresh) are
+  later waves; Parquet is out of scope (unverified upstream).
+
+### luxalgo market-trackers wave-2 expansion (#4849)
+
+`trackers_wave2_ingest.py` copies the congress-trades adapter pattern once
+per dataset behind a `TRACKER_DATASETS` spec table (manifest key, feed URL,
+`Document.doc_type`, ticker location). All five share the `trackers` index,
+the `fetch_json_feed` transport, the manifest stale-gate (per-dataset entry),
+`_stable_doc_id` seeding, and the chunker factory (`get_document_chunker()`,
+never hard-coded). Natural keys are `{dataset}:{upstream-id}`, namespaced so
+the five datasets cohabit one index without collision; chunk ids are
+`luxalgo-trackers::<dataset>::<upstream-id>::<idx>`.
+
+| Dataset (manifest key) | Feed (`exportDir/latest.json`) | Rows (manifest, 2026-09-30) | Ticker shape | Natural key |
+|------------------------|-------------------------------|-----------------------------|--------------|-------------|
+| `insider-transactions` | `insider/transactions` | ~17.5k | top-level `ticker` (rarely null) | `{dataset}:{accessionNumber}:{leg}` (`id`) |
+| `thirteenf-holdings` | `thirteenf/holdings` | ~111k | top-level `ticker`, **always null upstream** (`thirteenf-xml@1` skips CUSIP→ticker); rows keyed by issuer/cusip | `{dataset}:{accessionNumber}:{rowIndex}` (`id`) |
+| `short-volume` | `short-volume/daily` | ~122k daily | top-level `ticker` (required) | `{date}:{ticker}:{market}` (`id`) |
+| `lobbying-filings` | `lobbying/filings` | ~56k | `client.tickers[]` (often empty; primary = first) | filing `id` (= `filingUuid`) |
+| `gov-contracts` | `contracts/awards` | ~12.7k | `recipient.tickers[]` (often empty; primary = first) | award `id` |
+
+Null-ticker rows are ingested, never dropped (`ticker` key absent
+post-Chroma normalization; text falls back to issuer/client/recipient name).
+The full `tickers` list is stored alongside the primary `ticker` (Chroma
+normalization comma-joins lists).
+
+Performance (#4849 prerequisite, applied to both adapters): bulk entry points
+build the stub-index natural-key set **once** per run and thread it through
+`_known_keys` (new keys added as rows index) instead of rescanning per row —
+the deferred-minor O(n²) stub key-scan from #4826, which falls over on the
+100k+ row datasets. Pinned by scan-count tests on both bulk paths.
+Production backends are unaffected (they upsert by stable chunk id).
 
 ### Lazy package surface and install extras
 

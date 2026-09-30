@@ -11,13 +11,12 @@
 #   2. Create git worktree (.worktrees/task/N-slug/)
 #   3. Print spec + pause for agent to implement
 #   4. Run component unit tests
-#   5. Self-score staged changes (4 dimensions)
-#   6. Commit with conventional message
-#   7. Push branch to origin
-#   8. Open PR
-#   9. Remove worktree
+#   5. Commit with conventional message
+#   6. Push branch to origin
+#   7. Open PR
+#   8. Remove worktree
 #
-# Requires: gh CLI, git, python3 (venv or system with score.py deps)
+# Requires: gh CLI, git, python3
 
 set -euo pipefail
 
@@ -63,11 +62,10 @@ if $DRY_RUN; then
   echo "  Step 2  scripts/worktree_task.sh create ${ISSUE}"
   echo "  Step 3  [PAUSE] Agent implements in worktree"
   echo "  Step 4  pytest -m unit -k {component} -v --tb=short"
-  echo "  Step 5  make score (in worktree)"
-  echo "  Step 6  make commit MSG='feat({component}): {title} (#{issue})'"
-  echo "  Step 7  git push origin task/${ISSUE}-{slug}"
-  echo "  Step 8  make pr"
-  echo "  Step 9  scripts/worktree_task.sh remove ${ISSUE}"
+  echo "  Step 5  make commit MSG='feat({component}): {title} (#{issue})'"
+  echo "  Step 6  git push origin task/${ISSUE}-{slug}"
+  echo "  Step 7  make pr"
+  echo "  Step 8  scripts/worktree_task.sh remove ${ISSUE}"
   echo ""
   exit 0
 fi
@@ -135,32 +133,7 @@ if ! eval "$TEST_CMD"; then
   eval "$TEST_CMD" || die "Tests still failing. Aborting pipeline."
 fi
 
-# ── Step 5: Self-score ────────────────────────────────────────────────────────
-step "Self-scoring staged changes"
-cd "$WORKTREE_PATH"
-
-SCORE_ATTEMPTS=0
-while true; do
-  SCORE_ATTEMPTS=$((SCORE_ATTEMPTS + 1))
-  if python3 "${REPO_ROOT}/scripts/score.py" --staged; then
-    echo "Score: PASS"
-    break
-  fi
-
-  if [[ "$SCORE_ATTEMPTS" -ge 2 ]]; then
-    echo ""
-    echo "⚠  Score below threshold after ${SCORE_ATTEMPTS} attempts."
-    echo "   Human review required before proceeding."
-    read -rp "Press Enter to continue anyway (human approved), or Ctrl+C to abort... "
-    break
-  fi
-
-  echo ""
-  echo "Score failed (attempt $SCORE_ATTEMPTS/2). Fix the issues above and stage the fixes."
-  read -rp "Press Enter to re-score... "
-done
-
-# ── Step 6: Commit ────────────────────────────────────────────────────────────
+# ── Step 5: Commit ────────────────────────────────────────────────────────────
 step "Committing"
 cd "$WORKTREE_PATH"
 
@@ -171,17 +144,17 @@ COMMIT_MSG="feat(${COMP_PART}): ${TITLE_RAW} (#${ISSUE})"
 echo "Commit message: $COMMIT_MSG"
 bash "${REPO_ROOT}/scripts/commit_helper.sh" "$COMMIT_MSG"
 
-# ── Step 7: Push ──────────────────────────────────────────────────────────────
+# ── Step 6: Push ──────────────────────────────────────────────────────────────
 step "Pushing branch"
 cd "$WORKTREE_PATH"
 git push origin "$BRANCH" --set-upstream
 
-# ── Step 8: Open PR ───────────────────────────────────────────────────────────
+# ── Step 7: Open PR ───────────────────────────────────────────────────────────
 step "Opening PR"
 cd "$WORKTREE_PATH"
 PR_URL="$(bash "${REPO_ROOT}/scripts/create_pr.sh" 2>&1 | tail -1)"
 
-# ── Step 9: Cleanup (handled by EXIT trap) ────────────────────────────────────
+# ── Step 8: Cleanup (handled by EXIT trap) ────────────────────────────────────
 # Trap calls scripts/worktree_task.sh remove on any exit path.
 
 # ── Done ──────────────────────────────────────────────────────────────────────

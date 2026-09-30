@@ -10,6 +10,7 @@ that need it, so importing this module never requires the extra.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -213,4 +214,54 @@ def ingest_url(
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-__all__ = ["EXTRACTOR", "UrlFetchError", "UrlIngestResult", "ingest_url"]
+def fetch_json_feed(
+    url: str,
+    *,
+    fetcher: HttpFetcher | None = None,
+    allowed_hosts: Iterable[str] | None = None,
+) -> Any:
+    """GET *url* via the shared digifetch client and decode the JSON body.
+
+    Same guards as :func:`ingest_url` (``validate_fetch_url`` + ``HttpFetcher``,
+    allowlisted hosts, no raw sockets) minus the HTML→markdown extraction,
+    which is wrong for a JSON feed. Raises :class:`UrlFetchError` on
+    validation, transport, or JSON-decode failure.
+    """
+    from digifetch.ssrf import SsrfBlockedError, validate_fetch_url
+
+    effective = _effective_allowed_hosts(allowed_hosts)
+    try:
+        url = validate_fetch_url(url, allowed_hosts=effective)
+    except (SsrfBlockedError, ValueError) as exc:
+        raise UrlFetchError(
+            f"invalid URL {url!r}: {exc}", code="url_invalid", http_status=400
+        ) from exc
+
+    owns_fetcher = fetcher is None
+    active = fetcher if fetcher is not None else _default_fetcher(effective)
+    try:
+        try:
+            result = active.fetch(url)
+        except SsrfBlockedError as exc:
+            raise UrlFetchError(
+                f"blocked URL {url!r}: {exc}", code="url_blocked", http_status=400
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise UrlFetchError(f"fetch failed for {url!r}: {exc}") from exc
+        try:
+            return json.loads(result.text)
+        except (ValueError, TypeError) as exc:
+            raise UrlFetchError(
+                f"response from {url!r} is not valid JSON: {exc}",
+                code="url_invalid_json",
+                http_status=502,
+            ) from exc
+    finally:
+        if owns_fetcher:
+            try:
+                active.close()
+            except Exception:
+                pass
+
+
+__all__ = ["EXTRACTOR", "UrlFetchError", "UrlIngestResult", "fetch_json_feed", "ingest_url"]

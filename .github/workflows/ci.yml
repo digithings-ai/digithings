@@ -26,6 +26,7 @@ jobs:
       digismith: ${{ steps.filter.outputs.digismith }}
       digivault: ${{ steps.filter.outputs.digivault }}
       digiclaw: ${{ steps.filter.outputs.digiclaw }}
+      digivoice: ${{ steps.filter.outputs.digivoice }}
       digiquant: ${{ steps.filter.outputs.digiquant }}
       digisearch: ${{ steps.filter.outputs.digisearch }}
       digigraph: ${{ steps.filter.outputs.digigraph }}
@@ -36,7 +37,6 @@ jobs:
       digichat: ${{ steps.filter.outputs.digichat }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
       web: ${{ steps.filter.outputs.web }}
-      score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       research_graph: ${{ steps.filter.outputs.research_graph }}
@@ -72,6 +72,10 @@ jobs:
               - 'digiclaw/**'
               - 'tests/dc/**'
               - '.github/workflows/test-digiclaw.yml'
+            digivoice:
+              - 'digivoice/**'
+              - 'tests/dvo/**'
+              - '.github/workflows/test-digivoice.yml'
             digiquant:
               - 'digiquant/**'
               - 'tests/dq/**'
@@ -126,21 +130,6 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
-            score:
-              - 'digibase/**'
-              - 'digiclaw/**'
-              - 'digigraph/**'
-              - 'digiquant/**'
-              - 'digisearch/**'
-              - 'digismith/**'
-              - 'digikey/**'
-              - 'digivault/**'
-              - 'scripts/**'
-              - 'tests/**'
-              - 'agents.yml'
-              - 'agents/**'
-              - '.github/workflows/test-score.yml'
-              - 'config/**'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
@@ -285,6 +274,11 @@ jobs:
     if: needs.changes.outputs.digiclaw == 'true'
     uses: ./.github/workflows/test-digiclaw.yml
 
+  digivoice:
+    needs: changes
+    if: needs.changes.outputs.digivoice == 'true'
+    uses: ./.github/workflows/test-digivoice.yml
+
   digiquant:
     needs: changes
     if: needs.changes.outputs.digiquant == 'true'
@@ -328,11 +322,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.web == 'true'
     uses: ./.github/workflows/test-web.yml
-
-  score:
-    needs: changes
-    if: needs.changes.outputs.score == 'true'
-    uses: ./.github/workflows/test-score.yml
 
   e2e-contract:
     needs: changes
@@ -622,11 +611,6 @@ jobs:
   # This job always runs, tolerates `skipped` on every dependency, and fails only
   # if something it depends on actually failed or was cancelled — so IT is the
   # one stable name to require on develop.
-  #
-  # Exception — `score` is advisory (#3528): AGENTS.md treats `make score` as
-  # optional human/CI tooling. Keeping it in `needs` still runs the job and
-  # surfaces a red `score / score` check; the aggregator must not fail on it
-  # or module promotions get forced into `--admin` merges.
   required-checks:
     name: Required checks passed
     if: always()
@@ -638,6 +622,7 @@ jobs:
       - digismith
       - digivault
       - digiclaw
+      - digivoice
       - digiquant
       - digisearch
       - digigraph
@@ -646,7 +631,6 @@ jobs:
       - digichat
       - dashboard
       - web
-      - score
       - e2e-contract
       - nautilus-smoke
       - research-graph

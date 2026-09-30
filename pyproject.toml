@@ -49,6 +49,7 @@ members = [
   "digiskills",
   "digismith",
   "digivault",
+  "digivoice",
 ]
 
 [tool.uv.sources]
@@ -63,3 +64,4 @@ digisearch = { workspace = true }
 digiskills = { workspace = true }
 digismith = { workspace = true }
 digivault = { workspace = true }
+digivoice = { workspace = true }

@@ -30,6 +30,7 @@ members = [
     "digismith",
     "digithings-workspace",
     "digivault",
+    "digivoice",
 ]
 
 [[package]]
@@ -1951,6 +1952,29 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.29" },
 ]
 provides-extras = ["service", "supabase"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
+
+[[package]]
+name = "digivoice"
+version = "0.1.0"
+source = { editable = "digivoice" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2" }]
 
 [package.metadata.requires-dev]
 dev = [

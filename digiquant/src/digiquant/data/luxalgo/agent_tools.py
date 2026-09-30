@@ -1,6 +1,6 @@
-"""In-process ``luxalgo_*`` tool surface for pipeline agents (#4779 P0).
+"""In-process ``luxalgo_*`` tool surface for pipeline agents (#4779 P0, #4844).
 
-The 8 LuxAlgo Library tools are MCP-registration + orchestrator manifest
+The 14 LuxAlgo hosted tools are MCP-registration + orchestrator manifest
 schemas only; this module gives pipeline agents the same in-process surface
 the digifetch family has:
 
@@ -8,13 +8,13 @@ the digifetch family has:
   :func:`digiquant.orchestrator_tools.build_orchestrator_tool_manifest`
   (filtered to the names declared in the luxalgo :data:`TOOL_ENTITLEMENTS`),
   so the MCP, manifest, and in-process surfaces cannot drift.
-* :data:`RESEARCH_TOOLS` — the curated research subset (all 8; Library reads
-  are research-only by scope §P0).
+* :data:`RESEARCH_TOOLS` — the curated research subset (the 8 Library reads;
+  Library content is research-only by scope §P0).
 * :func:`available_luxalgo_tools` — subset -> schemas, dropping the whole
   family when ``LUXALGO_ENABLED`` disables it.
 * :func:`build_luxalgo_tool_dispatcher` — ``(name, args) -> {"content": <json
   str>, "ok": bool}`` routed through the shared :class:`LuxAlgoClient` and
-  serialized with the LuxAlgo attribution envelope.
+  serialized with the per-family LuxAlgo attribution envelope.
 
 The client factory (:func:`build_luxalgo_client`) and envelope serializer
 (:func:`luxalgo_envelope_json`) live here too, so the MCP surface and the
@@ -24,7 +24,16 @@ them).
 LuxAlgo Library reads are **research references, not pipeline primaries** —
 and the tools are read-scope. Every payload keeps the "Sourced from LuxAlgo
 Library" attribution + the upstream canonical URL where one page is addressed.
-Indicator source code is never exposed (CC BY-NC-SA license boundary).
+Indicator source code is never exposed (CC BY-NC-SA license boundary, #4845):
+the dispatcher refuses source-code tool names with a typed envelope and no
+request while ``LUXALGO_COMMERCIAL_LICENSE`` is OFF (default), and every
+payload states the flag state it was produced under.
+
+The Edge Stats preset reads (#4844) carry the edge-stats attribution plus the
+honesty disclaimer on every ``edge_report`` result. The Trackers companions
+(#4844) carry the CC0-dumps attribution: dumps stay the source of record, so
+neither family joins :data:`RESEARCH_TOOLS` and neither is wired into a
+pipeline phase — they are freshness checks and ad-hoc lookups only.
 """
 
 from __future__ import annotations
@@ -44,7 +53,15 @@ from pydantic import BaseModel, ValidationError
 
 from .client import LUXALGO_ENABLED_ENV, luxalgo_enabled
 from .entitlements import TOOL_ENTITLEMENTS
+from .license_guard import (
+    SOURCE_CODE_TOOL_NAMES,
+    luxalgo_commercial_license_enabled,
+    source_code_refusal_message,
+)
 from .models import (
+    EdgePresetsInput,
+    EdgeReportInput,
+    EdgeSymbolsInput,
     LibraryGetConceptInput,
     LibraryGetFamilyInput,
     LibraryGetIndicatorInput,
@@ -55,6 +72,9 @@ from .models import (
     LibrarySearchInput,
     LuxalgoEnvelope,
     LuxalgoError,
+    TrackersDatasetsInput,
+    TrackersLatestInput,
+    TrackersTickerInput,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,13 +142,20 @@ def _canonical_url_for(envelope: Any) -> str | None:
     return None
 
 
-def luxalgo_envelope_json(envelope: Any, *, canonical_url: str | None = None) -> str:
-    """Serialize a ``LuxalgoEnvelope`` with attribution + canonical link."""
+def luxalgo_envelope_json(
+    envelope: Any, *, canonical_url: str | None = None, tool: str | None = None
+) -> str:
+    """Serialize a ``LuxalgoEnvelope`` with attribution + canonical link.
+
+    ``tool`` selects the family's attribution set (Edge Stats / Trackers via
+    :func:`attribution_fields_for`); tools without a declared set keep the
+    Library attribution.
+    """
     payload = envelope.model_dump(mode="json")
-    from digiquant.data.luxalgo import attribution_fields
+    from digiquant.data.luxalgo import attribution_fields_for
 
     url = canonical_url or _canonical_url_for(envelope)
-    payload.update(attribution_fields(url))
+    payload.update(attribution_fields_for(tool or "", url))
     return json.dumps(payload, indent=2, default=str)
 
 
@@ -226,6 +253,12 @@ LUXALGO_DISPATCH: dict[str, LuxalgoDispatch] = {
         LibraryListFamiliesInput, "library_list_families"
     ),
     "luxalgo_library_get_family": LuxalgoDispatch(LibraryGetFamilyInput, "library_get_family"),
+    "luxalgo_edge_symbols": LuxalgoDispatch(EdgeSymbolsInput, "edge_symbols"),
+    "luxalgo_edge_presets": LuxalgoDispatch(EdgePresetsInput, "edge_presets"),
+    "luxalgo_edge_report": LuxalgoDispatch(EdgeReportInput, "edge_report"),
+    "luxalgo_trackers_datasets": LuxalgoDispatch(TrackersDatasetsInput, "trackers_datasets"),
+    "luxalgo_trackers_latest": LuxalgoDispatch(TrackersLatestInput, "trackers_latest"),
+    "luxalgo_trackers_ticker": LuxalgoDispatch(TrackersTickerInput, "trackers_ticker"),
 }
 
 
@@ -254,6 +287,24 @@ def build_luxalgo_tool_dispatcher(
         return client if client is not None else build_luxalgo_client()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str | dict[str, Any]:
+        # License boundary (#4845): a source-code tool name is refused with a
+        # typed envelope and no request while the commercial flag is OFF — even
+        # if a dispatch row for it is ever added. Runs before the unknown-tool
+        # branch so the refusal names the license, not the wiring.
+        if name in SOURCE_CODE_TOOL_NAMES and not luxalgo_commercial_license_enabled():
+            logger.warning("luxalgo tool %s refused: no commercial Library license", name)
+            return {
+                "content": luxalgo_envelope_json(
+                    LuxalgoEnvelope(
+                        data=LuxalgoError(
+                            code="invalid_input",
+                            message=source_code_refusal_message(name),
+                            retryable=False,
+                        )
+                    )
+                ),
+                "ok": False,
+            }
         spec = LUXALGO_DISPATCH.get(name)
         if spec is None:
             return {"content": f"Error: unknown luxalgo tool {name!r}", "ok": False}
@@ -272,7 +323,8 @@ def build_luxalgo_tool_dispatcher(
                             message=f"invalid args for {name}: {exc.errors(include_url=False)}",
                             retryable=False,
                         )
-                    )
+                    ),
+                    tool=name,
                 ),
                 "ok": False,
             }
@@ -291,7 +343,8 @@ def build_luxalgo_tool_dispatcher(
                             ),
                             retryable=False,
                         )
-                    )
+                    ),
+                    tool=name,
                 ),
                 "ok": False,
             }
@@ -304,7 +357,7 @@ def build_luxalgo_tool_dispatcher(
                 "ok": False,
             }
         return {
-            "content": luxalgo_envelope_json(envelope),
+            "content": luxalgo_envelope_json(envelope, tool=name),
             # An envelope whose ``data`` slot is a typed error is still a failed
             # call: the model gets the error text, telemetry records ok=False.
             "ok": not isinstance(envelope.data, LuxalgoError),

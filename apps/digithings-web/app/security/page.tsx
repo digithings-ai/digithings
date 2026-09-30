@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Reveal } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
@@ -393,17 +392,6 @@ export default function SecurityPage() {
                 >
                   SECURITY.md — threat model, defaults, disclosure contact
                 </a>
-              </p>
-              <p className="mt-[1.6rem] text-[0.95rem] leading-[1.7] text-ink-soft">
-                For how the same posture is enforced on the way in — the review gates, the test
-                suite, the rubrics —{" "}
-                <Link
-                  className="text-accent [text-underline-offset:2px] hover:text-ink"
-                  href="/quality"
-                >
-                  see the quality page
-                </Link>
-                .
               </p>
             </div>
           </div>

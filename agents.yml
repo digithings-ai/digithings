@@ -139,16 +139,18 @@ components:
     # No dedicated workflow yet; path matches digiskills/AGENTS.md + tests/dsk/.
     test_cmd: "pytest tests/dsk/ -m unit -v --tb=short"
 
+  - name: digivoice
+    port: null
+    description: "Local whisper.cpp and Piper CLI for dictation, speech, and session history"
+    agents_doc: digivoice/AGENTS.md
+    arch_doc: digivoice/ARCHITECTURE.md
+    test_cmd: "pytest tests/dvo/ -m unit -v --tb=short"
+
 agent_capabilities:
   - id: agents-init
     description: "Generate platform adapter files from agents.yml"
     script: scripts/agents_init.py
     make_target: agents-init
-
-  - id: scorer
-    description: "Optional 4-dimension rubric on staged changes (human/CI; not an agent pre-flight)"
-    script: scripts/score.py
-    make_target: score
 
   - id: clean-imports
     description: "Remove unused Python imports with ruff (dry-run by default)"
@@ -217,8 +219,6 @@ claude_code_surface:
       path: .claude/commands/normalize.md
     - name: /spec
       path: .claude/commands/spec.md
-    - name: /score
-      path: .claude/commands/score.md
     - name: /task
       path: .claude/commands/task.md
     - name: /opsx-propose

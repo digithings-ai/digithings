@@ -313,13 +313,25 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 120 for the develop merge-forward (promotion #4745
     prep): merged ARCHITECTURE.md carries both #4717 and #4711 prose —
     fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 120) re-recorded for #4823 (cross-namespace
+    twin-dedupe behavior note in the POST /query section of ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 122 for #4826 (luxalgo market-trackers ingest
+    section + url_ingest JSON-helper tree note in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
+    Re-recorded at count 125 for #4849 (luxalgo market-trackers wave-2
+    expansion table + trackers_wave2_ingest.py tree note in ARCHITECTURE.md)
+    — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 126 for merge of #4849 (luxalgo wave-2, +3) and
+    #4856 (twin-identity priority note, +1) prose — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 120
+    assert len(chunks) == 126
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -331,7 +343,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "bea0bf0dc35372d3",
         "0a3a7b984057149d",
         "27f0ca91eb93d7e1",
-        "5fc146dcd98ed469",
+        "ac22aad7e50a19a8",
+        "d85a3755cd5e8708",
         "6bb725ee96409565",
         "2496b0331a6908ca",
         "d79c9e4802601817",
@@ -387,13 +400,18 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "7cd2ab2a02a644ad",
-        "0f3f0cd274843600",
-        "088e1f78f0807cf2",
-        "3b33ce80895ebd06",
-        "0cc6a533a3ec0447",
-        "819ebadc3320ecc2",
-        "10832c167583db90",
+        "9fdf82f0c003a7a4",
+        "9ebbe22f37b1ac89",
+        "75aa00c56fa87d4c",
+        "ff55f4563a262e29",
+        "b89e580a2d68a708",
+        "d040c14d01f65a04",
+        "3021ca751898fc7b",
+        "ef1849e4569e10b8",
+        "8e7e26ccae99b4a2",
+        "d90f1ea6b18577c2",
+        "6603c2da6eeb5309",
+        "e351b4963a561cd6",
         "3442051d624d3623",
         "06ba55aa13191afa",
         "533d598598a15fa9",
