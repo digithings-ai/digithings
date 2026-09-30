@@ -313,6 +313,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 120 for the develop merge-forward (promotion #4745
     prep): merged ARCHITECTURE.md carries both #4717 and #4711 prose —
     fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 120) re-recorded for #4823 (cross-namespace
+    twin-dedupe behavior note in the POST /query section of ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -331,10 +334,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "bea0bf0dc35372d3",
         "0a3a7b984057149d",
         "27f0ca91eb93d7e1",
-        "5fc146dcd98ed469",
-        "6bb725ee96409565",
-        "2496b0331a6908ca",
-        "d79c9e4802601817",
+        "ac22aad7e50a19a8",
+        "bd5783df8cad254d",
+        "1d58a13adc2f1766",
+        "f79f2f8493e2a01b",
         "8135b004b65f5e71",
         "38ba575592a8ce18",
         "a08f56ac9059ac1b",
