@@ -178,9 +178,9 @@ def _series_block(text: str, series: str) -> str:
 def test_registry_declares_cadences_for_slow_series() -> None:
     """The manifest that drives the refresh must declare the slow cadences."""
     text = MACRO_YAML.read_text()
-    for series in ("M2SL", "UNRATE", "MANEMP", "CPIAUCSL", "PCEPI"):
+    for series in ("M2SL", "UNRATE", "CPIAUCSL", "PCEPI"):
         assert "cadence: monthly" in _series_block(text, series), series
-    for series in ("NFCI", "STLFSI4", "MORTGAGE30US", "WALCL", "ICSA"):
+    for series in ("WALCL", "ICSA"):
         assert "cadence: weekly" in _series_block(text, series), series
 
 

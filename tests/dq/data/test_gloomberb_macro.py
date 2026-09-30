@@ -69,6 +69,29 @@ def test_panel_sets_are_the_probed_split() -> None:
     assert "DTWEXBGS" in DROPPED_SERIES_IDS and "MANEMP" in DROPPED_SERIES_IDS
 
 
+def test_manifest_matches_probed_panel() -> None:
+    from pathlib import Path
+
+    manifest = MacroManifest.from_yaml(
+        Path(__file__).resolve().parents[3]
+        / "digiquant"
+        / "src"
+        / "digiquant"
+        / "research"
+        / "config"
+        / "macro_series.yaml"
+    )
+    ids = {s["id"] for s in manifest.fred_series}
+    assert ids == KEPT_SERIES_IDS
+    assert ids.isdisjoint(DROPPED_SERIES_IDS)
+
+
+def test_default_liquidity_specs_match_live_panel() -> None:
+    from digiquant.indicators.macro_liquidity import DEFAULT_MACRO_SPECS
+
+    assert {s.series_id for s in DEFAULT_MACRO_SPECS} == {"M2SL", "UNRATE"}
+
+
 def test_window_limit_covers_cadence_and_rejects_unknown() -> None:
     assert window_limit(None) == 60
     assert window_limit("daily") == 60
