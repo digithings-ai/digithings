@@ -1,0 +1,110 @@
+{
+  "capturedAt": "2026-09-30T10:41:02+00:00",
+  "command": "python -m digiquant.mcp_server --stdio --scope read",
+  "server": {
+    "name": "digiquant",
+    "protocolVersion": "2025-11-25"
+  },
+  "toolCount": 44,
+  "calls": [
+    {
+      "tool": "digifetch_quotes_batch",
+      "args": {
+        "symbols": [
+          "SPY",
+          "QQQ",
+          "BTC-USD"
+        ]
+      },
+      "envelope": {
+        "source": "gloomberb",
+        "fetched_at": "2026-09-30T10:41:02.412180Z",
+        "attribution": "Sourced from Gloomberb",
+        "delay_notice": "Data delayed up to 15 minutes"
+      },
+      "columns": [
+        "symbol",
+        "price",
+        "change_percent",
+        "market_state",
+        "data_source"
+      ],
+      "rows": [
+        {
+          "symbol": "SPY",
+          "status": "success",
+          "price": 765.0182,
+          "change_percent": 0.10706621303322866,
+          "market_state": "PRE",
+          "data_source": "delayed"
+        },
+        {
+          "symbol": "QQQ",
+          "status": "success",
+          "price": 737.77,
+          "change_percent": -0.021682273386360248,
+          "market_state": "PRE",
+          "data_source": "delayed"
+        },
+        {
+          "symbol": "BTC-USD",
+          "status": "success",
+          "price": 83767.3125,
+          "change_percent": 0.17043092126151396,
+          "market_state": "REGULAR",
+          "data_source": "delayed"
+        }
+      ]
+    },
+    {
+      "tool": "digifetch_price_history",
+      "args": {
+        "symbol": "SPY",
+        "resolution": "1d",
+        "range": "1M"
+      },
+      "envelope": {
+        "source": "gloomberb",
+        "fetched_at": "2026-09-30T10:41:02.683742Z",
+        "attribution": "Sourced from Gloomberb",
+        "delay_notice": "Data delayed up to 15 minutes"
+      },
+      "columns": [
+        "date",
+        "close",
+        "volume"
+      ],
+      "rows": [
+        {
+          "date": "2026-09-23",
+          "close": 767.8099975585938,
+          "volume": 54931700.0
+        },
+        {
+          "date": "2026-09-24",
+          "close": 767.1799926757812,
+          "volume": 43983700.0
+        },
+        {
+          "date": "2026-09-25",
+          "close": 771.3499755859375,
+          "volume": 36666700.0
+        },
+        {
+          "date": "2026-09-28",
+          "close": 765.6099853515625,
+          "volume": 42694500.0
+        },
+        {
+          "date": "2026-09-29",
+          "close": 764.2,
+          "volume": 37009343.0
+        }
+      ],
+      "meta": {
+        "bar_count": 21,
+        "shown": "last 5"
+      }
+    }
+  ]
+}

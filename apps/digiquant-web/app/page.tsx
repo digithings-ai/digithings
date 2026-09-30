@@ -9,7 +9,10 @@ import {
   NumberedStages,
   PageTitle,
   Section,
+  fmtNum,
+  fmtPct,
   subsystems,
+  toneClass,
 } from "@digithings/ui";
 import {
   Table,
@@ -23,6 +26,7 @@ import {
 } from "@digithings/ui/ui";
 import { PortfolioIsland } from "@/components/live/portfolio-island";
 import { StrategyLibraryLive } from "@/components/tearsheet/strategy-library-live";
+import transcript from "./_mcp-transcript.json";
 import { PRICING_FAQ, PRICING_TIERS } from "./_pricing";
 
 // Every line below is copied from shipped source (see
@@ -62,6 +66,56 @@ const MCP_TOOLS: { name: string; what: string }[] = [
   { name: "digifetch_price_history", what: "OHLCV bars for one listing." },
 ];
 const MCP_RUN = "python -m digiquant.mcp_server --stdio --scope read";
+
+// scripts/capture_mcp_transcript.py writes app/_mcp-transcript.json from a real
+// local run; nothing in it is hand-written. Cells are formatted per column.
+type TranscriptCall = (typeof transcript.calls)[number];
+type TranscriptRow = Record<string, string | number | null>;
+
+function transcriptCell(col: string, row: TranscriptRow) {
+  const v = row[col];
+  if (typeof v !== "number") return v ?? "n/a";
+  if (col === "change_percent") return <span className={toneClass(v)}>{fmtPct(v)}</span>;
+  if (col === "volume") return fmtNum(v);
+  return fmtNum(v, 2);
+}
+
+function TranscriptCallTable({ call }: { call: TranscriptCall }) {
+  const rows = call.rows as TranscriptRow[];
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-[0.6rem]">
+      <p className="m-0 break-words text-ink-soft">
+        <span className="text-ink-mute">tools/call</span> {call.tool} {JSON.stringify(call.args)}
+      </p>
+      <Table density="compact">
+        <TableHeader>
+          <TableRow>
+            {call.columns.map((c) => (
+              <TableHead key={c} numeric={typeof rows[0]?.[c] === "number"}>
+                {c}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, i) => (
+            <TableRow key={i}>
+              {call.columns.map((c, j) =>
+                j === 0 ? (
+                  <TableRowHeader key={c}>{transcriptCell(c, row)}</TableRowHeader>
+                ) : (
+                  <TableCell key={c} numeric={typeof row[c] === "number"}>
+                    {transcriptCell(c, row)}
+                  </TableCell>
+                ),
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 // Gloomberg density: tighter block step than the kit default (--page-step).
 const DENSE = "py-[1.75rem]";
@@ -141,6 +195,25 @@ export default function Home() {
 
         <Section
           className={DENSE}
+          id="dashboard"
+          title="The dashboard"
+          lede="A walkthrough of the dashboard goes here once its rebuild is final."
+        >
+          {/* Slot for the dashboard recording: swap the inner div for a media
+              part once the video exists (kit promotion + reference specimen). */}
+          <Figure n={2} caption="Dashboard walkthrough — recording to come.">
+            <div
+              role="img"
+              aria-label="Placeholder for the dashboard walkthrough video"
+              className="grid aspect-video w-full place-items-center border border-hair text-ink-mute"
+            >
+              Video placeholder · 16:9
+            </div>
+          </Figure>
+        </Section>
+
+        <Section
+          className={DENSE}
           id="desk"
           title="Desk"
           lede="Three subsystems, research → portfolio → execution. Phase ids are the real folder names — h8 was never assigned."
@@ -209,6 +282,16 @@ export default function Home() {
                 ))}
               </TableBody>
             </Table>
+            <Figure
+              n={3}
+              caption={`Recorded session, ${transcript.capturedAt.slice(0, 10)} — real calls to a local run of \`${transcript.command}\` (${transcript.server.name}, ${transcript.toolCount} tools listed). Fields trimmed to a few per row. ${transcript.calls[0].envelope.attribution}; ${transcript.calls[0].envelope.delay_notice?.toLowerCase()}. A recording, not a live feed.`}
+            >
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-[1.4rem]">
+                {transcript.calls.map((call) => (
+                  <TranscriptCallTable key={call.tool} call={call} />
+                ))}
+              </div>
+            </Figure>
           </div>
         </Section>
 
