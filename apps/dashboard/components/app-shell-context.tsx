@@ -1,27 +1,9 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
-
-const STORAGE_KEY = 'dashboard-sidebar-collapsed';
-/** Pre-rebrand key. Read once so a collapsed sidebar survives the rename; never write. */
-const LEGACY_STORAGE_KEY = 'research-sidebar-collapsed';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 type AppShellContextValue = {
-  sidebarCollapsed: boolean;
-  toggleSidebar: () => void;
-  /** Drawer open state for the mobile navigation sidebar (< md). */
-  mobileNavOpen: boolean;
-  setMobileNavOpen: (open: boolean) => void;
-  toggleMobileNav: () => void;
-  /** Command palette open state, lifted so chrome (search pill) can open it (F2). */
+  /** Command palette open state, lifted so chrome (search button) can open it (F2). */
   commandPaletteOpen: boolean;
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
@@ -29,70 +11,14 @@ type AppShellContextValue = {
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
 
-function readSidebarCollapsed(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const current = localStorage.getItem(STORAGE_KEY);
-    if (current === '1' || current === '0') return current === '1';
-    return localStorage.getItem(LEGACY_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
   const closeCommandPalette = useCallback(() => setCommandPaletteOpen(false), []);
 
-  const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((c) => {
-      const next = !c;
-      try {
-        localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
-        localStorage.removeItem(LEGACY_STORAGE_KEY);
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleMobileNav = useCallback(() => {
-    setMobileNavOpen((o) => !o);
-  }, []);
-
-  useEffect(() => {
-    if (!mobileNavOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [mobileNavOpen]);
-
   const value = useMemo(
-    () => ({
-      sidebarCollapsed,
-      toggleSidebar,
-      mobileNavOpen,
-      setMobileNavOpen,
-      toggleMobileNav,
-      commandPaletteOpen,
-      openCommandPalette,
-      closeCommandPalette,
-    }),
-    [
-      sidebarCollapsed,
-      toggleSidebar,
-      mobileNavOpen,
-      toggleMobileNav,
-      commandPaletteOpen,
-      openCommandPalette,
-      closeCommandPalette,
-    ]
+    () => ({ commandPaletteOpen, openCommandPalette, closeCommandPalette }),
+    [commandPaletteOpen, openCommandPalette, closeCommandPalette]
   );
 
   return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>;
