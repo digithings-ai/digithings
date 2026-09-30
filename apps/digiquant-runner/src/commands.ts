@@ -9,6 +9,20 @@ export type GatedStep = {
   argv: string[];
   when_arg?: string;
   equals?: string;
+  /** Run only when this arg is non-empty. */
+  when_arg_set?: string;
+  /** Run only when this arg is missing or blank. Empty date uses this branch. */
+  when_arg_empty?: string;
+  /** Append args[name] as the final argv element. */
+  append_arg?: string;
+  /** Append UTC YYYY-MM-DD. Resolved in the container, not in this catalog. */
+  append_utc_date?: boolean;
+  /** Non-zero exit does not fail the job (GHA continue-on-error). */
+  continue_on_error?: boolean;
+  /** Run even after an earlier step failed (GHA if: always() / success()||failure()). */
+  always?: boolean;
+  /** Skip unless this path exists under the image workdir. */
+  when_file?: string;
 };
 
 export type CommandStep = ArgvStep | GatedStep;
@@ -19,6 +33,8 @@ export type CommandSpec = {
   code_ref: "main";
   alias_supabase?: boolean;
   market_backend?: "r2";
+  /** Non-secret literals baked into the child env. Never put tokens here. */
+  extra_env?: Record<string, string>;
   env: string[];
   steps: CommandStep[];
   publish?: string[];

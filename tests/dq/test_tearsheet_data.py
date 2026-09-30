@@ -14,6 +14,7 @@ import pytest
 from digiquant.tearsheet_data import (
     SCHEMA_VERSION,
     OHLCBar,
+    StatBlock,
     TearsheetData,
     from_nautilus,
     from_nautilus_run,
@@ -285,7 +286,7 @@ def test_ohlc_bars_roundtrip() -> None:
     assert len(ts.ohlc_bars) == 2
     assert ts.ohlc_bars[0] == OHLCBar(t="2020-01-01", o=100.0, h=110.0, l=95.0, c=105.0)
     payload = json.loads(ts.to_json())
-    assert payload["schema_version"] == "1.3"
+    assert payload["schema_version"] == "1.4"
     assert payload["ohlc_bars"][1] == {
         "t": "2020-01-02",
         "o": 105.0,
@@ -317,3 +318,41 @@ def test_ohlc_bars_roundtrip() -> None:
 def test_entry_label_mirrors_pine_taxonomy(signal_type, direction, expected) -> None:
     gen = _load_generator()
     assert gen._entry_label(signal_type, direction) == expected
+
+
+def test_stat_block_carries_win_rate_n_and_ci95() -> None:
+    """from_pine overall (wins=3, trades=4): n=4 + wilson(3, 4) CI."""
+    ts = from_pine(
+        _pine_summary(),
+        _pine_trades(),
+        equity_curve=[("2020-01-01", 1000.0), ("2020-03-01", 1200.0)],
+    )
+    assert ts.overall.win_rate_n == 4  # n=4
+    assert ts.overall.win_rate_ci95 is not None  # n=4
+    assert ts.overall.win_rate_ci95[0] == pytest.approx(0.3007, abs=1e-4)  # n=4
+    assert ts.overall.win_rate_ci95[1] == pytest.approx(0.9544, abs=1e-4)  # n=4
+
+
+def test_stat_block_defaults_have_null_ci() -> None:
+    """Bare StatBlock (n unknown): win_rate_n / ci95 default to null."""
+    empty = StatBlock()
+    assert empty.win_rate_n is None  # no trades
+    assert empty.win_rate_ci95 is None  # no trades
+
+
+def test_schema_1_4_stays_back_compatible() -> None:
+    """1.3 payloads without the new keys still validate (n fields default)."""
+    assert SCHEMA_VERSION == "1.4"
+    dumped = json.loads(
+        from_pine(_pine_summary(), _pine_trades(), equity_curve=[("2020-01-01", 1000.0)]).to_json()
+    )
+    assert dumped["schema_version"] == "1.4"
+    legacy = dict(dumped)
+    legacy_overall = dict(legacy["overall"])
+    del legacy_overall["win_rate_n"]
+    del legacy_overall["win_rate_ci95"]
+    legacy["overall"] = legacy_overall
+    legacy["schema_version"] = "1.3"
+    ts = TearsheetData.model_validate(legacy)
+    assert ts.overall.win_rate_n is None  # absent key → null, still valid
+    assert ts.overall.win_rate_ci95 is None  # absent key → null, still valid

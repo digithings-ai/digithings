@@ -188,13 +188,19 @@ describe("data plane env", () => {
     );
     expect(keys).not.toContain("RUNNER_AUTH_TOKEN");
     expect(keys).not.toContain("GH_ISSUE_TOKEN");
+    expect(keys).not.toContain("FRED_API_KEY");
+    expect(keys).not.toContain("OPENROUTER_API_KEY");
+    expect(keys).not.toContain("DIGIQUANT_DIGIKEY_API_KEY");
     // #4794: the macro panel needs no vendor key — pin the whitelist exactly.
     expect([...keys].sort()).toEqual(
       [
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_EMAIL_API_TOKEN",
         "CORE_POSTGRES_URI",
         "CORE_SUPABASE_SERVICE_KEY",
         "CORE_SUPABASE_URL",
         "DIGIQUANT_RUNNER_GIT_SHA",
+        "NOTIFY_FROM",
         "R2_ACCESS_KEY_ID",
         "R2_ACCOUNT_ID",
         "R2_BUCKET",

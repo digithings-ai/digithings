@@ -1,12 +1,13 @@
-# digiquant-runner (Phase 1)
+# digiquant-runner
 
 Private Cloudflare Container Worker for the digiquant live cadence
-(issue #4761, Phase 1 only). No public hostname: `workers_dev = false`, no
+(issue #4761, Phases 1–2). No public hostname: `workers_dev = false`, no
 custom domain, no routes. digithings-cron is the only clock. It reaches this
 Worker over the `RUNNER` service binding.
 
-Phase 1 does not run the house research chain, `execution-cron-check`, broker
-credentials, Alpaca keys, or `--execute`. twelve-x stays `workflow_dispatch`.
+This Worker does not run the house research chain, broker credentials, Alpaca
+keys, or `--execute`. twelve-x stays `workflow_dispatch`. The execution probe
+is `--dry-run` only.
 
 ## Commands
 
@@ -22,6 +23,40 @@ credentials, Alpaca keys, or `--execute`. twelve-x stays `workflow_dispatch`.
 
 `prices-fx-refresh-writers` is in the catalog and is not a cron row. Cron
 never sends `run_writers`. A kick can pass `args`.
+
+## Phase 2 commands
+
+Same container class (`DigiQuantRunnerContainer`, `standard-2`). The image
+sync adds `--extra nautilus` for tearsheets and research-metrics. The
+nautilus 1.230.0 cp312 manylinux x86_64 wheel is 182608916 bytes, under the
+~8 GB split, so there is no `DigiQuantRunnerNautilusContainer`. `ccxt` stays
+out of the lockfile; the Coinbase step is `uv run --frozen --with ccxt`.
+
+| Cron job | Command | Timeout | Notes |
+| --- | --- | --- | --- |
+| `onchain` (`40 22 * * *`) | `onchain-bitview` | 900s | `fetch-bitview --supabase` |
+| `execution-cron-check` (`15 12 * * *`) | `execution-cron-check` | 600s | Five probe steps. Later steps still run after an earlier failure. No `--execute`, `--all`, or `portfolio.chain` |
+| `research-metrics` (`5 22 * * *`) | `research-metrics` | 1200s | finalize (continue on error) → verify `--write` → metrics → read-only verify → attribution (`always`). Empty `date` is the no-date branch |
+| `tearsheets` (`12 0 * * *`) | `tearsheets` | 2700s | calibrations → Coinbase (`--with ccxt`) → `export_sdca_macro.py` if present → `generate_tearsheets.py` |
+
+Image pin stays released `main`. Probe CLIs (`scripts/execution_cron_check.py`,
+`digiquant.dashboard.overlay`, `digiquant.execution.sync_cron`,
+`digiquant.execution.route_cron`, `digiquant.notify.dispatch`) are on `main`,
+so this job is cut over. Do not point the container at `develop`.
+
+A kick can pass `args.date` (`YYYY-MM-DD`) for research-metrics. Cron sends
+no date, which selects `--mark-through <UTC today>` on the NAV write,
+`--mark-through-book` on metrics, and the no-date finalizer and attribution
+commands. Exit 3 from metrics when there is no book is a real failure.
+
+The runner does not file GitHub issues (`GH_ISSUE_TOKEN` is not a binding;
+`commands.json` has no `failure_issue`). The GHA override files still carry
+`<!-- digiquant-tearsheets-tracker -->` and
+`<!-- digiquant-onchain-bitview-tracker -->`. Container failures show up in
+Workers Logs and `GET /runs/:run_id`.
+
+These workflows already have no `schedule:`. Do not add one. House-run is
+still `repository_dispatch`.
 
 ## Macro panel (#4794)
 
@@ -84,7 +119,8 @@ bucket at:
 ## Image pin
 
 The image is the released `main` tree baked at build time. The hot path is
-`uv run --frozen --no-sync`. `/healthz` reports `git_sha` from the latest
+`uv run --frozen --no-sync`, except Coinbase tearsheet fetch which is
+`uv run --frozen --with ccxt`. `/healthz` reports `git_sha` from the latest
 stored job status (`DIGIQUANT_RUNNER_GIT_SHA`). Until a job has run, that
 value is `unknown`. Wrangler does not pass a build arg. A non-wrangler build
 can set it:
@@ -117,8 +153,17 @@ On digiquant-runner: `RUNNER_AUTH_TOKEN`, `R2_ACCOUNT_ID`, `R2_BUCKET`,
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `CORE_POSTGRES_URI`,
 `CORE_SUPABASE_URL`, `CORE_SUPABASE_SERVICE_KEY`.
 
-`FRED_API_KEY` is gone from this path and must stay unset. `GH_ISSUE_TOKEN`
-is not used: the runner does not open or update GitHub issues.
+Phase 2 adds `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
+`NOTIFY_FROM` for `execution-cron-check`. Missing names fail that probe
+closed (exit 2). Research-metrics and tearsheets do not need LLM, digikey,
+or LangSmith keys. Those stay off this Worker until the house run.
+
+`FRED_API_KEY` is gone from this path and must stay unset. #4794 PR3
+(#4817) removed the last FRED callers, including tearsheet
+`export_sdca_macro.py`, which stages M2SL from Supabase or sealed R2 and
+does not call `fetch_fred`. Do not put `FRED_API_KEY` back on the runner.
+`GH_ISSUE_TOKEN` is not used: the runner does not open or update GitHub
+issues.
 
 On digithings-cron: the same `RUNNER_AUTH_TOKEN` value.
 
@@ -131,8 +176,21 @@ the wrangler process:
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 ```
 
+## Phase 2 kicks
+
+```bash
+curl -sS -X POST "$CRON_ORIGIN/kick" \
+  -H "Authorization: Bearer $CRON_KICK_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"cron":"40 22 * * *","force":true}'
+```
+
+The same shape covers `12 0 * * *` (tearsheets), `5 22 * * *`
+(research-metrics), and `15 12 * * *` (execution probe). Pass
+`"args":{"date":"YYYY-MM-DD"}` only when recomputing one metrics day.
+
 ## Phase 3 note
 
-Phase 1 does not run the house research chain and does not write the
+Phases 1–2 do not run the house research chain and do not write the
 skip-if-done ledger. A same-day GitHub Actions manual house success does not
 write `pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
