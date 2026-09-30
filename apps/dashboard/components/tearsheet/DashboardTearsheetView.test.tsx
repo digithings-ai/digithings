@@ -130,6 +130,7 @@ describe('PerformanceTearsheetView', () => {
     const out = html();
     expect(out).toContain('Open positions');
     expect(out).toContain('data-testid="open-positions-panel"');
+    expect(out).toMatch(/data-slot="table"[^>]*data-density="compact"[^>]*aria-label="Open positions"/);
     expect(out).not.toContain('Closed positions');
     expect(out).not.toContain('role="tablist"');
     expect(out).toContain('data-testid="ledger-doorway"');

@@ -6,6 +6,13 @@ import {
   CollapsibleTrigger,
   DivergingBars,
   EmptyState,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableRowHeader,
   WaterfallBridge,
 } from '@digithings/ui/ui';
 import {
@@ -48,7 +55,7 @@ export function BookAttribution({ rows }: { rows: readonly AttributionRow[] }) {
   }
 
   const summary = bridgeSummary(view);
-  const window = rows.find((r) => r.window_start_date && r.window_end_date);
+  const lookback = rows.find((r) => r.window_start_date && r.window_end_date);
 
   return (
     <section
@@ -62,8 +69,8 @@ export function BookAttribution({ rows }: { rows: readonly AttributionRow[] }) {
           data-testid="book-attribution-label"
           className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
         >
-          Current-book lookback diagnostic - not realized daily contribution
-          {window ? ` · ${window.window_start_date} to ${window.window_end_date}` : ''}
+          Current-book lookback diagnostic — not realized daily contribution
+          {lookback ? ` · ${lookback.window_start_date} to ${lookback.window_end_date}` : ''}
         </span>
       </header>
 
@@ -128,40 +135,54 @@ export function BookAttribution({ rows }: { rows: readonly AttributionRow[] }) {
           Decomposition table
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <table className="mt-2 w-full border-collapse font-mono text-[0.75rem] tabular-nums">
-            <thead>
-              <tr className="text-left text-[0.58rem] uppercase tracking-wider text-ink-mute">
-                <th className="py-1 font-normal">Holding</th>
-                <th className="py-1 text-right font-normal">Weight</th>
-                <th className="py-1 text-right font-normal">Return</th>
-                <th className="py-1 text-right font-normal">Contrib.</th>
-                <th className="py-1 text-right font-normal">Selection</th>
-                <th className="py-1 text-right font-normal">Allocation</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-hair">
-                  <td className="py-1 text-ink">{r.ticker}</td>
-                  <td className="py-1 text-right text-ink-soft">
-                    {r.weight_pct == null ? '—' : `${r.weight_pct.toFixed(1)}%`}
-                  </td>
-                  <td className="py-1 text-right text-ink-soft">
-                    {r.position_return_pct == null ? '—' : pct(r.position_return_pct)}
-                  </td>
-                  <td className="py-1 text-right">{r.contribution_pct == null ? '—' : pct(r.contribution_pct)}</td>
-                  <td className="py-1 text-right">
-                    {r.selection_effect_pct == null ? '—' : pct(r.selection_effect_pct)}
-                  </td>
-                  <td className="py-1 text-right">
-                    {r.allocation_effect_pct == null ? '—' : pct(r.allocation_effect_pct)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DecompositionTable rows={rows} />
         </CollapsibleContent>
       </Collapsible>
     </section>
+  );
+}
+
+/** Per-holding lookback decomposition; `—` wherever the stored row has no value. */
+export function DecompositionTable({ rows }: { rows: readonly AttributionRow[] }) {
+  return (
+    <Table
+      density="compact"
+      className="mt-2 font-mono"
+      aria-label="Current-book lookback decomposition by holding"
+      data-testid="book-attribution-table"
+    >
+      <TableHeader>
+        <TableRow>
+          <TableHead>Holding</TableHead>
+          <TableHead numeric>Weight</TableHead>
+          <TableHead numeric>Return</TableHead>
+          <TableHead numeric>Contrib.</TableHead>
+          <TableHead numeric>Selection</TableHead>
+          <TableHead numeric>Allocation</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => (
+          <TableRow key={r.id}>
+            <TableRowHeader className="text-ink">{r.ticker}</TableRowHeader>
+            <TableCell numeric className="text-ink-soft">
+              {r.weight_pct == null ? '—' : `${r.weight_pct.toFixed(1)}%`}
+            </TableCell>
+            <TableCell numeric className="text-ink-soft">
+              {r.position_return_pct == null ? '—' : pct(r.position_return_pct)}
+            </TableCell>
+            <TableCell numeric>
+              {r.contribution_pct == null ? '—' : pct(r.contribution_pct)}
+            </TableCell>
+            <TableCell numeric>
+              {r.selection_effect_pct == null ? '—' : pct(r.selection_effect_pct)}
+            </TableCell>
+            <TableCell numeric>
+              {r.allocation_effect_pct == null ? '—' : pct(r.allocation_effect_pct)}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

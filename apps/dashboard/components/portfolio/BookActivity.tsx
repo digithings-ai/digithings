@@ -1,6 +1,6 @@
 'use client';
 
-import { CompositionBar } from '@digithings/ui/ui';
+import { CompositionBar, EmptyState } from '@digithings/ui/ui';
 import type { DashboardPositionEvent } from '@/lib/types';
 import { eventMix } from '@/lib/book-view';
 import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
@@ -10,7 +10,14 @@ const EVENT_TONE = { OPEN: 'accent', ADD: 'soft', TRIM: 'warn', EXIT: 'ink', HOL
 /** Position-event activity: a mix bar (what kind of moves) over the event table. */
 export default function BookActivity({ events }: { events: DashboardPositionEvent[] }) {
   if (events.length === 0) {
-    return <p className="py-6 text-sm text-ink-mute">No position events recorded yet.</p>;
+    return (
+      <EmptyState
+        data-testid="book-activity-empty"
+        variant="first-run"
+        title="No position events recorded yet"
+        body="Opens, adds, trims and exits appear here once the pipeline records a rebalance."
+      />
+    );
   }
   const mix = eventMix(events);
   return (

@@ -23,6 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
   Stat,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableRowHeader,
 } from '@digithings/ui/ui';
 import type { TableRow as AttributionRow } from '@/lib/database.types';
 import type { PerformanceTearsheet } from './types';
@@ -363,32 +370,41 @@ export function PerformanceTearsheetView({
         )}
         {data.currentHoldings.length ? (
           <div className="mt-3 max-h-[22rem] overflow-auto print:max-h-none print:overflow-visible">
-              <table className="mt-2 w-full border-collapse font-mono text-[0.75rem] tabular-nums">
-                <thead>
-                  <tr className="text-left text-[0.58rem] uppercase tracking-wider text-ink-mute">
-                    <th className="py-1 font-normal">Holding</th>
-                    <th className="py-1 font-normal">Category</th>
-                    <th className="py-1 text-right font-normal">Weight</th>
-                    <th className="py-1 text-right font-normal">Unrealized</th>
-                    <th className="py-1 text-right font-normal">As of</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.currentHoldings.map((row) => (
-                    <tr key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}`} className="border-t border-hair">
-                      <td className="py-1 font-semibold text-ink">{row.ticker}</td>
-                      <td className="py-1 text-ink-soft">{formatAllocationCategory(row.category)}</td>
-                      <td className="py-1 text-right">
-                        {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
-                      </td>
-                      <td className="py-1 text-right">
-                        {row.unrealizedReturnPct != null ? pct(row.unrealizedReturnPct) : '—'}
-                      </td>
-                      <td className="py-1 text-right text-ink-mute">{row.attributionDate ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <Table
+              density="compact"
+              className="font-mono"
+              aria-label="Open positions"
+              data-testid="open-positions-table"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Holding</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead numeric>Weight</TableHead>
+                  <TableHead numeric>Unrealized</TableHead>
+                  <TableHead numeric>As of</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.currentHoldings.map((row) => (
+                  <TableRow key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}`}>
+                    <TableRowHeader className="font-semibold text-ink">{row.ticker}</TableRowHeader>
+                    <TableCell className="text-ink-soft">
+                      {formatAllocationCategory(row.category)}
+                    </TableCell>
+                    <TableCell numeric>
+                      {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
+                    </TableCell>
+                    <TableCell numeric>
+                      {row.unrealizedReturnPct != null ? pct(row.unrealizedReturnPct) : '—'}
+                    </TableCell>
+                    <TableCell numeric className="text-ink-mute">
+                      {row.attributionDate ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : null}
       </section>
