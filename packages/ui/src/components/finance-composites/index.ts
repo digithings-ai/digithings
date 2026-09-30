@@ -6,6 +6,12 @@
  * Re-exported from the package barrel (src/index.ts) by the F1 wire-up.
  */
 export { StockTicker, type TickerItem, type StockTickerProps } from "./StockTicker";
+export {
+  MarketBar,
+  type MarketBarProps,
+  type MarketBarCell,
+  type MarketBarStatus,
+} from "./MarketBar";
 export { OrderBook, type OrderBookLevel, type OrderBookProps } from "./OrderBook";
 export { SortableTable, type SortableColumn, type SortableTableProps } from "./SortableTable";
 export {

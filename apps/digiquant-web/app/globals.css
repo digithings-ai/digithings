@@ -9,6 +9,8 @@
 @import "@digithings/ui/styles/controls-core.css";
 @import "@digithings/ui/styles/nav-shell.css";
 @import "@digithings/ui/styles/stages.css";
+@import "@digithings/ui/styles/marquee.css";
+@import "@digithings/ui/styles/data-layout.css";
 /* finance-tearsheet family: .ts-* grammar incl. the @media print export grammar
    (self-layering, imported plainly). Kept for the tearsheet routes. */
 @import "@digithings/ui/styles/finance-tearsheet.css";
@@ -26,6 +28,10 @@
 @source "../../../packages/ui/src/components/finance-tearsheet";
 @source "../../../packages/ui/src/components/finance-charts";
 @source "../../../packages/ui/src/components/stages";
+@source "../../../packages/ui/src/components/effects-chrome";
+@source "../../../packages/ui/src/components/data-layout";
+@source "../../../packages/ui/src/components/finance-composites";
+@source "../../../packages/ui/src/components/marquee";
 @source "../../../packages/ui/src/ui";
 
 /* Hero wordmark (QuantWordmark): cells grow up from the baseline like bars. The
