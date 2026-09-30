@@ -51,16 +51,15 @@ export function LocalLuxalgoWorkflow() {
 
   useEffect(() => {
     let active = true;
-    const state = resolveGatewayState();
-    if (!state.available) {
-      setStatus(state.reason === "unset" ? "unset" : "blocked");
-      return () => {
-        active = false;
-      };
-    }
-    void fetchHealthz().then((result) => {
+    void (async () => {
+      const state = resolveGatewayState();
+      if (!state.available) {
+        if (active) setStatus(state.reason === "unset" ? "unset" : "blocked");
+        return;
+      }
+      const result = await fetchHealthz();
       if (active) setStatus(result.ok ? "ready" : "offline");
-    });
+    })();
     return () => {
       active = false;
     };
