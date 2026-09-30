@@ -116,6 +116,25 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     "digifetch_tweet_search": "session",
     "digifetch_short_interest": "session",
     "digifetch_saved_searches": "session",
+    # workspace writes + broker reads + approval-gated orders (130-coverage
+    # Task 7): session-gated like the other account-surface tools. No personal
+    # Cloud write route is verified (Task 7 source probe: team-scoped account
+    # APIs only), so the workspace/broker tools are read-only in this phase and
+    # never issue a request; preview mints a local ticket and execute ships
+    # disabled pending human gate review.
+    "digifetch_portfolio_view": "session",
+    "digifetch_watchlist_add": "session",
+    "digifetch_watchlist_remove": "session",
+    "digifetch_portfolio_add": "session",
+    "digifetch_portfolio_remove": "session",
+    "digifetch_alert_add": "session",
+    "digifetch_alert_list": "session",
+    "digifetch_note_add": "session",
+    "digifetch_thesis_add": "session",
+    "digifetch_view_add": "session",
+    "digifetch_broker_positions": "session",
+    "digifetch_ibkr_preview_order": "session",
+    "digifetch_ibkr_execute_order": "session",
     # probe-backed tools (130-coverage Task 5): Cloud reads behind the
     # session gate (zero-HTTP auth_required without the cookie). The IV trio
     # stays session per the verdicts' guess — the readers are pro_gated, so

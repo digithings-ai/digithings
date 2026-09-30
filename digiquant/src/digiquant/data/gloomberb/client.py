@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -47,6 +48,13 @@ from pydantic import BaseModel, ValidationError
 from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 
 from . import normalizers as nz
+from .approvals import (
+    APPROVAL_TTL_SECONDS,
+    ApprovalError,
+    OrderTicket,
+    issue_ticket,
+    redeem_token,
+)
 from .calculators import (
     black_scholes_iv,
     black_scholes_price,
@@ -55,12 +63,18 @@ from .calculators import (
 )
 from .models import (
     PREVIEW_ACCESS_WARNING,
+    AlertAddEnvelope,
+    AlertAddInput,
+    AlertListEnvelope,
+    AlertListInput,
     AnalystResearchEnvelope,
     AnalystResearchInput,
     AuctionRow,
     BondCalcEnvelope,
     BondCalcInput,
     BondCalcResult,
+    BrokerPositionsEnvelope,
+    BrokerPositionsInput,
     CdsEnvelope,
     CdsInput,
     CdsResult,
@@ -155,6 +169,12 @@ from .models import (
     HoldersInput,
     HoldersResult,
     Holdings13FEnvelope,
+    IbkrExecuteEnvelope,
+    IbkrExecuteOrderInput,
+    IbkrExecuteResult,
+    IbkrPreviewEnvelope,
+    IbkrPreviewOrderInput,
+    IbkrPreviewResult,
     IpoCalendarEnvelope,
     IpoCalendarInput,
     IpoCalendarResult,
@@ -185,6 +205,8 @@ from .models import (
     NewsEnvelope,
     NewsInput,
     NewsResult,
+    NoteAddEnvelope,
+    NoteAddInput,
     OptionsCalcEnvelope,
     OptionsCalcInput,
     OptionsCalcResult,
@@ -199,6 +221,12 @@ from .models import (
     PollsEnvelope,
     PollsInput,
     PollsResult,
+    PortfolioAddEnvelope,
+    PortfolioAddInput,
+    PortfolioRemoveEnvelope,
+    PortfolioRemoveInput,
+    PortfolioViewEnvelope,
+    PortfolioViewInput,
     PredictionMarketRow,
     PredictionMarketsEnvelope,
     PredictionMarketsInput,
@@ -268,6 +296,8 @@ from .models import (
     SubstackResult,
     TapeQuote,
     TapeTrade,
+    ThesisAddEnvelope,
+    ThesisAddInput,
     ThirteenFFundsInput,
     ThirteenFHoldingsInput,
     TickerFinancialsEnvelope,
@@ -296,9 +326,16 @@ from .models import (
     ValGraphSnapshot,
     VenuesEnvelope,
     VenuesInput,
+    ViewAddEnvelope,
+    ViewAddInput,
     VixTermEnvelope,
     VixTermInput,
     VixTermResult,
+    WatchlistAddEnvelope,
+    WatchlistAddInput,
+    WatchlistRemoveEnvelope,
+    WatchlistRemoveInput,
+    WouldBeOrder,
     YieldCurveEnvelope,
     YieldCurveInput,
     YieldCurveResult,
@@ -321,6 +358,8 @@ __all__ = [
     "gloomberb_enabled",
     "yfinance_earnings_events",
 ]
+
+logger = logging.getLogger(__name__)
 
 GLOOMBERB_BASE_URL = "https://api.gloom.sh"
 GLOOMBERB_ENABLED_ENV = "GLOOMBERB_ENABLED"
@@ -5863,6 +5902,306 @@ class GloomberbClient:
             )
 
         return self._cached("rate_path", parsed, produce)
+
+    # -- workspace writes + broker reads + approval-gated orders (Task 7) ----
+    #
+    # Write-route disposition: no personal Cloud write route is verified (Task 4
+    # produced no write verdicts; the Task 7 source probe found only team-scoped
+    # account APIs, a mobile alert-history read, the generic /brokers proxy, and
+    # local-gateway IBKR execution). The tools below are session-gated but never
+    # issue Cloud write traffic: without a cookie they answer auth_required with
+    # zero HTTP, and with one they answer the read-only posture below — also
+    # with zero HTTP. Preview mints a local approval ticket; execute ships
+    # disabled pending human gate review.
+
+    def _require_session_cookie(self, envelope: type[EnvT], label: str) -> EnvT | None:
+        """Zero-HTTP session gate: the typed auth_required envelope, or None."""
+        if self._session_cookie is None:
+            return self._error_envelope(
+                envelope,
+                DigifetchError(
+                    code="auth_required",
+                    message=f"{label} requires a verified Gloom session; "
+                    f"{GLOOMBERB_SESSION_COOKIE_ENV} is not set",
+                    retryable=False,
+                ),
+            )
+        return None
+
+    def _read_only_workspace(self, envelope: type[EnvT], label: str) -> EnvT:
+        """Read-only posture: typed upstream_error, never a request."""
+        return self._error_envelope(
+            envelope,
+            DigifetchError(
+                code="upstream_error",
+                message=(
+                    f"{label} is read-only in this phase: no personal Gloomberb "
+                    "Cloud write route is verified (source probe 2026-09-30 found "
+                    "only team-scoped account APIs), so no request was made"
+                ),
+                retryable=False,
+            ),
+        )
+
+    def portfolio_view(
+        self, request: PortfolioViewInput | Mapping[str, Any]
+    ) -> PortfolioViewEnvelope:
+        parsed = self._validate_input(PortfolioViewInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PortfolioViewEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PortfolioViewEnvelope)
+        gated = self._require_session_cookie(PortfolioViewEnvelope, "portfolio_view")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(PortfolioViewEnvelope, "portfolio_view")
+
+    def watchlist_add(self, request: WatchlistAddInput | Mapping[str, Any]) -> WatchlistAddEnvelope:
+        parsed = self._validate_input(WatchlistAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(WatchlistAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(WatchlistAddEnvelope)
+        gated = self._require_session_cookie(WatchlistAddEnvelope, "watchlist_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(WatchlistAddEnvelope, "watchlist_add")
+
+    def watchlist_remove(
+        self, request: WatchlistRemoveInput | Mapping[str, Any]
+    ) -> WatchlistRemoveEnvelope:
+        parsed = self._validate_input(WatchlistRemoveInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(WatchlistRemoveEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(WatchlistRemoveEnvelope)
+        gated = self._require_session_cookie(WatchlistRemoveEnvelope, "watchlist_remove")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(WatchlistRemoveEnvelope, "watchlist_remove")
+
+    def portfolio_add(self, request: PortfolioAddInput | Mapping[str, Any]) -> PortfolioAddEnvelope:
+        parsed = self._validate_input(PortfolioAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PortfolioAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PortfolioAddEnvelope)
+        gated = self._require_session_cookie(PortfolioAddEnvelope, "portfolio_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(PortfolioAddEnvelope, "portfolio_add")
+
+    def portfolio_remove(
+        self, request: PortfolioRemoveInput | Mapping[str, Any]
+    ) -> PortfolioRemoveEnvelope:
+        parsed = self._validate_input(PortfolioRemoveInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PortfolioRemoveEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PortfolioRemoveEnvelope)
+        gated = self._require_session_cookie(PortfolioRemoveEnvelope, "portfolio_remove")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(PortfolioRemoveEnvelope, "portfolio_remove")
+
+    def alert_add(self, request: AlertAddInput | Mapping[str, Any]) -> AlertAddEnvelope:
+        parsed = self._validate_input(AlertAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(AlertAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(AlertAddEnvelope)
+        gated = self._require_session_cookie(AlertAddEnvelope, "alert_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(AlertAddEnvelope, "alert_add")
+
+    def alert_list(self, request: AlertListInput | Mapping[str, Any]) -> AlertListEnvelope:
+        parsed = self._validate_input(AlertListInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(AlertListEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(AlertListEnvelope)
+        gated = self._require_session_cookie(AlertListEnvelope, "alert_list")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(AlertListEnvelope, "alert_list")
+
+    def note_add(self, request: NoteAddInput | Mapping[str, Any]) -> NoteAddEnvelope:
+        parsed = self._validate_input(NoteAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(NoteAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(NoteAddEnvelope)
+        gated = self._require_session_cookie(NoteAddEnvelope, "note_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(NoteAddEnvelope, "note_add")
+
+    def thesis_add(self, request: ThesisAddInput | Mapping[str, Any]) -> ThesisAddEnvelope:
+        parsed = self._validate_input(ThesisAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ThesisAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ThesisAddEnvelope)
+        gated = self._require_session_cookie(ThesisAddEnvelope, "thesis_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(ThesisAddEnvelope, "thesis_add")
+
+    def view_add(self, request: ViewAddInput | Mapping[str, Any]) -> ViewAddEnvelope:
+        parsed = self._validate_input(ViewAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ViewAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ViewAddEnvelope)
+        gated = self._require_session_cookie(ViewAddEnvelope, "view_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(ViewAddEnvelope, "view_add")
+
+    def broker_positions(
+        self, request: BrokerPositionsInput | Mapping[str, Any]
+    ) -> BrokerPositionsEnvelope:
+        parsed = self._validate_input(BrokerPositionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(BrokerPositionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(BrokerPositionsEnvelope)
+        gated = self._require_session_cookie(BrokerPositionsEnvelope, "broker_positions")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(BrokerPositionsEnvelope, "broker_positions")
+
+    def ibkr_preview_order(
+        self, request: IbkrPreviewOrderInput | Mapping[str, Any]
+    ) -> IbkrPreviewEnvelope:
+        """Validate an order and mint its single-use approval ticket. Never executes."""
+        parsed = self._validate_input(IbkrPreviewOrderInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IbkrPreviewEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IbkrPreviewEnvelope)
+        gated = self._require_session_cookie(IbkrPreviewEnvelope, "ibkr_preview_order")
+        if gated is not None:
+            return gated
+        try:
+            ticket = OrderTicket(
+                symbol=parsed.symbol,
+                side=parsed.side,
+                quantity=parsed.quantity,
+                order_type=parsed.order_type,
+                limit_price=parsed.limit_price,
+                exchange=parsed.exchange,
+            )
+        except ValidationError as exc:
+            return self._error_envelope(
+                IbkrPreviewEnvelope,
+                DigifetchError(
+                    code="invalid_input", message=_format_validation_error(exc), retryable=False
+                ),
+            )
+        try:
+            token = issue_ticket(ticket)
+        except ApprovalError as exc:
+            return self._error_envelope(
+                IbkrPreviewEnvelope,
+                DigifetchError(code="upstream_error", message=str(exc), retryable=False),
+            )
+        # Audit: symbol/side/quantity only — the token is the execute handoff
+        # and must never reach the logs.
+        logger.info(
+            "ibkr_preview_order symbol=%s side=%s quantity=%s order_type=%s",
+            ticket.symbol,
+            ticket.side,
+            ticket.quantity,
+            ticket.order_type,
+        )
+        return IbkrPreviewEnvelope(
+            data=IbkrPreviewResult(
+                ticket=ticket,
+                approval_token=token,
+                expires_at=self._now() + timedelta(seconds=APPROVAL_TTL_SECONDS),
+            ),
+            fetched_at=self._now(),
+        )
+
+    def ibkr_execute_order(
+        self, request: IbkrExecuteOrderInput | Mapping[str, Any]
+    ) -> IbkrExecuteEnvelope:
+        """Redeem an approval token and place the bound order.
+
+        Ships DISABLED pending human approval-gate review: a valid token ends in
+        the typed ``upstream_error`` below with zero brokerage traffic. Only
+        ``dry_run`` returns data (the would-be request), also with zero traffic.
+        """
+        parsed = self._validate_input(IbkrExecuteOrderInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IbkrExecuteEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IbkrExecuteEnvelope)
+        gated = self._require_session_cookie(IbkrExecuteEnvelope, "ibkr_execute_order")
+        if gated is not None:
+            return gated
+        try:
+            ticket = redeem_token(parsed.approval_token)
+        except ApprovalError as exc:
+            return self._error_envelope(
+                IbkrExecuteEnvelope,
+                DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+            )
+        if (
+            ticket.symbol.upper() != parsed.symbol.upper()
+            or ticket.side != parsed.side
+            or ticket.quantity != parsed.quantity
+            or ticket.order_type != parsed.order_type
+            or ticket.limit_price != parsed.limit_price
+        ):
+            return self._error_envelope(
+                IbkrExecuteEnvelope,
+                DigifetchError(
+                    code="invalid_input",
+                    message=(
+                        "approval ticket does not match the order: symbol, side, "
+                        "quantity, order-type, and limit are bound at preview"
+                    ),
+                    retryable=False,
+                ),
+            )
+        # Audit: symbol/side/quantity only — never the token.
+        logger.info(
+            "ibkr_execute_order symbol=%s side=%s quantity=%s order_type=%s dry_run=%s",
+            parsed.symbol,
+            parsed.side,
+            parsed.quantity,
+            parsed.order_type,
+            parsed.dry_run,
+        )
+        if parsed.dry_run:
+            return IbkrExecuteEnvelope(
+                data=IbkrExecuteResult(
+                    ticket=ticket,
+                    dry_run=True,
+                    would_be=WouldBeOrder(
+                        body={
+                            "symbol": parsed.symbol,
+                            "side": parsed.side,
+                            "quantity": parsed.quantity,
+                            "order_type": parsed.order_type,
+                            "limit_price": parsed.limit_price,
+                            "exchange": parsed.exchange,
+                        }
+                    ),
+                ),
+                fetched_at=self._now(),
+            )
+        return self._error_envelope(
+            IbkrExecuteEnvelope,
+            DigifetchError(
+                code="upstream_error",
+                message="order execution disabled pending approval-gate review",
+                retryable=False,
+            ),
+        )
 
     # -- internals ---------------------------------------------------------
 

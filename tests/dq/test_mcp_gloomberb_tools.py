@@ -117,6 +117,21 @@ DIGIFETCH_TOOLS = {
     "digifetch_treasury_auctions",
     "digifetch_market_halts",
     "digifetch_hacker_news",
+    # Workspace writes + broker reads + approval-gated orders (130-coverage
+    # Task 7, session-gated; read-only posture except preview/dry-run)
+    "digifetch_portfolio_view",
+    "digifetch_watchlist_add",
+    "digifetch_watchlist_remove",
+    "digifetch_portfolio_add",
+    "digifetch_portfolio_remove",
+    "digifetch_alert_add",
+    "digifetch_alert_list",
+    "digifetch_note_add",
+    "digifetch_thesis_add",
+    "digifetch_view_add",
+    "digifetch_broker_positions",
+    "digifetch_ibkr_preview_order",
+    "digifetch_ibkr_execute_order",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -1065,8 +1080,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_75_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 75
+def test_all_88_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 88
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -2280,6 +2295,22 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
         "digifetch_iv_surface",
         "digifetch_debt_maturities",
         "digifetch_session_movers",
+        # Workspace writes + broker reads + approval-gated orders (130-coverage
+        # Task 7): session-gated account-surface tools; read-only posture
+        # except the local preview ticket and dry-run paths.
+        "digifetch_portfolio_view",
+        "digifetch_watchlist_add",
+        "digifetch_watchlist_remove",
+        "digifetch_portfolio_add",
+        "digifetch_portfolio_remove",
+        "digifetch_alert_add",
+        "digifetch_alert_list",
+        "digifetch_note_add",
+        "digifetch_thesis_add",
+        "digifetch_view_add",
+        "digifetch_broker_positions",
+        "digifetch_ibkr_preview_order",
+        "digifetch_ibkr_execute_order",
     }
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "venue_session"} == {
         # Own-account Substack reader: fail-soft without SUBSTACK_SESSION_COOKIE.

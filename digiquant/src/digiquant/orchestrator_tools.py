@@ -816,6 +816,344 @@ def build_digifetch_saved_searches_tool() -> dict[str, Any]:
     }
 
 
+# ── Workspace writes + broker reads + approval-gated orders (130-coverage Task 7) ──
+#
+# Write-route disposition: no personal Cloud write route is verified (Task 4
+# produced no write verdicts; the Task 7 source probe found only team-scoped
+# account APIs, a mobile alert-history read, the generic /brokers proxy, and
+# local-gateway IBKR execution), so the workspace/broker tools are
+# session-gated but read-only in this phase (typed upstream_error, zero HTTP).
+# Preview mints a local approval ticket and never executes; execute ships
+# disabled pending human gate review (dry_run returns the would-be request).
+
+
+def build_digifetch_portfolio_view_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_portfolio_view",
+            "description": (
+                "Portfolio snapshot for the signed-in session (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud portfolio route is verified, "
+                "so no request is made."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_watchlist_add_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_watchlist_add",
+            "description": (
+                "Add one symbol to the session watchlist (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud watchlist write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_watchlist_remove_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_watchlist_remove",
+            "description": (
+                "Remove one symbol from the session watchlist (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud watchlist write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_portfolio_add_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_portfolio_add",
+            "description": (
+                "Add one symbol to the session portfolio (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud portfolio write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                    "quantity": {"type": "number"},
+                    "note": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_portfolio_remove_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_portfolio_remove",
+            "description": (
+                "Remove one symbol from the session portfolio (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud portfolio write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_alert_add_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_alert_add",
+            "description": (
+                "Add a price alert for one symbol (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud alert write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "condition": {"type": "string", "enum": ["above", "below"]},
+                    "price": {"type": "number"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol", "condition", "price"],
+            },
+        },
+    }
+
+
+def build_digifetch_alert_list_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_alert_list",
+            "description": (
+                "Price alerts for the signed-in session (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud alert route is verified, so "
+                "no request is made."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_note_add_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_note_add",
+            "description": (
+                "Add a note on one symbol (Gloomberb Cloud; session-gated). "
+                "Requires GLOOMBERB_SESSION_COOKIE - without it the call is a "
+                "typed auth_required with no request. Read-only in this phase: "
+                "no personal Cloud note write route is verified, so no request "
+                "is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "content": {"type": "string"},
+                    "title": {"type": "string"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol", "content"],
+            },
+        },
+    }
+
+
+def build_digifetch_thesis_add_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_thesis_add",
+            "description": (
+                "Add an investment thesis for one ticker (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud thesis write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "title": {"type": "string"},
+                    "document": {"type": "string"},
+                },
+                "required": ["ticker", "title", "document"],
+            },
+        },
+    }
+
+
+def build_digifetch_view_add_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_view_add",
+            "description": (
+                "Add a custom view from a spec object (Gloomberb Cloud; "
+                "session-gated). Requires GLOOMBERB_SESSION_COOKIE - without it "
+                "the call is a typed auth_required with no request. Read-only "
+                "in this phase: no personal Cloud view write route is "
+                "verified, so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "spec": {"type": "object"},
+                },
+                "required": ["name", "spec"],
+            },
+        },
+    }
+
+
+def build_digifetch_broker_positions_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_broker_positions",
+            "description": (
+                "Broker positions/account sync (Gloomberb Cloud; session-gated, "
+                "read-only). Requires GLOOMBERB_SESSION_COOKIE - without it the "
+                "call is a typed auth_required with no request. Read-only in "
+                "this phase: no fixed Cloud broker positions route is verified "
+                "(the Cloud broker surface is a generic session proxy and IBKR "
+                "orders go through the local gateway), so no request is made."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "broker": {"type": "string", "default": "ibkr"},
+                    "account": {"type": "string"},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_ibkr_preview_order_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_ibkr_preview_order",
+            "description": (
+                "Validate an IBKR order and mint its single-use approval ticket "
+                "(Gloomberb Cloud IBKR path; session-gated, never executes). "
+                "Requires GLOOMBERB_SESSION_COOKIE - without it the call is a "
+                "typed auth_required with no request. Returns the bound ticket "
+                "plus approval_token for digifetch_ibkr_execute_order; the "
+                "token is HMAC-bound, single-use, and expires after 15 minutes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "side": {"type": "string", "enum": ["buy", "sell"]},
+                    "quantity": {"type": "number"},
+                    "order_type": {
+                        "type": "string",
+                        "enum": ["market", "limit"],
+                        "default": "market",
+                    },
+                    "limit_price": {"type": "number"},
+                    "exchange": {"type": "string"},
+                },
+                "required": ["symbol", "side", "quantity"],
+            },
+        },
+    }
+
+
+def build_digifetch_ibkr_execute_order_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_ibkr_execute_order",
+            "description": (
+                "Redeem an approval token and place the bound IBKR order "
+                "(Gloomberb Cloud IBKR path; session-gated). Requires "
+                "GLOOMBERB_SESSION_COOKIE - without it the call is a typed "
+                "auth_required with no request. Without a valid single-use "
+                "token the call is typed invalid_input with no request. "
+                "DISABLED pending human approval-gate review: a valid token "
+                "ends in typed upstream_error with zero brokerage traffic; "
+                "dry_run returns the would-be request, also with zero traffic."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "side": {"type": "string", "enum": ["buy", "sell"]},
+                    "quantity": {"type": "number"},
+                    "order_type": {
+                        "type": "string",
+                        "enum": ["market", "limit"],
+                        "default": "market",
+                    },
+                    "limit_price": {"type": "number"},
+                    "exchange": {"type": "string"},
+                    "approval_token": {"type": "string"},
+                    "dry_run": {"type": "boolean", "default": False},
+                },
+                "required": ["symbol", "side", "quantity", "approval_token"],
+            },
+        },
+    }
+
+
 # ── LuxAlgo hosted family (#4779 P0, #4844) ───────────────────────────────────
 #
 # Thin wrap of the hosted LuxAlgo MCP (Library research reads + Edge Stats
@@ -3148,6 +3486,19 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_market_halts_tool(),
         build_digifetch_hacker_news_tool(),
         build_digifetch_saved_searches_tool(),
+        build_digifetch_portfolio_view_tool(),
+        build_digifetch_watchlist_add_tool(),
+        build_digifetch_watchlist_remove_tool(),
+        build_digifetch_portfolio_add_tool(),
+        build_digifetch_portfolio_remove_tool(),
+        build_digifetch_alert_add_tool(),
+        build_digifetch_alert_list_tool(),
+        build_digifetch_note_add_tool(),
+        build_digifetch_thesis_add_tool(),
+        build_digifetch_view_add_tool(),
+        build_digifetch_broker_positions_tool(),
+        build_digifetch_ibkr_preview_order_tool(),
+        build_digifetch_ibkr_execute_order_tool(),
         build_luxalgo_library_search_tool(),
         build_luxalgo_library_get_concept_tool(),
         build_luxalgo_library_get_indicator_tool(),

@@ -150,18 +150,18 @@ calculators and compositions.
 
 | Prefix | Docs title | Status | Mapped tool or reason |
 | ------ | ---------- | ------ | --------------------- |
-| PF | Portfolio | WRITE | digifetch_portfolio_view (read) + watchlist/portfolio add/remove — probe Cloud write API first; read-only if no write route (Phase D) |
-| PORT | Portfolio analytics | WRITE | digifetch_portfolio_view (read) — probe Cloud write API first; read-only if no write route (Phase D) |
+| PF | Portfolio | WRITE | digifetch_portfolio_view (read) + watchlist/portfolio add/remove — Task 7 verdict: no personal Cloud write route verified (source probe 2026-09-30: team-scoped account APIs only, Live unverified) → session-gated, read-only posture, zero HTTP (Phase D) |
+| PORT | Portfolio analytics | WRITE | digifetch_portfolio_view (read) — same Task 7 verdict as PF: read-only (Phase D) |
 | KELLY | Position sizer | CALC | digifetch_kelly_sizer — Kelly fraction, no transport (Phase A) |
-| AW | Add to watchlist | WRITE | digifetch_watchlist_add — session-gated, zero-HTTP auth_required without cookie (Phase D) |
-| AP | Add to portfolio | WRITE | digifetch_portfolio_add — session-gated, zero-HTTP auth_required without cookie (Phase D) |
-| RW | Remove from watchlist | WRITE | digifetch_watchlist_remove — session-gated, zero-HTTP auth_required without cookie (Phase D) |
-| RP | Remove from portfolio | WRITE | digifetch_portfolio_remove — session-gated, zero-HTTP auth_required without cookie (Phase D) |
-| ALRT | Price alerts | WRITE | digifetch_alert_list — session-gated (Phase D) |
-| SA | Add alert | WRITE | digifetch_alert_add — session-gated, zero-HTTP auth_required without cookie (Phase D) |
-| NOTE | Notes | WRITE | digifetch_note_add — session-gated (Phase D) |
-| THESIS | Investment theses | WRITE | digifetch_thesis_add — read-only if no write route (Phase D) |
-| VIEW | Custom view | WRITE | digifetch_view_add — spec JSON Kroner; read-only if no write route (Phase D) |
+| AW | Add to watchlist | WRITE | digifetch_watchlist_add — session-gated, zero-HTTP auth_required without cookie; read-only per Task 7 verdict (Phase D) |
+| AP | Add to portfolio | WRITE | digifetch_portfolio_add — session-gated, zero-HTTP auth_required without cookie; read-only per Task 7 verdict (Phase D) |
+| RW | Remove from watchlist | WRITE | digifetch_watchlist_remove — session-gated, zero-HTTP auth_required without cookie; read-only per Task 7 verdict (Phase D) |
+| RP | Remove from portfolio | WRITE | digifetch_portfolio_remove — session-gated, zero-HTTP auth_required without cookie; read-only per Task 7 verdict (Phase D) |
+| ALRT | Price alerts | WRITE | digifetch_alert_list — session-gated (only a mobile history read exists upstream); read-only per Task 7 verdict (Phase D) |
+| SA | Add alert | WRITE | digifetch_alert_add — session-gated, zero-HTTP auth_required without cookie; read-only per Task 7 verdict (Phase D) |
+| NOTE | Notes | WRITE | digifetch_note_add — session-gated (upstream `/notes` is revision/team-scoped account API); read-only per Task 7 verdict (Phase D) |
+| THESIS | Investment theses | WRITE | digifetch_thesis_add — read-only: upstream `/theses` is a team-scoped account API, no personal write route (Phase D) |
+| VIEW | Custom view | WRITE | digifetch_view_add — spec JSON Kroner; read-only: upstream `/views` is a team-view account API, no personal write route (Phase D) |
 
 ## Cloud and brokers (9)
 
@@ -174,8 +174,8 @@ calculators and compositions.
 | TBO | TheBuildout | OUT | Account surface, no data API |
 | ACM | Account management | OUT | Account surface, no data API |
 | UPGRADE | Upgrade to Pro | OUT | Account surface, no data API |
-| BR | Brokers | GATE | digifetch_broker_positions — read-only positions/account sync, session-gated (Phase E) |
-| IBKR | IBKR trading | GATE | digifetch_ibkr_preview_order (ticket, never executes) + digifetch_ibkr_execute_order (two-phase approval ticket, HMAC, single-use, 15-min TTL; disabled pending human gate review) (Phase E) |
+| BR | Brokers | GATE | digifetch_broker_positions — read-only positions/account sync, session-gated; no fixed Cloud route verified (generic `/brokers/{broker}` session proxy only) → read-only posture, zero HTTP (Phase E) |
+| IBKR | IBKR trading | GATE | digifetch_ibkr_preview_order (ticket, never executes) + digifetch_ibkr_execute_order (two-phase approval ticket, HMAC, single-use, 15-min TTL; DISABLED pending human gate review — upstream_error with zero brokerage traffic; dry-run returns the would-be request) — upstream orders go through the local gateway, not Cloud REST (Phase E) |
 
 ## Layouts and settings (16)
 

@@ -581,6 +581,22 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_treasury_auctions",
         "digifetch_market_halts",
         "digifetch_hacker_news",
+        # Workspace writes + broker reads + approval-gated orders (130-coverage
+        # Task 7): session-gated but read-only in this phase (no verified Cloud
+        # write route); preview mints a local ticket, execute ships disabled.
+        "digifetch_portfolio_view",
+        "digifetch_watchlist_add",
+        "digifetch_watchlist_remove",
+        "digifetch_portfolio_add",
+        "digifetch_portfolio_remove",
+        "digifetch_alert_add",
+        "digifetch_alert_list",
+        "digifetch_note_add",
+        "digifetch_thesis_add",
+        "digifetch_view_add",
+        "digifetch_broker_positions",
+        "digifetch_ibkr_preview_order",
+        "digifetch_ibkr_execute_order",
         "luxalgo_library_search",
         "luxalgo_library_get_concept",
         "luxalgo_library_get_indicator",
@@ -2462,6 +2478,270 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Workspace writes + broker reads + approval-gated orders (130-coverage Task 7) ──
+    #
+    # No personal Cloud write route is verified (team-scoped account APIs only),
+    # so the workspace/broker tools are session-gated but read-only in this
+    # phase (typed upstream_error, zero HTTP). Preview mints a local approval
+    # ticket and never executes; execute ships disabled pending human gate
+    # review. Payloads carry no Gloomberb-sourced data and stay unattributed.
+
+    @_maybe_tool("digifetch_portfolio_view")
+    def digifetch_portfolio_view() -> str:
+        """Portfolio snapshot for the signed-in session (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud portfolio route is verified, so no request is
+        made even with a session.
+        """
+        try:
+            envelope = _build_gloomberb_client().portfolio_view({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_watchlist_add")
+    def digifetch_watchlist_add(symbol: str, exchange: str | None = None) -> str:
+        """Add one symbol to the session watchlist (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud watchlist write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().watchlist_add(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_watchlist_remove")
+    def digifetch_watchlist_remove(symbol: str, exchange: str | None = None) -> str:
+        """Remove one symbol from the session watchlist (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud watchlist write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().watchlist_remove(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_portfolio_add")
+    def digifetch_portfolio_add(
+        symbol: str,
+        exchange: str | None = None,
+        quantity: float | None = None,
+        note: str | None = None,
+    ) -> str:
+        """Add one symbol to the session portfolio (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud portfolio write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().portfolio_add(
+                {"symbol": symbol, "exchange": exchange, "quantity": quantity, "note": note}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_portfolio_remove")
+    def digifetch_portfolio_remove(symbol: str, exchange: str | None = None) -> str:
+        """Remove one symbol from the session portfolio (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud portfolio write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().portfolio_remove(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_alert_add")
+    def digifetch_alert_add(
+        symbol: str, condition: str, price: float, exchange: str | None = None
+    ) -> str:
+        """Add a price alert for one symbol (Gloomberb Cloud; session-gated).
+
+        `condition` is above/below, `price` the trigger. Requires
+        GLOOMBERB_SESSION_COOKIE; without it the envelope data is a typed
+        `auth_required` error and no request is made. Read-only in this phase:
+        no personal Cloud alert write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().alert_add(
+                {"symbol": symbol, "condition": condition, "price": price, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_alert_list")
+    def digifetch_alert_list() -> str:
+        """Price alerts for the signed-in session (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud alert route is verified, so no request is made
+        even with a session.
+        """
+        try:
+            envelope = _build_gloomberb_client().alert_list({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_note_add")
+    def digifetch_note_add(
+        symbol: str, content: str, title: str | None = None, exchange: str | None = None
+    ) -> str:
+        """Add a note on one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud note write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().note_add(
+                {"symbol": symbol, "content": content, "title": title, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_thesis_add")
+    def digifetch_thesis_add(ticker: str, title: str, document: str) -> str:
+        """Add an investment thesis for one ticker (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud thesis write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().thesis_add(
+                {"ticker": ticker, "title": title, "document": document}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker, attributed=False)
+
+    @_maybe_tool("digifetch_view_add")
+    def digifetch_view_add(name: str, spec_json: str) -> str:
+        """Add a custom view from a spec object (Gloomberb Cloud; session-gated).
+
+        `spec_json` is a JSON object describing the view. Requires
+        GLOOMBERB_SESSION_COOKIE; without it the envelope data is a typed
+        `auth_required` error and no request is made. Read-only in this phase:
+        no personal Cloud view write route is verified.
+        """
+        try:
+            spec = json.loads(spec_json)
+            envelope = _build_gloomberb_client().view_add({"name": name, "spec": spec})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_broker_positions")
+    def digifetch_broker_positions(broker: str = "ibkr", account: str | None = None) -> str:
+        """Broker positions/account sync (Gloomberb Cloud; session-gated, read-only).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no fixed Cloud broker positions route is verified (the Cloud
+        broker surface is a generic session proxy and IBKR orders go through
+        the local gateway), so no request is made even with a session.
+        """
+        try:
+            envelope = _build_gloomberb_client().broker_positions(
+                {"broker": broker, "account": account}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_ibkr_preview_order")
+    def digifetch_ibkr_preview_order(
+        symbol: str,
+        side: str,
+        quantity: float,
+        order_type: str = "market",
+        limit_price: float | None = None,
+        exchange: str | None = None,
+    ) -> str:
+        """Validate an IBKR order and mint its approval ticket (Gloomberb Cloud; session-gated).
+
+        Never executes. Requires GLOOMBERB_SESSION_COOKIE; without it the
+        envelope data is a typed `auth_required` error and no request is made.
+        Returns the bound ticket plus `approval_token` for
+        `digifetch_ibkr_execute_order` (single-use, 15-minute TTL). A limit
+        order requires `limit_price`. The approval key comes from
+        GLOOMBERB_APPROVAL_KEY (server-side, never committed).
+        """
+        try:
+            envelope = _build_gloomberb_client().ibkr_preview_order(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "quantity": quantity,
+                    "order_type": order_type,
+                    "limit_price": limit_price,
+                    "exchange": exchange,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_ibkr_execute_order")
+    def digifetch_ibkr_execute_order(
+        symbol: str,
+        side: str,
+        quantity: float,
+        approval_token: str,
+        order_type: str = "market",
+        limit_price: float | None = None,
+        exchange: str | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """Redeem an approval token and place the bound IBKR order (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE and the single-use `approval_token`
+        from `digifetch_ibkr_preview_order`; without either the call is typed
+        `auth_required` / `invalid_input` with no request. DISABLED pending
+        human approval-gate review: a valid token ends in typed
+        `upstream_error` with zero brokerage traffic; `dry_run` returns the
+        would-be request, also with zero traffic.
+        """
+        try:
+            envelope = _build_gloomberb_client().ibkr_execute_order(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "quantity": quantity,
+                    "order_type": order_type,
+                    "limit_price": limit_price,
+                    "exchange": exchange,
+                    "approval_token": approval_token,
+                    "dry_run": dry_run,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
 
     # ── LuxAlgo hosted family (#4779 P0, #4844) ──────────────────────────────
     #

@@ -40,6 +40,8 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
+from .approvals import OrderTicket
+
 __all__ = [
     "SOURCE",
     "PROVIDER_ID",
@@ -93,6 +95,20 @@ __all__ = [
     "ShortInterestInput",
     "EquityDiagnosticInput",
     "PredictionMarketsInput",
+    # workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "PortfolioViewInput",
+    "WatchlistAddInput",
+    "WatchlistRemoveInput",
+    "PortfolioAddInput",
+    "PortfolioRemoveInput",
+    "AlertAddInput",
+    "AlertListInput",
+    "NoteAddInput",
+    "ThesisAddInput",
+    "ViewAddInput",
+    "BrokerPositionsInput",
+    "IbkrPreviewOrderInput",
+    "IbkrExecuteOrderInput",
     # calculator + composition inputs (130-coverage Task 2)
     "OptionsCalcInput",
     "BondCalcInput",
@@ -221,6 +237,23 @@ __all__ = [
     "EquityDiagnosticResult",
     "PredictionMarketRow",
     "PredictionMarketsResult",
+    # workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "WatchlistAddResult",
+    "WatchlistRemoveResult",
+    "PortfolioViewResult",
+    "PortfolioAddResult",
+    "PortfolioRemoveResult",
+    "AlertAddResult",
+    "AlertRow",
+    "AlertListResult",
+    "NoteAddResult",
+    "ThesisAddResult",
+    "ViewAddResult",
+    "BrokerPosition",
+    "BrokerPositionsResult",
+    "IbkrPreviewResult",
+    "WouldBeOrder",
+    "IbkrExecuteResult",
     # calculator + composition payloads (130-coverage Task 2)
     "OptionsCalcResult",
     "BondCalcResult",
@@ -283,6 +316,20 @@ __all__ = [
     "ShortInterestEnvelope",
     "EquityDiagnosticEnvelope",
     "PredictionMarketsEnvelope",
+    # workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "PortfolioViewEnvelope",
+    "WatchlistAddEnvelope",
+    "WatchlistRemoveEnvelope",
+    "PortfolioAddEnvelope",
+    "PortfolioRemoveEnvelope",
+    "AlertAddEnvelope",
+    "AlertListEnvelope",
+    "NoteAddEnvelope",
+    "ThesisAddEnvelope",
+    "ViewAddEnvelope",
+    "BrokerPositionsEnvelope",
+    "IbkrPreviewEnvelope",
+    "IbkrExecuteEnvelope",
     # calculator + composition envelopes (130-coverage Task 2)
     "OptionsCalcEnvelope",
     "BondCalcEnvelope",
@@ -3541,3 +3588,225 @@ PollsEnvelope = DigifetchEnvelope[PollsResult]
 TreasuryAuctionsEnvelope = DigifetchEnvelope[TreasuryAuctionsResult]
 MarketHaltsEnvelope = DigifetchEnvelope[MarketHaltsResult]
 HackerNewsEnvelope = DigifetchEnvelope[HackerNewsResult]
+
+
+# ---------------------------------------------------------------------------
+# Workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+# ---------------------------------------------------------------------------
+#
+# Write-route disposition: Task 4 produced no Cloud-write-API verdicts, and a
+# Task 7 source probe of gloom-sh/gloomberb (2026-09-30, Live: unverified)
+# found no personal-symbol watchlist/portfolio/alert/note/thesis/view write
+# route and no fixed broker positions/order route — only team-scoped account
+# APIs (``src/api-client/collections.ts`` team collections, ``notes.ts``,
+# ``theses.ts``, ``views.ts``), a mobile alert-history read, the generic
+# ``/brokers/{broker}{path}`` session proxy (``src/brokers/cloud-broker-link.ts``),
+# and local-gateway IBKR execution (``rawApi.placeOrder``, gloom-ibkr-gateway).
+# Per the locked contract no write tool invents a route: the workspace/broker
+# tools below are session-gated but read-only in this phase (typed
+# ``upstream_error``, zero HTTP), while preview mints a local approval ticket
+# and execute ships disabled pending human gate review.
+
+
+class PortfolioViewInput(_InputModel):
+    """The signed-in session's portfolio snapshot (no parameters)."""
+
+
+class WatchlistAddInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class WatchlistRemoveInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class PortfolioAddInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+    quantity: float | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class PortfolioRemoveInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class AlertAddInput(_InputModel):
+    symbol: Symbol
+    condition: Literal["above", "below"]
+    price: float = Field(gt=0)
+    exchange: str | None = None
+
+
+class AlertListInput(_InputModel):
+    """The signed-in session's price alerts (no parameters)."""
+
+
+class NoteAddInput(_InputModel):
+    symbol: Symbol
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
+    title: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+    exchange: str | None = None
+
+
+class ThesisAddInput(_InputModel):
+    ticker: Symbol
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    document: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20000)
+    ]
+
+
+class ViewAddInput(_InputModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    spec: dict[str, Any]
+
+
+class BrokerPositionsInput(_InputModel):
+    broker: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "ibkr"
+    account: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+        | None
+    ) = None
+
+
+class IbkrPreviewOrderInput(_InputModel):
+    """One order to validate and ticket, never to execute."""
+
+    symbol: Symbol
+    side: Literal["buy", "sell"]
+    quantity: float = Field(gt=0)
+    order_type: Literal["market", "limit"] = "market"
+    limit_price: float | None = Field(default=None, gt=0)
+    exchange: str | None = None
+
+    @model_validator(mode="after")
+    def _limit_orders_require_limit_price(self) -> IbkrPreviewOrderInput:
+        if self.order_type == "limit" and self.limit_price is None:
+            raise ValueError("order_type='limit' requires limit_price")
+        return self
+
+
+class IbkrExecuteOrderInput(IbkrPreviewOrderInput):
+    """The previewed order plus its single-use approval token (and dry-run)."""
+
+    approval_token: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)
+    ]
+    dry_run: bool = False
+
+
+class WatchlistAddResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+
+
+class WatchlistRemoveResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+
+
+class PortfolioViewResult(_CamelModel):
+    """Read-only in this phase; the envelope carries the typed posture error."""
+
+
+class PortfolioAddResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+    quantity: float | None = None
+    note: str | None = None
+
+
+class PortfolioRemoveResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+
+
+class AlertAddResult(_CamelModel):
+    symbol: str
+    condition: str
+    price: float
+    exchange: str | None = None
+
+
+class AlertRow(_CamelModel):
+    symbol: str
+    condition: str | None = None
+    price: float | None = None
+    exchange: str | None = None
+
+
+class AlertListResult(_CamelModel):
+    alerts: list[AlertRow] = Field(default_factory=list)
+
+
+class NoteAddResult(_CamelModel):
+    symbol: str
+    title: str | None = None
+
+
+class ThesisAddResult(_CamelModel):
+    ticker: str
+    title: str
+
+
+class ViewAddResult(_CamelModel):
+    name: str
+
+
+class BrokerPosition(_CamelModel):
+    symbol: str
+    quantity: float | None = None
+
+
+class BrokerPositionsResult(_CamelModel):
+    broker: str
+    account: str | None = None
+    positions: list[BrokerPosition] = Field(default_factory=list)
+
+
+class IbkrPreviewResult(_CamelModel):
+    """A minted approval ticket. The token is the execute-path handoff (returned
+    to the caller, never logged); it redeems exactly once within 15 minutes."""
+
+    ticket: OrderTicket
+    approval_token: str
+    expires_at: datetime
+
+
+class WouldBeOrder(_CamelModel):
+    """The request execute would send (dry-run only; zero brokerage traffic)."""
+
+    broker: str = "ibkr"
+    method: str = "POST"
+    path: str = "/brokers/ibkr/orders"
+    body: dict[str, Any] = Field(default_factory=dict)
+
+
+class IbkrExecuteResult(_CamelModel):
+    ticket: OrderTicket
+    dry_run: bool = True
+    would_be: WouldBeOrder
+
+
+PortfolioViewEnvelope = DigifetchEnvelope[PortfolioViewResult]
+WatchlistAddEnvelope = DigifetchEnvelope[WatchlistAddResult]
+WatchlistRemoveEnvelope = DigifetchEnvelope[WatchlistRemoveResult]
+PortfolioAddEnvelope = DigifetchEnvelope[PortfolioAddResult]
+PortfolioRemoveEnvelope = DigifetchEnvelope[PortfolioRemoveResult]
+AlertAddEnvelope = DigifetchEnvelope[AlertAddResult]
+AlertListEnvelope = DigifetchEnvelope[AlertListResult]
+NoteAddEnvelope = DigifetchEnvelope[NoteAddResult]
+ThesisAddEnvelope = DigifetchEnvelope[ThesisAddResult]
+ViewAddEnvelope = DigifetchEnvelope[ViewAddResult]
+BrokerPositionsEnvelope = DigifetchEnvelope[BrokerPositionsResult]
+IbkrPreviewEnvelope = DigifetchEnvelope[IbkrPreviewResult]
+IbkrExecuteEnvelope = DigifetchEnvelope[IbkrExecuteResult]

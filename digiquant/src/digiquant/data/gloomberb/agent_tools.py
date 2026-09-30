@@ -53,8 +53,11 @@ from .client import (
 )
 from .entitlements import TOOL_ENTITLEMENTS
 from .models import (
+    AlertAddInput,
+    AlertListInput,
     AnalystResearchInput,
     BondCalcInput,
+    BrokerPositionsInput,
     CdsInput,
     CdxInput,
     CentralBankRatesInput,
@@ -82,6 +85,8 @@ from .models import (
     HackerNewsInput,
     HiringInput,
     HoldersInput,
+    IbkrExecuteOrderInput,
+    IbkrPreviewOrderInput,
     IpoCalendarInput,
     IvHistoryInput,
     IvScreenInput,
@@ -91,10 +96,14 @@ from .models import (
     MarketValInput,
     MoneyMarketsInput,
     NewsInput,
+    NoteAddInput,
     OptionsCalcInput,
     OptionsChainInput,
     OptionsFlowInput,
     PollsInput,
+    PortfolioAddInput,
+    PortfolioRemoveInput,
+    PortfolioViewInput,
     PredictionMarketsInput,
     PriceHistoryInput,
     ProxyStatementsInput,
@@ -117,6 +126,7 @@ from .models import (
     SovrInput,
     StatementsInput,
     SubstackInput,
+    ThesisAddInput,
     ThirteenFFundsInput,
     ThirteenFHoldingsInput,
     TickerFinancialsInput,
@@ -128,7 +138,10 @@ from .models import (
     TweetSearchInput,
     ValGraphInput,
     VenuesInput,
+    ViewAddInput,
     VixTermInput,
+    WatchlistAddInput,
+    WatchlistRemoveInput,
     YieldCurveInput,
 )
 
@@ -529,6 +542,43 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     ),
     "digifetch_market_halts": DigifetchDispatch(MarketHaltsInput, "market_halts", attributed=False),
     "digifetch_hacker_news": DigifetchDispatch(HackerNewsInput, "hacker_news", attributed=False),
+    # Workspace writes + broker reads + approval-gated orders (130-coverage
+    # Task 7): no personal Cloud write route is verified, so the payloads carry
+    # no Gloomberb-sourced data and stay unattributed (like the calculators and
+    # venue-direct tools); the descriptions still name the Cloud account surface.
+    "digifetch_portfolio_view": DigifetchDispatch(
+        PortfolioViewInput, "portfolio_view", attributed=False
+    ),
+    "digifetch_watchlist_add": DigifetchDispatch(
+        WatchlistAddInput, "watchlist_add", "symbol", attributed=False
+    ),
+    "digifetch_watchlist_remove": DigifetchDispatch(
+        WatchlistRemoveInput, "watchlist_remove", "symbol", attributed=False
+    ),
+    "digifetch_portfolio_add": DigifetchDispatch(
+        PortfolioAddInput, "portfolio_add", "symbol", attributed=False
+    ),
+    "digifetch_portfolio_remove": DigifetchDispatch(
+        PortfolioRemoveInput, "portfolio_remove", "symbol", attributed=False
+    ),
+    "digifetch_alert_add": DigifetchDispatch(
+        AlertAddInput, "alert_add", "symbol", attributed=False
+    ),
+    "digifetch_alert_list": DigifetchDispatch(AlertListInput, "alert_list", attributed=False),
+    "digifetch_note_add": DigifetchDispatch(NoteAddInput, "note_add", "symbol", attributed=False),
+    "digifetch_thesis_add": DigifetchDispatch(
+        ThesisAddInput, "thesis_add", "ticker", attributed=False
+    ),
+    "digifetch_view_add": DigifetchDispatch(ViewAddInput, "view_add", attributed=False),
+    "digifetch_broker_positions": DigifetchDispatch(
+        BrokerPositionsInput, "broker_positions", attributed=False
+    ),
+    "digifetch_ibkr_preview_order": DigifetchDispatch(
+        IbkrPreviewOrderInput, "ibkr_preview_order", "symbol", attributed=False
+    ),
+    "digifetch_ibkr_execute_order": DigifetchDispatch(
+        IbkrExecuteOrderInput, "ibkr_execute_order", "symbol", attributed=False
+    ),
 }
 
 
