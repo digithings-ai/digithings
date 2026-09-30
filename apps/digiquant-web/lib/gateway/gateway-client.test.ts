@@ -11,9 +11,6 @@ import {
   resolveGatewayState,
   fetchHealthz,
   fetchLuxalgoSearch,
-  type GatewayState,
-  type HealthzResult,
-  type ProbeResult,
   type ProbeEnvelope,
 } from "./gateway-client";
 

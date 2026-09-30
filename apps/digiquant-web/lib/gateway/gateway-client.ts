@@ -118,7 +118,6 @@ export function resolveGatewayState(pageHostname?: string): GatewayState {
   let host = pageHostname;
   if (host === undefined) {
     try {
-      // eslint-disable-next-line no-undef
       host = window.location.hostname;
     } catch {
       return { available: false, reason: "nonlocal-page" };
