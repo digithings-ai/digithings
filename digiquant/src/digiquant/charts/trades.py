@@ -228,26 +228,38 @@ def _build_win_rate_donut(
 ) -> Any:
     """Donut chart showing win/loss split.
 
-    ``num_wins`` is the caller-counted (k, n) pair — preferred over
-    reconstructing wins from the rate. When omitted, falls back to the
-    legacy ``round(rate * n)`` reconstruction. The center annotation
-    always carries N + Wilson 95% CI, never a bare percentage.
+    ``num_wins`` is the caller-counted (k, n) pair — the only honest source
+    for the center annotation. When omitted, the pie slices still use the
+    rate-derived estimate, but the center renders an explicit unknown
+    (rate + n, wins uncounted, no CI) instead of presenting a reconstructed
+    ``round(rate * n)`` count as observed.
+    The center annotation always carries N + Wilson 95% CI (counted path),
+    never a bare percentage.
     """
     if win_rate is None:
         return None
     try:
         import plotly.graph_objects as go
 
+        wr = win_rate / 100.0 if win_rate > 1 else win_rate
+        wr = max(0.0, min(1.0, wr))
         if num_wins is None:
-            wr = max(0.0, min(1.0, win_rate))
+            # Slice-only estimate: shapes the pie, never shown as counted k.
             wins = round(wr * num_trades)
+            counted = False
         else:
             wins = min(num_trades, max(0, num_wins))
+            counted = True
         losses = num_trades - wins
         hr = honest_rate(wins, num_trades)
+        sub = "<span style='font-size:9px;color:#64748b'>"
         if hr.refused or hr.estimate is None or hr.ci_lo is None or hr.ci_hi is None:
+            center = f"<b>REFUSED</b><br>{sub}n={num_trades}</span>"
+        elif not counted:
             center = (
-                f"<b>REFUSED</b><br><span style='font-size:9px;color:#64748b'>n={num_trades}</span>"
+                f"<b>{wr * 100:.1f}%</b><br>"
+                "<span style='font-size:9px;color:#64748b'>"
+                f"n={num_trades} · wins uncounted</span>"
             )
         else:
             flag = " · LOW SAMPLE" if hr.low_sample else ""
