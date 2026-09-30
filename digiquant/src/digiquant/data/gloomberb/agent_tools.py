@@ -75,9 +75,11 @@ from .models import (
     EquityDiagnosticInput,
     EstimateRevisionsInput,
     ExchangeRateInput,
+    FearGreedInput,
     FilingEventsInput,
     FundGraphInput,
     FxMatrixInput,
+    HackerNewsInput,
     HiringInput,
     HoldersInput,
     IpoCalendarInput,
@@ -85,12 +87,14 @@ from .models import (
     IvScreenInput,
     IvSurfaceInput,
     KellyInput,
+    MarketHaltsInput,
     MarketValInput,
     MoneyMarketsInput,
     NewsInput,
     OptionsCalcInput,
     OptionsChainInput,
     OptionsFlowInput,
+    PollsInput,
     PredictionMarketsInput,
     PriceHistoryInput,
     ProxyStatementsInput,
@@ -119,6 +123,7 @@ from .models import (
     TickerTweetsInput,
     TimeAndSalesInput,
     TranscriptsInput,
+    TreasuryAuctionsInput,
     TrendingInput,
     TweetSearchInput,
     ValGraphInput,
@@ -258,11 +263,15 @@ MACRO_TOOLS: tuple[str, ...] = (
     "digifetch_money_markets",
     "digifetch_rate_path",
     # probe-backed tools (130-coverage Task 5): rates/credit/positioning core
-    # for the macro phase (15/16 — one slot of headroom left).
+    # for the macro phase.
     "digifetch_central_bank_rates",
     "digifetch_cdx",
     "digifetch_sovereign_cds",
     "digifetch_cot",
+    # ToS/direct tools (130-coverage Task 6): Treasury auction results are
+    # rates core for the macro phase (16/16 — at cap; polls and hacker_news
+    # stay MCP-only, see below).
+    "digifetch_treasury_auctions",
 )
 # ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
 # upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
@@ -282,10 +291,19 @@ PM_TOOLS: tuple[str, ...] = (
     "digifetch_shiller",
     "digifetch_cds",
     # probe-backed tools (130-coverage Task 5): market-wide session movers +
-    # the IPO calendar (14/16 — headroom left).
+    # the IPO calendar.
     "digifetch_session_movers",
     "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6): market-wide sentiment gauge +
+    # trade-halt risk for the PM direction read (16/16 — at cap).
+    "digifetch_fear_greed",
+    "digifetch_market_halts",
 )
+# ``digifetch_polls`` and ``digifetch_hacker_news`` stay MCP-only for now
+# (130-coverage Task 6): EQUITY is at its 16-name cap and MACRO/PM filled to
+# 16 with the rates/sentiment/risk picks above. Both remain discoverable via
+# MCP and the full manifest; promote into a subset only with an eviction the
+# owner signs off.
 
 
 # ── schemas, generated from the orchestrator manifest builders ────────────────
@@ -502,6 +520,15 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     "digifetch_trending": DigifetchDispatch(TrendingInput, "trending", attributed=False),
     "digifetch_substack": DigifetchDispatch(SubstackInput, "substack", attributed=False),
     "digifetch_ipo_calendar": DigifetchDispatch(IpoCalendarInput, "ipo_calendar"),
+    # ToS/direct tools (130-coverage Task 6): venue-direct, free,
+    # unattributed, per-row venue URLs, no Gloomberb claims.
+    "digifetch_fear_greed": DigifetchDispatch(FearGreedInput, "fear_greed", attributed=False),
+    "digifetch_polls": DigifetchDispatch(PollsInput, "polls", attributed=False),
+    "digifetch_treasury_auctions": DigifetchDispatch(
+        TreasuryAuctionsInput, "treasury_auctions", attributed=False
+    ),
+    "digifetch_market_halts": DigifetchDispatch(MarketHaltsInput, "market_halts", attributed=False),
+    "digifetch_hacker_news": DigifetchDispatch(HackerNewsInput, "hacker_news", attributed=False),
 }
 
 

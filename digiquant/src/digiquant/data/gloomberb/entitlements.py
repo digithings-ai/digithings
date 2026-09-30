@@ -152,6 +152,14 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     # matches manifest order for the free subset.
     "digifetch_trending": "free",
     "digifetch_ipo_calendar": "free",
+    # ToS/direct tools (130-coverage Task 6): venue-direct anonymous reads
+    # (CNN, VoteHub, Fiscal Data, Nasdaq Trader, Hacker News), free like the
+    # other anonymous tools. Order matches manifest builder order below.
+    "digifetch_fear_greed": "free",
+    "digifetch_polls": "free",
+    "digifetch_treasury_auctions": "free",
+    "digifetch_market_halts": "free",
+    "digifetch_hacker_news": "free",
 }
 
 #: The sentence appended to the MCP/manifest description for each entitlement.

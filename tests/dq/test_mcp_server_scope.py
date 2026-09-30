@@ -29,7 +29,7 @@ def _tool_names(server) -> set[str]:
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
-#: The 70 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
+#: The 75 digifetch x Gloomberb enrichment reads (#4069, #4110) are read-scope
 #: only, default-ON behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
@@ -104,6 +104,12 @@ DIGIFETCH_TOOLS = {
     "digifetch_trending",
     "digifetch_substack",
     "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6, venue-direct, unattributed)
+    "digifetch_fear_greed",
+    "digifetch_polls",
+    "digifetch_treasury_auctions",
+    "digifetch_market_halts",
+    "digifetch_hacker_news",
 }
 
 #: The 14 LuxAlgo hosted reads (#4779 P0 Library + #4844 edge/trackers).
@@ -224,6 +230,6 @@ def test_read_scope_includes_luxalgo_family():
 
 @pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 88
+    assert len(READ_SCOPE_TOOLS) == 93
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 102
+    assert len(_tool_names(create_mcp_server())) == 107

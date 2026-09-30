@@ -576,6 +576,11 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_trending",
         "digifetch_substack",
         "digifetch_ipo_calendar",
+        "digifetch_fear_greed",
+        "digifetch_polls",
+        "digifetch_treasury_auctions",
+        "digifetch_market_halts",
+        "digifetch_hacker_news",
         "luxalgo_library_search",
         "luxalgo_library_get_concept",
         "luxalgo_library_get_indicator",
@@ -2356,6 +2361,107 @@ def create_mcp_server(
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_fear_greed")
+    def digifetch_fear_greed() -> str:
+        """CNN Fear & Greed gauge + 7 components (venue-direct, anonymous).
+
+        Unofficial CNN read (ToS grey area) — cross-check before citing.
+        Carries CNN-only attribution, never the terminal sourcing block.
+        Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().fear_greed({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_polls")
+    def digifetch_polls(
+        poll_type: str | None = None,
+        subject: str | None = None,
+        limit: int = 20,
+    ) -> str:
+        """VoteHub political polls (venue-direct, anonymous).
+
+        VoteHub data © VoteHub contributors, CC BY 4.0 — every row carries
+        the CC BY attribution plus its source link. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().polls(
+                {
+                    "poll_type": poll_type,
+                    "subject": subject,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_treasury_auctions")
+    def digifetch_treasury_auctions(
+        security_type: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 20,
+    ) -> str:
+        """US Treasury auction results, newest first (venue-direct, anonymous).
+
+        Treasury Fiscal Data, public — rows carry the result-document link.
+        Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().treasury_auctions(
+                {
+                    "security_type": security_type,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_market_halts")
+    def digifetch_market_halts(
+        symbol: str | None = None,
+        limit: int = 100,
+    ) -> str:
+        """US equity trade halts with reason (venue-direct, anonymous).
+
+        Nasdaq Trader, delayed — rows carry the halt-codes link. Enrichment
+        only.
+        """
+        try:
+            envelope = _build_gloomberb_client().market_halts(
+                {
+                    "symbol": symbol,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_hacker_news")
+    def digifetch_hacker_news(feed: str = "top", limit: int = 10) -> str:
+        """Hacker News stories (venue-direct, anonymous).
+
+        Reads the public API — rows carry the article or discussion link.
+        Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().hacker_news(
+                {
+                    "feed": feed,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
 
     # ── LuxAlgo hosted family (#4779 P0, #4844) ──────────────────────────────
     #

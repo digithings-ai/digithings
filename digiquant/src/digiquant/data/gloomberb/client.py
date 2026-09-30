@@ -31,6 +31,7 @@ from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, NamedTuple, TypeVar, cast  # score:allow untyped any — wire JSON
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import httpx
 from digifetch import (
@@ -56,6 +57,7 @@ from .models import (
     PREVIEW_ACCESS_WARNING,
     AnalystResearchEnvelope,
     AnalystResearchInput,
+    AuctionRow,
     BondCalcEnvelope,
     BondCalcInput,
     BondCalcResult,
@@ -123,6 +125,12 @@ from .models import (
     EstimateRevisionSurprise,
     ExchangeRateEnvelope,
     ExchangeRateInput,
+    FearGreedComponent,
+    FearGreedEnvelope,
+    FearGreedInput,
+    FearGreedPoint,
+    FearGreedPrevious,
+    FearGreedResult,
     FilingEventsEnvelope,
     FilingEventsInput,
     FlowEvent,
@@ -134,6 +142,11 @@ from .models import (
     FxMatrixEnvelope,
     FxMatrixInput,
     FxMatrixResult,
+    HackerNewsEnvelope,
+    HackerNewsInput,
+    HackerNewsResult,
+    HackerNewsStory,
+    HaltRow,
     HiringEnvelope,
     HiringInput,
     HiringMover,
@@ -160,6 +173,9 @@ from .models import (
     KellyEnvelope,
     KellyInput,
     KellyResult,
+    MarketHaltsEnvelope,
+    MarketHaltsInput,
+    MarketHaltsResult,
     MarketValEnvelope,
     MarketValInput,
     MarketValResult,
@@ -178,6 +194,11 @@ from .models import (
     OptionsFlowEnvelope,
     OptionsFlowInput,
     OptionsFlowResult,
+    PollAnswer,
+    PollRow,
+    PollsEnvelope,
+    PollsInput,
+    PollsResult,
     PredictionMarketRow,
     PredictionMarketsEnvelope,
     PredictionMarketsInput,
@@ -259,6 +280,9 @@ from .models import (
     TranscriptsEnvelope,
     TranscriptsInput,
     TranscriptsResult,
+    TreasuryAuctionsEnvelope,
+    TreasuryAuctionsInput,
+    TreasuryAuctionsResult,
     TrendingEnvelope,
     TrendingInput,
     TrendingResult,
@@ -478,6 +502,96 @@ SUBSTACK_LOGIN_HELP = (
     "Without it this tool returns auth_required and makes no request."
 )
 
+# ToS/direct tools (130-coverage Task 6). No Gloomberb Cloud route exists for
+# these panes, so they read the venues directly through the shared digifetch
+# transport (pacing, retry, breaker, SSRF guard):
+#
+# * fear_greed — CNN's public Fear & Greed graphdata endpoint (unofficial,
+#   ToS grey area): the index series plus the seven component series, with a
+#   dated second read for the latest print. Each read fails soft into the
+#   other; both failing is a typed upstream_error.
+# * polls — VoteHub's public polls endpoint (CC BY 4.0): bare array or a
+#   {"polls": [...]} wrapper, filtered to well-formed polls, sliced
+#   client-side to limit with total_available/truncated.
+# * treasury_auctions — Treasury Fiscal Data's public auction-query dataset
+#   (sorted newest-first, paged client-side via page[size]).
+# * market_halts — Nasdaq Trader's trade-halts RSS feed (XML, not JSON):
+#   an empty channel is a quiet day (empty success); items nobody can parse
+#   are a format error, never an empty success.
+# * hacker_news — the public Firebase API: one id-list read plus one read
+#   per item (sliced to limit first), each item failing soft on its own.
+CNN_FEAR_GREED_BASE_URL = "https://production.dataviz.cnn.io"
+CNN_FEAR_GREED_PATH = "/index/fearandgreed/graphdata"
+CNN_FEAR_GREED_PAGE = "https://www.cnn.com/markets/fear-and-greed"
+CNN_REFERER = "https://www.cnn.com/markets/fear-and-greed"
+CNN_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+# CNN serves the endpoint only to something that looks like its own page, so
+# the referer and user agent are not optional (same headers the plugin sends).
+CNN_FEAR_GREED_HEADERS: dict[str, str] = {
+    "Accept": "application/json,text/plain,*/*",
+    "User-Agent": CNN_USER_AGENT,
+    "Referer": CNN_REFERER,
+}
+
+VOTEHUB_BASE_URL = "https://api.votehub.com"
+VOTEHUB_POLLS_PATH = "/polls"
+VOTEHUB_CC_BY = "VoteHub data © VoteHub contributors, CC BY 4.0"
+
+FISCALDATA_BASE_URL = "https://api.fiscaldata.treasury.gov"
+FISCALDATA_AUCTIONS_PATH = "/services/api/fiscal_service/v1/accounting/od/auctions_query"
+FISCALDATA_AUCTIONS_DOC_URL = (
+    "https://fiscaldata.treasury.gov/datasets/auction-query/treasury-auctions-query"
+)
+
+NASDAQ_TRADER_BASE_URL = "https://www.nasdaqtrader.com"
+NASDAQ_HALTS_PATH = "/rss.aspx"
+NASDAQ_HALT_CODES_URL = "https://www.nasdaqtrader.com/trader.aspx?id=TradeHalt"
+
+HN_BASE_URL = "https://hacker-news.firebaseio.com/v0"
+HN_FEED_PATHS: dict[str, str] = {
+    "top": "topstories",
+    "new": "newstories",
+    "best": "beststories",
+    "show": "showstories",
+    "ask": "askstories",
+}
+HN_DISCUSSION_URL = "https://news.ycombinator.com/item?id={story_id}"
+
+# Venue honesty: result-level attribution for venue-sourced rows. These name
+# the venues, never Gloomberb Cloud (there is no term.gloom.sh page for
+# venue rows).
+FEAR_GREED_ATTRIBUTION = (
+    "CNN Fear & Greed sentiment gauge read directly from CNN's public endpoint "
+    "(production.dataviz.cnn.io). Unofficial read; cross-check before citing. "
+    "Enrichment only, never a pipeline primary."
+)
+
+POLLS_ATTRIBUTION = (
+    "Polls sourced directly from VoteHub (api.votehub.com). "
+    "VoteHub data © VoteHub contributors, CC BY 4.0. "
+    "Enrichment only, never a pipeline primary."
+)
+
+AUCTIONS_ATTRIBUTION = (
+    "Treasury auction results sourced directly from Treasury Fiscal Data "
+    "(fiscaldata.treasury.gov), public. "
+    "Enrichment only, never a pipeline primary."
+)
+
+HALTS_ATTRIBUTION = (
+    "Trade halts sourced directly from Nasdaq Trader (nasdaqtrader.com), "
+    "delayed. Enrichment only, never a pipeline primary."
+)
+
+HN_ATTRIBUTION = (
+    "Stories sourced directly from Hacker News via the public API "
+    "(hacker-news.firebaseio.com). "
+    "Enrichment only, never a pipeline primary."
+)
+
 
 def _venue_float(value: Any) -> float | None:
     """Coerce a loose venue number (numeric string, int, float) to float."""
@@ -495,6 +609,25 @@ def _venue_float(value: Any) -> float | None:
         return None
     number = float(value)
     return number if math.isfinite(number) else None
+
+
+def _venue_str(value: Any) -> str | None:
+    """A stripped venue string, or None when absent/blank."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _venue_number_or_str(value: Any) -> float | str | None:
+    """A venue amount: finite numbers stay numeric, raw strings stay raw."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value) if math.isfinite(value) else None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _polymarket_yes_prob(market: Mapping[str, Any]) -> float | None:
@@ -682,6 +815,333 @@ def _yahoo_trending_symbols(payload: Any) -> list[str] | None:
             if isinstance(symbol, str) and symbol.strip() and symbol not in symbols:
                 symbols.append(symbol.strip())
     return symbols
+
+
+_FEAR_GREED_RATINGS: tuple[str, ...] = (
+    "extreme fear",
+    "fear",
+    "neutral",
+    "greed",
+    "extreme greed",
+)
+
+#: The seven components behind the CNN index: id, title, primary series key,
+#: secondary series key (or None), and value format.
+_FEAR_GREED_COMPONENTS: tuple[tuple[str, str, str, str | None, str], ...] = (
+    (
+        "market-momentum",
+        "Market Momentum",
+        "market_momentum_sp500",
+        "market_momentum_sp125",
+        "number",
+    ),
+    ("stock-price-strength", "Stock Price Strength", "stock_price_strength", None, "percent"),
+    ("stock-price-breadth", "Stock Price Breadth", "stock_price_breadth", None, "number"),
+    ("put-call-options", "Put and Call Options", "put_call_options", None, "ratio"),
+    (
+        "market-volatility",
+        "Market Volatility",
+        "market_volatility_vix",
+        "market_volatility_vix_50",
+        "number",
+    ),
+    ("safe-haven-demand", "Safe Haven Demand", "safe_haven_demand", None, "percent"),
+    ("junk-bond-demand", "Junk Bond Demand", "junk_bond_demand", None, "percent"),
+)
+
+
+def _fear_greed_rating(value: Any, score: float | None) -> str:
+    """Normalize a CNN rating, falling back to the score bands."""
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _FEAR_GREED_RATINGS:
+            return normalized
+    if score is None:
+        return "neutral"
+    if score < 25:
+        return "extreme fear"
+    if score < 45:
+        return "fear"
+    if score <= 55:
+        return "neutral"
+    if score <= 75:
+        return "greed"
+    return "extreme greed"
+
+
+def _cnn_number(value: Any) -> float | None:
+    """A finite CNN number, or None (bools and numeric strings are not numbers)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _cnn_points(series: Any) -> list[tuple[int, float]]:
+    """Sorted ``(epoch_ms, value)`` pairs from a CNN ``data`` list, or []."""
+    if not isinstance(series, Mapping):
+        return []
+    data = series.get("data")
+    if not isinstance(data, list):
+        return []
+    points: list[tuple[int, float]] = []
+    for item in data:
+        if not isinstance(item, Mapping):
+            continue
+        x = _cnn_number(item.get("x"))
+        y = _cnn_number(item.get("y"))
+        if x is None or y is None:
+            continue
+        points.append((int(x), y))
+    return sorted(points)
+
+
+def _cnn_timestamp(value: Any) -> str | None:
+    """An ISO timestamp from a CNN timestamp (ISO string or epoch ms), or None."""
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.isoformat()
+    millis = _cnn_number(value)
+    if millis is None:
+        return None
+    try:
+        return datetime.fromtimestamp(millis / 1000, tz=timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _votehub_polls(payload: Any) -> list[Mapping[str, Any]] | None:
+    """VoteHub polls from a bare array or a ``{"polls": [...]}`` wrapper.
+
+    ``None`` is an unexpected shape (typed ``upstream_error``); rows that are
+    not well-formed polls are filtered, never fatal.
+    """
+    items: Any = payload
+    if isinstance(payload, Mapping):
+        if "polls" not in payload:
+            return None
+        items = payload.get("polls")
+    if not isinstance(items, list):
+        return None
+    polls: list[Mapping[str, Any]] = []
+    for entry in items:
+        if not isinstance(entry, Mapping):
+            continue
+        if (
+            isinstance(entry.get("id"), str)
+            and isinstance(entry.get("pollster"), str)
+            and isinstance(entry.get("subject"), str)
+        ):
+            polls.append(entry)
+    return polls
+
+
+def _poll_sample_size(value: Any) -> int | None:
+    """A VoteHub sample size (number or comma-formatted string), or None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.replace(",", "").strip()))
+        except ValueError:
+            return None
+    return None
+
+
+def _poll_margin_of_error(sample_size: int | None) -> float | None:
+    """95% MoE at 50/50 from sample size (0.98 / sqrt(n)), or None."""
+    if sample_size is None or sample_size < 1:
+        return None
+    moe = (0.98 / math.sqrt(sample_size)) * 100
+    return round(moe, 1) if math.isfinite(moe) else None
+
+
+def _poll_result_summary(
+    answers: list[PollAnswer],
+) -> tuple[str, float | None, str | None]:
+    """``"First 52 · Second 45"`` result line plus lead and leader, or blanks."""
+    if not answers:
+        return "—", None, None
+    first = answers[0]
+    if len(answers) < 2:
+        return f"{first.choice} {first.pct:g}", first.pct, first.choice
+    second = answers[1]
+    lead = first.pct - second.pct
+    return f"{first.choice} {first.pct:g} · {second.choice} {second.pct:g}", lead, first.choice
+
+
+def _halt_field(item: str, tag: str) -> str:
+    """One ``ndaq:`` namespaced field from a halt-feed ``<item>`` block."""
+    match = re.search(rf"<ndaq:{tag}[^>]*>([\s\S]*?)</ndaq:{tag}>", item, re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
+
+#: Concise renderings of Nasdaq's trade halt codes
+#: (nasdaqtrader.com/trader.aspx?id=TradeHaltCodes).
+_HALT_REASONS: dict[str, str] = {
+    "T1": "News pending",
+    "T2": "News released",
+    "T3": "News released, resumption times set",
+    "T5": "Single-stock pause, 10% move",
+    "T6": "Extraordinary market activity",
+    "T7": "Quotation-only period",
+    "T8": "ETF halt",
+    "T12": "Additional info requested by Nasdaq",
+    "H4": "Listing non-compliance",
+    "H9": "Filings not current",
+    "H10": "SEC trading suspension",
+    "H11": "Regulatory concern",
+    "O1": "Operations halt",
+    "IPO1": "IPO not yet trading",
+    "IPOQ": "IPO released for quotation",
+    "IPOE": "IPO positioning window extended",
+    "M": "Volatility pause, listed issue",
+    "M1": "Corporate action",
+    "M2": "Quotation not available",
+    "LUDP": "Volatility pause",
+    "LUDS": "Volatility pause, straddle",
+    "MWC0": "Circuit breaker carried over",
+    "MWC1": "Market-wide circuit breaker, level 1",
+    "MWC2": "Market-wide circuit breaker, level 2",
+    "MWC3": "Market-wide circuit breaker, level 3",
+    "MWCQ": "Market-wide circuit breaker resumption",
+    "R1": "New issue available",
+    "R2": "Issue available",
+    "R4": "Qualification issues resolved",
+    "R9": "Filing requirements satisfied",
+    "C3": "Issuer news not forthcoming",
+    "C4": "Qualifications halt ended",
+    "C9": "Qualifications halt concluded",
+    "C11": "Halt concluded by other regulator",
+    "D": "Security deleted from Nasdaq/CQS",
+}
+
+
+def _describe_halt_reason(code: str) -> str:
+    """Plain-English expansion of a Nasdaq halt code (or the code itself)."""
+    normalized = code.strip().upper()
+    if not normalized:
+        return "Reason not available"
+    return _HALT_REASONS.get(normalized, f"Reason code {normalized}")
+
+
+try:
+    _ET_ZONE: ZoneInfo | None = ZoneInfo("America/New_York")
+except Exception:
+    # No tz database: ET wall-clock times stay strings and epochs stay null
+    # rather than guessing an offset.
+    _ET_ZONE = None
+
+
+def _et_to_utc_ms(utc_date: str, utc_time: str) -> int | None:
+    """Nasdaq's ``MM/DD/YYYY`` + ``HH:MM:SS[.mmm]`` ET pair to UTC epoch ms."""
+    if _ET_ZONE is None:
+        return None
+    date_match = re.fullmatch(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*", utc_date or "")
+    time_match = re.fullmatch(
+        r"\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,3}))?\s*", utc_time or ""
+    )
+    if not date_match or not time_match:
+        return None
+    try:
+        wall = datetime(
+            int(date_match.group(3)),
+            int(date_match.group(1)),
+            int(date_match.group(2)),
+            int(time_match.group(1)),
+            int(time_match.group(2)),
+            int(time_match.group(3) or 0),
+            int((time_match.group(4) or "0").ljust(3, "0")) * 1000,
+            tzinfo=_ET_ZONE,
+        )
+    except ValueError:
+        return None
+    return int(wall.timestamp() * 1000)
+
+
+def _parse_halt_items(xml: str) -> tuple[list[dict[str, Any]], int]:
+    """Halt records + ``<item>`` count from the Nasdaq RSS XML.
+
+    Rows without a symbol or a parseable halt time are skipped (they carry no
+    addressable halt); the caller turns items-nobody-can-parse into a format
+    error so it never reads as a quiet day.
+    """
+    items = re.findall(r"<item>[\s\S]*?</item>", xml, re.IGNORECASE)
+    records: list[dict[str, Any]] = []
+    for item in items:
+        symbol = _halt_field(item, "IssueSymbol").upper()
+        halt_date = _halt_field(item, "HaltDate")
+        halt_time = _halt_field(item, "HaltTime")
+        halted_at = _et_to_utc_ms(halt_date, halt_time)
+        if not symbol or halted_at is None:
+            continue
+        reason_code = _halt_field(item, "ReasonCode").upper()
+        resumption_date = _halt_field(item, "ResumptionDate")
+        records.append(
+            {
+                "symbol": symbol,
+                "company": _halt_field(item, "IssueName") or None,
+                "market": _halt_field(item, "Market") or None,
+                "reason_code": reason_code,
+                "reason": _describe_halt_reason(reason_code),
+                "halt_date": halt_date or None,
+                "halt_time": halt_time or None,
+                "halted_at": halted_at,
+                "quote_resume_at": _et_to_utc_ms(
+                    resumption_date, _halt_field(item, "ResumptionQuoteTime")
+                ),
+                "trade_resume_at": _et_to_utc_ms(
+                    resumption_date, _halt_field(item, "ResumptionTradeTime")
+                ),
+            }
+        )
+    return records, len(items)
+
+
+def _hn_site(url: str) -> str | None:
+    """Hostname minus a ``www.`` prefix, or None when unparseable."""
+    from urllib.parse import urlparse
+
+    try:
+        host = urlparse(url).hostname or ""
+    except ValueError:
+        return None
+    return host[4:] if host.startswith("www.") else host or None
+
+
+def _hn_story(raw: Any) -> dict[str, Any] | None:
+    """One normalized Hacker News story, or None when deleted/dead/malformed."""
+    if not isinstance(raw, Mapping):
+        return None
+    if raw.get("deleted") is True or raw.get("dead") is True:
+        return None
+    story_id = raw.get("id")
+    title = raw.get("title")
+    if type(story_id) is not int or not isinstance(title, str) or not title:
+        return None
+    url = raw.get("url")
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        url = None
+    by = raw.get("by")
+    time_value = raw.get("time")
+    score = raw.get("score")
+    comments = raw.get("descendants")
+    return {
+        "id": story_id,
+        "title": title,
+        "by": by if isinstance(by, str) else "unknown",
+        "time": time_value if type(time_value) is int else 0,
+        "score": score if type(score) is int else 0,
+        "comments": comments if type(comments) is int else 0,
+        "url": url,
+        "site": _hn_site(url) if url else None,
+        "source_url": url or HN_DISCUSSION_URL.format(story_id=story_id),
+    }
 
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -3786,6 +4246,555 @@ class GloomberbClient:
 
         return self._cached("ipo_calendar", parsed, produce)
 
+    # -- ToS/direct tools (130-coverage Task 6) ------------------------------
+    #
+    # Venue-direct reads (the prediction-markets precedent): free, unattributed
+    # (attributed=False on both surfaces), per-row venue URLs, per-venue
+    # fail-soft, no Gloomberb claims anywhere.
+
+    def fear_greed(
+        self, request: FearGreedInput | Mapping[str, Any] | None = None
+    ) -> FearGreedEnvelope:
+        """CNN Fear & Greed gauge + the seven components behind it.
+
+        Venue-direct: the index/history/components come from CNN's public
+        graphdata endpoint (unofficial, ToS grey area) with a dated second
+        read for the latest print. Each read fails soft into the other; both
+        failing is a typed ``upstream_error``. NOT attributed to Gloomberb;
+        rows carry the CNN page link.
+        """
+        parsed = self._validate_input(FearGreedInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FearGreedEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FearGreedEnvelope)
+
+        def produce() -> FearGreedEnvelope:
+            today = self._now().date().isoformat()
+            charts = self._request_json(
+                "GET",
+                CNN_FEAR_GREED_PATH,
+                base_url=CNN_FEAR_GREED_BASE_URL,
+                label="CNN Fear & Greed",
+                headers=CNN_FEAR_GREED_HEADERS,
+            )
+            latest = self._request_json(
+                "GET",
+                f"{CNN_FEAR_GREED_PATH}/{today}",
+                base_url=CNN_FEAR_GREED_BASE_URL,
+                label="CNN Fear & Greed",
+                headers=CNN_FEAR_GREED_HEADERS,
+            )
+            charts_data = charts.data if not isinstance(charts, DigifetchError) else None
+            latest_data = latest.data if not isinstance(latest, DigifetchError) else None
+            if charts_data is None and latest_data is None:
+                first = charts if isinstance(charts, DigifetchError) else latest
+                assert isinstance(first, DigifetchError)
+                return self._error_envelope(FearGreedEnvelope, first)
+            try:
+                result_obj = self._normalize_fear_greed(charts_data, latest_data)
+            except ValueError as exc:
+                return self._error_envelope(
+                    FearGreedEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"CNN Fear & Greed returned an unexpected shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            return FearGreedEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                provider_id="cnn-fear-greed",
+            )
+
+        return self._cached("fear_greed", parsed, produce)
+
+    @staticmethod
+    def _normalize_fear_greed(charts: Any, latest: Any) -> FearGreedResult:
+        """Index gauge + components from the CNN graphdata payloads."""
+        charts_map = charts if isinstance(charts, Mapping) else {}
+        latest_map = latest if isinstance(latest, Mapping) else {}
+        overall = latest_map.get("fear_and_greed", charts_map.get("fear_and_greed"))
+        history_series = charts_map.get("fear_and_greed_historical") or latest_map.get(
+            "fear_and_greed_historical"
+        )
+        history_points = _cnn_points(history_series)
+        score = _cnn_number(overall.get("score") if isinstance(overall, Mapping) else None)
+        if score is None and isinstance(history_series, Mapping):
+            score = _cnn_number(history_series.get("score"))
+        if score is None and history_points:
+            score = history_points[-1][1]
+        if score is None:
+            raise ValueError("response did not include an index score")
+        rating = _fear_greed_rating(
+            overall.get("rating") if isinstance(overall, Mapping) else None, score
+        )
+        updated_at = _cnn_timestamp(
+            overall.get("timestamp") if isinstance(overall, Mapping) else None
+        )
+        previous = FearGreedPrevious()
+        if isinstance(overall, Mapping):
+            previous = FearGreedPrevious(
+                close=_cnn_number(overall.get("previous_close")),
+                week=_cnn_number(overall.get("previous_1_week")),
+                month=_cnn_number(overall.get("previous_1_month")),
+                year=_cnn_number(overall.get("previous_1_year")),
+            )
+            if updated_at is None:
+                updated_at = _cnn_timestamp(history_series.get("timestamp"))
+        history = [
+            FearGreedPoint(
+                date=datetime.fromtimestamp(x / 1000, tz=timezone.utc).isoformat(),
+                score=y,
+            )
+            for x, y in history_points
+        ]
+        components: list[FearGreedComponent] = []
+        for comp_id, title, primary_key, _secondary_key, value_format in _FEAR_GREED_COMPONENTS:
+            series = charts_map.get(primary_key, latest_map.get(primary_key))
+            if not isinstance(series, Mapping):
+                continue
+            points = _cnn_points(series)
+            if not points:
+                continue
+            comp_score = _cnn_number(series.get("score"))
+            components.append(
+                FearGreedComponent(
+                    id=comp_id,
+                    title=title,
+                    score=comp_score,
+                    rating=_fear_greed_rating(series.get("rating"), comp_score),
+                    value=points[-1][1],
+                    value_format=value_format,
+                    updated_at=_cnn_timestamp(series.get("timestamp"))
+                    or (datetime.fromtimestamp(points[-1][0] / 1000, tz=timezone.utc).isoformat()),
+                    source_url=CNN_FEAR_GREED_PAGE,
+                )
+            )
+        return FearGreedResult(
+            score=score,
+            rating=rating,
+            updated_at=updated_at,
+            previous=previous,
+            history=history,
+            components=components,
+            attribution=FEAR_GREED_ATTRIBUTION,
+        )
+
+    def polls(self, request: PollsInput | Mapping[str, Any]) -> PollsEnvelope:
+        """VoteHub political polls (venue-direct, anonymous).
+
+        The endpoint answers a bare array or a ``{"polls": [...]}`` wrapper;
+        rows that are not well-formed polls are filtered, never fatal, and the
+        list is sliced client-side to ``limit`` with ``total_available`` /
+        ``truncated``. NOT attributed to Gloomberb; every row carries the
+        VoteHub CC BY 4.0 marker plus its source link.
+        """
+        parsed = self._validate_input(PollsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PollsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PollsEnvelope)
+
+        def produce() -> PollsEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.poll_type:
+                params["poll_type"] = parsed.poll_type
+            if parsed.subject:
+                params["subject"] = parsed.subject
+            raw = self._request_json(
+                "GET",
+                VOTEHUB_POLLS_PATH,
+                params=params or None,
+                base_url=VOTEHUB_BASE_URL,
+                label="VoteHub",
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(PollsEnvelope, raw)
+            result = self._data_or_error(raw, "VoteHub polls are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(PollsEnvelope, result)
+            data, warnings = result
+            items = _votehub_polls(data)
+            if items is None:
+                return self._error_envelope(
+                    PollsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="VoteHub polls returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            rows: list[PollRow] = []
+            for entry in items:
+                try:
+                    answers = [
+                        PollAnswer(choice=str(a["choice"]), pct=float(a["pct"]))
+                        for a in entry.get("answers") or []
+                        if isinstance(a, Mapping)
+                        and isinstance(a.get("choice"), str)
+                        and _cnn_number(a.get("pct")) is not None
+                    ]
+                    answers.sort(key=lambda a: a.pct, reverse=True)
+                    summary, lead, lead_choice = _poll_result_summary(answers)
+                    sample_size = _poll_sample_size(entry.get("sample_size"))
+                    rows.append(
+                        PollRow(
+                            id=entry["id"],
+                            subject=entry["subject"],
+                            poll_type=str(entry.get("poll_type") or ""),
+                            pollster=entry["pollster"],
+                            population=(
+                                str(entry["population"])
+                                if entry.get("population") is not None
+                                else None
+                            ),
+                            sample_size=sample_size,
+                            margin_of_error=_poll_margin_of_error(sample_size),
+                            start_date=(
+                                str(entry["start_date"])
+                                if entry.get("start_date") is not None
+                                else None
+                            ),
+                            end_date=(
+                                str(entry["end_date"])
+                                if entry.get("end_date") is not None
+                                else None
+                            ),
+                            result=summary,
+                            lead=lead,
+                            lead_choice=lead_choice,
+                            url=(str(entry["url"]) if isinstance(entry.get("url"), str) else None),
+                            attribution=VOTEHUB_CC_BY,
+                            answers=answers,
+                        )
+                    )
+                except (ValidationError, ValueError, TypeError):
+                    continue
+            total_available = len(rows)
+            sliced = rows[: parsed.limit]
+            return PollsEnvelope(
+                data=PollsResult(
+                    rows=sliced,
+                    total_available=total_available,
+                    truncated=total_available > len(sliced),
+                    attribution=POLLS_ATTRIBUTION,
+                ),
+                fetched_at=self._now(),
+                provider_id="votehub-polls",
+                warnings=warnings,
+            )
+
+        return self._cached("polls", parsed, produce)
+
+    def treasury_auctions(
+        self, request: TreasuryAuctionsInput | Mapping[str, Any]
+    ) -> TreasuryAuctionsEnvelope:
+        """US Treasury auction results (venue-direct, anonymous).
+
+        Reads Treasury Fiscal Data's public auction-query dataset newest-first
+        (``sort=-record_date``, ``page[size]=limit``) with optional
+        security-type / record-date filters. Rows type the common fields and
+        preserve the rest; each row carries the result-document link when the
+        venue supplies one. NOT attributed to Gloomberb.
+        """
+        parsed = self._validate_input(TreasuryAuctionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TreasuryAuctionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TreasuryAuctionsEnvelope)
+
+        def produce() -> TreasuryAuctionsEnvelope:
+            params: dict[str, Any] = {
+                "sort": "-record_date",
+                "page[size]": str(parsed.limit),
+            }
+            filters: list[str] = []
+            if parsed.from_date:
+                filters.append(f"record_date:gte:{parsed.from_date}")
+            if parsed.to_date:
+                filters.append(f"record_date:lte:{parsed.to_date}")
+            if parsed.security_type:
+                filters.append(f"security_type:eq:{parsed.security_type}")
+            if filters:
+                params["filter"] = ",".join(filters)
+            raw = self._request_json(
+                "GET",
+                FISCALDATA_AUCTIONS_PATH,
+                params=params,
+                base_url=FISCALDATA_BASE_URL,
+                label="Treasury Fiscal Data",
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TreasuryAuctionsEnvelope, raw)
+            result = self._data_or_error(raw, "Treasury auction data is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TreasuryAuctionsEnvelope, result)
+            data, warnings = result
+            items: Any = data.get("data") if isinstance(data, Mapping) else data
+            if not isinstance(items, list):
+                return self._error_envelope(
+                    TreasuryAuctionsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Treasury auction data returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            rows: list[AuctionRow] = []
+            for entry in items:
+                if not isinstance(entry, Mapping):
+                    continue
+                try:
+                    pdf_url = entry.get("pdf_url")
+                    rows.append(
+                        AuctionRow(
+                            record_date=_venue_str(entry.get("record_date")),
+                            cusip=_venue_str(entry.get("cusip")),
+                            security_type=_venue_str(entry.get("security_type")),
+                            auction_date=_venue_str(entry.get("auction_date")),
+                            issue_date=_venue_str(entry.get("issue_date")),
+                            maturity_date=_venue_str(entry.get("maturity_date")),
+                            offering_amount=_venue_number_or_str(entry.get("offering_amount")),
+                            total_accepted=_venue_number_or_str(
+                                entry.get("total_accepted") or entry.get("total_accepted_amount")
+                            ),
+                            bid_to_cover_ratio=_venue_number_or_str(
+                                entry.get("bid_to_cover_ratio")
+                            ),
+                            high_yield=_venue_number_or_str(
+                                entry.get("high_yield") or entry.get("rate")
+                            ),
+                            price_per100=_venue_number_or_str(entry.get("price_per100")),
+                            source_url=(
+                                pdf_url
+                                if isinstance(pdf_url, str) and pdf_url.startswith("http")
+                                else FISCALDATA_AUCTIONS_DOC_URL
+                            ),
+                            **{
+                                key: value
+                                for key, value in entry.items()
+                                if key
+                                not in {
+                                    "record_date",
+                                    "cusip",
+                                    "security_type",
+                                    "auction_date",
+                                    "issue_date",
+                                    "maturity_date",
+                                    "offering_amount",
+                                    "total_accepted",
+                                    "total_accepted_amount",
+                                    "bid_to_cover_ratio",
+                                    "high_yield",
+                                    "rate",
+                                    "price_per100",
+                                    "pdf_url",
+                                }
+                            },
+                        )
+                    )
+                except (ValidationError, ValueError, TypeError):
+                    continue
+            meta = data.get("meta") if isinstance(data, Mapping) else None
+            meta_count = meta.get("count") if isinstance(meta, Mapping) else None
+            total_available = meta_count if type(meta_count) is int else len(rows)
+            sliced = rows[: parsed.limit]
+            return TreasuryAuctionsEnvelope(
+                data=TreasuryAuctionsResult(
+                    rows=sliced,
+                    total_available=total_available,
+                    truncated=total_available > len(sliced),
+                    attribution=AUCTIONS_ATTRIBUTION,
+                ),
+                fetched_at=self._now(),
+                provider_id="treasury-fiscal-data",
+                warnings=warnings,
+            )
+
+        return self._cached("treasury_auctions", parsed, produce)
+
+    def market_halts(
+        self, request: MarketHaltsInput | Mapping[str, Any] | None = None
+    ) -> MarketHaltsEnvelope:
+        """US equity trade halts (venue-direct, anonymous).
+
+        Reads Nasdaq Trader's trade-halts RSS feed (XML): an empty channel is
+        a quiet day (empty success), while items nobody can parse are a format
+        error, never an empty success. Times are ET wall clock with UTC
+        epochs; ``status`` resolves against now. NOT attributed to Gloomberb;
+        rows carry the halt-codes link.
+        """
+        parsed = self._validate_input(MarketHaltsInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(MarketHaltsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(MarketHaltsEnvelope)
+
+        def produce() -> MarketHaltsEnvelope:
+            text = self._request_text(
+                "GET",
+                NASDAQ_HALTS_PATH,
+                params={"feed": "tradehalts"},
+                base_url=NASDAQ_TRADER_BASE_URL,
+                label="Nasdaq Trader",
+            )
+            if isinstance(text, DigifetchError):
+                return self._error_envelope(MarketHaltsEnvelope, text)
+            if (
+                re.search(r"<rss\b", text, re.IGNORECASE) is None
+                or re.search(r"<channel\b", text, re.IGNORECASE) is None
+                or re.search(r"xmlns:ndaq=", text, re.IGNORECASE) is None
+            ):
+                return self._error_envelope(
+                    MarketHaltsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Nasdaq halt feed response was not RSS",
+                        retryable=False,
+                    ),
+                )
+            records, item_count = _parse_halt_items(text)
+            if not records and item_count > 0:
+                return self._error_envelope(
+                    MarketHaltsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Nasdaq halt feed format was not recognized",
+                        retryable=False,
+                    ),
+                )
+            now_ms = int(self._now().timestamp() * 1000)
+            wanted = (parsed.symbol or "").strip().upper()
+            rows: list[HaltRow] = []
+            for record in records:
+                if wanted and record["symbol"] != wanted:
+                    continue
+                trade_resume = record["trade_resume_at"]
+                quote_resume = record["quote_resume_at"]
+                if isinstance(trade_resume, int) and now_ms >= trade_resume:
+                    status = "resumed"
+                elif isinstance(quote_resume, int) and now_ms >= quote_resume:
+                    status = "quote"
+                else:
+                    status = "halted"
+                rows.append(
+                    HaltRow(
+                        symbol=record["symbol"],
+                        company=record["company"],
+                        market=record["market"],
+                        reason_code=record["reason_code"],
+                        reason=record["reason"],
+                        halt_date=record["halt_date"],
+                        halt_time=record["halt_time"],
+                        halted_at=record["halted_at"],
+                        quote_resume_at=quote_resume,
+                        trade_resume_at=trade_resume,
+                        status=status,
+                        source_url=NASDAQ_HALT_CODES_URL,
+                    )
+                )
+            # Newest halt first: the reason anyone opens this pane.
+            rows.sort(key=lambda row: row.halted_at or 0, reverse=True)
+            return MarketHaltsEnvelope(
+                data=MarketHaltsResult(
+                    rows=rows[: parsed.limit],
+                    attribution=HALTS_ATTRIBUTION,
+                    as_of=self._now().isoformat(),
+                ),
+                fetched_at=self._now(),
+                provider_id="nasdaq-trader-halts",
+            )
+
+        return self._cached("market_halts", parsed, produce)
+
+    def hacker_news(
+        self, request: HackerNewsInput | Mapping[str, Any] | None = None
+    ) -> HackerNewsEnvelope:
+        """Hacker News stories (venue-direct, anonymous).
+
+        Reads the public API's id list for one feed, then one item read per
+        story (sliced to ``limit`` first, so the fan-out stays bounded). One
+        dead item never empties the feed: per-item failures skip that story.
+        NOT attributed to Gloomberb; rows carry the article link, or the
+        discussion link for self posts.
+        """
+        parsed = self._validate_input(HackerNewsInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(HackerNewsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(HackerNewsEnvelope)
+
+        def produce() -> HackerNewsEnvelope:
+            feed_path = HN_FEED_PATHS.get(parsed.feed)
+            if feed_path is None:
+                return self._error_envelope(
+                    HackerNewsEnvelope,
+                    DigifetchError(
+                        code="invalid_input",
+                        message=f"unknown Hacker News feed {parsed.feed!r}",
+                        retryable=False,
+                    ),
+                )
+            raw = self._request_json(
+                "GET",
+                f"/{feed_path}.json",
+                base_url=HN_BASE_URL,
+                label="Hacker News",
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(HackerNewsEnvelope, raw)
+            result = self._data_or_error(raw, "Hacker News feed is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(HackerNewsEnvelope, result)
+            data, warnings = result
+            if not isinstance(data, list):
+                return self._error_envelope(
+                    HackerNewsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Hacker News feed returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            ids = [item for item in data if type(item) is int][: parsed.limit]
+            rows: list[HackerNewsStory] = []
+            for story_id in ids:
+                item = self._request_json(
+                    "GET",
+                    f"/item/{story_id}.json",
+                    base_url=HN_BASE_URL,
+                    label="Hacker News",
+                )
+                if isinstance(item, DigifetchError):
+                    continue
+                item_result = self._data_or_error(item, "Hacker News item is unavailable")
+                if isinstance(item_result, DigifetchError):
+                    continue
+                story, _item_warnings = item_result
+                normalized = _hn_story(story)
+                if normalized is None:
+                    continue
+                try:
+                    rows.append(HackerNewsStory.model_validate(normalized))
+                except (ValidationError, ValueError, TypeError):
+                    continue
+            return HackerNewsEnvelope(
+                data=HackerNewsResult(
+                    rows=rows,
+                    feed=parsed.feed,
+                    attribution=HN_ATTRIBUTION,
+                ),
+                fetched_at=self._now(),
+                provider_id="hacker-news",
+                warnings=warnings,
+            )
+
+        return self._cached("hacker_news", parsed, produce)
+
     # -- calculators + compositions (130-coverage Task 2) --------------------
     #
     # Pure calculators run local math only (no transport, no cookies). The
@@ -5150,6 +6159,7 @@ class GloomberbClient:
         base_url: str | None = None,
         label: str = "Gloomberb",
         cookies: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -5182,6 +6192,7 @@ class GloomberbClient:
                     params=params,
                     json=body,
                     cookies=cookies,
+                    headers=headers,
                 )
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code >= 500:
@@ -5320,3 +6331,79 @@ class GloomberbClient:
             as_of=str(payload["asOf"]) if payload.get("asOf") is not None else None,
             currency=str(currency) if currency is not None else None,
         )
+
+    def _request_text(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        retry_policy: RetryPolicy | None = None,
+        base_url: str | None = None,
+        label: str = "Gloomberb",
+        headers: Mapping[str, str] | None = None,
+    ) -> str | DigifetchError:
+        """Raw-text read for non-JSON venues (the Nasdaq halt RSS feed).
+
+        Mirrors :meth:`_request_json`'s transport contract (kill switch,
+        breaker, retry, per-label HTTP mapping) without the JSON envelope
+        parsing — the caller validates the body shape itself.
+        """
+        if not self._enabled:
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb data family disabled by kill switch ({GLOOMBERB_ENABLED_ENV})",
+                retryable=False,
+            )
+        breaker = self._breaker_error()
+        if breaker is not None:
+            return breaker
+        url = f"{base_url or self._base_url}{path}"
+
+        def attempt() -> FetchResult:
+            self._rate_limiter.acquire()
+            try:
+                return self._fetcher.fetch(
+                    url,
+                    method=method,
+                    params=params,
+                    headers=headers,
+                )
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code >= 500:
+                    raise _UpstreamServerError(str(exc)) from exc
+                raise
+
+        try:
+            result = with_retry(
+                attempt,
+                retry_policy or self._retry_policy,
+                description=f"{label.lower()} {method} {path}",
+            )
+        except httpx.HTTPStatusError as exc:
+            error = self._map_http_error(exc, label=label)
+            if error.retryable or error.code == "rate_limited":
+                self._record_failure()
+            return error
+        except (httpx.TransportError, _UpstreamServerError) as exc:
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} request failed: {exc}",
+                retryable=True,
+            )
+        except SsrfBlockedError as exc:
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} request blocked by the SSRF guard: {exc}",
+                retryable=False,
+            )
+        except httpx.HTTPError as exc:
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} request failed: {exc}",
+                retryable=False,
+            )
+        self._record_success()
+        return result.text

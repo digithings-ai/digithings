@@ -2480,6 +2480,131 @@ def build_digifetch_ipo_calendar_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_fear_greed_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_fear_greed",
+            "description": (
+                "CNN Fear & Greed sentiment gauge with its history and the "
+                "seven components behind it (venue-direct, anonymous) — "
+                "unofficial CNN read, ToS grey area, cross-check before "
+                "citing. Rows carry CNN-only attribution and the CNN page "
+                "link, never the terminal sourcing block. Takes no "
+                "parameters (today's read). Enrichment only, never a "
+                "pipeline primary."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_digifetch_polls_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_polls",
+            "description": (
+                "VoteHub political polls: approval, favorability, generic "
+                "ballot, Senate, governor, House (venue-direct, anonymous). "
+                "VoteHub data © VoteHub contributors, CC BY 4.0 — every row "
+                "carries the CC BY attribution plus its source link, never "
+                "the terminal sourcing block. Rows carry result summary, "
+                "lead, sample, margin of error, and dates. Filters: "
+                "poll_type, subject, limit. Enrichment only, never a "
+                "pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "poll_type": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_treasury_auctions_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_treasury_auctions",
+            "description": (
+                "US Treasury auction results, newest first (venue-direct, "
+                "anonymous). Treasury Fiscal Data, public — rows carry "
+                "dates, amounts, high yield, and the result-document link, "
+                "never the terminal sourcing block. Filters: "
+                "security_type, from/to date (YYYY-MM-DD), limit. "
+                "Enrichment only, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "security_type": {"type": "string"},
+                    "from_date": {"type": "string"},
+                    "to_date": {"type": "string"},
+                    "limit": {"type": "integer", "default": 20},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_market_halts_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_market_halts",
+            "description": (
+                "US equity trade halts with halt/quote/trade times and "
+                "reason (venue-direct, anonymous). Nasdaq Trader, delayed — "
+                "rows carry symbol, company, reason code, ET times, status, "
+                "and the halt-codes link, never the terminal sourcing "
+                "block. Filters: symbol, limit. Enrichment only, never a "
+                "pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "limit": {"type": "integer", "default": 100},
+                },
+            },
+        },
+    }
+
+
+def build_digifetch_hacker_news_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_hacker_news",
+            "description": (
+                "Hacker News stories with score and comment counts "
+                "(venue-direct, anonymous). Reads the public API — rows "
+                "carry title, author, and the article link (or the "
+                "discussion link for self posts), never the terminal "
+                "sourcing block. feed selects top/new/best/show/ask; limit "
+                "caps the per-item reads. Enrichment only, never a pipeline "
+                "primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "feed": {
+                        "type": "string",
+                        "enum": ["top", "new", "best", "show", "ask"],
+                        "default": "top",
+                    },
+                    "limit": {"type": "integer", "default": 10},
+                },
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -3017,6 +3142,11 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_trending_tool(),
         build_digifetch_substack_tool(),
         build_digifetch_ipo_calendar_tool(),
+        build_digifetch_fear_greed_tool(),
+        build_digifetch_polls_tool(),
+        build_digifetch_treasury_auctions_tool(),
+        build_digifetch_market_halts_tool(),
+        build_digifetch_hacker_news_tool(),
         build_digifetch_saved_searches_tool(),
         build_luxalgo_library_search_tool(),
         build_luxalgo_library_get_concept_tool(),

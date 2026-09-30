@@ -3319,6 +3319,204 @@ class IpoCalendarResult(_CamelModel):
     deal_type: str | None = None
 
 
+class FearGreedInput(_InputModel):
+    """CNN Fear & Greed gauge + components (parameterless: today's read)."""
+
+
+class FearGreedPrevious(_CamelModel):
+    """Index readings at the previous close, week, month, and year."""
+
+    close: float | None = None
+    week: float | None = None
+    month: float | None = None
+    year: float | None = None
+
+
+class FearGreedPoint(_CamelModel):
+    """One index-history point (epoch-ms date + score)."""
+
+    date: str | None = None
+    score: float | None = None
+
+
+class FearGreedComponent(_CamelModel):
+    """One of the seven components behind the index, with its CNN page link."""
+
+    id: str
+    title: str
+    score: float | None = None
+    rating: str = "neutral"
+    value: float | str | None = None
+    value_format: str | None = None
+    updated_at: str | None = None
+    source_url: str = ""
+
+
+class FearGreedResult(_CamelModel):
+    """Index gauge plus components; venue honesty: never attributed to Gloomberb."""
+
+    score: float
+    rating: str = "neutral"
+    updated_at: str | None = None
+    previous: FearGreedPrevious = Field(default_factory=FearGreedPrevious)
+    history: list[FearGreedPoint] = Field(default_factory=list)
+    components: list[FearGreedComponent] = Field(default_factory=list)
+    attribution: str = ""
+
+
+class PollsInput(_InputModel):
+    """VoteHub polls: optional type/subject filters, client-side limit."""
+
+    poll_type: str | None = Field(default=None, max_length=64)
+    subject: str | None = Field(default=None, max_length=128)
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class PollAnswer(_CamelModel):
+    """One answer choice with its percentage."""
+
+    choice: str
+    pct: float
+
+
+class PollRow(_CamelModel):
+    """One poll: result summary, lead, MoE, source link, per-row CC BY marker."""
+
+    id: str
+    subject: str
+    poll_type: str = ""
+    pollster: str = ""
+    population: str | None = None
+    sample_size: int | None = None
+    margin_of_error: float | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    result: str = ""
+    lead: float | None = None
+    lead_choice: str | None = None
+    url: str | None = None
+    attribution: str = ""
+    answers: list[PollAnswer] = Field(default_factory=list)
+
+
+class PollsResult(_CamelModel):
+    """Poll rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[PollRow] = Field(default_factory=list)
+    total_available: int = 0
+    truncated: bool = False
+    attribution: str = ""
+
+
+class TreasuryAuctionsInput(_InputModel):
+    """Treasury auction results: security-type + record-date filters, page size."""
+
+    security_type: str | None = Field(default=None, max_length=32)
+    from_date: str | None = None
+    to_date: str | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+
+    @field_validator("from_date", "to_date", mode="before")
+    @classmethod
+    def _validate_iso_date(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, str):
+            candidate = value.strip()
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
+                return candidate
+        raise ValueError(f"must be an ISO YYYY-MM-DD date string; got {value!r}")
+
+
+class AuctionRow(_CamelModel):
+    """One auction: dates, amounts, high yield, and the result-document link."""
+
+    record_date: str | None = None
+    cusip: str | None = None
+    security_type: str | None = None
+    auction_date: str | None = None
+    issue_date: str | None = None
+    maturity_date: str | None = None
+    offering_amount: float | str | None = None
+    total_accepted: float | str | None = None
+    bid_to_cover_ratio: float | str | None = None
+    high_yield: float | str | None = None
+    price_per100: float | str | None = None
+    source_url: str = ""
+
+
+class TreasuryAuctionsResult(_CamelModel):
+    """Auction rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[AuctionRow] = Field(default_factory=list)
+    total_available: int = 0
+    truncated: bool = False
+    attribution: str = ""
+
+
+class MarketHaltsInput(_InputModel):
+    """Nasdaq trade halts: optional symbol filter, client-side limit."""
+
+    symbol: str | None = Field(default=None, max_length=16)
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class HaltRow(_CamelModel):
+    """One halt: ET wall-clock times + UTC epochs, status, halt-codes link."""
+
+    symbol: str
+    company: str | None = None
+    market: str | None = None
+    reason_code: str = ""
+    reason: str = ""
+    halt_date: str | None = None
+    halt_time: str | None = None
+    halted_at: int | None = None
+    quote_resume_at: int | None = None
+    trade_resume_at: int | None = None
+    status: str = "halted"
+    source_url: str = ""
+
+
+class MarketHaltsResult(_CamelModel):
+    """Halt rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[HaltRow] = Field(default_factory=list)
+    attribution: str = ""
+    as_of: str | None = None
+
+
+class HackerNewsInput(_InputModel):
+    """Hacker News feed reader: feed id + per-item-read cap."""
+
+    feed: Literal["top", "new", "best", "show", "ask"] = "top"
+    limit: int = Field(default=10, ge=1, le=30)
+
+
+class HackerNewsStory(_CamelModel):
+    """One story: article link when present, discussion link always."""
+
+    id: int
+    title: str
+    by: str = "unknown"
+    time: int = 0
+    score: int = 0
+    comments: int = 0
+    url: str | None = None
+    site: str | None = None
+    source_url: str = ""
+
+
+class HackerNewsResult(_CamelModel):
+    """Story rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[HackerNewsStory] = Field(default_factory=list)
+    feed: str = "top"
+    attribution: str = ""
+
+
 TimeAndSalesEnvelope = DigifetchEnvelope[TimeAndSalesResult]
 QuoteRecapEnvelope = DigifetchEnvelope[QuoteRecapResult]
 EstimateRevisionsEnvelope = DigifetchEnvelope[EstimateRevisionsResult]
@@ -3338,3 +3536,8 @@ SessionMoversEnvelope = DigifetchEnvelope[SessionMoversResult]
 TrendingEnvelope = DigifetchEnvelope[TrendingResult]
 SubstackEnvelope = DigifetchEnvelope[SubstackResult]
 IpoCalendarEnvelope = DigifetchEnvelope[IpoCalendarResult]
+FearGreedEnvelope = DigifetchEnvelope[FearGreedResult]
+PollsEnvelope = DigifetchEnvelope[PollsResult]
+TreasuryAuctionsEnvelope = DigifetchEnvelope[TreasuryAuctionsResult]
+MarketHaltsEnvelope = DigifetchEnvelope[MarketHaltsResult]
+HackerNewsEnvelope = DigifetchEnvelope[HackerNewsResult]

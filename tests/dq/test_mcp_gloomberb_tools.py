@@ -111,6 +111,12 @@ DIGIFETCH_TOOLS = {
     "digifetch_trending",
     "digifetch_substack",
     "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6, venue-direct, unattributed)
+    "digifetch_fear_greed",
+    "digifetch_polls",
+    "digifetch_treasury_auctions",
+    "digifetch_market_halts",
+    "digifetch_hacker_news",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -184,6 +190,13 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
             "query1.finance.yahoo.com",
             "substack.com",
             "examplepub.substack.com",
+            # ToS/direct tools (130-coverage Task 6): CNN, VoteHub, Fiscal
+            # Data, Nasdaq Trader, and Hacker News ride it too.
+            "production.dataviz.cnn.io",
+            "api.votehub.com",
+            "api.fiscaldata.treasury.gov",
+            "www.nasdaqtrader.com",
+            "hacker-news.firebaseio.com",
         ],
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
@@ -274,6 +287,123 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
                 "cursor": "",
             },
         )
+    # ToS/direct tools (130-coverage Task 6): venue fixtures for the free
+    # sweep calls (all five reach the wire with and without a cookie).
+    if host == "production.dataviz.cnn.io" and request.url.path.startswith(
+        "/index/fearandgreed/graphdata"
+    ):
+        series = {
+            "timestamp": "2026-09-29T16:00:00Z",
+            "score": 42.0,
+            "rating": "Fear",
+            "previous_close": 44.0,
+            "previous_1_week": 50.0,
+            "previous_1_month": 60.0,
+            "previous_1_year": 70.0,
+            "data": [{"x": 1790035200000, "y": 42.0, "rating": "Fear"}],
+        }
+        return httpx.Response(
+            200,
+            json={
+                "fear_and_greed": series,
+                "fear_and_greed_historical": {
+                    "data": [{"x": 1790035200000, "y": 42.0, "rating": "Fear"}]
+                },
+                "market_momentum_sp500": series,
+                "market_momentum_sp125": series,
+                "stock_price_strength": series,
+                "stock_price_breadth": series,
+                "put_call_options": series,
+                "market_volatility_vix": series,
+                "market_volatility_vix_50": series,
+                "safe_haven_demand": series,
+                "junk_bond_demand": series,
+            },
+        )
+    if host == "api.votehub.com" and request.url.path == "/polls":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "p1",
+                    "poll_type": "approval",
+                    "sample_size": 1500,
+                    "population": "lv",
+                    "url": "https://votehub.com/p/p1",
+                    "start_date": "2026-09-01",
+                    "end_date": "2026-09-05",
+                    "pollster": "Acme Polls",
+                    "answers": [
+                        {"choice": "Approve", "pct": 45.0},
+                        {"choice": "Disapprove", "pct": 52.0},
+                    ],
+                    "subject": "Presidential approval",
+                }
+            ],
+        )
+    if host == "api.fiscaldata.treasury.gov":
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "record_date": "2026-09-24",
+                        "cusip": "912797AB1",
+                        "security_type": "Bill",
+                        "auction_date": "2026-09-22",
+                        "issue_date": "2026-09-25",
+                        "maturity_date": "2026-12-24",
+                        "high_yield": "4.125",
+                    }
+                ],
+                "meta": {"count": 1},
+            },
+        )
+    if host == "www.nasdaqtrader.com":
+        return httpx.Response(
+            200,
+            text=(
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<rss version="2.0" xmlns:ndaq="http://www.nasdaqtrader.com/ndaq">'
+                "<channel><title>NASDAQ Trade Halts</title>"
+                "<item>"
+                "<ndaq:IssueSymbol>XYZ</ndaq:IssueSymbol>"
+                "<ndaq:IssueName>XYZ Corp</ndaq:IssueName>"
+                "<ndaq:Market>NASDAQ</ndaq:Market>"
+                "<ndaq:HaltDate>09/29/2026</ndaq:HaltDate>"
+                "<ndaq:HaltTime>14:32:10</ndaq:HaltTime>"
+                "<ndaq:ReasonCode>T1</ndaq:ReasonCode>"
+                "<ndaq:ResumptionDate>09/29/2026</ndaq:ResumptionDate>"
+                "<ndaq:ResumptionQuoteTime>14:37:10</ndaq:ResumptionQuoteTime>"
+                "<ndaq:ResumptionTradeTime>14:37:15</ndaq:ResumptionTradeTime>"
+                "</item>"
+                "</channel></rss>"
+            ),
+        )
+    if host == "hacker-news.firebaseio.com":
+        if request.url.path == "/v0/topstories.json":
+            return httpx.Response(200, json=[111, 222, 333])
+        if request.url.path == "/v0/item/111.json":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 111,
+                    "title": "Kept",
+                    "by": "a",
+                    "time": 1790000000,
+                    "score": 10,
+                    "descendants": 5,
+                    "url": "https://example.com/a",
+                },
+            )
+        if request.url.path == "/v0/item/222.json":
+            return httpx.Response(
+                200,
+                json={"id": 222, "title": "Ask", "by": "b", "time": 2, "score": 3},
+            )
+        if request.url.path == "/v0/item/333.json":
+            return httpx.Response(200, json={"id": 333, "deleted": True})
+        raise AssertionError(f"unexpected Hacker News path {request.url.path!r}")
     path = request.url.path
     if path == "/market/quote":
         return _envelope(AAPL_QUOTE)
@@ -935,8 +1065,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_70_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 70
+def test_all_75_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 75
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -952,6 +1082,14 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
         # own-account Substack reader must not claim terminal sourcing.
         "digifetch_trending",
         "digifetch_substack",
+        # ToS/direct tools (130-coverage Task 6): CNN, VoteHub, Fiscal Data,
+        # Nasdaq Trader, and Hacker News reads must not claim terminal
+        # sourcing either.
+        "digifetch_fear_greed",
+        "digifetch_polls",
+        "digifetch_treasury_auctions",
+        "digifetch_market_halts",
+        "digifetch_hacker_news",
         # Calculators + compositions (130-coverage Task 2): derived math must
         # not claim Gloomberb sourcing; the manifest names the math source.
         "digifetch_options_calculator",
@@ -994,6 +1132,19 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     substack_description = rows["digifetch_substack"]["function"]["description"]
     assert "Substack" in substack_description
     assert "Gloomberb" not in substack_description
+    # ToS/direct tools (130-coverage Task 6): the descriptions name the
+    # venue, never Gloomberb.
+    tos_markers = {
+        "digifetch_fear_greed": "CNN",
+        "digifetch_polls": "VoteHub",
+        "digifetch_treasury_auctions": "Fiscal",
+        "digifetch_market_halts": "Nasdaq",
+        "digifetch_hacker_news": "Hacker",
+    }
+    for name, venue in tos_markers.items():
+        description = rows[name]["function"]["description"]
+        assert venue in description, name
+        assert "Gloomberb" not in description, name
     # Calculator + composition descriptions name the math source, never Gloomberb.
     math_sources = {
         "digifetch_options_calculator": "Black-Scholes",
@@ -1262,6 +1413,12 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_trending": (),
     "digifetch_substack": ("examplepub",),
     "digifetch_ipo_calendar": (),
+    # ToS/direct tools (130-coverage Task 6)
+    "digifetch_fear_greed": (),
+    "digifetch_polls": (),
+    "digifetch_treasury_auctions": (),
+    "digifetch_market_halts": (),
+    "digifetch_hacker_news": ("top", 3),
 }
 
 
@@ -1279,6 +1436,8 @@ _TWO_REQUEST_TOOLS = {
     "digifetch_vix_term_structure",
     # Yahoo trending hydrates its symbols with one quote-batch read.
     "digifetch_trending",
+    # CNN Fear & Greed reads the graphdata endpoint plus the dated latest.
+    "digifetch_fear_greed",
 }
 
 #: Portfolio-math compositions (130-coverage Task 3): wire requests one sweep
@@ -1295,6 +1454,9 @@ _MULTI_REQUEST_TOOLS = {
     "digifetch_market_valuation": [1],
     "digifetch_money_markets": [1, 1, 1],
     "digifetch_rate_path": [1],
+    # Hacker News reads one id list plus one item read per story (the sweep
+    # call passes limit=3).
+    "digifetch_hacker_news": [1, 1, 1, 1],
 }
 
 
@@ -1336,6 +1498,14 @@ def test_every_tool_returns_attributed_json(
         # own-account Substack reader must not claim terminal sourcing.
         "digifetch_trending",
         "digifetch_substack",
+        # ToS/direct tools (130-coverage Task 6): CNN, VoteHub, Fiscal Data,
+        # Nasdaq Trader, and Hacker News reads must not claim terminal
+        # sourcing either.
+        "digifetch_fear_greed",
+        "digifetch_polls",
+        "digifetch_treasury_auctions",
+        "digifetch_market_halts",
+        "digifetch_hacker_news",
         # Calculators + compositions (130-coverage Task 2): derived math must
         # not claim Gloomberb sourcing.
         "digifetch_options_calculator",

@@ -90,7 +90,7 @@ calculators and compositions.
 | TWIT | X feed | DONE | digifetch_ticker_tweets / digifetch_tweet_search |
 | SUB | Substack | TOS | digifetch_substack — own-account venue-direct reader (SUBSTACK_SESSION_COOKIE), fail-soft auth_required without stored auth (Task 5, Task 4 venue-DIRECT) |
 | TV | Live TV | OUT | Live video pane, no tool surface |
-| HN | Hacker News | TOS | digifetch_hacker_news — public API reader, free, unattributed, per-row source URLs (Phase C) |
+| HN | Hacker News | DONE | digifetch_hacker_news — public API reader, free, unattributed, per-row source URLs (Task 6) |
 
 ## Watch markets (20)
 
@@ -105,17 +105,17 @@ calculators and compositions.
 | CRYP | Crypto board | DONE | digifetch_crypto_markets — up-to-100-coin board over the Cloud route (Task 5, Task 4 ROUTE) |
 | FUT | Futures board | OUT | Yahoo continuous symbols, prior decision |
 | CTM | Futures curve | OUT | Yahoo continuous symbols, prior decision |
-| FNG | Fear and greed | TOS | digifetch_fear_greed — unofficial CNN read, ToS grey area, cross-check before citing (Phase C) |
+| FNG | Fear and greed | DONE | digifetch_fear_greed — unofficial CNN read, ToS grey area, cross-check before citing (Task 6) |
 | COT | CFTC positioning | DONE | digifetch_cot — board or one contract over the Cloud routes (Task 5, Task 4 ROUTE) |
 | VIX | VIX term structure | COMP | digifetch_vix_term_structure — FRED composition over econ_series, contango/inversion (Phase A; far-leg default VXVCLS per Task 5 controller ruling — VIX3M is the ^VIX3M index symbol, not a FRED id) |
 | VOLS | Cross-asset volatility | COMP | digifetch_vix_term_structure — cross-asset board over econ_series (Phase A) |
 | HILO | New highs and lows | OUT | Socket-only streaming scanner, no REST equivalent and no tool-shaped equivalent; 52-week extremes already in quotes/screener (Task 4 NO-ROUTE → OUT) |
 | FLOW | Options flow | DONE | digifetch_options_flow — recorded history route, Pro-gated, fails closed on denial (Task 5, Task 4 ROUTE) |
-| HALT | Market halts | TOS | digifetch_market_halts — Nasdaq Trader, delayed, free, unattributed (Phase C) |
+| HALT | Market halts | DONE | digifetch_market_halts — Nasdaq Trader, delayed, free, unattributed (Task 6) |
 | IPO | IPO calendar | DONE | digifetch_ipo_calendar — Cloud-overlap confirmed: public Cloud route, anonymous (Task 5, Task 4 Cloud-overlap YES) |
 | MAP | World venue map | DONE | digifetch_venues |
 | PM | Prediction markets | DONE | digifetch_prediction_markets (venue-direct precedent: provider_id="prediction-markets-venues", attributed=False, per-row venue URLs) |
-| POLL | Polls | TOS | digifetch_polls — VoteHub data © VoteHub contributors, CC BY 4.0, per-row attribution (Phase C) |
+| POLL | Polls | DONE | digifetch_polls — VoteHub data © VoteHub contributors, CC BY 4.0, per-row attribution (Task 6) |
 
 ## Macro and rates (14)
 
@@ -127,7 +127,7 @@ calculators and compositions.
 | GC | Yield curve | DONE | digifetch_yield_curve |
 | WIRP | US rate path | COMP | digifetch_rate_path — fed-prob ladder over existing ingest + kalshi/polymarket reads (Phase A) |
 | CRD | Credit spreads | COMP | Compose over econ_series via the Cloud FRED proxy — the six board ids (BAMLC0A0CM / BAMLC0A1CAAA / BAMLC0A2CAA / BAMLC0A3CA / BAMLC0A4CBBB / BAMLH0A0HYM2); no /cloud/credit spreads route (Task 4 compose verdict) |
-| AUCT | Treasury auctions | TOS | digifetch_treasury_auctions — Treasury Fiscal Data, public, free, unattributed (Phase C) |
+| AUCT | Treasury auctions | DONE | digifetch_treasury_auctions — Treasury Fiscal Data, public, free, unattributed (Task 6) |
 | BTMM | Money markets | COMP | digifetch_money_markets — SOFR/EFFR/reserves are FRED series via econ_series (Phase A) |
 | CDS | Single-name CDS | DONE | digifetch_cds |
 | CDX | Index CDS | DONE | digifetch_cdx — 5Y on-the-run board over the Cloud route (Task 5, Task 4 ROUTE) |
