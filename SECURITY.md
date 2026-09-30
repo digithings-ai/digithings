@@ -1,6 +1,6 @@
 # Security
 
-This document describes the security posture of digithings and how to report vulnerabilities. See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram and [docs/scoring/SECURITY.md](docs/scoring/SECURITY.md) for the PR-review rubric.
+This document describes the security posture of digithings and how to report vulnerabilities. See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram and [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) for the review policy.
 
 ## Threat model
 
@@ -29,7 +29,7 @@ STRIDE categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation
 | External unauthenticated attacker | All FastAPI services | T/I — malformed payloads, parser abuse, unbounded bodies | Pydantic v2 models with `extra="forbid"` at every HTTP handler; bounded `httpx` timeouts via `digibase.http_client`; loopback binding keeps the attack surface off the public Internet by default. | No explicit request body-size cap at the ASGI layer; relies on upstream gateway for byte limits. |
 | External unauthenticated attacker | `/healthz`, `/.well-known/jwks.json` | I — fingerprint service versions | Endpoints are deliberately minimal and secret-free; `/v1/status` on digismith is audited for secret leakage. | Version / stack fingerprinting is possible from response shape; acceptable given public-by-design contract. |
 | Compromised digikey API key holder | Tenant data in digisearch / digiquant | E — widen blast radius beyond issued scopes | Scoped API keys with per-route scope enforcement (`service_middleware`); tenant scope bound at the key layer. | Storage-layer tenant isolation is a roadmap item — today, isolation is key-scope-only (see `digibase/ARCHITECTURE.md`). |
-| Compromised digikey API key holder | Live-trading paths (IB/Alpaca/QuantConnect adapters) | E — submit real orders | Broker adapters raise `NotImplementedError`; any code change touching them requires a `Human-Approved-By:` commit trailer enforced by `scripts/hooks/pre-push.sh`; criterion 5/8 in `docs/scoring/SECURITY.md`. | No runtime circuit-breaker yet — the gate is source-tree + commit-trailer, not a runtime interlock. |
+| Compromised digikey API key holder | Live-trading paths (IB/Alpaca/QuantConnect adapters) | E — submit real orders | Broker adapters raise `NotImplementedError`; any code change touching them requires a `Human-Approved-By:` commit trailer enforced by `scripts/hooks/pre-push.sh`; the live-trading human gate lives in `docs/agents/CODE_REVIEW_POLICY.md`. | No runtime circuit-breaker yet — the gate is source-tree + commit-trailer, not a runtime interlock. |
 | Compromised digikey API key holder | Audit trail | R — deny actions taken | Immutable JSONL audit via `digibase.audit.redact_mapping`; spans carry `workflow_id`, `request_id`, `session_id`. | Audit log is local per-host; no append-only remote sink or signed chain. |
 | Compromised digikey API key holder | Rate-limited endpoints | D — exhaust quota for co-tenants | Per-IP limiter today; key issuance gated by admin scope. | No per-key / per-tenant quotas on orchestration or search paths yet. |
 | Malicious LLM output (prompt injection) | Tool-calls from digigraph agents | E — coerce agent into unintended tool use | Pydantic v2 structured outputs across tool boundaries; MCP tool allowlist in `digigraph/orchestration/registry.py`; debug/thread endpoints off by default; live-trading adapters stubbed. | Prompt-injection from retrieved digisearch documents is not systematically defended — no content-level sanitizer or trust-tier tagging on retrieved context. |
@@ -54,9 +54,9 @@ only once a concrete mitigation is merged and exercised by tests.
 
 These are enforced in code and reviewed on every PR:
 
-1. **Loopback binding.** Every service binds `127.0.0.1` in `docker-compose.yml`. No `0.0.0.0` without matching SECURITY.md approval (enforced by the `docs/scoring/SECURITY.md` rubric).
+1. **Loopback binding.** Every service binds `127.0.0.1` in `docker-compose.yml`. No `0.0.0.0` without matching SECURITY.md approval (enforced by review per `docs/agents/CODE_REVIEW_POLICY.md`).
 2. **digikey JWT required on protected routes.** digigraph, digiquant, and digisearch require `DIGIKEY_JWKS_URL` (or `DIGIKEY_PUBLIC_KEY_PEM`) and an `Authorization: Bearer <JWT>` on non-exempt routes. There is no legacy static `DIGI_API_KEY` fallback. digisearch additionally requires a real index backend (Azure or Chroma) unless `DIGISEARCH_ALLOW_STUB=1` (tests only).
-3. **Human gates before any live trade.** Broker adapters (IB, Alpaca, QuantConnect) currently raise `NotImplementedError`. Any change to those paths requires explicit human approval per `docs/scoring/SECURITY.md` criterion 5.
+3. **Human gates before any live trade.** Broker adapters (IB, Alpaca, QuantConnect) currently raise `NotImplementedError`. Any change to those paths requires explicit human approval per `docs/agents/CODE_REVIEW_POLICY.md`.
 4. **Debug and thread endpoints are off by default.** `DIGI_ENABLE_DEBUG_ENDPOINTS` and `DIGI_ENABLE_THREAD_API` default to `0`; `/v1/debug/*`, `/test_llm`, and `/threads/*` are not exposed unless explicitly enabled.
 5. **LiteLLM proxy is not unauthenticated in non-dev deployments.** With no `LITELLM_MASTER_KEY`, the proxy may accept requests without a Bearer — acceptable only on loopback/trusted networks. Beyond local dev, set `LITELLM_MASTER_KEY` (and `LITELLM_PROXY_API_KEY` on digigraph to match, or issue virtual keys via digikey).
 6. **Audit events must be redacted before persistence.** Every `audit.jsonl` writer must go through `digibase.audit.redact_mapping` (or equivalent). API keys, JWTs, prompts, and document bodies must not appear in audit events. The `/v1/status` endpoint on digismith is public — keep it secret-free.
@@ -236,6 +236,6 @@ Live Supabase Database/Auth advisors on the **core** project are triaged in [#46
 - **twelve-x** Hibp + accepted `fx_hub_has_access` DEFINER WARN: [digithings-ai/twelve-x#211](https://github.com/digithings-ai/twelve-x/issues/211) (Hibp there is likely the same Pro-only residual).
 - **pg_net**: remains in `public` (`extrelocatable=false`); migration 139 revokes `USAGE`/`EXECUTE` on schema `net` from `PUBLIC`/`anon`/`authenticated`. Cron `prices-live-*` runs as `postgres`.
 
-## PR security rubric
+## PR security review
 
-Every pull request is expected to pass the `docs/scoring/SECURITY.md` rubric at ≥ 8/10 before merge. Doc-only PRs touching `SECURITY.md` itself are excluded from auto-merge (see [docs/agent-backlog/AUTOMERGE.md](docs/agent-backlog/AUTOMERGE.md)).
+Every pull request touching a security surface gets a security-lens review per `docs/agents/CODE_REVIEW_POLICY.md` before merge (the self-score rubric was removed in #4868). Doc-only PRs touching `SECURITY.md` itself are excluded from auto-merge (see [docs/agent-backlog/AUTOMERGE.md](docs/agent-backlog/AUTOMERGE.md)).

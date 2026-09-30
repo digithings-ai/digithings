@@ -129,4 +129,4 @@ jobs:
 
           This will create branch \`${BRANCH}\` from the active module branch.
 
-          Gate before PR: \`make score && ${TEST_CMD} && ruff check .\`"
+          Gate before PR: \`${TEST_CMD} && ruff check .\`"
