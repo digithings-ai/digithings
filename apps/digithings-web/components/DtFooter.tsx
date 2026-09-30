@@ -21,7 +21,7 @@ function Sitemap() {
                 href={link.href}
                 target={link.external ? "_blank" : undefined}
                 rel={link.external ? "noopener noreferrer" : undefined}
-                className="font-mono text-[0.95rem] text-ink-soft no-underline transition-colors duration-150 hover:text-ink"
+                className="w-fit font-mono text-[0.95rem] text-ink-soft underline decoration-transparent decoration-1 underline-offset-[0.3em] transition-[color,text-decoration-color] duration-150 hover:text-ink hover:decoration-ink-mute focus-visible:text-ink focus-visible:decoration-ink-mute"
               >
                 {link.label}
               </a>
