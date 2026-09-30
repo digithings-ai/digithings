@@ -1,9 +1,10 @@
 "use client";
 
-import { ModuleGrid as KitModuleGrid, modules, type ModuleGridItem } from "@digithings/ui";
+import { ModuleGrid as KitModuleGrid, Reveal, modules, type ModuleGridItem } from "@digithings/ui";
 import { writeHandoff } from "@/lib/chatHandoff";
 import { moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
+import { SectionHead } from "./SectionHead";
 
 /**
  * The landing's module mosaic and its `#architecture` anchor: the kit
@@ -25,6 +26,13 @@ function ask(id: string) {
 export function ModuleGrid() {
   return (
     <section id="architecture" className="line-t line-b scroll-mt-[var(--dq-nav-h)]">
+      <Reveal className="mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pt-[clamp(2.25rem,5vw,3.5rem)]">
+        <SectionHead
+          id="architecture"
+          title="The stack, sized by its code"
+          lede="Each tile is a module and its area is its share of the lines of code. Scroll to walk them, biggest first."
+        />
+      </Reveal>
       <KitModuleGrid items={ITEMS} onAsk={ask} />
     </section>
   );

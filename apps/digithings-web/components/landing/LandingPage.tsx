@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { ContactMailto, CopyCommand, CtaLink, Reveal, SocialRow } from "@digithings/ui";
 import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
@@ -11,6 +12,7 @@ import { ModuleGrid } from "@/components/landing/ModuleGrid";
 import { Pricing } from "@/components/landing/Pricing";
 import { QuantSection } from "@/components/landing/QuantSection";
 import { SectionRail } from "@/components/landing/SectionRail";
+import { SectionHead } from "@/components/landing/SectionHead";
 import { OpenSource } from "@/components/landing/Sections";
 import { WhyStack } from "@/components/landing/WhyStack";
 import { REPO_CLONE, REPO_URL } from "@/lib/repoActivity";
@@ -34,21 +36,37 @@ import { REPO_CLONE, REPO_URL } from "@/lib/repoActivity";
  * sit on the same row, to its right.
  */
 const HERO_ACTION =
-  "inline-flex h-auto items-center border border-hair bg-transparent px-[1rem] py-[0.85rem] font-mono text-[0.85rem] leading-[1.5] text-ink no-underline hover:bg-surface-2";
+  "hero-action inline-flex h-auto items-center border border-hair bg-transparent px-[1rem] py-[0.85rem] font-mono text-[0.85rem] leading-[1.5] text-ink no-underline hover:bg-surface-2";
+
+/** What the hero promises, each line already stated in the FAQ below it. */
+const HERO_FACTS = ["self-hosted", "your own keys", "no hosted tier"] as const;
+
+function rise(step: number): CSSProperties {
+  return { "--rise": step } as CSSProperties;
+}
 
 function Hero() {
   return (
     <section className="pixel-hero border-b border-hair">
       <PixelField />
-      <div className="relative z-10 mx-auto flex max-w-[64rem] flex-col items-center px-[var(--page-pad)] pb-[4rem] pt-[2.5rem] text-center sm:px-[2.5rem] sm:pb-[5rem]">
+      <div className="relative z-10 mx-auto flex max-w-[64rem] flex-col items-center px-[var(--page-pad)] pb-[6rem] pt-[2.5rem] text-center sm:px-[2.5rem] sm:pb-[7rem]">
         <PixelWordmark />
-        <h1 className="m-0 mt-[2rem] font-mono text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-ink sm:text-[1.7rem]">
+        <h1
+          className="hero-rise m-0 mt-[2rem] font-mono text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
+          style={rise(0)}
+        >
           AI infrastructure, in a glass box you own.
         </h1>
-        <p className="m-0 mt-[0.75rem] max-w-[42rem] font-mono text-[0.875rem] leading-[1.6] text-ink-soft">
+        <p
+          className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] font-mono text-[0.875rem] leading-[1.6] text-pretty text-ink-soft"
+          style={rise(1)}
+        >
           Chat, research and quant modules on your own keys and hardware.
         </p>
-        <div className="mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]">
+        <div
+          className="hero-rise mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]"
+          style={rise(2)}
+        >
           <CopyCommand
             className="w-fit max-w-full"
             samples={[{ label: "clone", protocol: "git clone", code: REPO_CLONE }]}
@@ -60,9 +78,27 @@ function Hero() {
           </CtaLink>
           <CtaLink href="#architecture" variant="ghost" className={HERO_ACTION}>
             Modules
+            <span aria-hidden="true" className="hero-action__arrow">
+              ↓
+            </span>
           </CtaLink>
         </div>
+        <ul
+          className="hero-rise m-0 mt-[1.4rem] flex list-none flex-wrap items-center justify-center gap-x-[0.6rem] gap-y-[0.3rem] p-0 font-mono text-[0.72rem] leading-[1.5] tracking-[0.02em] text-ink-mute"
+          style={rise(3)}
+          aria-label="What you get"
+        >
+          {HERO_FACTS.map((fact, index) => (
+            <li key={fact} className="flex items-center gap-[0.6rem]">
+              {index > 0 ? <span aria-hidden="true" className="text-hair">/</span> : null}
+              {fact}
+            </li>
+          ))}
+        </ul>
       </div>
+      <a href="#architecture" className="hero-cue" aria-label="Scroll to the modules">
+        <span aria-hidden="true" className="hero-cue__line" />
+      </a>
     </section>
   );
 }
@@ -84,9 +120,11 @@ function Contact() {
           <ContactForm />
         </Reveal>
         <Reveal delay={0.08} className="flex flex-col gap-[1.4rem]">
-          <h2 className="m-0 max-w-[24ch] font-mono text-[length:var(--type-page-title)] font-medium leading-[1.2] tracking-[-0.02em] text-balance text-ink">
-            You own the stack and the keys.
-          </h2>
+          <SectionHead
+            id="contact"
+            title="You own the stack and the keys."
+            titleClassName="max-w-[24ch]"
+          />
           <p className="m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft">
             What we sell is the integration work: fitting these modules to the
             systems you already run.
@@ -134,8 +172,12 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
 
       <section id="open-source" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
-          <Reveal as="h2" className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-            Open source, and still shipping
+          <Reveal>
+            <SectionHead
+              id="open-source"
+              title="Open source, and still shipping"
+              lede="Clone it, read it, run it. The activity below is the repo's own."
+            />
           </Reveal>
           <Reveal delay={0.08}>
             <OpenSource />
@@ -155,7 +197,8 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
       {/* No section title here by owner direction (#4429 ship list): the
           comparison table suffices on its own. */}
       <section id="pricing" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
-        <Reveal className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
+        <Reveal className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.25rem]">
+          <SectionHead id="pricing" />
           <Pricing />
         </Reveal>
       </section>

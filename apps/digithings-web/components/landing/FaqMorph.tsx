@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { FaqList } from "./Sections";
 import { LiveAsk } from "./LiveAsk";
+import { SectionHead } from "./SectionHead";
 
 /**
  * The FAQ band's scroll-driven zoom-morph (#4429, branch claude/home-variants).
@@ -239,9 +240,7 @@ export function FaqMorph({ embedOrigin }: { embedOrigin: string }) {
           className="mx-auto grid max-w-[var(--frame-w)] gap-[2.4rem] min-[960px]:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]"
         >
           <div ref={faqRef} className="faq-morph__faq flex flex-col gap-[1.6rem]">
-            <h2 className="m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink">
-              Questions, answered
-            </h2>
+            <SectionHead id="faq" title="Questions, answered" />
             <FaqList />
           </div>
           <div ref={chatRef} className="faq-morph__chat min-w-0">

@@ -957,3 +957,119 @@ html {
   0% { fill: var(--glint); opacity: 1; }
   5%, 100% { fill: currentColor; opacity: var(--f); }
 }
+
+/* Hero craft — the text settles in after the wordmark has built (its cells run
+   out by ~1.1s), the field dissolves into the page ground at the band's floor,
+   and a thin cue points at the modules. All of it is transform/opacity only and
+   sits behind no-preference; reduced motion gets the final state. */
+.pixel-hero::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 6rem;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 0.7s var(--ease) calc(0.7s + var(--rise, 0) * 0.09s) both;
+  }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.hero-action {
+  transition:
+    background-color var(--duration-hover) var(--ease),
+    border-color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover { border-color: var(--ink-mute); }
+
+.hero-action:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.hero-action__arrow {
+  display: inline-block;
+  margin-inline-start: 0.6em;
+  color: var(--ink-mute);
+  transition:
+    transform var(--duration-hover) var(--ease),
+    color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover .hero-action__arrow {
+  color: var(--ink);
+  transform: translateY(2px);
+}
+
+.hero-cue {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  height: 3.25rem;
+  outline-offset: -2px;
+}
+
+.hero-cue__line {
+  position: relative;
+  width: 1px;
+  height: 100%;
+  overflow: hidden;
+  background: var(--hair);
+}
+
+.hero-cue__line::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 40%;
+  background: var(--ink-soft);
+  transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-cue__line::after { animation: hero-cue 2.4s var(--ease) 2s infinite; }
+}
+
+@keyframes hero-cue {
+  0% { transform: translateY(-100%); }
+  70%, 100% { transform: translateY(260%); }
+}
+
+.hero-cue:hover .hero-cue__line { background: var(--ink-mute); }
+
+/* Band eyebrow — `NN / label`, numbered like the gutter rail. The tick
+   matches the rail's own stroke so the two read as one system. */
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.section-eyebrow__tick {
+  display: block;
+  width: 1.1rem;
+  height: 1px;
+  background: var(--ink-mute);
+}
+
+@media (min-width: 640px) {
+  .section-eyebrow__tick { width: 1.6rem; }
+}

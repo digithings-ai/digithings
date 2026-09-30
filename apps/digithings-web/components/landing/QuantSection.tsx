@@ -28,6 +28,7 @@ import {
   type StrategyRead,
 } from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
+import { SectionHead } from "./SectionHead";
 import { windowAlpha, windowBeta } from "@/lib/bookMath";
 
 /**
@@ -636,6 +637,7 @@ export function QuantSection({ className }: { className?: string }) {
                 CTA buttons were removed in the same pass ("remove the open
                 dashboard and tearsheet buttons"). */}
             <div className="flex min-w-0 flex-col justify-center gap-[1rem]">
+              <SectionHead id="digiquant" />
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
                   the document outline skipping a level between `#open-source`
                   and `#pricing`. The band's heading is its product name; the
