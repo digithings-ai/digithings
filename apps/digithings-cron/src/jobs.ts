@@ -173,10 +173,40 @@ export const JOBS: readonly Job[] = [
   rd("house-run-11", "17 11 * * *", DIGITHINGS, "digiquant-baseline"),
   rd("house-run-12", "17 12 * * *", DIGITHINGS, "digiquant-baseline"),
 
-  wd("research-metrics", "5 22 * * *", DIGITHINGS, "pipeline-research-metrics.yml"),
-  wd("tearsheets", "12 0 * * *", DIGITHINGS, "pipeline-digiquant-tearsheets.yml"),
-  wd("onchain", "40 22 * * *", DIGITHINGS, "pipeline-digiquant-onchain.yml"),
-  wd("execution-cron-check", "15 12 * * *", DIGITHINGS, "execution-cron-check.yml"),
+  // Phase 2 (#4761). Probe CLIs are on main, so this cutover stays codeRef main.
+  // Do not point the container at develop. House-run stays repository_dispatch.
+  cj(
+    "research-metrics",
+    "5 22 * * *",
+    "pipeline-research-metrics.yml",
+    "research-metrics",
+    "research-refresh-metrics",
+    1200,
+  ),
+  cj(
+    "tearsheets",
+    "12 0 * * *",
+    "pipeline-digiquant-tearsheets.yml",
+    "tearsheets",
+    "digiquant-tearsheets",
+    2700,
+  ),
+  cj(
+    "onchain",
+    "40 22 * * *",
+    "pipeline-digiquant-onchain.yml",
+    "onchain-bitview",
+    "digiquant-onchain",
+    900,
+  ),
+  cj(
+    "execution-cron-check",
+    "15 12 * * *",
+    "execution-cron-check.yml",
+    "execution-cron-check",
+    "execution-cron-check",
+    600,
+  ),
 
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
   wd(

@@ -12,6 +12,7 @@ byte-for-byte. Probe-only (``--check`` / ``--dry-run``); never ``--execute``.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -26,6 +27,9 @@ SPEC = REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "kairos-cron
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
+RUNNER_COMMANDS = REPO_ROOT / "apps" / "digiquant-runner" / "commands.json"
+# Phase 2 (#4761): these clocks are cj() container jobs. House-run stays rd().
+PHASE2_CONTAINER_JOBS = ("onchain", "tearsheets", "research-metrics", "execution-cron-check")
 NOTIFY_FRAGMENT = (
     REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "pipeline-olympus-notify.env.yml"
 )
@@ -35,8 +39,9 @@ FORBIDDEN_APPLY = ("--execute", "--all", "portfolio.chain")
 
 
 def _worker_jobs() -> dict[str, str]:
+    """Job id -> cron. Includes container jobs (cj), not only GHA wd/rd."""
     pairs = re.findall(
-        r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        r'(?:wd|rd|cj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
         JOBS_SOURCE.read_text(encoding="utf-8"),
         flags=re.DOTALL,
     )
@@ -94,6 +99,32 @@ class TestExecutionCronSpecIsProbeOnly:
         assert "0 12 * * *" not in crons
         for cron in house_crons:
             assert cron not in crons
+
+    def test_phase2_clocks_are_container_jobs(self) -> None:
+        """digithings-cron remains the clock; these four no longer workflow_dispatch."""
+        text = JOBS_SOURCE.read_text(encoding="utf-8")
+        for job_id in PHASE2_CONTAINER_JOBS:
+            assert re.search(rf'cj\(\s*"{job_id}"\s*,', text), job_id
+            assert not re.search(rf'wd\(\s*"{job_id}"\s*,', text), job_id
+        assert re.search(r'rd\(\s*"house-run-09"\s*,', text)
+        jobs = _worker_jobs()
+        assert jobs["onchain"] == "40 22 * * *"
+        assert jobs["tearsheets"] == "12 0 * * *"
+        assert jobs["research-metrics"] == "5 22 * * *"
+        assert jobs["execution-cron-check"] == "15 12 * * *"
+
+    def test_runner_argv_stays_probe_only(self) -> None:
+        catalog = json.loads(RUNNER_COMMANDS.read_text(encoding="utf-8"))
+        spec = catalog["execution-cron-check"]
+        blob = json.dumps(spec["steps"])
+        assert "scripts/execution_cron_check.py" in blob
+        assert "digiquant.dashboard.overlay" in blob
+        assert "digiquant.execution.sync_cron" in blob
+        assert "digiquant.execution.route_cron" in blob
+        assert "digiquant.notify.dispatch" in blob
+        assert blob.count("--dry-run") == 4
+        for token in FORBIDDEN_APPLY:
+            assert token not in blob, token
 
     def test_permissions_are_contents_read_only(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
