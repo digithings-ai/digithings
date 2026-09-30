@@ -1,5 +1,6 @@
 import type { ElementType } from 'react';
 import { Building2, GitBranch, Globe, LayoutDashboard, PieChart, Settings } from 'lucide-react';
+import { GLOOMBERB_TERMINAL_URL } from '@digithings/ui';
 import { NAV_ALIASES } from '@/lib/nav';
 import { settingsTabsVisible } from '@/lib/entitlements';
 import type { PlanTier } from '@/lib/entitlements';
@@ -125,6 +126,28 @@ export const WORKSPACE: readonly NavGroupItem[] = [
     children: [],
   },
   fxHub,
+];
+
+/** Tools group: data-driven so integrations (LuxAlgo, Connections) are one-line additions. */
+export interface ToolItem {
+  id: string;
+  label: string;
+  href: string;
+  /** Opens in a new tab (absolute URL). */
+  external?: boolean;
+  testid?: string;
+  ariaLabel?: string;
+}
+
+export const TOOLS: readonly ToolItem[] = [
+  {
+    id: 'gloomberb',
+    label: 'Gloomberb Terminal',
+    href: GLOOMBERB_TERMINAL_URL,
+    external: true,
+    testid: 'sidebar-gloomberb-link',
+    ariaLabel: 'Gloomberb Terminal (opens in a new tab)',
+  },
 ];
 
 export const REFERENCE: readonly NavGroupItem[] = [house];

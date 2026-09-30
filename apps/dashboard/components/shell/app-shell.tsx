@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider, TooltipProvider } from '@digithings/ui/ui';
 import { useAppShell } from '@/components/app-shell-context';
+import { PipelineSelectionProvider } from '@/components/pipeline-selection';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
 import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
@@ -85,9 +86,11 @@ function ShellFrame({ children }: { children: ReactNode }) {
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <TooltipProvider delay={200}>
-      <PageHeaderProvider>
-        <ShellFrame>{children}</ShellFrame>
-      </PageHeaderProvider>
+      <PipelineSelectionProvider>
+        <PageHeaderProvider>
+          <ShellFrame>{children}</ShellFrame>
+        </PageHeaderProvider>
+      </PipelineSelectionProvider>
     </TooltipProvider>
   );
 }

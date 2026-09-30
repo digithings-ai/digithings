@@ -3,9 +3,9 @@
 import type { MouseEvent } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronRight, ExternalLink, Search } from 'lucide-react';
-import { GLOOMBERB_TERMINAL_URL } from '@digithings/ui';
 import {
   Kbd,
+  PipelineSelect,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -25,6 +25,7 @@ import {
   useSidebar,
 } from '@digithings/ui/ui';
 import { useAppShell } from '@/components/app-shell-context';
+import { usePipelineSelection } from '@/components/pipeline-selection';
 import { DashboardMark } from '@/components/dashboard-mark';
 import { GloomberbMark } from '@/components/gloomberb-mark';
 import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
@@ -33,6 +34,7 @@ import SidebarAccount from './sidebar-account';
 import SidebarStatus from './sidebar-status';
 import {
   REFERENCE,
+  TOOLS,
   WORKSPACE,
   activeChildId,
   childHref,
@@ -137,6 +139,7 @@ export default function DashboardSidebar() {
   const { setOpenMobile } = useSidebar();
   const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
   const tier = usePlanTier();
+  const { pipelines, pipelineId, setPipelineId } = usePipelineSelection();
 
   // An fx_hub-only invitee sees FX Hub and a single Account entry (12x single-view contract).
   const workspace = WORKSPACE.filter((g) => (g.href === '/twelve-x' ? canFxHub : !fxHubOnlyInvitee));
@@ -162,6 +165,11 @@ export default function DashboardSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {fxHubOnlyInvitee ? null : (
+          <div className="px-3 pt-2 group-data-[collapsible=icon]:hidden">
+            <PipelineSelect options={pipelines} value={pipelineId} onValueChange={setPipelineId} />
+          </div>
+        )}
         <SidebarGroup className="pb-0">
           <SidebarMenu>
             <SidebarMenuItem>
@@ -189,18 +197,28 @@ export default function DashboardSidebar() {
               <SidebarGroupLabel>Tools</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      tooltip="Gloomberb Terminal"
-                      aria-label="Gloomberb Terminal (opens in a new tab)"
-                      data-testid="sidebar-gloomberb-link"
-                      render={<a href={GLOOMBERB_TERMINAL_URL} target="_blank" rel="noopener noreferrer" />}
-                    >
-                      <GloomberbMark size={16} />
-                      <span>Gloomberb Terminal</span>
-                      <ExternalLink className="ms-auto size-3! text-ink-mute group-data-[collapsible=icon]:hidden" aria-hidden />
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {TOOLS.map((t) => (
+                    <SidebarMenuItem key={t.id}>
+                      <SidebarMenuButton
+                        tooltip={t.label}
+                        aria-label={t.ariaLabel}
+                        data-testid={t.testid}
+                        render={
+                          t.external ? (
+                            <a href={t.href} target="_blank" rel="noopener noreferrer" />
+                          ) : (
+                            <Link href={t.href} onClick={() => setOpenMobile(false)} />
+                          )
+                        }
+                      >
+                        {t.id === 'gloomberb' ? <GloomberbMark size={16} /> : null}
+                        <span>{t.label}</span>
+                        {t.external ? (
+                          <ExternalLink className="ms-auto size-3! text-ink-mute group-data-[collapsible=icon]:hidden" aria-hidden />
+                        ) : null}
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
