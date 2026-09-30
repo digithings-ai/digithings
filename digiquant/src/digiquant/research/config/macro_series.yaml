@@ -1,6 +1,9 @@
-# Manifest for systematic macro ingestion into macro_series_observations.
-# Used by `digiquant prices fetch-macro` (FRED + Yahoo FX defaults; legacy
-# scripts/ingest_fx_frankfurter.py and ingest_crypto_fng.py remain opt-in).
+# Manifest for systematic macro ingestion into sealed R2 generations.
+# The `fred:` block below is the gloomberb panel (dataset id remains `fred`:
+# generations are still sealed as `fred__{SERIES}` with `source="fred"`).
+# Refreshed from anonymous gloomberb `econ_series` pages — no FRED_API_KEY.
+# Dropped 2026-09-29 (not served by the panel, do not re-add without a probe):
+# DTWEXBGS, GVZCLS, MANEMP, MORTGAGE30US, NFCI, OVXCLS, STLFSI4, VXNCLS.
 # Treasury: scripts/ingest_treasury_curve.py → us_treasury + treasury_market (not listed here).
 #
 # FX rates (FX/EUR, FX/GBP, FX/JPY, FX/CAD) come from Yahoo Finance via
@@ -57,25 +60,12 @@ fred:
     - id: VIXCLS
       title: "VIX close"
       unit: index
-    # Volatility complex (#708, Phase D) — FRED republishes the CBOE indices, so
-    # alt-options-derivatives reads the term structure (VIXCLS/VXVCLS) and
-    # cross-asset vol from Supabase instead of a paid web_search pre-pass.
+    # Volatility complex (#708, Phase D) — VIXCLS/VXVCLS term structure only.
+    # VXNCLS/GVZCLS/OVXCLS are not on the gloomberb panel (dropped 2026-09-29).
     - id: VXVCLS
       title: "VIX 3-month (VIX3M)"
       unit: index
-    - id: VXNCLS
-      title: "Nasdaq-100 volatility (VXN)"
-      unit: index
-    - id: GVZCLS
-      title: "Gold volatility (GVZ)"
-      unit: index
-    - id: OVXCLS
-      title: "Crude oil volatility (OVX)"
-      unit: index
-    - id: DTWEXBGS
-      title: "Trade-weighted US dollar (broad)"
-      unit: index
-    # Macro-liquidity regime gauge (#1085) — M2 + DXY + labor + mfg activity.
+    # Macro-liquidity regime gauge (#1085) — M2 + labor.
     - id: M2SL
       cadence: monthly
       title: "M2 money stock (seasonally adjusted)"
@@ -84,12 +74,6 @@ fred:
       cadence: monthly
       title: "Unemployment rate"
       unit: percent
-    # FRED does not carry live ISM PMI; MANEMP YoY is the manufacturing-activity
-    # vote in MacroLiquidityModel (named ``pmi`` in the blend for consumers).
-    - id: MANEMP
-      cadence: monthly
-      title: "All employees, manufacturing (SA)"
-      unit: thousands_persons
     - id: CPIAUCSL
       cadence: monthly
       title: "CPI all urban consumers"
@@ -98,18 +82,6 @@ fred:
       cadence: monthly
       title: "PCE price index"
       unit: index
-    - id: NFCI
-      cadence: weekly
-      title: "Chicago Fed National Financial Conditions Index"
-      unit: index
-    - id: STLFSI4
-      cadence: weekly
-      title: "St. Louis Fed Financial Stress Index"
-      unit: index
-    - id: MORTGAGE30US
-      cadence: weekly
-      title: "30-year fixed rate mortgage average"
-      unit: percent
     - id: DCOILWTICO
       title: "WTI crude oil spot (EIA via FRED)"
       unit: usd_per_barrel

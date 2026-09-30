@@ -1,34 +1,22 @@
-"""Unit tests for digiquant.data.prices.macro_ingest (mocked HTTP)."""
+"""Unit tests for digiquant.data.prices.macro_ingest (mocked HTTP).
+
+The live FRED API fetchers were removed in #4794 PR3 (panel seals from
+gloomberb ``econ_series``); ``fred_observations_to_rows`` stays covered.
+"""
 
 from __future__ import annotations
-
-from unittest.mock import patch
 
 import pytest
 from digiquant.data.prices.macro_ingest import (
     YAHOO_FX_DEFAULT,
     MacroManifest,
     dedupe_observation_rows,
-    fetch_fred,
     fetch_fx_intraday,
     fetch_fx_yahoo,
     fred_observations_to_rows,
     fx_intraday_payload_to_candles,
     yahoo_fx_payload_to_rows,
 )
-
-
-def _manifest() -> MacroManifest:
-    return MacroManifest.from_dict(
-        {
-            "fred": {
-                "series": [
-                    {"id": "DGS10", "title": "10-Year Treasury", "unit": "percent"},
-                ],
-                "backfill_start": "1990-01-01",
-            },
-        }
-    )
 
 
 @pytest.mark.unit
@@ -47,27 +35,6 @@ def test_fred_observations_to_rows_filters_missing_values() -> None:
     assert rows[0]["source"] == "fred"
     assert rows[0]["series_id"] == "DGS10"
     assert rows[0]["meta"]["title"] == "10Y"
-
-
-@pytest.mark.unit
-def test_fetch_fred_mocks_http_and_returns_rows() -> None:
-    fake_payload = {
-        "observations": [
-            {"date": "2025-04-01", "value": "4.12"},
-            {"date": "2025-04-02", "value": "4.15"},
-        ]
-    }
-    with patch("digiquant.data.prices.macro_ingest.fetch_fred_series") as fake:
-        fake.return_value = fake_payload["observations"]
-        rows = fetch_fred(_manifest(), api_key="fake-key", end="2025-04-30")
-    assert len(rows) == 2
-    assert {r["value"] for r in rows} == {4.12, 4.15}
-
-
-@pytest.mark.unit
-def test_fetch_fred_requires_api_key() -> None:
-    with pytest.raises(ValueError, match="api_key"):
-        fetch_fred(_manifest(), api_key="")
 
 
 @pytest.mark.unit
@@ -92,52 +59,7 @@ def test_macro_manifest_defaults() -> None:
     assert mani.fred_series == []
 
 
-# ─── Retry + per-series isolation ──────────────────────────────────────
-
-
-def _manifest_two_series() -> MacroManifest:
-    return MacroManifest.from_dict(
-        {
-            "fred": {
-                "series": [
-                    {"id": "DGS10", "title": "10Y", "unit": "percent"},
-                    {"id": "SOFR", "title": "SOFR", "unit": "percent"},
-                ],
-                "backfill_start": "2025-01-01",
-            },
-        }
-    )
-
-
-@pytest.mark.unit
-def test_fetch_fred_isolates_per_series_failure(monkeypatch) -> None:
-    # One series succeeds, the other raises. The succeeding series' rows are
-    # returned; the failing one is skipped (logged to stderr), not propagated.
-    import requests
-    from digiquant.data.prices import macro_ingest
-
-    def fake_fetch(api_key, series_id, *args, **kwargs):
-        if series_id == "SOFR":
-            raise requests.HTTPError("500 Server Error", response=None)
-        return [{"date": "2025-01-02", "value": "4.25"}]
-
-    monkeypatch.setattr(macro_ingest, "fetch_fred_series", fake_fetch)
-    rows = fetch_fred(_manifest_two_series(), api_key="test")
-    assert len(rows) == 1
-    assert rows[0]["series_id"] == "DGS10"
-
-
-@pytest.mark.unit
-def test_fetch_fred_fails_only_when_all_series_fail(monkeypatch) -> None:
-    import requests
-    from digiquant.data.prices import macro_ingest
-
-    def always_fail(*args, **kwargs):
-        raise requests.HTTPError("500 Server Error", response=None)
-
-    monkeypatch.setattr(macro_ingest, "fetch_fred_series", always_fail)
-    with pytest.raises(RuntimeError, match="all 2 series failed"):
-        fetch_fred(_manifest_two_series(), api_key="test")
+# ─── Retry helper (shared session factory) ──────────────────────────────────
 
 
 @pytest.mark.unit

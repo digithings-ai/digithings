@@ -6,5 +6,4 @@ export const MACRO_PREVIEW_SERIES_IDS: string[] = [
   'VIXCLS',
   'DGS10',
   'DEXUSEU',
-  'DTWEXBGS',
 ];
