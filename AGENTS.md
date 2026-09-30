@@ -130,9 +130,9 @@ The quality bar is **review**, not a self-score. Use `/review` / in-session revi
 
 **Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `review-<subject>.md` beside the plan or ledger the review belongs to (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
 
-`make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
+Review skills are the sole quality gate. Do not treat any self-score as a substitute for review.
 
-**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `apps/**` and `packages/**` are excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
+**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
 
 ---
 
@@ -355,7 +355,6 @@ resulting fixes reviewed — the same rule the `ruff.toml` rule selection follow
 
 ```bash
 make test-unit          # unit tests (no stack required)
-make score              # optional 4-dimension rubric (human/CI; not an agent pre-flight)
 make readiness          # repo-health panel for housekeeping shifts (advisory; never a gate)
 make task ISSUE=N       # isolated git worktree for a backlog task (full pipeline)
 make doc-check          # validate internal markdown links
@@ -535,7 +534,7 @@ release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
+Active slash commands: `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
 
 When the session also has plugin skills (`deslop`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship`, test-driven-development, …), pick those instead of inventing a numbered ritual. See [How to work](#how-to-work).
 

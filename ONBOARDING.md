@@ -127,11 +127,11 @@ make commit MSG="feat(digiquant): short imperative subject (#N)"
 make pr                             # opens the PR with template pre-filled (requires gh)
 ```
 
-`make commit` runs conventional-commit validation. `make pr` uses `scripts/create_pr.sh`, which routes the PR into the correct base branch via `scripts/project_routing.json`. Quality bar is **review** ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
+`make commit` runs conventional-commit validation. `make pr` uses `scripts/create_pr.sh`, which routes the PR into the correct base branch via `scripts/project_routing.json`. Quality bar is **review** ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score (the `make score` gate was removed in #4868).
 
-### Optional `make score`
+### Review gate
 
-`make score` and [`docs/scoring/`](docs/scoring/) are an optional human/CI tool (CI may still run the score job on a PR diff). Do not treat them as an agent pre-flight. Review skills own security, quality, optimization, and accuracy.
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)) — run `/review` when that policy needs a hatch. The `make score` self-score tooling was removed in #4868; do not treat any self-score as a pre-flight.
 
 ### GitHub project automation
 
@@ -195,7 +195,6 @@ make batch-candidates               # group open tasks for parallel execution
 make new-task                       # interactive issue creation
 make task ISSUE=N                   # start backlog task in isolated worktree
 make parse-error                    # identify component from a Python traceback
-make score                          # optional 4-dimension rubric (human/CI)
 make commit MSG="feat(x):…"         # validated conventional commit
 make pr                             # open PR with template
 
@@ -216,7 +215,6 @@ make find-stale                     # find stale branches / artifacts
 - **Stray `node_modules/` at the repo root** means you ran `npm install` in the wrong directory. Workspace installs must happen at the repo root (npm workspaces: `apps/*`, `packages/*`) or a specific app dir.
 - **research frontend regeneration**: `apps/dashboard/next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
 - **Task branches are worktrees** — `make task ISSUE=N` creates a worktree under `.worktrees/task/N-slug/` (gitignored). Don't `cd` out of it mid-task; close with `git worktree remove .worktrees/task/N-slug/` after the PR merges.
-- **`make score` requires the editable installs** — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"` once per environment.
 
 ---
 
@@ -228,7 +226,7 @@ make find-stale                     # find stale branches / artifacts
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram.
 - [docs/adr/](docs/adr/) — architecture decision records. 0002 (two-domain plan), 0006 (public dogfood projects), 0009 (frontend umbrella) are the most referenced.
 - [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md) — orchestrated / backlog-driven work.
-- [docs/scoring/](docs/scoring/) — scoring rubric used by `make score` and `/review`.
+- [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) — review policy, the sole quality gate.
 - `scripts/claude-hooks/` + `scripts/hooks/pre-push.sh` — the guardrail scripts themselves; read them to understand exactly what's blocked and why.
 
 Questions, or something in here out of date? Fix it in the same PR as whatever made you notice — this file belongs to the contributors who are actively using it.
