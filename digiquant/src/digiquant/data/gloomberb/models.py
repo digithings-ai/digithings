@@ -26,6 +26,7 @@ dropped. Input models forbid unknown fields so a typo fails loudly.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime, timezone
 from typing import Annotated, Any, Generic, Literal, TypeVar  # score:allow untyped any — wire JSON
@@ -39,6 +40,8 @@ from pydantic import (
     model_validator,
 )
 from pydantic.alias_generators import to_camel
+
+from .approvals import OrderTicket
 
 __all__ = [
     "SOURCE",
@@ -93,6 +96,42 @@ __all__ = [
     "ShortInterestInput",
     "EquityDiagnosticInput",
     "PredictionMarketsInput",
+    # workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "PortfolioViewInput",
+    "WatchlistAddInput",
+    "WatchlistRemoveInput",
+    "PortfolioAddInput",
+    "PortfolioRemoveInput",
+    "AlertAddInput",
+    "AlertListInput",
+    "NoteAddInput",
+    "ThesisAddInput",
+    "ViewAddInput",
+    "BrokerPositionsInput",
+    "IbkrPreviewOrderInput",
+    "IbkrExecuteOrderInput",
+    # calculator + composition inputs (130-coverage Task 2)
+    "OptionsCalcInput",
+    "BondCalcInput",
+    "KellyInput",
+    "DividendYieldInput",
+    "FxMatrixInput",
+    "VixTermInput",
+    # options-scenario composition inputs (130-coverage Task 8: OSA)
+    "OptionsScenarioLeg",
+    "OptionsScenarioInput",
+    # portfolio-math composition inputs (130-coverage Task 3)
+    "ComparePerfInput",
+    "CorrMatrixInput",
+    "RelGraphInput",
+    "RelValInput",
+    "FundGraphInput",
+    "ValGraphInput",
+    "CustomSeries",
+    "CustomChartInput",
+    "MarketValInput",
+    "MoneyMarketsInput",
+    "RatePathInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -202,6 +241,56 @@ __all__ = [
     "EquityDiagnosticResult",
     "PredictionMarketRow",
     "PredictionMarketsResult",
+    # workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "WatchlistAddResult",
+    "WatchlistRemoveResult",
+    "PortfolioViewResult",
+    "PortfolioAddResult",
+    "PortfolioRemoveResult",
+    "AlertAddResult",
+    "AlertRow",
+    "AlertListResult",
+    "NoteAddResult",
+    "ThesisAddResult",
+    "ViewAddResult",
+    "BrokerPosition",
+    "BrokerPositionsResult",
+    "IbkrPreviewResult",
+    "WouldBeOrder",
+    "IbkrExecuteResult",
+    # calculator + composition payloads (130-coverage Task 2)
+    "OptionsCalcResult",
+    "BondCalcResult",
+    "KellyResult",
+    "DividendYieldResult",
+    "FxMatrixResult",
+    "VixTermResult",
+    # options-scenario composition payloads (130-coverage Task 8: OSA)
+    "OptionsScenarioLegDetail",
+    "OptionsScenarioGridPoint",
+    "OptionsScenarioExpiryPoint",
+    "OptionsScenarioLegGreeks",
+    "OptionsScenarioPortfolioGreeks",
+    "OptionsScenarioResult",
+    "STATEMENT_FIELDS",
+    "StatementField",
+    # portfolio-math composition payloads (130-coverage Task 3)
+    "ComparePerfResult",
+    "CorrMatrixResult",
+    "RelGraphResult",
+    "RelValRow",
+    "RelValResult",
+    "FundGraphPoint",
+    "FundGraphResult",
+    "ValGraphRow",
+    "ValGraphSnapshot",
+    "ValGraphResult",
+    "CustomChartResult",
+    "EconRatio",
+    "MarketValResult",
+    "MoneyMarketsResult",
+    "RateMeeting",
+    "RatePathResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -238,6 +327,40 @@ __all__ = [
     "ShortInterestEnvelope",
     "EquityDiagnosticEnvelope",
     "PredictionMarketsEnvelope",
+    # workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+    "PortfolioViewEnvelope",
+    "WatchlistAddEnvelope",
+    "WatchlistRemoveEnvelope",
+    "PortfolioAddEnvelope",
+    "PortfolioRemoveEnvelope",
+    "AlertAddEnvelope",
+    "AlertListEnvelope",
+    "NoteAddEnvelope",
+    "ThesisAddEnvelope",
+    "ViewAddEnvelope",
+    "BrokerPositionsEnvelope",
+    "IbkrPreviewEnvelope",
+    "IbkrExecuteEnvelope",
+    # calculator + composition envelopes (130-coverage Task 2)
+    "OptionsCalcEnvelope",
+    "BondCalcEnvelope",
+    "KellyEnvelope",
+    "DividendYieldEnvelope",
+    "FxMatrixEnvelope",
+    "VixTermEnvelope",
+    # options-scenario composition envelope (130-coverage Task 8: OSA)
+    "OptionsScenarioEnvelope",
+    # portfolio-math composition envelopes (130-coverage Task 3)
+    "ComparePerfEnvelope",
+    "CorrMatrixEnvelope",
+    "RelGraphEnvelope",
+    "RelValEnvelope",
+    "FundGraphEnvelope",
+    "ValGraphEnvelope",
+    "CustomChartEnvelope",
+    "MarketValEnvelope",
+    "MoneyMarketsEnvelope",
+    "RatePathEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -2085,6 +2208,621 @@ class PredictionMarketsResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Calculator + composition inputs/payloads (130-coverage Task 2)
+# ---------------------------------------------------------------------------
+#
+# The pure calculators (options/bond/Kelly) run local math only — no transport,
+# no cookies — and their outputs are derived numbers, so they never claim
+# Gloomberb sourcing. The three compositions fan out to existing reads; their
+# outputs are derived math over those reads, so they are unattributed too.
+
+
+class OptionsCalcInput(_InputModel):
+    """European Black-Scholes price, with an optional IV solve.
+
+    Without ``price`` the tool returns the model price at ``vol``; with
+    ``price`` it solves the implied vol by bisection and echoes the price.
+    Bounds mirror the local math core (negative rates pass through; contract
+    violations are ``invalid_input``, never clamped).
+    """
+
+    spot: float = Field(gt=0.0)
+    strike: float = Field(gt=0.0)
+    rate: float
+    vol: float = Field(gt=0.0)
+    expiry_years: float = Field(gt=0.0)
+    kind: Literal["call", "put"]
+    price: float | None = Field(default=None, gt=0.0)
+
+
+class OptionsCalcResult(_CamelModel):
+    """Model price plus the solved IV (None when no ``price`` was given)."""
+
+    price: float
+    implied_vol: float | None = None
+    kind: Literal["call", "put"]
+
+
+class BondCalcInput(_InputModel):
+    """Par-bond analytics over local discounting math.
+
+    ``accrued`` is always 0.0 by convention: settlement is assumed exactly on
+    a coupon date, so the dirty price equals the clean price (no date inputs
+    exist to compute anything else — the tool copy says so).
+    """
+
+    coupon: float = Field(ge=0.0)
+    face: float = Field(gt=0.0)
+    ytm: float
+    years: float = Field(gt=0.0)
+    freq: int = Field(ge=1)
+
+
+class BondCalcResult(_CamelModel):
+    """Price, accrued, modified duration (years), convexity, DV01."""
+
+    price: float
+    accrued: float
+    duration: float
+    convexity: float
+    dv01: float
+
+
+class KellyInput(_InputModel):
+    """Kelly-criterion fraction from win probability and win/loss payoff ratio."""
+
+    win_prob: float = Field(ge=0.0, le=1.0)
+    win_loss_ratio: float = Field(gt=0.0)
+
+
+class KellyResult(_CamelModel):
+    """``p - (1 - p) / b`` clamped at 0.0 from below (the local core's rule)."""
+
+    fraction: float
+
+
+class DividendYieldInput(_InputModel):
+    """Trailing dividend yield for one symbol (composition, not a Cloud route)."""
+
+    symbol: Symbol
+
+
+class DividendYieldResult(_CamelModel):
+    """Trailing cash distributions over the latest quote price (local division)."""
+
+    symbol: str
+    price: float
+    trailing_dividends: float
+    distribution_count: int
+    dividend_yield: float
+
+
+class FxMatrixInput(_InputModel):
+    """USD-pair FX matrix over the exchange-rate read (USD base only)."""
+
+    currencies: list[CurrencyCode] = Field(min_length=1, max_length=20)
+    to_currency: CurrencyCode = "USD"
+
+    @model_validator(mode="after")
+    def _only_usd_base_supported(self) -> FxMatrixInput:
+        if self.to_currency != "USD":
+            raise ValueError(
+                "the exchange-rate route is USD-based only; "
+                f"to_currency must be 'USD', got {self.to_currency!r}"
+            )
+        return self
+
+
+class FxMatrixResult(_CamelModel):
+    """Per-currency USD rates plus every ordered cross (``rates[a] / rates[b]``)."""
+
+    base: str
+    rates: dict[str, float] = Field(default_factory=dict)
+    crosses: dict[str, float] = Field(default_factory=dict)
+
+
+class VixTermInput(_InputModel):
+    """VIX term snapshot over two econ-series closes (FRED ids, overridable)."""
+
+    near_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "VIXCLS"
+    # Controller ruling (130-coverage Task 5): the FRED far leg is VXVCLS (FRED
+    # 3M, labeled "VIX 3M"). VIX3M as such is the Yahoo/CBOE index symbol
+    # ^VIX3M, not a FRED id — tool defaults hitting FRED must use VXVCLS.
+    far_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "VXVCLS"
+    limit: int = Field(default=5, ge=1, le=100)
+
+
+class VixTermResult(_CamelModel):
+    """Latest closes, far-minus-near spread, and the curve regime."""
+
+    near_series: str
+    far_series: str
+    near_close: float
+    far_close: float
+    near_date: str
+    far_date: str
+    spread: float
+    regime: Literal["contango", "inversion", "flat"]
+
+
+# ---------------------------------------------------------------------------
+# Options-scenario composition inputs/payloads (130-coverage Task 8: OSA)
+# ---------------------------------------------------------------------------
+#
+# A multi-leg European book valued over a spot/date/vol-shift grid. Legs are
+# matched to listed options_chain contracts (exact expiry/strike/kind) for
+# their implied vol and last-price cost basis; every number is then derived
+# locally with the Task 1 Black-Scholes core, so the tool is unattributed.
+
+
+class OptionsScenarioLeg(_CamelModel):
+    """One book leg: a listed contract address plus a signed quantity.
+
+    ``expiry`` is epoch seconds matching ``OptionContract.expiration`` (the
+    millisecond ceiling from ``OptionsChainInput`` applies — a millisecond
+    timestamp is rejected, never reinterpreted). ``qty`` is signed (+ long /
+    - short) and must be nonzero.
+    """
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+    expiry: float
+    strike: float = Field(gt=0.0)
+    kind: Literal["call", "put"]
+    qty: float
+
+    @model_validator(mode="after")
+    def _reject_millisecond_expiry(self) -> OptionsScenarioLeg:
+        if self.expiry >= EPOCH_SECONDS_CEILING:
+            raise ValueError(
+                "expiry must be epoch seconds, not milliseconds "
+                f"(got {self.expiry}); multiply seconds by 1000 only if you "
+                "meant milliseconds"
+            )
+        return self
+
+
+class OptionsScenarioInput(_InputModel):
+    """Multi-leg European scenario over the options_chain read (composition).
+
+    ``spots`` is the valuation grid (each positive), ``valuation_dates`` the
+    decay grid (strict ISO ``YYYY-MM-DD``), ``vol_shifts`` additive bumps to
+    each leg's chain implied vol (default [0.0]). Negative rates pass through;
+    every other contract violation is ``invalid_input``, never clamped.
+    """
+
+    symbol: Symbol
+    legs: list[OptionsScenarioLeg] = Field(min_length=1, max_length=8)
+    rate: float
+    spots: list[float] = Field(min_length=1, max_length=21)
+    valuation_dates: list[date] = Field(min_length=1, max_length=7)
+    vol_shifts: list[float] = Field(default_factory=lambda: [0.0], min_length=1, max_length=5)
+
+    @field_validator("valuation_dates", mode="before")
+    @classmethod
+    def _only_strict_iso_dates(cls, value: object) -> object:
+        """Accept only ``YYYY-MM-DD`` strings (or real ``date``s), per item."""
+        if not isinstance(value, list):
+            return value
+        checked: list[object] = []
+        for item in value:
+            if isinstance(item, date) and not isinstance(item, datetime):
+                checked.append(item)
+            elif isinstance(item, str) and re.fullmatch(_ISO_DATE_PATTERN, item.strip()):
+                checked.append(item.strip())
+            else:
+                raise ValueError(
+                    "valuation_dates must be ISO YYYY-MM-DD date strings (or dates); "
+                    f"got {type(item).__name__} {item!r}"
+                )
+        return checked
+
+    @model_validator(mode="after")
+    def _require_finite_positive_math(self) -> OptionsScenarioInput:
+        for spot in self.spots:
+            if not math.isfinite(spot) or spot <= 0.0:
+                raise ValueError(f"spots must be finite and positive, got {spot!r}")
+        if not math.isfinite(self.rate):
+            raise ValueError(f"rate must be finite, got {self.rate!r}")
+        for shift in self.vol_shifts:
+            if not math.isfinite(shift):
+                raise ValueError(f"vol_shifts must be finite, got {shift!r}")
+        for leg in self.legs:
+            if not math.isfinite(leg.expiry):
+                raise ValueError(f"leg expiry must be finite, got {leg.expiry!r}")
+            if not math.isfinite(leg.strike):
+                raise ValueError(f"leg strike must be finite, got {leg.strike!r}")
+            if not math.isfinite(leg.qty) or leg.qty == 0.0:
+                raise ValueError(f"leg qty must be finite and nonzero, got {leg.qty!r}")
+        return self
+
+
+class OptionsScenarioLegDetail(_CamelModel):
+    """A leg resolved against the chain: the IV priced and the premium paid."""
+
+    expiry: float
+    strike: float
+    kind: Literal["call", "put"]
+    qty: float
+    implied_vol: float
+    premium: float
+
+
+class OptionsScenarioGridPoint(_CamelModel):
+    """Book value and P&L at one (spot, date, vol-shift) grid node."""
+
+    spot: float
+    valuation_date: str
+    vol_shift: float
+    value: float
+    pnl: float
+
+
+class OptionsScenarioExpiryPoint(_CamelModel):
+    """Expiry payoff and P&L per grid spot (the curve breakevens bisect)."""
+
+    spot: float
+    payoff: float
+    pnl: float
+
+
+class OptionsScenarioLegGreeks(_CamelModel):
+    """Finite-difference Greeks for one leg (qty included)."""
+
+    leg_index: int
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+
+
+class OptionsScenarioPortfolioGreeks(_CamelModel):
+    """Book Greeks: the leg-Greek sums at the reference corner."""
+
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
+
+
+class OptionsScenarioResult(_CamelModel):
+    """Grid values, expiry payoff, breakevens, and corner Greeks.
+
+    Greeks are evaluated at the first spot and first valuation date with no
+    vol shift (``greeks_at_spot`` / ``greeks_valuation_date``); ``theta`` is
+    the value change for one day's passage of time (negative for long
+    premium), ``vega`` per unit vol. European exercise throughout: intrinsic
+    value at/after a leg's expiry.
+    """
+
+    symbol: str
+    legs: list[OptionsScenarioLegDetail] = Field(default_factory=list)
+    premium_paid: float
+    valuation_epochs: list[float] = Field(default_factory=list)
+    grid: list[OptionsScenarioGridPoint] = Field(default_factory=list)
+    expiry_payoff: list[OptionsScenarioExpiryPoint] = Field(default_factory=list)
+    breakevens: list[float] = Field(default_factory=list)
+    greeks_at_spot: float
+    greeks_valuation_date: str
+    leg_greeks: list[OptionsScenarioLegGreeks] = Field(default_factory=list)
+    portfolio_greeks: OptionsScenarioPortfolioGreeks | None = None
+
+
+# ---------------------------------------------------------------------------
+# Portfolio-math composition inputs/payloads (130-coverage Task 3)
+# ---------------------------------------------------------------------------
+#
+# Ten compositions over existing reads (price history, ticker financials, econ
+# series, Shiller, and the Kalshi KXFED venue path). Every number is derived
+# locally — rebased returns, date-aligned inner joins, Pearson math, statement
+# multiples, CAPE zones, funding spreads, survival-ladder differences — so all
+# ten are unattributed: a derived number must not claim Cloud sourcing.
+
+
+class ComparePerfInput(_InputModel):
+    """Rebased performance comparison over two or more price histories."""
+
+    tickers: list[Symbol] = Field(min_length=2, max_length=20)
+    resolution: Resolution = "1d"
+    range: Range | None = None
+
+
+class ComparePerfResult(_CamelModel):
+    """Per-ticker series rebased to 100 at the first common date, plus totals."""
+
+    tickers: list[str] = Field(default_factory=list)
+    dates: list[str] = Field(default_factory=list)
+    base_date: str | None = None
+    series: dict[str, list[float]] = Field(default_factory=dict)
+    total_returns: dict[str, float] = Field(default_factory=dict)
+
+
+class CorrMatrixInput(_InputModel):
+    """Pearson correlation matrix over two or more price histories."""
+
+    tickers: list[Symbol] = Field(min_length=2, max_length=20)
+    resolution: Resolution = "1d"
+    range: Range | None = None
+
+
+class CorrMatrixResult(_CamelModel):
+    """Pairwise Pearson correlations of daily simple returns (None when flat)."""
+
+    tickers: list[str] = Field(default_factory=list)
+    matrix: dict[str, dict[str, float | None]] = Field(default_factory=dict)
+    common_dates: list[str] = Field(default_factory=list)
+
+
+class RelGraphInput(_InputModel):
+    """Pair relationship over two price histories (base vs quote)."""
+
+    base: Symbol
+    quote: Symbol
+    resolution: Resolution = "1d"
+    range: Range | None = None
+    window: int = Field(default=20, ge=2, le=250)
+
+    @model_validator(mode="after")
+    def _require_distinct_pair(self) -> RelGraphInput:
+        if self.base.strip().upper() == self.quote.strip().upper():
+            raise ValueError("base and quote must be distinct tickers")
+        return self
+
+
+class RelGraphResult(_CamelModel):
+    """Indexed prices, price ratio, rolling correlation, and returns beta."""
+
+    base: str
+    quote: str
+    dates: list[str] = Field(default_factory=list)
+    indexed_base: list[float] = Field(default_factory=list)
+    indexed_quote: list[float] = Field(default_factory=list)
+    ratio: list[float] = Field(default_factory=list)
+    beta: float | None = None
+    rolling_correlation: list[float | None] = Field(default_factory=list)
+
+
+class RelValInput(_InputModel):
+    """Peer multiples table over two or more ticker-financials reads."""
+
+    tickers: list[Symbol] = Field(min_length=2, max_length=20)
+
+
+class RelValRow(_CamelModel):
+    """One peer's trailing multiples (None when the read lacks the field)."""
+
+    symbol: str
+    price: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+    peg_ratio: float | None = None
+    ev_to_revenue: float | None = None
+    dividend_yield: float | None = None
+
+
+class RelValResult(_CamelModel):
+    """Peer rows plus the median trailing P/E across covered peers."""
+
+    rows: list[RelValRow] = Field(default_factory=list)
+    median_pe: float | None = None
+
+
+#: Statement fields addressable by the fundamental/valuation graph tools.
+STATEMENT_FIELDS: tuple[str, ...] = (
+    "total_revenue",
+    "net_income",
+    "ebitda",
+    "free_cash_flow",
+    "total_assets",
+    "total_liabilities",
+    "total_equity",
+    "eps",
+)
+
+StatementField = Literal[
+    "total_revenue",
+    "net_income",
+    "ebitda",
+    "free_cash_flow",
+    "total_assets",
+    "total_liabilities",
+    "total_equity",
+    "eps",
+]
+
+
+class FundGraphInput(_InputModel):
+    """One statement field's time series for one symbol (composition)."""
+
+    symbol: Symbol
+    field: StatementField = "total_revenue"
+    period: Literal["annual", "quarterly"] = "annual"
+
+
+class FundGraphPoint(_CamelModel):
+    """One statement period's value for the requested field."""
+
+    date: str
+    value: float
+
+
+class FundGraphResult(_CamelModel):
+    """The field's per-period values in statement order (oldest first)."""
+
+    symbol: str
+    field: str
+    period: str
+    points: list[FundGraphPoint] = Field(default_factory=list)
+
+
+class ValGraphInput(_InputModel):
+    """Per-period valuation rows for one symbol (composition)."""
+
+    symbol: Symbol
+    period: Literal["annual", "quarterly"] = "annual"
+
+
+class ValGraphRow(_CamelModel):
+    """One statement period's earnings scaffolding for multiples."""
+
+    date: str
+    eps: float | None = None
+    total_revenue: float | None = None
+    net_income: float | None = None
+
+
+class ValGraphSnapshot(_CamelModel):
+    """Latest price plus the trailing multiples snapshot."""
+
+    price: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+
+
+class ValGraphResult(_CamelModel):
+    """Per-period rows plus the latest-price multiples snapshot."""
+
+    symbol: str
+    period: str
+    rows: list[ValGraphRow] = Field(default_factory=list)
+    snapshot: ValGraphSnapshot = Field(default_factory=ValGraphSnapshot)
+
+
+class CustomSeries(_CamelModel):
+    """One explicit chart leg (no catalog search; the caller names the source).
+
+    ``price`` needs ``symbol``; ``statement`` needs ``symbol`` + ``field``;
+    ``fred`` needs ``ref`` (an econ-series id).
+    """
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+    source: Literal["price", "statement", "fred"]
+    symbol: Symbol | None = None
+    field: StatementField | None = None
+    ref: str | None = None
+    resolution: Resolution = "1d"
+    range: Range | None = None
+
+
+class CustomChartInput(_InputModel):
+    """Explicit series list aligned onto one date union (composition)."""
+
+    series: list[CustomSeries] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _require_leg_identity(self) -> CustomChartInput:
+        for leg in self.series:
+            if leg.source == "price" and leg.symbol is None:
+                raise ValueError("a price leg requires symbol")
+            if leg.source == "statement" and (leg.symbol is None or leg.field is None):
+                raise ValueError("a statement leg requires symbol and field")
+            if leg.source == "fred" and not (leg.ref or "").strip():
+                raise ValueError("a fred leg requires ref (an econ-series id)")
+        return self
+
+
+class CustomChartResult(_CamelModel):
+    """Union of dates with one aligned column per leg (None where absent)."""
+
+    dates: list[str] = Field(default_factory=list)
+    columns: dict[str, list[float | None]] = Field(default_factory=dict)
+
+
+class MarketValInput(_InputModel):
+    """Market valuation snapshot over Shiller CAPE + optional econ ratios."""
+
+    # Mirrors ShillerInput's bound: the full series is ~1869 rows from 1871.
+    limit: int = Field(default=240, ge=1, le=2000)
+    econ_series_ids: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    ] = Field(default_factory=list, max_length=10)
+    ratio_limit: int = Field(default=100, ge=1, le=1000)
+
+
+class EconRatio(_CamelModel):
+    """Latest print of one econ series against its history thirds."""
+
+    series_id: str
+    value: float | None = None
+    date: str | None = None
+    percentile: float | None = None
+    zone: Literal["cheap", "fair", "expensive"] | None = None
+
+
+class MarketValResult(_CamelModel):
+    """Latest CAPE against its history thirds, plus optional econ ratios."""
+
+    cape: float | None = None
+    cape_date: str | None = None
+    cape_percentile: float | None = None
+    zone: Literal["cheap", "fair", "expensive"] | None = None
+    n_observations: int = 0
+    ratios: list[EconRatio] = Field(default_factory=list)
+
+
+class MoneyMarketsInput(_InputModel):
+    """Money-markets snapshot over FRED funding/reserve series (ids overridable)."""
+
+    sofr_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "SOFR"
+    effr_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "EFFR"
+    reserves_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "WRESBAL"
+    limit: int = Field(default=5, ge=1, le=100)
+
+
+class MoneyMarketsResult(_CamelModel):
+    """Latest SOFR/EFFR/reserve prints plus the SOFR-minus-EFFR spread."""
+
+    sofr: float
+    effr: float
+    spread: float
+    reserves: float | None = None
+    sofr_date: str | None = None
+    effr_date: str | None = None
+    reserves_date: str | None = None
+
+
+class RatePathInput(_InputModel):
+    """US rate path over live Kalshi KXFED threshold markets (venue-direct)."""
+
+    # One page of open KXFED markets (the venue caps at 200 per page).
+    limit: int = Field(default=200, ge=1, le=1000)
+
+
+class RateMeeting(_CamelModel):
+    """One meeting's 25bp outcome distribution differenced from its ladder."""
+
+    meeting: str
+    distribution: dict[str, float] = Field(default_factory=dict)
+    most_likely: str | None = None
+    n_strikes: int = 0
+
+
+class RatePathResult(_CamelModel):
+    """Per-meeting distributions (meetings with <2 strikes are skipped)."""
+
+    meetings: list[RateMeeting] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -2122,8 +2860,1134 @@ RiskReportsEnvelope = DigifetchEnvelope[RiskReportsResult]
 ShortInterestEnvelope = DigifetchEnvelope[ShortInterestResult]
 EquityDiagnosticEnvelope = DigifetchEnvelope[EquityDiagnosticResult]
 PredictionMarketsEnvelope = DigifetchEnvelope[PredictionMarketsResult]
+OptionsCalcEnvelope = DigifetchEnvelope[OptionsCalcResult]
+BondCalcEnvelope = DigifetchEnvelope[BondCalcResult]
+KellyEnvelope = DigifetchEnvelope[KellyResult]
+DividendYieldEnvelope = DigifetchEnvelope[DividendYieldResult]
+FxMatrixEnvelope = DigifetchEnvelope[FxMatrixResult]
+VixTermEnvelope = DigifetchEnvelope[VixTermResult]
+OptionsScenarioEnvelope = DigifetchEnvelope[OptionsScenarioResult]
+ComparePerfEnvelope = DigifetchEnvelope[ComparePerfResult]
+CorrMatrixEnvelope = DigifetchEnvelope[CorrMatrixResult]
+RelGraphEnvelope = DigifetchEnvelope[RelGraphResult]
+RelValEnvelope = DigifetchEnvelope[RelValResult]
+FundGraphEnvelope = DigifetchEnvelope[FundGraphResult]
+ValGraphEnvelope = DigifetchEnvelope[ValGraphResult]
+CustomChartEnvelope = DigifetchEnvelope[CustomChartResult]
+MarketValEnvelope = DigifetchEnvelope[MarketValResult]
+MoneyMarketsEnvelope = DigifetchEnvelope[MoneyMarketsResult]
+RatePathEnvelope = DigifetchEnvelope[RatePathResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:
     """Return the typed error carried by *envelope*, or None on success."""
     return envelope.data if isinstance(envelope.data, DigifetchError) else None
+
+
+# ---------------------------------------------------------------------------
+# Probe-backed tool inputs/payloads (130-coverage Task 5)
+# ---------------------------------------------------------------------------
+#
+# One tool per GO verdict in
+# ``docs/superpowers/plans/2026-09-30-gloomberb-endpoint-probes.md``. Every
+# verdict carries a ``Live: unverified`` marker (no operator approval for any
+# host), so the wire types below stay deliberately permissive
+# (``float | str``, ``str | int``, open-ended mappings): do not tighten them
+# without a live probe. Rows keep unknown fields as extras.
+#
+# NO-ROUTE verdicts stay out of this section: EE/INS compose over shipped
+# tools, HVG/HVT compose over price_history (+ options_chain), CRD composes
+# over econ_series via the Cloud FRED proxy, and HILO is OUT (a socket-only
+# streaming scanner has no tool-shaped equivalent).
+
+
+class TimeAndSalesInput(_InputModel):
+    """Time and sales over the shared tape route (exchange is required)."""
+
+    symbol: Symbol
+    exchange: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class QuoteRecapInput(_InputModel):
+    """NBBO recap over the shared tape route (the quotes half of TAS)."""
+
+    symbol: Symbol
+    exchange: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class TapeTrade(_CamelModel):
+    """One prints row: id/timestamp/price/size/exchange/conditions/tape."""
+
+    id: str | int | None = None
+    timestamp: str | None = None
+    price: float | str | None = None
+    size: float | str | int | None = None
+    exchange: str | None = None
+    conditions: list[str] = Field(default_factory=list)
+    tape: str | None = None
+
+
+class TapeQuote(_CamelModel):
+    """One NBBO row: bid/ask in round lots, venues, conditions, spread."""
+
+    bid: float | str | None = None
+    ask: float | str | None = None
+    bid_size: float | str | int | None = None
+    ask_size: float | str | int | None = None
+    venues: list[str] = Field(default_factory=list)
+    conditions: list[str] = Field(default_factory=list)
+    spread: float | str | None = None
+
+
+class TimeAndSalesResult(_CamelModel):
+    """Session trades plus the session high/low and feed counters."""
+
+    symbol: str
+    exchange: str | None = None
+    trades: list[TapeTrade] = Field(default_factory=list)
+    session_high: float | str | None = None
+    session_low: float | str | None = None
+    capacity: int | None = None
+    dropped: int | None = None
+    cancelled: int | None = None
+
+
+class QuoteRecapResult(_CamelModel):
+    """Session NBBO quotes (the quotes array of the same tape snapshot)."""
+
+    symbol: str
+    exchange: str | None = None
+    quotes: list[TapeQuote] = Field(default_factory=list)
+
+
+class EstimateRevisionsInput(_InputModel):
+    """Estimate revisions (pane shortcut EM; docs prefix EMM — same pane)."""
+
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class EstimateRevisionPeriod(_CamelModel):
+    """One period's current/recorded/lookback observations."""
+
+    period: str | None = None
+    current: float | str | None = None
+    recorded: float | str | None = None
+    lookback: float | str | None = None
+    source: str | None = None
+
+
+class EstimateRevisionSurprise(_CamelModel):
+    """One reported surprise: actual vs the estimate."""
+
+    period: str | None = None
+    actual: float | str | None = None
+    estimate: float | str | None = None
+
+
+class EstimateRevisionsResult(_CamelModel):
+    """Revision breadth, surprises, guidance, coverage and gaps."""
+
+    symbol: str
+    exchange: str | None = None
+    periods: list[EstimateRevisionPeriod] = Field(default_factory=list)
+    breadth_7d: dict[str, Any] = Field(default_factory=dict)
+    breadth_30d: dict[str, Any] = Field(default_factory=dict)
+    surprises: list[EstimateRevisionSurprise] = Field(default_factory=list)
+    guidance: str | None = None
+    coverage: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+
+
+class ShortVolumeInput(_InputModel):
+    """FINRA daily short volume (NMS default, OTC)."""
+
+    symbol: Symbol
+    scope: Literal["nms", "otc"] = "nms"
+
+
+class ShortVolumeRow(_CamelModel):
+    """One daily FINRA row with the provenance link."""
+
+    date: str | None = None
+    short_volume: float | str | int | None = None
+    short_exempt_volume: float | str | int | None = None
+    total_volume: float | str | int | None = None
+    ratio_percent: float | str | None = None
+    markets: list[str] = Field(default_factory=list)
+    source_url: str | None = None
+
+
+class ShortVolumeResult(_CamelModel):
+    """Daily rows plus the latest row, change, percentile and coverage."""
+
+    symbol: str
+    scope: str = "nms"
+    rows: list[ShortVolumeRow] = Field(default_factory=list)
+    latest: dict[str, Any] = Field(default_factory=dict)
+    change: float | str | None = None
+    percentile: float | str | None = None
+    coverage_start: str | None = None
+    coverage_end: str | None = None
+
+
+class HiringInput(_InputModel):
+    """Hiring: summary (default), postings, or market-wide movers."""
+
+    mode: Literal["summary", "postings", "movers"] = "summary"
+    ticker: str | None = None
+    name: str | None = None
+    limit: int = Field(default=25, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _require_ticker_outside_movers(self) -> HiringInput:
+        if self.mode in ("summary", "postings") and not (self.ticker or "").strip():
+            raise ValueError(f"ticker is required for mode={self.mode!r} (movers needs none)")
+        return self
+
+
+class JobPosting(_CamelModel):
+    """One open posting row; unprobed fields stay as extras."""
+
+    id: str | int | None = None
+    title: str | None = None
+    company: str | None = None
+    location: str | None = None
+    function: str | None = None
+    url: str | None = None
+    posted_at: str | None = None
+
+
+class HiringMover(_CamelModel):
+    """One hiring-movers row: headcount, 30d change, 7d adds, top function."""
+
+    ticker: str | None = None
+    company: str | None = None
+    open_count: float | str | int | None = None
+    employee_count: float | str | int | None = None
+    # Explicit aliases (digit + lowercase letter — see skew_25d above).
+    change_30d: float | str | int | None = Field(default=None, alias="change30d")
+    new_7d: float | str | int | None = Field(default=None, alias="new7d")
+    top_function: str | None = None
+
+
+class HiringResult(_CamelModel):
+    """The mode's payload: summary mapping, postings page, or movers board."""
+
+    mode: str = "summary"
+    ticker: str | None = None
+    status: str | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    postings: list[JobPosting] = Field(default_factory=list)
+    total: int | None = None
+    as_of: str | None = None
+    covered: int | None = None
+    movers: list[HiringMover] = Field(default_factory=list)
+
+
+class CentralBankRatesInput(_InputModel):
+    """The central-bank-rates route takes no parameters."""
+
+    pass
+
+
+class CentralBankRate(_CamelModel):
+    """One bank: policy rate or target range, provenance, next meeting."""
+
+    bank: str | None = None
+    rate: float | str | None = None
+    range_low: float | str | None = None
+    range_high: float | str | None = None
+    source_series_ids: list[str] = Field(default_factory=list)
+    next_meeting: str | None = None
+    state: str | None = None
+    history: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CentralBankRatesResult(_CamelModel):
+    """Policy-rate board rows (FRED/BIS provenance per row)."""
+
+    rows: list[CentralBankRate] = Field(default_factory=list)
+
+
+class CdxInput(_InputModel):
+    """Index-CDS board; days is the optional history depth."""
+
+    days: int | None = Field(default=None, gt=0)
+
+
+class CdxBoard(_CamelModel):
+    """One index board: 5Y on-the-run IG/HY/EM or iTraxx Main/Crossover."""
+
+    name: str | None = None
+    spread: float | str | None = None
+    price: float | str | None = None
+    maturity: str | None = None
+    on_the_run: bool | None = None
+
+
+class CdxResult(_CamelModel):
+    """Boards plus daily points with the on-the-run maturity."""
+
+    boards: list[CdxBoard] = Field(default_factory=list)
+    points: list[dict[str, Any]] = Field(default_factory=list)
+    days: int | None = None
+
+
+class SovrInput(_InputModel):
+    """Sovereign-CDS board; days is the optional history depth."""
+
+    days: int | None = Field(default=None, gt=0)
+
+
+class SovrRow(_CamelModel):
+    """One sovereign: 5Y spread (bp), 1W/1M changes, daily points."""
+
+    sovereign: str | None = None
+    spread_bp: float | str | None = None
+    # Explicit aliases (digit + lowercase letter — see skew_25d above).
+    change_1w: float | str | None = Field(default=None, alias="change1w")
+    change_1m: float | str | None = Field(default=None, alias="change1m")
+    points: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SovrResult(_CamelModel):
+    """Per-sovereign rows, widest-1M-move first."""
+
+    rows: list[SovrRow] = Field(default_factory=list)
+    days: int | None = None
+
+
+class OptionsFlowInput(_InputModel):
+    """Recorded options-flow history (Pro; no delayed tier — fail closed)."""
+
+    before: str | None = None
+    limit: int | None = Field(default=None, gt=0, le=500)
+    min_premium: float | None = Field(default=None, gt=0)
+    right: Literal["call", "put"] | None = None
+    kind: Literal["sweep", "block", "split", "trade"] | None = None
+    min_vol_oi: float | None = Field(default=None, gt=0)
+    max_expiry_days: int | None = Field(default=None, gt=0)
+    symbols: list[Symbol] | None = None
+
+
+class FlowEvent(_CamelModel):
+    """One recorded flow print: contract, side, kind, size, premium, IV."""
+
+    id: str | int | None = None
+    at: str | None = None
+    underlying: str | None = None
+    contract: str | None = None
+    right: str | None = None
+    strike: float | str | None = None
+    expiry: str | None = None
+    side: str | None = None
+    kind: str | None = None
+    size: float | str | int | None = None
+    price: float | str | None = None
+    premium: float | str | None = None
+    vol: float | str | int | None = None
+    open_interest: float | str | int | None = None
+    vol_oi: float | str | None = None
+    iv: float | str | None = None
+
+
+class OptionsFlowResult(_CamelModel):
+    """Recorded prints plus the continuation flag (never an empty success)."""
+
+    events: list[FlowEvent] = Field(default_factory=list)
+    has_more: bool = False
+
+
+class CotInput(_InputModel):
+    """CFTC positioning: board by default, one contract when code is given."""
+
+    report: Literal["legacy", "disaggregated"] = "legacy"
+    trader_class: (
+        Literal[
+            "noncommercial",
+            "commercial",
+            "producer",
+            "swap",
+            "managed-money",
+            "other-reportable",
+            "nonreportable",
+        ]
+        | None
+    ) = None
+    code: str | None = None
+
+
+class CotRow(_CamelModel):
+    """One futures-only CFTC row: class legs, net, 1Y/3Y percentiles."""
+
+    code: str | None = None
+    contract: str | None = None
+    as_of: str | None = None
+    trader_class: str | None = None
+    long: float | str | int | None = None
+    short: float | str | int | None = None
+    spreading: float | str | int | None = None
+    net: float | str | int | None = None
+    # Explicit aliases (digit + lowercase letter — see skew_25d above).
+    pct_1y: float | str | None = Field(default=None, alias="pct1y")
+    pct_3y: float | str | None = Field(default=None, alias="pct3y")
+
+
+class CotBoardResult(_CamelModel):
+    """Board rows with the request echo (no contract code on this shape)."""
+
+    report: str = "legacy"
+    trader_class: str | None = None
+    rows: list[CotRow] = Field(default_factory=list)
+
+
+class CotContractResult(_CamelModel):
+    """One contract's rows (the contract code is always present here)."""
+
+    report: str = "legacy"
+    code: str
+    rows: list[CotRow] = Field(default_factory=list)
+
+
+#: Board or contract, by request mode. Split (not one model with an optional
+#: ``code``) so a board success never serializes ``"code": null`` — success
+#: payloads must not carry the typed-error ``code`` slot.
+CotResult = CotBoardResult | CotContractResult
+
+
+class CryptoMarketsInput(_InputModel):
+    """The crypto-markets route takes no parameters."""
+
+    pass
+
+
+class CryptoCoin(_CamelModel):
+    """One coin row; the server-declared source passes through untouched."""
+
+    symbol: str | None = None
+    name: str | None = None
+    price: float | str | None = None
+    # Explicit aliases (digit + lowercase letter — see skew_25d above).
+    change_24h: float | str | None = Field(default=None, alias="change24h")
+    day_high: float | str | None = None
+    day_low: float | str | None = None
+    volume_24h: float | str | None = Field(default=None, alias="volume24h")
+    market_cap: float | str | None = None
+    supply: float | str | None = None
+    range_52w: list[Any] = Field(default_factory=list, alias="range52w")
+    price_year_ago: float | str | None = None
+    closes_30d: list[Any] = Field(default_factory=list, alias="closes30d")
+
+
+class CryptoMarketsResult(_CamelModel):
+    """Up to 100 coins; ``source`` is server-declared (no vendor asserted)."""
+
+    coins: list[CryptoCoin] = Field(default_factory=list)
+    source: dict[str, Any] = Field(default_factory=dict)
+
+
+class IvScreenInput(_InputModel):
+    """IV rich/cheap screen: comma-joined bare US symbols upstream."""
+
+    symbols: list[Symbol] = Field(min_length=1, max_length=50)
+
+
+class IvScreenRow(_CamelModel):
+    """One screened symbol: ready/queued status, iv30/iv90 stats, skew."""
+
+    symbol: str | None = None
+    status: str | None = None
+    iv30_value: float | str | None = None
+    iv30_date: str | None = None
+    iv30_rank: float | str | None = None
+    iv30_percentile: float | str | None = None
+    iv90_value: float | str | None = None
+    iv90_date: str | None = None
+    iv90_rank: float | str | None = None
+    iv90_percentile: float | str | None = None
+    latest: float | str | None = None
+    # Explicit alias: `to_camel("skew_25d")` would produce "skew25D" (digit
+    # followed by a lowercase letter defeats pydantic's identity shortcut —
+    # same reason `high52w`/`low52w` carry explicit aliases).
+    skew_25d: float | str | None = Field(default=None, alias="skew25d")
+
+
+class IvScreenResult(_CamelModel):
+    """Per-symbol IV screen rows."""
+
+    rows: list[IvScreenRow] = Field(default_factory=list)
+
+
+class IvHistoryInput(_InputModel):
+    """Stored daily IV history for a bare US symbol (default 1100 days)."""
+
+    symbol: Symbol
+    days: int = Field(default=1100, gt=0)
+
+
+class IvHistoryResult(_CamelModel):
+    """Coverage status, per-session term points, rank/percentile stats."""
+
+    symbol: str
+    days: int = 1100
+    status: str | None = None
+    points: list[dict[str, Any]] = Field(default_factory=list)
+    iv30_rank: float | str | None = None
+    iv30_percentile: float | str | None = None
+    iv90_rank: float | str | None = None
+    iv90_percentile: float | str | None = None
+    latest: float | str | None = None
+
+
+class IvSurfaceInput(_InputModel):
+    """Stored close surface: dates list by default, surface for a date."""
+
+    symbol: Symbol
+    date: str | None = None
+
+
+class IvSurfaceResult(_CamelModel):
+    """Surface dates, or the stored surface for the requested date."""
+
+    symbol: str
+    date: str | None = None
+    dates: list[str] = Field(default_factory=list)
+    surface: Any = None
+
+
+class DebtMaturitiesInput(_InputModel):
+    """US-GAAP debt maturities for a symbol."""
+
+    symbol: Symbol
+
+
+class DebtMaturityFiling(_CamelModel):
+    """One filing's debt facts with accession/filed/form provenance."""
+
+    accession: str | None = None
+    filed: str | None = None
+    form: str | None = None
+    principal: float | str | None = None
+
+
+class DebtMaturitiesResult(_CamelModel):
+    """Totals, next-12M/3Y shares, funding cost, per-filing history."""
+
+    symbol: str
+    total_principal: float | str | None = None
+    next_12m_share: float | str | None = None
+    next_3y_share: float | str | None = None
+    interest_expense: float | str | None = None
+    borrowing_cost: float | str | None = None
+    filings: list[DebtMaturityFiling] = Field(default_factory=list)
+
+
+class SessionMoversInput(_InputModel):
+    """Pre-market / after-hours / gaps movers over the screener route."""
+
+    category: Literal["premarket", "afterhours", "gaps"]
+    side: Literal["up", "down", "active"]
+    count: int = Field(default=25, ge=1, le=50)
+    mode: Literal["cache-first", "refresh"] = "cache-first"
+
+
+class SessionMover(_CamelModel):
+    """One session mover: ref-close, session volume, gap, VWAP, catalysts."""
+
+    symbol: str | None = None
+    price: float | str | None = None
+    change: float | str | None = None
+    ref_close: float | str | None = None
+    session_volume: float | str | int | None = None
+    rel_volume: float | str | None = None
+    gap_pct: float | str | None = None
+    vwap: float | str | None = None
+    catalysts: list[str] = Field(default_factory=list)
+    phase: str | None = None
+    as_of: str | None = None
+
+
+class SessionMoversResult(_CamelModel):
+    """Session movers with the phase + as-of the route reports."""
+
+    category: str
+    side: str
+    phase: str | None = None
+    as_of: str | None = None
+    movers: list[SessionMover] = Field(default_factory=list)
+
+
+class TrendingInput(_InputModel):
+    """Yahoo trending symbols, hydrated with delayed Cloud quotes."""
+
+    limit: int = Field(default=10, ge=1, le=20)
+
+
+class TrendingRow(_CamelModel):
+    """One trending symbol: rank, delayed quote, Yahoo deep link."""
+
+    symbol: str
+    rank: int | None = None
+    price: float | str | None = None
+    change: float | str | None = None
+    change_percent: float | str | None = None
+    volume: float | str | int | None = None
+    market_state: str | None = None
+    venue_url: str = ""
+
+
+class TrendingResult(_CamelModel):
+    """Trending rows plus venue honesty: never attributed to Gloomberb Cloud."""
+
+    rows: list[TrendingRow] = Field(default_factory=list)
+    attribution: str = ""
+    as_of: str | None = None
+
+
+class SubstackInput(_InputModel):
+    """Own-account Substack reader: feed (default), post, or inbox."""
+
+    publication: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ]
+    mode: Literal["feed", "post", "inbox"] = "feed"
+    post_id: str | None = None
+    limit: int = Field(default=20, ge=1, le=50)
+    offset: int = Field(default=0, ge=0)
+
+    @field_validator("publication", mode="after")
+    @classmethod
+    def _validate_subdomain(cls, value: str) -> str:
+        candidate = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", candidate):
+            raise ValueError(f"publication must be a Substack subdomain slug; got {value!r}")
+        return candidate
+
+    @model_validator(mode="after")
+    def _require_post_id_for_post_mode(self) -> SubstackInput:
+        if self.mode == "post" and not (self.post_id or "").strip():
+            raise ValueError("post_id is required for mode='post'")
+        return self
+
+
+class SubstackPost(_CamelModel):
+    """One publication post; feed rows may omit the body (detail has it)."""
+
+    id: str | int | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    slug: str | None = None
+    post_date: str | None = None
+    audience: str | None = None
+    canonical_url: str | None = None
+
+
+class SubstackResult(_CamelModel):
+    """Feed posts, one post detail, or the reader inbox — never Gloomberb."""
+
+    publication: str = ""
+    mode: str = "feed"
+    posts: list[SubstackPost] = Field(default_factory=list)
+    post: dict[str, Any] = Field(default_factory=dict)
+    post_id: str | None = None
+    attribution: str = ""
+
+
+class IpoCalendarInput(_InputModel):
+    """Worldwide IPO calendar (Cloud; public, works signed out)."""
+
+    status: str | None = None
+    region: str | None = None
+    deal_type: str | None = None
+    from_date: str | None = None
+    to_date: str | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+    @field_validator("from_date", "to_date", mode="before")
+    @classmethod
+    def _validate_iso_date(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, str):
+            candidate = value.strip()
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
+                return candidate
+        raise ValueError(f"must be an ISO YYYY-MM-DD date string; got {value!r}")
+
+
+class IpoDeal(_CamelModel):
+    """One deal: venue, lifecycle dates, price range, first-day return."""
+
+    id: str | int | None = None
+    company: str | None = None
+    symbol: str | None = None
+    mic: str | None = None
+    venue: str | None = None
+    status: str | None = None
+    price_low: float | str | None = None
+    price_high: float | str | None = None
+    offer_size: float | str | None = None
+    filed_date: str | None = None
+    listed_date: str | None = None
+    first_day_open: float | str | None = None
+    first_day_close: float | str | None = None
+    first_day_return: float | str | None = None
+
+
+class IpoCalendarResult(_CamelModel):
+    """Deals merged per venue with the filter echo."""
+
+    deals: list[IpoDeal] = Field(default_factory=list)
+    status: str | None = None
+    region: str | None = None
+    deal_type: str | None = None
+
+
+class FearGreedInput(_InputModel):
+    """CNN Fear & Greed gauge + components (parameterless: today's read)."""
+
+
+class FearGreedPrevious(_CamelModel):
+    """Index readings at the previous close, week, month, and year."""
+
+    close: float | None = None
+    week: float | None = None
+    month: float | None = None
+    year: float | None = None
+
+
+class FearGreedPoint(_CamelModel):
+    """One index-history point (epoch-ms date + score)."""
+
+    date: str | None = None
+    score: float | None = None
+
+
+class FearGreedComponent(_CamelModel):
+    """One of the seven components behind the index, with its CNN page link."""
+
+    id: str
+    title: str
+    score: float | None = None
+    rating: str = "neutral"
+    value: float | str | None = None
+    value_format: str | None = None
+    updated_at: str | None = None
+    source_url: str = ""
+
+
+class FearGreedResult(_CamelModel):
+    """Index gauge plus components; venue honesty: never attributed to Gloomberb."""
+
+    score: float
+    rating: str = "neutral"
+    updated_at: str | None = None
+    previous: FearGreedPrevious = Field(default_factory=FearGreedPrevious)
+    history: list[FearGreedPoint] = Field(default_factory=list)
+    components: list[FearGreedComponent] = Field(default_factory=list)
+    attribution: str = ""
+
+
+class PollsInput(_InputModel):
+    """VoteHub polls: optional type/subject filters, client-side limit."""
+
+    poll_type: str | None = Field(default=None, max_length=64)
+    subject: str | None = Field(default=None, max_length=128)
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class PollAnswer(_CamelModel):
+    """One answer choice with its percentage."""
+
+    choice: str
+    pct: float
+
+
+class PollRow(_CamelModel):
+    """One poll: result summary, lead, MoE, source link, per-row CC BY marker."""
+
+    id: str
+    subject: str
+    poll_type: str = ""
+    pollster: str = ""
+    population: str | None = None
+    sample_size: int | None = None
+    margin_of_error: float | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    result: str = ""
+    lead: float | None = None
+    lead_choice: str | None = None
+    url: str | None = None
+    attribution: str = ""
+    answers: list[PollAnswer] = Field(default_factory=list)
+
+
+class PollsResult(_CamelModel):
+    """Poll rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[PollRow] = Field(default_factory=list)
+    total_available: int = 0
+    truncated: bool = False
+    attribution: str = ""
+
+
+class TreasuryAuctionsInput(_InputModel):
+    """Treasury auction results: security-type + record-date filters, page size."""
+
+    security_type: str | None = Field(default=None, max_length=32)
+    from_date: str | None = None
+    to_date: str | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+
+    @field_validator("from_date", "to_date", mode="before")
+    @classmethod
+    def _validate_iso_date(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, str):
+            candidate = value.strip()
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
+                return candidate
+        raise ValueError(f"must be an ISO YYYY-MM-DD date string; got {value!r}")
+
+
+class AuctionRow(_CamelModel):
+    """One auction: dates, amounts, high yield, and the result-document link."""
+
+    record_date: str | None = None
+    cusip: str | None = None
+    security_type: str | None = None
+    auction_date: str | None = None
+    issue_date: str | None = None
+    maturity_date: str | None = None
+    offering_amount: float | str | None = None
+    total_accepted: float | str | None = None
+    bid_to_cover_ratio: float | str | None = None
+    high_yield: float | str | None = None
+    price_per100: float | str | None = None
+    source_url: str = ""
+
+
+class TreasuryAuctionsResult(_CamelModel):
+    """Auction rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[AuctionRow] = Field(default_factory=list)
+    total_available: int = 0
+    truncated: bool = False
+    attribution: str = ""
+
+
+class MarketHaltsInput(_InputModel):
+    """Nasdaq trade halts: optional symbol filter, client-side limit."""
+
+    symbol: str | None = Field(default=None, max_length=16)
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class HaltRow(_CamelModel):
+    """One halt: ET wall-clock times + UTC epochs, status, halt-codes link."""
+
+    symbol: str
+    company: str | None = None
+    market: str | None = None
+    reason_code: str = ""
+    reason: str = ""
+    halt_date: str | None = None
+    halt_time: str | None = None
+    halted_at: int | None = None
+    quote_resume_at: int | None = None
+    trade_resume_at: int | None = None
+    status: str = "halted"
+    source_url: str = ""
+
+
+class MarketHaltsResult(_CamelModel):
+    """Halt rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[HaltRow] = Field(default_factory=list)
+    attribution: str = ""
+    as_of: str | None = None
+
+
+class HackerNewsInput(_InputModel):
+    """Hacker News feed reader: feed id + per-item-read cap."""
+
+    feed: Literal["top", "new", "best", "show", "ask"] = "top"
+    limit: int = Field(default=10, ge=1, le=30)
+
+
+class HackerNewsStory(_CamelModel):
+    """One story: article link when present, discussion link always."""
+
+    id: int
+    title: str
+    by: str = "unknown"
+    time: int = 0
+    score: int = 0
+    comments: int = 0
+    url: str | None = None
+    site: str | None = None
+    source_url: str = ""
+
+
+class HackerNewsResult(_CamelModel):
+    """Story rows plus venue honesty: never attributed to Gloomberb."""
+
+    rows: list[HackerNewsStory] = Field(default_factory=list)
+    feed: str = "top"
+    attribution: str = ""
+
+
+TimeAndSalesEnvelope = DigifetchEnvelope[TimeAndSalesResult]
+QuoteRecapEnvelope = DigifetchEnvelope[QuoteRecapResult]
+EstimateRevisionsEnvelope = DigifetchEnvelope[EstimateRevisionsResult]
+ShortVolumeEnvelope = DigifetchEnvelope[ShortVolumeResult]
+HiringEnvelope = DigifetchEnvelope[HiringResult]
+CentralBankRatesEnvelope = DigifetchEnvelope[CentralBankRatesResult]
+CdxEnvelope = DigifetchEnvelope[CdxResult]
+SovrEnvelope = DigifetchEnvelope[SovrResult]
+OptionsFlowEnvelope = DigifetchEnvelope[OptionsFlowResult]
+CotEnvelope = DigifetchEnvelope[CotResult]
+CryptoMarketsEnvelope = DigifetchEnvelope[CryptoMarketsResult]
+IvScreenEnvelope = DigifetchEnvelope[IvScreenResult]
+IvHistoryEnvelope = DigifetchEnvelope[IvHistoryResult]
+IvSurfaceEnvelope = DigifetchEnvelope[IvSurfaceResult]
+DebtMaturitiesEnvelope = DigifetchEnvelope[DebtMaturitiesResult]
+SessionMoversEnvelope = DigifetchEnvelope[SessionMoversResult]
+TrendingEnvelope = DigifetchEnvelope[TrendingResult]
+SubstackEnvelope = DigifetchEnvelope[SubstackResult]
+IpoCalendarEnvelope = DigifetchEnvelope[IpoCalendarResult]
+FearGreedEnvelope = DigifetchEnvelope[FearGreedResult]
+PollsEnvelope = DigifetchEnvelope[PollsResult]
+TreasuryAuctionsEnvelope = DigifetchEnvelope[TreasuryAuctionsResult]
+MarketHaltsEnvelope = DigifetchEnvelope[MarketHaltsResult]
+HackerNewsEnvelope = DigifetchEnvelope[HackerNewsResult]
+
+
+# ---------------------------------------------------------------------------
+# Workspace writes + broker reads + approval-gated orders (130-coverage Task 7)
+# ---------------------------------------------------------------------------
+#
+# Write-route disposition: Task 4 produced no Cloud-write-API verdicts, and a
+# Task 7 source probe of gloom-sh/gloomberb (2026-09-30, Live: unverified)
+# found no personal-symbol watchlist/portfolio/alert/note/thesis/view write
+# route and no fixed broker positions/order route — only team-scoped account
+# APIs (``src/api-client/collections.ts`` team collections, ``notes.ts``,
+# ``theses.ts``, ``views.ts``), a mobile alert-history read, the generic
+# ``/brokers/{broker}{path}`` session proxy (``src/brokers/cloud-broker-link.ts``),
+# and local-gateway IBKR execution (``rawApi.placeOrder``, gloom-ibkr-gateway).
+# Per the locked contract no write tool invents a route: the workspace/broker
+# tools below are session-gated but read-only in this phase (typed
+# ``upstream_error``, zero HTTP), while preview mints a local approval ticket
+# and execute ships disabled pending human gate review.
+
+
+class PortfolioViewInput(_InputModel):
+    """The signed-in session's portfolio snapshot (no parameters)."""
+
+
+class WatchlistAddInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class WatchlistRemoveInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class PortfolioAddInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+    quantity: float | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class PortfolioRemoveInput(_InputModel):
+    symbol: Symbol
+    exchange: str | None = None
+
+
+class AlertAddInput(_InputModel):
+    symbol: Symbol
+    condition: Literal["above", "below"]
+    price: float = Field(gt=0)
+    exchange: str | None = None
+
+
+class AlertListInput(_InputModel):
+    """The signed-in session's price alerts (no parameters)."""
+
+
+class NoteAddInput(_InputModel):
+    symbol: Symbol
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
+    title: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+    exchange: str | None = None
+
+
+class ThesisAddInput(_InputModel):
+    ticker: Symbol
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    document: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20000)
+    ]
+
+
+class ViewAddInput(_InputModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    spec: dict[str, Any]
+
+
+class BrokerPositionsInput(_InputModel):
+    broker: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "ibkr"
+    account: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+        | None
+    ) = None
+
+
+class IbkrPreviewOrderInput(_InputModel):
+    """One order to validate and ticket, never to execute."""
+
+    symbol: Symbol
+    side: Literal["buy", "sell"]
+    quantity: float = Field(gt=0)
+    order_type: Literal["market", "limit"] = "market"
+    limit_price: float | None = Field(default=None, gt=0)
+    exchange: str | None = None
+
+    @model_validator(mode="after")
+    def _limit_orders_require_limit_price(self) -> IbkrPreviewOrderInput:
+        if self.order_type == "limit" and self.limit_price is None:
+            raise ValueError("order_type='limit' requires limit_price")
+        return self
+
+
+class IbkrExecuteOrderInput(IbkrPreviewOrderInput):
+    """The previewed order plus its single-use approval token (and dry-run)."""
+
+    approval_token: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)
+    ]
+    dry_run: bool = False
+
+
+class WatchlistAddResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+
+
+class WatchlistRemoveResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+
+
+class PortfolioViewResult(_CamelModel):
+    """Read-only in this phase; the envelope carries the typed posture error."""
+
+
+class PortfolioAddResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+    quantity: float | None = None
+    note: str | None = None
+
+
+class PortfolioRemoveResult(_CamelModel):
+    symbol: str
+    exchange: str | None = None
+
+
+class AlertAddResult(_CamelModel):
+    symbol: str
+    condition: str
+    price: float
+    exchange: str | None = None
+
+
+class AlertRow(_CamelModel):
+    symbol: str
+    condition: str | None = None
+    price: float | None = None
+    exchange: str | None = None
+
+
+class AlertListResult(_CamelModel):
+    alerts: list[AlertRow] = Field(default_factory=list)
+
+
+class NoteAddResult(_CamelModel):
+    symbol: str
+    title: str | None = None
+
+
+class ThesisAddResult(_CamelModel):
+    ticker: str
+    title: str
+
+
+class ViewAddResult(_CamelModel):
+    name: str
+
+
+class BrokerPosition(_CamelModel):
+    symbol: str
+    quantity: float | None = None
+
+
+class BrokerPositionsResult(_CamelModel):
+    broker: str
+    account: str | None = None
+    positions: list[BrokerPosition] = Field(default_factory=list)
+
+
+class IbkrPreviewResult(_CamelModel):
+    """A minted approval ticket. The token is the execute-path handoff (returned
+    to the caller, never logged); it redeems exactly once within 15 minutes."""
+
+    ticket: OrderTicket
+    approval_token: str
+    expires_at: datetime
+
+
+class WouldBeOrder(_CamelModel):
+    """The request execute would send (dry-run only; zero brokerage traffic)."""
+
+    broker: str = "ibkr"
+    method: str = "POST"
+    path: str = "/brokers/ibkr/orders"
+    body: dict[str, Any] = Field(default_factory=dict)
+
+
+class IbkrExecuteResult(_CamelModel):
+    ticket: OrderTicket
+    dry_run: bool = True
+    would_be: WouldBeOrder
+
+
+PortfolioViewEnvelope = DigifetchEnvelope[PortfolioViewResult]
+WatchlistAddEnvelope = DigifetchEnvelope[WatchlistAddResult]
+WatchlistRemoveEnvelope = DigifetchEnvelope[WatchlistRemoveResult]
+PortfolioAddEnvelope = DigifetchEnvelope[PortfolioAddResult]
+PortfolioRemoveEnvelope = DigifetchEnvelope[PortfolioRemoveResult]
+AlertAddEnvelope = DigifetchEnvelope[AlertAddResult]
+AlertListEnvelope = DigifetchEnvelope[AlertListResult]
+NoteAddEnvelope = DigifetchEnvelope[NoteAddResult]
+ThesisAddEnvelope = DigifetchEnvelope[ThesisAddResult]
+ViewAddEnvelope = DigifetchEnvelope[ViewAddResult]
+BrokerPositionsEnvelope = DigifetchEnvelope[BrokerPositionsResult]
+IbkrPreviewEnvelope = DigifetchEnvelope[IbkrPreviewResult]
+IbkrExecuteEnvelope = DigifetchEnvelope[IbkrExecuteResult]

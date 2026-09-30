@@ -21,15 +21,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import re
+import statistics
 import threading
 import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, NamedTuple, TypeVar, cast  # score:allow untyped any — wire JSON
+from typing import Any, Literal, NamedTuple, TypeVar, cast  # score:allow untyped any — wire JSON
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import httpx
 from digifetch import (
@@ -42,22 +45,80 @@ from digifetch import (
 )
 from pydantic import BaseModel, ValidationError
 
+from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
+
 from . import normalizers as nz
+from .approvals import (
+    APPROVAL_TTL_SECONDS,
+    ApprovalError,
+    OrderTicket,
+    issue_ticket,
+    redeem_token,
+)
+from .calculators import (
+    black_scholes_iv,
+    black_scholes_price,
+    bond_metrics,
+    kelly_fraction,
+)
 from .models import (
     PREVIEW_ACCESS_WARNING,
+    AlertAddEnvelope,
+    AlertAddInput,
+    AlertListEnvelope,
+    AlertListInput,
     AnalystResearchEnvelope,
     AnalystResearchInput,
+    AuctionRow,
+    BondCalcEnvelope,
+    BondCalcInput,
+    BondCalcResult,
+    BrokerPositionsEnvelope,
+    BrokerPositionsInput,
     CdsEnvelope,
     CdsInput,
     CdsResult,
+    CdxBoard,
+    CdxEnvelope,
+    CdxInput,
+    CdxResult,
+    CentralBankRate,
+    CentralBankRatesEnvelope,
+    CentralBankRatesInput,
+    CentralBankRatesResult,
+    ComparePerfEnvelope,
+    ComparePerfInput,
+    ComparePerfResult,
     CongressTradesEnvelope,
     CongressTradesInput,
     CongressTradesResult,
     CorporateActionsEnvelope,
     CorporateActionsInput,
     CorporateActionsResult,
+    CorrMatrixEnvelope,
+    CorrMatrixInput,
+    CorrMatrixResult,
+    CotBoardResult,
+    CotContractResult,
+    CotEnvelope,
+    CotInput,
+    CotRow,
+    CryptoCoin,
+    CryptoMarketsEnvelope,
+    CryptoMarketsInput,
+    CryptoMarketsResult,
+    CustomChartEnvelope,
+    CustomChartInput,
+    CustomChartResult,
+    DebtMaturitiesEnvelope,
+    DebtMaturitiesInput,
+    DebtMaturitiesResult,
+    DebtMaturityFiling,
     DigifetchEnvelope,
     DigifetchError,
+    DividendYieldEnvelope,
+    DividendYieldInput,
+    DividendYieldResult,
     EarningsCalendarEnvelope,
     EarningsCalendarInput,
     EarningsCalendarResult,
@@ -65,26 +126,115 @@ from .models import (
     EconCalendarEnvelope,
     EconCalendarInput,
     EconCalendarResult,
+    EconRatio,
     EconSeriesEnvelope,
     EconSeriesInput,
     EquityDiagnosticEnvelope,
     EquityDiagnosticInput,
     EquityDiagnosticResult,
+    EstimateRevisionPeriod,
+    EstimateRevisionsEnvelope,
+    EstimateRevisionsInput,
+    EstimateRevisionsResult,
+    EstimateRevisionSurprise,
     ExchangeRateEnvelope,
     ExchangeRateInput,
+    FearGreedComponent,
+    FearGreedEnvelope,
+    FearGreedInput,
+    FearGreedPoint,
+    FearGreedPrevious,
+    FearGreedResult,
     FilingEventsEnvelope,
     FilingEventsInput,
+    FlowEvent,
+    FundGraphEnvelope,
+    FundGraphInput,
+    FundGraphPoint,
+    FundGraphResult,
     Funds13FEnvelope,
+    FxMatrixEnvelope,
+    FxMatrixInput,
+    FxMatrixResult,
+    HackerNewsEnvelope,
+    HackerNewsInput,
+    HackerNewsResult,
+    HackerNewsStory,
+    HaltRow,
+    HiringEnvelope,
+    HiringInput,
+    HiringMover,
+    HiringResult,
     HoldersEnvelope,
     HoldersInput,
     HoldersResult,
     Holdings13FEnvelope,
+    IbkrExecuteEnvelope,
+    IbkrExecuteOrderInput,
+    IbkrExecuteResult,
+    IbkrPreviewEnvelope,
+    IbkrPreviewOrderInput,
+    IbkrPreviewResult,
+    IpoCalendarEnvelope,
+    IpoCalendarInput,
+    IpoCalendarResult,
+    IpoDeal,
+    IvHistoryEnvelope,
+    IvHistoryInput,
+    IvHistoryResult,
+    IvScreenEnvelope,
+    IvScreenInput,
+    IvScreenResult,
+    IvScreenRow,
+    IvSurfaceEnvelope,
+    IvSurfaceInput,
+    IvSurfaceResult,
+    JobPosting,
+    KellyEnvelope,
+    KellyInput,
+    KellyResult,
+    MarketHaltsEnvelope,
+    MarketHaltsInput,
+    MarketHaltsResult,
+    MarketValEnvelope,
+    MarketValInput,
+    MarketValResult,
+    MoneyMarketsEnvelope,
+    MoneyMarketsInput,
+    MoneyMarketsResult,
     NewsEnvelope,
     NewsInput,
     NewsResult,
+    NoteAddEnvelope,
+    NoteAddInput,
+    OptionsCalcEnvelope,
+    OptionsCalcInput,
+    OptionsCalcResult,
     OptionsChainEnvelope,
     OptionsChainInput,
     OptionsChainResult,
+    OptionsFlowEnvelope,
+    OptionsFlowInput,
+    OptionsFlowResult,
+    OptionsScenarioEnvelope,
+    OptionsScenarioExpiryPoint,
+    OptionsScenarioGridPoint,
+    OptionsScenarioInput,
+    OptionsScenarioLegDetail,
+    OptionsScenarioLegGreeks,
+    OptionsScenarioPortfolioGreeks,
+    OptionsScenarioResult,
+    PollAnswer,
+    PollRow,
+    PollsEnvelope,
+    PollsInput,
+    PollsResult,
+    PortfolioAddEnvelope,
+    PortfolioAddInput,
+    PortfolioRemoveEnvelope,
+    PortfolioRemoveInput,
+    PortfolioViewEnvelope,
+    PortfolioViewInput,
     PredictionMarketRow,
     PredictionMarketsEnvelope,
     PredictionMarketsInput,
@@ -95,12 +245,27 @@ from .models import (
     PriceHistoryResult,
     ProxyStatementsEnvelope,
     ProxyStatementsInput,
+    Quote,
     QuoteEnvelope,
     QuoteInput,
+    QuoteRecapEnvelope,
+    QuoteRecapInput,
+    QuoteRecapResult,
     QuoteResult,
     QuotesBatchEnvelope,
     QuotesBatchInput,
     QuotesBatchResult,
+    RateMeeting,
+    RatePathEnvelope,
+    RatePathInput,
+    RatePathResult,
+    RelGraphEnvelope,
+    RelGraphInput,
+    RelGraphResult,
+    RelValEnvelope,
+    RelValInput,
+    RelValResult,
+    RelValRow,
     ResearchSearchEnvelope,
     ResearchSearchInput,
     RiskReportsEnvelope,
@@ -115,25 +280,70 @@ from .models import (
     SecFilingsEnvelope,
     SecFilingsInput,
     SecFilingsResult,
+    SessionMover,
+    SessionMoversEnvelope,
+    SessionMoversInput,
+    SessionMoversResult,
     ShillerEnvelope,
     ShillerInput,
     ShortInterestEnvelope,
     ShortInterestInput,
+    ShortVolumeEnvelope,
+    ShortVolumeInput,
+    ShortVolumeResult,
+    ShortVolumeRow,
+    SovrEnvelope,
+    SovrInput,
+    SovrResult,
+    SovrRow,
     StatementsEnvelope,
     StatementsInput,
+    SubstackEnvelope,
+    SubstackInput,
+    SubstackPost,
+    SubstackResult,
+    TapeQuote,
+    TapeTrade,
+    ThesisAddEnvelope,
+    ThesisAddInput,
     ThirteenFFundsInput,
     ThirteenFHoldingsInput,
     TickerFinancialsEnvelope,
     TickerFinancialsInput,
     TickerFinancialsResult,
     TickerTweetsInput,
+    TimeAndSalesEnvelope,
+    TimeAndSalesInput,
+    TimeAndSalesResult,
     TranscriptsEnvelope,
     TranscriptsInput,
     TranscriptsResult,
+    TreasuryAuctionsEnvelope,
+    TreasuryAuctionsInput,
+    TreasuryAuctionsResult,
+    TrendingEnvelope,
+    TrendingInput,
+    TrendingResult,
+    TrendingRow,
     TweetSearchInput,
     TweetsEnvelope,
+    ValGraphEnvelope,
+    ValGraphInput,
+    ValGraphResult,
+    ValGraphRow,
+    ValGraphSnapshot,
     VenuesEnvelope,
     VenuesInput,
+    ViewAddEnvelope,
+    ViewAddInput,
+    VixTermEnvelope,
+    VixTermInput,
+    VixTermResult,
+    WatchlistAddEnvelope,
+    WatchlistAddInput,
+    WatchlistRemoveEnvelope,
+    WatchlistRemoveInput,
+    WouldBeOrder,
     YieldCurveEnvelope,
     YieldCurveInput,
     YieldCurveResult,
@@ -143,6 +353,7 @@ __all__ = [
     "GLOOMBERB_BASE_URL",
     "GLOOMBERB_ENABLED_ENV",
     "GLOOMBERB_SESSION_COOKIE_ENV",
+    "SUBSTACK_SESSION_COOKIE_ENV",
     "SESSION_COOKIE_NAMES",
     "session_cache_fingerprint",
     "DEFAULT_CACHE_TTL_SECONDS",
@@ -155,6 +366,8 @@ __all__ = [
     "gloomberb_enabled",
     "yfinance_earnings_events",
 ]
+
+logger = logging.getLogger(__name__)
 
 GLOOMBERB_BASE_URL = "https://api.gloom.sh"
 GLOOMBERB_ENABLED_ENV = "GLOOMBERB_ENABLED"
@@ -182,6 +395,10 @@ SEARCH_LIMIT_CAP = 10
 # de-dupes concurrent requests, but that is unverified, so pin one attempt.
 # (The shared policy still retries everything else.)
 _SINGLE_ATTEMPT_POLICY = RetryPolicy(attempts=1)
+
+# Seconds per year for the options-scenario tau math (365.25-day year, the
+# same day-count the valuation epochs are differenced in).
+_SECONDS_PER_YEAR = 365.25 * 24 * 3600
 
 # Upstream session cookie names (api-client/request.ts SESSION_COOKIE_NAMES).
 SESSION_COOKIE_NAMES: tuple[str, ...] = (
@@ -252,6 +469,26 @@ ENDPOINTS: dict[str, str] = {
     "equity_diagnostic": "/research/equity-diagnostic",
     # coverage expansion (#4110 phase 4a)
     "saved_searches": "/cloud/search/saved",
+    # probe-backed tools (130-coverage Task 5): confirmed Cloud routes from
+    # the Task 4 GO verdicts only. Venue-direct tools (trending, substack)
+    # take no ENDPOINTS entry — their hosts live in the venue constants below.
+    "tape": "/cloud/tape",
+    "estimate_revisions": "/cloud/research/estimates",
+    "short_volume": "/cloud/short-volume",
+    "hiring": "/cloud/jobs",
+    "central_bank_rates": "/cloud/econ/central-bank-rates",
+    "cdx": "/cloud/credit/cdx",
+    "sovr": "/cloud/credit/sovr",
+    "flow_history": "/market/scanner/flow/history",
+    "cot_board": "/cloud/cot/board",
+    "cot_contracts": "/cloud/cot/contracts",
+    "crypto_markets": "/cloud/crypto/markets",
+    "iv_screen": "/cloud/iv/screen",
+    "iv_history": "/cloud/iv/history",
+    "iv_surface_dates": "/cloud/iv/surface-dates",
+    "iv_surface": "/cloud/iv/surface",
+    "debt_maturities": "/cloud/debt-maturities",
+    "ipo_calendar": "/cloud/ipo/calendar",
 }
 
 # Prediction-markets venue catalog (#4813). No Gloomberb Cloud route exists
@@ -275,6 +512,137 @@ PREDICTION_MARKETS_ATTRIBUTION = (
     "lag the venue order book. Enrichment only, never a pipeline primary."
 )
 
+# Probe-backed venue-direct tools (130-coverage Task 5). No Gloomberb Cloud
+# route exists for these verdicts, so they read the venues directly through
+# the shared digifetch transport (pacing, retry, breaker, SSRF guard):
+#
+# * trending — the builtin market-movers pane hydrates Yahoo's trending list
+#   (``GET /v1/finance/trending/US``) with quotes; the tool mirrors that:
+#   trend symbols from Yahoo, delayed quotes from the Cloud batch read.
+# * substack — the plugin talks to substack.com directly with the reader's
+#   own account (magic-link/OTP sign-in harvesting ``substack.sid``); the
+#   tool attaches that cookie and fails soft to ``auth_required`` + login
+#   instructions without it, never an exception-shaped failure.
+YAHOO_TRENDING_BASE_URL = "https://query1.finance.yahoo.com"
+YAHOO_TRENDING_PATH = "/v1/finance/trending/US"
+YAHOO_QUOTE_URL = "https://finance.yahoo.com/quote/{symbol}"
+
+SUBSTACK_ORIGIN = "https://substack.com"
+SUBSTACK_SESSION_COOKIE_ENV = "SUBSTACK_SESSION_COOKIE"
+SUBSTACK_COOKIE_NAMES: tuple[str, ...] = (
+    "substack.sid",
+    "substack.lli",
+)
+
+TRENDING_ATTRIBUTION = (
+    "Trending symbols sourced directly from Yahoo Finance "
+    "(query1.finance.yahoo.com), hydrated with delayed Cloud quotes. "
+    "Enrichment only, never a pipeline primary."
+)
+
+SUBSTACK_ATTRIBUTION = (
+    "Posts sourced directly from Substack with the reader's own account "
+    "(own-account session cookie; unofficial, ToS grey area). "
+    "Enrichment only, never a pipeline primary."
+)
+
+SUBSTACK_LOGIN_HELP = (
+    "Substack sign-in required: open substack.com in a browser and sign in "
+    "(magic email link or 6-digit OTP code), then set SUBSTACK_SESSION_COOKIE "
+    "to the substack.sid cookie value (bare token or substack.sid=value). "
+    "Without it this tool returns auth_required and makes no request."
+)
+
+# ToS/direct tools (130-coverage Task 6). No Gloomberb Cloud route exists for
+# these panes, so they read the venues directly through the shared digifetch
+# transport (pacing, retry, breaker, SSRF guard):
+#
+# * fear_greed — CNN's public Fear & Greed graphdata endpoint (unofficial,
+#   ToS grey area): the index series plus the seven component series, with a
+#   dated second read for the latest print. Each read fails soft into the
+#   other; both failing is a typed upstream_error.
+# * polls — VoteHub's public polls endpoint (CC BY 4.0): bare array or a
+#   {"polls": [...]} wrapper, filtered to well-formed polls, sliced
+#   client-side to limit with total_available/truncated.
+# * treasury_auctions — Treasury Fiscal Data's public auction-query dataset
+#   (sorted newest-first, paged client-side via page[size]).
+# * market_halts — Nasdaq Trader's trade-halts RSS feed (XML, not JSON):
+#   an empty channel is a quiet day (empty success); items nobody can parse
+#   are a format error, never an empty success.
+# * hacker_news — the public Firebase API: one id-list read plus one read
+#   per item (sliced to limit first), each item failing soft on its own.
+CNN_FEAR_GREED_BASE_URL = "https://production.dataviz.cnn.io"
+CNN_FEAR_GREED_PATH = "/index/fearandgreed/graphdata"
+CNN_FEAR_GREED_PAGE = "https://www.cnn.com/markets/fear-and-greed"
+CNN_REFERER = "https://www.cnn.com/markets/fear-and-greed"
+CNN_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+# CNN serves the endpoint only to something that looks like its own page, so
+# the referer and user agent are not optional (same headers the plugin sends).
+CNN_FEAR_GREED_HEADERS: dict[str, str] = {
+    "Accept": "application/json,text/plain,*/*",
+    "User-Agent": CNN_USER_AGENT,
+    "Referer": CNN_REFERER,
+}
+
+VOTEHUB_BASE_URL = "https://api.votehub.com"
+VOTEHUB_POLLS_PATH = "/polls"
+VOTEHUB_CC_BY = "VoteHub data © VoteHub contributors, CC BY 4.0"
+
+FISCALDATA_BASE_URL = "https://api.fiscaldata.treasury.gov"
+FISCALDATA_AUCTIONS_PATH = "/services/api/fiscal_service/v1/accounting/od/auctions_query"
+FISCALDATA_AUCTIONS_DOC_URL = (
+    "https://fiscaldata.treasury.gov/datasets/auction-query/treasury-auctions-query"
+)
+
+NASDAQ_TRADER_BASE_URL = "https://www.nasdaqtrader.com"
+NASDAQ_HALTS_PATH = "/rss.aspx"
+NASDAQ_HALT_CODES_URL = "https://www.nasdaqtrader.com/trader.aspx?id=TradeHalt"
+
+HN_BASE_URL = "https://hacker-news.firebaseio.com/v0"
+HN_FEED_PATHS: dict[str, str] = {
+    "top": "topstories",
+    "new": "newstories",
+    "best": "beststories",
+    "show": "showstories",
+    "ask": "askstories",
+}
+HN_DISCUSSION_URL = "https://news.ycombinator.com/item?id={story_id}"
+
+# Venue honesty: result-level attribution for venue-sourced rows. These name
+# the venues, never Gloomberb Cloud (there is no term.gloom.sh page for
+# venue rows).
+FEAR_GREED_ATTRIBUTION = (
+    "CNN Fear & Greed sentiment gauge read directly from CNN's public endpoint "
+    "(production.dataviz.cnn.io). Unofficial read; cross-check before citing. "
+    "Enrichment only, never a pipeline primary."
+)
+
+POLLS_ATTRIBUTION = (
+    "Polls sourced directly from VoteHub (api.votehub.com). "
+    "VoteHub data © VoteHub contributors, CC BY 4.0. "
+    "Enrichment only, never a pipeline primary."
+)
+
+AUCTIONS_ATTRIBUTION = (
+    "Treasury auction results sourced directly from Treasury Fiscal Data "
+    "(fiscaldata.treasury.gov), public. "
+    "Enrichment only, never a pipeline primary."
+)
+
+HALTS_ATTRIBUTION = (
+    "Trade halts sourced directly from Nasdaq Trader (nasdaqtrader.com), "
+    "delayed. Enrichment only, never a pipeline primary."
+)
+
+HN_ATTRIBUTION = (
+    "Stories sourced directly from Hacker News via the public API "
+    "(hacker-news.firebaseio.com). "
+    "Enrichment only, never a pipeline primary."
+)
+
 
 def _venue_float(value: Any) -> float | None:
     """Coerce a loose venue number (numeric string, int, float) to float."""
@@ -292,6 +660,25 @@ def _venue_float(value: Any) -> float | None:
         return None
     number = float(value)
     return number if math.isfinite(number) else None
+
+
+def _venue_str(value: Any) -> str | None:
+    """A stripped venue string, or None when absent/blank."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _venue_number_or_str(value: Any) -> float | str | None:
+    """A venue amount: finite numbers stay numeric, raw strings stay raw."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value) if math.isfinite(value) else None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _polymarket_yes_prob(market: Mapping[str, Any]) -> float | None:
@@ -449,6 +836,363 @@ def _filter_prediction_markets(
     elif tab == "top":
         rows = sorted(rows, key=lambda row: (row.volume_24h is None, -(row.volume_24h or 0.0)))
     return rows[:limit]
+
+
+def _yahoo_trending_symbols(payload: Any) -> list[str] | None:
+    """Trend symbols from Yahoo's ``/v1/finance/trending`` payload, or None.
+
+    ``None`` is an unexpected shape (typed ``upstream_error``); an empty list
+    is a valid-but-empty venue answer (the caller maps it the same way —
+    never an empty success).
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    finance = payload.get("finance")
+    if not isinstance(finance, Mapping):
+        return None
+    results = finance.get("result")
+    if not isinstance(results, list) or not results:
+        return []
+    first = results[0]
+    if not isinstance(first, Mapping):
+        return None
+    quotes = first.get("quotes")
+    if not isinstance(quotes, list):
+        return None
+    symbols: list[str] = []
+    for entry in quotes:
+        if isinstance(entry, Mapping):
+            symbol = entry.get("symbol")
+            if isinstance(symbol, str) and symbol.strip() and symbol not in symbols:
+                symbols.append(symbol.strip())
+    return symbols
+
+
+_FEAR_GREED_RATINGS: tuple[str, ...] = (
+    "extreme fear",
+    "fear",
+    "neutral",
+    "greed",
+    "extreme greed",
+)
+
+#: The seven components behind the CNN index: id, title, primary series key,
+#: secondary series key (or None), and value format.
+_FEAR_GREED_COMPONENTS: tuple[tuple[str, str, str, str | None, str], ...] = (
+    (
+        "market-momentum",
+        "Market Momentum",
+        "market_momentum_sp500",
+        "market_momentum_sp125",
+        "number",
+    ),
+    ("stock-price-strength", "Stock Price Strength", "stock_price_strength", None, "percent"),
+    ("stock-price-breadth", "Stock Price Breadth", "stock_price_breadth", None, "number"),
+    ("put-call-options", "Put and Call Options", "put_call_options", None, "ratio"),
+    (
+        "market-volatility",
+        "Market Volatility",
+        "market_volatility_vix",
+        "market_volatility_vix_50",
+        "number",
+    ),
+    ("safe-haven-demand", "Safe Haven Demand", "safe_haven_demand", None, "percent"),
+    ("junk-bond-demand", "Junk Bond Demand", "junk_bond_demand", None, "percent"),
+)
+
+
+def _fear_greed_rating(value: Any, score: float | None) -> str:
+    """Normalize a CNN rating, falling back to the score bands."""
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _FEAR_GREED_RATINGS:
+            return normalized
+    if score is None:
+        return "neutral"
+    if score < 25:
+        return "extreme fear"
+    if score < 45:
+        return "fear"
+    if score <= 55:
+        return "neutral"
+    if score <= 75:
+        return "greed"
+    return "extreme greed"
+
+
+def _cnn_number(value: Any) -> float | None:
+    """A finite CNN number, or None (bools and numeric strings are not numbers)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _cnn_points(series: Any) -> list[tuple[int, float]]:
+    """Sorted ``(epoch_ms, value)`` pairs from a CNN ``data`` list, or []."""
+    if not isinstance(series, Mapping):
+        return []
+    data = series.get("data")
+    if not isinstance(data, list):
+        return []
+    points: list[tuple[int, float]] = []
+    for item in data:
+        if not isinstance(item, Mapping):
+            continue
+        x = _cnn_number(item.get("x"))
+        y = _cnn_number(item.get("y"))
+        if x is None or y is None:
+            continue
+        points.append((int(x), y))
+    return sorted(points)
+
+
+def _cnn_timestamp(value: Any) -> str | None:
+    """An ISO timestamp from a CNN timestamp (ISO string or epoch ms), or None."""
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed.isoformat()
+    millis = _cnn_number(value)
+    if millis is None:
+        return None
+    try:
+        return datetime.fromtimestamp(millis / 1000, tz=timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _votehub_polls(payload: Any) -> list[Mapping[str, Any]] | None:
+    """VoteHub polls from a bare array or a ``{"polls": [...]}`` wrapper.
+
+    ``None`` is an unexpected shape (typed ``upstream_error``); rows that are
+    not well-formed polls are filtered, never fatal.
+    """
+    items: Any = payload
+    if isinstance(payload, Mapping):
+        if "polls" not in payload:
+            return None
+        items = payload.get("polls")
+    if not isinstance(items, list):
+        return None
+    polls: list[Mapping[str, Any]] = []
+    for entry in items:
+        if not isinstance(entry, Mapping):
+            continue
+        if (
+            isinstance(entry.get("id"), str)
+            and isinstance(entry.get("pollster"), str)
+            and isinstance(entry.get("subject"), str)
+        ):
+            polls.append(entry)
+    return polls
+
+
+def _poll_sample_size(value: Any) -> int | None:
+    """A VoteHub sample size (number or comma-formatted string), or None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.replace(",", "").strip()))
+        except ValueError:
+            return None
+    return None
+
+
+def _poll_margin_of_error(sample_size: int | None) -> float | None:
+    """95% MoE at 50/50 from sample size (0.98 / sqrt(n)), or None."""
+    if sample_size is None or sample_size < 1:
+        return None
+    moe = (0.98 / math.sqrt(sample_size)) * 100
+    return round(moe, 1) if math.isfinite(moe) else None
+
+
+def _poll_result_summary(
+    answers: list[PollAnswer],
+) -> tuple[str, float | None, str | None]:
+    """``"First 52 · Second 45"`` result line plus lead and leader, or blanks."""
+    if not answers:
+        return "—", None, None
+    first = answers[0]
+    if len(answers) < 2:
+        return f"{first.choice} {first.pct:g}", first.pct, first.choice
+    second = answers[1]
+    lead = first.pct - second.pct
+    return f"{first.choice} {first.pct:g} · {second.choice} {second.pct:g}", lead, first.choice
+
+
+def _halt_field(item: str, tag: str) -> str:
+    """One ``ndaq:`` namespaced field from a halt-feed ``<item>`` block."""
+    match = re.search(rf"<ndaq:{tag}[^>]*>([\s\S]*?)</ndaq:{tag}>", item, re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
+
+#: Concise renderings of Nasdaq's trade halt codes
+#: (nasdaqtrader.com/trader.aspx?id=TradeHaltCodes).
+_HALT_REASONS: dict[str, str] = {
+    "T1": "News pending",
+    "T2": "News released",
+    "T3": "News released, resumption times set",
+    "T5": "Single-stock pause, 10% move",
+    "T6": "Extraordinary market activity",
+    "T7": "Quotation-only period",
+    "T8": "ETF halt",
+    "T12": "Additional info requested by Nasdaq",
+    "H4": "Listing non-compliance",
+    "H9": "Filings not current",
+    "H10": "SEC trading suspension",
+    "H11": "Regulatory concern",
+    "O1": "Operations halt",
+    "IPO1": "IPO not yet trading",
+    "IPOQ": "IPO released for quotation",
+    "IPOE": "IPO positioning window extended",
+    "M": "Volatility pause, listed issue",
+    "M1": "Corporate action",
+    "M2": "Quotation not available",
+    "LUDP": "Volatility pause",
+    "LUDS": "Volatility pause, straddle",
+    "MWC0": "Circuit breaker carried over",
+    "MWC1": "Market-wide circuit breaker, level 1",
+    "MWC2": "Market-wide circuit breaker, level 2",
+    "MWC3": "Market-wide circuit breaker, level 3",
+    "MWCQ": "Market-wide circuit breaker resumption",
+    "R1": "New issue available",
+    "R2": "Issue available",
+    "R4": "Qualification issues resolved",
+    "R9": "Filing requirements satisfied",
+    "C3": "Issuer news not forthcoming",
+    "C4": "Qualifications halt ended",
+    "C9": "Qualifications halt concluded",
+    "C11": "Halt concluded by other regulator",
+    "D": "Security deleted from Nasdaq/CQS",
+}
+
+
+def _describe_halt_reason(code: str) -> str:
+    """Plain-English expansion of a Nasdaq halt code (or the code itself)."""
+    normalized = code.strip().upper()
+    if not normalized:
+        return "Reason not available"
+    return _HALT_REASONS.get(normalized, f"Reason code {normalized}")
+
+
+try:
+    _ET_ZONE: ZoneInfo | None = ZoneInfo("America/New_York")
+except Exception:
+    # No tz database: ET wall-clock times stay strings and epochs stay null
+    # rather than guessing an offset.
+    _ET_ZONE = None
+
+
+def _et_to_utc_ms(utc_date: str, utc_time: str) -> int | None:
+    """Nasdaq's ``MM/DD/YYYY`` + ``HH:MM:SS[.mmm]`` ET pair to UTC epoch ms."""
+    if _ET_ZONE is None:
+        return None
+    date_match = re.fullmatch(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*", utc_date or "")
+    time_match = re.fullmatch(
+        r"\s*(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,3}))?\s*", utc_time or ""
+    )
+    if not date_match or not time_match:
+        return None
+    try:
+        wall = datetime(
+            int(date_match.group(3)),
+            int(date_match.group(1)),
+            int(date_match.group(2)),
+            int(time_match.group(1)),
+            int(time_match.group(2)),
+            int(time_match.group(3) or 0),
+            int((time_match.group(4) or "0").ljust(3, "0")) * 1000,
+            tzinfo=_ET_ZONE,
+        )
+    except ValueError:
+        return None
+    return int(wall.timestamp() * 1000)
+
+
+def _parse_halt_items(xml: str) -> tuple[list[dict[str, Any]], int]:
+    """Halt records + ``<item>`` count from the Nasdaq RSS XML.
+
+    Rows without a symbol or a parseable halt time are skipped (they carry no
+    addressable halt); the caller turns items-nobody-can-parse into a format
+    error so it never reads as a quiet day.
+    """
+    items = re.findall(r"<item>[\s\S]*?</item>", xml, re.IGNORECASE)
+    records: list[dict[str, Any]] = []
+    for item in items:
+        symbol = _halt_field(item, "IssueSymbol").upper()
+        halt_date = _halt_field(item, "HaltDate")
+        halt_time = _halt_field(item, "HaltTime")
+        halted_at = _et_to_utc_ms(halt_date, halt_time)
+        if not symbol or halted_at is None:
+            continue
+        reason_code = _halt_field(item, "ReasonCode").upper()
+        resumption_date = _halt_field(item, "ResumptionDate")
+        records.append(
+            {
+                "symbol": symbol,
+                "company": _halt_field(item, "IssueName") or None,
+                "market": _halt_field(item, "Market") or None,
+                "reason_code": reason_code,
+                "reason": _describe_halt_reason(reason_code),
+                "halt_date": halt_date or None,
+                "halt_time": halt_time or None,
+                "halted_at": halted_at,
+                "quote_resume_at": _et_to_utc_ms(
+                    resumption_date, _halt_field(item, "ResumptionQuoteTime")
+                ),
+                "trade_resume_at": _et_to_utc_ms(
+                    resumption_date, _halt_field(item, "ResumptionTradeTime")
+                ),
+            }
+        )
+    return records, len(items)
+
+
+def _hn_site(url: str) -> str | None:
+    """Hostname minus a ``www.`` prefix, or None when unparseable."""
+    from urllib.parse import urlparse
+
+    try:
+        host = urlparse(url).hostname or ""
+    except ValueError:
+        return None
+    return host[4:] if host.startswith("www.") else host or None
+
+
+def _hn_story(raw: Any) -> dict[str, Any] | None:
+    """One normalized Hacker News story, or None when deleted/dead/malformed."""
+    if not isinstance(raw, Mapping):
+        return None
+    if raw.get("deleted") is True or raw.get("dead") is True:
+        return None
+    story_id = raw.get("id")
+    title = raw.get("title")
+    if type(story_id) is not int or not isinstance(title, str) or not title:
+        return None
+    url = raw.get("url")
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        url = None
+    by = raw.get("by")
+    time_value = raw.get("time")
+    score = raw.get("score")
+    comments = raw.get("descendants")
+    return {
+        "id": story_id,
+        "title": title,
+        "by": by if isinstance(by, str) else "unknown",
+        "time": time_value if type(time_value) is int else 0,
+        "score": score if type(score) is int else 0,
+        "comments": comments if type(comments) is int else 0,
+        "url": url,
+        "site": _hn_site(url) if url else None,
+        "source_url": url or HN_DISCUSSION_URL.format(story_id=story_id),
+    }
 
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -643,6 +1387,10 @@ class GloomberbClient:
         session_cookie:   Optional Gloom session cookie; ``None`` reads
                           ``GLOOMBERB_SESSION_COOKIE``. Accepts either a bare
                           token or ``name=value``. Never logged.
+        substack_cookie:  Optional own-account Substack cookie; ``None`` reads
+                          ``SUBSTACK_SESSION_COOKIE``. Same bare-or-named form;
+                          only the substack reader sends it, never the Cloud
+                          routes. Never logged.
         rate_limiter:     Minimum-interval gate (default 0.5s).
         retry_policy:     Composable retry policy; narrowed to timeouts/5xx.
         cache_ttl:        Seconds an envelope stays fresh (900s default).
@@ -665,6 +1413,7 @@ class GloomberbClient:
         base_url: str = GLOOMBERB_BASE_URL,
         enabled: bool | None = None,
         session_cookie: str | None = None,
+        substack_cookie: str | None = None,
         rate_limiter: RateLimiter | None = None,
         retry_policy: RetryPolicy | None = None,
         cache_ttl: float = DEFAULT_CACHE_TTL_SECONDS,
@@ -690,6 +1439,11 @@ class GloomberbClient:
             self._session_cookie: str | None = env_cookie or None
         else:
             self._session_cookie = session_cookie.strip() or None
+        if substack_cookie is None:
+            env_substack = os.environ.get(SUBSTACK_SESSION_COOKIE_ENV, "").strip()
+            self._substack_cookie: str | None = env_substack or None
+        else:
+            self._substack_cookie = substack_cookie.strip() or None
         self._rate_limiter = rate_limiter or RateLimiter(DEFAULT_MIN_INTERVAL_SECONDS)
         self._retry_policy = retry_policy or RetryPolicy(
             attempts=3,
@@ -2347,6 +3101,3420 @@ class GloomberbClient:
                 retryable=False,
             )
 
+    # -- probe-backed tools (130-coverage Task 5) -------------------------------
+    #
+    # One method per GO verdict in the Task 4 probe table. Every verdict
+    # carries a ``Live: unverified`` marker (no operator approval for any
+    # host), so payload models stay deliberately permissive — typed key
+    # fields with the long tail preserved as extras — until a live probe
+    # lands. NO-ROUTE verdicts (EE/INS/HVG/HVT/CRD/HILO) add no method here.
+
+    def time_and_sales(
+        self, request: TimeAndSalesInput | Mapping[str, Any]
+    ) -> TimeAndSalesEnvelope:
+        """Time and sales over the shared tape route (session-gated)."""
+        parsed = self._validate_input(TimeAndSalesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TimeAndSalesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TimeAndSalesEnvelope)
+
+        def produce() -> TimeAndSalesEnvelope:
+            path = f"{ENDPOINTS['tape']}/{quote(parsed.symbol, safe='')}"
+            raw = self._request_json("GET", path, params={"exchange": parsed.exchange}, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TimeAndSalesEnvelope, raw)
+            result = self._data_or_error(raw, f"Cloud tape is unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TimeAndSalesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tape")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(TimeAndSalesEnvelope, payload)
+            try:
+                trades = [TapeTrade.model_validate(row) for row in payload.get("trades") or []]
+                result_obj = TimeAndSalesResult(
+                    symbol=parsed.symbol,
+                    exchange=parsed.exchange,
+                    trades=trades,
+                    session_high=payload.get("sessionHigh"),
+                    session_low=payload.get("sessionLow"),
+                    capacity=payload.get("capacity"),
+                    dropped=payload.get("dropped"),
+                    cancelled=payload.get("cancelled"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    TimeAndSalesEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected tape payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return TimeAndSalesEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("time_and_sales", parsed, produce)
+
+    def quote_recap(self, request: QuoteRecapInput | Mapping[str, Any]) -> QuoteRecapEnvelope:
+        """NBBO recap over the shared tape route (the quotes half of TAS)."""
+        parsed = self._validate_input(QuoteRecapInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(QuoteRecapEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(QuoteRecapEnvelope)
+
+        def produce() -> QuoteRecapEnvelope:
+            path = f"{ENDPOINTS['tape']}/{quote(parsed.symbol, safe='')}"
+            raw = self._request_json("GET", path, params={"exchange": parsed.exchange}, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(QuoteRecapEnvelope, raw)
+            result = self._data_or_error(raw, f"Cloud tape is unavailable for {parsed.symbol}")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(QuoteRecapEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "tape")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(QuoteRecapEnvelope, payload)
+            try:
+                quotes = [TapeQuote.model_validate(row) for row in payload.get("quotes") or []]
+                result_obj = QuoteRecapResult(
+                    symbol=parsed.symbol, exchange=parsed.exchange, quotes=quotes
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    QuoteRecapEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected tape payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return QuoteRecapEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("quote_recap", parsed, produce)
+
+    def estimate_revisions(
+        self, request: EstimateRevisionsInput | Mapping[str, Any]
+    ) -> EstimateRevisionsEnvelope:
+        """Estimate revisions board (session-gated; pane shortcut EM)."""
+        parsed = self._validate_input(EstimateRevisionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(EstimateRevisionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(EstimateRevisionsEnvelope)
+
+        def produce() -> EstimateRevisionsEnvelope:
+            path = f"{ENDPOINTS['estimate_revisions']}/{quote(parsed.symbol, safe='')}"
+            params: dict[str, Any] = {}
+            if parsed.exchange:
+                params["exchange"] = parsed.exchange
+            raw = self._request_json("GET", path, params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(EstimateRevisionsEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud estimate revisions are unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(EstimateRevisionsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "estimate revisions")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(EstimateRevisionsEnvelope, payload)
+            try:
+                result_obj = EstimateRevisionsResult(
+                    symbol=parsed.symbol,
+                    exchange=parsed.exchange,
+                    periods=[
+                        EstimateRevisionPeriod.model_validate(row)
+                        for row in payload.get("periods") or []
+                    ],
+                    breadth_7d=payload.get("breadth7d") or {},
+                    breadth_30d=payload.get("breadth30d") or {},
+                    surprises=[
+                        EstimateRevisionSurprise.model_validate(row)
+                        for row in payload.get("surprises") or []
+                    ],
+                    guidance=payload.get("guidance"),
+                    coverage=list(payload.get("coverage") or []),
+                    gaps=list(payload.get("gaps") or []),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    EstimateRevisionsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected estimate-revisions payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return EstimateRevisionsEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("estimate_revisions", parsed, produce)
+
+    def short_volume(self, request: ShortVolumeInput | Mapping[str, Any]) -> ShortVolumeEnvelope:
+        """FINRA daily short volume, NMS or OTC scope (session-gated)."""
+        parsed = self._validate_input(ShortVolumeInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ShortVolumeEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ShortVolumeEnvelope)
+
+        def produce() -> ShortVolumeEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["short_volume"],
+                params={"symbol": parsed.symbol, "scope": parsed.scope},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(ShortVolumeEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud short volume is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(ShortVolumeEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "short volume")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(ShortVolumeEnvelope, payload)
+            try:
+                result_obj = ShortVolumeResult(
+                    symbol=parsed.symbol,
+                    scope=parsed.scope,
+                    rows=[ShortVolumeRow.model_validate(row) for row in payload.get("rows") or []],
+                    latest=payload.get("latest") or {},
+                    change=payload.get("change"),
+                    percentile=payload.get("percentile"),
+                    coverage_start=payload.get("coverageStart"),
+                    coverage_end=payload.get("coverageEnd"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    ShortVolumeEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected short-volume payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return ShortVolumeEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("short_volume", parsed, produce)
+
+    def hiring(self, request: HiringInput | Mapping[str, Any]) -> HiringEnvelope:
+        """Hiring summary / postings / market-wide movers (session-gated)."""
+        parsed = self._validate_input(HiringInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(HiringEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(HiringEnvelope)
+
+        def produce() -> HiringEnvelope:
+            if parsed.mode == "movers":
+                path: str = ENDPOINTS["hiring"]
+                params: dict[str, Any] = {
+                    "limit": str(parsed.limit),
+                    "offset": str(parsed.offset),
+                }
+            elif parsed.mode == "postings":
+                ticker = (parsed.ticker or "").strip()
+                path = f"{ENDPOINTS['hiring']}/{quote(ticker, safe='')}/postings"
+                params = {"limit": str(parsed.limit), "offset": str(parsed.offset)}
+            else:
+                ticker = (parsed.ticker or "").strip()
+                path = f"{ENDPOINTS['hiring']}/{quote(ticker, safe='')}"
+                params = {}
+                if parsed.name:
+                    params["name"] = parsed.name
+            raw = self._request_json("GET", path, params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(HiringEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud hiring is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(HiringEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "hiring")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(HiringEnvelope, payload)
+            try:
+                result_obj = HiringResult(
+                    mode=parsed.mode,
+                    ticker=(parsed.ticker or "").strip() or None,
+                    status=payload.get("status"),
+                    summary={
+                        key: value
+                        for key, value in payload.items()
+                        if key not in ("postings", "total", "asOf", "covered", "movers")
+                    },
+                    postings=[
+                        JobPosting.model_validate(row) for row in payload.get("postings") or []
+                    ],
+                    total=payload.get("total"),
+                    as_of=payload.get("asOf"),
+                    covered=payload.get("covered"),
+                    movers=[HiringMover.model_validate(row) for row in payload.get("movers") or []],
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    HiringEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected hiring payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return HiringEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("hiring", parsed, produce)
+
+    def central_bank_rates(
+        self, request: CentralBankRatesInput | Mapping[str, Any]
+    ) -> CentralBankRatesEnvelope:
+        """Policy-rate board (session-gated; FRED/BIS provenance per row)."""
+        parsed = self._validate_input(CentralBankRatesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CentralBankRatesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CentralBankRatesEnvelope)
+
+        def produce() -> CentralBankRatesEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["central_bank_rates"], gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CentralBankRatesEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud central-bank rates are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CentralBankRatesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "central-bank rates")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CentralBankRatesEnvelope, payload)
+            try:
+                result_obj = CentralBankRatesResult(
+                    rows=[CentralBankRate.model_validate(row) for row in payload.get("rows") or []]
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CentralBankRatesEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected central-bank-rates payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CentralBankRatesEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("central_bank_rates", parsed, produce)
+
+    def cdx(self, request: CdxInput | Mapping[str, Any]) -> CdxEnvelope:
+        """Index-CDS board (session-gated; DTCC-built 5Y on-the-run)."""
+        parsed = self._validate_input(CdxInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CdxEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CdxEnvelope)
+
+        def produce() -> CdxEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.days is not None:
+                params["days"] = str(parsed.days)
+            raw = self._request_json("GET", ENDPOINTS["cdx"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CdxEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud CDX board is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CdxEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "CDX board")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CdxEnvelope, payload)
+            try:
+                result_obj = CdxResult(
+                    boards=[CdxBoard.model_validate(row) for row in payload.get("boards") or []],
+                    points=list(payload.get("points") or []),
+                    days=parsed.days,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CdxEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected CDX payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CdxEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("cdx", parsed, produce)
+
+    def sovereign_cds(self, request: SovrInput | Mapping[str, Any]) -> SovrEnvelope:
+        """Sovereign-CDS board (session-gated; 5Y spreads in bp)."""
+        parsed = self._validate_input(SovrInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SovrEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SovrEnvelope)
+
+        def produce() -> SovrEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.days is not None:
+                params["days"] = str(parsed.days)
+            raw = self._request_json("GET", ENDPOINTS["sovr"], params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SovrEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud sovereign-CDS board is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SovrEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "sovereign-CDS board")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(SovrEnvelope, payload)
+            try:
+                result_obj = SovrResult(
+                    rows=[SovrRow.model_validate(row) for row in payload.get("rows") or []],
+                    days=parsed.days,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    SovrEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected sovereign-CDS payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return SovrEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("sovereign_cds", parsed, produce)
+
+    def options_flow(self, request: OptionsFlowInput | Mapping[str, Any]) -> OptionsFlowEnvelope:
+        """Recorded options-flow history (Pro; no delayed tier — fail closed).
+
+        A denial (``auth_required`` / ``pro_required``) is surfaced, never an
+        empty success: FLOW is the one scanner with no delayed tier.
+        """
+        parsed = self._validate_input(OptionsFlowInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsFlowEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsFlowEnvelope)
+
+        def produce() -> OptionsFlowEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.before:
+                params["before"] = parsed.before
+            if parsed.limit is not None:
+                params["limit"] = str(parsed.limit)
+            if parsed.min_premium is not None:
+                params["minPremium"] = str(parsed.min_premium)
+            if parsed.right:
+                params["right"] = parsed.right
+            if parsed.kind:
+                params["kind"] = parsed.kind
+            if parsed.min_vol_oi is not None:
+                params["minVolOi"] = str(parsed.min_vol_oi)
+            if parsed.max_expiry_days is not None:
+                params["maxExpiryDays"] = str(parsed.max_expiry_days)
+            if parsed.symbols:
+                params["symbols"] = ",".join(parsed.symbols)
+            raw = self._request_json(
+                "GET", ENDPOINTS["flow_history"], params=params, gated=True, pro_gated=True
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(OptionsFlowEnvelope, raw)
+            result = self._data_or_error(raw, "Recorded options flow is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(OptionsFlowEnvelope, result)
+            data, warnings = result
+            events: Any = data.get("events") if isinstance(data, Mapping) else data
+            try:
+                result_obj = OptionsFlowResult(
+                    events=[FlowEvent.model_validate(row) for row in events or []],
+                    has_more=bool(data.get("hasMore")) if isinstance(data, Mapping) else False,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    OptionsFlowEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected options-flow payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, data if isinstance(data, Mapping) else None)
+            return OptionsFlowEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("options_flow", parsed, produce)
+
+    def cot(self, request: CotInput | Mapping[str, Any]) -> CotEnvelope:
+        """CFTC positioning board, or one contract when code is given."""
+        parsed = self._validate_input(CotInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CotEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CotEnvelope)
+
+        def produce() -> CotEnvelope:
+            if parsed.code:
+                path = f"{ENDPOINTS['cot_contracts']}/{quote(parsed.code.strip(), safe='')}"
+                params: dict[str, Any] = {"report": parsed.report}
+            else:
+                path = ENDPOINTS["cot_board"]
+                params = {"report": parsed.report}
+                if parsed.trader_class:
+                    params["traderClass"] = parsed.trader_class
+            raw = self._request_json("GET", path, params=params, gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CotEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud COT board is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CotEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "COT board")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CotEnvelope, payload)
+            try:
+                rows = [CotRow.model_validate(row) for row in payload.get("rows") or []]
+                if parsed.code:
+                    result_obj: CotBoardResult | CotContractResult = CotContractResult(
+                        report=str(payload.get("report") or parsed.report),
+                        code=str(payload.get("code") or parsed.code.strip()),
+                        rows=rows,
+                    )
+                else:
+                    result_obj = CotBoardResult(
+                        report=str(payload.get("report") or parsed.report),
+                        trader_class=payload.get("traderClass") or parsed.trader_class,
+                        rows=rows,
+                    )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CotEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected COT payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CotEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("cot", parsed, produce)
+
+    def crypto_markets(
+        self, request: CryptoMarketsInput | Mapping[str, Any]
+    ) -> CryptoMarketsEnvelope:
+        """Crypto board (session-gated; pane refreshes every 15s upstream)."""
+        parsed = self._validate_input(CryptoMarketsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CryptoMarketsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CryptoMarketsEnvelope)
+
+        def produce() -> CryptoMarketsEnvelope:
+            raw = self._request_json("GET", ENDPOINTS["crypto_markets"], gated=True)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(CryptoMarketsEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud crypto markets are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(CryptoMarketsEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "crypto markets")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(CryptoMarketsEnvelope, payload)
+            try:
+                result_obj = CryptoMarketsResult(
+                    coins=[CryptoCoin.model_validate(row) for row in payload.get("coins") or []],
+                    source=payload.get("source") or {},
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    CryptoMarketsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected crypto-markets payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return CryptoMarketsEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("crypto_markets", parsed, produce)
+
+    def iv_screen(self, request: IvScreenInput | Mapping[str, Any]) -> IvScreenEnvelope:
+        """IV rich/cheap screen over stored daily history (session guess).
+
+        No Pro-gate evidence in source, but the route is ``pro_gated``: a
+        server denial surfaces verbatim, and a 402 plan body maps to the
+        typed ``pro_required`` (a bare 402 keeps the generic mapping).
+        """
+        parsed = self._validate_input(IvScreenInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IvScreenEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IvScreenEnvelope)
+
+        def produce() -> IvScreenEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["iv_screen"],
+                params={"symbols": ",".join(parsed.symbols)},
+                gated=True,
+                pro_gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IvScreenEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud IV screen is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IvScreenEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IV screen")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IvScreenEnvelope, payload)
+            try:
+                result_obj = IvScreenResult(
+                    rows=[IvScreenRow.model_validate(row) for row in payload.get("rows") or []]
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IvScreenEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IV-screen payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IvScreenEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("iv_screen", parsed, produce)
+
+    def iv_history(self, request: IvHistoryInput | Mapping[str, Any]) -> IvHistoryEnvelope:
+        """Stored daily IV history with rank/percentile (session guess).
+
+        Same denial contract as :meth:`iv_screen`: verbatim surfacing, ready
+        for a Pro gate on 402.
+        """
+        parsed = self._validate_input(IvHistoryInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IvHistoryEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IvHistoryEnvelope)
+
+        def produce() -> IvHistoryEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["iv_history"],
+                params={"symbol": parsed.symbol, "days": str(parsed.days)},
+                gated=True,
+                pro_gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IvHistoryEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud IV history is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IvHistoryEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IV history")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IvHistoryEnvelope, payload)
+            try:
+                result_obj = IvHistoryResult(
+                    symbol=parsed.symbol,
+                    days=parsed.days,
+                    status=payload.get("status"),
+                    points=list(payload.get("points") or []),
+                    iv30_rank=payload.get("iv30Rank"),
+                    iv30_percentile=payload.get("iv30Percentile"),
+                    iv90_rank=payload.get("iv90Rank"),
+                    iv90_percentile=payload.get("iv90Percentile"),
+                    latest=payload.get("latest"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IvHistoryEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IV-history payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IvHistoryEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("iv_history", parsed, produce)
+
+    def iv_surface(self, request: IvSurfaceInput | Mapping[str, Any]) -> IvSurfaceEnvelope:
+        """Stored close surface: dates list, or the surface for a date.
+
+        Same denial contract as :meth:`iv_screen`: verbatim surfacing, ready
+        for a Pro gate on 402. A live surface composes over
+        ``options_chain`` + ``yield_curve`` instead.
+        """
+        parsed = self._validate_input(IvSurfaceInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IvSurfaceEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IvSurfaceEnvelope)
+
+        def produce() -> IvSurfaceEnvelope:
+            if parsed.date:
+                raw = self._request_json(
+                    "GET",
+                    ENDPOINTS["iv_surface"],
+                    params={"symbol": parsed.symbol, "date": parsed.date},
+                    gated=True,
+                    pro_gated=True,
+                )
+            else:
+                raw = self._request_json(
+                    "GET",
+                    ENDPOINTS["iv_surface_dates"],
+                    params={"symbol": parsed.symbol},
+                    gated=True,
+                    pro_gated=True,
+                )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IvSurfaceEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud IV surface is unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IvSurfaceEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IV surface")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IvSurfaceEnvelope, payload)
+            try:
+                result_obj = IvSurfaceResult(
+                    symbol=parsed.symbol,
+                    date=parsed.date or payload.get("date"),
+                    dates=list(payload.get("dates") or []),
+                    surface=payload.get("surface"),
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IvSurfaceEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IV-surface payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IvSurfaceEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("iv_surface", parsed, produce)
+
+    def debt_maturities(
+        self, request: DebtMaturitiesInput | Mapping[str, Any]
+    ) -> DebtMaturitiesEnvelope:
+        """US-GAAP debt maturities with filing provenance (session-gated)."""
+        parsed = self._validate_input(DebtMaturitiesInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(DebtMaturitiesEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(DebtMaturitiesEnvelope)
+
+        def produce() -> DebtMaturitiesEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["debt_maturities"],
+                params={"symbol": parsed.symbol},
+                gated=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(DebtMaturitiesEnvelope, raw)
+            result = self._data_or_error(
+                raw, f"Cloud debt maturities are unavailable for {parsed.symbol}"
+            )
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(DebtMaturitiesEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "debt maturities")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(DebtMaturitiesEnvelope, payload)
+            try:
+                result_obj = DebtMaturitiesResult(
+                    symbol=parsed.symbol,
+                    total_principal=payload.get("totalPrincipal"),
+                    next_12m_share=payload.get("next12mShare"),
+                    next_3y_share=payload.get("next3yShare"),
+                    interest_expense=payload.get("interestExpense"),
+                    borrowing_cost=payload.get("borrowingCost"),
+                    filings=[
+                        DebtMaturityFiling.model_validate(row)
+                        for row in payload.get("filings") or []
+                    ],
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    DebtMaturitiesEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected debt-maturities payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return DebtMaturitiesEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("debt_maturities", parsed, produce)
+
+    def session_movers(
+        self, request: SessionMoversInput | Mapping[str, Any]
+    ) -> SessionMoversEnvelope:
+        """Pre-market / after-hours / gaps movers (session guess).
+
+        Same screener route, session categories only (gainers/losers/
+        most-active stay on ``digifetch_screener``). ``pro_gated`` so a
+        server plan denial surfaces verbatim either way.
+        """
+        parsed = self._validate_input(SessionMoversInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SessionMoversEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SessionMoversEnvelope)
+
+        def produce() -> SessionMoversEnvelope:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["screener"],
+                params={
+                    "category": parsed.category,
+                    "side": parsed.side,
+                    "count": str(parsed.count),
+                    "mode": parsed.mode,
+                },
+                gated=True,
+                pro_gated=True,
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(SessionMoversEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud session movers are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SessionMoversEnvelope, result)
+            data, warnings = result
+            rows: Any = data.get("movers") if isinstance(data, Mapping) else data
+            if rows is None and isinstance(data, Mapping):
+                rows = data.get("data")
+            try:
+                movers = [SessionMover.model_validate(row) for row in rows or []]
+                first = movers[0] if movers else None
+                result_obj = SessionMoversResult(
+                    category=parsed.category,
+                    side=parsed.side,
+                    # Phase/as-of ride the envelope in one shape and per row
+                    # in the other; prefer the envelope, fall back to the row.
+                    phase=(data.get("phase") if isinstance(data, Mapping) else None)
+                    or (first.phase if first else None),
+                    as_of=(data.get("asOf") if isinstance(data, Mapping) else None)
+                    or (first.as_of if first else None),
+                    movers=movers,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    SessionMoversEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected session-movers payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(
+                raw, data if isinstance(data, Mapping) else None, extra_stale=self._rows_stale(rows)
+            )
+            return SessionMoversEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("session_movers", parsed, produce)
+
+    def trending(
+        self, request: TrendingInput | Mapping[str, Any] | None = None
+    ) -> TrendingEnvelope:
+        """Yahoo trending symbols, hydrated with delayed Cloud quotes.
+
+        Venue-direct (the builtin pane hydrates the same way): trend symbols
+        come from Yahoo's trending endpoint, quotes from the anonymous Cloud
+        batch read. NOT attributed to Gloomberb; rows carry the Yahoo deep
+        link. An empty trending list is a typed ``upstream_error``, never an
+        empty success.
+        """
+        parsed = self._validate_input(TrendingInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TrendingEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TrendingEnvelope)
+
+        def produce() -> TrendingEnvelope:
+            warnings: list[str] = []
+            raw = self._request_json(
+                "GET",
+                YAHOO_TRENDING_PATH,
+                base_url=YAHOO_TRENDING_BASE_URL,
+                label="Yahoo",
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TrendingEnvelope, raw)
+            symbols = _yahoo_trending_symbols(raw.data)
+            if symbols is None:
+                return self._error_envelope(
+                    TrendingEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Yahoo trending returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            symbols = symbols[: parsed.limit]
+            if not symbols:
+                return self._error_envelope(
+                    TrendingEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Yahoo trending returned no symbols",
+                        retryable=False,
+                    ),
+                )
+            quotes: dict[str, Quote] = {}
+            batch = self.quotes_batch({"symbols": symbols})
+            if isinstance(batch.data, DigifetchError):
+                warnings.append(f"delayed quotes unavailable: {batch.data.message}")
+            else:
+                for item in batch.data.quotes:
+                    if item.quote is not None:
+                        quotes[item.symbol.upper()] = item.quote
+            rows: list[TrendingRow] = []
+            for rank, symbol in enumerate(symbols, start=1):
+                quote_data = quotes.get(symbol.upper())
+                rows.append(
+                    TrendingRow(
+                        symbol=symbol,
+                        rank=rank,
+                        price=quote_data.price if quote_data else None,
+                        change=quote_data.change if quote_data else None,
+                        change_percent=quote_data.change_percent if quote_data else None,
+                        volume=quote_data.volume if quote_data else None,
+                        market_state=quote_data.market_state if quote_data else None,
+                        venue_url=YAHOO_QUOTE_URL.format(symbol=symbol),
+                    )
+                )
+            return TrendingEnvelope(
+                data=TrendingResult(
+                    rows=rows,
+                    attribution=TRENDING_ATTRIBUTION,
+                    as_of=self._now().isoformat(),
+                ),
+                fetched_at=self._now(),
+                provider_id="yahoo-trending",
+                warnings=warnings,
+            )
+
+        return self._cached("trending", parsed, produce)
+
+    def substack(self, request: SubstackInput | Mapping[str, Any]) -> SubstackEnvelope:
+        """Own-account Substack reader (venue-direct, fail-soft).
+
+        No stored auth (``SUBSTACK_SESSION_COOKIE``) returns ``auth_required``
+        with login instructions and makes no request — the unauthenticated
+        pane renders the login view, never an error. An expired/rejected
+        session maps to ``auth_required`` (re-sign-in), never an
+        exception-shaped failure. NOT attributed to Gloomberb.
+        """
+        parsed = self._validate_input(SubstackInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(SubstackEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(SubstackEnvelope)
+
+        def produce() -> SubstackEnvelope:
+            if self._substack_cookie is None:
+                return self._error_envelope(
+                    SubstackEnvelope,
+                    DigifetchError(
+                        code="auth_required", message=SUBSTACK_LOGIN_HELP, retryable=False
+                    ),
+                )
+            cookies = self._substack_cookies()
+            host = f"{parsed.publication}.substack.com"
+            base_url = f"https://{host}"
+            if parsed.mode == "post":
+                post_id = (parsed.post_id or "").strip()
+                raw = self._request_json(
+                    "GET",
+                    f"/api/v1/posts/by-id/{quote(post_id, safe='')}",
+                    base_url=base_url,
+                    label="Substack",
+                    cookies=cookies,
+                )
+            elif parsed.mode == "inbox":
+                raw = self._request_json(
+                    "GET",
+                    "/api/v1/inbox/top",
+                    params={
+                        "inboxType": "inbox",
+                        "surface": "inbox_all",
+                        "limit": str(parsed.limit),
+                    },
+                    base_url=SUBSTACK_ORIGIN,
+                    label="Substack",
+                    cookies=cookies,
+                )
+            else:
+                raw = self._request_json(
+                    "GET",
+                    "/api/v1/posts",
+                    params={"limit": str(parsed.limit), "offset": str(parsed.offset)},
+                    base_url=base_url,
+                    label="Substack",
+                    cookies=cookies,
+                    allow_array=True,
+                )
+            if isinstance(raw, DigifetchError):
+                # An expired/rejected own-account session drops back to the
+                # login view: auth_required with re-sign-in help, never a
+                # generic upstream error.
+                if "HTTP 401" in raw.message or "HTTP 403" in raw.message:
+                    return self._error_envelope(
+                        SubstackEnvelope,
+                        DigifetchError(
+                            code="auth_required",
+                            message=(
+                                "Substack rejected the stored session (expired or "
+                                f"revoked); {SUBSTACK_LOGIN_HELP}"
+                            ),
+                            retryable=False,
+                        ),
+                    )
+                return self._error_envelope(SubstackEnvelope, raw)
+            result = self._data_or_error(raw, "Substack reader is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(SubstackEnvelope, result)
+            data, warnings = result
+            try:
+                if parsed.mode == "post":
+                    post = data.get("post") if isinstance(data, Mapping) else None
+                    if not isinstance(post, Mapping):
+                        raise ValueError("post detail carries no post object")
+                    result_obj = SubstackResult(
+                        publication=parsed.publication,
+                        mode=parsed.mode,
+                        post_id=(parsed.post_id or "").strip(),
+                        post=dict(post),
+                        attribution=SUBSTACK_ATTRIBUTION,
+                    )
+                else:
+                    items: Any = data
+                    if isinstance(data, Mapping):
+                        items = data.get("posts", data)
+                    posts = [SubstackPost.model_validate(row) for row in items or []]
+                    result_obj = SubstackResult(
+                        publication=parsed.publication,
+                        mode=parsed.mode,
+                        posts=posts,
+                        attribution=SUBSTACK_ATTRIBUTION,
+                    )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    SubstackEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected Substack payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            return SubstackEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                provider_id="substack-venue",
+                warnings=warnings,
+            )
+
+        return self._cached("substack", parsed, produce)
+
+    def ipo_calendar(
+        self, request: IpoCalendarInput | Mapping[str, Any] | None = None
+    ) -> IpoCalendarEnvelope:
+        """Worldwide IPO calendar (Cloud; public, works signed out)."""
+        parsed = self._validate_input(IpoCalendarInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IpoCalendarEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IpoCalendarEnvelope)
+
+        def produce() -> IpoCalendarEnvelope:
+            params: dict[str, Any] = {"limit": str(parsed.limit)}
+            if parsed.status:
+                params["status"] = parsed.status
+            if parsed.region:
+                params["region"] = parsed.region
+            if parsed.deal_type:
+                params["type"] = parsed.deal_type
+            if parsed.from_date:
+                params["fromDate"] = parsed.from_date
+            if parsed.to_date:
+                params["toDate"] = parsed.to_date
+            raw = self._request_json("GET", ENDPOINTS["ipo_calendar"], params=params)
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(IpoCalendarEnvelope, raw)
+            result = self._data_or_error(raw, "Cloud IPO calendar is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(IpoCalendarEnvelope, result)
+            data, warnings = result
+            payload = self._as_mapping(data, "IPO calendar")
+            if isinstance(payload, DigifetchError):
+                return self._error_envelope(IpoCalendarEnvelope, payload)
+            try:
+                result_obj = IpoCalendarResult(
+                    deals=[IpoDeal.model_validate(row) for row in payload.get("deals") or []],
+                    status=parsed.status,
+                    region=parsed.region,
+                    deal_type=parsed.deal_type,
+                )
+            except (ValidationError, ValueError, TypeError) as exc:
+                return self._error_envelope(
+                    IpoCalendarEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"unexpected IPO-calendar payload shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            fresh = self._freshness(raw, payload)
+            return IpoCalendarEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                stale=fresh.stale,
+                delay_note=fresh.delay_note,
+                warnings=warnings,
+            )
+
+        return self._cached("ipo_calendar", parsed, produce)
+
+    # -- ToS/direct tools (130-coverage Task 6) ------------------------------
+    #
+    # Venue-direct reads (the prediction-markets precedent): free, unattributed
+    # (attributed=False on both surfaces), per-row venue URLs, per-venue
+    # fail-soft, no Gloomberb claims anywhere.
+
+    def fear_greed(
+        self, request: FearGreedInput | Mapping[str, Any] | None = None
+    ) -> FearGreedEnvelope:
+        """CNN Fear & Greed gauge + the seven components behind it.
+
+        Venue-direct: the index/history/components come from CNN's public
+        graphdata endpoint (unofficial, ToS grey area) with a dated second
+        read for the latest print. Each read fails soft into the other; both
+        failing is a typed ``upstream_error``. NOT attributed to Gloomberb;
+        rows carry the CNN page link.
+        """
+        parsed = self._validate_input(FearGreedInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FearGreedEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FearGreedEnvelope)
+
+        def produce() -> FearGreedEnvelope:
+            today = self._now().date().isoformat()
+            charts = self._request_json(
+                "GET",
+                CNN_FEAR_GREED_PATH,
+                base_url=CNN_FEAR_GREED_BASE_URL,
+                label="CNN Fear & Greed",
+                headers=CNN_FEAR_GREED_HEADERS,
+            )
+            latest = self._request_json(
+                "GET",
+                f"{CNN_FEAR_GREED_PATH}/{today}",
+                base_url=CNN_FEAR_GREED_BASE_URL,
+                label="CNN Fear & Greed",
+                headers=CNN_FEAR_GREED_HEADERS,
+            )
+            charts_data = charts.data if not isinstance(charts, DigifetchError) else None
+            latest_data = latest.data if not isinstance(latest, DigifetchError) else None
+            if charts_data is None and latest_data is None:
+                first = charts if isinstance(charts, DigifetchError) else latest
+                assert isinstance(first, DigifetchError)
+                return self._error_envelope(FearGreedEnvelope, first)
+            try:
+                result_obj = self._normalize_fear_greed(charts_data, latest_data)
+            except ValueError as exc:
+                return self._error_envelope(
+                    FearGreedEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"CNN Fear & Greed returned an unexpected shape: {exc}",
+                        retryable=False,
+                    ),
+                )
+            return FearGreedEnvelope(
+                data=result_obj,
+                fetched_at=self._now(),
+                provider_id="cnn-fear-greed",
+            )
+
+        return self._cached("fear_greed", parsed, produce)
+
+    @staticmethod
+    def _normalize_fear_greed(charts: Any, latest: Any) -> FearGreedResult:
+        """Index gauge + components from the CNN graphdata payloads."""
+        charts_map = charts if isinstance(charts, Mapping) else {}
+        latest_map = latest if isinstance(latest, Mapping) else {}
+        overall = latest_map.get("fear_and_greed", charts_map.get("fear_and_greed"))
+        history_series = charts_map.get("fear_and_greed_historical") or latest_map.get(
+            "fear_and_greed_historical"
+        )
+        history_points = _cnn_points(history_series)
+        score = _cnn_number(overall.get("score") if isinstance(overall, Mapping) else None)
+        if score is None and isinstance(history_series, Mapping):
+            score = _cnn_number(history_series.get("score"))
+        if score is None and history_points:
+            score = history_points[-1][1]
+        if score is None:
+            raise ValueError("response did not include an index score")
+        rating = _fear_greed_rating(
+            overall.get("rating") if isinstance(overall, Mapping) else None, score
+        )
+        updated_at = _cnn_timestamp(
+            overall.get("timestamp") if isinstance(overall, Mapping) else None
+        )
+        previous = FearGreedPrevious()
+        if isinstance(overall, Mapping):
+            previous = FearGreedPrevious(
+                close=_cnn_number(overall.get("previous_close")),
+                week=_cnn_number(overall.get("previous_1_week")),
+                month=_cnn_number(overall.get("previous_1_month")),
+                year=_cnn_number(overall.get("previous_1_year")),
+            )
+            if updated_at is None:
+                updated_at = _cnn_timestamp(history_series.get("timestamp"))
+        history = [
+            FearGreedPoint(
+                date=datetime.fromtimestamp(x / 1000, tz=timezone.utc).isoformat(),
+                score=y,
+            )
+            for x, y in history_points
+        ]
+        components: list[FearGreedComponent] = []
+        for comp_id, title, primary_key, _secondary_key, value_format in _FEAR_GREED_COMPONENTS:
+            series = charts_map.get(primary_key, latest_map.get(primary_key))
+            if not isinstance(series, Mapping):
+                continue
+            points = _cnn_points(series)
+            if not points:
+                continue
+            comp_score = _cnn_number(series.get("score"))
+            components.append(
+                FearGreedComponent(
+                    id=comp_id,
+                    title=title,
+                    score=comp_score,
+                    rating=_fear_greed_rating(series.get("rating"), comp_score),
+                    value=points[-1][1],
+                    value_format=value_format,
+                    updated_at=_cnn_timestamp(series.get("timestamp"))
+                    or (datetime.fromtimestamp(points[-1][0] / 1000, tz=timezone.utc).isoformat()),
+                    source_url=CNN_FEAR_GREED_PAGE,
+                )
+            )
+        return FearGreedResult(
+            score=score,
+            rating=rating,
+            updated_at=updated_at,
+            previous=previous,
+            history=history,
+            components=components,
+            attribution=FEAR_GREED_ATTRIBUTION,
+        )
+
+    def polls(self, request: PollsInput | Mapping[str, Any]) -> PollsEnvelope:
+        """VoteHub political polls (venue-direct, anonymous).
+
+        The endpoint answers a bare array or a ``{"polls": [...]}`` wrapper;
+        rows that are not well-formed polls are filtered, never fatal, and the
+        list is sliced client-side to ``limit`` with ``total_available`` /
+        ``truncated``. NOT attributed to Gloomberb; every row carries the
+        VoteHub CC BY 4.0 marker plus its source link.
+        """
+        parsed = self._validate_input(PollsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PollsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PollsEnvelope)
+
+        def produce() -> PollsEnvelope:
+            params: dict[str, Any] = {}
+            if parsed.poll_type:
+                params["poll_type"] = parsed.poll_type
+            if parsed.subject:
+                params["subject"] = parsed.subject
+            raw = self._request_json(
+                "GET",
+                VOTEHUB_POLLS_PATH,
+                params=params or None,
+                base_url=VOTEHUB_BASE_URL,
+                label="VoteHub",
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(PollsEnvelope, raw)
+            result = self._data_or_error(raw, "VoteHub polls are unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(PollsEnvelope, result)
+            data, warnings = result
+            items = _votehub_polls(data)
+            if items is None:
+                return self._error_envelope(
+                    PollsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="VoteHub polls returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            rows: list[PollRow] = []
+            for entry in items:
+                try:
+                    answers = [
+                        PollAnswer(choice=str(a["choice"]), pct=float(a["pct"]))
+                        for a in entry.get("answers") or []
+                        if isinstance(a, Mapping)
+                        and isinstance(a.get("choice"), str)
+                        and _cnn_number(a.get("pct")) is not None
+                    ]
+                    answers.sort(key=lambda a: a.pct, reverse=True)
+                    summary, lead, lead_choice = _poll_result_summary(answers)
+                    sample_size = _poll_sample_size(entry.get("sample_size"))
+                    rows.append(
+                        PollRow(
+                            id=entry["id"],
+                            subject=entry["subject"],
+                            poll_type=str(entry.get("poll_type") or ""),
+                            pollster=entry["pollster"],
+                            population=(
+                                str(entry["population"])
+                                if entry.get("population") is not None
+                                else None
+                            ),
+                            sample_size=sample_size,
+                            margin_of_error=_poll_margin_of_error(sample_size),
+                            start_date=(
+                                str(entry["start_date"])
+                                if entry.get("start_date") is not None
+                                else None
+                            ),
+                            end_date=(
+                                str(entry["end_date"])
+                                if entry.get("end_date") is not None
+                                else None
+                            ),
+                            result=summary,
+                            lead=lead,
+                            lead_choice=lead_choice,
+                            url=(str(entry["url"]) if isinstance(entry.get("url"), str) else None),
+                            attribution=VOTEHUB_CC_BY,
+                            answers=answers,
+                        )
+                    )
+                except (ValidationError, ValueError, TypeError):
+                    continue
+            total_available = len(rows)
+            sliced = rows[: parsed.limit]
+            return PollsEnvelope(
+                data=PollsResult(
+                    rows=sliced,
+                    total_available=total_available,
+                    truncated=total_available > len(sliced),
+                    attribution=POLLS_ATTRIBUTION,
+                ),
+                fetched_at=self._now(),
+                provider_id="votehub-polls",
+                warnings=warnings,
+            )
+
+        return self._cached("polls", parsed, produce)
+
+    def treasury_auctions(
+        self, request: TreasuryAuctionsInput | Mapping[str, Any]
+    ) -> TreasuryAuctionsEnvelope:
+        """US Treasury auction results (venue-direct, anonymous).
+
+        Reads Treasury Fiscal Data's public auction-query dataset newest-first
+        (``sort=-record_date``, ``page[size]=limit``) with optional
+        security-type / record-date filters. Rows type the common fields and
+        preserve the rest; each row carries the result-document link when the
+        venue supplies one. NOT attributed to Gloomberb.
+        """
+        parsed = self._validate_input(TreasuryAuctionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(TreasuryAuctionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(TreasuryAuctionsEnvelope)
+
+        def produce() -> TreasuryAuctionsEnvelope:
+            params: dict[str, Any] = {
+                "sort": "-record_date",
+                "page[size]": str(parsed.limit),
+            }
+            filters: list[str] = []
+            if parsed.from_date:
+                filters.append(f"record_date:gte:{parsed.from_date}")
+            if parsed.to_date:
+                filters.append(f"record_date:lte:{parsed.to_date}")
+            if parsed.security_type:
+                filters.append(f"security_type:eq:{parsed.security_type}")
+            if filters:
+                params["filter"] = ",".join(filters)
+            raw = self._request_json(
+                "GET",
+                FISCALDATA_AUCTIONS_PATH,
+                params=params,
+                base_url=FISCALDATA_BASE_URL,
+                label="Treasury Fiscal Data",
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(TreasuryAuctionsEnvelope, raw)
+            result = self._data_or_error(raw, "Treasury auction data is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(TreasuryAuctionsEnvelope, result)
+            data, warnings = result
+            items: Any = data.get("data") if isinstance(data, Mapping) else data
+            if not isinstance(items, list):
+                return self._error_envelope(
+                    TreasuryAuctionsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Treasury auction data returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            rows: list[AuctionRow] = []
+            for entry in items:
+                if not isinstance(entry, Mapping):
+                    continue
+                try:
+                    pdf_url = entry.get("pdf_url")
+                    rows.append(
+                        AuctionRow(
+                            record_date=_venue_str(entry.get("record_date")),
+                            cusip=_venue_str(entry.get("cusip")),
+                            security_type=_venue_str(entry.get("security_type")),
+                            auction_date=_venue_str(entry.get("auction_date")),
+                            issue_date=_venue_str(entry.get("issue_date")),
+                            maturity_date=_venue_str(entry.get("maturity_date")),
+                            offering_amount=_venue_number_or_str(entry.get("offering_amount")),
+                            total_accepted=_venue_number_or_str(
+                                entry.get("total_accepted") or entry.get("total_accepted_amount")
+                            ),
+                            bid_to_cover_ratio=_venue_number_or_str(
+                                entry.get("bid_to_cover_ratio")
+                            ),
+                            high_yield=_venue_number_or_str(
+                                entry.get("high_yield") or entry.get("rate")
+                            ),
+                            price_per100=_venue_number_or_str(entry.get("price_per100")),
+                            source_url=(
+                                pdf_url
+                                if isinstance(pdf_url, str) and pdf_url.startswith("http")
+                                else FISCALDATA_AUCTIONS_DOC_URL
+                            ),
+                            **{
+                                key: value
+                                for key, value in entry.items()
+                                if key
+                                not in {
+                                    "record_date",
+                                    "cusip",
+                                    "security_type",
+                                    "auction_date",
+                                    "issue_date",
+                                    "maturity_date",
+                                    "offering_amount",
+                                    "total_accepted",
+                                    "total_accepted_amount",
+                                    "bid_to_cover_ratio",
+                                    "high_yield",
+                                    "rate",
+                                    "price_per100",
+                                    "pdf_url",
+                                }
+                            },
+                        )
+                    )
+                except (ValidationError, ValueError, TypeError):
+                    continue
+            meta = data.get("meta") if isinstance(data, Mapping) else None
+            meta_count = meta.get("count") if isinstance(meta, Mapping) else None
+            total_available = meta_count if type(meta_count) is int else len(rows)
+            sliced = rows[: parsed.limit]
+            return TreasuryAuctionsEnvelope(
+                data=TreasuryAuctionsResult(
+                    rows=sliced,
+                    total_available=total_available,
+                    truncated=total_available > len(sliced),
+                    attribution=AUCTIONS_ATTRIBUTION,
+                ),
+                fetched_at=self._now(),
+                provider_id="treasury-fiscal-data",
+                warnings=warnings,
+            )
+
+        return self._cached("treasury_auctions", parsed, produce)
+
+    def market_halts(
+        self, request: MarketHaltsInput | Mapping[str, Any] | None = None
+    ) -> MarketHaltsEnvelope:
+        """US equity trade halts (venue-direct, anonymous).
+
+        Reads Nasdaq Trader's trade-halts RSS feed (XML): an empty channel is
+        a quiet day (empty success), while items nobody can parse are a format
+        error, never an empty success. Times are ET wall clock with UTC
+        epochs; ``status`` resolves against now. NOT attributed to Gloomberb;
+        rows carry the halt-codes link.
+        """
+        parsed = self._validate_input(MarketHaltsInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(MarketHaltsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(MarketHaltsEnvelope)
+
+        def produce() -> MarketHaltsEnvelope:
+            text = self._request_text(
+                "GET",
+                NASDAQ_HALTS_PATH,
+                params={"feed": "tradehalts"},
+                base_url=NASDAQ_TRADER_BASE_URL,
+                label="Nasdaq Trader",
+            )
+            if isinstance(text, DigifetchError):
+                return self._error_envelope(MarketHaltsEnvelope, text)
+            if (
+                re.search(r"<rss\b", text, re.IGNORECASE) is None
+                or re.search(r"<channel\b", text, re.IGNORECASE) is None
+                or re.search(r"xmlns:ndaq=", text, re.IGNORECASE) is None
+            ):
+                return self._error_envelope(
+                    MarketHaltsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Nasdaq halt feed response was not RSS",
+                        retryable=False,
+                    ),
+                )
+            records, item_count = _parse_halt_items(text)
+            if not records and item_count > 0:
+                return self._error_envelope(
+                    MarketHaltsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Nasdaq halt feed format was not recognized",
+                        retryable=False,
+                    ),
+                )
+            now_ms = int(self._now().timestamp() * 1000)
+            wanted = (parsed.symbol or "").strip().upper()
+            rows: list[HaltRow] = []
+            for record in records:
+                if wanted and record["symbol"] != wanted:
+                    continue
+                trade_resume = record["trade_resume_at"]
+                quote_resume = record["quote_resume_at"]
+                if isinstance(trade_resume, int) and now_ms >= trade_resume:
+                    status = "resumed"
+                elif isinstance(quote_resume, int) and now_ms >= quote_resume:
+                    status = "quote"
+                else:
+                    status = "halted"
+                rows.append(
+                    HaltRow(
+                        symbol=record["symbol"],
+                        company=record["company"],
+                        market=record["market"],
+                        reason_code=record["reason_code"],
+                        reason=record["reason"],
+                        halt_date=record["halt_date"],
+                        halt_time=record["halt_time"],
+                        halted_at=record["halted_at"],
+                        quote_resume_at=quote_resume,
+                        trade_resume_at=trade_resume,
+                        status=status,
+                        source_url=NASDAQ_HALT_CODES_URL,
+                    )
+                )
+            # Newest halt first: the reason anyone opens this pane.
+            rows.sort(key=lambda row: row.halted_at or 0, reverse=True)
+            return MarketHaltsEnvelope(
+                data=MarketHaltsResult(
+                    rows=rows[: parsed.limit],
+                    attribution=HALTS_ATTRIBUTION,
+                    as_of=self._now().isoformat(),
+                ),
+                fetched_at=self._now(),
+                provider_id="nasdaq-trader-halts",
+            )
+
+        return self._cached("market_halts", parsed, produce)
+
+    def hacker_news(
+        self, request: HackerNewsInput | Mapping[str, Any] | None = None
+    ) -> HackerNewsEnvelope:
+        """Hacker News stories (venue-direct, anonymous).
+
+        Reads the public API's id list for one feed, then one item read per
+        story (sliced to ``limit`` first, so the fan-out stays bounded). One
+        dead item never empties the feed: per-item failures skip that story.
+        NOT attributed to Gloomberb; rows carry the article link, or the
+        discussion link for self posts.
+        """
+        parsed = self._validate_input(HackerNewsInput, request or {})
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(HackerNewsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(HackerNewsEnvelope)
+
+        def produce() -> HackerNewsEnvelope:
+            feed_path = HN_FEED_PATHS.get(parsed.feed)
+            if feed_path is None:
+                return self._error_envelope(
+                    HackerNewsEnvelope,
+                    DigifetchError(
+                        code="invalid_input",
+                        message=f"unknown Hacker News feed {parsed.feed!r}",
+                        retryable=False,
+                    ),
+                )
+            raw = self._request_json(
+                "GET",
+                f"/{feed_path}.json",
+                base_url=HN_BASE_URL,
+                label="Hacker News",
+                allow_array=True,
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(HackerNewsEnvelope, raw)
+            result = self._data_or_error(raw, "Hacker News feed is unavailable")
+            if isinstance(result, DigifetchError):
+                return self._error_envelope(HackerNewsEnvelope, result)
+            data, warnings = result
+            if not isinstance(data, list):
+                return self._error_envelope(
+                    HackerNewsEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Hacker News feed returned an unexpected payload shape",
+                        retryable=False,
+                    ),
+                )
+            ids = [item for item in data if type(item) is int][: parsed.limit]
+            rows: list[HackerNewsStory] = []
+            for story_id in ids:
+                item = self._request_json(
+                    "GET",
+                    f"/item/{story_id}.json",
+                    base_url=HN_BASE_URL,
+                    label="Hacker News",
+                )
+                if isinstance(item, DigifetchError):
+                    continue
+                item_result = self._data_or_error(item, "Hacker News item is unavailable")
+                if isinstance(item_result, DigifetchError):
+                    continue
+                story, _item_warnings = item_result
+                normalized = _hn_story(story)
+                if normalized is None:
+                    continue
+                try:
+                    rows.append(HackerNewsStory.model_validate(normalized))
+                except (ValidationError, ValueError, TypeError):
+                    continue
+            return HackerNewsEnvelope(
+                data=HackerNewsResult(
+                    rows=rows,
+                    feed=parsed.feed,
+                    attribution=HN_ATTRIBUTION,
+                ),
+                fetched_at=self._now(),
+                provider_id="hacker-news",
+                warnings=warnings,
+            )
+
+        return self._cached("hacker_news", parsed, produce)
+
+    # -- calculators + compositions (130-coverage Task 2) --------------------
+    #
+    # Pure calculators run local math only (no transport, no cookies). The
+    # compositions fan out to existing reads and derive their numbers locally.
+    # All six are unattributed: a derived number must not claim Cloud sourcing.
+
+    def options_calculator(
+        self, request: OptionsCalcInput | Mapping[str, Any]
+    ) -> OptionsCalcEnvelope:
+        """European Black-Scholes price, with an optional IV solve (no transport)."""
+        parsed = self._validate_input(OptionsCalcInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsCalcEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsCalcEnvelope)
+
+        def produce() -> OptionsCalcEnvelope:
+            try:
+                if parsed.price is None:
+                    price = black_scholes_price(
+                        spot=parsed.spot,
+                        strike=parsed.strike,
+                        rate=parsed.rate,
+                        vol=parsed.vol,
+                        expiry_years=parsed.expiry_years,
+                        kind=parsed.kind,
+                    )
+                    implied_vol: float | None = None
+                else:
+                    implied_vol = black_scholes_iv(
+                        price=parsed.price,
+                        spot=parsed.spot,
+                        strike=parsed.strike,
+                        rate=parsed.rate,
+                        expiry_years=parsed.expiry_years,
+                        kind=parsed.kind,
+                    )
+                    price = parsed.price
+            except ValueError as exc:
+                return self._error_envelope(
+                    OptionsCalcEnvelope,
+                    DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+                )
+            return OptionsCalcEnvelope(
+                data=OptionsCalcResult(price=price, implied_vol=implied_vol, kind=parsed.kind),
+                fetched_at=self._now(),
+            )
+
+        return self._cached("options_calculator", parsed, produce)
+
+    def bond_calculator(self, request: BondCalcInput | Mapping[str, Any]) -> BondCalcEnvelope:
+        """Par-bond analytics over local discounting math (no transport)."""
+        parsed = self._validate_input(BondCalcInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(BondCalcEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(BondCalcEnvelope)
+
+        def produce() -> BondCalcEnvelope:
+            try:
+                metrics = bond_metrics(
+                    coupon=parsed.coupon,
+                    face=parsed.face,
+                    ytm=parsed.ytm,
+                    years=parsed.years,
+                    freq=parsed.freq,
+                )
+            except ValueError as exc:
+                return self._error_envelope(
+                    BondCalcEnvelope,
+                    DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+                )
+            return BondCalcEnvelope(
+                data=BondCalcResult(
+                    price=metrics["price"],
+                    accrued=metrics["accrued"],
+                    duration=metrics["duration"],
+                    convexity=metrics["convexity"],
+                    dv01=metrics["dv01"],
+                ),
+                fetched_at=self._now(),
+            )
+
+        return self._cached("bond_calculator", parsed, produce)
+
+    def kelly_sizer(self, request: KellyInput | Mapping[str, Any]) -> KellyEnvelope:
+        """Kelly-criterion fraction from win probability and payoff ratio (no transport)."""
+        parsed = self._validate_input(KellyInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(KellyEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(KellyEnvelope)
+
+        def produce() -> KellyEnvelope:
+            try:
+                fraction = kelly_fraction(
+                    win_prob=parsed.win_prob, win_loss_ratio=parsed.win_loss_ratio
+                )
+            except ValueError as exc:
+                return self._error_envelope(
+                    KellyEnvelope,
+                    DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+                )
+            return KellyEnvelope(
+                data=KellyResult(fraction=fraction),
+                fetched_at=self._now(),
+            )
+
+        return self._cached("kelly_sizer", parsed, produce)
+
+    def dividend_yield(
+        self, request: DividendYieldInput | Mapping[str, Any]
+    ) -> DividendYieldEnvelope:
+        """Trailing dividend yield over corporate-actions + quote (composition).
+
+        Sums the trailing cash distributions and divides by the latest quote
+        price locally. Warns and returns ``upstream_error`` when either leg
+        errors (including the session gate on the corporate-actions leg).
+        """
+        parsed = self._validate_input(DividendYieldInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(DividendYieldEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(DividendYieldEnvelope)
+
+        def produce() -> DividendYieldEnvelope:
+            quote_env = self.quote({"symbol": parsed.symbol})
+            corp_env = self.corporate_actions({"symbol": parsed.symbol})
+            warnings: list[str] = [*quote_env.warnings, *corp_env.warnings]
+            if isinstance(quote_env.data, DigifetchError):
+                warnings.append(f"quote unavailable for {parsed.symbol}: {quote_env.data.message}")
+            if isinstance(corp_env.data, DigifetchError):
+                warnings.append(
+                    f"corporate actions unavailable for {parsed.symbol}: {corp_env.data.message}"
+                )
+            if isinstance(quote_env.data, DigifetchError) or isinstance(
+                corp_env.data, DigifetchError
+            ):
+                return DividendYieldEnvelope(
+                    data=DigifetchError(
+                        code="upstream_error",
+                        message=f"dividend yield unavailable for {parsed.symbol} ({'; '.join(warnings)})",
+                        retryable=any(
+                            error.retryable
+                            for error in (quote_env.data, corp_env.data)
+                            if isinstance(error, DigifetchError)
+                        ),
+                    ),
+                    fetched_at=self._now(),
+                    warnings=warnings,
+                )
+            quote = quote_env.data.quote if not isinstance(quote_env.data, DigifetchError) else None
+            actions = corp_env.data.actions if not isinstance(corp_env.data, DigifetchError) else []
+            if quote is None:
+                return self._error_envelope(
+                    DividendYieldEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"quote payload missing for {parsed.symbol}",
+                        retryable=False,
+                    ),
+                )
+            if quote.price <= 0.0:
+                return self._error_envelope(
+                    DividendYieldEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"quote price non-positive for {parsed.symbol}",
+                        retryable=False,
+                    ),
+                )
+            distributions = [
+                action.amount
+                for action in actions
+                if action.kind == "dividend" and action.amount is not None
+            ]
+            trailing = sum(distributions)
+            return DividendYieldEnvelope(
+                data=DividendYieldResult(
+                    symbol=parsed.symbol,
+                    price=quote.price,
+                    trailing_dividends=trailing,
+                    distribution_count=len(distributions),
+                    dividend_yield=trailing / quote.price,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("dividend_yield", parsed, produce)
+
+    def fx_cross_rates(self, request: FxMatrixInput | Mapping[str, Any]) -> FxMatrixEnvelope:
+        """USD-pair FX matrix over the exchange-rate read (USD base only)."""
+        parsed = self._validate_input(FxMatrixInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FxMatrixEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FxMatrixEnvelope)
+
+        def produce() -> FxMatrixEnvelope:
+            rates: dict[str, float] = {}
+            warnings: list[str] = []
+            for code in parsed.currencies:
+                env = self.exchange_rate({"from_currency": code, "to_currency": parsed.to_currency})
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return FxMatrixEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"exchange rate unavailable for {code}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                rates[code] = env.data.rate
+            crosses = {
+                f"{base}/{quote_code}": rates[base] / rates[quote_code]
+                for base in rates
+                for quote_code in rates
+                if base != quote_code
+            }
+            return FxMatrixEnvelope(
+                data=FxMatrixResult(base=parsed.to_currency, rates=rates, crosses=crosses),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("fx_cross_rates", parsed, produce)
+
+    def vix_term_structure(self, request: VixTermInput | Mapping[str, Any]) -> VixTermEnvelope:
+        """VIX term snapshot over two econ-series closes (composition).
+
+        Reads the near and far series and reports the far-minus-near spread
+        with the curve regime (contango/inversion/flat). Warns and returns
+        ``upstream_error`` when either leg errors or carries no closes.
+        """
+        parsed = self._validate_input(VixTermInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(VixTermEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(VixTermEnvelope)
+
+        def produce() -> VixTermEnvelope:
+            legs = (
+                ("near", parsed.near_series),
+                ("far", parsed.far_series),
+            )
+            closes: dict[str, tuple[str, float]] = {}
+            warnings: list[str] = []
+            for leg, series_id in legs:
+                env = self.econ_series(
+                    {"series_id": series_id, "limit": parsed.limit, "sort_order": "desc"}
+                )
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return VixTermEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series unavailable for {series_id}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                dated = [
+                    (observation.date, observation.value)
+                    for observation in env.data.observations
+                    if observation.value is not None
+                ]
+                if not dated:
+                    return VixTermEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series {series_id} carries no closes",
+                            retryable=False,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                closes[leg] = dated[0]
+            (near_date, near_close), (far_date, far_close) = closes["near"], closes["far"]
+            spread = far_close - near_close
+            regime: Literal["contango", "inversion", "flat"] = (
+                "contango" if spread > 0.0 else ("inversion" if spread < 0.0 else "flat")
+            )
+            return VixTermEnvelope(
+                data=VixTermResult(
+                    near_series=parsed.near_series,
+                    far_series=parsed.far_series,
+                    near_close=near_close,
+                    far_close=far_close,
+                    near_date=near_date,
+                    far_date=far_date,
+                    spread=spread,
+                    regime=regime,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("vix_term_structure", parsed, produce)
+
+    # -- options scenario (130-coverage Task 8: OSA) ---------------------------
+    #
+    # A multi-leg European book over the options_chain read. Legs match listed
+    # contracts exactly (expiry/strike/kind) for their implied vol and
+    # last-price cost basis; every number is then derived locally with the
+    # Task 1 Black-Scholes core, so the tool is unattributed: a derived number
+    # must not claim Cloud sourcing.
+
+    @staticmethod
+    def _scenario_intrinsic(kind: str, spot: float, strike: float, qty: float) -> float:
+        """European expiry payoff for one leg (qty included)."""
+        if kind == "call":
+            return max(spot - strike, 0.0) * qty
+        return max(strike - spot, 0.0) * qty
+
+    @staticmethod
+    def _scenario_leg_value(
+        kind: str, spot: float, strike: float, rate: float, vol: float, tau: float, qty: float
+    ) -> float:
+        """One leg at one grid node: Black-Scholes before expiry, intrinsic at/after."""
+        if tau <= 0.0:
+            return GloomberbClient._scenario_intrinsic(kind, spot, strike, qty)
+        return qty * black_scholes_price(
+            spot=spot,
+            strike=strike,
+            rate=rate,
+            vol=vol,
+            expiry_years=tau,
+            kind=kind,  # type: ignore[arg-type]
+        )
+
+    def options_scenario(
+        self, request: OptionsScenarioInput | Mapping[str, Any]
+    ) -> OptionsScenarioEnvelope:
+        """Multi-leg European scenario over the options_chain read (composition).
+
+        Reads one chain for ``symbol``, matches each leg to a listed contract
+        for its implied vol and last-price cost basis, and values the book over
+        the spot/date/vol-shift grid with European Black-Scholes math
+        (intrinsic at/after a leg's expiry). Reports grid value plus P&L
+        against premium paid, the expiry-payoff curve with bisected
+        breakevens, and finite-difference Greeks at the first spot and date
+        with no vol shift. Warns and returns ``upstream_error`` when the chain
+        leg errors or carries no usable IV; unmatched legs and non-positive
+        shifted vols are ``invalid_input``, never clamped.
+        """
+        parsed = self._validate_input(OptionsScenarioInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsScenarioEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsScenarioEnvelope)
+
+        def produce() -> OptionsScenarioEnvelope:
+            chain_env = self.options_chain({"symbol": parsed.symbol})
+            warnings: list[str] = list(chain_env.warnings)
+            if isinstance(chain_env.data, DigifetchError):
+                warnings.append(
+                    f"options chain unavailable for {parsed.symbol}: {chain_env.data.message}"
+                )
+                return OptionsScenarioEnvelope(
+                    data=DigifetchError(
+                        code="upstream_error",
+                        message=(
+                            f"options scenario unavailable for {parsed.symbol} "
+                            f"({'; '.join(warnings)})"
+                        ),
+                        retryable=chain_env.data.retryable,
+                    ),
+                    fetched_at=self._now(),
+                    warnings=warnings,
+                )
+            contracts = [*chain_env.data.chain.calls, *chain_env.data.chain.puts]
+            details: list[OptionsScenarioLegDetail] = []
+            for index, leg in enumerate(parsed.legs):
+                match = next(
+                    (
+                        contract
+                        for contract in contracts
+                        if contract.side == leg.kind
+                        and contract.strike == leg.strike
+                        and contract.expiration == leg.expiry
+                    ),
+                    None,
+                )
+                if match is None:
+                    return self._error_envelope(
+                        OptionsScenarioEnvelope,
+                        DigifetchError(
+                            code="invalid_input",
+                            message=(
+                                f"leg {index} ({leg.kind} {leg.strike} @ {leg.expiry}) "
+                                f"matches no listed {parsed.symbol} contract "
+                                "(legs match exactly, never snapped)"
+                            ),
+                            retryable=False,
+                        ),
+                    )
+                if not (
+                    isinstance(match.implied_volatility, float | int)
+                    and math.isfinite(match.implied_volatility)
+                    and match.implied_volatility > 0.0
+                ):
+                    return OptionsScenarioEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=(
+                                f"leg {index} ({leg.kind} {leg.strike} @ {leg.expiry}) "
+                                "carries no usable chain implied vol"
+                            ),
+                            retryable=False,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                premium = leg.qty * match.last_price
+                details.append(
+                    OptionsScenarioLegDetail(
+                        expiry=leg.expiry,
+                        strike=leg.strike,
+                        kind=leg.kind,
+                        qty=leg.qty,
+                        implied_vol=match.implied_volatility,
+                        premium=premium,
+                    )
+                )
+            floor_vol = min(
+                detail.implied_vol + shift for detail in details for shift in parsed.vol_shifts
+            )
+            if not math.isfinite(floor_vol) or floor_vol <= 0.0:
+                return self._error_envelope(
+                    OptionsScenarioEnvelope,
+                    DigifetchError(
+                        code="invalid_input",
+                        message=(
+                            "a vol shift drives a leg vol to a non-positive value "
+                            f"(floor {floor_vol}); shifts are rejected, never clamped"
+                        ),
+                        retryable=False,
+                    ),
+                )
+            epochs = [
+                datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp()
+                for day in parsed.valuation_dates
+            ]
+            premium_paid = sum(detail.premium for detail in details)
+            grid: list[OptionsScenarioGridPoint] = []
+            for day, epoch in zip(parsed.valuation_dates, epochs, strict=True):
+                label = day.isoformat()
+                for spot in parsed.spots:
+                    for shift in parsed.vol_shifts:
+                        value = sum(
+                            self._scenario_leg_value(
+                                kind=detail.kind,
+                                spot=spot,
+                                strike=detail.strike,
+                                rate=parsed.rate,
+                                vol=detail.implied_vol + shift,
+                                tau=(detail.expiry - epoch) / _SECONDS_PER_YEAR,
+                                qty=detail.qty,
+                            )
+                            for detail in details
+                        )
+                        grid.append(
+                            OptionsScenarioGridPoint(
+                                spot=spot,
+                                valuation_date=label,
+                                vol_shift=shift,
+                                value=value,
+                                pnl=value - premium_paid,
+                            )
+                        )
+            ordered_spots = sorted(set(parsed.spots))
+
+            def _expiry_pnl(spot: float) -> float:
+                return (
+                    sum(
+                        self._scenario_intrinsic(detail.kind, spot, detail.strike, detail.qty)
+                        for detail in details
+                    )
+                    - premium_paid
+                )
+
+            expiry_payoff: list[OptionsScenarioExpiryPoint] = []
+            for spot in ordered_spots:
+                payoff = _expiry_pnl(spot) + premium_paid
+                expiry_payoff.append(
+                    OptionsScenarioExpiryPoint(spot=spot, payoff=payoff, pnl=payoff - premium_paid)
+                )
+
+            breakevens: list[float] = []
+            for low, high in zip(ordered_spots, ordered_spots[1:], strict=False):
+                pnl_low, pnl_high = _expiry_pnl(low), _expiry_pnl(high)
+                if pnl_low == 0.0:
+                    breakevens.append(low)
+                if pnl_low * pnl_high < 0.0:
+                    root = self._bisect_expiry_pnl(_expiry_pnl, low, high)
+                    breakevens.append(root)
+            if ordered_spots and _expiry_pnl(ordered_spots[-1]) == 0.0:
+                breakevens.append(ordered_spots[-1])
+            breakevens = sorted({round(root, 9) for root in breakevens})
+
+            ref_spot = parsed.spots[0]
+            ref_epoch = epochs[0]
+            ref_label = parsed.valuation_dates[0].isoformat()
+            leg_greeks: list[OptionsScenarioLegGreeks] = []
+            for index, detail in enumerate(details):
+                tau = (detail.expiry - ref_epoch) / _SECONDS_PER_YEAR
+                leg_greeks.append(
+                    OptionsScenarioLegGreeks(
+                        leg_index=index,
+                        **self._scenario_greeks(
+                            kind=detail.kind,
+                            spot=ref_spot,
+                            strike=detail.strike,
+                            rate=parsed.rate,
+                            vol=detail.implied_vol,
+                            tau=tau,
+                            qty=detail.qty,
+                        ),
+                    )
+                )
+            portfolio = OptionsScenarioPortfolioGreeks(
+                delta=sum(entry.delta for entry in leg_greeks),
+                gamma=sum(entry.gamma for entry in leg_greeks),
+                theta=sum(entry.theta for entry in leg_greeks),
+                vega=sum(entry.vega for entry in leg_greeks),
+            )
+            return OptionsScenarioEnvelope(
+                data=OptionsScenarioResult(
+                    symbol=parsed.symbol,
+                    legs=details,
+                    premium_paid=premium_paid,
+                    valuation_epochs=epochs,
+                    grid=grid,
+                    expiry_payoff=expiry_payoff,
+                    breakevens=breakevens,
+                    greeks_at_spot=ref_spot,
+                    greeks_valuation_date=ref_label,
+                    leg_greeks=leg_greeks,
+                    portfolio_greeks=portfolio,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("options_scenario", parsed, produce)
+
+    @staticmethod
+    def _bisect_expiry_pnl(
+        pnl: Callable[[float], float], low: float, high: float, iterations: int = 100
+    ) -> float:
+        """Bisection root of the continuous expiry-P&L curve on a bracket."""
+        pnl_low = pnl(low)
+        for _ in range(iterations):
+            mid = 0.5 * (low + high)
+            if pnl_low * pnl(mid) <= 0.0:
+                high = mid
+            else:
+                low, pnl_low = mid, pnl(mid)
+        return 0.5 * (low + high)
+
+    @staticmethod
+    def _scenario_greeks(
+        *, kind: str, spot: float, strike: float, rate: float, vol: float, tau: float, qty: float
+    ) -> dict[str, float]:
+        """Finite-difference delta/gamma/theta/vega for one leg (qty included).
+
+        Central differences on the Task 1 Black-Scholes core at (spot, tau,
+        vol); ``theta`` is the value change for one day's passage of time and
+        ``vega`` per unit vol. An expired leg prices intrinsic: step delta,
+        zero gamma/theta/vega.
+        """
+        if tau <= 0.0:
+            up = GloomberbClient._scenario_intrinsic(kind, spot + 1e-4, strike, qty)
+            down = GloomberbClient._scenario_intrinsic(kind, spot - 1e-4, strike, qty)
+            slope = (up - down) / 2e-4
+            return {"delta": slope, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
+
+        def price(at_spot: float, at_tau: float, at_vol: float) -> float:
+            return GloomberbClient._scenario_leg_value(
+                kind, at_spot, strike, rate, at_vol, at_tau, qty
+            )
+
+        bump = min(max(spot * 0.01, 0.01), spot * 0.5)
+        base = price(spot, tau, vol)
+        delta = (price(spot + bump, tau, vol) - price(spot - bump, tau, vol)) / (2.0 * bump)
+        gamma = (price(spot + bump, tau, vol) - 2.0 * base + price(spot - bump, tau, vol)) / (
+            bump * bump
+        )
+        day = 1.0 / 365.25
+        theta = price(spot, tau - day, vol) - base
+        vol_bump = 0.01
+        if vol - vol_bump <= 0.0:
+            vega = (price(spot, tau, vol + vol_bump) - base) / vol_bump
+        else:
+            vega = (price(spot, tau, vol + vol_bump) - price(spot, tau, vol - vol_bump)) / (
+                2.0 * vol_bump
+            )
+        return {"delta": delta, "gamma": gamma, "theta": theta, "vega": vega}
+
+    # -- portfolio-math compositions (130-coverage Task 3) -------------------
+    #
+    # Ten compositions over existing reads. Every number is derived locally
+    # (rebased returns, date-aligned inner joins, Pearson math, statement
+    # multiples, CAPE zones, funding spreads, survival-ladder differences), so
+    # all ten are unattributed: a derived number must not claim Cloud sourcing.
+
+    def _aligned_closes(
+        self, tickers: list[str], resolution: str, range: str | None
+    ) -> tuple[list[str], dict[str, list[float]], list[str]] | DigifetchError:
+        """Date-aligned inner join of daily closes, or a typed error.
+
+        Each leg is one ``price_history`` read. A failed leg (or a leg with no
+        bars) is an ``upstream_error`` naming the ticker; an empty date overlap
+        is an ``invalid_input`` — the join is rejected, never clamped.
+        """
+        per_ticker: dict[str, dict[str, float]] = {}
+        warnings: list[str] = []
+        for ticker in tickers:
+            env = self.price_history({"symbol": ticker, "resolution": resolution, "range": range})
+            warnings.extend(env.warnings)
+            if isinstance(env.data, DigifetchError):
+                return DigifetchError(
+                    code="upstream_error",
+                    message=f"price history unavailable for {ticker}: {env.data.message}",
+                    retryable=env.data.retryable,
+                )
+            closes = {
+                bar.date: bar.close
+                for bar in env.data.bars
+                if bar.close is not None and bar.close > 0.0
+            }
+            if not closes:
+                return DigifetchError(
+                    code="upstream_error",
+                    message=f"price history for {ticker} carries no closes",
+                    retryable=False,
+                )
+            per_ticker[ticker] = closes
+        dates = sorted(set.intersection(*(set(closes) for closes in per_ticker.values())))
+        if not dates:
+            return DigifetchError(
+                code="invalid_input",
+                message=(
+                    f"empty date overlap for {', '.join(tickers)} "
+                    "(the join is rejected, never clamped)"
+                ),
+                retryable=False,
+            )
+        aligned = {ticker: [per_ticker[ticker][day] for day in dates] for ticker in tickers}
+        return dates, aligned, warnings
+
+    @staticmethod
+    def _simple_returns(closes: list[float]) -> list[float]:
+        """Daily simple returns, skipping non-positive bases (noisy-row guard)."""
+        returns: list[float] = []
+        for prev, current in zip(closes, closes[1:], strict=False):
+            if prev > 0.0:
+                returns.append(current / prev - 1.0)
+        return returns
+
+    @staticmethod
+    def _pearson(first: list[float], second: list[float]) -> float | None:
+        """Pearson correlation, or None when either leg is flat (undefined)."""
+        try:
+            return statistics.correlation(first, second)
+        except statistics.StatisticsError:
+            return None
+
+    @staticmethod
+    def _history_zone(percentile: float) -> Literal["cheap", "fair", "expensive"]:
+        """History thirds: cheap ≤1/3, fair ≤2/3, expensive above."""
+        if percentile <= 1.0 / 3.0:
+            return "cheap"
+        if percentile <= 2.0 / 3.0:
+            return "fair"
+        return "expensive"
+
+    def compare_performance(
+        self, request: ComparePerfInput | Mapping[str, Any]
+    ) -> ComparePerfEnvelope:
+        """Rebased performance over two or more price histories (composition).
+
+        Reads one ``price_history`` per ticker, inner-joins on trading dates,
+        and rebases every leg to 100 at the first common date. Fewer than two
+        tickers or an empty date overlap is ``invalid_input``.
+        """
+        parsed = self._validate_input(ComparePerfInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ComparePerfEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ComparePerfEnvelope)
+
+        def produce() -> ComparePerfEnvelope:
+            joined = self._aligned_closes(parsed.tickers, parsed.resolution, parsed.range)
+            if isinstance(joined, DigifetchError):
+                return self._error_envelope(ComparePerfEnvelope, joined)
+            dates, aligned, warnings = joined
+            series = {
+                ticker: [close / closes[0] * 100.0 for close in closes]
+                for ticker, closes in aligned.items()
+            }
+            total_returns = {
+                ticker: closes[-1] / closes[0] - 1.0 for ticker, closes in aligned.items()
+            }
+            return ComparePerfEnvelope(
+                data=ComparePerfResult(
+                    tickers=list(parsed.tickers),
+                    dates=dates,
+                    base_date=dates[0],
+                    series=series,
+                    total_returns=total_returns,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("compare_performance", parsed, produce)
+
+    def correlation_matrix(
+        self, request: CorrMatrixInput | Mapping[str, Any]
+    ) -> CorrMatrixEnvelope:
+        """Pearson correlation matrix over date-aligned daily returns.
+
+        Identical return paths correlate at 1.0; a flat leg correlates with
+        nothing (None — undefined, never a clamped zero-fill claim).
+        """
+        parsed = self._validate_input(CorrMatrixInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CorrMatrixEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CorrMatrixEnvelope)
+
+        def produce() -> CorrMatrixEnvelope:
+            joined = self._aligned_closes(parsed.tickers, parsed.resolution, parsed.range)
+            if isinstance(joined, DigifetchError):
+                return self._error_envelope(CorrMatrixEnvelope, joined)
+            dates, aligned, warnings = joined
+            returns = {ticker: self._simple_returns(closes) for ticker, closes in aligned.items()}
+            matrix = {
+                base: {
+                    quote: (
+                        1.0
+                        if base == quote and len(returns[base]) >= 2
+                        else self._pearson(returns[base], returns[quote])
+                    )
+                    for quote in parsed.tickers
+                }
+                for base in parsed.tickers
+            }
+            return CorrMatrixEnvelope(
+                data=CorrMatrixResult(
+                    tickers=list(parsed.tickers),
+                    matrix=matrix,
+                    common_dates=dates,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("correlation_matrix", parsed, produce)
+
+    def relationship_graph(self, request: RelGraphInput | Mapping[str, Any]) -> RelGraphEnvelope:
+        """Pair relationship: indexed prices, ratio, rolling correlation, beta."""
+        parsed = self._validate_input(RelGraphInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RelGraphEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RelGraphEnvelope)
+
+        def produce() -> RelGraphEnvelope:
+            joined = self._aligned_closes(
+                [parsed.base, parsed.quote], parsed.resolution, parsed.range
+            )
+            if isinstance(joined, DigifetchError):
+                return self._error_envelope(RelGraphEnvelope, joined)
+            dates, aligned, warnings = joined
+            base_closes, quote_closes = aligned[parsed.base], aligned[parsed.quote]
+            indexed_base = [close / base_closes[0] * 100.0 for close in base_closes]
+            indexed_quote = [close / quote_closes[0] * 100.0 for close in quote_closes]
+            ratio = [
+                base / quote if quote > 0.0 else 0.0
+                for base, quote in zip(base_closes, quote_closes, strict=False)
+            ]
+            base_returns = self._simple_returns(base_closes)
+            quote_returns = self._simple_returns(quote_closes)
+            try:
+                beta: float | None = statistics.covariance(
+                    base_returns, quote_returns
+                ) / statistics.variance(quote_returns)
+            except (statistics.StatisticsError, ZeroDivisionError):
+                beta = None
+            rolling: list[float | None] = [None]
+            for end in range(1, len(base_returns) + 1):
+                window_base = base_returns[max(0, end - parsed.window) : end]
+                window_quote = quote_returns[max(0, end - parsed.window) : end]
+                rolling.append(
+                    self._pearson(window_base, window_quote) if len(window_base) >= 2 else None
+                )
+            return RelGraphEnvelope(
+                data=RelGraphResult(
+                    base=parsed.base,
+                    quote=parsed.quote,
+                    dates=dates,
+                    indexed_base=indexed_base,
+                    indexed_quote=indexed_quote,
+                    ratio=ratio,
+                    beta=beta,
+                    rolling_correlation=rolling,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("relationship_graph", parsed, produce)
+
+    def relative_valuation(self, request: RelValInput | Mapping[str, Any]) -> RelValEnvelope:
+        """Peer trailing-multiples table over ticker-financials reads."""
+        parsed = self._validate_input(RelValInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RelValEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RelValEnvelope)
+
+        def produce() -> RelValEnvelope:
+            rows: list[RelValRow] = []
+            warnings: list[str] = []
+            for ticker in parsed.tickers:
+                env = self.ticker_financials({"symbol": ticker})
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return RelValEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"financials unavailable for {ticker}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                financials = env.data.financials
+                fundamentals = financials.fundamentals
+                rows.append(
+                    RelValRow(
+                        symbol=ticker,
+                        price=financials.quote.price if financials.quote else None,
+                        trailing_pe=fundamentals.trailing_pe if fundamentals else None,
+                        forward_pe=fundamentals.forward_pe if fundamentals else None,
+                        peg_ratio=fundamentals.peg_ratio if fundamentals else None,
+                        ev_to_revenue=fundamentals.enterprise_to_revenue if fundamentals else None,
+                        dividend_yield=fundamentals.dividend_yield if fundamentals else None,
+                    )
+                )
+            covered = [row.trailing_pe for row in rows if row.trailing_pe is not None]
+            return RelValEnvelope(
+                data=RelValResult(
+                    rows=rows,
+                    median_pe=statistics.median(covered) if covered else None,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("relative_valuation", parsed, produce)
+
+    def _statement_frame(
+        self, symbol: str, period: str
+    ) -> tuple[Any, float | None, Any, list[str]] | DigifetchError:
+        """Ticker-financials statement rows + price + fundamentals, or an error."""
+        env = self.ticker_financials({"symbol": symbol})
+        if isinstance(env.data, DigifetchError):
+            return DigifetchError(
+                code="upstream_error",
+                message=f"financials unavailable for {symbol}: {env.data.message}",
+                retryable=env.data.retryable,
+            )
+        financials = env.data.financials
+        rows = sorted(
+            (
+                financials.annual_statements
+                if period == "annual"
+                else financials.quarterly_statements
+            ),
+            key=lambda row: row.date or "",
+        )
+        price = financials.quote.price if financials.quote else None
+        return rows, price, financials.fundamentals, list(env.warnings)
+
+    def fundamental_graph(self, request: FundGraphInput | Mapping[str, Any]) -> FundGraphEnvelope:
+        """One statement field's per-period series for one symbol."""
+        parsed = self._validate_input(FundGraphInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FundGraphEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FundGraphEnvelope)
+
+        def produce() -> FundGraphEnvelope:
+            frame = self._statement_frame(parsed.symbol, parsed.period)
+            if isinstance(frame, DigifetchError):
+                return self._error_envelope(FundGraphEnvelope, frame)
+            rows, _price, _fundamentals, warnings = frame
+            points = [
+                FundGraphPoint(date=row.date or "", value=value)
+                for row in rows
+                if row.date
+                for value in [getattr(row, parsed.field, None)]
+                if isinstance(value, (int, float)) and math.isfinite(value)
+            ]
+            if not points:
+                return self._error_envelope(
+                    FundGraphEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=(
+                            f"no {parsed.field} values in {parsed.period} statements "
+                            f"for {parsed.symbol}"
+                        ),
+                        retryable=False,
+                    ),
+                )
+            return FundGraphEnvelope(
+                data=FundGraphResult(
+                    symbol=parsed.symbol,
+                    field=parsed.field,
+                    period=parsed.period,
+                    points=points,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("fundamental_graph", parsed, produce)
+
+    def valuation_graph(self, request: ValGraphInput | Mapping[str, Any]) -> ValGraphEnvelope:
+        """Per-period earnings scaffolding plus the latest multiples snapshot."""
+        parsed = self._validate_input(ValGraphInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ValGraphEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ValGraphEnvelope)
+
+        def produce() -> ValGraphEnvelope:
+            frame = self._statement_frame(parsed.symbol, parsed.period)
+            if isinstance(frame, DigifetchError):
+                return self._error_envelope(ValGraphEnvelope, frame)
+            rows, price, fundamentals, warnings = frame
+            graph_rows = [
+                ValGraphRow(
+                    date=row.date or "",
+                    eps=row.eps,
+                    total_revenue=row.total_revenue,
+                    net_income=row.net_income,
+                )
+                for row in rows
+                if row.date
+            ]
+            if not graph_rows:
+                return self._error_envelope(
+                    ValGraphEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=(f"no {parsed.period} statements for {parsed.symbol}"),
+                        retryable=False,
+                    ),
+                )
+            return ValGraphEnvelope(
+                data=ValGraphResult(
+                    symbol=parsed.symbol,
+                    period=parsed.period,
+                    rows=graph_rows,
+                    snapshot=ValGraphSnapshot(
+                        price=price,
+                        trailing_pe=fundamentals.trailing_pe if fundamentals else None,
+                        forward_pe=fundamentals.forward_pe if fundamentals else None,
+                    ),
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("valuation_graph", parsed, produce)
+
+    def custom_chart(self, request: CustomChartInput | Mapping[str, Any]) -> CustomChartEnvelope:
+        """Explicit-series alignment onto one date union (no catalog search).
+
+        ``price`` legs read closes, ``statement`` legs read one statement
+        field, ``fred`` legs read econ-series values. A failed or empty leg is
+        an ``upstream_error`` naming the leg.
+        """
+        parsed = self._validate_input(CustomChartInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(CustomChartEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(CustomChartEnvelope)
+
+        def produce() -> CustomChartEnvelope:
+            leg_values: dict[str, dict[str, float]] = {}
+            warnings: list[str] = []
+            for leg in parsed.series:
+                key, values, leg_warnings, error = self._custom_chart_leg(leg)
+                warnings.extend(leg_warnings)
+                if error is not None:
+                    return self._error_envelope(CustomChartEnvelope, error)
+                assert values is not None
+                leg_values[key] = values
+            dates = sorted({day for values in leg_values.values() for day in values})
+            columns = {
+                key: [values.get(day) for day in dates] for key, values in leg_values.items()
+            }
+            return CustomChartEnvelope(
+                data=CustomChartResult(dates=dates, columns=columns),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("custom_chart", parsed, produce)
+
+    def _custom_chart_leg(
+        self, leg: Any
+    ) -> tuple[str, dict[str, float] | None, list[str], DigifetchError | None]:
+        """One explicit leg's (key, date->value): error names the leg, never generic."""
+        if leg.source == "price":
+            key = leg.symbol or "price"
+            env = self.price_history(
+                {"symbol": leg.symbol, "resolution": leg.resolution, "range": leg.range}
+            )
+            if isinstance(env.data, DigifetchError):
+                return (
+                    key,
+                    None,
+                    list(env.warnings),
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"price leg unavailable for {leg.symbol}: {env.data.message}",
+                        retryable=env.data.retryable,
+                    ),
+                )
+            values = {
+                bar.date: bar.close
+                for bar in env.data.bars
+                if bar.close is not None and math.isfinite(bar.close)
+            }
+            if not values:
+                return (
+                    key,
+                    None,
+                    list(env.warnings),
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"price leg for {leg.symbol} carries no closes",
+                        retryable=False,
+                    ),
+                )
+            return key, values, list(env.warnings), None
+        if leg.source == "statement":
+            key = f"{leg.symbol}:{leg.field}"
+            frame = self._statement_frame(leg.symbol or "", "annual")
+            if isinstance(frame, DigifetchError):
+                return key, None, [], frame
+            rows, _price, _fundamentals, frame_warnings = frame
+            values = {
+                row.date: value
+                for row in rows
+                if row.date
+                for value in [getattr(row, leg.field, None)]
+                if isinstance(value, (int, float)) and math.isfinite(value)
+            }
+            if not values:
+                return (
+                    key,
+                    None,
+                    frame_warnings,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"statement leg {key} carries no values",
+                        retryable=False,
+                    ),
+                )
+            return key, values, frame_warnings, None
+        key = f"FRED:{leg.ref}"
+        env = self.econ_series({"series_id": leg.ref or "", "limit": 100})
+        if isinstance(env.data, DigifetchError):
+            return (
+                key,
+                None,
+                list(env.warnings),
+                DigifetchError(
+                    code="upstream_error",
+                    message=f"fred leg unavailable for {leg.ref}: {env.data.message}",
+                    retryable=env.data.retryable,
+                ),
+            )
+        values = {
+            observation.date: observation.value
+            for observation in env.data.observations
+            if observation.value is not None and math.isfinite(observation.value)
+        }
+        if not values:
+            return (
+                key,
+                None,
+                list(env.warnings),
+                DigifetchError(
+                    code="upstream_error",
+                    message=f"fred leg {leg.ref} carries no values",
+                    retryable=False,
+                ),
+            )
+        return key, values, list(env.warnings), None
+
+    def market_valuation(self, request: MarketValInput | Mapping[str, Any]) -> MarketValEnvelope:
+        """Shiller CAPE plus optional econ ratios, each against history thirds."""
+        parsed = self._validate_input(MarketValInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(MarketValEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(MarketValEnvelope)
+
+        def produce() -> MarketValEnvelope:
+            env = self.shiller({"limit": parsed.limit})
+            warnings: list[str] = list(env.warnings)
+            if isinstance(env.data, DigifetchError):
+                return self._error_envelope(MarketValEnvelope, env.data)
+            capes = [
+                (observation.date, observation.cape)
+                for observation in env.data.observations
+                if observation.cape is not None and math.isfinite(observation.cape)
+            ]
+            if not capes:
+                return self._error_envelope(
+                    MarketValEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Shiller series carries no CAPE values",
+                        retryable=False,
+                    ),
+                )
+            cape_date, cape = capes[-1]
+            ranked = sum(1 for _, value in capes if value <= cape) / len(capes)
+            ratios: list[EconRatio] = []
+            for series_id in parsed.econ_series_ids:
+                leg = self.econ_series({"series_id": series_id, "limit": parsed.ratio_limit})
+                warnings.extend(leg.warnings)
+                if isinstance(leg.data, DigifetchError):
+                    warnings.append(f"ratio {series_id} skipped: {leg.data.message}")
+                    continue
+                prints = [
+                    (observation.date, observation.value)
+                    for observation in leg.data.observations
+                    if observation.value is not None and math.isfinite(observation.value)
+                ]
+                if not prints:
+                    warnings.append(f"ratio {series_id} skipped: no prints")
+                    continue
+                ratio_date, ratio_value = prints[0]
+                percentile = sum(1 for _, value in prints if value <= ratio_value) / len(prints)
+                ratios.append(
+                    EconRatio(
+                        series_id=series_id,
+                        value=ratio_value,
+                        date=ratio_date,
+                        percentile=percentile,
+                        zone=self._history_zone(percentile),
+                    )
+                )
+            return MarketValEnvelope(
+                data=MarketValResult(
+                    cape=cape,
+                    cape_date=cape_date,
+                    cape_percentile=ranked,
+                    zone=self._history_zone(ranked),
+                    n_observations=len(capes),
+                    ratios=ratios,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("market_valuation", parsed, produce)
+
+    def money_markets(self, request: MoneyMarketsInput | Mapping[str, Any]) -> MoneyMarketsEnvelope:
+        """SOFR/EFFR/reserve prints over FRED econ-series reads (composition).
+
+        Reports the latest prints plus the SOFR-minus-EFFR spread. A failed
+        leg (or one with no prints) is an ``upstream_error`` naming the series.
+        """
+        parsed = self._validate_input(MoneyMarketsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(MoneyMarketsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(MoneyMarketsEnvelope)
+
+        def produce() -> MoneyMarketsEnvelope:
+            legs = (
+                ("sofr", parsed.sofr_series),
+                ("effr", parsed.effr_series),
+                ("reserves", parsed.reserves_series),
+            )
+            prints: dict[str, tuple[str, float]] = {}
+            warnings: list[str] = []
+            for leg, series_id in legs:
+                env = self.econ_series(
+                    {"series_id": series_id, "limit": parsed.limit, "sort_order": "desc"}
+                )
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return MoneyMarketsEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series unavailable for {series_id}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                dated = [
+                    (observation.date, observation.value)
+                    for observation in env.data.observations
+                    if observation.value is not None and math.isfinite(observation.value)
+                ]
+                if not dated:
+                    return MoneyMarketsEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series {series_id} carries no prints",
+                            retryable=False,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                prints[leg] = dated[0]
+            (sofr_date, sofr), (effr_date, effr) = prints["sofr"], prints["effr"]
+            reserves_date, reserves = prints["reserves"]
+            return MoneyMarketsEnvelope(
+                data=MoneyMarketsResult(
+                    sofr=sofr,
+                    effr=effr,
+                    spread=sofr - effr,
+                    reserves=reserves,
+                    sofr_date=sofr_date,
+                    effr_date=effr_date,
+                    reserves_date=reserves_date,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("money_markets", parsed, produce)
+
+    @staticmethod
+    def _venue_prob(value: Any) -> float | None:
+        """Kalshi wire price in probability units (dollar-or-cent wire values)."""
+        prob = _venue_float(value)
+        if prob is None or prob < 0.0:
+            return None
+        if prob > 1.0:
+            prob = prob / 100.0
+        return prob if 0.0 <= prob <= 1.0 else None
+
+    @staticmethod
+    def _meeting_day(value: Any) -> str | None:
+        """Date part of a Kalshi ``close_time`` (the meeting-day anchor)."""
+        if not isinstance(value, str) or len(value) < 10:
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            return value[:10] if value[:10].count("-") == 2 else None
+
+    def rate_path(self, request: RatePathInput | Mapping[str, Any]) -> RatePathEnvelope:
+        """US rate path over live Kalshi KXFED threshold markets (venue-direct).
+
+        Reads one page of open KXFED markets through the venue path, groups by
+        meeting day, and differences each survival ladder into a 25bp outcome
+        distribution with the fed-prob ladder semantics. Anonymous, polled —
+        enrichment only, never a pipeline primary.
+        """
+        parsed = self._validate_input(RatePathInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(RatePathEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(RatePathEnvelope)
+
+        def produce() -> RatePathEnvelope:
+            raw = self._request_json(
+                "GET",
+                "/markets",
+                params={
+                    "series_ticker": "KXFED",
+                    "status": "open",
+                    "limit": str(parsed.limit),
+                },
+                base_url=KALSHI_TRADE_BASE_URL,
+                label="Kalshi",
+            )
+            if isinstance(raw, DigifetchError):
+                return self._error_envelope(RatePathEnvelope, raw)
+            payload = raw.data if isinstance(raw.data, Mapping) else {}
+            markets = payload.get("markets")
+            if not isinstance(markets, list):
+                return self._error_envelope(
+                    RatePathEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message="Kalshi KXFED read returned an unexpected payload",
+                        retryable=False,
+                    ),
+                )
+            ladders: dict[str, dict[float, float]] = {}
+            for market in markets:
+                if not isinstance(market, Mapping):
+                    continue
+                meeting = self._meeting_day(market.get("close_time"))
+                strike_raw = market.get("floor_strike", market.get("strike"))
+                if strike_raw is None:
+                    strike_raw = market.get("floorStrike")
+                try:
+                    strike = float(strike_raw)  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(strike):
+                    continue
+                bid = self._venue_prob(market.get("yes_bid_dollars", market.get("yes_bid")))
+                ask = self._venue_prob(market.get("yes_ask_dollars", market.get("yes_ask")))
+                if bid is not None and ask is not None:
+                    prob: float | None = round((bid + ask) / 2.0, 4)
+                else:
+                    prob = self._venue_prob(
+                        market.get("last_price_dollars", market.get("last_price"))
+                    )
+                if meeting is None or prob is None:
+                    continue
+                ladders.setdefault(meeting, {})[strike] = prob
+            meetings: list[RateMeeting] = []
+            warnings: list[str] = []
+            for meeting in sorted(ladders):
+                derived = fed_distribution_from_ladder(ladders[meeting])
+                if not derived:
+                    warnings.append(f"{meeting}: fewer than two strikes, skipped")
+                    continue
+                meetings.append(
+                    RateMeeting(
+                        meeting=meeting,
+                        distribution=derived["distribution"],
+                        most_likely=derived["most_likely"],
+                        n_strikes=derived["n_strikes"],
+                    )
+                )
+            if not meetings:
+                return RatePathEnvelope(
+                    data=DigifetchError(
+                        code="upstream_error",
+                        message="no KXFED meeting carries a usable strike ladder",
+                        retryable=False,
+                    ),
+                    fetched_at=self._now(),
+                    warnings=warnings,
+                )
+            return RatePathEnvelope(
+                data=RatePathResult(meetings=meetings),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("rate_path", parsed, produce)
+
+    # -- workspace writes + broker reads + approval-gated orders (Task 7) ----
+    #
+    # Write-route disposition: no personal Cloud write route is verified (Task 4
+    # produced no write verdicts; the Task 7 source probe found only team-scoped
+    # account APIs, a mobile alert-history read, the generic /brokers proxy, and
+    # local-gateway IBKR execution). The tools below are session-gated but never
+    # issue Cloud write traffic: without a cookie they answer auth_required with
+    # zero HTTP, and with one they answer the read-only posture below — also
+    # with zero HTTP. Preview mints a local approval ticket; execute ships
+    # disabled pending human gate review.
+
+    def _require_session_cookie(self, envelope: type[EnvT], label: str) -> EnvT | None:
+        """Zero-HTTP session gate: the typed auth_required envelope, or None."""
+        if self._session_cookie is None:
+            return self._error_envelope(
+                envelope,
+                DigifetchError(
+                    code="auth_required",
+                    message=f"{label} requires a verified Gloom session; "
+                    f"{GLOOMBERB_SESSION_COOKIE_ENV} is not set",
+                    retryable=False,
+                ),
+            )
+        return None
+
+    def _read_only_workspace(self, envelope: type[EnvT], label: str) -> EnvT:
+        """Read-only posture: typed upstream_error, never a request."""
+        return self._error_envelope(
+            envelope,
+            DigifetchError(
+                code="upstream_error",
+                message=(
+                    f"{label} is read-only in this phase: no personal Gloomberb "
+                    "Cloud write route is verified (source probe 2026-09-30 found "
+                    "only team-scoped account APIs), so no request was made"
+                ),
+                retryable=False,
+            ),
+        )
+
+    def portfolio_view(
+        self, request: PortfolioViewInput | Mapping[str, Any]
+    ) -> PortfolioViewEnvelope:
+        parsed = self._validate_input(PortfolioViewInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PortfolioViewEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PortfolioViewEnvelope)
+        gated = self._require_session_cookie(PortfolioViewEnvelope, "portfolio_view")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(PortfolioViewEnvelope, "portfolio_view")
+
+    def watchlist_add(self, request: WatchlistAddInput | Mapping[str, Any]) -> WatchlistAddEnvelope:
+        parsed = self._validate_input(WatchlistAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(WatchlistAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(WatchlistAddEnvelope)
+        gated = self._require_session_cookie(WatchlistAddEnvelope, "watchlist_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(WatchlistAddEnvelope, "watchlist_add")
+
+    def watchlist_remove(
+        self, request: WatchlistRemoveInput | Mapping[str, Any]
+    ) -> WatchlistRemoveEnvelope:
+        parsed = self._validate_input(WatchlistRemoveInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(WatchlistRemoveEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(WatchlistRemoveEnvelope)
+        gated = self._require_session_cookie(WatchlistRemoveEnvelope, "watchlist_remove")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(WatchlistRemoveEnvelope, "watchlist_remove")
+
+    def portfolio_add(self, request: PortfolioAddInput | Mapping[str, Any]) -> PortfolioAddEnvelope:
+        parsed = self._validate_input(PortfolioAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PortfolioAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PortfolioAddEnvelope)
+        gated = self._require_session_cookie(PortfolioAddEnvelope, "portfolio_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(PortfolioAddEnvelope, "portfolio_add")
+
+    def portfolio_remove(
+        self, request: PortfolioRemoveInput | Mapping[str, Any]
+    ) -> PortfolioRemoveEnvelope:
+        parsed = self._validate_input(PortfolioRemoveInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(PortfolioRemoveEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(PortfolioRemoveEnvelope)
+        gated = self._require_session_cookie(PortfolioRemoveEnvelope, "portfolio_remove")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(PortfolioRemoveEnvelope, "portfolio_remove")
+
+    def alert_add(self, request: AlertAddInput | Mapping[str, Any]) -> AlertAddEnvelope:
+        parsed = self._validate_input(AlertAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(AlertAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(AlertAddEnvelope)
+        gated = self._require_session_cookie(AlertAddEnvelope, "alert_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(AlertAddEnvelope, "alert_add")
+
+    def alert_list(self, request: AlertListInput | Mapping[str, Any]) -> AlertListEnvelope:
+        parsed = self._validate_input(AlertListInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(AlertListEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(AlertListEnvelope)
+        gated = self._require_session_cookie(AlertListEnvelope, "alert_list")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(AlertListEnvelope, "alert_list")
+
+    def note_add(self, request: NoteAddInput | Mapping[str, Any]) -> NoteAddEnvelope:
+        parsed = self._validate_input(NoteAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(NoteAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(NoteAddEnvelope)
+        gated = self._require_session_cookie(NoteAddEnvelope, "note_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(NoteAddEnvelope, "note_add")
+
+    def thesis_add(self, request: ThesisAddInput | Mapping[str, Any]) -> ThesisAddEnvelope:
+        parsed = self._validate_input(ThesisAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ThesisAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ThesisAddEnvelope)
+        gated = self._require_session_cookie(ThesisAddEnvelope, "thesis_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(ThesisAddEnvelope, "thesis_add")
+
+    def view_add(self, request: ViewAddInput | Mapping[str, Any]) -> ViewAddEnvelope:
+        parsed = self._validate_input(ViewAddInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(ViewAddEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(ViewAddEnvelope)
+        gated = self._require_session_cookie(ViewAddEnvelope, "view_add")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(ViewAddEnvelope, "view_add")
+
+    def broker_positions(
+        self, request: BrokerPositionsInput | Mapping[str, Any]
+    ) -> BrokerPositionsEnvelope:
+        parsed = self._validate_input(BrokerPositionsInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(BrokerPositionsEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(BrokerPositionsEnvelope)
+        gated = self._require_session_cookie(BrokerPositionsEnvelope, "broker_positions")
+        if gated is not None:
+            return gated
+        return self._read_only_workspace(BrokerPositionsEnvelope, "broker_positions")
+
+    def ibkr_preview_order(
+        self, request: IbkrPreviewOrderInput | Mapping[str, Any]
+    ) -> IbkrPreviewEnvelope:
+        """Validate an order and mint its single-use approval ticket. Never executes."""
+        parsed = self._validate_input(IbkrPreviewOrderInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IbkrPreviewEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IbkrPreviewEnvelope)
+        gated = self._require_session_cookie(IbkrPreviewEnvelope, "ibkr_preview_order")
+        if gated is not None:
+            return gated
+        try:
+            ticket = OrderTicket(
+                symbol=parsed.symbol,
+                side=parsed.side,
+                quantity=parsed.quantity,
+                order_type=parsed.order_type,
+                limit_price=parsed.limit_price,
+                exchange=parsed.exchange,
+            )
+        except ValidationError as exc:
+            return self._error_envelope(
+                IbkrPreviewEnvelope,
+                DigifetchError(
+                    code="invalid_input", message=_format_validation_error(exc), retryable=False
+                ),
+            )
+        try:
+            token = issue_ticket(ticket)
+        except ApprovalError as exc:
+            return self._error_envelope(
+                IbkrPreviewEnvelope,
+                DigifetchError(code="upstream_error", message=str(exc), retryable=False),
+            )
+        # Audit: symbol/side/quantity only — the token is the execute handoff
+        # and must never reach the logs.
+        logger.info(
+            "ibkr_preview_order symbol=%s side=%s quantity=%s order_type=%s",
+            ticket.symbol,
+            ticket.side,
+            ticket.quantity,
+            ticket.order_type,
+        )
+        return IbkrPreviewEnvelope(
+            data=IbkrPreviewResult(
+                ticket=ticket,
+                approval_token=token,
+                expires_at=self._now() + timedelta(seconds=APPROVAL_TTL_SECONDS),
+            ),
+            fetched_at=self._now(),
+        )
+
+    def ibkr_execute_order(
+        self, request: IbkrExecuteOrderInput | Mapping[str, Any]
+    ) -> IbkrExecuteEnvelope:
+        """Redeem an approval token and place the bound order.
+
+        Ships DISABLED pending human approval-gate review: a valid token ends in
+        the typed ``upstream_error`` below with zero brokerage traffic. Only
+        ``dry_run`` returns data (the would-be request), also with zero traffic.
+        """
+        parsed = self._validate_input(IbkrExecuteOrderInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(IbkrExecuteEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(IbkrExecuteEnvelope)
+        gated = self._require_session_cookie(IbkrExecuteEnvelope, "ibkr_execute_order")
+        if gated is not None:
+            return gated
+        try:
+            ticket = redeem_token(parsed.approval_token)
+        except ApprovalError as exc:
+            return self._error_envelope(
+                IbkrExecuteEnvelope,
+                DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+            )
+        if (
+            ticket.symbol.upper() != parsed.symbol.upper()
+            or ticket.side != parsed.side
+            or ticket.quantity != parsed.quantity
+            or ticket.order_type != parsed.order_type
+            or ticket.limit_price != parsed.limit_price
+        ):
+            return self._error_envelope(
+                IbkrExecuteEnvelope,
+                DigifetchError(
+                    code="invalid_input",
+                    message=(
+                        "approval ticket does not match the order: symbol, side, "
+                        "quantity, order-type, and limit are bound at preview"
+                    ),
+                    retryable=False,
+                ),
+            )
+        # Audit: symbol/side/quantity only — never the token.
+        logger.info(
+            "ibkr_execute_order symbol=%s side=%s quantity=%s order_type=%s dry_run=%s",
+            parsed.symbol,
+            parsed.side,
+            parsed.quantity,
+            parsed.order_type,
+            parsed.dry_run,
+        )
+        if parsed.dry_run:
+            return IbkrExecuteEnvelope(
+                data=IbkrExecuteResult(
+                    ticket=ticket,
+                    dry_run=True,
+                    would_be=WouldBeOrder(
+                        body={
+                            "symbol": parsed.symbol,
+                            "side": parsed.side,
+                            "quantity": parsed.quantity,
+                            "order_type": parsed.order_type,
+                            "limit_price": parsed.limit_price,
+                            "exchange": parsed.exchange,
+                        }
+                    ),
+                ),
+                fetched_at=self._now(),
+            )
+        return self._error_envelope(
+            IbkrExecuteEnvelope,
+            DigifetchError(
+                code="upstream_error",
+                message="order execution disabled pending approval-gate review",
+                retryable=False,
+            ),
+        )
+
     # -- internals ---------------------------------------------------------
 
     def _validate_input(
@@ -2453,9 +6621,15 @@ class GloomberbClient:
     ) -> EnvT:
         # Cache first: a warm enrichment read still serves during an upstream
         # outage, and the breaker only guards real requests. The key includes
-        # the session fingerprint: responses are entitlement-sensitive, so a
-        # cached preview/full report must never be served across sessions.
-        key = (name, session_cache_fingerprint(self._session_cookie), request.model_dump_json())
+        # both session fingerprints: responses are entitlement-sensitive, so a
+        # cached preview/full report must never be served across sessions —
+        # and the Substack reader is account-sensitive under its own cookie.
+        key = (
+            name,
+            session_cache_fingerprint(self._session_cookie),
+            session_cache_fingerprint(self._substack_cookie),
+            request.model_dump_json(),
+        )
         now = self._monotonic()
         with self._cache_lock:
             self._evict_expired(now)
@@ -2506,6 +6680,24 @@ class GloomberbClient:
         with self._breaker_lock:
             self._consecutive_failures = 0
             self._opened_at = None
+
+    def _substack_cookies(self) -> dict[str, str] | None:
+        """Own-account Substack cookies (bare token fans out over both names).
+
+        Only the Substack reader sends these; Cloud routes never see them.
+        Mirrors :meth:`_session_cookies` (bare token or ``name=value``).
+        """
+        raw = self._substack_cookie
+        if not raw:
+            return None
+        if "=" in raw:
+            name, _, value = raw.partition("=")
+            name, value = name.strip(), value.strip()
+            if name and value:
+                return {name: value}
+        # A bare token is sent under every upstream Substack cookie name, the
+        # same fallback the TS plugin uses when it has not observed a name.
+        return {name: raw for name in SUBSTACK_COOKIE_NAMES}
 
     def _session_cookies(self) -> dict[str, str] | None:
         raw = self._session_cookie
@@ -2617,6 +6809,8 @@ class GloomberbClient:
         retry_policy: RetryPolicy | None = None,
         base_url: str | None = None,
         label: str = "Gloomberb",
+        cookies: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> _RawResponse | DigifetchError:
         if not self._enabled:
             return DigifetchError(
@@ -2635,7 +6829,10 @@ class GloomberbClient:
         if breaker is not None:
             return breaker
         url = f"{base_url or self._base_url}{path}"
-        cookies = self._session_cookies() if gated else None
+        # An explicit cookie jar (the own-account Substack reader) wins; gated
+        # Cloud routes attach the Gloom session cookie, ungated reads send none.
+        if cookies is None:
+            cookies = self._session_cookies() if gated else None
 
         def attempt() -> FetchResult:
             self._rate_limiter.acquire()
@@ -2646,6 +6843,7 @@ class GloomberbClient:
                     params=params,
                     json=body,
                     cookies=cookies,
+                    headers=headers,
                 )
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code >= 500:
@@ -2784,3 +6982,79 @@ class GloomberbClient:
             as_of=str(payload["asOf"]) if payload.get("asOf") is not None else None,
             currency=str(currency) if currency is not None else None,
         )
+
+    def _request_text(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        retry_policy: RetryPolicy | None = None,
+        base_url: str | None = None,
+        label: str = "Gloomberb",
+        headers: Mapping[str, str] | None = None,
+    ) -> str | DigifetchError:
+        """Raw-text read for non-JSON venues (the Nasdaq halt RSS feed).
+
+        Mirrors :meth:`_request_json`'s transport contract (kill switch,
+        breaker, retry, per-label HTTP mapping) without the JSON envelope
+        parsing — the caller validates the body shape itself.
+        """
+        if not self._enabled:
+            return DigifetchError(
+                code="upstream_error",
+                message=f"Gloomberb data family disabled by kill switch ({GLOOMBERB_ENABLED_ENV})",
+                retryable=False,
+            )
+        breaker = self._breaker_error()
+        if breaker is not None:
+            return breaker
+        url = f"{base_url or self._base_url}{path}"
+
+        def attempt() -> FetchResult:
+            self._rate_limiter.acquire()
+            try:
+                return self._fetcher.fetch(
+                    url,
+                    method=method,
+                    params=params,
+                    headers=headers,
+                )
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code >= 500:
+                    raise _UpstreamServerError(str(exc)) from exc
+                raise
+
+        try:
+            result = with_retry(
+                attempt,
+                retry_policy or self._retry_policy,
+                description=f"{label.lower()} {method} {path}",
+            )
+        except httpx.HTTPStatusError as exc:
+            error = self._map_http_error(exc, label=label)
+            if error.retryable or error.code == "rate_limited":
+                self._record_failure()
+            return error
+        except (httpx.TransportError, _UpstreamServerError) as exc:
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} request failed: {exc}",
+                retryable=True,
+            )
+        except SsrfBlockedError as exc:
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} request blocked by the SSRF guard: {exc}",
+                retryable=False,
+            )
+        except httpx.HTTPError as exc:
+            self._record_failure()
+            return DigifetchError(
+                code="upstream_error",
+                message=f"{label} request failed: {exc}",
+                retryable=False,
+            )
+        self._record_success()
+        return result.text
