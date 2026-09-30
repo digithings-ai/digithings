@@ -1,6 +1,6 @@
 name: "Test: digivoice"
 
-# Local CLI scaffold (#4818). Installs from the committed uv.lock.
+# Local CLI (#4818). Installs from the committed uv.lock.
 on:
   workflow_call:
 
