@@ -44,6 +44,7 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "m2",
     "rs_eth",
     "dxy",
+    "uup",
     "gvz",
     "walcl",
     "hy_oas",
@@ -62,6 +63,7 @@ GOLD_MACRO_NAMES: tuple[str, ...] = (
     "nfci",
     "gdx_gld",
     "gld_slv",
+    "uup",
 )
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
@@ -75,6 +77,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "m2": "m2_weight",
     "rs_eth": "rs_eth_weight",
     "dxy": "dxy_weight",
+    "uup": "uup_weight",
     "gvz": "gvz_weight",
     "walcl": "walcl_weight",
     "hy_oas": "hy_oas_weight",
@@ -94,6 +97,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "m2": "M2 liquidity",
     "rs_eth": "BTC/ETH relative strength",
     "dxy": "DXY",
+    "uup": "dollar proxy (UUP)",
     "gvz": "gold volatility (GVZ)",
     "walcl": "Fed balance sheet",
     "hy_oas": "HY credit spread",
@@ -122,6 +126,7 @@ class SdcaCompositeWeights(BaseModel):
     m2: float = Field(0.0, ge=0.0)
     rs_eth: float = Field(0.0, ge=0.0)
     dxy: float = Field(0.0, ge=0.0)
+    uup: float = Field(0.0, ge=0.0)
     gvz: float = Field(0.0, ge=0.0)
     walcl: float = Field(0.0, ge=0.0)
     hy_oas: float = Field(0.0, ge=0.0)
@@ -145,6 +150,7 @@ class SdcaCompositeWeights(BaseModel):
             ("m2", self.m2),
             ("rs_eth", self.rs_eth),
             ("dxy", self.dxy),
+            ("uup", self.uup),
             ("gvz", self.gvz),
             ("walcl", self.walcl),
             ("hy_oas", self.hy_oas),
@@ -178,6 +184,8 @@ class ExtraIndicatorSources(BaseModel):
     eth_close: pl.Series | None = None
     dxy_dates: pl.Series | None = None
     dxy_values: pl.Series | None = None
+    uup_dates: pl.Series | None = None
+    uup_close: pl.Series | None = None
     gvz_dates: pl.Series | None = None
     gvz_values: pl.Series | None = None
     walcl_dates: pl.Series | None = None
@@ -203,6 +211,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         m2=float(params.get("m2_weight", 0.0)),
         rs_eth=float(params.get("rs_eth_weight", 0.0)),
         dxy=float(params.get("dxy_weight", 0.0)),
+        uup=float(params.get("uup_weight", 0.0)),
         gvz=float(params.get("gvz_weight", 0.0)),
         walcl=float(params.get("walcl_weight", 0.0)),
         hy_oas=float(params.get("hy_oas_weight", 0.0)),
@@ -230,6 +239,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         m2=float(payload.get("m2", 0.0)),
         rs_eth=float(payload.get("rs_eth", 0.0)),
         dxy=float(payload.get("dxy", 0.0)),
+        uup=float(payload.get("uup", 0.0)),
         gvz=float(payload.get("gvz", 0.0)),
         walcl=float(payload.get("walcl", 0.0)),
         hy_oas=float(payload.get("hy_oas", 0.0)),
@@ -320,6 +330,24 @@ def dxy_z(
     """Dollar index rolling-z, sign-flipped: strong dollar → −z (headwind)."""
     aligned = align_to_dates(dates, dxy_dates, dxy_values, forward_fill=True)
     return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("dxy")
+
+
+def uup_z(
+    dates: pl.Series,
+    uup_dates: pl.Series,
+    uup_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """UUP dollar-proxy rolling-z, sign-flipped like DXY: strong dollar → −z.
+
+    UUP↔DXY correlate 0.86/0.88 (levels/63d changes, 4857 joint days) — this
+    leg is a refreshability swap for the unstageable DTWEXBGS file, not a new
+    independent vote. Parity with dxy, not outperformance, is success.
+    """
+    aligned = align_to_dates(dates, uup_dates, uup_values, forward_fill=True)
+    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("uup")
 
 
 def _macro_level_z(
@@ -526,6 +554,21 @@ def build_extra_indicators(
                     min_samples=min_samples,
                 ),
                 weight=enabled["dxy"],
+            )
+        )
+    if "uup" in enabled:
+        uup_dates = _require_pair(sources.uup_dates, sources.uup_close, "uup")
+        extras.append(
+            IndicatorWeight(
+                name="uup",
+                z=uup_z(
+                    dates,
+                    uup_dates,
+                    sources.uup_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["uup"],
             )
         )
     if "gvz" in enabled:
@@ -842,6 +885,7 @@ __all__ = [
     "causal_rolling_z",
     "composite_weights_from_params",
     "dxy_z",
+    "uup_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
     "gdx_gld_z",

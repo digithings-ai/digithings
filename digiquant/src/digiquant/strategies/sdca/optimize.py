@@ -68,6 +68,7 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "m2_weight": 0.0,
     "rs_eth_weight": 0.0,
     "dxy_weight": 0.0,
+    "uup_weight": 0.0,
     "gdx_gld_weight": 0.0,
     "gld_slv_weight": 0.0,
     "weekly_rsi_weight": 0.0,
@@ -183,6 +184,7 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_path = _first_existing(base, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
     eth_path = _first_existing(base, ("ETH-USD.csv", "ETH-USD.parquet"))
     dxy_path = _first_existing(base, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    uup_path = _first_existing(base, ("UUP.csv", "UUP.parquet"))
     gvz_path = _first_existing(base, ("GVZCLS.csv", "GVZCLS.parquet"))
     walcl_path = _first_existing(base, ("WALCL.csv", "WALCL.parquet"))
     hy_path = _first_existing(base, ("BAMLH0A0HYM2.csv", "BAMLH0A0HYM2.parquet"))
@@ -194,6 +196,7 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
     m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
     eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
     dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    uup_dates, uup_close = load_date_value_frame(uup_path) if uup_path else (None, None)
     gvz_dates, gvz_values = load_date_value_frame(gvz_path) if gvz_path else (None, None)
     walcl_dates, walcl_values = load_date_value_frame(walcl_path) if walcl_path else (None, None)
     hy_oas_dates, hy_oas_values = load_date_value_frame(hy_path) if hy_path else (None, None)
@@ -209,6 +212,8 @@ def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        uup_dates=uup_dates,
+        uup_close=uup_close,
         gvz_dates=gvz_dates,
         gvz_values=gvz_values,
         walcl_dates=walcl_dates,
@@ -240,6 +245,8 @@ def drop_extras_missing_sources(
         payload["rs_eth"] = 0.0
     if payload["dxy"] > 0.0 and sources.dxy_dates is None:
         payload["dxy"] = 0.0
+    if payload["uup"] > 0.0 and sources.uup_dates is None:
+        payload["uup"] = 0.0
     if payload["gvz"] > 0.0 and sources.gvz_dates is None:
         payload["gvz"] = 0.0
     if payload["walcl"] > 0.0 and sources.walcl_dates is None:
@@ -269,7 +276,7 @@ def load_sdca_extra_z(
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
     Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``,
-    plus the gold legs ``GVZCLS.csv``, ``WALCL.csv``, ``BAMLH0A0HYM2.csv``,
+    ``UUP.csv``, plus the gold legs ``GVZCLS.csv``, ``WALCL.csv``, ``BAMLH0A0HYM2.csv``,
     ``BAMLC0A0CM.csv``, ``T5YIE.csv``, ``NFCI.csv``, ``GDX-USD.csv``, ``SLV.csv``
     (each also accepted as parquet).
     Missing files omit that extra (trials that need it are skipped).
