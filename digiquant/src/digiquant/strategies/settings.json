@@ -52,6 +52,37 @@
           "sma_band": 0.0
         }
       }
+    },
+    "gold_sdca": {
+      "symbol": "GLD-USD",
+      "ccxt_symbol": "GLD/USD",
+      "label": "GLD-SDCA",
+      "kind": "dca",
+      "strategy_type": "sdca",
+      "sdca": {
+        "preset": "gold_optimized",
+        "risk_model": "generic_valuation",
+        "long_only": false,
+        "initial_cash": 1000.0,
+        "indicator_weights": {
+          "valuation": 1.0,
+          "m2": 0.5,
+          "rs_eth": 0.0,
+          "dxy": 0.0,
+          "uup": 0.5,
+          "gvz": 0.0,
+          "walcl": 0.0,
+          "hy_oas": 0.0,
+          "ig_oas": 0.0,
+          "breakeven_5y": 0.0,
+          "nfci": 0.0,
+          "gdx_gld": 0.0,
+          "gld_slv": 0.0,
+          "weekly_rsi": 0.0,
+          "weekly_macd": 0.0,
+          "sma_band": 0.0
+        }
+      }
     }
   }
 }

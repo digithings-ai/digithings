@@ -1,0 +1,73 @@
+{
+  "preset": "gold_optimized",
+  "evaluator": "curve_simulator",
+  "objective": {
+    "capital_deployed_floor_pct": 10.0,
+    "max_drawdown_cap_pct": 50.0
+  },
+  "fit_window": [
+    "2004-11-18",
+    "2022-05-11"
+  ],
+  "folds": [
+    {
+      "fold": 0,
+      "is_start": "2004-11-18",
+      "is_end": "2009-04-02",
+      "oos_start": "2009-04-03",
+      "oos_end": "2013-08-15"
+    },
+    {
+      "fold": 1,
+      "is_start": "2004-11-18",
+      "is_end": "2013-08-15",
+      "oos_start": "2013-08-16",
+      "oos_end": "2017-12-27"
+    },
+    {
+      "fold": 2,
+      "is_start": "2004-11-18",
+      "is_end": "2017-12-27",
+      "oos_start": "2017-12-28",
+      "oos_end": "2022-05-11"
+    }
+  ],
+  "holdout": [
+    "2022-05-12",
+    "2026-09-29"
+  ],
+  "best_params": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 45.0,
+    "sell_knee_risk": 50.0,
+    "sell_max_rate": 30.0,
+    "buy_curvature": 1.0,
+    "sell_curvature": 2.0,
+    "buy_mid_curvature": 1.0,
+    "sell_mid_curvature": 1.0,
+    "valuation_weight": 1.0,
+    "m2_weight": 0.5,
+    "rs_eth_weight": 0.0,
+    "dxy_weight": 0.0,
+    "uup_weight": 0.5,
+    "gvz_weight": 0.0,
+    "walcl_weight": 0.0,
+    "hy_oas_weight": 0.0,
+    "ig_oas_weight": 0.0,
+    "breakeven_5y_weight": 0.0,
+    "nfci_weight": 0.0,
+    "gdx_gld_weight": 0.0,
+    "gld_slv_weight": 0.0,
+    "weekly_rsi_weight": 0.0,
+    "weekly_macd_weight": 0.0,
+    "sma_band_weight": 0.0
+  },
+  "mean_is_vs_flat_dca_pct": 28.075068825244326,
+  "mean_oos_vs_flat_dca_pct": 9.965535247091468,
+  "is_oos_gap_pct": 18.109533578152856,
+  "holdout_vs_flat_dca_pct": -21.15507952929604,
+  "beats_flat_dca_oos": true,
+  "sensitivity_stable": true,
+  "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
+  "notes": "v3 winner = honest-v3 gated_shape (35/45/50/30/1.0/2.0, mids null -- the single-knee projection the gate actually evaluated; gate_projection_drops_mid_tier=true, so null mid keys are omitted from best_params, not hidden). Feasibility floor measured on capital_deployed_peak_pct (peak-based, post-Plan-9 override; net deployed went negative on the holdout tail after take-profit sells). Gate: mean-OOS +9.97% vs flat (beats_flat true), per-fold +23.31/-11.16/+17.75, sensitivity stable 0.45 (49 neighbors, worst buy_knee_risk:-5%). Honest holdout (Task 1, scored once 2026-10-01): -21.16% vs flat DCA on 2022-05-12..2026-09-29, feasible (peak-deployed ~100%, dd 8.65) -- trails flat DCA out-of-sample; record kept honest, not softened. Weights valuation 1.0/m2 0.5/uup 0.5, rest 0 (hy/ig at zero; BAML depth work outstanding). Evaluator curve_simulator (Linux-safe simulator; not a Nautilus walk-forward). Detail: digiquant/.scratch/gold_curve_search_honest_v3.json. Do not --push-supabase from the agent environment."
+}
