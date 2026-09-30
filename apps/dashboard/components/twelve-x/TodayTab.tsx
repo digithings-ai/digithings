@@ -117,11 +117,11 @@ export default function TodayTab({
             variant="link"
             size="xs"
             data-disputes-line="true"
+            aria-pressed={highlightDisputed}
             className="h-auto justify-start p-0 text-left text-sm text-accent"
             onClick={() => setHighlightDisputed((v) => !v)}
           >
-            The data disputes {disputeCount} of today&rsquo;s calls
-            {disputeCount === 1 ? '' : 's'}.
+            The data disputes {disputeCount} of today&rsquo;s calls.
           </Button>
         </p>
       ) : null}

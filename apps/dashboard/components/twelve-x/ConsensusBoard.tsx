@@ -59,14 +59,19 @@ export default function ConsensusBoard({
                     type="button"
                     variant="ghost"
                     size="xs"
-                    className={`h-auto justify-start p-0 font-mono text-[13px] font-semibold hover:bg-transparent hover:text-accent ${
+                    className={`h-auto justify-start p-0 font-mono text-[13px] font-semibold hover:bg-transparent hover:text-accent dark:hover:bg-transparent ${
                       disputed ? 'text-warn' : 'text-ink'
                     }`}
                     title={`${r.currency}: ${r.label} — open on the Consensus tab`}
                     onClick={() => crossLink({ kind: 'currency', currency: r.currency })}
                   >
                     {r.currency}
-                    {disputed ? <span aria-label="disputed by the data"> ●</span> : null}
+                    {disputed ? (
+                      <>
+                        <span aria-hidden> ●</span>
+                        <span className="sr-only">, disputed by the data</span>
+                      </>
+                    ) : null}
                   </Button>
                   <ScoreBar
                     label={`${r.currency} 5-run average`}

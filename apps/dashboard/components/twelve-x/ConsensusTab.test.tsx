@@ -10,6 +10,7 @@ const mockContext: TwelveXContextValue = {
   runDate: '2026-06-22',
   crossLink: () => {},
   openBrief: () => {},
+  openIdea: () => {},
   watchlist: {
     items: [],
     has: () => false,
@@ -182,6 +183,34 @@ describe('ConsensusTab confluence reads', () => {
     expect(html).toContain('bullish');
     expect(html).toContain('JPY');
     expect(html).toContain('bearish');
+  });
+
+  it('tones each read by direction — neutral and watch never read as bearish', () => {
+    const read = (rank: number, currency: string, direction: string) => ({
+      run_date: '2026-06-22',
+      rank,
+      currency,
+      direction,
+      score: 0.5,
+      components: {},
+      as_of: '2026-06-22T12:00:00Z',
+    });
+    const html = render({
+      confluence: [
+        read(1, 'EUR', 'bullish'),
+        read(2, 'JPY', 'bearish'),
+        read(3, 'GBP', 'neutral'),
+        read(4, 'CHF', 'watch'),
+      ] as never,
+    });
+    const toneOf = (direction: string) => {
+      const li = html.slice(html.indexOf(`data-direction="${direction}"`));
+      return li.match(/text-xs font-semibold uppercase (text-[\w-]+)/)?.[1];
+    };
+    expect(toneOf('bullish')).toBe('text-accent');
+    expect(toneOf('bearish')).toBe('text-warn');
+    expect(toneOf('neutral')).toBe('text-ink-soft');
+    expect(toneOf('watch')).toBe('text-ink-mute');
   });
 
   it('omits the confluence reads section when there are no rows', () => {

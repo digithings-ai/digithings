@@ -16,6 +16,7 @@ const ctx: TwelveXContextValue = {
   runDate: '2026-06-22',
   crossLink: () => {},
   openBrief: () => {},
+  openIdea: () => {},
   watchlist: {
     items: [],
     has: () => false,
@@ -294,7 +295,9 @@ describe('TodayTab layout (Task 2.2)', () => {
       tradeIdeas,
     );
     expect(html).toContain('data-disputes-line="true"');
-    expect(html).toContain('The data disputes 1 of today');
+    expect(html).toContain('The data disputes 1 of today’s calls.');
+    expect(html).not.toContain('callss');
+    expect(html).toMatch(/aria-pressed="false"[^>]*data-disputes-line="true"|data-disputes-line="true"[^>]*aria-pressed="false"/);
   });
 
   it('does not surface the internal track-record scoreboard', () => {

@@ -11,6 +11,7 @@ import {
 } from '@/lib/twelve-x/consensus-bar';
 import type {
   ConsensusDeltaSet,
+  CurrencyView,
   FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusDivergence,
@@ -23,6 +24,7 @@ import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';
 import DivergencePanel from './DivergencePanel';
 import { deriveBoardRows, stanceSegments } from '@/lib/twelve-x/board-view';
 import { fmtSigned } from '@/lib/twelve-x/format';
+import { directionStyle } from '@/lib/twelve-x/matrix-format';
 import DeltaChip from './DeltaChip';
 import { useTwelveX } from './context';
 
@@ -116,10 +118,9 @@ export default function ConsensusTab({
     return researchBriefs.filter((brief) => {
       if (!brief.currency_views) return false;
       const views = Array.isArray(brief.currency_views) ? brief.currency_views : [];
-      return views.some((view: any) => {
-        const ccyInView = view.currency || '';
-        const legs = ccyInView.split('/');
-        return legs.some((leg: string) => leg.trim().toUpperCase() === drilldownCcy);
+      return views.some((view: Partial<CurrencyView> | null) => {
+        const legs = (view?.currency ?? '').split('/');
+        return legs.some((leg) => leg.trim().toUpperCase() === drilldownCcy);
       });
     });
   }, [drilldownCcy, researchBriefs]);
@@ -182,7 +183,7 @@ export default function ConsensusTab({
                       type="button"
                       variant="ghost"
                       size="xs"
-                      className="mb-1 flex h-auto w-full justify-start gap-2 p-0 font-mono text-[13px] font-semibold text-ink hover:bg-transparent hover:text-accent"
+                      className="mb-1 flex h-auto w-full justify-start gap-2 p-0 font-mono text-[13px] font-semibold text-ink hover:bg-transparent hover:text-accent dark:hover:bg-transparent"
                       title={`${r.currency}: ${r.label} — open drilldown`}
                       onClick={() => setDrilldownCcy(r.currency)}
                     >
@@ -236,20 +237,18 @@ export default function ConsensusTab({
             </span>
           </div>
           <ul className="grid gap-1">
-            {confluence.map((c) => (
+            {confluence.map((c) => {
+              const dir = directionStyle(c.direction);
+              return (
               <li
                 key={`${c.rank}-${c.currency}`}
+                data-direction={c.direction}
                 className="flex items-center gap-2 border-t border-hair pt-1 first:border-t-0 first:pt-0"
               >
                 <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
                 <span className="font-semibold text-ink">{c.currency}</span>
-                <span
-                  className={`text-xs font-semibold uppercase ${
-                    c.direction === 'bullish' || c.direction === 'long'
-                      ? 'text-accent'
-                      : 'text-warn'
-                  }`}
-                >
+                <span className={`text-xs font-semibold uppercase ${dir.text}`}>
+                  <span aria-hidden>{dir.glyph} </span>
                   {c.direction}
                 </span>
                 <Button
@@ -261,7 +260,8 @@ export default function ConsensusTab({
                   trend →
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Card>
       ) : null}
