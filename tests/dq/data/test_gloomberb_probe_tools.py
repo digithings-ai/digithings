@@ -846,6 +846,29 @@ def test_trending_hydrates_yahoo_symbols_with_delayed_quotes() -> None:
     assert "Yahoo" in envelope.data.attribution
 
 
+def test_trending_sends_browser_like_headers_to_yahoo() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == YAHOO:
+            seen["user_agent"] = request.headers.get("user-agent", "")
+            seen["referer"] = request.headers.get("referer", "")
+            return httpx.Response(
+                200,
+                json={
+                    "finance": {
+                        "result": [{"count": 1, "quotes": [{"symbol": "NVDA"}]}],
+                        "error": None,
+                    }
+                },
+            )
+        return httpx.Response(200, json={"status": "success", "data": {"items": []}})
+
+    make_client(handler).trending({"limit": 1})
+    assert "Mozilla" in seen["user_agent"], "Yahoo bot-gate needs a browser User-Agent (#4876)"
+    assert "yahoo" in seen["referer"].lower(), "Yahoo bot-gate needs a Yahoo referer (#4876)"
+
+
 def test_trending_empty_trending_list_is_upstream_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"finance": {"result": [], "error": None}})
