@@ -90,6 +90,7 @@ def test_backtest_search_keeps_helpful_extra_and_drops_harmful() -> None:
             vs_flat_dca_pct=vs_flat - 0.001 * len(window_dates),
             vs_lump_pct=-1.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=12.0,
         )
 
@@ -134,6 +135,7 @@ def test_backtest_search_does_not_drop_all_on_high_drawdown() -> None:
             vs_flat_dca_pct=4.0 + 3.0 * rsi_w,
             vs_lump_pct=-1.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=61.0,
         )
 
@@ -175,11 +177,14 @@ def test_backtest_search_keeps_extra_when_early_fold_is_all_cash() -> None:
             if getattr(ind, "name", "") == "weekly_rsi":
                 rsi_w = float(ind.weight)
         # Short early windows: all-cash (0% deployed). Longer windows trade.
+        # Peak mirrors net here: all-cash windows carry peak 0.0 and stay
+        # infeasible while trading windows clear the floor (#4804).
         deployed = 0.0 if len(window_dates) < 40 else 40.0
         return SdcaTrialMetrics(
             vs_flat_dca_pct=4.0 + 3.0 * rsi_w,
             vs_lump_pct=-1.0,
             capital_deployed_pct=deployed,
+            capital_deployed_peak_pct=deployed,
             max_drawdown_pct=12.0,
         )
 
@@ -215,6 +220,7 @@ def test_backtest_search_skips_enabled_extra_without_z() -> None:
             vs_flat_dca_pct=float(valuation_weight),
             vs_lump_pct=0.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=10.0,
         )
 
