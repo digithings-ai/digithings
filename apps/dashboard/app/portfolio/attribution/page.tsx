@@ -42,7 +42,7 @@ export default function AttributionPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <main className={`${SUBPAGE_MAX} flex-1 py-4 md:py-5`}>
+      <div className={`${SUBPAGE_MAX} flex-1 py-4 md:py-5`}>
         <h1 className="sr-only">Attribution</h1>
         <EntitledSurface artifactClass="house_weights_nav">
           {error ? (
@@ -53,7 +53,7 @@ export default function AttributionPage() {
             <DecisionsView decisions={data.decisions} pane={pane} onPaneChange={setPane} />
           )}
         </EntitledSurface>
-      </main>
+      </div>
     </div>
   );
 }
