@@ -134,6 +134,13 @@ export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyBu
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
 export {
+  ChatPlayback,
+  type ChatPlaybackProps,
+  type ChatPlaybackStep,
+  type ChatPlaybackTool,
+  type ChatPlaybackTable,
+} from "./components/chat/ChatPlayback";
+export {
   ChatWidgetFrame,
   ChatWidgetButton,
   type ChatWidgetFrameProps,
@@ -241,6 +248,8 @@ export {
   ProductFrame,
   CardRail,
   type CardRailProps,
+  MediaFrame,
+  type MediaFrameProps,
   FeatureCell,
   TestimonialWall,
   ModuleGrid,
