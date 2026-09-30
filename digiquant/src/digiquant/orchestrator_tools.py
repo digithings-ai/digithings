@@ -1274,6 +1274,44 @@ def build_digifetch_equity_diagnostic_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_prediction_markets_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_prediction_markets",
+            "description": (
+                "Prediction-markets catalog search across Polymarket and Kalshi "
+                "(public venue APIs, anonymous direct reads). venue selects "
+                "all/polymarket/kalshi; query matches titles, category matches "
+                "the venue tag, tab selects top/ending_soon/new, limit bounds "
+                "the rows (default 20, max 100). Rows carry title, "
+                "yes-probability, spread, volume, liquidity/open interest, "
+                "ends-at, status, category, and the venue deep link. "
+                "Enrichment only: polled reads may lag the venue order book "
+                "and are never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "venue": {
+                        "type": "string",
+                        "enum": ["all", "polymarket", "kalshi"],
+                        "default": "all",
+                    },
+                    "query": {"type": "string"},
+                    "category": {"type": "string"},
+                    "tab": {
+                        "type": "string",
+                        "enum": ["top", "ending_soon", "new"],
+                        "default": "top",
+                    },
+                    "limit": {"type": "integer", "default": 20},
+                },
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -1775,6 +1813,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_risk_reports_tool(),
         build_digifetch_short_interest_tool(),
         build_digifetch_equity_diagnostic_tool(),
+        build_digifetch_prediction_markets_tool(),
         build_digifetch_saved_searches_tool(),
         build_luxalgo_library_search_tool(),
         build_luxalgo_library_get_concept_tool(),

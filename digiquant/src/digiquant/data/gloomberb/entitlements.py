@@ -79,6 +79,7 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     "digifetch_proxy_statements": "free",
     "digifetch_filing_events": "free",
     "digifetch_risk_reports": "free",
+    "digifetch_prediction_markets": "free",
     # session — GLOOMBERB_SESSION_COOKIE required (zero-HTTP auth_required without it)
     "digifetch_holders": "session",
     "digifetch_analyst_research": "session",

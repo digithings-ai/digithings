@@ -92,6 +92,7 @@ __all__ = [
     "RiskReportsInput",
     "ShortInterestInput",
     "EquityDiagnosticInput",
+    "PredictionMarketsInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -199,6 +200,8 @@ __all__ = [
     "EquityDiagnosticEvidence",
     "EquityDiagnosticReport",
     "EquityDiagnosticResult",
+    "PredictionMarketRow",
+    "PredictionMarketsResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -234,6 +237,7 @@ __all__ = [
     "RiskReportsEnvelope",
     "ShortInterestEnvelope",
     "EquityDiagnosticEnvelope",
+    "PredictionMarketsEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -862,6 +866,34 @@ class EquityDiagnosticInput(_InputModel):
     symbol: Symbol
     exchange: str | None = None
     mode: Literal["cache-first", "refresh"] = "cache-first"
+
+
+# ---------------------------------------------------------------------------
+# Prediction-markets catalog input (#4813)
+# ---------------------------------------------------------------------------
+
+
+class PredictionMarketsInput(_InputModel):
+    """Prediction-markets catalog search (direct-to-venue, enrichment only).
+
+    Anonymous reads against the Polymarket Gamma API and the Kalshi trade API
+    — no Gloomberb Cloud route exists for prediction markets, so the client
+    calls the venues directly and normalizes the catalog rows. ``query`` /
+    ``category`` / ``tab`` filter client-side; each venue fails soft into the
+    result ``warnings``.
+    """
+
+    venue: Literal["all", "polymarket", "kalshi"] = "all"
+    query: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+    category: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None
+    ) = None
+    tab: Literal["top", "ending_soon", "new"] = "top"
+    # Bounded so one enrichment read cannot fan out unboundedly.
+    limit: int = Field(default=20, ge=1, le=100)
 
 
 # ---------------------------------------------------------------------------
@@ -2016,6 +2048,43 @@ class EquityDiagnosticResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Prediction-markets catalog payloads (#4813)
+# ---------------------------------------------------------------------------
+
+
+class PredictionMarketRow(_CamelModel):
+    """One normalized prediction-market row.
+
+    The wire types are unprobed for both venues (Gamma answers JSON-encoded
+    outcome strings; Kalshi answers dollar-or-cent numbers), so every numeric
+    field accepts the loose wire type and the client normalizes defensively.
+    ``venue_url`` is the venue deep link (Polymarket event slug / Kalshi
+    ticker) — there is no term.gloom.sh page for venue-sourced rows. Unknown
+    fields stay as extras.
+    """
+
+    venue: Literal["polymarket", "kalshi"]
+    title: str
+    yes_prob: float | None = None
+    spread: float | None = None
+    volume_24h: float | None = None
+    liquidity: float | None = None
+    open_interest: float | None = None
+    ends_at: str | None = None
+    status: str | None = None
+    category: str | None = None
+    venue_url: str = ""
+
+
+class PredictionMarketsResult(_CamelModel):
+    """Catalog rows plus venue honesty: never attributed to Gloomberb Cloud."""
+
+    markets: list[PredictionMarketRow] = Field(default_factory=list)
+    attribution: str = ""
+    warnings: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -2052,6 +2121,7 @@ FilingEventsEnvelope = DigifetchEnvelope[FilingEventsResult]
 RiskReportsEnvelope = DigifetchEnvelope[RiskReportsResult]
 ShortInterestEnvelope = DigifetchEnvelope[ShortInterestResult]
 EquityDiagnosticEnvelope = DigifetchEnvelope[EquityDiagnosticResult]
+PredictionMarketsEnvelope = DigifetchEnvelope[PredictionMarketsResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:

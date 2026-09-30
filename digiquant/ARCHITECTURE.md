@@ -674,6 +674,22 @@ Slapper dumps omit these keys.
 
 **Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
 
+**Tearsheet schema 1.4** (`tearsheet_data.SCHEMA_VERSION`, #4828) adds the
+honesty envelope to every `StatBlock`: `win_rate_n: int | None` (sample size
+behind `percent_profitable`) and `win_rate_ci95: tuple[float, float] | None`
+(Wilson 95% CI fractions). Both default to null, so 1.0–1.3 fixtures still
+validate. Ported from LuxAlgo edge-stats `stats.ts` (MIT — code only, no
+`data/`, no rebrand) into `digiquant.stats.honesty`: `wilson(k, n)`,
+`apply_guards(n)` (warn 30 / refuse 10, identical to upstream),
+`stability_split` (CI-overlap agree), Pydantic `HonestRate`, and the verbatim
+disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
+95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
+strip (thresholds act on the CI lower bound, not the point estimate), and the
+win/loss donut (caller-counted `(k, n)` from realized fills, never
+`round(rate * n)`). `BacktestResult` is untouched, so no model versioning was
+needed. Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+`tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
+
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
@@ -1350,12 +1366,14 @@ against (e.g. a future tier→entitlement map); **no billing or entitlement
 upgrade code exists here**, and `GLOOMBERB_SESSION_COOKIE` remains the only
 way to supply a Pro session today.
 
-**Exposure.** All 34 tools are registered in `mcp_server.py` via the
+**Exposure.** All 35 tools are registered in `mcp_server.py` via the
 `_maybe_tool` pattern (read scope) and in the `orchestrator_tools.py` manifest.
 The lazily-cached `_build_gloomberb_client()` seam is keyed on the kill-switch +
 cookie env pair, so tests inject a `MockTransport`-backed client and an env
 change gets a fresh client. Attribution/deep links are appended by
-`_gloomberb_envelope_json`; the Yahoo earnings tool opts out explicitly.
+`_gloomberb_envelope_json`; the Yahoo earnings tool and the venue-direct
+prediction-markets tool opt out explicitly (their attribution lives inside
+`data`, never top-level, and neither emits a term.gloom.sh link).
 
 **Coverage expansion (#4110 phase 1).** Seven read tools joined the family on
 the same envelope/attribution/pacing semantics: `digifetch_econ_calendar`
@@ -1431,6 +1449,28 @@ transcript detail row shape **probe-pending** (the models stay permissive) until
 a Pro-account probe re-records it. The `saved`-key fallback is retained as an
 unverified variant.
 
+**Prediction markets (#4813).** `digifetch_prediction_markets` is the
+family's first venue-direct tool: no Cloud route exists, so the client reads
+the Polymarket Gamma `/events` catalog and the Kalshi trade `/events` catalog
+straight through the shared digifetch transport (`_request_json` takes a
+`base_url` + `label` so venue calls share pacing/retry/breaker with
+venue-named errors; a venue 401/402/403 maps to `upstream_error`, never to the
+session-cookie `auth_required`). Only `limit` (plus Kalshi's `open` status) is
+sent upstream — the venues' search/category/tab parameters are unprobed, so
+`query`/`category`/`tab` filter client-side and `limit` (1–100) slices the
+merged rows. Gamma's JSON-encoded `outcomes`/`outcomePrices` resolve the Yes
+probability; Kalshi's dollar-or-cent prices scale by 100 when above 1. Each
+venue fails soft into the result `warnings`; all-requested-venues-down is a
+typed `upstream_error`. Rows carry the venue deep link
+(`polymarket.com/event/{slug}`, `kalshi.com/markets/{ticker}`); the envelope
+`provider_id` is `prediction-markets-venues`, the result attribution names the
+venues with a polling notice, and both surfaces pass `attributed=False`, so no
+top-level attribution or term.gloom.sh link is ever emitted. Entitlement is
+`free`; the tool joins `MACRO_TOOLS` only (8 names, still within the 16-name
+prompt budget; subsets stay distinct). Not live-probed: venue shapes are parsed
+defensively from the plugin's documented reads, and the offline suite drives
+both venues through `MockTransport`.
+
 **Deliberately out of scope (client-side or non-Cloud sources).** The remaining
 plugin panes compute from already-tooled routes or call third parties
 directly, so no new tool was added: correlation / relationship graph (client
@@ -1439,7 +1479,7 @@ fallback (`query1.finance.yahoo.com`), world indices / FX matrix / futures
 (quote + history composition; futures are Yahoo continuous symbols),
 volatility term structure and credit conditions (FRED series composition over
 `digifetch_econ_series`), treasury auctions (`api.fiscaldata.treasury.gov`),
-prediction markets (kelly-sizer is a local model with no data endpoint),
+kelly-sizer (a local model with no data endpoint),
 market movers / scanner (already-tooled `/market/screener` plus Yahoo
 trending; the live scanner is a websocket stream), and short-interest coverage
 is the Cloud proxy above. The per-transcript detail route
