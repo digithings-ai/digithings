@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 from digiquant.models import BacktestResult
+from digiquant.stats.honesty import DISCLAIMER
+from digiquant.tearsheet_page import _build_page
 from digiquant.tearsheet_stats import (
     _build_categorized_stats,
     _build_full_stats_table,
@@ -69,3 +71,72 @@ def test_full_stats_win_rate_carries_n_and_ci() -> None:
     html = _build_full_stats_table(None, None, {"Win Rate": 0.6}, _result(50))
     assert "n=50" in html  # n=50
     assert "CI" in html  # n=50
+
+
+def _page(win_rate: float | None, num_trades: int, **kw) -> str:
+    blanks = {
+        "strategy_display": "EMA Cross",
+        "symbols_str": "BTC-USD",
+        "params_str": "period=20",
+        "profit_factor": 1.2,
+        "sortino": 0.5,
+        "calmar": 0.5,
+        "price_gen": "",
+        "price_tab": "",
+        "equity_gen": "",
+        "equity_tab": "",
+        "dd_gen": "",
+        "dd_tab": "",
+        "monthly_gen": "",
+        "dist_gen": "",
+        "dist_tab": "",
+        "rolling_gen": "",
+        "rolling_tab": "",
+        "yearly_gen": "",
+        "rolling_equity_html": "",
+        "realized_pnl_html": "",
+        "trade_pnl_dist_html": "",
+        "trade_pnl_dist_trades_html": "",
+        "rolling_dd_html": "",
+        "monthly_yearly_html": "",
+        "per_trade_pnl_html": "",
+        "win_rate_donut_html": "",
+        "rolling_calmar_html": "",
+        "cum_trade_pnl_html": "",
+        "underwater_html": "",
+    }
+    blanks.update(kw)
+    return _build_page(_result(num_trades), win_rate=win_rate, **blanks)
+
+
+def test_kpi_strip_win_rate_carries_n_and_ci() -> None:
+    """KPI WIN RATE 0.6 with n=50 carries N + CI, not a bare %."""
+    html = _page(0.6, 50)
+    assert "WIN RATE" in html  # n=50
+    assert "n=50" in html  # n=50
+    assert "CI" in html  # n=50
+    assert "60.0% (30/50" in html  # k=30, n=50
+
+
+def test_kpi_win_rate_threshold_uses_ci_lower_bound() -> None:
+    """Point estimate 0.6 (> 0.5) with n=12 has CI lo ~0.32 → negative."""
+    html = _page(0.6, 12)
+    assert 'WIN RATE</span><span class="kpi-value negative">' in html  # n=12
+
+
+def test_kpi_win_rate_confident_above_half_is_positive() -> None:
+    """Win rate 0.9 with n=1000 has CI lo > 0.5 → positive."""
+    html = _page(0.9, 1000)
+    assert 'WIN RATE</span><span class="kpi-value positive">' in html  # n=1000
+
+
+def test_kpi_win_rate_refused_below_floor() -> None:
+    """Win rate 0.6 with n=5 renders REFUSED on the KPI strip."""
+    html = _page(0.6, 5)
+    assert "REFUSED" in html  # n=5
+
+
+def test_rendered_page_ships_disclaimer_verbatim() -> None:
+    """Fixed disclaimer string is present on the rendered page (n=50)."""
+    html = _page(0.6, 50)
+    assert DISCLAIMER in html  # n=50
