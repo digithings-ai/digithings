@@ -53,19 +53,24 @@ from .client import (
 from .entitlements import TOOL_ENTITLEMENTS
 from .models import (
     AnalystResearchInput,
+    BondCalcInput,
     CdsInput,
     CongressTradesInput,
     CorporateActionsInput,
     DigifetchEnvelope,
     DigifetchError,
+    DividendYieldInput,
     EarningsCalendarInput,
     EconCalendarInput,
     EconSeriesInput,
     EquityDiagnosticInput,
     ExchangeRateInput,
     FilingEventsInput,
+    FxMatrixInput,
     HoldersInput,
+    KellyInput,
     NewsInput,
+    OptionsCalcInput,
     OptionsChainInput,
     PredictionMarketsInput,
     PriceHistoryInput,
@@ -88,6 +93,7 @@ from .models import (
     TranscriptsInput,
     TweetSearchInput,
     VenuesInput,
+    VixTermInput,
     YieldCurveInput,
 )
 
@@ -360,6 +366,24 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     ),
     "digifetch_prediction_markets": DigifetchDispatch(
         PredictionMarketsInput, "prediction_markets", attributed=False
+    ),
+    # Calculators + compositions (130-coverage Task 2): derived math, never
+    # Cloud-sourced, so no deep link and no attribution.
+    "digifetch_options_calculator": DigifetchDispatch(
+        OptionsCalcInput, "options_calculator", attributed=False
+    ),
+    "digifetch_bond_calculator": DigifetchDispatch(
+        BondCalcInput, "bond_calculator", attributed=False
+    ),
+    "digifetch_kelly_sizer": DigifetchDispatch(KellyInput, "kelly_sizer", attributed=False),
+    "digifetch_dividend_yield": DigifetchDispatch(
+        DividendYieldInput, "dividend_yield", attributed=False
+    ),
+    "digifetch_fx_cross_rates": DigifetchDispatch(
+        FxMatrixInput, "fx_cross_rates", attributed=False
+    ),
+    "digifetch_vix_term_structure": DigifetchDispatch(
+        VixTermInput, "vix_term_structure", attributed=False
     ),
 }
 

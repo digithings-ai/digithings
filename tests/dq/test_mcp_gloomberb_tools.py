@@ -73,6 +73,13 @@ DIGIFETCH_TOOLS = {
     "digifetch_saved_searches",
     # prediction-markets venue catalog (#4813)
     "digifetch_prediction_markets",
+    # calculators + compositions (130-coverage Task 2, unattributed derived math)
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+    "digifetch_dividend_yield",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
 }
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
@@ -501,8 +508,8 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_35_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 35
+def test_all_41_tools_registered_in_full_and_read_scope() -> None:
+    assert len(DIGIFETCH_TOOLS) == 41
     assert DIGIFETCH_TOOLS <= _names()
     assert DIGIFETCH_TOOLS <= _names(scope="read")
 
@@ -511,7 +518,18 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
     missing = DIGIFETCH_TOOLS - set(rows)
     assert not missing, f"missing orchestrator tools: {sorted(missing)}"
-    unattributed = {"digifetch_earnings_calendar", "digifetch_prediction_markets"}
+    unattributed = {
+        "digifetch_earnings_calendar",
+        "digifetch_prediction_markets",
+        # Calculators + compositions (130-coverage Task 2): derived math must
+        # not claim Gloomberb sourcing; the manifest names the math source.
+        "digifetch_options_calculator",
+        "digifetch_bond_calculator",
+        "digifetch_kelly_sizer",
+        "digifetch_dividend_yield",
+        "digifetch_fx_cross_rates",
+        "digifetch_vix_term_structure",
+    }
     for name in sorted(DIGIFETCH_TOOLS - unattributed):
         description = rows[name]["function"]["description"]
         assert "Gloomberb" in description, f"{name} description must name the source"
@@ -525,6 +543,19 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     assert "Polymarket" in markets_description
     assert "Kalshi" in markets_description
     assert "Gloomberb" not in markets_description
+    # Calculator + composition descriptions name the math source, never Gloomberb.
+    math_sources = {
+        "digifetch_options_calculator": "Black-Scholes",
+        "digifetch_bond_calculator": "discounting",
+        "digifetch_kelly_sizer": "Kelly",
+        "digifetch_dividend_yield": "corporate-actions",
+        "digifetch_fx_cross_rates": "exchange-rate",
+        "digifetch_vix_term_structure": "econ-series",
+    }
+    for name, source in math_sources.items():
+        description = rows[name]["function"]["description"]
+        assert source in description, f"{name} description must name {source}"
+        assert "Gloomberb" not in description, f"{name} must not claim Gloomberb sourcing"
 
 
 def test_anon_quote_returns_attributed_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -729,7 +760,46 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_short_interest": ("AAPL",),
     "digifetch_equity_diagnostic": ("AAPL",),
     "digifetch_prediction_markets": (),
+    # calculators + compositions (130-coverage Task 2)
+    "digifetch_options_calculator": (100.0, 100.0, 0.05, 0.2, 1.0, "call"),
+    "digifetch_bond_calculator": (0.05, 100.0, 0.05, 10.0, 2),
+    "digifetch_kelly_sizer": (0.6, 2.0),
+    "digifetch_dividend_yield": ("AAPL",),
+    "digifetch_fx_cross_rates": (["EUR", "GBP"],),
+    "digifetch_vix_term_structure": (),
 }
+
+
+#: Pure calculators never touch the transport (local math only).
+_NO_WIRE_TOOLS = {
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+}
+
+#: Tools that fan out to two upstream reads per call.
+_TWO_REQUEST_TOOLS = {
+    "digifetch_prediction_markets",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
+}
+
+
+def _expected_wire_calls(name: str, *, with_cookie: bool) -> list[int]:
+    """Wire requests one sweep call makes (MockTransport request count).
+
+    The Yahoo-backed earnings calendar and the pure calculators never touch
+    the transport. ``digifetch_dividend_yield`` reads quote + corporate-actions
+    with a cookie, but only quote without one (the session-gated leg answers
+    ``auth_required`` with no request).
+    """
+    if name == "digifetch_earnings_calendar" or name in _NO_WIRE_TOOLS:
+        return []
+    if name in _TWO_REQUEST_TOOLS:
+        return [1, 1]
+    if name == "digifetch_dividend_yield":
+        return [1, 1] if with_cookie else [1]
+    return [1]
 
 
 @pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
@@ -744,7 +814,18 @@ def test_every_tool_returns_attributed_json(
     )
     payload = json.loads(_mcp(name)(*args))
     assert "data" in payload, f"{name} returned no data slot"
-    unattributed = {"digifetch_earnings_calendar", "digifetch_prediction_markets"}
+    unattributed = {
+        "digifetch_earnings_calendar",
+        "digifetch_prediction_markets",
+        # Calculators + compositions (130-coverage Task 2): derived math must
+        # not claim Gloomberb sourcing.
+        "digifetch_options_calculator",
+        "digifetch_bond_calculator",
+        "digifetch_kelly_sizer",
+        "digifetch_dividend_yield",
+        "digifetch_fx_cross_rates",
+        "digifetch_vix_term_structure",
+    }
     attributed = name not in unattributed
     if attributed:
         assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
@@ -1499,13 +1580,10 @@ def test_entitlement_zero_http_gating_matches_the_declaration(
     _patch_client(monkeypatch, handler, earnings_provider=lambda symbol: [])
     payload = json.loads(_mcp(name)(*args))
     # The Yahoo-backed earnings calendar never touches the Cloud transport.
-    # Prediction markets fans out to one request per venue (Polymarket + Kalshi).
-    if name == "digifetch_earnings_calendar":
-        expected_calls = []
-    elif name == "digifetch_prediction_markets":
-        expected_calls = [1, 1]
-    else:
-        expected_calls = [1]
+    # Pure calculators never touch any transport. Prediction markets fans out
+    # to one request per venue (Polymarket + Kalshi); the FX and VIX
+    # compositions fan out to one request per leg.
+    expected_calls = _expected_wire_calls(name, with_cookie=False)
     if entitlement == "free":
         # Anonymous tools are never gated: the request goes out and succeeds.
         assert calls == expected_calls, name
@@ -1538,12 +1616,7 @@ def test_entitlement_wire_access_with_a_session_cookie(
         earnings_provider=lambda symbol: [],
     )
     payload = json.loads(_mcp(name)(*args))
-    if name == "digifetch_earnings_calendar":
-        expected_calls = []
-    elif name == "digifetch_prediction_markets":
-        expected_calls = [1, 1]
-    else:
-        expected_calls = [1]
+    expected_calls = _expected_wire_calls(name, with_cookie=True)
     assert calls == expected_calls, name
     assert "code" not in payload["data"], name
 

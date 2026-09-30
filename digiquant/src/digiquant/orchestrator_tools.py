@@ -1479,6 +1479,158 @@ def build_digifetch_prediction_markets_tool() -> dict[str, Any]:
     }
 
 
+def build_digifetch_options_calculator_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_options_calculator",
+            "description": (
+                "European Black-Scholes option calculator (pure local math, no "
+                "transport). spot/strike/vol/expiry_years must be positive; kind "
+                "is call/put. Without price it returns the model price at vol; "
+                "with price it solves the implied vol by bisection and echoes "
+                "the price. Contract violations are typed invalid_input, never "
+                "clamped. Derived math, never a sourced quote."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "spot": {"type": "number"},
+                    "strike": {"type": "number"},
+                    "rate": {"type": "number"},
+                    "vol": {"type": "number"},
+                    "expiry_years": {"type": "number"},
+                    "kind": {"type": "string", "enum": ["call", "put"]},
+                    "price": {"type": "number"},
+                },
+                "required": ["spot", "strike", "rate", "vol", "expiry_years", "kind"],
+            },
+        },
+    }
+
+
+def build_digifetch_bond_calculator_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_bond_calculator",
+            "description": (
+                "Par-bond analytics over local discounting math (pure local math, "
+                "no transport). Returns price, accrued, modified duration "
+                "(years), convexity, and DV01. accrued is always 0.0 by "
+                "convention — settlement is assumed exactly on a coupon date, "
+                "so the dirty price equals the clean price. Contract violations "
+                "are typed invalid_input, never clamped."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "coupon": {"type": "number"},
+                    "face": {"type": "number"},
+                    "ytm": {"type": "number"},
+                    "years": {"type": "number"},
+                    "freq": {"type": "integer"},
+                },
+                "required": ["coupon", "face", "ytm", "years", "freq"],
+            },
+        },
+    }
+
+
+def build_digifetch_kelly_sizer_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_kelly_sizer",
+            "description": (
+                "Kelly-criterion position sizer (pure local math, no transport). "
+                "Returns p - (1 - p) / b clamped at 0.0 from below; win_prob is "
+                "within [0, 1] and win_loss_ratio is positive. Contract "
+                "violations are typed invalid_input, never clamped. A sizing "
+                "rule, not investment advice."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "win_prob": {"type": "number"},
+                    "win_loss_ratio": {"type": "number"},
+                },
+                "required": ["win_prob", "win_loss_ratio"],
+            },
+        },
+    }
+
+
+def build_digifetch_dividend_yield_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_dividend_yield",
+            "description": (
+                "Trailing dividend yield (composition of the corporate-actions "
+                "and quote reads). Sums the trailing cash distributions and "
+                "divides by the latest quote price locally. Warns and returns "
+                "upstream_error when either leg errors. Derived math over "
+                "enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"symbol": {"type": "string"}},
+                "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_fx_cross_rates_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_fx_cross_rates",
+            "description": (
+                "USD-pair FX matrix over the exchange-rate read (USD base only; "
+                "a non-USD to_currency is typed invalid_input). Reads each "
+                "requested currency vs USD and crosses every ordered pair "
+                "locally (cross = rate_a / rate_b). A failed leg returns "
+                "upstream_error naming the currency."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "currencies": {"type": "array", "items": {"type": "string"}},
+                    "to_currency": {"type": "string", "default": "USD"},
+                },
+                "required": ["currencies"],
+            },
+        },
+    }
+
+
+def build_digifetch_vix_term_structure_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_vix_term_structure",
+            "description": (
+                "VIX term snapshot over two econ-series closes (FRED ids, "
+                "overridable; defaults VIXCLS / VIX3M). Reports the latest "
+                "closes, the far-minus-near spread, and the curve regime "
+                "(contango/inversion/flat). Warns and returns upstream_error "
+                "when either series errors or carries no closes. Derived math "
+                "over enrichment reads, never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "near_series": {"type": "string", "default": "VIXCLS"},
+                    "far_series": {"type": "string", "default": "VIX3M"},
+                    "limit": {"type": "integer", "default": 5},
+                },
+            },
+        },
+    }
+
+
 def build_digiquant_fit_btc_power_law_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -1981,6 +2133,12 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_short_interest_tool(),
         build_digifetch_equity_diagnostic_tool(),
         build_digifetch_prediction_markets_tool(),
+        build_digifetch_options_calculator_tool(),
+        build_digifetch_bond_calculator_tool(),
+        build_digifetch_kelly_sizer_tool(),
+        build_digifetch_dividend_yield_tool(),
+        build_digifetch_fx_cross_rates_tool(),
+        build_digifetch_vix_term_structure_tool(),
         build_digifetch_saved_searches_tool(),
         build_luxalgo_library_search_tool(),
         build_luxalgo_library_get_concept_tool(),

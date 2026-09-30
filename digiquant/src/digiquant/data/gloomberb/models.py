@@ -93,6 +93,13 @@ __all__ = [
     "ShortInterestInput",
     "EquityDiagnosticInput",
     "PredictionMarketsInput",
+    # calculator + composition inputs (130-coverage Task 2)
+    "OptionsCalcInput",
+    "BondCalcInput",
+    "KellyInput",
+    "DividendYieldInput",
+    "FxMatrixInput",
+    "VixTermInput",
     # wire/output payload models
     "Quote",
     "QuoteBatchItem",
@@ -202,6 +209,13 @@ __all__ = [
     "EquityDiagnosticResult",
     "PredictionMarketRow",
     "PredictionMarketsResult",
+    # calculator + composition payloads (130-coverage Task 2)
+    "OptionsCalcResult",
+    "BondCalcResult",
+    "KellyResult",
+    "DividendYieldResult",
+    "FxMatrixResult",
+    "VixTermResult",
     # concrete envelopes
     "QuoteEnvelope",
     "QuotesBatchEnvelope",
@@ -238,6 +252,13 @@ __all__ = [
     "ShortInterestEnvelope",
     "EquityDiagnosticEnvelope",
     "PredictionMarketsEnvelope",
+    # calculator + composition envelopes (130-coverage Task 2)
+    "OptionsCalcEnvelope",
+    "BondCalcEnvelope",
+    "KellyEnvelope",
+    "DividendYieldEnvelope",
+    "FxMatrixEnvelope",
+    "VixTermEnvelope",
 ]
 
 SOURCE: Literal["gloomberb"] = "gloomberb"
@@ -2085,6 +2106,145 @@ class PredictionMarketsResult(_CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Calculator + composition inputs/payloads (130-coverage Task 2)
+# ---------------------------------------------------------------------------
+#
+# The pure calculators (options/bond/Kelly) run local math only — no transport,
+# no cookies — and their outputs are derived numbers, so they never claim
+# Gloomberb sourcing. The three compositions fan out to existing reads; their
+# outputs are derived math over those reads, so they are unattributed too.
+
+
+class OptionsCalcInput(_InputModel):
+    """European Black-Scholes price, with an optional IV solve.
+
+    Without ``price`` the tool returns the model price at ``vol``; with
+    ``price`` it solves the implied vol by bisection and echoes the price.
+    Bounds mirror the local math core (negative rates pass through; contract
+    violations are ``invalid_input``, never clamped).
+    """
+
+    spot: float = Field(gt=0.0)
+    strike: float = Field(gt=0.0)
+    rate: float
+    vol: float = Field(gt=0.0)
+    expiry_years: float = Field(gt=0.0)
+    kind: Literal["call", "put"]
+    price: float | None = Field(default=None, gt=0.0)
+
+
+class OptionsCalcResult(_CamelModel):
+    """Model price plus the solved IV (None when no ``price`` was given)."""
+
+    price: float
+    implied_vol: float | None = None
+    kind: Literal["call", "put"]
+
+
+class BondCalcInput(_InputModel):
+    """Par-bond analytics over local discounting math.
+
+    ``accrued`` is always 0.0 by convention: settlement is assumed exactly on
+    a coupon date, so the dirty price equals the clean price (no date inputs
+    exist to compute anything else — the tool copy says so).
+    """
+
+    coupon: float = Field(ge=0.0)
+    face: float = Field(gt=0.0)
+    ytm: float
+    years: float = Field(gt=0.0)
+    freq: int = Field(ge=1)
+
+
+class BondCalcResult(_CamelModel):
+    """Price, accrued, modified duration (years), convexity, DV01."""
+
+    price: float
+    accrued: float
+    duration: float
+    convexity: float
+    dv01: float
+
+
+class KellyInput(_InputModel):
+    """Kelly-criterion fraction from win probability and win/loss payoff ratio."""
+
+    win_prob: float = Field(ge=0.0, le=1.0)
+    win_loss_ratio: float = Field(gt=0.0)
+
+
+class KellyResult(_CamelModel):
+    """``p - (1 - p) / b`` clamped at 0.0 from below (the local core's rule)."""
+
+    fraction: float
+
+
+class DividendYieldInput(_InputModel):
+    """Trailing dividend yield for one symbol (composition, not a Cloud route)."""
+
+    symbol: Symbol
+
+
+class DividendYieldResult(_CamelModel):
+    """Trailing cash distributions over the latest quote price (local division)."""
+
+    symbol: str
+    price: float
+    trailing_dividends: float
+    distribution_count: int
+    dividend_yield: float
+
+
+class FxMatrixInput(_InputModel):
+    """USD-pair FX matrix over the exchange-rate read (USD base only)."""
+
+    currencies: list[CurrencyCode] = Field(min_length=1, max_length=20)
+    to_currency: CurrencyCode = "USD"
+
+    @model_validator(mode="after")
+    def _only_usd_base_supported(self) -> FxMatrixInput:
+        if self.to_currency != "USD":
+            raise ValueError(
+                "the exchange-rate route is USD-based only; "
+                f"to_currency must be 'USD', got {self.to_currency!r}"
+            )
+        return self
+
+
+class FxMatrixResult(_CamelModel):
+    """Per-currency USD rates plus every ordered cross (``rates[a] / rates[b]``)."""
+
+    base: str
+    rates: dict[str, float] = Field(default_factory=dict)
+    crosses: dict[str, float] = Field(default_factory=dict)
+
+
+class VixTermInput(_InputModel):
+    """VIX term snapshot over two econ-series closes (FRED ids, overridable)."""
+
+    near_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "VIXCLS"
+    far_series: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ] = "VIX3M"
+    limit: int = Field(default=5, ge=1, le=100)
+
+
+class VixTermResult(_CamelModel):
+    """Latest closes, far-minus-near spread, and the curve regime."""
+
+    near_series: str
+    far_series: str
+    near_close: float
+    far_close: float
+    near_date: str
+    far_date: str
+    spread: float
+    regime: Literal["contango", "inversion", "flat"]
+
+
+# ---------------------------------------------------------------------------
 # Concrete envelopes (one per tool)
 # ---------------------------------------------------------------------------
 
@@ -2122,6 +2282,12 @@ RiskReportsEnvelope = DigifetchEnvelope[RiskReportsResult]
 ShortInterestEnvelope = DigifetchEnvelope[ShortInterestResult]
 EquityDiagnosticEnvelope = DigifetchEnvelope[EquityDiagnosticResult]
 PredictionMarketsEnvelope = DigifetchEnvelope[PredictionMarketsResult]
+OptionsCalcEnvelope = DigifetchEnvelope[OptionsCalcResult]
+BondCalcEnvelope = DigifetchEnvelope[BondCalcResult]
+KellyEnvelope = DigifetchEnvelope[KellyResult]
+DividendYieldEnvelope = DigifetchEnvelope[DividendYieldResult]
+FxMatrixEnvelope = DigifetchEnvelope[FxMatrixResult]
+VixTermEnvelope = DigifetchEnvelope[VixTermResult]
 
 
 def envelope_error(envelope: DigifetchEnvelope[Any]) -> DigifetchError | None:

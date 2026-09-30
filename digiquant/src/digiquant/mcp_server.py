@@ -541,6 +541,12 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_equity_diagnostic",
         "digifetch_saved_searches",
         "digifetch_prediction_markets",
+        "digifetch_options_calculator",
+        "digifetch_bond_calculator",
+        "digifetch_kelly_sizer",
+        "digifetch_dividend_yield",
+        "digifetch_fx_cross_rates",
+        "digifetch_vix_term_structure",
         "luxalgo_library_search",
         "luxalgo_library_get_concept",
         "luxalgo_library_get_indicator",
@@ -1668,6 +1674,125 @@ def create_mcp_server(
                     "tab": tab,
                     "limit": limit,
                 }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Calculators + compositions (130-coverage Task 2) ────────────────────
+    #
+    # Derived math, never Cloud-sourced: pure local calculators plus fan-out
+    # compositions whose numbers are computed locally. All six are unattributed.
+
+    @_maybe_tool("digifetch_options_calculator")
+    def digifetch_options_calculator(
+        spot: float,
+        strike: float,
+        rate: float,
+        vol: float,
+        expiry_years: float,
+        kind: str,
+        price: float | None = None,
+    ) -> str:
+        """European Black-Scholes price / IV solve (pure local math).
+
+        NOT attributed to Gloomberb: no transport, no cookies. Without `price`
+        it returns the model price at `vol`; with `price` it solves the implied
+        vol by bisection. Contract violations are typed `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().options_calculator(
+                {
+                    "spot": spot,
+                    "strike": strike,
+                    "rate": rate,
+                    "vol": vol,
+                    "expiry_years": expiry_years,
+                    "kind": kind,
+                    "price": price,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_bond_calculator")
+    def digifetch_bond_calculator(
+        coupon: float, face: float, ytm: float, years: float, freq: int
+    ) -> str:
+        """Par-bond analytics over local discounting math (pure local math).
+
+        NOT attributed to Gloomberb: no transport, no cookies. Returns price,
+        accrued (always 0.0 — settlement is assumed exactly on a coupon date,
+        so the dirty price equals the clean price), modified duration, convexity,
+        and DV01. Contract violations are typed `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().bond_calculator(
+                {"coupon": coupon, "face": face, "ytm": ytm, "years": years, "freq": freq}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_kelly_sizer")
+    def digifetch_kelly_sizer(win_prob: float, win_loss_ratio: float) -> str:
+        """Kelly-criterion position size (pure local math).
+
+        NOT attributed to Gloomberb: no transport, no cookies. Returns
+        p - (1 - p) / b clamped at 0.0 from below. A sizing rule, not advice.
+        """
+        try:
+            envelope = _build_gloomberb_client().kelly_sizer(
+                {"win_prob": win_prob, "win_loss_ratio": win_loss_ratio}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_dividend_yield")
+    def digifetch_dividend_yield(symbol: str) -> str:
+        """Trailing dividend yield (composition of corporate-actions + quote).
+
+        NOT attributed to Gloomberb: the number is derived locally (trailing
+        cash distributions over the latest quote price). Warns and returns
+        `upstream_error` when either leg errors.
+        """
+        try:
+            envelope = _build_gloomberb_client().dividend_yield({"symbol": symbol})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_fx_cross_rates")
+    def digifetch_fx_cross_rates(currencies: list[str], to_currency: str = "USD") -> str:
+        """USD-pair FX matrix over the exchange-rate read (USD base only).
+
+        NOT attributed to Gloomberb: the crosses are derived locally
+        (cross = rate_a / rate_b). A non-USD `to_currency` is typed
+        `invalid_input`; a failed leg returns `upstream_error` naming it.
+        """
+        try:
+            envelope = _build_gloomberb_client().fx_cross_rates(
+                {"currencies": currencies, "to_currency": to_currency}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_vix_term_structure")
+    def digifetch_vix_term_structure(
+        near_series: str = "VIXCLS", far_series: str = "VIX3M", limit: int = 5
+    ) -> str:
+        """VIX term snapshot over two econ-series closes (composition).
+
+        NOT attributed to Gloomberb: the spread and regime are derived locally
+        (far-minus-near; contango/inversion/flat). Warns and returns
+        `upstream_error` when either series errors or carries no closes.
+        """
+        try:
+            envelope = _build_gloomberb_client().vix_term_structure(
+                {"near_series": near_series, "far_series": far_series, "limit": limit}
             )
         except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

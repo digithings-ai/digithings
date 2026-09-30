@@ -80,6 +80,14 @@ TOOL_ENTITLEMENTS: dict[str, Entitlement] = {
     "digifetch_filing_events": "free",
     "digifetch_risk_reports": "free",
     "digifetch_prediction_markets": "free",
+    # calculators + compositions (130-coverage Task 2) — derived math, never
+    # Cloud-sourced, so all six are anonymous reads like the other free tools
+    "digifetch_options_calculator": "free",
+    "digifetch_bond_calculator": "free",
+    "digifetch_kelly_sizer": "free",
+    "digifetch_dividend_yield": "free",
+    "digifetch_fx_cross_rates": "free",
+    "digifetch_vix_term_structure": "free",
     # session — GLOOMBERB_SESSION_COOKIE required (zero-HTTP auth_required without it)
     "digifetch_holders": "session",
     "digifetch_analyst_research": "session",

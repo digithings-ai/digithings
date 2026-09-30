@@ -66,6 +66,13 @@ DIGIFETCH_TOOLS = {
     "digifetch_short_interest",
     "digifetch_equity_diagnostic",
     "digifetch_saved_searches",
+    # calculators + compositions (130-coverage Task 2, unattributed derived math)
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+    "digifetch_dividend_yield",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
 }
 
 #: The 14 LuxAlgo hosted reads (#4779 P0 Library + #4844 edge/trackers).

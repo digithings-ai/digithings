@@ -28,7 +28,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, NamedTuple, TypeVar, cast  # score:allow untyped any — wire JSON
+from typing import Any, Literal, NamedTuple, TypeVar, cast  # score:allow untyped any — wire JSON
 from urllib.parse import quote
 
 import httpx
@@ -43,10 +43,19 @@ from digifetch import (
 from pydantic import BaseModel, ValidationError
 
 from . import normalizers as nz
+from .calculators import (
+    black_scholes_iv,
+    black_scholes_price,
+    bond_metrics,
+    kelly_fraction,
+)
 from .models import (
     PREVIEW_ACCESS_WARNING,
     AnalystResearchEnvelope,
     AnalystResearchInput,
+    BondCalcEnvelope,
+    BondCalcInput,
+    BondCalcResult,
     CdsEnvelope,
     CdsInput,
     CdsResult,
@@ -58,6 +67,9 @@ from .models import (
     CorporateActionsResult,
     DigifetchEnvelope,
     DigifetchError,
+    DividendYieldEnvelope,
+    DividendYieldInput,
+    DividendYieldResult,
     EarningsCalendarEnvelope,
     EarningsCalendarInput,
     EarningsCalendarResult,
@@ -75,13 +87,22 @@ from .models import (
     FilingEventsEnvelope,
     FilingEventsInput,
     Funds13FEnvelope,
+    FxMatrixEnvelope,
+    FxMatrixInput,
+    FxMatrixResult,
     HoldersEnvelope,
     HoldersInput,
     HoldersResult,
     Holdings13FEnvelope,
+    KellyEnvelope,
+    KellyInput,
+    KellyResult,
     NewsEnvelope,
     NewsInput,
     NewsResult,
+    OptionsCalcEnvelope,
+    OptionsCalcInput,
+    OptionsCalcResult,
     OptionsChainEnvelope,
     OptionsChainInput,
     OptionsChainResult,
@@ -134,6 +155,9 @@ from .models import (
     TweetsEnvelope,
     VenuesEnvelope,
     VenuesInput,
+    VixTermEnvelope,
+    VixTermInput,
+    VixTermResult,
     YieldCurveEnvelope,
     YieldCurveInput,
     YieldCurveResult,
@@ -2346,6 +2370,309 @@ class GloomberbClient:
                 message=f"unexpected Kalshi payload shape: {exc}",
                 retryable=False,
             )
+
+    # -- calculators + compositions (130-coverage Task 2) --------------------
+    #
+    # Pure calculators run local math only (no transport, no cookies). The
+    # compositions fan out to existing reads and derive their numbers locally.
+    # All six are unattributed: a derived number must not claim Cloud sourcing.
+
+    def options_calculator(
+        self, request: OptionsCalcInput | Mapping[str, Any]
+    ) -> OptionsCalcEnvelope:
+        """European Black-Scholes price, with an optional IV solve (no transport)."""
+        parsed = self._validate_input(OptionsCalcInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(OptionsCalcEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(OptionsCalcEnvelope)
+
+        def produce() -> OptionsCalcEnvelope:
+            try:
+                if parsed.price is None:
+                    price = black_scholes_price(
+                        spot=parsed.spot,
+                        strike=parsed.strike,
+                        rate=parsed.rate,
+                        vol=parsed.vol,
+                        expiry_years=parsed.expiry_years,
+                        kind=parsed.kind,
+                    )
+                    implied_vol: float | None = None
+                else:
+                    implied_vol = black_scholes_iv(
+                        price=parsed.price,
+                        spot=parsed.spot,
+                        strike=parsed.strike,
+                        rate=parsed.rate,
+                        expiry_years=parsed.expiry_years,
+                        kind=parsed.kind,
+                    )
+                    price = parsed.price
+            except ValueError as exc:
+                return self._error_envelope(
+                    OptionsCalcEnvelope,
+                    DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+                )
+            return OptionsCalcEnvelope(
+                data=OptionsCalcResult(price=price, implied_vol=implied_vol, kind=parsed.kind),
+                fetched_at=self._now(),
+            )
+
+        return self._cached("options_calculator", parsed, produce)
+
+    def bond_calculator(self, request: BondCalcInput | Mapping[str, Any]) -> BondCalcEnvelope:
+        """Par-bond analytics over local discounting math (no transport)."""
+        parsed = self._validate_input(BondCalcInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(BondCalcEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(BondCalcEnvelope)
+
+        def produce() -> BondCalcEnvelope:
+            try:
+                metrics = bond_metrics(
+                    coupon=parsed.coupon,
+                    face=parsed.face,
+                    ytm=parsed.ytm,
+                    years=parsed.years,
+                    freq=parsed.freq,
+                )
+            except ValueError as exc:
+                return self._error_envelope(
+                    BondCalcEnvelope,
+                    DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+                )
+            return BondCalcEnvelope(
+                data=BondCalcResult(
+                    price=metrics["price"],
+                    accrued=metrics["accrued"],
+                    duration=metrics["duration"],
+                    convexity=metrics["convexity"],
+                    dv01=metrics["dv01"],
+                ),
+                fetched_at=self._now(),
+            )
+
+        return self._cached("bond_calculator", parsed, produce)
+
+    def kelly_sizer(self, request: KellyInput | Mapping[str, Any]) -> KellyEnvelope:
+        """Kelly-criterion fraction from win probability and payoff ratio (no transport)."""
+        parsed = self._validate_input(KellyInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(KellyEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(KellyEnvelope)
+
+        def produce() -> KellyEnvelope:
+            try:
+                fraction = kelly_fraction(
+                    win_prob=parsed.win_prob, win_loss_ratio=parsed.win_loss_ratio
+                )
+            except ValueError as exc:
+                return self._error_envelope(
+                    KellyEnvelope,
+                    DigifetchError(code="invalid_input", message=str(exc), retryable=False),
+                )
+            return KellyEnvelope(
+                data=KellyResult(fraction=fraction),
+                fetched_at=self._now(),
+            )
+
+        return self._cached("kelly_sizer", parsed, produce)
+
+    def dividend_yield(
+        self, request: DividendYieldInput | Mapping[str, Any]
+    ) -> DividendYieldEnvelope:
+        """Trailing dividend yield over corporate-actions + quote (composition).
+
+        Sums the trailing cash distributions and divides by the latest quote
+        price locally. Warns and returns ``upstream_error`` when either leg
+        errors (including the session gate on the corporate-actions leg).
+        """
+        parsed = self._validate_input(DividendYieldInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(DividendYieldEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(DividendYieldEnvelope)
+
+        def produce() -> DividendYieldEnvelope:
+            quote_env = self.quote({"symbol": parsed.symbol})
+            corp_env = self.corporate_actions({"symbol": parsed.symbol})
+            warnings: list[str] = [*quote_env.warnings, *corp_env.warnings]
+            if isinstance(quote_env.data, DigifetchError):
+                warnings.append(f"quote unavailable for {parsed.symbol}: {quote_env.data.message}")
+            if isinstance(corp_env.data, DigifetchError):
+                warnings.append(
+                    f"corporate actions unavailable for {parsed.symbol}: {corp_env.data.message}"
+                )
+            if isinstance(quote_env.data, DigifetchError) or isinstance(
+                corp_env.data, DigifetchError
+            ):
+                return DividendYieldEnvelope(
+                    data=DigifetchError(
+                        code="upstream_error",
+                        message=f"dividend yield unavailable for {parsed.symbol} ({'; '.join(warnings)})",
+                        retryable=any(
+                            error.retryable
+                            for error in (quote_env.data, corp_env.data)
+                            if isinstance(error, DigifetchError)
+                        ),
+                    ),
+                    fetched_at=self._now(),
+                    warnings=warnings,
+                )
+            quote = quote_env.data.quote if not isinstance(quote_env.data, DigifetchError) else None
+            actions = corp_env.data.actions if not isinstance(corp_env.data, DigifetchError) else []
+            if quote is None:
+                return self._error_envelope(
+                    DividendYieldEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"quote payload missing for {parsed.symbol}",
+                        retryable=False,
+                    ),
+                )
+            if quote.price <= 0.0:
+                return self._error_envelope(
+                    DividendYieldEnvelope,
+                    DigifetchError(
+                        code="upstream_error",
+                        message=f"quote price non-positive for {parsed.symbol}",
+                        retryable=False,
+                    ),
+                )
+            distributions = [
+                action.amount
+                for action in actions
+                if action.kind == "dividend" and action.amount is not None
+            ]
+            trailing = sum(distributions)
+            return DividendYieldEnvelope(
+                data=DividendYieldResult(
+                    symbol=parsed.symbol,
+                    price=quote.price,
+                    trailing_dividends=trailing,
+                    distribution_count=len(distributions),
+                    dividend_yield=trailing / quote.price,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("dividend_yield", parsed, produce)
+
+    def fx_cross_rates(self, request: FxMatrixInput | Mapping[str, Any]) -> FxMatrixEnvelope:
+        """USD-pair FX matrix over the exchange-rate read (USD base only)."""
+        parsed = self._validate_input(FxMatrixInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(FxMatrixEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(FxMatrixEnvelope)
+
+        def produce() -> FxMatrixEnvelope:
+            rates: dict[str, float] = {}
+            warnings: list[str] = []
+            for code in parsed.currencies:
+                env = self.exchange_rate({"from_currency": code, "to_currency": parsed.to_currency})
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return FxMatrixEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"exchange rate unavailable for {code}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                rates[code] = env.data.rate
+            crosses = {
+                f"{base}/{quote_code}": rates[base] / rates[quote_code]
+                for base in rates
+                for quote_code in rates
+                if base != quote_code
+            }
+            return FxMatrixEnvelope(
+                data=FxMatrixResult(base=parsed.to_currency, rates=rates, crosses=crosses),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("fx_cross_rates", parsed, produce)
+
+    def vix_term_structure(self, request: VixTermInput | Mapping[str, Any]) -> VixTermEnvelope:
+        """VIX term snapshot over two econ-series closes (composition).
+
+        Reads the near and far series and reports the far-minus-near spread
+        with the curve regime (contango/inversion/flat). Warns and returns
+        ``upstream_error`` when either leg errors or carries no closes.
+        """
+        parsed = self._validate_input(VixTermInput, request)
+        if isinstance(parsed, DigifetchError):
+            return self._error_envelope(VixTermEnvelope, parsed)
+        if not self._enabled:
+            return self._disabled(VixTermEnvelope)
+
+        def produce() -> VixTermEnvelope:
+            legs = (
+                ("near", parsed.near_series),
+                ("far", parsed.far_series),
+            )
+            closes: dict[str, tuple[str, float]] = {}
+            warnings: list[str] = []
+            for leg, series_id in legs:
+                env = self.econ_series(
+                    {"series_id": series_id, "limit": parsed.limit, "sort_order": "desc"}
+                )
+                warnings.extend(env.warnings)
+                if isinstance(env.data, DigifetchError):
+                    return VixTermEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series unavailable for {series_id}: {env.data.message}",
+                            retryable=env.data.retryable,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                dated = [
+                    (observation.date, observation.value)
+                    for observation in env.data.observations
+                    if observation.value is not None
+                ]
+                if not dated:
+                    return VixTermEnvelope(
+                        data=DigifetchError(
+                            code="upstream_error",
+                            message=f"econ series {series_id} carries no closes",
+                            retryable=False,
+                        ),
+                        fetched_at=self._now(),
+                        warnings=warnings,
+                    )
+                closes[leg] = dated[0]
+            (near_date, near_close), (far_date, far_close) = closes["near"], closes["far"]
+            spread = far_close - near_close
+            regime: Literal["contango", "inversion", "flat"] = (
+                "contango" if spread > 0.0 else ("inversion" if spread < 0.0 else "flat")
+            )
+            return VixTermEnvelope(
+                data=VixTermResult(
+                    near_series=parsed.near_series,
+                    far_series=parsed.far_series,
+                    near_close=near_close,
+                    far_close=far_close,
+                    near_date=near_date,
+                    far_date=far_date,
+                    spread=spread,
+                    regime=regime,
+                ),
+                fetched_at=self._now(),
+                warnings=warnings,
+            )
+
+        return self._cached("vix_term_structure", parsed, produce)
 
     # -- internals ---------------------------------------------------------
 
