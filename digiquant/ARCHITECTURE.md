@@ -256,6 +256,14 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digifetch_risk_reports` | 10-K risk-factor reports, diffed year-over-year (`/public/risks/{ticker}` + `/{year}`, anonymous; live-verified). `what=list` lists report years with risk/group/word counts and an overview; `what=report` returns one year's extracted risk factors, groups, the added/removed/reworded diff against the prior year, and notes (requires `year`). Adds a deep link. Cached/delayed — cross-check against EDGAR |
 | `digifetch_short_interest` | Biweekly short-interest settlements (`/market/short-interest?symbol=&years=`, session-gated; live-verified: 401 anon → 200 with cookie). `years` is 1–10 client-side (live: 1→24 points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window upstream). Points carry shares short, prior shares short, average daily volume, days to cover, change percent, and a revised flag. Adds a deep link. Exchange-reported data, delayed by reporting cadence |
 | `digifetch_equity_diagnostic` | On-demand AI evidence review for one listing (`POST /research/equity-diagnostic`, session-gated; live-verified). `symbol`/`exchange`/`mode` (cache-first\|refresh); the first request per symbol answers HTTP 202 with a `pending` payload (`status=generating` + `retryAfterMs`) and retries eventually yield a report whose findings keep `observation` and `interpretation` separate. Free sessions only receive `access=preview`. The payload's own `status` field is not the market-envelope discriminator (`direct_payload`), pending payloads are **never** client-cached, and complete reports are cached normally. Adds a deep link. Model-generated reading of Gloomberb's data — not investment advice |
+| `luxalgo_library_search` | Full-text search over the LuxAlgo Library, concepts + indicators (hosted LuxAlgo MCP `mcp.luxalgo.com/mcp`, anonymous; #4779 P0). `query` free text, `limit` 1–50. Rows carry kind/slug/name/family plus the canonical `url`/`md_url`. Research reference only: "Sourced from LuxAlgo Library" attribution + `source_url` on every payload |
+| `luxalgo_library_get_concept` | One Library concept page by `slug` (e.g. rsi; anonymous). Returns slug/name/family/aliases, the canonical `url`/`md_url`, and `content_markdown`. Research reference only |
+| `luxalgo_library_get_indicator` | One Library indicator's **metadata** by `slug` (anonymous). Metadata only — indicator source code is not exposed (CC BY-NC-SA license boundary). Research reference only |
+| `luxalgo_library_list_concepts` | List Library concept pages (anonymous). `limit` 1–200. Research reference only |
+| `luxalgo_library_list_indicators` | List Library indicator entries (anonymous). `limit` 1–200. Metadata only, no source code. Research reference only |
+| `luxalgo_library_list_tags` | List Library tags (anonymous). No parameters. Research reference only |
+| `luxalgo_library_list_families` | List Library indicator families (anonymous). No parameters. Research reference only |
+| `luxalgo_library_get_family` | One Library indicator family by `family` name/slug (anonymous). Research reference only |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
@@ -476,7 +484,18 @@ prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
 `scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
 lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
-to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+to span at least one publication period of the series (#4588). No `FRED_API_KEY`
+is read anywhere on this path (#4794): `source=="fred"` fetches the newest
+anonymous Gloomberb `econ_series` page per kept series (`window_limit` by
+cadence: 60/16/8/4; 1000-row tail on bootstrap, sealed with a `truncated` note)
+and merges it into the existing `fred__*` generation, keeping sealed rows older
+than the page. A same-seal revision takes the window-merge path, never a full
+1990 re-pull. Only the 23 kept panel ids
+(`data/prices/gloomberb_macro.py::KEPT_SERIES_IDS`) are selected; the 8 dropped
+ids are never fetched and their `latest` pointers keep serving the last seal.
+`digiquant prices fetch-macro` reads the same panel the same way (`--dry-run`
+prints ids without a client; `--backfill` is a 1000-row tail, not 1990).
+`LIVE_WINDOW_DAYS`
 (45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
 `CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
 plus the pending release puts the newest month up to ~90 days behind the run — so
@@ -678,7 +697,7 @@ python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase 
 # One-shot BTC-SDCA only: add --strategy btc_sdca (skips Slapper calibrations).
 ```
 
-`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The scheduled job (`pipeline-digiquant-tearsheets.yml`) is fetch Coinbase → stage SDCA macro CSVs → generate `--push-supabase --signal-delay-days 3 --cache-dir digiquant/data/price-history`, no repo write. The explicit `--cache-dir` keeps the job correct while checkout is pinned to `main` (#1626) even if `DEFAULT_CACHE` on that ref lags. Targets are every `settings.json` strategy (L/S Slappers + `btc_sdca`). Push upserts the public `strategies` catalog row first — `strategy_tearsheets.strategy_id` FKs that table, and SDCA was never inserted by the Slapper-only calibrations sync.
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The job (`pipeline-digiquant-tearsheets.yml`) is fetch Coinbase → stage SDCA macro CSVs → generate `--push-supabase --signal-delay-days 3 --cache-dir digiquant/data/price-history`, no repo write. Phase 2 of #4761 runs that sequence as digiquant-runner command `tearsheets` (digithings-cron `12 0 * * *`). The workflow stays `workflow_dispatch` and has no `schedule`. Coinbase fetch keeps `uv run --frozen --with ccxt`. `export_sdca_macro.py` runs only when that file is in the image. The explicit `--cache-dir` keeps the job correct while the image is pinned to `main` (#1626) even if `DEFAULT_CACHE` on that ref lags. Targets are every `settings.json` strategy (L/S Slappers + `btc_sdca`). Push upserts the public `strategies` catalog row first — `strategy_tearsheets.strategy_id` FKs that table, and SDCA was never inserted by the Slapper-only calibrations sync.
 
 **One-time upload** (after optimizing in TradingView):
 
@@ -693,7 +712,10 @@ python digiquant/scripts/verify_strategy_calibrations_rls.py
 The separate `pipeline-digiquant-prices.yml` job owns `position_events` writes at the
 market open and the surviving macro ingest; price/technicals ingest moved to the R2
 refresh (`pipeline-market-data-refresh.yml`) and migration 127 dropped the Supabase
-`price_history`/`price_technicals` tables (#4053). It does
+`price_history`/`price_technicals` tables (#4053). Phase 1 of #4761 moves those
+clocks onto digithings-cron `kind: container` → the private digiquant-runner
+Worker (`docs/ops/digiquant-runner.md`). The market-data workflow keeps
+`workflow_dispatch` and has no `schedule`. It does
 **not** regenerate these public tearsheets. Two UTC crons cover New York daylight
 and standard time. `market_open_gate.py` selects the season-correct cron and keeps
 it valid after the open even when GitHub delivers it late, while rejecting the
@@ -1328,12 +1350,14 @@ against (e.g. a future tier→entitlement map); **no billing or entitlement
 upgrade code exists here**, and `GLOOMBERB_SESSION_COOKIE` remains the only
 way to supply a Pro session today.
 
-**Exposure.** All 34 tools are registered in `mcp_server.py` via the
+**Exposure.** All 35 tools are registered in `mcp_server.py` via the
 `_maybe_tool` pattern (read scope) and in the `orchestrator_tools.py` manifest.
 The lazily-cached `_build_gloomberb_client()` seam is keyed on the kill-switch +
 cookie env pair, so tests inject a `MockTransport`-backed client and an env
 change gets a fresh client. Attribution/deep links are appended by
-`_gloomberb_envelope_json`; the Yahoo earnings tool opts out explicitly.
+`_gloomberb_envelope_json`; the Yahoo earnings tool and the venue-direct
+prediction-markets tool opt out explicitly (their attribution lives inside
+`data`, never top-level, and neither emits a term.gloom.sh link).
 
 **Coverage expansion (#4110 phase 1).** Seven read tools joined the family on
 the same envelope/attribution/pacing semantics: `digifetch_econ_calendar`
@@ -1409,6 +1433,28 @@ transcript detail row shape **probe-pending** (the models stay permissive) until
 a Pro-account probe re-records it. The `saved`-key fallback is retained as an
 unverified variant.
 
+**Prediction markets (#4813).** `digifetch_prediction_markets` is the
+family's first venue-direct tool: no Cloud route exists, so the client reads
+the Polymarket Gamma `/events` catalog and the Kalshi trade `/events` catalog
+straight through the shared digifetch transport (`_request_json` takes a
+`base_url` + `label` so venue calls share pacing/retry/breaker with
+venue-named errors; a venue 401/402/403 maps to `upstream_error`, never to the
+session-cookie `auth_required`). Only `limit` (plus Kalshi's `open` status) is
+sent upstream — the venues' search/category/tab parameters are unprobed, so
+`query`/`category`/`tab` filter client-side and `limit` (1–100) slices the
+merged rows. Gamma's JSON-encoded `outcomes`/`outcomePrices` resolve the Yes
+probability; Kalshi's dollar-or-cent prices scale by 100 when above 1. Each
+venue fails soft into the result `warnings`; all-requested-venues-down is a
+typed `upstream_error`. Rows carry the venue deep link
+(`polymarket.com/event/{slug}`, `kalshi.com/markets/{ticker}`); the envelope
+`provider_id` is `prediction-markets-venues`, the result attribution names the
+venues with a polling notice, and both surfaces pass `attributed=False`, so no
+top-level attribution or term.gloom.sh link is ever emitted. Entitlement is
+`free`; the tool joins `MACRO_TOOLS` only (8 names, still within the 16-name
+prompt budget; subsets stay distinct). Not live-probed: venue shapes are parsed
+defensively from the plugin's documented reads, and the offline suite drives
+both venues through `MockTransport`.
+
 **Deliberately out of scope (client-side or non-Cloud sources).** The remaining
 plugin panes compute from already-tooled routes or call third parties
 directly, so no new tool was added: correlation / relationship graph (client
@@ -1417,7 +1463,7 @@ fallback (`query1.finance.yahoo.com`), world indices / FX matrix / futures
 (quote + history composition; futures are Yahoo continuous symbols),
 volatility term structure and credit conditions (FRED series composition over
 `digifetch_econ_series`), treasury auctions (`api.fiscaldata.treasury.gov`),
-prediction markets (kelly-sizer is a local model with no data endpoint),
+kelly-sizer (a local model with no data endpoint),
 market movers / scanner (already-tooled `/market/screener` plus Yahoo
 trending; the live scanner is a websocket stream), and short-interest coverage
 is the Cloud proxy above. The per-transcript detail route
@@ -1714,6 +1760,7 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
 | `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 34 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
+| `LUXALGO_ENABLED` | unset (ON) | Kill switch for the 8 `luxalgo_*` Library tools (#4779 P0). Only `1`/`true`/`yes`/`on` enable the family; any other explicit value disables it, and every call then returns a typed `upstream_error` without a request |
 | `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions, research search, statements, ticker tweets, tweet search, short interest, saved searches, equity diagnostic — screener is also gated and, like transcripts, additionally needs a Pro plan; 15 gated call sites in `client.py`). The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |
@@ -2843,8 +2890,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   tool (`call_web_search_tool` via digigraph's orchestrator hub over HTTP —
   never `import digisearch`), with enforced `include_domains` from
   `research/config/search_domains.yaml` (per-segment allowlists, capped at 5),
-  plus that config's `recency_days` (clamped to digisearch's 1–365, #4165) and
-  `max_search_results`. The query is a keyword search, not a prompt — the
+  plus that config's `recency_days` (clamped to digisearch's 1–365, #4165),
+  `max_search_results`, and `provider` (search engine in digisearch vocabulary,
+  default `auto`; forwarded to the tool only when set and not `auto` so a
+  pre-#4722 digigraph never sees the unknown keyword, #4723). The query is a keyword search, not a prompt — the
   request params carry the scoping and the caller formats the returned rows.
   The cited summary is injected into `phase_inputs` before the normal
   structured-output research call. `live_search_is_fallback` segments (e.g. macro)
@@ -4040,6 +4089,20 @@ Contributors are pure, fail-soft (an exception is logged and swallowed), may not
 existing key, and run **once per run** inside `_segment_counts`. Note the split:
 `_segment_totals` is the pure counter used by `research_produced`, which the chain calls
 *mid-run* to gate portfolio — contributors must never see that half-populated state.
+
+## Stage contracts (ADR-0030)
+
+Swappable handoffs live in `digiquant.stages`. `ResearchDigest` is the stage-1
+briefing (`date`, `body`, `regime_label`) plus `source` and `composition_id`.
+`TradeIdeaSnapshot` is the stage-2 trade-idea row. `refuse_order_intent` raises
+`ExecutionOptInRequired` and does not build an `OrderIntent`.
+
+Consensus timeframes are `medium` and `long`. Other strings are display-only
+(`split_timeframe`). twelve-x trade generation stays in the twelve-x repo.
+twelve-x does not execute. `PortfolioState` remains an alias of `ResearchState`.
+The portfolio `--from-digest` CLI still loads a full `ResearchState`.
+
+Plan: `docs/plans/adr-0030/README.md`. Decision: ADR-0030.
 
 ## execution contracts
 

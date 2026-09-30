@@ -231,10 +231,10 @@ async def byok_header_context(request: Request, call_next):
 from digigraph.rate_limit import RateLimiter as _RateLimiter
 
 _rate_limiter = _RateLimiter()
-# Expensive endpoints: 10 req/min. Ingest/query: 30 req/min. Health: unlimited.
+# Expensive endpoints (/workflow, /v1/product_graphs): 10 req/min. Chat: 60 req/min (#4776). Ingest/query: 30 req/min. Health: unlimited.
 _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/workflow": (10, 60),
-    "/v1/chat/completions": (10, 60),
+    "/v1/chat/completions": (60, 60),
     "/v1/product_graphs": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
@@ -618,6 +618,7 @@ from digigraph.http_api.chat_resolve import (
     _resolve_force_tool_chat,
     _resolve_openwebui_format,
     _resolve_require_tool_calls_chat,
+    _resolve_search_engine_chat,
     _resolve_session_id,
     _resolve_suppress_tool_stream,
     enforce_web_search_license_scope,
@@ -660,6 +661,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     # the ``hosted-web-search`` scope (corpus headers are gated inside
     # ``_digi_fields_from_request`` below). Plain turns never touch license code.
     enforce_web_search_license_scope(req, request)
+    search_engine = _resolve_search_engine_chat(req, request)
     limited = _enforce_require_tool_calls_budget(require_tool_calls, request)
     if limited is not None:
         return limited
@@ -699,6 +701,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 suppress_tool_stream=suppress_tool_stream,
                 force_tool=_resolve_force_tool_chat(req, request),
                 enable_web_search=enable_web_search,
+                search_engine=search_engine,
             ),
             media_type="text/event-stream",
             headers={
@@ -722,6 +725,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             request_id=request_id,
             force_tool=_resolve_force_tool_chat(req, request),
             enable_web_search=enable_web_search,
+            search_engine=search_engine,
             disabled_tools=disabled_tokens or None,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))

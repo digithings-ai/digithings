@@ -70,3 +70,7 @@ web_excluded_websites: []
 # Live search is billed per source; 8 -> 4 roughly halves the per-search spend with minimal
 # grounding loss (top results dominate). Tune up if grounding quality regresses.
 max_search_results: 4
+# Search engine for every grounding search, digisearch vocabulary end-to-end
+# (auto/internal/exa/tavily/parallel/firecrawl/tinyfish); the hub validates.
+# Omitted or auto keeps the in-house engine (#4723).
+provider: auto

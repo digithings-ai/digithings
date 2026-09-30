@@ -112,9 +112,12 @@ def test_catalog_keeps_zero_weight_extras_out_of_index() -> None:
 
 
 def test_btc_optimized_knees_leave_a_dead_zone() -> None:
+    # Promoted cycle-4 shape (owner accept 2026-09-29): narrow 45/50 dead
+    # zone, mid-knees buy 15 / sell 85. The test pins the promoted knees and
+    # the non-empty dead zone, not the pre-promotion 24.1/71.9 values.
     knees = knees_from_preset("btc_optimized")
-    assert 0.0 < knees.buy_knee_risk <= 25.0
-    assert 70.0 <= knees.sell_knee_risk < 100.0
+    assert knees.buy_knee_risk == pytest.approx(45.0)
+    assert knees.sell_knee_risk == pytest.approx(50.0)
     assert knees.buy_knee_risk < knees.sell_knee_risk
 
 

@@ -31,16 +31,29 @@ from digiquant.strategies.sdca.curve_optimize import (
     shape_from_bounds_ok,
 )
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
-from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategy_specs import get_param_specs
 
 pytestmark = pytest.mark.unit
 
 
-def _published_shape() -> SdcaCurveShape:
-    preset = load_preset("btc_optimized")
-    assert preset.shape is not None
-    return preset.shape
+def _weak_baseline() -> SdcaCurveShape:
+    """Fixed weak single-knee baseline for search-mechanics tests.
+
+    These tests verify search selection on synthetic data, not the published
+    preset's value (pinned by TestBtcOptimizedPromotion + the dead-zone
+    test). They previously read the live preset via load_preset, which broke
+    when the preset was promoted to the cycle-4 mid-tier candidate: fixed
+    6-key trials can no longer beat it on raw return. The pre-promotion
+    knees (35.5/24.1/71.9/21.0/1.3/4.0) preserve the original test premise.
+    """
+    return _shape(
+        buy_max_rate=35.5,
+        buy_knee_risk=24.1,
+        sell_knee_risk=71.9,
+        sell_max_rate=21.0,
+        buy_curvature=1.3,
+        sell_curvature=4.0,
+    )
 
 
 def _shape(**overrides: float) -> SdcaCurveShape:
@@ -211,7 +224,7 @@ class TestSearchSpace:
 class TestSearchAndPersist:
     def test_search_picks_higher_return_among_concentrated(self) -> None:
         dates, prices, risk = _v_cycle()
-        baseline = _published_shape()
+        baseline = _weak_baseline()
         clustered = _shape(
             buy_max_rate=18.0,
             buy_knee_risk=12.0,
@@ -282,7 +295,7 @@ class TestSearchAndPersist:
         dates = pl.Series("date", dates_list, dtype=pl.Date)
         prices_s = pl.Series(prices)
         risk_s = pl.Series(risks)
-        baseline = _published_shape()
+        baseline = _weak_baseline()
         drip = _shape(
             buy_max_rate=35.0,
             buy_knee_risk=25.0,
@@ -335,7 +348,7 @@ class TestSearchAndPersist:
 
     def test_persist_requires_return_and_concentration(self, tmp_path: Path) -> None:
         dates, prices, risk = _v_cycle()
-        baseline = _published_shape()
+        baseline = _weak_baseline()
         result = search_curve(
             dates,
             prices,

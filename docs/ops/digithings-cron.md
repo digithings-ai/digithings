@@ -2,7 +2,9 @@
 
 Production schedules for digithings-ai no longer rely on GitHub Actions
 `on: schedule`. The Cloudflare Worker **digithings-cron** owns the clocks and
-dispatches workflow runs on the default `develop` branch. Individual workflows
+dispatches workflow runs on the default `develop` branch. Price and
+market-data jobs POST the private digiquant-runner instead
+([digiquant-runner.md](digiquant-runner.md), #4761). Individual workflows
 retain their own release and safety gates.
 
 Canonical package + deploy docs:

@@ -478,7 +478,7 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **34 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **35 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
@@ -493,7 +493,9 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_filing_events`, `digifetch_risk_reports`,
   `digifetch_short_interest`, `digifetch_equity_diagnostic`, and the #4110
   phase-4a `digifetch_saved_searches` (`digifetch_transcripts` also gained a
-  `transcript_id` detail mode) are registered in
+  `transcript_id` detail mode), and the #4813 `digifetch_prediction_markets`
+  (Polymarket + Kalshi venue-direct catalog, free, in `MACRO_TOOLS`) are
+  registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
   `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
@@ -512,6 +514,11 @@ stays a generic transport engine (no URLs, no env reads).
   (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
   past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
   delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
+  **Panel exception (owner lock 2026-09-29, #4794):** anonymous `econ_series`
+  is the writer for the 23 kept macro ids sealed to R2 `fred__*` generations
+  (`data/prices/gloomberb_macro.py`). Delay on econ prints is publisher lag
+  (a monthly CPI print), not the 15-minute equity delay — do not stamp
+  "delayed up to 15 minutes" on these parquet rows.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
   either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
   `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
@@ -676,6 +683,44 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch.HttpFetcher`, or a patched `_build_gloomberb_client`; never hit the
   live API. Run `pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_*.py`
   plus `pytest tests/dq/test_mcp_server_scope.py`.
+
+---
+
+## LuxAlgo Library thin wrap (#4779 P0)
+
+`src/digiquant/data/luxalgo/` is the LuxAlgo Library research layer, mirroring
+the Gloomberb layering (`attribution` / `entitlements` / `models` / `client` /
+`agent_tools`, same MCP + manifest + dispatcher surfaces). It is the **only**
+place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
+
+- **8 tools, read scope, default ON, all keyless (`free`).**
+  `luxalgo_library_search`, `luxalgo_library_get_concept`,
+  `luxalgo_library_get_indicator` (metadata only), `luxalgo_library_list_concepts`,
+  `luxalgo_library_list_indicators`, `luxalgo_library_list_tags`,
+  `luxalgo_library_list_families`, `luxalgo_library_get_family` are registered
+  in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
+  `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
+  `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
+  typed `upstream_error` with no request.
+- **Upstream contract.** One `tools/call` JSON-RPC round trip per tool over
+  streamable HTTP (SSE `data:` lines; bare JSON also accepted). Every upstream
+  tool requires a `context` string — the client injects the fixed generic
+  `LUXALGO_CONTEXT` server-side and always overwrites any caller value, so no
+  PII reaches the upstream. Upstream payloads pass through as envelope `data`
+  unchanged (shapes vary); errors map to `not_found` / `rate_limited` /
+  `upstream_error` / `invalid_input`. 900s size-bounded TTL cache; no
+  rate-limiter/breaker in this phase (low-volume research reads).
+- **Attribution + license boundary.** Every payload carries "Sourced from
+  LuxAlgo Library" + the upstream canonical `url`/`md_url` (Library home when
+  no single page is addressed). Research reference only — never a pipeline
+  primary. `library_get_source_code` is deliberately NOT wrapped (CC
+  BY-NC-SA: no indicator source in paid surfaces); `broker_*` keys are never
+  sent to the hosted MCP; `journal_*`/`edge_*`/`trackers_*`/`propfirms_*` are
+  separate packages.
+- **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
+  (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
+  the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py` plus
+  `pytest tests/dq/test_mcp_server_scope.py`.
 
 ---
 

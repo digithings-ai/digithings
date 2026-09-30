@@ -75,6 +75,7 @@ export type ComposerMenuKind =
   | "tools"
   | "language"
   | "effort"
+  | "search-engine"
   | "view"
   | "thinking"
   | "provider";
@@ -84,6 +85,7 @@ type MenuView =
   | "language"
   | "models"
   | "effort"
+  | "search-engine"
   | "view"
   | "thinking"
   | "tools"
@@ -104,6 +106,26 @@ type MenuRow = {
 };
 
 const EFFORTS = ["low", "medium", "high"] as const;
+
+const SEARCH_ENGINES = [
+  "auto",
+  "internal",
+  "exa",
+  "tavily",
+  "parallel",
+  "firecrawl",
+  "tinyfish",
+] as const;
+
+const SEARCH_ENGINE_LABELS: Record<string, string> = {
+  auto: "Auto · in-house",
+  internal: "In-house",
+  exa: "Exa",
+  tavily: "Tavily",
+  parallel: "Parallel",
+  firecrawl: "Firecrawl",
+  tinyfish: "Tinyfish",
+};
 
 const VIEW_LABELS: Record<string, string> = {
   hidden: "Hidden · answer only",
@@ -137,6 +159,7 @@ function initialView(kind: ComposerMenuKind): MenuView {
   if (kind === "models") return "models";
   if (kind === "language") return "language";
   if (kind === "effort") return "effort";
+  if (kind === "search-engine") return "search-engine";
   if (kind === "view") return "view";
   if (kind === "thinking") return "thinking";
   if (kind === "tools") return "tools";
@@ -273,6 +296,10 @@ export function EmbedComposerMenu({
         setCursor(Math.max(0, languageCodes.indexOf(api.prefs.language)));
       } else if (kind === "effort") {
         setCursor(Math.max(0, EFFORTS.indexOf(api.prefs.effort as (typeof EFFORTS)[number])));
+      } else if (kind === "search-engine") {
+        setCursor(
+          Math.max(0, SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number])),
+        );
       } else if (kind === "view") {
         setCursor(Math.max(0, VIEW_MODES.indexOf(api.prefs.view)));
       } else if (kind === "thinking") {
@@ -369,6 +396,19 @@ export function EmbedComposerMenu({
         },
       });
     }
+    if (api.tenantAllowsWeb) {
+      rows.push({
+        id: "search-engine",
+        label: slashName("search-engine"),
+        value: SEARCH_ENGINE_LABELS[api.prefs.searchEngine || "auto"] ?? api.prefs.searchEngine,
+        activate: () => {
+          setCursor(
+            Math.max(0, SEARCH_ENGINES.indexOf(api.prefs.searchEngine as (typeof SEARCH_ENGINES)[number])),
+          );
+          setView("search-engine");
+        },
+      });
+    }
     if (onActivateProvider) {
       rows.push({
         id: "provider",
@@ -446,6 +486,22 @@ export function EmbedComposerMenu({
         exclusive: true,
         activate: () => {
           api.setEffort(id);
+          onClose();
+        },
+      })),
+    [api, onClose],
+  );
+
+  const engineRows = useMemo(
+    (): MenuRow[] =>
+      SEARCH_ENGINES.map((id) => ({
+        id,
+        label: slashName(`search-engine ${id}`),
+        value: SEARCH_ENGINE_LABELS[id] ?? "",
+        checked: (api.prefs.searchEngine || "auto") === id,
+        exclusive: true,
+        activate: () => {
+          api.setSearchEngine(id);
           onClose();
         },
       })),
@@ -761,7 +817,9 @@ export function EmbedComposerMenu({
                     ? providerModelRows
                     : view === "provider-key"
                       ? []
-                      : modelRows;
+                      : view === "search-engine"
+                        ? engineRows
+                        : modelRows;
   const title =
     view === "language"
       ? "/language"
@@ -779,7 +837,9 @@ export function EmbedComposerMenu({
               ? "/mcp"
               : view === "provider" || view === "provider-key" || view === "provider-model"
                 ? "/provider"
-                : "Settings";
+                : view === "search-engine"
+                  ? "/search-engine"
+                  : "Settings";
 
   const safeCursor = rows.length ? Math.min(cursor, rows.length - 1) : 0;
   if (safeCursor !== cursor) setCursor(safeCursor);
@@ -907,6 +967,12 @@ export function EmbedComposerMenu({
           api.setEffort(cycle(EFFORTS, api.prefs.effort, delta));
           return;
         }
+        if (view === "main" && row?.id === "search-engine") {
+          event.preventDefault();
+          event.stopPropagation();
+          api.setSearchEngine(cycle(SEARCH_ENGINES, api.prefs.searchEngine || "auto", delta));
+          return;
+        }
         if (view === "main" && row?.id === "view") {
           event.preventDefault();
           event.stopPropagation();
@@ -922,6 +988,7 @@ export function EmbedComposerMenu({
         if (
           view === "language" ||
           view === "effort" ||
+          view === "search-engine" ||
           view === "view" ||
           view === "thinking" ||
           view === "models" ||

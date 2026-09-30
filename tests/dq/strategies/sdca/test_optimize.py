@@ -224,7 +224,10 @@ class TestPersistAndDispatch:
         assert len(preset.curve_nodes) == 21
         prov = load_btc_optimized_provenance()
         assert prov.beats_flat_dca_oos is False
-        assert "nautilus" in prov.notes.lower() or "SIGABRT" in prov.notes
+        # Promotion record (owner accept 2026-09-29): the notes must point at
+        # the cycle-4 gate record, not the prior fit's boilerplate.
+        assert "cycle-4" in prov.notes
+        assert "SUPERSEDED" in prov.notes
 
     def test_run_optimize_sdca_dispatches_to_walk_forward(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

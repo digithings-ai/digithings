@@ -7,6 +7,7 @@ import type { Unstable_SlashCommand } from "@assistant-ui/react";
 import {
   catalogToolSlashDef,
   isEffortCode,
+  isSearchEngine,
   isThinkingCode,
   isViewCode,
   parseSlashInput,
@@ -128,6 +129,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
 
   for (const def of [...SLASH_COMMANDS, ...extra]) {
     if (def.id === "websearch" && !vis.webSearch) continue;
+    if (def.id === "search-engine" && !vis.webSearch) continue;
     if (def.id === "byok" && vis.byok === false) continue;
     if (def.id === "digisearch" && vis.digisearch === false) continue;
     if (def.id === "digivault" && vis.digivault === false) continue;
@@ -153,6 +155,8 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
       description = prefs.model || def.hint;
     } else if (def.id === "effort") {
       description = prefs.effort || "medium";
+    } else if (def.id === "search-engine") {
+      description = prefs.searchEngine || "auto";
     } else if (def.kind === "tool" && def.id) {
       const on = api.extraToolOn(def.id);
       description = toggleHint(on, def.hint, "disabled this session");
@@ -235,6 +239,15 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
       if (isEffortCode(value)) api.setEffort(value);
       return;
     }
+    case "search-engine": {
+      if (!arg) {
+        api.openSearchEngine();
+        return;
+      }
+      const value = arg.trim().toLowerCase();
+      if (isSearchEngine(value)) api.setSearchEngine(value);
+      return;
+    }
     case "sessions":
       api.openSessions();
       return;
@@ -267,7 +280,7 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
 }
 
 export function executeSlashFromComposer(
-  id: "lang" | "effort" | "byok" | "mcp" | "tools",
+  id: "lang" | "effort" | "search-engine" | "byok" | "mcp" | "tools",
   composerText: string,
   api: EmbedChatPrefsApi,
   extra?: readonly SlashDef[],

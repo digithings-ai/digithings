@@ -113,6 +113,8 @@ web:
   # Org-wide Cloudflare cron Worker. This lane owns its Vitest + typecheck
   # because it already installs the root npm workspaces.
   - apps/digithings-cron/**
+  - apps/digiquant-runner/**
+  - Dockerfile.digiquant-runner
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
   - packages/digichat-ui/**

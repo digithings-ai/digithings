@@ -34,8 +34,29 @@ describe("jobsForCron", () => {
 
   it("workflow dispatches target the default develop branch", () => {
     for (const j of JOBS) {
-      if (j.kind === "workflow_dispatch") expect(j.ref).toBe("develop");
-      else expect(j.ref).toBeUndefined();
+      if (j.kind === "repository_dispatch") expect(j.ref).toBeUndefined();
+      else expect(j.ref).toBe("develop");
+    }
+  });
+
+  it("sends price and market-data clocks to digiquant-runner", () => {
+    expect(JOBS.some((job) => job.id === "prices-intraday")).toBe(false);
+    const fx = JOBS.find((job) => job.id === "prices-fx-refresh");
+    expect(fx?.kind).toBe("container");
+    expect(fx?.command).toBe("prices-fx-candles");
+    expect(fx?.codeRef).toBe("main");
+    expect(JSON.stringify(fx?.command)).not.toContain("fetch-macro");
+    const morning = JOBS.find((job) => job.id === "market-data-refresh-morning");
+    const evening = JOBS.find((job) => job.id === "market-data-refresh-evening");
+    expect(morning?.cron).toBe("0 13 * * *");
+    expect(evening?.cron).toBe("30 21 * * *");
+    expect(morning?.command).toBe("market-data-refresh");
+    expect(evening?.command).toBe("market-data-refresh");
+    expect(morning?.concurrency).toBe("market-data-refresh");
+    for (const job of [morning, evening, fx]) {
+      expect(job?.kind).toBe("container");
+      expect(job?.workflow).toBeTruthy();
+      expect(job?.ref).toBe("develop");
     }
   });
 
@@ -50,6 +71,26 @@ describe("jobsForCron", () => {
       const dow = cron.split(/\s+/)[4];
       expect(dow, cron).not.toMatch(/^\d(?:-\d)?$/);
     }
+  });
+
+  it("sends phase 2 clocks to digiquant-runner without a second schedule", () => {
+    const expected = [
+      ["onchain", "onchain-bitview", "40 22 * * *", 900],
+      ["tearsheets", "tearsheets", "12 0 * * *", 2700],
+      ["research-metrics", "research-metrics", "5 22 * * *", 1200],
+      ["execution-cron-check", "execution-cron-check", "15 12 * * *", 600],
+    ] as const;
+    for (const [id, command, cron, timeout] of expected) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.kind).toBe("container");
+      expect(job?.command).toBe(command);
+      expect(job?.cron).toBe(cron);
+      expect(job?.timeoutSeconds).toBe(timeout);
+      expect(job?.codeRef).toBe("main");
+      expect(job?.workflow).toBeTruthy();
+      expect(job?.ref).toBe("develop");
+    }
+    expect(JOBS.find((job) => job.id === "house-run-09")?.kind).toBe("repository_dispatch");
   });
 
   it("runs house research/portfolio retries every day without a Sunday special", () => {

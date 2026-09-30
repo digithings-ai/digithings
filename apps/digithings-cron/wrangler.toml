@@ -1,7 +1,9 @@
-# digithings-cron — org-wide production clocks (issue #3579).
-# Thin Worker: Cron Triggers → GitHub workflow_dispatch / repository_dispatch.
-# No Containers / Durable Objects. Deploy from main only.
-# wrangler deploy is the source of truth for [triggers] crons.
+# digithings-cron — org-wide production clocks (issue #3579, #4761).
+# Cron Triggers → GitHub workflow_dispatch / repository_dispatch, or the
+# private digiquant-runner Worker (service binding RUNNER). This Worker does
+# not run Containers itself. wrangler deploy is the source of truth for
+# [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
+# The price and market-data prefix is in that same order.
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -13,19 +15,30 @@ enabled = true
 
 [vars]
 DRY_RUN = "0"
+# Empty: migrated jobs never call api.github.com. Comma-separated job ids
+# restore workflow_dispatch for those ids only and log github_override.
+GITHUB_OVERRIDE_JOBS = ""
 
 # Secrets (wrangler secret put; never commit values):
 #   GH_DISPATCH_TOKEN   — Actions write on digithings-ai/digithings + digithings-ai/twelve-x
-#   CRON_KICK_SECRET    — optional; enables POST /kick
+#   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
+#   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
+#
+# printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
+
+[[services]]
+binding = "RUNNER"
+service = "digiquant-runner"
 
 [triggers]
 crons = [
   "40 13 * * MON-FRI",
   "40 14 * * MON-FRI",
-  "7,22,37,52 13-21 * * MON-FRI",
   "19 */2 * * MON-FRI",
   "19 22 * * SUN",
   "27 21 * * MON-FRI",
+  "0 13 * * *",
+  "30 21 * * *",
   "17 9 * * *",
   "17 10 * * *",
   "17 11 * * *",

@@ -60,7 +60,11 @@ import {
 import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
 import { uiMessagesForUpstream } from "@/lib/ui-stream-parts";
 
-export const maxDuration = 120;
+// #4753: the boot-retry budget in adapters/digithings/stream.ts runs up to
+// ~250s (stack portReady 180s + instanceGet 60s + margin). The route must
+// outlive it or a slow cold boot is cut off mid-retry; 300s leaves headroom
+// for the answer stream that follows.
+export const maxDuration = 300;
 
 function rateLimitResponse(message: string, retryAfterSec: number): Response {
   return new Response(
@@ -543,6 +547,28 @@ export async function POST(req: Request) {
   const effortRaw = (req.headers.get("x-digi-effort") || "").trim().toLowerCase();
   if (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high") {
     upstreamHeaders["X-Digi-Effort"] = effortRaw;
+  }
+  // Search engine choice for digisearch web_search (#4724): allowlisted names
+  // only, unknown/blank dropped. "auto" is the hub default, so it is omitted
+  // rather than forwarded. Effective engine is the browser choice, else the
+  // tenant default from dep.gate.searchEngine (engine NAME only, never keys);
+  // an explicit browser "auto" beats a tenant default via omission.
+  const engineRaw = (req.headers.get("x-digi-search-engine") || "").trim().toLowerCase();
+  const tenantEngineRaw = (dep?.gate?.searchEngine || "").trim().toLowerCase();
+  const isEngineName = (v: string) =>
+    v === "auto" ||
+    v === "internal" ||
+    v === "exa" ||
+    v === "tavily" ||
+    v === "parallel" ||
+    v === "firecrawl" ||
+    v === "tinyfish";
+  const browserEngine = isEngineName(engineRaw) ? engineRaw : undefined;
+  const tenantEngine =
+    tenantEngineRaw !== "auto" && isEngineName(tenantEngineRaw) ? tenantEngineRaw : undefined;
+  const effectiveEngine = browserEngine === "auto" ? undefined : (browserEngine ?? tenantEngine);
+  if (effectiveEngine) {
+    upstreamHeaders["X-Digi-Search-Engine"] = effectiveEngine;
   }
   // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
   // Session X-Digi-Disabled-Tools still forwards on Redo / edit (#3735 review).

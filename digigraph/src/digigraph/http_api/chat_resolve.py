@@ -127,6 +127,15 @@ def enforce_web_search_license_scope(req: ChatCompletionRequest, request: Reques
     )
 
 
+def _resolve_search_engine_chat(req: ChatCompletionRequest, request: Request) -> str | None:
+    """Per-request web_search engine (#4722). Body or X-Digi-Search-Engine; None = auto."""
+    body = (req.search_engine or "").strip()
+    if body:
+        return body
+    header = (request.headers.get("X-Digi-Search-Engine") or "").strip()
+    return header or None
+
+
 def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
     """Session id from body, then X-Session-Id, then X-Thread-Id. Ensures digistore/checkpoint are per-conversation when client sends it."""
     sid = getattr(req, "session_id", None)

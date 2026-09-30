@@ -816,6 +816,185 @@ def build_digifetch_saved_searches_tool() -> dict[str, Any]:
     }
 
 
+# ── LuxAlgo Library family (#4779 P0) ─────────────────────────────────────────
+#
+# Thin wrap of the hosted LuxAlgo MCP (Library research reads only). All 8
+# tools are keyless (``free``); every payload carries the "Sourced from
+# LuxAlgo Library" attribution + the upstream canonical URL. Indicator source
+# code is deliberately NOT wrapped (CC BY-NC-SA license boundary).
+
+
+def build_luxalgo_library_search_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_search",
+            "description": (
+                "Full-text search over the LuxAlgo Library (concepts + "
+                "indicators; hosted LuxAlgo MCP, anonymous). Rows carry "
+                "kind/slug/name/family plus the canonical url/md_url. "
+                "Research reference only: attribute LuxAlgo and link back."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def build_luxalgo_library_get_concept_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_get_concept",
+            "description": (
+                "One LuxAlgo Library concept page by slug (e.g. rsi; hosted "
+                "LuxAlgo MCP, anonymous). Returns slug/name/family/aliases, "
+                "the canonical url/md_url, and content_markdown. Research "
+                "reference only: attribute LuxAlgo and link back."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string"},
+                },
+                "required": ["slug"],
+            },
+        },
+    }
+
+
+def build_luxalgo_library_get_indicator_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_get_indicator",
+            "description": (
+                "One LuxAlgo Library indicator's metadata by slug (hosted "
+                "LuxAlgo MCP, anonymous). Metadata only — indicator source "
+                "code is not exposed (CC BY-NC-SA). Research reference only: "
+                "attribute LuxAlgo and link back."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string"},
+                },
+                "required": ["slug"],
+            },
+        },
+    }
+
+
+def build_luxalgo_library_list_concepts_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_list_concepts",
+            "description": (
+                "List LuxAlgo Library concept pages (hosted LuxAlgo MCP, "
+                "anonymous). `limit` bounds the page (1-200). Research "
+                "reference only: attribute LuxAlgo and link back."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "minimum": 1,
+                        "maximum": 200,
+                    },
+                },
+            },
+        },
+    }
+
+
+def build_luxalgo_library_list_indicators_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_list_indicators",
+            "description": (
+                "List LuxAlgo Library indicator entries (hosted LuxAlgo MCP, "
+                "anonymous). `limit` bounds the page (1-200). Entries are "
+                "metadata only — no source code. Research reference only."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "default": 50,
+                        "minimum": 1,
+                        "maximum": 200,
+                    },
+                },
+            },
+        },
+    }
+
+
+def build_luxalgo_library_list_tags_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_list_tags",
+            "description": (
+                "List LuxAlgo Library tags (hosted LuxAlgo MCP, anonymous). "
+                "Takes no parameters. Research reference only."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_luxalgo_library_list_families_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_list_families",
+            "description": (
+                "List LuxAlgo Library indicator families (hosted LuxAlgo MCP, "
+                "anonymous). Takes no parameters. Research reference only."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+
+
+def build_luxalgo_library_get_family_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "luxalgo_library_get_family",
+            "description": (
+                "One LuxAlgo Library indicator family by name/slug (hosted "
+                "LuxAlgo MCP, anonymous). Research reference only: attribute "
+                "LuxAlgo and link back."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "family": {"type": "string"},
+                },
+                "required": ["family"],
+            },
+        },
+    }
+
+
 def build_digifetch_screener_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -1090,6 +1269,44 @@ def build_digifetch_equity_diagnostic_tool() -> dict[str, Any]:
                     },
                 },
                 "required": ["symbol"],
+            },
+        },
+    }
+
+
+def build_digifetch_prediction_markets_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "digifetch_prediction_markets",
+            "description": (
+                "Prediction-markets catalog search across Polymarket and Kalshi "
+                "(public venue APIs, anonymous direct reads). venue selects "
+                "all/polymarket/kalshi; query matches titles, category matches "
+                "the venue tag, tab selects top/ending_soon/new, limit bounds "
+                "the rows (default 20, max 100). Rows carry title, "
+                "yes-probability, spread, volume, liquidity/open interest, "
+                "ends-at, status, category, and the venue deep link. "
+                "Enrichment only: polled reads may lag the venue order book "
+                "and are never a pipeline primary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "venue": {
+                        "type": "string",
+                        "enum": ["all", "polymarket", "kalshi"],
+                        "default": "all",
+                    },
+                    "query": {"type": "string"},
+                    "category": {"type": "string"},
+                    "tab": {
+                        "type": "string",
+                        "enum": ["top", "ending_soon", "new"],
+                        "default": "top",
+                    },
+                    "limit": {"type": "integer", "default": 20},
+                },
             },
         },
     }
@@ -1515,21 +1732,34 @@ def build_digiquant_get_trade_levels_tool() -> dict[str, Any]:
 
 
 def _with_entitlement(tool: dict[str, Any]) -> dict[str, Any]:
-    """Attach the declared entitlement to a digifetch tool schema (#4110 phase 5).
+    """Attach the declared entitlement to a digifetch/luxalgo tool schema.
 
-    The vocabulary lives in :mod:`digiquant.data.gloomberb.entitlements`; the
-    MCP registration injects the same note into its description and tags the
-    registered function, so the two surfaces cannot drift.
+    The digifetch vocabulary lives in
+    :mod:`digiquant.data.gloomberb.entitlements` and the luxalgo vocabulary in
+    :mod:`digiquant.data.luxalgo.entitlements`; the MCP registration injects
+    the same note into its description and tags the registered function, so
+    the two surfaces cannot drift. (#4110 phase 5, #4779 P0)
     """
-    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, with_entitlement_note
+    from digiquant.data.gloomberb.entitlements import (
+        TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
+    )
+    from digiquant.data.gloomberb.entitlements import (
+        with_entitlement_note as _gloomberb_note,
+    )
+    from digiquant.data.luxalgo.entitlements import TOOL_ENTITLEMENTS as _LUXALGO_ENTITLEMENTS
+    from digiquant.data.luxalgo.entitlements import with_entitlement_note as _luxalgo_note
 
     name = tool.get("function", {}).get("name")
-    entitlement = TOOL_ENTITLEMENTS.get(name)
+    entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
+    note_fn = _gloomberb_note
+    if entitlement is None:
+        entitlement = _LUXALGO_ENTITLEMENTS.get(name)
+        note_fn = _luxalgo_note
     if entitlement is None:
         return tool
     tool["entitlement"] = entitlement
     function = tool["function"]
-    function["description"] = with_entitlement_note(name, function["description"])
+    function["description"] = note_fn(name, function["description"])
     return tool
 
 
@@ -1538,7 +1768,9 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
 
     Every digifetch tool carries a top-level ``entitlement`` declaration
     (``free`` | ``session`` | ``preview`` | ``pro``) and an entitlement note in
-    its description; see :mod:`digiquant.data.gloomberb.entitlements`.
+    its description; see :mod:`digiquant.data.gloomberb.entitlements`. Every
+    luxalgo Library tool carries ``entitlement="free"`` plus the LuxAlgo
+    attribution/license note; see :mod:`digiquant.data.luxalgo.entitlements`.
     """
     tools = [
         build_digiquant_list_strategies_tool(),
@@ -1581,7 +1813,16 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digifetch_risk_reports_tool(),
         build_digifetch_short_interest_tool(),
         build_digifetch_equity_diagnostic_tool(),
+        build_digifetch_prediction_markets_tool(),
         build_digifetch_saved_searches_tool(),
+        build_luxalgo_library_search_tool(),
+        build_luxalgo_library_get_concept_tool(),
+        build_luxalgo_library_get_indicator_tool(),
+        build_luxalgo_library_list_concepts_tool(),
+        build_luxalgo_library_list_indicators_tool(),
+        build_luxalgo_library_list_tags_tool(),
+        build_luxalgo_library_list_families_tool(),
+        build_luxalgo_library_get_family_tool(),
         build_digiquant_fit_btc_power_law_tool(),
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),

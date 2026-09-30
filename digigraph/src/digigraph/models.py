@@ -94,6 +94,14 @@ class ChatCompletionRequest(BaseModel):
             "vault/search hits and never replace them (#3420)."
         ),
     )
+    search_engine: str | None = Field(
+        None,
+        description=(
+            "Per-request web_search engine (X-Digi-Search-Engine). One of auto, "
+            "internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto "
+            "for the in-house engine; unknown values fail at the digisearch hub (#4722)."
+        ),
+    )
     research_system_prompt: str | None = Field(
         None,
         max_length=4000,
@@ -228,6 +236,14 @@ class WorkflowRequest(BaseModel):
         description=(
             "Opt-in digigraph ``web_search`` tool (digillm). Default off. "
             "Also via X-Digi-Enable-Web-Search (#3420)."
+        ),
+    )
+    search_engine: str | None = Field(
+        None,
+        description=(
+            "Per-request web_search engine (X-Digi-Search-Engine). One of auto, "
+            "internal, exa, tavily, parallel, firecrawl, tinyfish. Omit or auto "
+            "for the in-house engine; unknown values fail at the digisearch hub (#4722)."
         ),
     )
     disabled_tools: list[str] | None = Field(

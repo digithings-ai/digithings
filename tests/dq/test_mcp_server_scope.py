@@ -68,6 +68,18 @@ DIGIFETCH_TOOLS = {
     "digifetch_saved_searches",
 }
 
+#: The 8 LuxAlgo Library research reads (#4779 P0).
+LUXALGO_TOOLS = {
+    "luxalgo_library_search",
+    "luxalgo_library_get_concept",
+    "luxalgo_library_get_indicator",
+    "luxalgo_library_list_concepts",
+    "luxalgo_library_list_indicators",
+    "luxalgo_library_list_tags",
+    "luxalgo_library_list_families",
+    "luxalgo_library_get_family",
+}
+
 COMPUTE_TOOLS = {
     "digiquant_run_backtest",
     "digiquant_run_optimize",
@@ -161,7 +173,13 @@ def test_read_scope_includes_digifetch_family():
 
 
 @pytest.mark.unit
+def test_read_scope_includes_luxalgo_family():
+    assert LUXALGO_TOOLS <= set(READ_SCOPE_TOOLS)
+    assert not (LUXALGO_TOOLS & COMPUTE_TOOLS)
+
+
+@pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 44
+    assert len(READ_SCOPE_TOOLS) == 53
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 58
+    assert len(_tool_names(create_mcp_server())) == 67

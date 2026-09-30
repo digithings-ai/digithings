@@ -285,4 +285,4 @@ These docs must never claim the following — the evidence is not available in t
 
 | Date (UTC) | Secret | Actor | Ticket | Verification evidence |
 |---|---|---|---|---|
-|  |  |  |  |  |
+| 2026-09-29 | MCP_EDGE_KEY + DIGICHAT_EMBED_TENANTS (occ zammad entry) | agent (user-authorized rotation) | occ zammad `Unknown tool` | edge GET no-key→401 / with-key→406 (gate passes; 406=MCP GET negotiation); occ tenant-config now lists zammad server (was []); JSON-RPC tools/list via edge returns 5 tools; digichat Worker e6901a69 live, container shared-v9 |
