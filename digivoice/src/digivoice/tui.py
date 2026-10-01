@@ -8,6 +8,7 @@ never scroll-appended menus. Speech stays local; nothing here touches hardware.
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from typing import TextIO
 
 # --- Interactive wizard (stdlib only) -------------------------------------
@@ -240,6 +241,7 @@ def _render_menu_frame(
     hint: str | None = None,
     checked: set[int] | None = None,
     subtitle: str | None = None,
+    context: Sequence[str] | None = None,
 ) -> str:
     """Build one full TTY frame: clear+home, pixel header, menu, footer."""
     use_ansi = _use_ansi()
@@ -251,6 +253,9 @@ def _render_menu_frame(
     lines = [_ANSI_CLEAR_HOME]
     lines.extend(tui_header_lines(subtitle))
     lines.append(f"{title}")
+    if context:
+        for entry in context:
+            lines.append(f"{dim}  {entry}{reset}{clear_eol}")
     for i, option in enumerate(options):
         marker = "▶" if i == selected else " "
         if checked is not None:
@@ -272,12 +277,14 @@ def choose(
     stdout: TextIO | None = None,
     hint: str | None = None,
     subtitle: str | None = None,
+    context: Sequence[str] | None = None,
 ) -> int | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
     TTY mode redraws the whole frame in place on every key (CSI clear+home)
     so menu lines never duplicate. Space confirms like Enter; Esc/q goes back.
-    Returns None on Esc/back/quit.
+    `context` renders a dim status strip between the title and the options
+    (TTY only). Returns None on Esc/back/quit.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -290,7 +297,11 @@ def choose(
             if use_ansi:
                 stdout.write(_ANSI_HIDE)
             while True:
-                stdout.write(_render_menu_frame(title, options, selected, hint, subtitle=subtitle))
+                stdout.write(
+                    _render_menu_frame(
+                        title, options, selected, hint, subtitle=subtitle, context=context
+                    )
+                )
                 stdout.flush()
                 key = _read_key(stdin)
                 if key == "up" or key in {"k", "K"}:

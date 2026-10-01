@@ -266,15 +266,19 @@ def _reload(args: argparse.Namespace, runtime: Runtime) -> CliResult:
 
 def _home(runtime: Runtime) -> CliResult:
     """Bare `digivoice`: TUI home on a TTY, printed overview otherwise."""
-    from digivoice.home import run_home
+    from digivoice.home import build_context_lines, render_home_overview, run_home
 
     if not sys.stdin.isatty():
         # Never hang an agent/pipe: print the overview instead of the shell.
-        from digivoice.home import render_home_overview
         from digivoice.settings import format_settings_text, load_settings
 
         paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
-        text = render_home_overview(format_settings_text(load_settings(paths), paths))
+        context = build_context_lines(
+            runtime.platform, runtime.home, dict(runtime.env), probe=runtime.probe
+        )
+        text = render_home_overview(
+            format_settings_text(load_settings(paths), paths), context_lines=context
+        )
         return CliResult(code=0, stdout=text + "\n", stderr="")
     code = run_home(runtime.platform, runtime.home, dict(runtime.env))
     return CliResult(code=code, stdout="", stderr="")

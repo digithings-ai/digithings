@@ -1,8 +1,9 @@
-"""Bare-`digivoice` home shell: the full terminal UI over the existing commands.
+"""Bare-`digivoice` app home: status strip plus actions over the commands.
 
-A TTY gets the in-place TUI (pixel DIGIVOICE header, one-frame redraw per key,
-same nav as setup). Pipes, CI, and agents get a printed overview and exit 0 —
-never a hang. Every entry routes to the same handlers the subcommands use.
+A TTY gets the in-place app shell (pixel DIGIVOICE header, brief build-in,
+one-frame redraw per key). Pipes, CI, and agents get a printed overview and
+exit 0 — never a hang. Setup is a submenu entry that returns to home; it is
+not the home screen. Every entry routes to the handlers the subcommands use.
 """
 
 from __future__ import annotations
@@ -22,17 +23,21 @@ from digivoice.tui import (
     play_intro,
 )
 
-HOME_SUBTITLE = "digivoice home · local speech control"
+HOME_TITLE = "DIGIVOICE"
+HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 
+# App-home actions. Setup sits second-last as a "wizard…" submenu — it opens
+# the setup wizard and returns to home, it is never the home screen itself.
+# Status is not an action: the live status.json feed surfaces in the context
+# strip and via `digivoice status`.
 HOME_MENU = (
     "Doctor (health checks)",
-    "Setup wizard (models, features, hotkeys)",
     "Settings (show)",
     "History (recent)",
-    "Status (banner feed)",
     "Reload (local control)",
     "Update",
     "Uninstall",
+    "Setup (wizard…)",
     "Quit",
 )
 
@@ -45,22 +50,98 @@ def home_menu_tree() -> list[str]:
     return list(HOME_MENU)
 
 
+def home_context_lines(
+    settings_text_model: str,
+    tts_label: str,
+    banner_density: str,
+    banner_position: str,
+    health: str,
+) -> list[str]:
+    """Two-line status/context strip for the home frame."""
+    return [
+        f"models: stt {settings_text_model} · tts {tts_label} — banner {banner_density} ({banner_position})",
+        f"health: {health}",
+    ]
+
+
+def build_context_lines(
+    platform: str,
+    home: Path,
+    env: Mapping[str, str],
+    probe: object | None = None,
+) -> list[str]:
+    """Status strip: models, banner density, doctor health. Never raises."""
+    from digivoice.settings import load_settings
+
+    try:
+        paths = resolve_paths(platform, home, env)
+        settings = load_settings(paths)
+        tts_label = settings.tts_voice or "(auto)"
+        if probe is None:
+            from digivoice.probe import real_probe
+
+            probe = real_probe(env.get("PATH", ""))
+        ok, summary = summarize_health(platform, home, dict(env), probe)
+        _ = ok
+        return home_context_lines(
+            settings.stt_model,
+            tts_label,
+            settings.banner_density,
+            settings.banner_position,
+            summary,
+        )
+    except Exception:
+        return ["models: (unavailable) — banner (unavailable)", "health: unknown"]
+
+
+def summarize_health(
+    platform: str,
+    home: Path,
+    env: dict[str, str],
+    probe: object,
+) -> tuple[bool, str]:
+    """One-line doctor summary for the strip. Never raises."""
+    try:
+        from digivoice.doctor import doctor_checks, render_doctor
+
+        checks = doctor_checks(platform, home, env, probe)  # type: ignore[arg-type]
+        report = render_doctor(checks)
+        required = [c for c in checks if c.id in {"whisper-cli", "piper", "capture", "models"}]
+        missing = [c.id for c in required if c.status != "ok"]
+        if report.ok:
+            return True, f"ok ({len(required)}/{len(required)} ready)"
+        if missing:
+            return False, f"not ready — missing: {', '.join(missing)}"
+        return False, "not ready — see Doctor"
+    except Exception:
+        return False, "unknown"
+
+
 def render_home_overview(
     settings_text: str,
     history_hint: str = "no recent entries shown here; see `digivoice history --last 5`",
+    context_lines: list[str] | None = None,
 ) -> str:
-    """Non-interactive home: menu tree plus pointers. No prompts, exit 0."""
+    """Non-interactive home: context strip plus menu tree. No prompts, exit 0."""
     lines = [
-        "┌─ digivoice ────────────────────────────────────────────┐",
-        "│  digivoice home · local speech control                 │",
-        "│  ↑↓ move · Enter select · Space select · Esc/q quit   │",
+        "┌─ DIGIVOICE ────────────────────────────────────────────┐",
+        "│  DIGIVOICE · app home — local speech control           │",
+        "│  ↑↓ move · Enter select · Esc/q quit                   │",
         "└────────────────────────────────────────────────────────┘",
         "",
     ]
+    if context_lines:
+        lines.append("— Context —")
+        for entry in context_lines:
+            lines.append(f"  {entry}")
+        lines.append("")
+    lines.append("— Actions —")
     for index, item in enumerate(HOME_MENU):
         marker = "▶" if index == 0 else " "
         lines.append(f"  {marker} {item}")
     lines += [
+        "",
+        "Setup lives under “Setup (wizard…)” and returns here; it is not the home screen.",
         "",
         "— Settings (current) —",
         settings_text.rstrip(),
@@ -95,7 +176,8 @@ def run_home(
 
     if not _is_tty(stdin):
         settings_text = format_settings_text(load_settings(paths), paths)
-        stdout.write(render_home_overview(settings_text) + "\n")
+        context = build_context_lines(platform, home, env, probe=_cli.real_probe(env.get("PATH")))
+        stdout.write(render_home_overview(settings_text, context_lines=context) + "\n")
         stdout.flush()
         return 0
 
@@ -104,7 +186,15 @@ def run_home(
     )
     play_intro(stdout, HOME_SUBTITLE)
     while True:
-        picked = choose("digivoice home", list(HOME_MENU), stdin, stdout, subtitle=HOME_SUBTITLE)
+        context = build_context_lines(platform, home, env, probe=runtime.probe)
+        picked = choose(
+            HOME_TITLE,
+            list(HOME_MENU),
+            stdin,
+            stdout,
+            subtitle=HOME_SUBTITLE,
+            context=context,
+        )
         if picked is None or HOME_MENU[picked] == "Quit":
             return 0
         entry = HOME_MENU[picked]
@@ -117,8 +207,6 @@ def run_home(
                 subtitle=HOME_SUBTITLE,
             )
             _pause(stdin, stdout)
-        elif entry.startswith("Setup"):
-            _cli._setup(argparse.Namespace(print_only=False, as_json=False), runtime)
         elif entry.startswith("Settings"):
             text = format_settings_text(load_settings(paths), paths)
             _write_info_frame(stdout, "— Settings —", text.splitlines(), subtitle=HOME_SUBTITLE)
@@ -132,11 +220,6 @@ def run_home(
                 result.stdout.splitlines(),
                 subtitle=HOME_SUBTITLE,
             )
-            _pause(stdin, stdout)
-        elif entry.startswith("Status"):
-            result = _cli._status(runtime)
-            body = result.stdout.splitlines() or [result.stderr.strip()]
-            _write_info_frame(stdout, "— Status —", body, subtitle=HOME_SUBTITLE)
             _pause(stdin, stdout)
         elif entry.startswith("Reload"):
             args = argparse.Namespace(as_json=False)
@@ -156,3 +239,6 @@ def run_home(
                 stdout, "— Uninstall —", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
             )
             _pause(stdin, stdout)
+        elif entry.startswith("Setup"):
+            # Submenu: run the wizard, then return to home (never exit).
+            _cli._setup(argparse.Namespace(print_only=False, as_json=False), runtime)

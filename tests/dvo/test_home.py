@@ -24,7 +24,12 @@ def _runtime(tmp_path: Path, **env: str) -> Runtime:
 def test_bare_non_tty_prints_home_overview(tmp_path: Path) -> None:
     result = run([], _runtime(tmp_path))
     assert result.code == 0
-    assert "digivoice home" in result.stdout
+    assert "DIGIVOICE" in result.stdout
+    assert "— Context —" in result.stdout
+    assert "— Actions —" in result.stdout
+    assert "models:" in result.stdout
+    assert "banner" in result.stdout
+    assert "health:" in result.stdout
     for item in HOME_MENU:
         assert item.split(" (")[0] in result.stdout
     assert "Reload" in result.stdout
@@ -45,6 +50,31 @@ def test_home_menu_tree_matches_rendered_overview(tmp_path: Path) -> None:
     assert "Quit" in text
 
 
+def test_home_is_app_actions_with_setup_as_submenu() -> None:
+    assert [m.split(" (")[0] for m in HOME_MENU] == [
+        "Doctor",
+        "Settings",
+        "History",
+        "Reload",
+        "Update",
+        "Uninstall",
+        "Setup",
+        "Quit",
+    ]
+    assert not any(m.startswith("Status") for m in HOME_MENU)
+    setup_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Setup"))
+    reload_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Reload"))
+    assert setup_at > reload_at
+    assert "wizard" in HOME_MENU[setup_at].lower()
+
+
+def test_home_overview_mentions_setup_returns_home(tmp_path: Path) -> None:
+    result = run([], _runtime(tmp_path))
+    assert result.code == 0
+    assert "Setup" in result.stdout
+    assert "returns here" in result.stdout
+
+
 def test_run_home_non_tty_never_hangs(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     buf = io.StringIO()
@@ -52,7 +82,7 @@ def test_run_home_non_tty_never_hangs(tmp_path: Path) -> None:
         runtime.platform, runtime.home, dict(runtime.env), stdin=io.StringIO(""), stdout=buf
     )
     assert code == 0
-    assert "digivoice home" in buf.getvalue()
+    assert "DIGIVOICE" in buf.getvalue()
 
 
 def test_reload_skips_hammerspoon_when_hs_missing(tmp_path: Path) -> None:
