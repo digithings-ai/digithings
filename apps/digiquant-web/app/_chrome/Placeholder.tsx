@@ -7,6 +7,7 @@ import { Badge } from "@digithings/ui/ui";
  *  one shell so the grid reads the same everywhere. */
 export function Placeholder({
   title,
+  mark,
   note,
   status,
   bodyClassName = "min-h-[14rem]",
@@ -14,6 +15,8 @@ export function Placeholder({
   children,
 }: {
   title: string;
+  /** Optional logo shown before the title. */
+  mark?: ReactNode;
   /** What this block will eventually show. Rendered as the design note. */
   note: string;
   /** Honest status of the thing the slot stands for, shown beside the placeholder chip. */
@@ -25,7 +28,10 @@ export function Placeholder({
   return (
     <figure role="group" aria-label={`${title} (placeholder)`} className={`m-0 flex min-w-0 flex-col border border-dashed border-hair ${className}`}>
       <div className="flex items-center justify-between gap-3 border-b border-dashed border-hair px-3 py-2 font-mono text-[0.68rem] text-ink-mute">
-        <span className="truncate">{title}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {mark ? <span className="shrink-0 text-ink-soft">{mark}</span> : null}
+          <span className="truncate">{title}</span>
+        </span>
         <span className="flex shrink-0 items-center gap-2">
           {status ? <Badge variant="neutral">{status}</Badge> : null}
           <Badge variant="outline" className="border-dashed text-[0.62rem] text-ink-mute">

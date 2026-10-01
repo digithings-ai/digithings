@@ -80,7 +80,10 @@ function build(): { letters: Cell[]; strays: Cell[] } {
 
 const CELLS = build();
 
-export function QuantWordmark({ className }: { className?: string }) {
+/** `idle` holds every cell back (opacity 0, no animation) until it flips to `run`, which
+ *  plays the build. The footer copy uses it to build when it first scrolls into view. */
+export function QuantWordmark({ className, phase = "run" }: { className?: string; phase?: "run" | "idle" }) {
+  const idle = phase === "idle";
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -91,10 +94,26 @@ export function QuantWordmark({ className }: { className?: string }) {
       className={className}
     >
       {CELLS.letters.map((cell) => (
-        <rect key={`c${cell.x}-${cell.y}`} x={cell.x} y={cell.y} width="1" height="1" data-dq-anim="" style={cell.style} />
+        <rect
+          key={`c${cell.x}-${cell.y}`}
+          x={cell.x}
+          y={cell.y}
+          width="1"
+          height="1"
+          data-dq-anim=""
+          style={idle ? { opacity: 0 } : cell.style}
+        />
       ))}
       {CELLS.strays.map((cell) => (
-        <rect key={`n${cell.x}-${cell.y}`} x={cell.x} y={cell.y} width="1" height="1" data-dq-anim="" style={cell.style} />
+        <rect
+          key={`n${cell.x}-${cell.y}`}
+          x={cell.x}
+          y={cell.y}
+          width="1"
+          height="1"
+          data-dq-anim=""
+          style={idle ? { opacity: 0 } : cell.style}
+        />
       ))}
     </svg>
   );

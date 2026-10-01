@@ -1,9 +1,14 @@
+import { IntegrationMark } from "@/components/integrations/marks";
 import { Placeholder, Wire } from "./_chrome/Placeholder";
 
 /** Layout placeholders for the showcase. Structure first: each one fixes a slot on
  *  the grid and says in its design note what will fill it. Nothing here is wired
  *  to data, brokers or iframes, and nothing implies trading. */
 
+const BROKERS = [
+  { id: "alpaca", name: "Alpaca" },
+  { id: "ibkr", name: "Interactive Brokers" },
+] as const;
 const TABS = ["Profile", "Chart", "Financials", "News", "Filings"] as const;
 const RANGES = ["1D", "1W", "1M", "1Y"] as const;
 const STAGES = ["Inputs", "Research", "Synthesis", "Selection", "Decision", "Learning"] as const;
@@ -51,13 +56,13 @@ export function DashboardViewPlaceholder() {
 export function DashboardFlowPlaceholder() {
   const nodes = [
     { name: "digichat", sub: "describe the idea" },
-    { name: "Nautilus", sub: "backtest and optimize" },
+    { name: "backtest + optimize", sub: "the quant engine" },
     { name: "inspect + hand off", sub: "review, then export" },
   ];
   return (
     <Placeholder
       title="Dashboard pipeline · strategy path"
-      note="The strategy path as the dashboard shows it: digichat, then Nautilus, then inspect and hand off. Final art comes from the dashboard."
+      note="The strategy path as the dashboard shows it: digichat, then the backtester and optimizer, then inspect and hand off. Final art comes from the dashboard."
       bodyClassName="min-h-0"
     >
       <ol className="m-0 grid list-none items-stretch gap-3 p-0 font-mono md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
@@ -83,16 +88,16 @@ export function ResearchRunsPlaceholder() {
   return (
     <Placeholder
       title="Research runs · sample timeline"
-      note="A run timeline and stage status from a real desk session. Static mock for layout; the rows below are not a real run."
+      note="Stage status from a real desk session goes here. Static mock for layout, not a real run."
       bodyClassName="min-h-0"
     >
-      <div className="grid gap-2 font-mono text-[0.68rem] text-ink-mute">
+      <div className="grid gap-1.5 font-mono text-[0.66rem] text-ink-mute">
         {SAMPLE_RUNS.map((run) => (
           <div key={run.name} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3">
             <span>{run.name}</span>
             <div className="grid grid-cols-6 gap-1">
               {run.cells.map((cell, i) => (
-                <span key={STAGES[i]} className={`h-4 border ${CELL_STYLE[cell]}`} />
+                <span key={STAGES[i]} className={`h-3 border ${CELL_STYLE[cell]}`} />
               ))}
             </div>
           </div>
@@ -116,7 +121,8 @@ export function ResearchRunsPlaceholder() {
 export function ChartFramePlaceholder() {
   return (
     <Placeholder
-      title="Embedded chart · frame"
+      title="Chart frame"
+      mark={<IntegrationMark id="luxalgo" size={16} />}
       status="story embed"
       note="A LuxAlgo or Vela-style chart: a live ticker chart for the asset picked above it. This frame only hosts it."
       bodyClassName="min-h-[8rem]"
@@ -148,7 +154,8 @@ export function ChartFramePlaceholder() {
 export function GloombergTerminalPlaceholder() {
   return (
     <Placeholder
-      title="Gloomberb terminal · teaser"
+      title="Gloomberb terminal"
+      mark={<IntegrationMark id="gloomberb" size={16} />}
       status="integrated"
       note="Bloomberg-style profile and tearsheet tabs. Richer data routes through MCP tools later. Sourced from Gloomberb; free-tier data is delayed up to 15 minutes. No affiliation implied."
       bodyClassName="min-h-[8rem]"
@@ -179,20 +186,20 @@ export function GloombergTerminalPlaceholder() {
 export function BrokerCardsPlaceholder() {
   return (
     <Placeholder
-      title="Broker integrations · cards"
+      title="Brokers"
       status="in development"
       note="Connected brokers with status chips, as the dashboard shows them. Showcase only: no orders, no live trading."
       bodyClassName="min-h-[8rem]"
       className="h-full"
     >
       <div className="grid gap-2">
-        {["broker 01", "broker 02", "broker 03"].map((name) => (
-          <div key={name} className="flex items-center justify-between gap-3 border border-dashed border-hair px-3 py-3 font-mono">
-            <span className="flex items-center gap-3">
-              <Wire className="size-6" />
-              <span className="text-[0.78rem] text-ink-soft">{name}</span>
+        {BROKERS.map((b) => (
+          <div key={b.name} className="flex items-center justify-between gap-3 border border-dashed border-hair px-3 py-3 font-mono">
+            <span className="flex items-center gap-3 text-ink-soft">
+              <IntegrationMark id={b.id} size={24} />
+              <span className="text-[0.78rem]">{b.name}</span>
             </span>
-            <span className="border border-dashed border-hair px-2 py-0.5 text-[0.62rem] text-ink-mute">status chip</span>
+            <span className="border border-dashed border-hair px-2 py-0.5 text-[0.62rem] text-ink-mute">adapter declared</span>
           </div>
         ))}
       </div>

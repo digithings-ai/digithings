@@ -98,8 +98,8 @@ export function ChatBand() {
     <Band
       id="chat"
       status="story · in development"
-      title="From a chat to a Nautilus backtest"
-      takeaway="Describe a strategy in digichat, backtest it on Nautilus, inspect the result, hand it off. The builder lives in the dashboard; this is the story of it, and it is not live yet."
+      title="From a chat to a tested strategy"
+      takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. The builder lives in the dashboard; this is the story of it, and it is not live yet."
     >
       <div ref={ref} className="flex flex-col gap-4">
         <DashboardFlowPlaceholder />

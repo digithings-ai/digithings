@@ -104,8 +104,8 @@ export function LocalLuxalgoWorkflow() {
         <div>
           <p className="m-0 text-[0.8125rem] leading-[1.55] text-ink-soft">
             Charts and the trade journal stay in LuxAlgo; this site renders no competing chart. The local gateway looks up
-            Library concepts and indicator metadata, and an idea goes to digiquant for a Nautilus backtest before anything
-            is exported.
+            Library concepts and indicator metadata, and an idea goes to digiquant to be backtested before anything is
+            exported.
           </p>
           <p className="m-0 mt-2 font-mono text-[0.65rem] text-ink-mute">
             A demo of what the gateway can reach, not a search tool. The product is the dashboard.

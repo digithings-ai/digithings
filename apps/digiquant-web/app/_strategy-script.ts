@@ -1,6 +1,6 @@
 import type { ChatPlaybackStep } from "@digithings/ui";
 
-/** Workflow story script: digichat to Nautilus to inspect and hand off. Data, not a component.
+/** Workflow story script: digichat to the backtester and optimizer to inspect and hand off. Data, not a component.
  *
  *  Tool names and argument names are the real ones registered in
  *  digiquant/src/digiquant/mcp_server.py (the `*_json` arguments are JSON strings).
@@ -50,7 +50,7 @@ export const STRATEGY_SCRIPT: ChatPlaybackStep[] = [
     role: "tool",
     tool: {
       name: "digiquant_export",
-      args: 'strategy_name="ema_cross", target="nautilus_bundle"',
+      args: 'strategy_name="ema_cross", target="…"',
       result: "▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒",
       masked: true,
     },
@@ -69,7 +69,7 @@ export const STRATEGY_STEPS: { tool: string; label: string; scope: ToolScope }[]
 /** Honest status ledger shown beside the story. */
 export const STRATEGY_LEDGER: { key: string; value: string }[] = [
   { key: "where it is built", value: "In the dashboard. This page tells the story and builds nothing." },
-  { key: "status", value: "In development, not live." },
+  { key: "what it is for", value: "Iterating on an idea and trying to break it. Optimized results are in-sample, so they are never presented as proof." },
   { key: "backtest, optimize, export", value: "Run locally with the full-scope MCP server." },
   { key: "hand-off", value: "Export writes a local file for you to review. Nothing is deployed and nothing trades." },
 ];
