@@ -53,6 +53,7 @@ def resolve_sdca_risk_model(
     coefficients_path: Path | None = None,
     form: str = "log_quadratic",
     rolling_window: int = DEFAULT_ROLLING_WINDOW,
+    rolling_z: float = 1.0,
     max_fit_rows: int | None = None,
 ) -> RiskModel:
     """Construct a ``RiskModel`` from the MCP/selector name.
@@ -61,6 +62,8 @@ def resolve_sdca_risk_model(
     in ``KNOWN_SDCA_RISK_MODELS`` — the MCP tool surfaces that as error JSON.
     ``max_fit_rows`` is forwarded to ``fit_generic_valuation`` (evenly spaced
     QuantReg subsample; rails still cover every input date).
+    ``rolling_z`` sets the rolling-z rail width (``z``) and is only read on
+    the ``rolling_z`` branch.
     """
     if name not in KNOWN_SDCA_RISK_MODELS:
         raise ValueError(f"unknown risk_model {name!r}")
@@ -75,7 +78,9 @@ def resolve_sdca_risk_model(
         return GenericValuationRiskModel(
             fit_generic_valuation(dates, price, form=chosen, max_fit_rows=max_fit_rows)
         )
-    return RollingZRiskModel(dates, price, window=rolling_window)
+    if rolling_z <= 0:
+        raise ValueError(f"rolling-z z must be positive, got {rolling_z}")
+    return RollingZRiskModel(dates, price, window=rolling_window, z=rolling_z)
 
 
 __all__ = [

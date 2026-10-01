@@ -69,6 +69,26 @@ class TestResolveSdcaRiskModel:
             "rolling_z",
         )
 
+    def test_rolling_z_width_kwarg_scales_rails(self) -> None:
+        import math
+
+        dates, price = _series(n=60)
+        default_model = resolve_sdca_risk_model("rolling_z", dates=dates, price=price)
+        assert default_model.z == pytest.approx(1.0)
+        wide_model = resolve_sdca_risk_model("rolling_z", dates=dates, price=price, rolling_z=2.0)
+        assert wide_model.z == pytest.approx(2.0)
+        default_rails = default_model.rails(dates)
+        wide_rails = wide_model.rails(dates)
+        row = -1
+        default_width = math.log(default_rails["high"][row]) - math.log(default_rails["low"][row])
+        wide_width = math.log(wide_rails["high"][row]) - math.log(wide_rails["low"][row])
+        assert wide_width / default_width == pytest.approx(2.0, rel=0.05)
+
+    def test_rolling_z_absent_stays_default_width(self) -> None:
+        dates, price = _series(n=60)
+        model = resolve_sdca_risk_model("rolling_z", dates=dates, price=price)
+        assert model.z == pytest.approx(1.0)
+
 
 class TestBuildRiskIndexViaSelector:
     def test_each_provider_builds_a_risk_index(self) -> None:
