@@ -9,6 +9,7 @@ import {
   NavShell,
   ThemeProvider,
 } from "@digithings/ui";
+import { FooterWordmark } from "./_chrome/FooterWordmark";
 import { LayoutRails } from "./_chrome/LayoutRails";
 import { SectionRail } from "./_chrome/SectionRail";
 import { Brand,DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
@@ -99,8 +100,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="pt-[var(--nav-shell-h,62px)]">
               {children}
             </div>
+            <FooterWordmark />
             <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
-
           </ThemeProvider>
         </MotionProvider>
       </body>

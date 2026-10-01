@@ -6,7 +6,7 @@ import { DashboardViewPlaceholder } from "../_placeholders";
 /** What the dashboard holds, as a ledger. The surfaces live in the dashboard app,
  *  not on this site. */
 const DASHBOARD_SURFACES: { key: string; value: string }[] = [
-  { key: "strategy builder", value: "Describe a strategy in chat, backtest it on Nautilus, inspect it, hand it off. In development." },
+  { key: "strategy builder", value: "Describe a strategy in chat, test it against history, inspect it, hand it off. In development." },
   { key: "strategies", value: "Each strategy with its backtest tearsheet. In-sample and illustrative." },
   { key: "journal", value: "Notes kept next to the runs and strategies they belong to." },
   { key: "tools", value: "Research data and MCP tools, reached from inside the app." },

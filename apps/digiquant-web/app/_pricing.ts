@@ -58,8 +58,8 @@ export const PRICING_FAQ: readonly { q: string; a: string }[] = [
     a: "A container runtime (or a Python environment) and access to an LLM — any LiteLLM-supported provider or a local model. The rest ships in the open-core stack.",
   },
   {
-    q: "How is NautilusTrader licensed?",
-    a: "digiquant builds on NautilusTrader (open source) for all backtest, optimize, and live paths — see the NautilusTrader repository for its current license terms.",
+    q: "Which engine runs the backtests?",
+    a: "An open-source event-driven engine runs every backtest and optimize. It ships inside the stack you self-host, so the source and its license terms sit in the repository with everything else.",
   },
   {
     q: "Do I bring my own model keys?",
