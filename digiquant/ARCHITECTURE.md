@@ -1141,6 +1141,19 @@ row cannot null a valuation-only day. `run_backtest` treats a null-risk day as a
 no-trade day: state (cash, holdings) carries forward unchanged, but the day is
 still marked to market.
 
+**No-trend vote (gold v4, #4804).** `build_risk_index(..., valuation_weight=0.0)`
+omits the valuation leg entirely — the same rule as zero-weight extras — so a
+null valuation z contributes neither vote nor null mask. `resolve_sdca_risk_model("rolling_z",
+..., rolling_z=z)` selects trailing mean-reversion rails (`RollingZRiskModel`:
+causal rolling log-price mean ± z·std; the v4 seed uses window 90d / z 1.0, no
+time trend). `indicator_display_name("valuation", model=...)` labels the leg per
+rails: `btc_power_law` → "power law" (default, BTC charts unchanged),
+`generic_valuation` → "valuation trend", `rolling_z` → "mean reversion". Note:
+the engine walk-forward refits rails on the IS window only, which starves a
+trailing-window operator of pre-history — the gold v4 gate scores rolling folds
+through a gold-side causal concatenated-history loop (engine fitter protocol
+untouched; window/z are fixed seed constants, trailing inputs ≤ t).
+
 **Composite formula (BTC charts default to a single rail).**
 
 ```
