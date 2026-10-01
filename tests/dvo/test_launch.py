@@ -254,7 +254,29 @@ def test_take_in_progress_is_not_reloaded(tmp_path: Path) -> None:
     assert 'require("digivoice")' in init.read_text(encoding="utf-8")
 
 
+def test_missing_banner_without_adapter_does_not_reload(tmp_path: Path) -> None:
+    def reply(call: FakeCall) -> FakeReply:
+        if "hs.reload" in call.argv[-1]:
+            raise AssertionError("must not reload Hammerspoon when the adapter is absent")
+        if "ensure_banner" in call.argv[-1]:
+            return FakeReply(code=0, stdout="missing\n")
+        return FakeReply(code=0, stdout="ok\n")
+
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+    )
+    assert report.summary == "hammerspoon up · banner hidden"
+
+
 def test_missing_banner_reloads_once_then_shows(tmp_path: Path) -> None:
+    _install_adapter(tmp_path)
+    init = tmp_path / ".hammerspoon" / "init.lua"
+    init.write_text('require("digivoice")\n', encoding="utf-8")
     reloaded = {"n": 0}
 
     def reply(call: FakeCall) -> FakeReply:

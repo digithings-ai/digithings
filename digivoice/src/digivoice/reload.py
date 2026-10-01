@@ -384,7 +384,9 @@ def _ensure_home_control(
 
     ok, token = _hs_ok(active, _BANNER_EXPR, min(1.5, max(0.0, left())))
     # An already-running Hammerspoon may still have the previous adapter loaded.
-    if ok and token == "missing" and not reloaded and left() > 0.3:
+    # Reloading without an installed adapter just restarts the user's config.
+    adapter_installed = find_adapter(home, paths)["init"] is not None
+    if ok and token == "missing" and adapter_installed and not reloaded and left() > 0.3:
         reload_and_wait()
         if running and left() > 0:
             ok, token = _hs_ok(active, _BANNER_EXPR, min(1.5, max(0.0, left())))
