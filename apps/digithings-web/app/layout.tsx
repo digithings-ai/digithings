@@ -1,9 +1,26 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager, LayoutLines } from "@digithings/ui";
+import { SCROLL_RESUME_FLAG, SCROLL_RESUME_PLACE } from "@/lib/scrollResume";
 import { LegacyByokPurge } from "@/components/LegacyByokPurge";
+
+// Self-hosted at build time by next/font (served from /_next/static/media), so no
+// request ever leaves for fonts.googleapis.com. Inter is the sans/display voice
+// (nav, headings, prose, form fields); JetBrains Mono is the mono voice (labels,
+// code, commands, tabular figures). Both are variable fonts: weights come from the
+// axis, not from synthesized bold.
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digithings.ai"),
@@ -78,7 +95,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // legitimately flip data-theme + meta pre-hydration; scoped to this
   // element's attributes only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Stored theme choice (all routes) — pre-paint so no dark→light flip at hydration. */}
@@ -89,6 +106,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
             removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
+        {/* Reload / back-forward mid-page: flag the root so the hero intro is skipped
+            (see lib/scrollResume.ts); the body-end script then lands the scroll. */}
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_FLAG }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
             Literal = tokens.css dark --bg (metas can't read CSS vars). */}
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
@@ -108,6 +128,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             {children}
           </ThemeProvider>
         </MotionProvider>
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_PLACE }} />
       </body>
     </html>
   );

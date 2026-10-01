@@ -83,11 +83,24 @@ function wordCells(): { letters: Cell[]; stray: Cell[] } {
 
 const WORD = wordCells();
 
-/** Pixel lockup. Cells build in, a few glint in the accent, and strays flicker once. */
-export function PixelWordmark() {
+/** Pixel lockup. Cells build in, a few glint in the accent, and strays flicker once.
+ *  The hero builds on load, unless the page is being restored mid-scroll. `footer` is the same mark at page width: it stays inert
+ *  until `live` flips (the first time it scrolls into view), then runs the same
+ *  build. Reduced motion shows the final state with no build (see globals.css). */
+export function PixelWordmark({
+  variant = "hero",
+  live = false,
+}: {
+  variant?: "hero" | "footer";
+  live?: boolean;
+}) {
+  const className =
+    variant === "footer"
+      ? `pixel-word pixel-word-footer${live ? " is-live" : ""}`
+      : "pixel-word pixel-word-hero is-live";
   return (
     <svg
-      className="pixel-word"
+      className={className}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 88 10"
       fill="currentColor"

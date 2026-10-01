@@ -151,13 +151,23 @@
    controls-core.css), so components/controls needs no line here. */
 @source "../../../packages/ui/src/ui";
 
-/* Point the token font families at the self-hosted next/font variable.
-   Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
-   Do not re-point --font-display at a serif — tokens.css already ships Geist Mono. */
+/* Point the token font families at the self-hosted next/font variables (layout.tsx).
+   digithings.ai type stack (owner-locked 2026-10-01): Inter for sans/display —
+   nav, headings, prose, form fields — and JetBrains Mono for mono chrome:
+   labels, code, commands, numerals, `.brand-word`. Geist Mono is not used on
+   this surface. The PixelWordmark SVG is the brand mark, not a font, so it is
+   unaffected. Scoped to this app: tokens.css keeps its defaults for the others. */
 :root[data-theme] {
-  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-mono);
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-sans);
+}
+
+/* web-theme.css (shared by digiquant-web and the dashboard) sets the body to
+   --font-mono; digithings.ai's body voice is the sans token instead. */
+body {
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----
@@ -926,17 +936,43 @@ html {
   .pixel-word { width: 616px; }
 }
 
+.pixel-word-band {
+  padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
+  overflow-x: clip;
+}
+
+.pixel-word.pixel-word-footer {
+  width: min(100%, 1400px);
+  margin: 0 auto;
+}
+
 .pixel-word .c { opacity: var(--f); }
 .pixel-word .n { opacity: 0; }
 
+/* Cells build when the mark is live: the hero from first paint, the footer the
+   first time it scrolls into view (FooterWordmark). Until then the footer stays
+   blank, but only where JS can start it (html.no-js is cleared pre-paint) and
+   only when motion is allowed — otherwise the final state shows. */
 @media (prefers-reduced-motion: no-preference) {
-  .pixel-word .c { animation: pixel-build var(--t) linear var(--d) both; }
-  .pixel-word .g {
+  html:not(.no-js) .pixel-word:not(.is-live) .c { opacity: 0; }
+  .pixel-word.is-live .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word.is-live .g {
     animation:
       pixel-build var(--t) linear var(--d) both,
       pixel-glint var(--gp) step-end var(--g) infinite;
   }
-  .pixel-word .n { animation: pixel-stray var(--t) linear var(--d) both; }
+  .pixel-word.is-live .n { animation: pixel-stray var(--t) linear var(--d) both; }
+
+  /* A reload or back/forward that lands mid-page (scrollResume.ts) must not
+     replay the hero intro behind the restored scroll: the hero shows its final
+     built state and only the ambient glint keeps running. The footer mark is
+     not a hero, so it still builds on its first scroll-in. */
+  html.scroll-resumed .pixel-word-hero .c { animation: none; opacity: var(--f); }
+  html.scroll-resumed .pixel-word-hero .g {
+    animation: pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  html.scroll-resumed .pixel-word-hero .n { animation: none; }
+  html.scroll-resumed .hero-rise { animation: none; }
 }
 
 @keyframes pixel-build {
@@ -1049,27 +1085,3 @@ html {
 }
 
 .hero-cue:hover .hero-cue__line { background: var(--ink-mute); }
-
-/* Band eyebrow — `NN / label`, numbered like the gutter rail. The tick
-   matches the rail's own stroke so the two read as one system. */
-.section-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  color: var(--ink-mute);
-}
-
-.section-eyebrow__tick {
-  display: block;
-  width: 1.1rem;
-  height: 1px;
-  background: var(--ink-mute);
-}
-
-@media (min-width: 640px) {
-  .section-eyebrow__tick { width: 1.6rem; }
-}

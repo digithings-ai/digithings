@@ -52,13 +52,13 @@ function Hero() {
       <div className="relative z-10 mx-auto flex max-w-[64rem] flex-col items-center px-[var(--page-pad)] pb-[6rem] pt-[2.5rem] text-center sm:px-[2.5rem] sm:pb-[7rem]">
         <PixelWordmark />
         <h1
-          className="hero-rise m-0 mt-[2rem] font-mono text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
+          className="hero-rise m-0 mt-[2rem] font-display text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
           style={rise(0)}
         >
           AI infrastructure, in a glass box you own.
         </h1>
         <p
-          className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] font-mono text-[0.875rem] leading-[1.6] text-pretty text-ink-soft"
+          className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] text-[0.9375rem] leading-[1.6] text-pretty text-ink-soft"
           style={rise(1)}
         >
           Chat, research and quant modules on your own keys and hardware.
@@ -121,7 +121,6 @@ function Contact() {
         </Reveal>
         <Reveal delay={0.08} className="flex flex-col gap-[1.4rem]">
           <SectionHead
-            id="contact"
             title="You own the stack and the keys."
             titleClassName="max-w-[24ch]"
           />
@@ -174,7 +173,6 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <Reveal>
             <SectionHead
-              id="open-source"
               title="Open source, and still shipping"
               lede="Clone it, read it, run it. The activity below is the repo's own."
             />
@@ -198,7 +196,6 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
           comparison table suffices on its own. */}
       <section id="pricing" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <Reveal className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.25rem]">
-          <SectionHead id="pricing" />
           <Pricing />
         </Reveal>
       </section>

@@ -5,7 +5,6 @@ import { writeHandoff } from "@/lib/chatHandoff";
 import { moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
 import { ModuleManifest } from "./ModuleManifest";
-import { SectionHead } from "./SectionHead";
 
 /**
  * The landing's module mosaic and its `#architecture` anchor: the kit
@@ -17,6 +16,9 @@ import { SectionHead } from "./SectionHead";
  * (`aria-label="digithings module manifest"`) keeps matching — the mosaic
  * replaced the old sole listing, but the pane marker is still the contract
  * for folded `/modules/*` and `/architecture` routes.
+ *
+ * Band eyebrows (`SectionHead`) above the mosaic were dropped in #4898;
+ * the `#architecture` id on the section remains the jump target.
  */
 const ITEMS: ModuleGridItem[] = modules.map((module) => ({
   module,
@@ -33,13 +35,6 @@ function ask(id: string) {
 export function ModuleGrid() {
   return (
     <section id="architecture" className="line-t line-b scroll-mt-[var(--dq-nav-h)]">
-      <Reveal className="mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pt-[clamp(2.25rem,5vw,3.5rem)]">
-        <SectionHead
-          id="architecture"
-          title="The stack, sized by its code"
-          lede="Each tile is a module and its area is its share of the lines of code. Scroll to walk them, biggest first."
-        />
-      </Reveal>
       <KitModuleGrid items={ITEMS} onAsk={ask} />
       <Reveal className="mx-auto max-w-[var(--frame-w)] px-[var(--page-pad)] pb-[clamp(2.25rem,5vw,3.5rem)] pt-[clamp(1.5rem,3vw,2.25rem)]">
         <ModuleManifest />
