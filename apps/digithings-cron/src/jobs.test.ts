@@ -22,17 +22,11 @@ const PAUSED_PIPELINE_IDS = [
   "provider-review",
 ] as const;
 
-const KEPT_ENABLED_IDS = [
+const PAUSED_TRAP_IDS = [
   "agent-pr-finalizer",
   "agent-backlog-snapshot",
-  "ci-pr-hygiene",
   "refresh-repo-activity",
   "project-enforce-assignment",
-  "smoke-stack",
-  "security-pip-audit",
-  "security-npm-audit",
-  "token-canary",
-  "smoke-site",
   "twelve-x-asia",
   "twelve-x-london",
   "twelve-x-new-york",
@@ -45,6 +39,15 @@ const KEPT_ENABLED_IDS = [
   "twelve-x-archive-maintenance",
 ] as const;
 
+const KEPT_ENABLED_IDS = [
+  "ci-pr-hygiene",
+  "smoke-stack",
+  "security-pip-audit",
+  "security-npm-audit",
+  "token-canary",
+  "smoke-site",
+] as const;
+
 describe("jobsForCron", () => {
   it("matches exact cron strings only", () => {
     expect(jobsForCron("5 22 * * *")).toEqual([]);
@@ -54,8 +57,10 @@ describe("jobsForCron", () => {
   });
 
   it("keeps twelve-x new_york on weekday-only cron", () => {
-    const jobs = jobsForCron("17 12 * * MON-FRI");
+    expect(jobsForCron("17 12 * * MON-FRI")).toEqual([]);
+    const jobs = jobsForCron("17 12 * * MON-FRI", { includeDisabled: true });
     expect(jobs.map((j) => j.id)).toEqual(["twelve-x-new-york"]);
+    expect(jobs[0].enabled).toBe(false);
   });
 
   it("returns empty for unknown cron", () => {
@@ -110,9 +115,16 @@ describe("jobsForCron", () => {
   });
 
   it("market_context jobs pass bucket inputs", () => {
-    expect(jobsForCron("4 */4 * * *")[0].inputs?.bucket).toBe("intraday");
-    expect(jobsForCron("30 5 * * *")[0].inputs?.bucket).toBe("daily");
-    expect(jobsForCron("8 7 * * SAT")[0].inputs?.bucket).toBe("weekly");
+    expect(jobsForCron("4 */4 * * *")).toEqual([]);
+    expect(
+      jobsForCron("4 */4 * * *", { includeDisabled: true })[0].inputs?.bucket,
+    ).toBe("intraday");
+    expect(
+      jobsForCron("30 5 * * *", { includeDisabled: true })[0].inputs?.bucket,
+    ).toBe("daily");
+    expect(
+      jobsForCron("8 7 * * SAT", { includeDisabled: true })[0].inputs?.bucket,
+    ).toBe("weekly");
   });
 
   it("uses named weekdays so Cloudflare cannot reinterpret numeric DOWs", () => {
@@ -190,21 +202,30 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).not.toContain("30 13 * * *");
   });
 
-  it("pauses DigiQuant pipeline clocks and keeps non-pipeline jobs enabled", () => {
+  it("pauses DigiQuant + CF→disabled traps; keeps Path A essentials enabled", () => {
     expect(
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...PAUSED_PIPELINE_IDS].sort());
+    ).toEqual([...PAUSED_PIPELINE_IDS, ...PAUSED_TRAP_IDS].sort());
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)
         .sort(),
     ).toEqual([...KEPT_ENABLED_IDS].sort());
-    expect(uniqueEnabledCrons()).toHaveLength(20);
-    expect(uniqueEnabledCrons()).toContain("17 12 * * MON-FRI");
+    expect(uniqueEnabledCrons()).toHaveLength(6);
+    expect(uniqueEnabledCrons()).toEqual([
+      "21 6 * * *",
+      "27 7 * * *",
+      "33 6 * * MON",
+      "37 6 * * MON",
+      "41 6 * * *",
+      "17 6 * * *",
+    ]);
+    expect(uniqueEnabledCrons()).not.toContain("17 12 * * MON-FRI");
     expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
     expect(uniqueEnabledCrons()).not.toContain("40 13 * * MON-FRI");
     expect(uniqueEnabledCrons()).not.toContain("8 22 * * SUN");
+    expect(uniqueEnabledCrons()).not.toContain("11 7 * * *");
   });
 });

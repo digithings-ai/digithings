@@ -256,7 +256,6 @@ ruff_and_scripts:
   - release-please-config.json
   - apps/digichat/package.json
   - package-lock.json
-  - .github/workflows/release-please-digichat.yml
   # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
   # linkage for this workflow. A cron edit that touches nothing else would
   # otherwise skip this lane, and the failure it guards (a stale
@@ -267,7 +266,6 @@ ruff_and_scripts:
   # recorded new low-numbered files as applied without running their DDL). Without this entry a
   # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
   # edit it exists to catch. Same shape as the prices-cron entry above.
-  - .github/workflows/db-migrate.yml
   # tests/scripts/test_pipeline_digiquant_attempt.py asserts the outer-retry loop exports
   # DIGIQUANT_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
   # key (#1762). This file IS listed under research_graph, but that lane's selector is

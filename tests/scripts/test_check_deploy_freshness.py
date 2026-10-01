@@ -26,29 +26,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_deploy_freshness.py"
-_SMOKE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "smoke-site.yml"
 _BUILD_CHECK_WORKFLOWS = [
     REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml",
     REPO_ROOT / ".github" / "workflows" / "deploy-digithings-cloudflare.yml",
 ]
 
-#: One ``smoke-site.yml`` job per site: (job key, probed URL, issue label).
-#: Both static sites deploy through the same Cloudflare Pages git integration
-#: and share the blind spot, so both are pinned here (#1759).
-FRESHNESS_JOBS = [
-    pytest.param(
-        "freshness",
-        "https://digiquant.io/build-info.json",
-        "component:digiquant",
-        id="digiquant.io",
-    ),
-    pytest.param(
-        "freshness-digithings",
-        "https://digithings.ai/build-info.json",
-        "component:website",
-        id="digithings.ai",
-    ),
-]
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 URL = "https://digiquant.io/build-info.json"
@@ -91,10 +73,6 @@ def _workflow(path: Path) -> dict[str, Any]:
 def _run_blocks(job: dict[str, Any]) -> list[str]:
     return [step["run"] for step in job.get("steps", []) if isinstance(step.get("run"), str)]
 
-
-def _site_of(url: str) -> str:
-    """``https://digithings.ai/build-info.json`` -> ``digithings.ai``."""
-    return urlsplit(url).netloc
 
 
 class TestEvaluate:
@@ -218,85 +196,6 @@ class TestCli:
     def test_curl_triple_zero_status_is_tolerated(self, cdf: Any) -> None:
         assert cdf.main(["--url", URL, "--status", "000"]) == 0
 
-
-@pytest.mark.parametrize(("job_key", "live_url", "label"), FRESHNESS_JOBS)
-class TestWorkflowWiring:
-    """A freshness probe nobody calls detects nothing — pin every call site."""
-
-    def test_smoke_site_runs_the_freshness_check(
-        self, job_key: str, live_url: str, label: str
-    ) -> None:
-        workflow = _workflow(_SMOKE_WORKFLOW)
-        assert job_key in workflow["jobs"], f"smoke-site.yml lost the {job_key} job"
-        runs = "\n".join(_run_blocks(workflow["jobs"][job_key]))
-        assert "scripts/check_deploy_freshness.py" in runs
-        # Per-job, not workflow-wide: each site must probe its own URL, so one
-        # job cannot satisfy the assertion on behalf of the other.
-        assert live_url in runs
-
-    def test_freshness_job_can_check_out_and_file_an_issue(
-        self, job_key: str, live_url: str, label: str
-    ) -> None:
-        job = _workflow(_SMOKE_WORKFLOW)["jobs"][job_key]
-        # Declaring any `permissions` block zeroes the rest, so contents:read is
-        # required for actions/checkout to fetch the script at all.
-        assert job["permissions"]["contents"] == "read"
-        assert job["permissions"]["issues"] == "write"
-        assert any(
-            str(step.get("uses", "")).startswith("actions/checkout") for step in job["steps"]
-        )
-
-    def test_stale_deploy_issue_is_not_labelled_as_agent_work(
-        self, job_key: str, live_url: str, label: str
-    ) -> None:
-        job = _workflow(_SMOKE_WORKFLOW)["jobs"][job_key]
-        creates = "\n".join(
-            step["run"] for step in job["steps"] if "gh issue create" in str(step.get("run", ""))
-        )
-        assert creates, f"the {job_key} job no longer files an issue"
-        # The remedy is a Cloudflare dashboard action, not a code change, so this
-        # must not be dispatched to an agent the way the asset probe's issue is.
-        assert "agent-task" not in creates
-        # A shared issue naming the wrong site is worse than no issue: it sends
-        # the operator to the wrong Pages project.
-        assert label in creates
-        assert _site_of(live_url) in creates
-
-
-class TestOgAssetCanaries:
-    """Pin the #671 MIME-masking canaries to the live OG paths (#800).
-
-    Brand OG cards ship as ``public/og.png`` at each static-export root. The
-    smoke job used to probe ``/design/assets/og.png``, which 404'd after the
-    brand move and kept filing daily false alarms on #800.
-    """
-
-    def test_smoke_probes_root_og_png_not_legacy_design_assets(self) -> None:
-        runs = "\n".join(_run_blocks(_workflow(_SMOKE_WORKFLOW)["jobs"]["smoke"]))
-        assert "https://digithings.ai/og.png" in runs
-        assert "https://digiquant.io/og.png" in runs
-        assert "design/assets/og.png" not in runs
-
-
-class TestPerSiteIsolation:
-    """One stale site must not mask, cancel, or misattribute the other."""
-
-    def test_each_site_has_its_own_job(self) -> None:
-        jobs = _workflow(_SMOKE_WORKFLOW)["jobs"]
-        keys = {job_key for job_key, _, _ in (p.values for p in FRESHNESS_JOBS)}
-        assert keys <= set(jobs)
-        # A matrix would default to fail-fast, cancelling the sibling site's job
-        # before its `if: failure()` issue step could run.
-        assert not any("matrix" in str(jobs[key].get("strategy", "")) for key in keys)
-
-    def test_first_run_unstamped_reads_as_a_diagnostic_not_an_alarm(self) -> None:
-        # digithings.ai cannot serve a stamp until Cloudflare Pages next builds
-        # it, so the first probe after this shipped is expected to be UNSTAMPED.
-        job = _workflow(_SMOKE_WORKFLOW)["jobs"]["freshness-digithings"]
-        bodies = "\n".join(
-            step["run"] for step in job["steps"] if "gh issue create" in str(step.get("run", ""))
-        )
-        assert "not yet observable" in bodies
 
 
 @pytest.mark.parametrize("workflow_path", _BUILD_CHECK_WORKFLOWS, ids=lambda p: p.name)

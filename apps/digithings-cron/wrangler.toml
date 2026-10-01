@@ -5,6 +5,7 @@
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
 # DigiQuant pipeline clocks paused 2026-10-01 (Human Gate) — those job
 # rows stay in jobs.ts with enabled: false and are omitted here.
+# 2026-10-01 Path A: also paused agent/project/refresh + all twelve-x traps.
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -33,24 +34,10 @@ service = "digiquant-runner"
 
 [triggers]
 crons = [
-  "11 7 * * *",
-  "13 6 * * MON",
-  "21 6 * * *",
-  "10 6 * * MON",
-  "23 9 * * *",
-  "27 7 * * *",
-  "33 6 * * MON",
-  "37 6 * * MON",
-  "41 6 * * *",
-  "17 6 * * *",
-  "7 0 * * MON-FRI",
-  "12 7 * * MON-FRI",
-  "17 12 * * MON-FRI",
-  "4 */4 * * *",
-  "30 5 * * *",
-  "8 7 * * SAT",
-  "30 17 * * MON-FRI",
-  "3 6,18 * * *",
-  "52 * * * MON-FRI",
-  "30 2 * * *"
+  "21 6 * * *",   # ci-pr-hygiene
+  "27 7 * * *",   # smoke-stack
+  "33 6 * * MON", # security-pip-audit
+  "37 6 * * MON", # security-npm-audit
+  "41 6 * * *",   # token-canary
+  "17 6 * * *"    # smoke-site
 ]
