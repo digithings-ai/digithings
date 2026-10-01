@@ -252,7 +252,7 @@ class TestWorkflowDailyCadence:
         )
         pairs = dict(
             re.findall(
-                r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+                r'(?:wd|rd|cj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
                 jobs_src.read_text(encoding="utf-8"),
                 flags=re.DOTALL,
             )
