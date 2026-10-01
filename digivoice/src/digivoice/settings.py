@@ -20,6 +20,15 @@ SETTINGS_FILE_NAME = "settings.json"
 
 RewritePreset = Literal["email", "sms", "professional", "coding", "blog", "none"]
 RewriteRunnerKind = Literal["auto", "ollama", "llama.cpp"]
+BannerPosition = Literal[
+    "top-center",
+    "top-left",
+    "top-right",
+    "bottom-center",
+    "bottom-left",
+    "bottom-right",
+    "center",
+]
 
 PRESET_LABELS: dict[str, str] = {
     "email": "Email — clear greeting, paragraphs, sign-off friendly",
@@ -34,6 +43,9 @@ HOTKEYS_DOCS = {
     "dict_toggle": "Right Option (keycode 61) — start/stop digivoice dict --toggle",
     "speak_selection": (
         "Double-tap Left Option (keycode 58, ~350ms) — digivoice speak --selection"
+    ),
+    "cancel": (
+        "Esc while recording/transcribing/rewriting — discard the take (no paste, no history entry)"
     ),
 }
 
@@ -86,7 +98,11 @@ class VoiceSettings(BaseModel):
     rewrite_timeout_seconds: float = 30.0
     # Feature toggles agents can flip without touching code.
     paste_on_stop: bool = True
+    # Status overlay drawn by the Hammerspoon adapter (read from status.json). Display only.
     live_banner: bool = True
+    banner_position: BannerPosition = "top-center"
+    # False renders the dot-matrix icon as a still frame instead of animating it.
+    banner_animations: bool = True
 
 
 def settings_path(paths: VoicePaths) -> Path:
@@ -213,6 +229,8 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  rewrite_timeout_seconds: {settings.rewrite_timeout_seconds}",
         f"  paste_on_stop:          {settings.paste_on_stop}",
         f"  live_banner:            {settings.live_banner}",
+        f"  banner_position:        {settings.banner_position}",
+        f"  banner_animations:      {settings.banner_animations}",
         "",
         "paths",
         f"  data_dir:       {paths.data_dir}",

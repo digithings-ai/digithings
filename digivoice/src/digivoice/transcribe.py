@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from digivoice.errors import TranscribeError
+from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import Transcript
 from digivoice.paths import DEFAULT_MODEL, DEFAULT_MODEL_FILE, VoicePaths
 from digivoice.probe import CommandProbe
@@ -21,6 +21,14 @@ LANGUAGE = "en"
 TRANSCRIBE_TIMEOUT = 300.0
 # `[00:00:00.000 --> 00:00:02.500]` when a build ignores -nt.
 _SEGMENT_PREFIX = re.compile(r"\[\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}\]\s*")
+
+
+# whisper.cpp prints these markers for silence instead of an empty string. They are
+# not speech, so a take that only contains them is an empty take.
+_MARKER_WORDS = r"blank[_ ]audio|silence|no speech|inaudible"
+_NON_SPEECH_MARKER = re.compile(
+    rf"\[\s*(?:{_MARKER_WORDS})\s*\]|\(\s*(?:{_MARKER_WORDS})\s*\)", re.IGNORECASE
+)
 
 
 def whisper_argv(binary: str, model: Path, wav: Path) -> list[str]:
@@ -45,9 +53,10 @@ def select_whisper(probe: CommandProbe) -> str | None:
 
 
 def clean_transcript(raw: str) -> str:
-    """Strip segment timestamps and collapse the remaining line breaks."""
+    """Strip segment timestamps and silence markers, collapse the remaining line breaks."""
     without_prefixes = _SEGMENT_PREFIX.sub(" ", raw)
-    return " ".join(without_prefixes.split())
+    without_markers = _NON_SPEECH_MARKER.sub(" ", without_prefixes)
+    return " ".join(without_markers.split())
 
 
 def model_file(paths: VoicePaths) -> Path:
@@ -77,7 +86,7 @@ def transcribe(
         raise TranscribeError(f"whisper-cli failed ({reason})")
     text = clean_transcript(result.stdout)
     if not text:
-        raise TranscribeError("whisper-cli returned no text; nothing was recognized")
+        raise EmptyTranscriptError("whisper-cli returned no text; nothing was recognized")
     return Transcript(
         text=text,
         model=DEFAULT_MODEL,
