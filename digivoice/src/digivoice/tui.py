@@ -27,6 +27,8 @@ from typing import TextIO
 # TTY contract:
 # - Full viewport: alternate screen while a shell is open, CSI clear + home
 #   on the first paint, cursor-home redraws after that. Never scroll-append.
+# - Screen control (alt / clear / home / hide-cursor) follows the TTY + TERM,
+#   not color. `NO_COLOR` only skips SGR — otherwise frames append and stack.
 # - Color is SGR on the terminal's own foreground, so light and dark both work.
 #   `NO_COLOR` or `TERM=dumb` skips color. `DIGIVOICE_REDUCE_MOTION=1` skips
 #   the build-in and the idle pulse.
@@ -191,10 +193,16 @@ TUI_FOOTER_HINT = "↑↓ move · enter select · esc back · q quit"
 Group = tuple[str, int, int]
 
 
+def _use_screen() -> bool:
+    """Cursor / alt-screen / clear codes. Independent of NO_COLOR."""
+    return os.environ.get("TERM", "") != "dumb"
+
+
 def _use_ansi() -> bool:
+    """SGR color only. NO_COLOR must not disable clear/home (double-paint)."""
     if os.environ.get("NO_COLOR"):
         return False
-    return os.environ.get("TERM", "") != "dumb"
+    return _use_screen()
 
 
 def _reduce_motion() -> bool:
@@ -241,7 +249,7 @@ def _paint(plain: str, style: str, ansi: bool) -> str:
 def fullscreen_enter(stdout: TextIO) -> None:
     """Take the alternate screen. Nested calls (home → setup) keep one buffer."""
     global _fullscreen_depth
-    if not _is_tty(stdout) or os.environ.get("TERM", "") == "dumb":
+    if not _is_tty(stdout) or not _use_screen():
         return
     if _fullscreen_depth == 0:
         try:
@@ -258,7 +266,7 @@ def fullscreen_leave(stdout: TextIO) -> None:
     if _fullscreen_depth == 0:
         return
     _fullscreen_depth -= 1
-    if _fullscreen_depth == 0 and _is_tty(stdout) and os.environ.get("TERM", "") != "dumb":
+    if _fullscreen_depth == 0 and _is_tty(stdout) and _use_screen():
         try:
             stdout.write(_ANSI_SHOW + _ANSI_ALT_OFF)
             stdout.flush()
@@ -597,20 +605,24 @@ def _compose(
     clear: bool,
     redraw: bool,
     ansi: bool,
+    screen: bool | None = None,
 ) -> str:
+    # `ansi` = SGR color; `screen` = clear/home/eol. Default screen to ansi for
+    # older call sites; choose/play_intro pass screen independently of NO_COLOR.
+    screen_ok = ansi if screen is None else screen
     placed: list[str] = []
     if word_lines:
         anchor = _visible_len(word_lines[0])
-        placed.extend(_pad_line(line, cols, anchor, ansi) for line in word_lines)
-    placed.extend(_pad_line(line, cols, panel_w, ansi) for line in panel_lines)
+        placed.extend(_pad_line(line, cols, anchor, screen_ok) for line in word_lines)
+    placed.extend(_pad_line(line, cols, panel_w, screen_ok) for line in panel_lines)
     top = (rows - len(placed)) // 2 if len(placed) < rows else 0
-    if clear and ansi:
+    if clear and screen_ok:
         prefix = _ANSI_CLEAR_HOME
-    elif redraw and ansi:
+    elif redraw and screen_ok:
         prefix = _ANSI_HOME
     else:
         prefix = ""
-    suffix = _ANSI_CLEAR_DOWN if ansi and (clear or redraw) else ""
+    suffix = _ANSI_CLEAR_DOWN if screen_ok and (clear or redraw) else ""
     gap = "\n" * top
     return prefix + gap + "\n".join(placed) + "\n" + suffix
 
@@ -630,6 +642,7 @@ def render_screen(
     cols: int | None = None,
     rows: int | None = None,
     use_ansi: bool = False,
+    use_screen: bool | None = None,
     clear: bool = False,
     redraw: bool = False,
 ) -> str:
@@ -678,40 +691,82 @@ def render_screen(
         clear=clear,
         redraw=redraw,
         ansi=use_ansi,
+        screen=use_screen,
     )
 
 
+def _arrow_name(code: str) -> str:
+    return {"A": "up", "B": "down", "C": "right", "D": "left"}.get(code, "esc")
+
+
+def _read_byte(fd: int, wait: float) -> str | None:
+    """One raw byte from ``fd``, or None if nothing arrives within ``wait``."""
+    if not select.select([fd], [], [], wait)[0]:
+        return None
+    data = os.read(fd, 1)
+    return data.decode("latin-1") if data else None
+
+
+def _read_key_on_fd(fd: int, timeout: float | None = None) -> str | None:
+    """Read one key from an fd already in raw mode. See :func:`_read_key`."""
+    if timeout is not None and not select.select([fd], [], [], timeout)[0]:
+        return None
+    first_b = os.read(fd, 1)
+    if not first_b:
+        return None
+    first = first_b.decode("latin-1")
+    if first == "\x1b":
+        # Bare Esc and arrows share the first byte. Only wait briefly.
+        second = _read_byte(fd, 0.04)
+        if second is None:
+            return "esc"
+        if second == "[":
+            # CSI cursor: [A or [1;3A — final byte is 0x40–0x7E.
+            body: list[str] = []
+            while True:
+                ch = _read_byte(fd, 0.04)
+                if ch is None:
+                    return "esc"
+                body.append(ch)
+                if "@" <= ch <= "~":
+                    break
+                if len(body) > 8:
+                    return "esc"
+            return _arrow_name(body[-1])
+        if second == "O":
+            # SS3 application cursor keys: OA/OB/OC/OD.
+            third = _read_byte(fd, 0.04)
+            return "esc" if third is None else _arrow_name(third)
+        return "esc"
+    if first in {"\r", "\n"}:
+        return "enter"
+    if first == "\x03":
+        raise KeyboardInterrupt
+    return first
+
+
 def _read_key(stdin: TextIO, timeout: float | None = None) -> str | None:
-    """Read one key. Arrow sequences become names. `timeout` yields None on idle."""
+    """Read one key. Arrow sequences become names. `timeout` yields None on idle.
+
+    Uses ``os.read`` on the fd — never ``stdin.read``. TextIO buffering plus
+    ``select`` on the fd splits CSI tails (``\\x1b[A`` → esc, then ``[``, ``A``),
+    and home treats esc as quit. Also accepts SS3 application-cursor ``\\x1bOA``.
+
+    One-shot callers enter/leave raw here. Menu loops should hold raw mode for
+    the whole session (see :func:`choose`) so cooked restore cannot eat a
+    queued CSI that arrived with the previous key.
+    """
     fd = stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        if timeout is not None and not select.select([fd], [], [], timeout)[0]:
-            return None
-        first = stdin.read(1)
-        if not first:
-            return None
-        if first == "\x1b":
-            # A bare Esc and an arrow share the first byte. Only wait briefly.
-            if not select.select([fd], [], [], 0.04)[0]:
-                return "esc"
-            second = stdin.read(1)
-            if second != "[" or not select.select([fd], [], [], 0.04)[0]:
-                return "esc"
-            third = stdin.read(1)
-            return {"A": "up", "B": "down", "C": "right", "D": "left"}.get(third, "esc")
-        if first in {"\r", "\n"}:
-            return "enter"
-        if first == "\x03":
-            raise KeyboardInterrupt
-        return first
+        return _read_key_on_fd(fd, timeout)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def _cursor(stdout: TextIO, show: bool) -> None:
-    if not _use_ansi() or not _is_tty(stdout):
+    if not _use_screen() or not _is_tty(stdout):
         return
     try:
         stdout.write(_ANSI_SHOW if show else _ANSI_HIDE)
@@ -746,10 +801,15 @@ def choose(
             return None
         selected = 0
         color = _use_ansi()
-        live = pulse and color and not _reduce_motion()
+        screen = _use_screen()
+        # Pulse needs timed reads; screen (not color) is enough to redraw.
+        live = pulse and screen and not _reduce_motion()
         phase = 0
         first = True
+        fd = stdin.fileno()
+        saved = termios.tcgetattr(fd)
         try:
+            tty.setraw(fd)
             _cursor(stdout, False)
             while True:
                 stdout.write(
@@ -764,13 +824,14 @@ def choose(
                         phase=phase,
                         groups=groups,
                         use_ansi=color,
+                        use_screen=screen,
                         clear=first,
                         redraw=not first,
                     )
                 )
                 stdout.flush()
                 first = False
-                key = _read_key(stdin, 0.16 if live else None)
+                key = _read_key_on_fd(fd, 0.16 if live else None)
                 if key is None:
                     phase = (phase + 1) % 8
                     continue
@@ -785,6 +846,7 @@ def choose(
         except (OSError, ValueError):
             pass
         finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
     stdout.write(f"\n{title}\n")
     for i, option in enumerate(options, start=1):
@@ -828,9 +890,13 @@ def choose_many(
         selected = 0
         checked: set[int] = set(initial or set())
         color = _use_ansi()
+        screen = _use_screen()
         hint = "↑↓ move · space toggle · enter confirm · esc back · q quit"
         first = True
+        fd = stdin.fileno()
+        saved = termios.tcgetattr(fd)
         try:
+            tty.setraw(fd)
             _cursor(stdout, False)
             while True:
                 stdout.write(
@@ -842,13 +908,14 @@ def choose_many(
                         checked=checked,
                         subtitle=subtitle,
                         use_ansi=color,
+                        use_screen=screen,
                         clear=first,
                         redraw=not first,
                     )
                 )
                 stdout.flush()
                 first = False
-                key = _read_key(stdin)
+                key = _read_key_on_fd(fd)
                 if key is None:
                     return None
                 if key == "up" or key in {"k", "K"}:
@@ -868,6 +935,7 @@ def choose_many(
         except (OSError, ValueError):
             pass
         finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
     stdout.write(f"\n{title} (multi: comma-separated numbers, blank cancels)\n")
     for i, option in enumerate(options, start=1):
@@ -922,7 +990,9 @@ def _write_info_frame(
     """Centered read-only panel. Long reports top-align and may scroll."""
     _ = subtitle
     cols, rows = _term_size()
-    ansi = _use_ansi() and _is_tty(stdout)
+    tty_out = _is_tty(stdout)
+    ansi = _use_ansi() and tty_out
+    screen = _use_screen() and tty_out
     longest = max((len(line) for line in body), default=20)
     panel_w = max(36, min(cols - 2, max(62, min(longest + 4, cols - 2))))
     lines = [
@@ -932,7 +1002,9 @@ def _write_info_frame(
     for entry in body or ["(empty)"]:
         lines.append(_paint(_fit("│  " + entry.rstrip(), panel_w, truncate=False), "kv", ansi))
     lines.append(_paint(_fit(f"└  {footer} · esc back · q quit", panel_w), "rule", ansi))
-    stdout.write(_compose([], lines, cols, rows, panel_w, clear=True, redraw=False, ansi=ansi))
+    stdout.write(
+        _compose([], lines, cols, rows, panel_w, clear=True, redraw=False, ansi=ansi, screen=screen)
+    )
     _cursor(stdout, False)
     stdout.flush()
 
@@ -971,6 +1043,7 @@ def play_intro(
         return
     cols, rows = _term_size()
     ansi = _use_ansi()
+    screen = _use_screen()
     panel_w = max(36, min(64, cols - 4))
     tag = subtitle or "local speech control"
     try:
@@ -991,6 +1064,7 @@ def play_intro(
                     clear=index == 0,
                     redraw=index != 0,
                     ansi=ansi,
+                    screen=screen,
                 )
             )
             stdout.flush()
@@ -1010,6 +1084,7 @@ __all__ = [
     "_read_key",
     "_render_menu_frame",
     "_use_ansi",
+    "_use_screen",
     "_write_info_frame",
     "choose",
     "choose_many",
