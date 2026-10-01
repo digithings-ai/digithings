@@ -21,5 +21,8 @@ cost lock 2026-10-01) with `refresh_scope=none`. Daily `house-run-10/11/12`
 retries stay disabled. Research + dashboard/portfolio stay fed by the other
 enabled DigiQuant clocks (prices, market-data, metrics, tearsheets, onchain).
 At-open price clocks stay weekday/holiday-sensitive (`MON-FRI` + ET open gate).
+twelve-x FX Hub clocks (`twelve-x-*`) are live `workflow_dispatch` jobs on
+this Worker. Dead Path A trap rows (agent/project/refresh) were dropped from
+the job map; their YAML was deleted in #4919 and is not restored.
 Operator full refresh remains manual `workflow_dispatch` / `POST /kick` only.
 GHA `schedule:` stays off.
