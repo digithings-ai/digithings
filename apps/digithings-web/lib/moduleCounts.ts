@@ -54,7 +54,7 @@ export function moduleVersion(id: string): string | null {
 
 /**
  * The counts as one line of mono micro-copy for a tile's top-right corner, e.g.
- * `22 endpoints · 58 mcp tools`. Empty string when the module has neither, so
+ * `22 endpoints · 127 mcp tools`. Empty string when the module has neither, so
  * the caller renders nothing rather than a stray separator.
  */
 export function moduleCountLabel(id: string): string {

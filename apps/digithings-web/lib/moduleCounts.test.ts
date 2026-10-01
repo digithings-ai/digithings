@@ -92,7 +92,7 @@ describe("module-counts.json", () => {
   });
 
   it("labels the two numbers a module does publish", () => {
-    expect(moduleCountLabel("digiquant")).toBe("22 endpoints · 58 mcp tools");
+    expect(moduleCountLabel("digiquant")).toBe("22 endpoints · 127 mcp tools");
     expect(moduleCountLabel("digismith")).toBe("3 endpoints");
   });
 
