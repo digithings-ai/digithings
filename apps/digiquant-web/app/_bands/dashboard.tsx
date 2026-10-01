@@ -1,6 +1,5 @@
 import { CtaLink, MediaFrame } from "@digithings/ui";
 import { DASHBOARD_VIDEO_POSTER, DASHBOARD_VIDEO_SRC } from "@/components/dashboard/dashboard-video";
-import { PortfolioIsland } from "@/components/live/portfolio-island";
 import { Band } from "../_chrome/Band";
 import { DashboardViewPlaceholder } from "../_placeholders";
 
@@ -10,22 +9,21 @@ const DASHBOARD_SURFACES: { key: string; value: string }[] = [
   { key: "strategy builder", value: "Describe a strategy in chat, backtest it on Nautilus, inspect it, hand it off. In development." },
   { key: "strategies", value: "Each strategy with its backtest tearsheet. In-sample and illustrative." },
   { key: "journal", value: "Notes kept next to the runs and strategies they belong to." },
-  { key: "tools", value: "Research data, MCP tools and LuxAlgo, reached from inside the app." },
+  { key: "tools", value: "Research data and MCP tools, reached from inside the app." },
 ];
 
 /** The product band: the dashboard view (a labelled placeholder until a recording
- *  or screenshot exists), what it holds, and the paper book it shows. The dashboard
- *  is a separate app and is not embedded here. */
+ *  or screenshot exists) beside what it holds. The dashboard is a separate app and
+ *  is not embedded here. */
 export function DashboardBand() {
   return (
     <Band
       id="dashboard"
-      tint
       status={DASHBOARD_VIDEO_SRC ? "recording" : "recording to come"}
       title="The dashboard is the product"
       takeaway="Build strategies, read the results and keep notes in one app. This page shows it; the tools live there."
     >
-      <div className="flex flex-col gap-4">
+      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         {DASHBOARD_VIDEO_SRC ? (
           <MediaFrame
             src={DASHBOARD_VIDEO_SRC}
@@ -39,26 +37,24 @@ export function DashboardBand() {
           <DashboardViewPlaceholder />
         )}
 
-        <dl className="m-0 border border-hair bg-surface text-left font-mono text-[0.72rem] leading-[1.55]">
-          {DASHBOARD_SURFACES.map((row) => (
-            <div key={row.key} className="grid border-b border-hair last:border-b-0 sm:grid-cols-[12rem_minmax(0,1fr)]">
-              <dt className="px-3 pb-0 pt-2 text-ink-mute sm:border-e sm:border-hair sm:pb-2">[ {row.key} ]</dt>
-              <dd className="m-0 px-3 pb-2 pt-0 font-sans text-[0.8125rem] text-ink-soft sm:pt-2">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <PortfolioIsland />
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.8125rem] text-ink-soft">
-          <CtaLink
-            href="/dashboard/"
-            variant="ghost"
-            className="hero-action h-auto border border-hair bg-transparent px-4 py-[0.7rem] font-mono text-[0.8rem] text-ink no-underline hover:bg-surface-2"
-          >
-            Open the dashboard
-          </CtaLink>
-          <span>The paper book above is a research portfolio. No real money is in it.</span>
+        <div className="flex min-w-0 flex-col gap-4">
+          <dl className="m-0 flex-1 border border-hair text-left font-mono text-[0.72rem] leading-[1.55]">
+            {DASHBOARD_SURFACES.map((row) => (
+              <div key={row.key} className="border-b border-hair px-3 py-2 last:border-b-0">
+                <dt className="text-ink-mute">[ {row.key} ]</dt>
+                <dd className="m-0 mt-1 font-sans text-[0.8125rem] text-ink-soft">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div>
+            <CtaLink
+              href="/dashboard/"
+              variant="ghost"
+              className="hero-action h-auto border border-hair bg-transparent px-4 py-[0.7rem] font-mono text-[0.8rem] text-ink no-underline hover:bg-surface-2"
+            >
+              Open the dashboard
+            </CtaLink>
+          </div>
         </div>
       </div>
     </Band>

@@ -1,8 +1,9 @@
+import { ChatBand } from "./_bands/chat";
 import { DashboardBand } from "./_bands/dashboard";
+import { IntegrationsBand } from "./_bands/integrations";
+import { McpBand } from "./_bands/mcp";
 import { PipelineBand } from "./_bands/pipeline";
-import { ProductsBand } from "./_bands/products";
 import { StartBand } from "./_bands/start";
-import { StrategyBand } from "./_bands/strategy";
 import { TearsheetsBand } from "./_bands/tearsheets";
 import { TopBand } from "./_bands/top";
 
@@ -13,10 +14,11 @@ export default function Home() {
     <main id="main" className="[--page-step:clamp(2rem,4.5vw,3.5rem)]">
       <TopBand />
       <DashboardBand />
-      <StrategyBand />
       <PipelineBand />
+      <ChatBand />
+      <McpBand />
       <TearsheetsBand />
-      <ProductsBand />
+      <IntegrationsBand />
       <StartBand />
     </main>
   );

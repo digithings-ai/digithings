@@ -3,7 +3,7 @@
 import { MarketBar, type MarketBarCell } from "@digithings/ui";
 import { displaySymbol, useMarketBar, type MarketCell } from "@/lib/live/market-bar";
 
-/** Chrome price strip under the nav. Renders only what useMarketBar returns:
+/** Price strip at the top of the tearsheets band. Renders only what useMarketBar returns:
  *  SSR and the first client render are empty (`connecting…`), so no price ever
  *  appears before a real feed delivers one. Crypto is the Coinbase public
  *  websocket; SPY/QQQ are dated closes and always carry their as-of stamp.
@@ -15,7 +15,7 @@ function toCell(c: MarketCell, live: boolean): MarketBarCell {
     value: c.value,
     changePct: c.changePct,
     asOf: crypto && live ? undefined : c.stamp,
-    source: crypto ? "Coinbase Exchange, live ticker" : "daily close archive",
+    source: crypto ? "live ticker" : "daily close archive",
     flashKey: crypto ? c.asOf : undefined,
   };
 }
@@ -23,9 +23,9 @@ function toCell(c: MarketCell, live: boolean): MarketBarCell {
 export function MarketBarShell() {
   const { cells, status } = useMarketBar();
   return (
-    <div className="relative z-10 border-b border-hair">
+    <div className="min-w-0 border border-hair">
       <MarketBar
-        className="mx-auto w-full max-w-[var(--frame-w)] px-[var(--page-pad)]"
+        className="w-full px-3"
         cells={cells.map((c) => toCell(c, status === "live"))}
         status={status}
       />
