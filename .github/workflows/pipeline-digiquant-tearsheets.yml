@@ -98,6 +98,21 @@ jobs:
             echo "export_sdca_macro.py not on this checkout (main lags develop) — skip staging"
           fi
 
+      - name: Stage gold real-yield sibling (DFII10)
+        # DFII10 feeds the gold_sdca sell mask. The mask itself is built at
+        # generate time in generate_tearsheets.py from the signal-delayed
+        # closes + this CSV — never staged. Same sealed-panel pattern as the
+        # M2 step above (Supabase → sealed R2 via export_sdca_macro.py, no
+        # new secrets); explicit --series DFII10 so gold stays staged even
+        # if the M2 step's series list ever narrows. Same main-lag guard
+        # (#3456 review).
+        run: |
+          if [ -f digiquant/scripts/export_sdca_macro.py ]; then
+            uv run --frozen --no-sync python digiquant/scripts/export_sdca_macro.py --series DFII10
+          else
+            echo "export_sdca_macro.py not on this checkout (main lags develop) — skip staging"
+          fi
+
       - name: Generate tearsheets + push to Supabase
         # --push-supabase: upsert the tearsheet payload + current signal to
         # strategy_tearsheets (service role). --signal-delay-days 3 (#1462):
