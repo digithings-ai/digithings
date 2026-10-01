@@ -114,4 +114,25 @@ describe("jobsForCron", () => {
     expect(JOBS.some((job) => job.id === "house-run-sun")).toBe(false);
     expect(jobsForCron("17 12 * * SUN")).toEqual([]);
   });
+
+  it("sends smoke clocks to worker probes without a new cron", () => {
+    expect(JOBS.find((job) => job.id === "smoke-site")).toMatchObject({
+      kind: "probe",
+      probe: "site",
+      cron: "17 6 * * *",
+      workflow: "smoke-site.yml",
+      ref: "develop",
+    });
+    expect(JOBS.find((job) => job.id === "smoke-stack")).toMatchObject({
+      kind: "probe",
+      probe: "stack",
+      cron: "27 7 * * *",
+      workflow: "smoke-stack.yml",
+      ref: "develop",
+    });
+    expect(JOBS.find((job) => job.id === "checkpoint-archive")).toBeUndefined();
+    expect(uniqueEnabledCrons()).toContain("17 6 * * *");
+    expect(uniqueEnabledCrons()).toContain("27 7 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("30 13 * * *");
+  });
 });

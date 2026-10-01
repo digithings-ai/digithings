@@ -57,9 +57,11 @@ def workflow() -> dict:
 
 @pytest.fixture(scope="module")
 def worker_jobs() -> dict[str, str]:
-    """Read literal ``wd``/``rd``/``cj`` job IDs and crons from the typed Worker map."""
+    """Read literal ``wd``/``rd``/``cj``/``pj`` job IDs and crons from the typed Worker map."""
+    # pj = probe jobs (smoke-site, smoke-stack). Omitting it drops those crons
+    # from this map and fails parity with wrangler.toml.
     pairs = re.findall(
-        r'(?:wd|rd|cj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        r'(?:wd|rd|cj|pj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
         JOBS_SOURCE.read_text(encoding="utf-8"),
         flags=re.DOTALL,
     )

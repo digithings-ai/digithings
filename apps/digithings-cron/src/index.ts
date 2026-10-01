@@ -1,7 +1,8 @@
 /**
  * digithings-cron — org-wide Cloudflare Worker production clocks (#3579, #4761).
- * Cron Triggers fire workflow_dispatch / repository_dispatch, or POST the
- * private digiquant-runner when the job kind is "container".
+ * Cron Triggers fire workflow_dispatch / repository_dispatch, POST the
+ * private digiquant-runner when the job kind is "container", or fetch public
+ * probe URLs when the job kind is "probe".
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */

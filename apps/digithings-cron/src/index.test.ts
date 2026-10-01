@@ -26,8 +26,9 @@ describe("scheduled", () => {
 
     await worker.scheduled(
       {
-        // smoke-site stays workflow_dispatch. research-metrics is a container job.
-        cron: "17 6 * * *",
+        // token-canary stays workflow_dispatch. smoke-site is a probe and
+        // treats HTTP 403 as a warning, so it cannot prove a dispatch failure.
+        cron: "41 6 * * *",
         scheduledTime: Date.UTC(2026, 8, 4, 6, 17),
       } as ScheduledController,
       env,

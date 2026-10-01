@@ -1,3 +1,8 @@
+# Prod cadence is a digithings-cron probe (smoke-stack, 27 7 * * *): public
+# GET /healthz on graph.digithings.ai, key.digithings.ai, and search.digithings.ai.
+# digiquant (:8001) and digismith (:8003) have no public hostname; this compose
+# job still probes them on localhost when a human dispatches it.
+# workflow_dispatch remains the manual override. Do not add schedule:.
 # Optional nightly / manual Compose health probe (REM-128).
 # Verifies core Python services respond on /healthz after `docker compose up --wait`.
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
