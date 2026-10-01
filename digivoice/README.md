@@ -133,7 +133,7 @@ Esc (Hammerspoon sample) or `digivoice cancel` discards an active take: the reco
 `dict` and `speak` write `status.json` for the Hammerspoon banner (display only). Settings:
 
 ```bash
-digivoice settings set live_banner false          # no overlay at all (menubar mic mark stays)
+digivoice settings set live_banner false          # no overlay at all (hotkeys still armed)
 digivoice settings set banner_position top-right  # top-center (default), top-left, top-right,
                                                   # bottom-center, bottom-left, bottom-right, center
 digivoice settings set banner_density full        # mini (grid only) | peek (default, auto-hides) | full (stays)
@@ -150,7 +150,7 @@ Stopping a toggle capture (Right Option again / stop-file / SIGINT) **keeps the 
 
 See [`hammerspoon/README.md`](hammerspoon/README.md):
 
-- **Right Option** → dict toggle (stop-file) with a status banner + menubar mark for the whole capture
+- **Right Option** → dict toggle (stop-file) with a status banner for the whole capture
 - **Esc** → cancel the active take (discard; no paste, no history)
 - **Double-tap Left Option** → speak `--selection` (fail soft; the banner says if nothing is selected; no clipboard or dict history)
 

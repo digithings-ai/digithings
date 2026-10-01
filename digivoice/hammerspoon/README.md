@@ -16,7 +16,7 @@ Do not invent other default binds in this sample.
 
 ## Status banner
 
-Status is a custom overlay banner, not Hammerspoon notifications. The one allowed toast is at Hammerspoon launch: it lists the configured commands and the resolved `digivoice` path.
+Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
 The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only control.
 
@@ -39,7 +39,7 @@ that the CLI writes, so it shows exactly what digivoice is doing.
 Long text is clipped to a 3-line glimpse in peek; click the banner to cycle density
 (mini → peek → full → mini).
 
-The menubar mark (`assets/digivoice-mark.png` + `REC`) stays during a dictation as a mic-in-use indicator, even when the banner is disabled. Errors are also printed to the Hammerspoon console.
+There is no digivoice menubar mark — the banner grid alone shows take state. Closing the Terminal leaves Hammerspoon running; **Quit** in the digivoice TUI stops the adapter and quits Hammerspoon.
 
 ### Banner settings
 
@@ -97,7 +97,7 @@ Default stop-file: `~/Library/Application Support/digivoice/dict.stop`
    require("digivoice")
    ```
 
-5. Reload Hammerspoon config (menu → Reload Config), or just run bare `digivoice`. That launch opens Hammerspoon if it is not running, adds `require("digivoice")` to `~/.hammerspoon/init.lua` when the adapter is installed but not required, and shows the banner. It does not depend on the menubar. The attempt is capped at a few seconds and never blocks the shell.
+5. Reload Hammerspoon config (Hammerspoon → Reload Config), or just run bare `digivoice`. That launch opens Hammerspoon if it is not running, adds `require("digivoice")` to `~/.hammerspoon/init.lua` when the adapter is installed but not required, hides the Dock icon, and shows the banner. No digivoice menubar step. Cap a few seconds; never blocks the shell. Closing that Terminal leaves HS up; TUI **Quit** tears it down.
 
 Optional: `export DIGIVOICE_BIN=/absolute/path/to/digivoice` if PATH lookup fails
 inside Hammerspoon's environment.
@@ -118,7 +118,7 @@ After a digivoice change lands on `develop`:
 
 2. Reload the Lua adapter: Hammerspoon menubar icon → **Reload Config** (or run `hs.reload()` in the Hammerspoon console). The adapter is symlinked from the checkout (`~/.hammerspoon/digivoice` → `digithings/digivoice/hammerspoon`), so reloading picks up the new `init.lua` and `banner_core.lua`. Settings changes need no reload.
 
-3. Check which CLI Hammerspoon will run. The launch toast prints `cli: <path>` and the Hammerspoon console logs `digivoice: armed; cli = <path>`. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. If it is wrong or missing, point it at the right binary and reload:
+3. Check which CLI Hammerspoon will run. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. Confirm with `hs -c 'return require("digivoice")'` after reload, or watch `dict`/`speak` argv. If it is wrong or missing, point it at the right binary and reload:
 
    ```bash
    launchctl setenv DIGIVOICE_BIN "$HOME/path/to/digithings/.venv/bin/digivoice"   # then quit/reopen Hammerspoon

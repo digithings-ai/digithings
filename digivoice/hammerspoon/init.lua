@@ -7,7 +7,9 @@
 --- Status: a custom overlay banner (banner_core.lua) draws what the digivoice CLI
 --- writes to status.json. It is display only: no title chrome, no hints, no
 --- settings UI — a click cycles density mini → peek → full, Esc cancels a take.
---- The only Hammerspoon notification is the launch toast listing the commands.
+--- Ship model: background only — no Dock icon, no digivoice menubar mark, no
+--- launch toast. Customize and Quit live in the digivoice TUI (Quit tears HS down;
+--- closing the Terminal alone leaves Hammerspoon running).
 --- Banner enable/position/density/animations live in digivoice's settings.json
 --- (`digivoice settings set banner_density full`) and are re-read per take.
 --- Install: see README.md in this directory.
@@ -90,14 +92,12 @@ local STOP_FILE = DATA_DIR .. "/dict.stop"
 local CANCEL_FILE = DATA_DIR .. "/dict.cancel"
 local STATUS_FILE = DATA_DIR .. "/status.json"
 local SETTINGS_FILE = DATA_DIR .. "/settings.json"
-local MARK_PATH = script_dir() .. "assets/digivoice-mark.png"
 
 -- Double-tap window for Left Option speak (seconds).
 local DOUBLE_TAP_SEC = 0.35
 local FRAME_SEC = 1 / 15
 
 local session = nil -- the one banner session on screen (dict or speak)
-local menubar = nil
 local canvas = nil
 local frame_timer = nil
 local hide_timer = nil
@@ -113,32 +113,6 @@ local function read_json(path)
     return value
   end
   return nil
-end
-
---------------------------------------------------------------------------------
--- menubar mark (mic-in-use indicator; stays even when the banner is disabled)
---------------------------------------------------------------------------------
-
-local function show_menubar(title)
-  if not menubar then
-    menubar = hs.menubar.new(true)
-    if not menubar then
-      return
-    end
-    local mark = hs.image.imageFromPath(MARK_PATH)
-    if mark then
-      mark:size({ w = 16, h = 16 })
-      menubar:setIcon(mark, false)
-    end
-  end
-  menubar:setTitle(title)
-end
-
-local function hide_menubar()
-  if menubar then
-    menubar:delete()
-    menubar = nil
-  end
 end
 
 --------------------------------------------------------------------------------
@@ -283,7 +257,6 @@ local function end_session(s)
   hide_timer = cancel_timer(hide_timer)
   stop_esc_tap()
   delete_canvas()
-  hide_menubar()
   session = nil
 end
 
@@ -324,7 +297,6 @@ local function finish_session(s, exit_code, stdout, stderr)
   end
   frame_timer = cancel_timer(frame_timer)
   stop_esc_tap()
-  hide_menubar()
   s.final =
     core.final_view(exit_code, read_json(STATUS_FILE), s, stdout, stderr, s.local_state == "cancelling")
   if s.final.state == "error" then
@@ -375,7 +347,6 @@ function M.cancel_dict()
   end
   s.local_state = "cancelling"
   stop_esc_tap()
-  show_menubar(" …")
   render(s)
   return true
 end
@@ -398,7 +369,6 @@ local function start_dict()
   os.remove(STOP_FILE)
   os.remove(CANCEL_FILE)
   local s = begin_session("dict")
-  show_menubar(" REC")
   s.task = hs.task.new(DIGIVOICE, function(exit_code, std_out, std_err)
     finish_session(s, exit_code, std_out, std_err)
   end, { "dict", "--toggle", "--stop-file", STOP_FILE })
@@ -420,7 +390,6 @@ local function stop_dict(s)
     s.task:terminate()
   end
   s.local_state = "transcribing"
-  show_menubar(" …")
   render(s)
 end
 
@@ -538,9 +507,11 @@ end
 
 function M.start()
   tap:start()
-  -- The one allowed notification: what is armed, and which CLI it will run.
-  hs.notify.new({ title = "digivoice", informativeText = core.launch_notice(DIGIVOICE) }):send()
-  print("digivoice: armed; cli = " .. DIGIVOICE)
+  -- Background-only: hide the Hammerspoon Dock icon. No digivoice menubar mark,
+  -- no launch toast (TUI is the sole chrome for customize / Quit).
+  if hs.dockicon and hs.dockicon.hide then
+    hs.dockicon.hide()
+  end
 end
 
 function M.stop()
