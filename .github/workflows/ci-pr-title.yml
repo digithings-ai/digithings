@@ -1,0 +1,98 @@
+# Conventional Commit PR title lint for PRs into develop.
+# Squash merges use the PR title as the commit subject (COMMIT_OR_PR_TITLE),
+# so scoped titles feed release-please reliably. See #4625.
+#
+# Allowed exemptions (skip the action or ignoreLabels):
+#   - chore: promote develop to main
+#   - chore(release): …
+#   - chore(<scope>): release …   (release-please)
+#   - label autorelease: pending
+name: "CI: PR title"
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint-pr-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Allow release-please / promote titles
+        id: allow
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          # Exact promote title used by develop→main cutovers.
+          if [[ "$TITLE" == "chore: promote develop to main" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Exempt: promote develop to main"
+            exit 0
+          fi
+          # chore(release): … and chore(<scope>): release …
+          if [[ "$TITLE" =~ ^chore\(release\):[[:space:]].+ ]] || \
+             [[ "$TITLE" =~ ^chore\([^)]+\):[[:space:]]+release[[:space:]].+ ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Exempt: release / release-please title"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Lint conventional PR title
+        if: steps.allow.outputs.skip != 'true'
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            perf
+            test
+            ci
+            build
+            revert
+            style
+          requireScope: true
+          # Module / surface scopes. digitrace = Phase 0 rename forward-compat;
+          # digismith kept for legacy titles until rename lands.
+          scopes: |
+            digichat
+            digiskills
+            digillm
+            digifetch
+            digibase
+            digikey
+            digigraph
+            digivault
+            digiclaw
+            digismith
+            digitrace
+            digisearch
+            digiquant
+            digivoice
+            digidev
+            digiweb
+            ui
+            web
+            dashboard
+            root
+            deps
+            release
+          ignoreLabels: |
+            autorelease: pending
+            ignore-semantic-pull-request
