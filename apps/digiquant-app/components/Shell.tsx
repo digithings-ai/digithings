@@ -70,6 +70,11 @@ export function Shell({ children }: { children: ReactNode }) {
     try { localStorage.setItem(PIN_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
   }, []);
 
+  const focusNav = () => {
+    const links = document.querySelectorAll<HTMLElement>('.navtree a.nav-link');
+    (document.querySelector<HTMLElement>('.navtree a.nav-link.on') ?? links[0])?.focus();
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -80,11 +85,16 @@ export function Shell({ children }: { children: ReactNode }) {
         cmd.current?.focus();
       } else if (e.key === 'Escape') { setDrop(false); setHelp(false); }
       else if (!typing && bare && e.key === '[') setPin(!pinned);
+      else if (!typing && bare && e.key === 'n') {
+        e.preventDefault();
+        if (!showRail) setDrop(true);
+        else focusNav();
+      }
       else if (!typing && bare && e.key === '?') setHelp((h) => !h);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [pinned, setPin]);
+  }, [pinned, setPin, showRail]);
 
   const startResize = (e: RPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
