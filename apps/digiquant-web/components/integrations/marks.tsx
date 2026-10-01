@@ -2,11 +2,11 @@ import { siCoinbase } from "simple-icons";
 
 /** Marks for the integrations band. Real vendor marks where a single-path monochrome
  *  asset exists in the monorepo's dependencies; a monogram chip where none does
- *  (LuxAlgo, Alpaca, Interactive Brokers publish no such asset here). Everything is
- *  drawn in currentColor so the marks sit in the page's ink. Product names and marks
+ *  (LuxAlgo, NautilusTrader, digithings, Alpaca, Interactive Brokers have none here).
+ *  Everything is drawn in currentColor so the marks sit in the page's ink. Product names and marks
  *  belong to their owners; showing one implies no affiliation. */
 
-export type IntegrationId = "gloomberb" | "luxalgo" | "coinbase" | "alpaca" | "ibkr";
+export type IntegrationId = "gloomberb" | "luxalgo" | "nautilus" | "digithings" | "coinbase" | "alpaca" | "ibkr";
 
 /** Gloomberb candlestick mark: monochrome adaptation of the Gloomberb mark (source
  *  gloom-sh/gloomberb, MIT; Copyright (c) 2026 Gloomberb Contributors). Same drawing as
@@ -26,8 +26,10 @@ function GloomberbMark({ size }: { size: number }) {
   );
 }
 
-const MONOGRAMS: Record<"luxalgo" | "alpaca" | "ibkr", string> = {
+const MONOGRAMS: Record<"luxalgo" | "nautilus" | "digithings" | "alpaca" | "ibkr", string> = {
   luxalgo: "LA",
+  nautilus: "NT",
+  digithings: "dt",
   alpaca: "Al",
   ibkr: "IB",
 };
