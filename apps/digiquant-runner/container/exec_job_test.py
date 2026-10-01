@@ -401,6 +401,15 @@ def _check_phase2(commands: dict[str, Any]) -> None:
         raise SystemExit("idle sleepAfter stays 2m and busy window stays 30m")
     if ignore.count("!scripts/execution_cron_check.py") != 1:
         raise SystemExit("probe wrapper must be re-included in .dockerignore")
+    scripts_at = ignore.find("\nscripts\n")
+    archive_copy = "COPY scripts/digiquant_archive_checkpoints.py"
+    gate_copy = "COPY scripts/digiquant_checkpoint_size_gate.py"
+    if archive_copy not in dockerfile or gate_copy not in dockerfile:
+        raise SystemExit("image must copy the checkpoint-archive scripts")
+    archive_at = ignore.find("!scripts/digiquant_archive_checkpoints.py")
+    gate_at = ignore.find("!scripts/digiquant_checkpoint_size_gate.py")
+    if scripts_at < 0 or archive_at < scripts_at or gate_at < archive_at:
+        raise SystemExit("checkpoint scripts must be re-included after scripts/")
 
 
 def _check_house_run(commands: dict[str, Any]) -> None:
