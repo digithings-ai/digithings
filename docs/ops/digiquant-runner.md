@@ -207,7 +207,7 @@ The house-run image stays on `DigiQuantRunnerContainer` (`standard-2`,
 house-candidate Size=1344917045 (~1.253 GiB). The bake keeps the frozen
 digiquant extras `prices` / `research` / `nautilus` and adds
 `uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres`.
-Extra copies are `digigraph`, `digillm`, `digismith`, and
+Extra copies are `digigraph`, `digillm`, `digitrace`, and
 `config/byok-providers.json`, plus `.github/digiquant-pipeline.yml`,
 `.github/workflows/pipeline-digiquant-allocation-shadow.yml`, and the
 `/opt/runner` scripts `house_chain_step.py`, `wake_stack.py`, and

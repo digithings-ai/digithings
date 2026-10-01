@@ -74,7 +74,7 @@ DOC_MODULES = {
     "digisearch": ["digisearch/src"],
     "digichat": ["apps/digichat/src"],
     "digikey": ["digikey/src"],
-    "digismith": ["digismith/src"],
+    "digitrace": ["digitrace/src"],
     "digiclaw": ["digiclaw/src"],
     "digibase": ["digibase/src"],
     "digivault": ["digivault/src"],

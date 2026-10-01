@@ -1,7 +1,7 @@
 """Provider-agnostic, OpenAI-compatible LLM client.
 
 Extracted from the mature ``digigraph.llm`` implementation and made standalone:
-no FastAPI, no digigraph, no digismith hard dependencies. Speaks to any
+no FastAPI, no digigraph, no digitrace hard dependencies. Speaks to any
 OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter, OpenAI direct,
 or a registered external provider) and provides:
 
@@ -102,13 +102,13 @@ _llm_cache_set = _cache.llm_cache_set
 
 logger = logging.getLogger(__name__)
 
-# Optional tracing: degrade to a no-op decorator when digismith is not installed.
+# Optional tracing: degrade to a no-op decorator when digitrace is not installed.
 try:
-    from digismith.trace import traceable as _traceable  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised only when digismith is absent
+    from digitrace.trace import traceable as _traceable  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised only when digitrace is absent
 
     def _traceable(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """No-op stand-in for ``digismith.trace.traceable`` when digismith is absent."""
+        """No-op stand-in for ``digitrace.trace.traceable`` when digitrace is absent."""
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             return fn

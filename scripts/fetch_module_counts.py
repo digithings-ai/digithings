@@ -64,7 +64,7 @@ VERSION_SOURCES: dict[str, str] = {
     "digisearch": "digisearch/pyproject.toml",
     "digichat": "apps/digichat/package.json",
     "digikey": "digikey/pyproject.toml",
-    "digismith": "digismith/pyproject.toml",
+    "digitrace": "digitrace/pyproject.toml",
     "digiclaw": "digiclaw/pyproject.toml",
     "digibase": "digibase/pyproject.toml",
     "digivault": "digivault/pyproject.toml",
@@ -80,7 +80,7 @@ SPEC_SOURCES: dict[str, str] = {
     "digisearch": "digisearch",
     "digichat": "digichat",
     "digikey": "digikey",
-    "digismith": "digismith",
+    "digitrace": "digitrace",
     "digivault": "digivault",
 }
 

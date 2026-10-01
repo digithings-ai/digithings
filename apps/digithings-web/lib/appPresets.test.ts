@@ -31,7 +31,7 @@ describe("app presets", () => {
 
   it("dims only boxes that exist on the digithings drawing", () => {
     const ids = digiSpec(
-      { models: "local", embeddings: "local", vector: "self", telemetry: "digismith", hosting: "own" },
+      { models: "local", embeddings: "local", vector: "self", telemetry: "digitrace", hosting: "own" },
     ).services.map((s) => s.id);
     for (const app of APP_PRESETS) {
       for (const id of app.dimmedDigi) expect(ids).toContain(id);

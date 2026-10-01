@@ -1,0 +1,5 @@
+# digitrace Langfuse Web for Cloudflare Containers (#4930 Phase 1).
+# Build context: monorepo root (wrangler image_build_context = ../..).
+# Pin a concrete patch — do not float on :latest or bare :4.
+FROM langfuse/langfuse:4.49.0
+EXPOSE 3000

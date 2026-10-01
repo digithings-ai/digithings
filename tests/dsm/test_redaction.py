@@ -1,9 +1,9 @@
-"""Unit tests for digismith.redaction."""
+"""Unit tests for digitrace.redaction."""
 
 from __future__ import annotations
 
 import pytest
-from digismith.redaction import PiiRedactor, default_redactor
+from digitrace.redaction import PiiRedactor, default_redactor
 
 pytestmark = pytest.mark.unit
 

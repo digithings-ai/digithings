@@ -1,4 +1,4 @@
-"""digismith ``/healthz`` liveness contract.
+"""digitrace ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"): ``/healthz`` is the minimal
 liveness probe; ``/v1/status`` remains the richer diagnostic surface.
@@ -7,7 +7,7 @@ liveness probe; ``/v1/status`` remains the richer diagnostic surface.
 from __future__ import annotations
 
 import pytest
-from digismith.server import app
+from digitrace.server import app
 from fastapi.testclient import TestClient
 
 _client = TestClient(app)

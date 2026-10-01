@@ -57,9 +57,9 @@ adr-check:
 vault-check:
 	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
 
-# Coverage for Phase 1 code (digigraph + digiquant + digismith). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"
+# Coverage for Phase 1 code (digigraph + digiquant + digitrace). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digitrace"
 test-cov:
-	pytest -m unit -v --tb=short --cov=digigraph --cov=digiquant --cov=digismith --cov-report=term-missing --cov-fail-under=0
+	pytest -m unit -v --tb=short --cov=digigraph --cov=digiquant --cov=digitrace --cov-report=term-missing --cov-fail-under=0
 
 # Coverage with HTML report (output in htmlcov/).
 test-cov-html:

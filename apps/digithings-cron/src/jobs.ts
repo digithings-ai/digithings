@@ -164,6 +164,18 @@ export const JOBS: readonly Job[] = [
     1800,
     { enabled: false },
   ),
+  // --- digithings: checkpoint archive (container, #4761 Phase 4) ---
+  // PAUSED with DigiQuant peers (Human Gate #4917). Wire is digiquant-runner;
+  // do not enable until Chris resumes clocks / Platform hatch.
+  cj(
+    "checkpoint-archive",
+    "30 13 * * *",
+    "pipeline-checkpoint-archive.yml",
+    "checkpoint-archive",
+    "checkpoint-archive",
+    3600,
+    { enabled: false },
+  ),
   cj(
     "market-data-refresh-evening",
     "30 21 * * *",

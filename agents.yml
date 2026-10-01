@@ -96,11 +96,11 @@ components:
     arch_doc: digisearch/ARCHITECTURE.md
     test_cmd: "pytest tests/ds/ -m unit -v --tb=short"
 
-  - name: digismith
+  - name: digitrace
     port: 8003
     description: "LangSmith-aligned observability library + status API"
-    agents_doc: digismith/AGENTS.md
-    arch_doc: digismith/ARCHITECTURE.md
+    agents_doc: digitrace/AGENTS.md
+    arch_doc: digitrace/ARCHITECTURE.md
     test_cmd: "pytest tests/dsm/ -m unit -v --tb=short"
 
   - name: digiclaw

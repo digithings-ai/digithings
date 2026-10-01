@@ -13,10 +13,10 @@ digikey:
   - tests/dk/**
   - .github/workflows/test-digikey.yml
 
-digismith:
-  - digismith/**
+digitrace:
+  - digitrace/**
   - tests/dsm/**
-  - .github/workflows/test-digismith.yml
+  - .github/workflows/test-digitrace.yml
 
 digivault:
   - digivault/**
@@ -164,6 +164,10 @@ web:
   # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
   # Same install-input / web-lane cover as digichat-cloudflare above.
   - apps/digithings-stack-cloudflare/**
+  # digitrace Langfuse Web+Worker Containers (#4930 Phase 1).
+  - apps/digitrace-langfuse/**
+  - Dockerfile.digitrace-langfuse-web
+  - Dockerfile.digitrace-langfuse-worker
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -224,7 +228,7 @@ ruff_and_scripts:
   - digigraph/**
   - digiquant/**
   - digisearch/**
-  - digismith/**
+  - digitrace/**
   - digivault/**
   - tests/**
   - scripts/**

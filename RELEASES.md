@@ -1,6 +1,6 @@
 # Releases
 
-Monorepo components ship as **independent Python packages** (`digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`). Use **git tags** or Docker image digests in production.
+Monorepo components ship as **independent Python packages** (`digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`). Use **git tags** or Docker image digests in production.
 
 ## Release process
 
@@ -101,7 +101,7 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 
 ## Install order (local / CI)
 
-`pip install -e ./digibase` first, then editable installs of dependents (`digigraph`, `digiquant`, `digisearch`, `digismith`). Dockerfiles use a **repo-root build context** so `digibase` is copied and installed before each service package.
+`pip install -e ./digibase` first, then editable installs of dependents (`digigraph`, `digiquant`, `digisearch`, `digitrace`). Dockerfiles use a **repo-root build context** so `digibase` is copied and installed before each service package.
 
 ## Changelog (high level)
 
@@ -117,5 +117,5 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 - **digigraph:** depends on `digibase`; standardized errors; policy module; optional tool entry points `digigraph.tools`; `quant_artifact_uri` in workflow state.
 - **digiquant:** `POST /v1/jobs/backtest`, `GET /v1/jobs/{id}/status`; `digibase` errors and OTel.
 - **digisearch:** `workspace_id` on query; `digisearch-worker` CLI stub; `embeddings.config`; `digibase` integration.
-- **digismith:** `digibase` errors and OTel; correlation middleware.
+- **digitrace:** `digibase` errors and OTel; correlation middleware.
 - **digiclaw:** optional `AUDIT_SINK_URL` for NDJSON POST mirror.

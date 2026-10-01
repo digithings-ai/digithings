@@ -144,7 +144,7 @@ make digichat-profile-a-bundle-up
 ```
 
 Details: [`apps/digithings-stack-cloudflare/README.md`](../../apps/digithings-stack-cloudflare/README.md)
-(local `docker run` / compose). digiquant, digismith HTTP, and Ollama stay off.
+(local `docker run` / compose). digiquant, digitrace HTTP, and Ollama stay off.
 
 ### Monorepo build (full N-container stack)
 
