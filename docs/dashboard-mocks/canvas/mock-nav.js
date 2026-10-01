@@ -15,6 +15,9 @@
 
   var PAGES = [
     { path: "/1/brief", href: "brief.html", label: "brief" },
+    { path: "/1/book", href: "brief-book.html", label: "brief book" },
+    { path: "/1/markets", href: "brief-markets.html", label: "brief markets" },
+    { path: "/1/chart", href: "brief-chart.html", label: "brief chart" },
     { path: "/2/holdings", href: "holdings.html", label: "holdings" },
     { path: "/3/theses", href: "theses.html", label: "theses" },
     { path: "/4/tearsheet", href: "tearsheet.html", label: "tearsheet" },
@@ -41,6 +44,9 @@
     // portfolio cousins
     if (f === "attribution.html" || f === "holdings-empty.html") return 1;
     if (f === "ledger-error.html") return 4;
+    if (f === "brief-book.html") return 1;
+    if (f === "brief-markets.html") return 2;
+    if (f === "brief-chart.html") return 3;
     if (f.indexOf("brief") === 0) return 0;
     if (f.indexOf("pipeline") === 0) return 5;
     if (f.indexOf("strategy") === 0) return 6;
@@ -289,6 +295,96 @@
     document.documentElement.classList.remove("desk-fs");
   }
 
+
+  /* ── pane rearrange (polish dump) ── */
+  var PANE_ORDER_KEY = "dq-canvas-pane-order:";
+
+  function paneOrderKey() {
+    return PANE_ORDER_KEY + fileName();
+  }
+
+  function wirePaneRearrange() {
+    var col = document.querySelector("main.main > .col");
+    if (!col) return;
+    col.classList.add("col-stretch");
+
+    // Restore order from sessionStorage
+    try {
+      var saved = sessionStorage.getItem(paneOrderKey());
+      if (saved) {
+        var ids = JSON.parse(saved);
+        if (Array.isArray(ids) && ids.length) {
+          ids.forEach(function (id) {
+            var el = col.querySelector('.sec[data-pane-id="' + id + '"]');
+            if (el) col.appendChild(el);
+          });
+          // keep footer last
+          var foot = col.querySelector("footer.foot");
+          if (foot) col.appendChild(foot);
+        }
+      }
+    } catch (e) {}
+
+    var dragSec = null;
+
+    function persist() {
+      var ids = [];
+      col.querySelectorAll(".sec[data-pane-id]").forEach(function (s) {
+        ids.push(s.getAttribute("data-pane-id"));
+      });
+      try { sessionStorage.setItem(paneOrderKey(), JSON.stringify(ids)); } catch (e) {}
+    }
+
+    col.querySelectorAll(".sec[data-pane-id]").forEach(function (sec) {
+      sec.setAttribute("draggable", "true");
+      var handle = sec.querySelector("[data-pane-drag]");
+      if (handle) {
+        handle.addEventListener("pointerdown", function () {
+          sec.setAttribute("draggable", "true");
+        });
+      }
+      sec.addEventListener("dragstart", function (ev) {
+        dragSec = sec;
+        sec.classList.add("is-dragging");
+        col.classList.add("rearranging");
+        try {
+          ev.dataTransfer.effectAllowed = "move";
+          ev.dataTransfer.setData("text/plain", sec.getAttribute("data-pane-id") || "");
+        } catch (e) {}
+      });
+      sec.addEventListener("dragend", function () {
+        sec.classList.remove("is-dragging");
+        col.classList.remove("rearranging");
+        col.querySelectorAll(".sec.drag-over").forEach(function (s) {
+          s.classList.remove("drag-over");
+        });
+        dragSec = null;
+        persist();
+      });
+      sec.addEventListener("dragover", function (ev) {
+        if (!dragSec || dragSec === sec) return;
+        ev.preventDefault();
+        sec.classList.add("drag-over");
+        try { ev.dataTransfer.dropEffect = "move"; } catch (e) {}
+      });
+      sec.addEventListener("dragleave", function () {
+        sec.classList.remove("drag-over");
+      });
+      sec.addEventListener("drop", function (ev) {
+        ev.preventDefault();
+        sec.classList.remove("drag-over");
+        if (!dragSec || dragSec === sec) return;
+        var rect = sec.getBoundingClientRect();
+        var before = (ev.clientY - rect.top) < rect.height / 2;
+        if (before) col.insertBefore(dragSec, sec);
+        else col.insertBefore(dragSec, sec.nextSibling);
+        var foot = col.querySelector("footer.foot");
+        if (foot) col.appendChild(foot);
+        persist();
+      });
+    });
+  }
+
   function wirePaneFullscreen() {
     document.querySelectorAll("[data-pane-fs]").forEach(function (btn) {
       btn.addEventListener("click", function (ev) {
@@ -352,6 +448,7 @@
     wireNav();
     wireDeskExpand();
     wirePaneFullscreen();
+    wirePaneRearrange();
 
     var chatPage = fileName() === "chat.html";
     var wantOpen = chatPage;

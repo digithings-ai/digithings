@@ -20,7 +20,7 @@ Open [http://127.0.0.1:3920/](http://127.0.0.1:3920/).
 |---|---|
 | Index | `index.html` |
 | Shell | `desk-picker.html` |
-| Brief and charts | `brief.html`, `ticker-dossier.html`, `gloomberg.html`, `luxalgo.html` |
+| Brief and charts | `brief.html` (overview), `brief-book.html`, `brief-markets.html`, `brief-chart.html`, `ticker-dossier.html`, `gloomberg.html`, `luxalgo.html` |
 | Portfolio | `holdings.html`, `theses.html`, `tearsheet.html`, `ledger.html`, `attribution.html` |
 | Pipeline and chat | `pipeline.html`, `chat.html` |
 | Strategies and Tools (product vision, WIP / coming soon) | `strategies.html`, `strategy-detail.html`, `strategy-deploy.html`, `gloomberg.html` (Terminal), `luxalgo.html`, `charts.html`, `chat-fullscreen.html`, `fx-hub.html` |
@@ -75,3 +75,11 @@ digiquant has a live paying user. This canvas is a design source, not a live boo
 5. **Narrow panes** — column-priority when narrow; pane `full` + Esc to exit.
 6. **Rails** — DigiQuant left; DigiChat right rail (never replaces the left spine).
 7. **Headers** — lighter-gray section headers preserved from the `051f13ec` visual baseline.
+
+## Polish dump (#4911 remock continuation)
+
+1. **One viewport** — Brief split into nested spine pages (overview / book / markets / chart). No document scroll.
+2. **Sparse expand** — `.col` stretches panes to fill height (`grid-auto-rows: minmax(0,1fr)`).
+3. **View primitives** — shared atoms: `.atom-table`, `.atom-chart`, `.atom-feed`, `.atom-pipeline`, `.atom-tearsheet`.
+4. **No top KPI strip** — `.kpis` removed from frames and hidden in CSS.
+5. **Pane rearrange** — drag `⋮⋮` handle on pane headers; order persists in `sessionStorage`. Pane `full` + Esc kept.
