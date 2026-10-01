@@ -14,6 +14,9 @@ from digivoice.paths import (
     resolve_paths,
 )
 from digivoice.probe import CommandProbe
+from digivoice.rewrite import rewrite_doctor_detail
+from digivoice.runner import run_command
+from digivoice.settings import load_settings
 
 _REQUIRED = frozenset({"whisper-cli", "piper", "capture", "models"})
 
@@ -66,6 +69,12 @@ def _paths(home: Path, paths: VoicePaths) -> DoctorCheck:
     return DoctorCheck(id="paths", status="info", detail=detail)
 
 
+def _rewrite_check(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
+    settings = load_settings(paths)
+    status, detail = rewrite_doctor_detail(paths, settings, probe, run_command)
+    return DoctorCheck(id="rewrite", status=status, detail=detail)
+
+
 def doctor_checks(
     platform: str,
     home: Path,
@@ -92,6 +101,7 @@ def doctor_checks(
         _models(paths, probe),
         _history(paths, probe),
         _paths(home, paths),
+        _rewrite_check(paths, probe),
         DoctorCheck(
             id="tcc",
             status="info",
@@ -99,6 +109,15 @@ def doctor_checks(
                 "Mic and Accessibility prompts are not probed. dict degrades to "
                 "stdout when a paste is denied. See digivoice/hammerspoon/README.md "
                 "for Mic + Accessibility TCC on macOS."
+            ),
+        ),
+        DoctorCheck(
+            id="interrupt",
+            status="info",
+            detail=(
+                "On stop/early-stop, digivoice keeps the wav and pastes what was "
+                "captured (paste_on_stop default). Resume-same-take is not supported "
+                "— paste + start a new take."
             ),
         ),
     ]

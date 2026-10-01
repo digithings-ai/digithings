@@ -82,6 +82,7 @@ def test_help_lists_commands() -> None:
     assert "speak" in result.stdout
     assert "history" in result.stdout
     assert "doctor" in result.stdout
+    assert "settings" in result.stdout
 
 
 def test_rejects_bad_args() -> None:

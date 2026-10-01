@@ -13,6 +13,13 @@ config.
 
 Do not invent other default binds in this sample.
 
+## Live dictation banner
+
+While Right Option capture is running, the sample shows a **persistent** indicator for the whole take (not only a start toast):
+
+- **Menubar** — digivoice mark from `assets/digivoice-mark.png` when present, plus `REC` title; falls back to text `● digivoice REC` if the image is missing.
+- **Canvas banner** — centered top-of-screen “digivoice · recording…” until stop; switches to “pasting…” after the stop-file is written, then clears when the task exits.
+
 ## How stop works
 
 Toggle recording uses a **stop-file** (not only the PR1 length cap):
@@ -22,7 +29,8 @@ Toggle recording uses a **stop-file** (not only the PR1 length cap):
    digivoice clears the stop-file and records with sox/ffmpeg (open-ended, with a safety cap).
 2. Second Right Option → Hammerspoon **writes** the stop-file.
 3. digivoice notices the file, sends SIGINT to the recorder process group so the
-   wav closes cleanly, then continues whisper → history → paste.
+   wav closes cleanly, then continues whisper → optional rewrite → history → paste
+   of what was captured (interrupt-safe; no resume-same-take).
 
 SIGINT/SIGTERM to the digivoice process itself takes the same early-stop path
 (Hammerspoon falls back to `task:terminate()` if the stop-file cannot be written).
