@@ -34,14 +34,12 @@ HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 # App-home actions. Setup sits second-last as a "wizard…" submenu — it opens
 # the setup wizard and returns to home, it is never the home screen itself.
 # Status is not an action: the live status.json feed surfaces in the context
-# strip and via `digivoice status`.
+# strip and via `digivoice status`. Update/Uninstall stay CLI-only stubs.
 HOME_MENU = (
     "Doctor (health checks)",
     "Settings (show)",
     "History (recent)",
     "Reload (local control)",
-    "Update",
-    "Uninstall",
     "Setup (wizard…)",
     "Quit",
 )
@@ -49,9 +47,9 @@ HOME_MENU = (
 # Contiguous slices of HOME_MENU. Status is the context strip, not a row.
 HOME_GROUPS: tuple[tuple[str, int, int], ...] = (
     ("Operate", 0, 3),
-    ("Maintain", 3, 6),
-    ("Configure", 6, 7),
-    ("Leave", 7, 8),
+    ("Maintain", 3, 4),
+    ("Configure", 4, 5),
+    ("Leave", 5, 6),
 )
 
 MIC_HINT = (
@@ -70,10 +68,13 @@ def home_context_lines(
     banner_position: str,
     health: str,
 ) -> list[str]:
-    """Two-line status/context strip for the home frame."""
+    """Symbol-led status strip for the home frame (no `models:`/`health:` labels)."""
+    healthy = health.strip().lower().startswith("ok")
+    health_symbol = "■" if healthy else "□"
     return [
-        f"models: stt {settings_text_model} · tts {tts_label} — banner {banner_density} ({banner_position})",
-        f"health: {health}",
+        f"▦ stt {settings_text_model} · tts {tts_label}",
+        f"▥ {banner_density} ({banner_position})",
+        f"{health_symbol} {health}",
     ]
 
 
@@ -104,7 +105,7 @@ def build_context_lines(
             summary,
         )
     except Exception:
-        return ["models: (unavailable) — banner (unavailable)", "health: unknown"]
+        return ["▦ (unavailable)", "▥ (unavailable)", "□ unknown"]
 
 
 def summarize_health(
@@ -173,7 +174,7 @@ def render_home_overview(
 
 
 def _context_with_control(context: list[str], summary: str) -> list[str]:
-    return [*context, f"control: {summary}"]
+    return [*context, f"▤ {summary}"]
 
 
 def run_home(
@@ -187,7 +188,11 @@ def run_home(
 ) -> int:
     """Run the home shell. Returns a process exit code; never hangs a pipe."""
     from digivoice import cli as _cli
-    from digivoice.settings import format_settings_text, load_settings
+    from digivoice.settings import (
+        format_settings_compact,
+        format_settings_text,
+        load_settings,
+    )
 
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -244,7 +249,7 @@ def run_home(
                 )
                 _pause(stdin, stdout)
             elif entry.startswith("Settings"):
-                text = format_settings_text(load_settings(paths), paths)
+                text = format_settings_compact(load_settings(paths), paths)
                 _write_info_frame(stdout, "Settings", text.splitlines(), subtitle=HOME_SUBTITLE)
                 _pause(stdin, stdout)
             elif entry.startswith("History"):
@@ -262,18 +267,6 @@ def run_home(
                 result = _cli._reload(args, runtime)
                 body = result.stdout.splitlines() or [result.stderr.strip()]
                 _write_info_frame(stdout, "Reload", body, subtitle=HOME_SUBTITLE)
-                _pause(stdin, stdout)
-            elif entry.startswith("Update"):
-                result = _cli._update()
-                _write_info_frame(
-                    stdout, "Update", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
-                )
-                _pause(stdin, stdout)
-            elif entry.startswith("Uninstall"):
-                result = _cli._uninstall()
-                _write_info_frame(
-                    stdout, "Uninstall", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
-                )
                 _pause(stdin, stdout)
             elif entry.startswith("Setup"):
                 # Submenu: run the wizard, then return to home (never exit).

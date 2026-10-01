@@ -219,6 +219,36 @@ def set_setting(paths: VoicePaths, key: str, raw: str) -> VoiceSettings:
     return settings
 
 
+def format_settings_compact(settings: VoiceSettings, paths: VoicePaths) -> str:
+    """Scannable grouped summary for the TUI Settings pane (not the full dump)."""
+    tts = settings.tts_voice or "(auto)"
+    rewrite = (
+        f"{settings.rewrite_preset} via {settings.rewrite_runner}"
+        if settings.rewrite_enabled
+        else "off"
+    )
+    return "\n".join(
+        [
+            "■ Models",
+            f"  □ stt ..... {settings.stt_model}",
+            f"  □ tts ..... {tts}",
+            f"  □ rewrite . {rewrite}",
+            "",
+            "■ Features",
+            f"  □ paste on stop . {str(settings.paste_on_stop).lower()}",
+            f"  □ live banner .. {str(settings.live_banner).lower()}",
+            "",
+            "■ Banner",
+            f"  □ {settings.banner_density} ({settings.banner_position})",
+            f"  □ animations ... {str(settings.banner_animations).lower()}",
+            "",
+            "■ Paths",
+            f"  □ data ..... {paths.data_dir}",
+            f"  □ models ... {paths.models_dir}",
+        ]
+    )
+
+
 def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
     data = settings_public_dict(settings, paths)
     lines = [

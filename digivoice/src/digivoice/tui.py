@@ -47,6 +47,19 @@ _ANSI_ALT_OFF = "\x1b[?1049l"
 _ANSI_RESET = "\x1b[0m"
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
+# digiquant teal accent for selected/active rows (ANSI only, NO_COLOR skips).
+_TEAL = "\x1b[38;2;61;214;196m"
+# Multi-color letter accents for the DIGIVOICE wordmark (one hue per letter).
+_WORDMARK_HUES: tuple[tuple[int, int, int], ...] = (
+    (61, 214, 196),
+    (229, 183, 101),
+    (226, 112, 138),
+    (90, 163, 196),
+    (217, 122, 90),
+)
+
+_STATUS_SYMBOLS = frozenset({"▦", "▥", "■", "□", "▤"})
+
 _DEFAULT_SUBTITLE = "digivoice setup · local speech config"
 _KICKER = "digivoice"
 
@@ -252,15 +265,17 @@ def _fit(text: str, width: int, *, truncate: bool = True) -> str:
 
 
 def _paint(plain: str, style: str, ansi: bool) -> str:
-    """Theme-safe SGR. Inverse selection and dim chrome; body uses default fg."""
+    """Theme-safe SGR. Teal selection; dim chrome; body uses default fg."""
     if not ansi or not plain:
         return plain
     if style == "bar" and plain[:1] in {"│", "|"}:
-        return f"\x1b[2m{plain[:1]}{_ANSI_RESET}\x1b[7;1m{plain[1:]}{_ANSI_RESET}"
+        return f"\x1b[2m{plain[:1]}{_ANSI_RESET}{_TEAL}\x1b[7;1m{plain[1:]}{_ANSI_RESET}"
+    if style == "bar":
+        return f"{_TEAL}\x1b[7;1m{plain}{_ANSI_RESET}"
     if style in {"item", "kv"} and plain[:1] in {"│", "|"}:
         return f"\x1b[2m{plain[:1]}{_ANSI_RESET}{plain[1:]}"
     if style == "step-on":
-        return f"\x1b[1m{plain}{_ANSI_RESET}"
+        return f"{_TEAL}\x1b[1m{plain}{_ANSI_RESET}"
     return f"\x1b[2m{plain}{_ANSI_RESET}"
 
 
@@ -356,15 +371,28 @@ def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tu
     return found
 
 
-def _cell_sgr(x: int, y: int, phase: int, glints: dict[tuple[int, int], int], hot_ok: bool) -> str:
+def _wordmark_color(letter_index: int) -> str:
+    r, g, b = _WORDMARK_HUES[letter_index % len(_WORDMARK_HUES)]
+    return f"\x1b[38;2;{r};{g};{b}m"
+
+
+def _cell_sgr(
+    x: int,
+    y: int,
+    phase: int,
+    glints: dict[tuple[int, int], int],
+    hot_ok: bool,
+    letter_index: int = 0,
+) -> str:
     gi = glints.get((x, y))
+    color = _wordmark_color(letter_index)
     if hot_ok and gi is not None and (gi + phase) % 8 == 0:
-        return "\x1b[1;7m"
+        return f"\x1b[1;7m{color}"
     if (x * 3 + y * 5) % 4 == 0:
-        return "\x1b[2m"
+        return f"\x1b[2m{color}"
     if (x * 3 + y * 5) % 4 == 3:
-        return "\x1b[1m"
-    return ""
+        return f"\x1b[1m{color}"
+    return color
 
 
 def render_wordmark_lines(
@@ -388,6 +416,8 @@ def render_wordmark_lines(
     hot_ok = ansi and frac >= 1
     lines: list[str] = []
     width = len(grid[0])
+    stride = 7 + gap if gap else 7
+    n_letters = max(1, len(letters))
     for y in range(0, 10, 2):
         parts: list[str] = []
         dirty = False
@@ -410,8 +440,12 @@ def render_wordmark_lines(
                 ch = "▄"
                 sx, sy = x, y + 1
             if ansi:
+                letter_index = min(sx // stride, n_letters - 1) if stride else 0
                 stray_only = (sx, sy) in strays and (sx, sy) not in lit
-                sgr = "\x1b[2m" if stray_only else _cell_sgr(sx, sy, phase, glints, hot_ok)
+                if stray_only:
+                    sgr = "\x1b[2m"
+                else:
+                    sgr = _cell_sgr(sx, sy, phase, glints, hot_ok, letter_index)
                 if sgr:
                     parts.append(sgr)
                     dirty = True
@@ -477,17 +511,38 @@ def _option_parts(option: str) -> tuple[str, str]:
     return option, ""
 
 
+def _health_symbol(value: str) -> str:
+    return "■" if value.strip().lower().startswith("ok") else "□"
+
+
 def _context_pairs(context: Sequence[str] | None) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     for line in context or []:
+        stripped = line.strip()
+        if stripped and stripped[0] in _STATUS_SYMBOLS:
+            pairs.append((stripped[0], stripped[1:].strip()))
+            continue
         if line.startswith("models:") and " — banner " in line:
             models, banner = line.split(" — banner ", 1)
-            pairs.append(("models", models.split(":", 1)[1].strip()))
-            pairs.append(("banner", banner.strip()))
+            pairs.append(("▦", models.split(":", 1)[1].strip()))
+            pairs.append(("▥", banner.strip()))
             continue
         if ":" in line:
             key, val = line.split(":", 1)
-            pairs.append((key.strip(), val.strip()))
+            key = key.strip()
+            val = val.strip()
+            if key == "models":
+                pairs.append(("▦", val))
+            elif key == "banner":
+                pairs.append(("▥", val))
+            elif key == "health":
+                pairs.append((_health_symbol(val), val))
+            elif key == "control":
+                pairs.append(("▤", val))
+            elif key:
+                pairs.append(("□", val))
+            elif val:
+                pairs.append(("", val))
         elif line.strip():
             pairs.append(("", line.strip()))
     return pairs
@@ -495,8 +550,8 @@ def _context_pairs(context: Sequence[str] | None) -> list[tuple[str, str]]:
 
 def _mark(index: int, selected: int, checked: set[int] | None) -> str:
     if checked is not None:
-        return "[x] " if index in checked else "[ ] "
-    return "✓   " if index == selected else "○   "
+        return "■ " if index in checked else "□ "
+    return "■   " if index == selected else "□   "
 
 
 def _emit_items(
@@ -556,10 +611,13 @@ def _panel_lines(
     if pairs:
         if spaced:
             lines.append(_paint(_fit("│", panel_w), "rail", ansi))
-        lines.append(_paint(_fit("◇  STATUS", panel_w), "step-off", ansi))
-        for key, val in pairs:
-            key_show = (key or "·")[:8]
-            lines.append(_paint(_fit(f"│  {key_show:<8}  {val}", panel_w), "kv", ansi))
+        lines.append(_paint(_fit("■  STATUS", panel_w), "step-off", ansi))
+        for symbol, val in pairs:
+            lead = symbol if symbol in _STATUS_SYMBOLS else "□"
+            if lead:
+                lines.append(_paint(_fit(f"│  {lead}  {val}", panel_w), "kv", ansi))
+            else:
+                lines.append(_paint(_fit(f"│  {val}", panel_w), "kv", ansi))
 
     usable = [group for group in groups or [] if 0 <= group[1] < group[2] <= count]
     if usable:
@@ -568,7 +626,7 @@ def _panel_lines(
         covered: set[int] = set()
         for name, start, end in usable:
             active = start <= selected < end
-            symbol = "◆" if active else "◇"
+            symbol = "■" if active else "□"
             style = "step-on" if active else "step-off"
             lines.append(_paint(_fit(f"{symbol}  {name.upper()}", panel_w), style, ansi))
             _emit_items(
@@ -586,7 +644,7 @@ def _panel_lines(
     else:
         if spaced and lines:
             lines.append(_paint(_fit("│", panel_w), "rail", ansi))
-        lines.append(_paint(_fit(f"◆  {title}", panel_w), "step-on", ansi))
+        lines.append(_paint(_fit(f"■  {title}", panel_w), "step-on", ansi))
         if roomy:
             lines.append(_paint(_fit("│", panel_w), "rail", ansi))
         if count:
@@ -1018,7 +1076,7 @@ def _write_info_frame(
     panel_w = max(36, min(cols - 2, max(62, min(longest + 4, cols - 2))))
     lines = [
         _paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi),
-        _paint(_fit(f"◆  {title}", panel_w), "step-on", ansi),
+        _paint(_fit(f"■  {title}", panel_w), "step-on", ansi),
     ]
     for entry in body or ["(empty)"]:
         lines.append(_paint(_fit("│  " + entry.rstrip(), panel_w, truncate=False), "kv", ansi))

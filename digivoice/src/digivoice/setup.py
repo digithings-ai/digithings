@@ -1,7 +1,7 @@
 """Interactive `digivoice setup` wizard plus the non-interactive agent path.
 
 The wizard walks every VoiceSettings field grouped into Models / Features /
-Hotkeys (docs) / Hardware recommendations / Review & save / Doctor / Quit, per
+Hotkeys (docs) / Review & save / Doctor / Quit, per
 `digivoice/mocks/cli-setup-wizard.md`. Agents and CI drive the same content
 without a TTY via `digivoice setup --print` (or
 `DIGIVOICE_SETUP_NONINTERACTIVE=1`).
@@ -48,7 +48,6 @@ SETUP_MENU = (
     "Post-process (rewrite + auto-route)",
     "Features (paste, banner, detection)",
     "Hotkeys (docs)",
-    "Hardware recommendations (#4939 hook)",
     "Review & save",
     "Doctor (run health checks)",
     "Quit",
@@ -96,23 +95,37 @@ FEATURE_FIELDS = (
 
 
 def recommend_models(chip: str | None = None, ram_gb: float | None = None) -> dict[str, Any]:
-    """Placeholder hardware-aware tier list for epic #4939 / CHR-853.
+    """Tiered local STT model list with human-readable best-for roles.
 
-    Returns a short static list plus a pointer; the full catalog lives in
-    that epic and is deliberately not rebuilt here.
+    Static data (no weight downloads); the full hardware-aware catalog lives
+    in epic #4939 / CHR-853.
     """
     _ = (chip, ram_gb)
     return {
         "tiers": [
             {
+                "tier": "fastest",
+                "model": "ggml-tiny.en",
+                "note": "Smallest footprint; snappiest on low-power machines.",
+                "best_for": "lowest latency / low-power",
+            },
+            {
                 "tier": "default",
                 "model": "ggml-base.en",
                 "note": "Snappy push-to-talk default; ships as ggml-base.en.bin.",
+                "best_for": "everyday dictation (default)",
             },
             {
                 "tier": "larger",
                 "model": "ggml-small.en",
                 "note": "More accurate, slower; place ggml-small.en.bin under models/.",
+                "best_for": "higher accuracy when you can wait",
+            },
+            {
+                "tier": "careful",
+                "model": "ggml-medium.en",
+                "note": "Heaviest local tier; only when accuracy matters most.",
+                "best_for": "careful / tougher audio",
             },
         ],
         "pointer": HARDWARE_EPIC_POINTER,
@@ -166,11 +179,11 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         lines.append(f"  {name}: {doc}")
     lines += [
         "",
-        "— Hardware recommendations (stub for #4939) —",
+        "— Models (best for) —",
         f"  {HARDWARE_EPIC_POINTER}",
     ]
     for tier in recommend_models()["tiers"]:
-        lines.append(f"  {tier['tier']}: {tier['model']} — {tier['note']}")
+        lines.append(f"  {tier['model']} — best for: {tier.get('best_for', tier['note'])}")
     lines += [
         "",
         "Drive without a TTY: `digivoice setup --print` (or "
@@ -281,6 +294,16 @@ def _edit_models(
         if picked is None or picked == len(options) - 1:
             return
         if picked == 0:
+            tiers = recommend_models()["tiers"]
+            labels = [f"{t['model']} — best for: {t.get('best_for', t['note'])}" for t in tiers] + [
+                "Other… (free text)"
+            ]
+            sel = choose("stt_model — pick a tier", labels, stdin, stdout)
+            if sel is None:
+                continue
+            if sel < len(tiers):
+                working["stt_model"] = tiers[sel]["model"]
+                continue
             value = _prompt_text("stt_model", working["stt_model"], stdin, stdout)
             if value:
                 working["stt_model"] = value
@@ -472,24 +495,6 @@ def _show_hotkeys(stdout: TextIO | None = None, stdin: TextIO | None = None) -> 
     _pause(stdin, stdout)
 
 
-def _show_hardware(stdout: TextIO | None = None, stdin: TextIO | None = None) -> None:
-    stdout = stdout or sys.stdout
-    stdin = stdin or sys.stdin
-    body = [f"  {HARDWARE_EPIC_POINTER}"]
-    for tier in recommend_models()["tiers"]:
-        body.append(f"  {tier['tier']}: {tier['model']} — {tier['note']}")
-    if _is_tty(stdin):
-        _write_info_frame(stdout, "— Hardware recommendations (stub for #4939) —", body)
-        stdout.flush()
-        _pause(stdin, stdout)
-        return
-    stdout.write("\n— Hardware recommendations (stub for #4939) —\n")
-    for line in body:
-        stdout.write(line + "\n")
-    stdout.flush()
-    _pause(stdin, stdout)
-
-
 def run_interactive_setup(
     paths: VoicePaths,
     stdin: TextIO | None = None,
@@ -554,8 +559,6 @@ def run_interactive_setup(
                 dirty = dirty or json.dumps(working, sort_keys=True) != before
             elif section.startswith("Hotkeys"):
                 _show_hotkeys(stdout, stdin)
-            elif section.startswith("Hardware"):
-                _show_hardware(stdout, stdin)
             elif section.startswith("Review"):
                 try:
                     preview = VoiceSettings.model_validate(working)

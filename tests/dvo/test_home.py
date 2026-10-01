@@ -27,9 +27,9 @@ def test_bare_non_tty_prints_home_overview(tmp_path: Path) -> None:
     assert "DIGIVOICE" in result.stdout
     assert "— Context —" in result.stdout
     assert "— Actions —" in result.stdout
-    assert "models:" in result.stdout
+    assert "▦" in result.stdout
     assert "banner" in result.stdout
-    assert "health:" in result.stdout
+    assert "■" in result.stdout or "□" in result.stdout
     for item in HOME_MENU:
         assert item.split(" (")[0] in result.stdout
     assert "Reload" in result.stdout
@@ -56,8 +56,6 @@ def test_home_is_app_actions_with_setup_as_submenu() -> None:
         "Settings",
         "History",
         "Reload",
-        "Update",
-        "Uninstall",
         "Setup",
         "Quit",
     ]
