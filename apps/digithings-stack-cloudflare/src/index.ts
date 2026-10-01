@@ -103,7 +103,7 @@ export class DigiStackContainer extends Container {
     DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
     DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
     DIGIQUANT_URL: env.DIGIQUANT_URL ?? "",
-    DIGISMITH_URL: env.DIGISMITH_URL ?? "",
+    DIGITRACE_URL: env.DIGITRACE_URL ?? "",
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
@@ -379,7 +379,7 @@ export interface Env {
   DIGIVAULT_URL?: string;
   DIGISEARCH_URL?: string;
   DIGIQUANT_URL?: string;
-  DIGISMITH_URL?: string;
+  DIGITRACE_URL?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
   CHROMA_PATH?: string;

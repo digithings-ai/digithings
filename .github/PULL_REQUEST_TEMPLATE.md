@@ -17,7 +17,7 @@ Fixes #
 - [ ] digigraph
 - [ ] digiquant
 - [ ] digisearch
-- [ ] digismith
+- [ ] digitrace
 - [ ] digiclaw
 - [ ] digibase
 - [ ] digikey

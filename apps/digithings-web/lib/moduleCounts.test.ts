@@ -24,7 +24,7 @@ const SPEC_SOURCES: Record<string, string> = {
   digisearch: "digisearch",
   digichat: "digichat",
   digikey: "digikey",
-  digismith: "digismith",
+  digitrace: "digitrace",
   digivault: "digivault",
 };
 
@@ -43,7 +43,7 @@ const VERSION_SOURCES: Record<string, string> = {
   digisearch: "digisearch/pyproject.toml",
   digichat: "apps/digichat/package.json",
   digikey: "digikey/pyproject.toml",
-  digismith: "digismith/pyproject.toml",
+  digitrace: "digitrace/pyproject.toml",
   digiclaw: "digiclaw/pyproject.toml",
   digibase: "digibase/pyproject.toml",
   digivault: "digivault/pyproject.toml",
@@ -93,7 +93,7 @@ describe("module-counts.json", () => {
 
   it("labels the two numbers a module does publish", () => {
     expect(moduleCountLabel("digiquant")).toBe("22 endpoints · 127 mcp tools");
-    expect(moduleCountLabel("digismith")).toBe("3 endpoints");
+    expect(moduleCountLabel("digitrace")).toBe("3 endpoints");
   });
 
   it("matches the version each module declares for itself", () => {

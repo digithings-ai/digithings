@@ -46,7 +46,7 @@ RUNTIME_ROOTS: tuple[str, ...] = (
     "digibase/src",
     "digisearch/src",
     "digikey/src",
-    "digismith/src",
+    "digitrace/src",
     "digiclaw/src",
     "digivault/src",
     ".github/workflows",

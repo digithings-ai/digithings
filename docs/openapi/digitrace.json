@@ -1,7 +1,7 @@
 {
   "components": {
     "schemas": {
-      "SmithStatus": {
+      "TraceStatus": {
         "description": "Public status for GET /v1/status.",
         "properties": {
           "langsmith_host": {
@@ -39,7 +39,7 @@
             "type": "boolean"
           },
           "version": {
-            "description": "digismith package version",
+            "description": "digitrace package version",
             "title": "Version",
             "type": "string"
           }
@@ -49,14 +49,14 @@
           "tracing_configured",
           "langsmith_sdk_installed"
         ],
-        "title": "SmithStatus",
+        "title": "TraceStatus",
         "type": "object"
       }
     }
   },
   "info": {
-    "description": "LangSmith-aligned observability control plane for digithings. HTTP surface is intentionally thin (health + secret-free status). Interactive docs: `/docs` (Swagger) and `/redoc`.",
-    "title": "digismith",
+    "description": "Backend-neutral observability control plane for digithings. HTTP surface is intentionally thin (health + secret-free status). Interactive docs: `/docs` (Swagger) and `/redoc`.",
+    "title": "digitrace",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
@@ -121,7 +121,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SmithStatus"
+                  "$ref": "#/components/schemas/TraceStatus"
                 }
               }
             },

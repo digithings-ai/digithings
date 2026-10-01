@@ -77,7 +77,7 @@ const DigiKey = (p: P) => (
   </Svg>
 );
 // observability — a trace waterfall, the lead span filled
-const DigiSmith = (p: P) => (
+const DigiTrace = (p: P) => (
   <Svg {...p}>
     <rect x="-13" y="-11" width="15" height="5" rx="2.5" fill="currentColor" stroke="none" />
     <rect
@@ -168,7 +168,7 @@ const execution = (p: P) => (
 
 export const emblems: Record<string, (p: P) => React.ReactNode> = {
   digigraph: DigiGraph, digiquant: DigiQuant, digisearch: DigiSearch, digichat: DigiChat,
-  digikey: DigiKey, digismith: DigiSmith, digiclaw: DigiClaw, digibase: DigiBase,
+  digikey: DigiKey, digitrace: DigiTrace, digiclaw: DigiClaw, digibase: DigiBase,
   digivault: DigiVault,
   digistore: DigiStore, digilink: DigiLink,
   research: research, portfolio: portfolio, execution: execution,

@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 from tests.conftest import assert_prom_metrics_labels
 
 # Always-on HTTP services with digibase CORS + /healthz + /metrics.
-CORS_SERVICES = ("digigraph", "digiquant", "digisearch", "digismith", "digikey")
+CORS_SERVICES = ("digigraph", "digiquant", "digisearch", "digitrace", "digikey")
 
 # Optional Compose profiles — not parametrized here; see per-component suites.
 OPTIONAL_PROFILE_SKIP = (
@@ -87,8 +87,8 @@ def _load_app(service: str) -> Any:
     return mod.app
 
 
-HEALTHZ_SERVICES = ("digigraph", "digisearch", "digismith", "digikey", "digiquant")
-METRICS_SERVICES = ("digigraph", "digisearch", "digismith", "digikey", "digiquant")
+HEALTHZ_SERVICES = ("digigraph", "digisearch", "digitrace", "digikey", "digiquant")
+METRICS_SERVICES = ("digigraph", "digisearch", "digitrace", "digikey", "digiquant")
 
 
 @pytest.mark.parametrize("service", HEALTHZ_SERVICES)

@@ -25,10 +25,10 @@ COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
-# digismith (sibling package; tracing helpers + LangSmith SDK)
-COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
-COPY digismith/src ./digismith/src
-RUN uv pip install --system -e "./digismith[langsmith]"
+# digitrace (sibling package; tracing helpers + LangSmith SDK)
+COPY digitrace/pyproject.toml digitrace/ARCHITECTURE.md ./digitrace/
+COPY digitrace/src ./digitrace/src
+RUN uv pip install --system -e "./digitrace[tracing]"
 
 # digillm (sibling package; LLM client/provider abstraction — digigraph runtime dep)
 COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/

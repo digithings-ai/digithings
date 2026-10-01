@@ -2,7 +2,7 @@
 
 When the LangSmith SDK is installed and ``LANGSMITH_API_KEY`` is set,
 ``traceable(name)`` wraps the target function with ``langsmith.traceable``
-and attaches a :class:`~digismith.redaction.PiiRedactor` via the SDK's native
+and attaches a :class:`~digitrace.redaction.PiiRedactor` via the SDK's native
 ``process_inputs`` / ``process_outputs`` hooks so span payloads are scrubbed
 before submission. Otherwise the decorator returns the original function
 unmodified (zero per-call overhead).
@@ -15,7 +15,7 @@ import os
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from digismith.redaction import PiiRedactor, default_redactor
+from digitrace.redaction import PiiRedactor, default_redactor
 
 logger = logging.getLogger(__name__)
 

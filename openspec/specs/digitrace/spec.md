@@ -1,7 +1,7 @@
-# digismith — Spec
+# digitrace — Spec
 
 **Port:** 8003  
-**Role:** LangSmith-aligned observability library and operator status API.
+**Role:** Backend-neutral observability library and operator status API (LangSmith backend in Phase 0).
 
 ## Capabilities
 

@@ -1,6 +1,8 @@
-"""digismith HTTP API: health and non-sensitive tracing status."""
+"""digitrace HTTP API: health and non-sensitive tracing status."""
 
 from __future__ import annotations
+
+import os
 
 from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
@@ -9,18 +11,25 @@ from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from fastapi import FastAPI, Request
 
-from digismith import __version__
-from digismith.config import (
-    SmithStatus,
+from digitrace import __version__
+from digitrace.config import (
+    TraceStatus,
     langsmith_host_sanitized,
     langsmith_sdk_importable,
     tracing_enabled,
 )
 
+# Phase 0 compat (#4929): honor the pre-rename CORS override for one release.
+# Precedence: DIGITRACE_CORS_ORIGINS → DIGISMITH_CORS_ORIGINS → DIGI_* globals.
+if not (os.environ.get("DIGITRACE_CORS_ORIGINS") or "").strip():
+    _legacy_cors = (os.environ.get("DIGISMITH_CORS_ORIGINS") or "").strip()
+    if _legacy_cors:
+        os.environ.setdefault("DIGITRACE_CORS_ORIGINS", _legacy_cors)
+
 app = FastAPI(
-    title="digismith",
+    title="digitrace",
     description=(
-        "LangSmith-aligned observability control plane for digithings. "
+        "Backend-neutral observability control plane for digithings. "
         "HTTP surface is intentionally thin (health + secret-free status). "
         "Interactive docs: `/docs` (Swagger) and `/redoc`."
     ),
@@ -30,8 +39,8 @@ app = FastAPI(
         {"name": "status", "description": "Non-sensitive tracing configuration status."},
     ],
 )
-install_metrics(app, service="digismith", version=__version__)
-install_cors(app, service="digismith")
+install_metrics(app, service="digitrace", version=__version__)
+install_cors(app, service="digitrace")
 install_request_id_middleware(app)
 install_request_id_logging()
 
@@ -52,9 +61,9 @@ def healthz() -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.get("/v1/status", response_model=SmithStatus, tags=["status"], summary="Tracing status")
-def status(request: Request) -> SmithStatus:
-    return SmithStatus(
+@app.get("/v1/status", response_model=TraceStatus, tags=["status"], summary="Tracing status")
+def status(request: Request) -> TraceStatus:
+    return TraceStatus(
         version=__version__,
         tracing_configured=tracing_enabled(),
         langsmith_sdk_installed=langsmith_sdk_importable(),
@@ -63,5 +72,5 @@ def status(request: Request) -> SmithStatus:
     )
 
 
-register_fastapi_error_handlers(app, service="digismith")
-setup_otel_fastapi(app, service_name="digismith", service_version=__version__)
+register_fastapi_error_handlers(app, service="digitrace")
+setup_otel_fastapi(app, service_name="digitrace", service_version=__version__)

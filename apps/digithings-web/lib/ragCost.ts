@@ -205,7 +205,7 @@ export function ragCost(
     add("Embed corpus locally", 0, false);
     add("Vectors on your Postgres", 0, true);
     add("Local model answers", 0, true);
-    add("digismith traces", 0, true);
+    add("digitrace traces", 0, true);
     return { setup, monthly, lines };
   }
 
@@ -232,7 +232,7 @@ export function ragCost(
   add("Model answers", (chatIn * inPerM + chatOut * outPerM) / 1e6, true);
 
   add(
-    state === "provider" ? "LangSmith (1 seat + traces)" : "digismith traces",
+    state === "provider" ? "LangSmith (1 seat + traces)" : "digitrace traces",
     state === "provider" ? langsmithBill(queriesPerMonth, pricing) : 0,
     true,
   );

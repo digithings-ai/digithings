@@ -58,9 +58,9 @@ COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
-COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
-COPY digismith/src ./digismith/src
-RUN uv pip install --system -e "./digismith[langsmith]"
+COPY digitrace/pyproject.toml digitrace/ARCHITECTURE.md ./digitrace/
+COPY digitrace/src ./digitrace/src
+RUN uv pip install --system -e "./digitrace[tracing]"
 
 COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
 COPY digillm/src ./digillm/src

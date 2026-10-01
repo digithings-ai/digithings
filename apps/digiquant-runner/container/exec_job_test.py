@@ -371,7 +371,7 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     for needle in (
         "COPY digigraph ./digigraph",
         "COPY digillm ./digillm",
-        "COPY digismith ./digismith",
+        "COPY digitrace ./digitrace",
         "COPY config/byok-providers.json",
         "COPY .github/digiquant-pipeline.yml",
         "COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml",

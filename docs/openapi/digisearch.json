@@ -2919,7 +2919,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. Pair with digismith's ``/v1/status``\nfor richer diagnostics.",
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. Pair with digitrace's ``/v1/status``\nfor richer diagnostics.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {

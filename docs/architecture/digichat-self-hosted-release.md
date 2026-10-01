@@ -86,7 +86,7 @@ Browser / parent site iframe
 | LiteLLM (+ provider keys) | Via digillm |
 | digivault | Vault tool behind digigraph (when grounded chat matters) |
 
-Optional: digisearch, digiquant, digismith, Redis (LiteLLM cache) — only if the deploy needs those tools / health surfaces.
+Optional: digisearch, digiquant, digitrace, Redis (LiteLLM cache) — only if the deploy needs those tools / health surfaces.
 
 **digithings operator path today:** Compose profiles `digichat` + `digivault` (+ `litellm-cache` as needed) and Cloudflare Tunnel — see [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md). Public marketing URL stays `digithings.ai/chat` (Pages shell + iframe); digichat Node may be `digichat.digithings.ai` (Tunnel). digithings has **no Azure**.
 

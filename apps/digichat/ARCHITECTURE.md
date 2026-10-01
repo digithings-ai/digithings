@@ -121,7 +121,7 @@ composer. No back-end call needed; parsing is client-side.
 
 **Ecosystem health badges** (`src/components/connections-sheet.tsx`): Side sheet that
 calls `GET /api/ecosystem/config` and `GET /api/health`, then renders color-coded
-badges (emerald = ok, amber = not ok) for digraph / digiquant / digismith / digisearch
+badges (emerald = ok, amber = not ok) for digraph / digiquant / digitrace / digisearch
 / database. Endpoint overrides are stored in an httpOnly cookie
 (`digichat-endpoints`, 180-day `maxAge`).
 
@@ -1391,7 +1391,7 @@ only when no standard activity parts exist.
 
 Session correlation: `X-Session-Id` (conversation UUID), `X-Request-ID` (per-request
 UUID), `X-digichat-Tenant`, `X-Digi-Caller: digichat` are forwarded to digigraph and
-flow through to digismith tracing spans.
+flow through to digitrace tracing spans.
 
 ### digikey (token exchange)
 
@@ -1409,7 +1409,7 @@ digigraph calls digisearch internally during workflow execution. The health badg
 in the Ecosystem sheet reflects connectivity only.
 
 digigraph and digiquant get the same `DIGICHAT_ENABLED_SERVICES` treatment (#1346):
-unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digismithUrl` in
+unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digitraceUrl` in
 `EcosystemEndpoints` always have a default value (`ecosystem.ts`'s `DEFAULTS`), so
 the health route checks `isServiceCapabilityEnabled(...)` directly rather than URL
 presence — a deployment serving only `external-relay` embed tenants (no digigraph
@@ -1426,10 +1426,10 @@ message stream. The quant strip parses these client-side. With Postgres enabled,
 the client can persist runs by calling `POST /api/conversations/[id]/quant-runs`
 using the extracted `run_id` and metrics.
 
-### digismith status endpoint
+### digitrace status endpoint
 
-`GET /api/health` probes `{DIGISMITH_INTERNAL_URL}/health` when `digismith` is in
-`DIGICHAT_ENABLED_SERVICES`. digismith is not called from the chat flow; tracing is
+`GET /api/health` probes `{DIGITRACE_INTERNAL_URL}/health` when `digitrace` is in
+`DIGICHAT_ENABLED_SERVICES`. digitrace is not called from the chat flow; tracing is
 handled by digigraph emitting `span` trace events in the SSE stream. The health
 badge confirms the tracing service is reachable.
 
@@ -1620,9 +1620,9 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIKEY_PUBLIC_KEY_PEM` | One or more concatenated SPKI PEMs for offline license verify (rotation list) | Licensed deploys |
 | `DIGIKEY_ISSUER` | Expected license `iss` (default `http://127.0.0.1:8005`) | Licensed deploys |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL (health probe) | Recommended |
-| `DIGISMITH_INTERNAL_URL` | digismith base URL (health probe) | Recommended |
+| `DIGITRACE_INTERNAL_URL` | digitrace base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL (health probe) | Optional |
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs; unset defaults to all four (`digigraph,digisearch,digiquant,digismith`), explicitly set to `""` to enable none | Optional |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs; unset defaults to all four (`digigraph,digisearch,digiquant,digitrace`), explicitly set to `""` to enable none | Optional |
 | `DIGICHAT_DATABASE_URL` | PostgreSQL connection URL | For server persistence |
 | `DIGICHAT_AUTO_MIGRATE` | Run Drizzle migrations on startup (`1` = on) | Docker recommended |
 | `DIGICHAT_BOOTSTRAP_API_KEY` | Static machine API key (env bootstrap) | For machine clients |
@@ -1777,8 +1777,8 @@ the response headers (`X-Request-Id`). The browser-side `ChatPanel` should read 
 response header and attach it to subsequent `PUT /api/conversations/[id]` calls so
 that the stored conversation has a trace of every `X-Request-ID` that produced each
 assistant turn. This would enable linking a stored conversation message to a specific
-digismith trace span for post-hoc debugging.
+digitrace trace span for post-hoc debugging.
 
 Additionally, the BFF should log `X-Request-ID` at the start of every Route Handler
 invocation (a one-line addition to each route file) so that structured server logs can
-be correlated with digismith spans without relying on the client to preserve the ID.
+be correlated with digitrace spans without relying on the client to preserve the ID.

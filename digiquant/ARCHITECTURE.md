@@ -1788,7 +1788,7 @@ The `_normalize_symbols()` helper in `server.py` normalizes symbols in `v1_orche
 
 `DigiAuthMiddleware` from `digikey.integrations.service_middleware` is mounted as an ASGI middleware before route handlers. It validates JWT Bearer tokens against the digikey JWKS endpoint (`DIGIKEY_JWKS_URL`), checks issuer (`DIGIKEY_ISSUER`), audience (`DIGIKEY_AUDIENCE`), and required scopes via `digiquant_path_scopes()`. When digikey is not available or misconfigured, the middleware behavior depends on the digikey package's failure mode.
 
-### digismith Tracing
+### digitrace Tracing
 
 OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. digiquant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
 
@@ -2029,7 +2029,7 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 - `digiquant_job_queue_size` (gauge) — tracks in-flight async jobs
 - `digiquant_rate_limit_rejections_total` (counter, labeled by `path`) — identifies rate limit pressure
 
-These metrics complement digismith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
+These metrics complement digitrace's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
 
 ## Observability
 

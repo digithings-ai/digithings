@@ -6,7 +6,7 @@ import { Terminal, type TermLine } from "@digithings/ui";
  *
  * A scripted playback of `make up` bringing the digi modules online. Every line
  * is checkable against the tree: `make up` really is `docker compose up -d`
- * (Makefile:9-10), and `digi-digikey` / `digi-digismith` / `digi-digigraph` /
+ * (Makefile:9-10), and `digi-digikey` / `digi-digitrace` / `digi-digigraph` /
  * `digi-digiquant` / `digi-digisearch` are the compose file's real container
  * names for the five digi services that a bare `docker compose up -d` starts.
  *
@@ -35,7 +35,7 @@ const LINES: TermLine[] = [
   { kind: "out", text: "docker compose up -d" },
   { kind: "gap" },
   { kind: "ok", name: "digi-digikey", text: "started" },
-  { kind: "ok", name: "digi-digismith", text: "started" },
+  { kind: "ok", name: "digi-digitrace", text: "started" },
   { kind: "ok", name: "digi-digigraph", text: "started" },
   { kind: "ok", name: "digi-digiquant", text: "started" },
   { kind: "ok", name: "digi-digisearch", text: "started" },

@@ -60,7 +60,7 @@ Three traps to know:
 | LiteLLM | LLM router (loopback) |
 | Redis | digikey blocklist |
 
-**Not in Profile A:** digiquant, digismith HTTP, Ollama, heartbeat. Do not set
+**Not in Profile A:** digiquant, digitrace HTTP, Ollama, heartbeat. Do not set
 `DIGIQUANT_DATA_DIR` or probe digiquant from digichat
 (`DIGICHAT_ENABLED_SERVICES=digigraph`).
 
