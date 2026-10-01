@@ -20,6 +20,7 @@ SETTINGS_FILE_NAME = "settings.json"
 
 RewritePreset = Literal["email", "sms", "professional", "coding", "blog", "none"]
 RewriteRunnerKind = Literal["auto", "ollama", "llama.cpp"]
+BannerDensity = Literal["mini", "peek", "full"]
 BannerPosition = Literal[
     "top-center",
     "top-left",
@@ -101,6 +102,8 @@ class VoiceSettings(BaseModel):
     # Status overlay drawn by the Hammerspoon adapter (read from status.json). Display only.
     live_banner: bool = True
     banner_position: BannerPosition = "top-center"
+    # Banner density: mini (grid only) | peek (short glimpse, auto-hides; default) | full (stays).
+    banner_density: BannerDensity = "peek"
     # False renders the dot-matrix icon as a still frame instead of animating it.
     banner_animations: bool = True
 
@@ -230,6 +233,7 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  paste_on_stop:          {settings.paste_on_stop}",
         f"  live_banner:            {settings.live_banner}",
         f"  banner_position:        {settings.banner_position}",
+        f"  banner_density:         {settings.banner_density}",
         f"  banner_animations:      {settings.banner_animations}",
         "",
         "paths",

@@ -26,10 +26,15 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 BITS = 16
 # Caps keep a stuck microphone from hanging the CLI. The hold cap is the
-# push-to-talk length; toggle gets room for a full sentence (or until stop).
+# push-to-talk length. Toggle has no UX time limit (long dictation must work):
+# the safety cap below only bounds a stuck recorder, and ~10s of silence pauses
+# the take (sox `silence` effect) instead of force-finishing mid-speech.
 DEFAULT_HOLD_SECONDS = 15
-DEFAULT_TOGGLE_SECONDS = 60
+DEFAULT_TOGGLE_SECONDS = 1800
 DEFAULT_SECONDS = 30
+# Silence that pauses a toggle take (sox path): the recorder ends itself, the
+# wav is kept, and dictation proceeds with what was captured.
+SILENCE_PAUSE_SECONDS = 10.0
 # Slack past the cap so the recorder can close the file before we call it hung.
 _TIMEOUT_SLACK = 10.0
 # How often to poll the stop-file / child exit while recording.
@@ -68,8 +73,15 @@ def capture_argv(
     platform: str,
     *,
     unbounded: bool = False,
+    silence_pause: float | None = SILENCE_PAUSE_SECONDS,
 ) -> list[str]:
-    """Build recorder argv. `unbounded` omits the time cap for early-stop toggle."""
+    """Build recorder argv. `unbounded` omits the time cap for early-stop toggle.
+
+    `silence_pause` (sox only) appends a `silence` effect so the recorder ends
+    itself after N seconds of near-silence: a pause, not a mid-speech cut.
+    Leading silence is trimmed. ffmpeg has no self-stop on silence, so it keeps
+    the stop-file / signal / safety-cap path.
+    """
     if tool == "sox":
         argv = [
             binary,
@@ -85,6 +97,8 @@ def capture_argv(
         ]
         if not unbounded:
             argv.extend(["rec", "trim", "0", str(seconds)])
+        elif silence_pause is not None and silence_pause > 0:
+            argv.extend(["silence", "1", "0.1", "1%", "1", str(silence_pause), "1%"])
         return argv
     if tool == "ffmpeg":
         argv = [
@@ -189,13 +203,18 @@ def _record_early_stop(
     platform: str,
     stop_file: Path | None,
     cancel: CancelToken | None = None,
+    silence_pause: float = SILENCE_PAUSE_SECONDS,
 ) -> CaptureResult:
-    """Record until stop-file / SIGINT / SIGTERM, or the safety cap.
+    """Record until stop-file / SIGINT / SIGTERM, silence pause, or the safety cap.
 
     A cancel request ends the recorder and deletes the wav (CancelledError): the
     take was discarded, so nothing is kept for transcribe, paste, or history.
+    When the recorder exits by itself well before the cap (sox silence pause),
+    the take counts as stopped early: the wav is kept and dictation proceeds
+    with what was captured.
     """
-    argv = capture_argv(tool, binary, wav, limit, platform, unbounded=True)
+    silence = silence_pause if tool == "sox" else None
+    argv = capture_argv(tool, binary, wav, limit, platform, unbounded=True, silence_pause=silence)
     if stop_file is not None:
         stop_file.parent.mkdir(parents=True, exist_ok=True)
         _clear_stop_file(stop_file)
@@ -264,6 +283,13 @@ def _record_early_stop(
     if not wav.is_file():
         reason = error_tail("".join(stderr_chunks)) or f"exit {code}"
         raise CaptureError(f"{tool} could not record the microphone ({reason})")
+    self_stopped = not stopped_early and code == 0
+    if self_stopped:
+        # The recorder ended itself before any stop was requested: on the sox
+        # path that is the silence pause. Keep the wav, process what we got.
+        elapsed_self = time.monotonic() - started
+        if elapsed_self < limit:
+            stopped_early = True
     # A non-zero exit with a wav on disk after an intentional early stop is OK.
     if code not in (0, None) and not stopped_early:
         # Some recorders exit non-zero when killed at the safety cap edge too.
