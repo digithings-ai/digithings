@@ -258,6 +258,8 @@ def test_format_ticket_detail_includes_internal_notes():
     assert "[internal]" in out
     assert "Articles (2)" in out
     assert "internal note(s) omitted" not in out
+    assert "***" not in out
+    assert "jane.doe@example.test" in out
 
 
 def test_format_ticket_line_shows_customer_email_in_full():
