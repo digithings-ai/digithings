@@ -4,11 +4,12 @@
  * Guards the /services + /about + /team refresh: list content renders through
  * the shared SecondaryCard atom on the kit Card + Reveal (modest cards, subtle
  * motion only), page copy is unchanged in meaning, and no out-of-scope surface
- * (landing QuantSection, OpenSourceLive, DigiVoice) is touched.
+ * (landing QuantSection, OpenSourceLive, digivoice) is touched.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { secondaryDelay } from "./SecondaryCard";
 
 function src(rel: string): string {
   return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -33,7 +34,11 @@ describe("SecondaryCard atom", () => {
 
   it("caps the entrance stagger so grids stay calm", () => {
     expect(atom).toContain("secondaryDelay");
-    expect(atom).toContain("0.2");
+    expect(secondaryDelay(0)).toBe(0);
+    expect(secondaryDelay(2)).toBeCloseTo(0.1);
+    expect(secondaryDelay(4)).toBe(0.2);
+    expect(secondaryDelay(10)).toBe(0.2);
+    expect(secondaryDelay(-3)).toBe(0);
   });
 });
 
@@ -77,17 +82,13 @@ describe("secondary pages use the shared atom", () => {
   });
 
   it("leaves out-of-scope surfaces alone", () => {
+    // Strict reads (no try/catch): these paths must exist and must not adopt
+    // the atom. There is no digivoice surface under components/landing/.
     for (const rel of [
       "../components/landing/QuantSection.tsx",
       "../components/landing/OpenSourceLive.tsx",
     ]) {
-      let page: string | null = null;
-      try {
-        page = src(rel);
-      } catch {
-        page = null;
-      }
-      if (page !== null) expect(page).not.toContain("SecondaryCard");
+      expect(src(rel)).not.toContain("SecondaryCard");
     }
   });
 });
