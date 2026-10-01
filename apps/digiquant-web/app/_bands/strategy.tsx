@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChatPlayback } from "@digithings/ui";
 import { LocalLuxalgoWorkflow } from "@/components/luxalgo/local-luxalgo-workflow";
 import { Band } from "../_chrome/Band";
+import { ChartFramePlaceholder, DashboardFlowPlaceholder } from "../_placeholders";
 import {
   STRATEGY_BADGE,
   STRATEGY_HEADER,
@@ -80,11 +81,11 @@ function StepLedger({ states }: { states: StepState[] }) {
 
 function StatusLedger() {
   return (
-    <dl className="m-0 mt-3 border border-hair font-mono text-[0.7rem] leading-[1.5]">
+    <dl className="m-0 border border-hair font-mono text-[0.72rem] leading-[1.55]">
       {STRATEGY_LEDGER.map((row) => (
-        <div key={row.key} className="grid border-b border-hair last:border-b-0 sm:grid-cols-[13rem_minmax(0,1fr)]">
+        <div key={row.key} className="grid border-b border-hair last:border-b-0 sm:grid-cols-[12rem_minmax(0,1fr)]">
           <dt className="px-3 pb-0 pt-2 text-ink-mute sm:border-e sm:border-hair sm:pb-2">[ {row.key} ]</dt>
-          <dd className="m-0 px-3 pb-2 pt-0 text-ink-soft sm:pt-2">{row.value}</dd>
+          <dd className="m-0 px-3 pb-2 pt-0 font-sans text-[0.8125rem] text-ink-soft sm:pt-2">{row.value}</dd>
         </div>
       ))}
     </dl>
@@ -97,13 +98,13 @@ export function StrategyBand() {
   return (
     <Band
       id="workflow"
-      layout="split"
       status="story · in development"
       title="From a chat to a Nautilus backtest"
-      takeaway="How a strategy gets built: describe it in digichat, validate it on Nautilus, inspect the result and hand it off. The builder lives in the dashboard; this is the story of it. Not live yet."
+      takeaway="How a strategy gets built: describe it in digichat, backtest it on Nautilus, inspect the result, hand it off. The builder lives in the dashboard. This is the story of it, and it is not live yet."
     >
-      <div ref={ref}>
-        <div className="grid gap-3 md:grid-cols-[8.5rem_minmax(0,1fr)]">
+      <div ref={ref} className="flex flex-col gap-4">
+        <DashboardFlowPlaceholder />
+        <div className="grid gap-4 md:grid-cols-[8.5rem_minmax(0,1fr)]">
           <StepLedger states={states} />
           <ChatPlayback
             script={STRATEGY_SCRIPT}
@@ -114,6 +115,7 @@ export function StrategyBand() {
         </div>
         <StatusLedger />
         <LocalLuxalgoWorkflow />
+        <ChartFramePlaceholder />
       </div>
     </Band>
   );

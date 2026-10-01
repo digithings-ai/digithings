@@ -2,67 +2,64 @@ import { CtaLink, MediaFrame } from "@digithings/ui";
 import { DASHBOARD_VIDEO_POSTER, DASHBOARD_VIDEO_SRC } from "@/components/dashboard/dashboard-video";
 import { PortfolioIsland } from "@/components/live/portfolio-island";
 import { Band } from "../_chrome/Band";
+import { DashboardViewPlaceholder } from "../_placeholders";
 
-/** What the dashboard holds. Shown as a ledger on the showcase: the surfaces live in
- *  the dashboard app, not on this site. Statuses follow the product rows. */
+/** What the dashboard holds, as a ledger. The surfaces live in the dashboard app,
+ *  not on this site. */
 const DASHBOARD_SURFACES: { key: string; value: string }[] = [
-  { key: "strategy builder", value: "describe an idea in chat, backtest it on Nautilus, inspect and hand it off · in development" },
-  { key: "strategies", value: "every strategy with its backtest tearsheet, labelled in-sample and illustrative" },
-  { key: "journal", value: "decisions and notes kept next to the runs they came from" },
-  { key: "tools and integrations", value: "research data, the MCP tools and LuxAlgo, reached from inside the app" },
+  { key: "strategy builder", value: "Describe a strategy in chat, backtest it on Nautilus, inspect it, hand it off. In development." },
+  { key: "strategies", value: "Each strategy with its backtest tearsheet. In-sample and illustrative." },
+  { key: "journal", value: "Notes kept next to the runs and strategies they belong to." },
+  { key: "tools", value: "Research data, MCP tools and LuxAlgo, reached from inside the app." },
 ];
 
-/** Centred, tinted band: the dashboard recording on top (a labelled placeholder
- *  until one exists), a ledger of what the dashboard holds, and a rail down to the
- *  paper book it shows. The dashboard itself is a separate app and is not embedded
- *  here; this band demonstrates it. */
+/** The product band: the dashboard view (a labelled placeholder until a recording
+ *  or screenshot exists), what it holds, and the paper book it shows. The dashboard
+ *  is a separate app and is not embedded here. */
 export function DashboardBand() {
   return (
     <Band
       id="dashboard"
-      layout="center"
       tint
       status={DASHBOARD_VIDEO_SRC ? "recording" : "recording to come"}
       title="The dashboard is the product"
-      takeaway="One app for building strategies, keeping the journal and running the tools. This is a look at it, not the app."
+      takeaway="Build strategies, read the results and keep notes in one app. This page shows it; the tools live there."
     >
-      <div className="mx-auto flex max-w-[52rem] flex-col items-stretch">
-        <MediaFrame
-          src={DASHBOARD_VIDEO_SRC}
-          poster={DASHBOARD_VIDEO_POSTER}
-          title="dashboard walkthrough"
-          badge={DASHBOARD_VIDEO_SRC ? "Recorded walkthrough" : "Placeholder · no recording yet"}
-          placeholderLabel="recording to come"
-          caption={
-            DASHBOARD_VIDEO_SRC
-              ? "A recorded walkthrough of the dashboard."
-              : "A recorded walkthrough of the dashboard will go here once the dashboard UI rebuild is done."
-          }
-        />
+      <div className="flex flex-col gap-4">
+        {DASHBOARD_VIDEO_SRC ? (
+          <MediaFrame
+            src={DASHBOARD_VIDEO_SRC}
+            poster={DASHBOARD_VIDEO_POSTER}
+            title="dashboard walkthrough"
+            badge="Recorded walkthrough"
+            placeholderLabel="recording to come"
+            caption="A recorded walkthrough of the dashboard."
+          />
+        ) : (
+          <DashboardViewPlaceholder />
+        )}
 
-        <dl className="m-0 mt-3 border border-hair bg-surface text-left font-mono text-[0.7rem] leading-[1.5]">
+        <dl className="m-0 border border-hair bg-surface text-left font-mono text-[0.72rem] leading-[1.55]">
           {DASHBOARD_SURFACES.map((row) => (
-            <div key={row.key} className="grid border-b border-hair last:border-b-0 sm:grid-cols-[13rem_minmax(0,1fr)]">
+            <div key={row.key} className="grid border-b border-hair last:border-b-0 sm:grid-cols-[12rem_minmax(0,1fr)]">
               <dt className="px-3 pb-0 pt-2 text-ink-mute sm:border-e sm:border-hair sm:pb-2">[ {row.key} ]</dt>
-              <dd className="m-0 px-3 pb-2 pt-0 text-ink-soft sm:pt-2">{row.value}</dd>
+              <dd className="m-0 px-3 pb-2 pt-0 font-sans text-[0.8125rem] text-ink-soft sm:pt-2">{row.value}</dd>
             </div>
           ))}
         </dl>
 
-        <div className="mx-auto flex flex-col items-center font-mono text-[0.66rem] tracking-[0.06em] text-ink-mute" aria-hidden="true">
-          <span className="h-6 border-s border-hair" />
-          <span className="border border-hair bg-surface px-3 py-1">[ a slice of the paper book it shows ]</span>
-          <span className="h-6 border-s border-hair" />
-        </div>
-
         <PortfolioIsland />
 
-        <p className="m-0 mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center font-mono text-[0.72rem] leading-[1.6] text-ink-soft">
-          <span>The tools live in the dashboard. This page only shows them.</span>
-          <CtaLink href="/dashboard/" variant="ghost" className="h-auto border border-hair bg-transparent px-3 py-1.5 font-mono text-[0.72rem] text-ink no-underline hover:bg-surface-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.8125rem] text-ink-soft">
+          <CtaLink
+            href="/dashboard/"
+            variant="ghost"
+            className="hero-action h-auto border border-hair bg-transparent px-4 py-[0.7rem] font-mono text-[0.8rem] text-ink no-underline hover:bg-surface-2"
+          >
             Open the dashboard
           </CtaLink>
-        </p>
+          <span>The paper book above is a research portfolio. No real money is in it.</span>
+        </div>
       </div>
     </Band>
   );

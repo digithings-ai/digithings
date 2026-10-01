@@ -3,6 +3,7 @@ import { Badge } from "@digithings/ui/ui";
 import { ExecutionCard, StageCard } from "@/components/pipeline/StageCard";
 import { getLatestRun } from "@/lib/run-snapshot";
 import { Band } from "../_chrome/Band";
+import { ResearchRunsPlaceholder } from "../_placeholders";
 import { EXECUTION_STAGE, PIPELINE_STAGES } from "../_stages";
 
 /** The method band; the page's only pin. The frame chrome above the cards says what the data is:
@@ -16,10 +17,10 @@ export function PipelineBand() {
 
   const frame = (
     <div className="mx-6 flex flex-wrap items-center gap-x-3 gap-y-1 border border-hair px-3 py-2 font-mono text-[0.68rem] text-ink-mute">
-      <span>~/digiquant/run</span>
+      <span>run</span>
       <Badge variant="neutral">{badge}</Badge>
       <span className="text-ink-soft">
-        {snap ? "a recorded run, not live" : "no run was captured for this build; stages below are the pipeline's structure"}
+        {snap ? "a recorded run, not live" : "no run was captured for this build; the cards show the pipeline's structure"}
       </span>
       <span className="ms-auto hidden sm:inline">metadata only · captured {latest.capturedAt.slice(0, 10)}</span>
     </div>
@@ -31,10 +32,11 @@ export function PipelineBand() {
       tint
       status={snap ? "recorded" : "no recorded run"}
       title="The method, stage by stage"
-      takeaway="How every run in the dashboard is made: six stages from inputs to learning. A recorded run, not live."
+      takeaway="Every run goes through six stages, from inputs to learning, and each one leaves a record. This is a recorded run, not a live one."
     >
       <HorizontalScrollTrack
         ariaLabel="Pipeline stages"
+        className="-mx-6"
         pinTop={62}
         header={frame}
         footer={<HorizontalTrackStepper labels={labels} />}
@@ -52,6 +54,9 @@ export function PipelineBand() {
         ))}
         <ExecutionCard index={PIPELINE_STAGES.length} total={total} status={EXECUTION_STAGE.status} />
       </HorizontalScrollTrack>
+      <div className="mt-8">
+        <ResearchRunsPlaceholder />
+      </div>
     </Band>
   );
 }
