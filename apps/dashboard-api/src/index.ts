@@ -22,7 +22,7 @@
  * `POST /mcp` exposes the same routes as JSON-RPC tools (see `./mcp`).
  */
 
-import { buildManifest, grantedRoutes, parseCaller } from "./access";
+import { buildManifest, callerFor, grantedRoutes, routeVerdict } from "./access";
 import { adaptOnGet } from "./adapters";
 import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
@@ -58,9 +58,11 @@ export interface Env {
   /** Comma-separated CORS allowlist override (issue #4679); defaults cover
    * the production dashboard plus local dashboard dev servers. */
   DASHBOARD_API_ALLOWED_ORIGINS?: string;
+  /** Local dev only: caller used when a request has no identity headers, e.g. "max+12x". */
+  DASHBOARD_DEV_CALLER?: string;
 }
 
-export type ErrorCode = "bad_request" | "not_found" | "upstream_empty" | "internal";
+export type ErrorCode = "bad_request" | "forbidden" | "not_found" | "upstream_empty" | "internal";
 
 export interface Provenance {
   source: string;
@@ -72,6 +74,7 @@ export interface Provenance {
 
 const ERROR_STATUS: Record<ErrorCode, number> = {
   bad_request: 400,
+  forbidden: 403,
   not_found: 404,
   upstream_empty: 502,
   internal: 500,
@@ -192,8 +195,15 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = normalizePath(url.pathname);
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
+  if (request.method === "GET" && path !== "/access/manifest") {
+    // Same policy as the app: a governed data route is served only if the caller's manifest grants it.
+    const manifest = buildManifest(callerFor(request, env));
+    if (routeVerdict(manifest, path) === "forbidden") {
+      return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: manifest.caller.tier });
+    }
+  }
   if (request.method === "GET" && path === "/access/manifest") {
-    const manifest = buildManifest(parseCaller(request.headers));
+    const manifest = buildManifest(callerFor(request, env));
     return Response.json({
       data: { ...manifest, routes: grantedRoutes(manifest) },
       as_of: null,

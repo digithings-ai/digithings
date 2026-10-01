@@ -7,7 +7,7 @@ import app, { type Env } from "./index";
 import { MCP_TOOLS } from "./mcp";
 
 const KEY = "test-mcp-key";
-const ENV: Env = { MCP_EDGE_KEY: KEY };
+const ENV: Env = { MCP_EDGE_KEY: KEY, DASHBOARD_DEV_CALLER: "max+12x" };
 const NO_ENV: Env = {};
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
