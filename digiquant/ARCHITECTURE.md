@@ -1154,6 +1154,18 @@ trailing-window operator of pre-history — the gold v4 gate scores rolling fold
 through a gold-side causal concatenated-history loop (engine fitter protocol
 untouched; window/z are fixed seed constants, trailing inputs ≤ t).
 
+**Beat-both attempt (gold v5, #4804) — NEGATIVE, vote-level miss.** v5 froze a
+secular vote (rolling-z 1260d ≈ 5yr half secular swing / z 1.0, m2/uup 0.5,
+oscillators 0 — short-horizon votes sell the grind) and judged it against
+beating lump AND flat on mean OOS. Result: flat +1.34% (beats), lump −12.45%
+(miss); folds f0 +9.79/−26.76, f1 −8.60/+2.48, f2 +2.82/−13.08, feasible
+T/T/T; sens UNSTABLE 2.63 (`sell_knee_risk:−5%`); frontier 0/432 feasible
+shapes beat both — no curve in the searched space fixes it, so this is a vote
+failure, not a winner-selection failure. No v5 tearsheet was built. Standing
+implication: in gold's secular bull, cash-holding + profit-taking drag vs lump
+is structural to the SDCA family, not tunable within it; beating lump needs a
+different family (or accepting flat-DCA as the bar).
+
 **Composite formula (BTC charts default to a single rail).**
 
 ```
