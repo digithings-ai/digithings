@@ -4,7 +4,7 @@
 # not run Containers itself. wrangler deploy is the source of truth for
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
 # DigiQuant clocks resumed 2026-10-01; house-run is weekly Monday only.
-# Path A traps (agent/project/refresh + twelve-x) stay omitted.
+# twelve-x FX Hub clocks live. Dead Path A trap YAML (#4919) stays omitted.
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -54,5 +54,15 @@ crons = [
   "33 6 * * MON",      # security-pip-audit
   "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
-  "17 6 * * *"         # smoke-site
+  "17 6 * * *",        # smoke-site
+  "7 0 * * MON-FRI",   # twelve-x-asia
+  "12 7 * * MON-FRI",  # twelve-x-london
+  "17 12 * * MON-FRI", # twelve-x-new-york
+  "4 */4 * * *",       # twelve-x-market-context-intraday
+  "30 5 * * *",        # twelve-x-market-context-daily
+  "8 7 * * SAT",       # twelve-x-market-context-weekly
+  "30 17 * * MON-FRI", # twelve-x-performance-eval
+  "3 6,18 * * *",      # twelve-x-primemarket-heartbeat
+  "52 * * * MON-FRI",  # twelve-x-session-catchup
+  "30 2 * * *"         # twelve-x-archive-maintenance
 ]
