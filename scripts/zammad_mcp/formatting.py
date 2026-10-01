@@ -104,17 +104,13 @@ def _labeled(label: str, value: Any) -> str:
     return f"{label}: {text}" if text else ""
 
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+def _display_customer(value: Any) -> str:
+    """Full customer display for the OCC demo: no masking.
 
+    Returns the raw name/email as-is (``_field`` handles dict payloads).
+    """
 
-def _mask_customer(value: Any) -> str:
-    """Mask a customer email: keep only the first local-part character."""
-    raw = value.get("email") if isinstance(value, dict) else value
-    text = _field(raw)
-    if not _EMAIL_RE.match(text):
-        return text
-    local, _, domain = text.partition("@")
-    return f"{local[0]}***@{domain}"
+    return _field(value.get("email") if isinstance(value, dict) else value)
 
 
 def format_ticket_line(ticket: dict[str, Any]) -> str:
@@ -132,7 +128,7 @@ def format_ticket_line(ticket: dict[str, Any]) -> str:
         for part in (
             _labeled("group", ticket.get("group")),
             _labeled("priority", ticket.get("priority")),
-            _labeled("customer", _mask_customer(ticket.get("customer"))),
+            _labeled("customer", _display_customer(ticket.get("customer"))),
             _labeled("owner", ticket.get("owner")),
             _labeled("updated", ticket.get("updated_at")),
         )
@@ -237,8 +233,8 @@ def format_ticket_detail(
 ) -> str:
     """Render one ticket with its articles for the model.
 
-    Internal notes are omitted and customer emails are masked — the OCC
-    embed is anonymous, so tool output must not leak helpdesk-internal data.
+    Demo mode (#4944): all articles are shown, including internal notes
+    (tagged ``[internal]``), and customer names/emails render in full.
     ``owner_name`` is the ``resolve_user`` display name for the raw owner
     value; ``category`` is the open|closed|pending state category.
     """
@@ -249,8 +245,7 @@ def format_ticket_detail(
     if number:
         head += f" #{number}"
     lines = [f"{head}: {title}"]
-    visible = [article for article in articles if not article.get("internal")]
-    hidden = len(articles) - len(visible)
+    shown = list(articles)
     identity = " | ".join(
         part
         for part in (
@@ -267,7 +262,7 @@ def format_ticket_detail(
     people = " | ".join(
         part
         for part in (
-            _labeled("Customer", _mask_customer(ticket.get("customer"))),
+            _labeled("Customer", _display_customer(ticket.get("customer"))),
             _labeled("Organization", ticket.get("organization")),
             _labeled("Owner", owner_name or ticket.get("owner")),
         )
@@ -280,7 +275,7 @@ def format_ticket_detail(
         for part in (
             _labeled("Created", ticket.get("created_at")),
             _labeled("Updated", ticket.get("updated_at")),
-            f"Articles: {len(visible)}",
+            f"Articles: {len(shown)}",
         )
         if part
     )
@@ -292,14 +287,12 @@ def format_ticket_detail(
     if note:
         lines.append(f"Note: {note}")
     lines.append("")
-    lines.append(f"Articles ({len(visible)}):")
-    for index, article in enumerate(visible[:MAX_ARTICLES_SHOWN], start=1):
+    lines.append(f"Articles ({len(shown)}):")
+    for index, article in enumerate(shown[:MAX_ARTICLES_SHOWN], start=1):
         lines.extend(_format_article(index, article))
-    remaining = len(visible) - MAX_ARTICLES_SHOWN
+    remaining = len(shown) - MAX_ARTICLES_SHOWN
     if remaining > 0:
         lines.append(f"... {remaining} more article(s) omitted")
-    if hidden > 0:
-        lines.append(f"... {hidden} internal note(s) omitted")
     return "\n".join(lines)
 
 
@@ -399,9 +392,9 @@ def format_aggregate(
 ) -> str:
     """Render a windowed ranking for the model.
 
-    Customer entries prefer the server-enriched masked-email + id ``name``
-    (raw values mask here, never raw); owner entries prefer the resolved
-    ``name`` enrichment.
+    Customer entries prefer the server-enriched full-name/email + id
+    ``name`` (raw values pass through in full, never masked); owner
+    entries prefer the resolved ``name`` enrichment.
     """
     scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
     if not ranked:
@@ -409,10 +402,6 @@ def format_aggregate(
     lines = [f"Top {group_by} by {metric} ({scope}; {total} ticket(s) scanned):"]
     for index, entry in enumerate(ranked, start=1):
         name = entry.get("name") or entry.get("value", "?")
-        if group_by == "customer":
-            # Server-enriched names already carry the masked-email + id
-            # display and pass through unchanged; raw values mask here.
-            name = _mask_customer(name)
         lines.append(f"{index}. {name} — {entry.get('count', 0)}")
     if group_by in ("owner", "customer"):
         owners = ", ".join(sorted(AUTOMATION_OWNERS))
