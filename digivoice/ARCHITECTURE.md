@@ -16,6 +16,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/speak.py` | Piper synthesis + local player (`afplay` / `aplay` / `ffplay`). |
 | `src/digivoice/history.py` | JSONL append, tolerant read, `--last` / `--grep` / `--copy-last` / `--json`. |
 | `src/digivoice/settings.py` | `settings.json` under the data dir; agent-scriptable get/set. |
+| `src/digivoice/setup.py` | Interactive `setup` wizard (stdlib arrow/numbered menus) + `--print` overview and `recommend_models()` hardware stub (#4939 hook). |
 | `src/digivoice/rewrite.py` | Optional local post-STT rewrite (ollama / llama.cpp); fail soft. |
 | `src/digivoice/paste.py` | Clipboard plus Command-V into the focused app. Fails soft. Never pastes blank text. |
 | `src/digivoice/status.py` | `status.json` feed for the banner, cancel-file token, `CANCELLED_EXIT`. Fails soft. |
@@ -71,7 +72,8 @@ commands write.
 | `history [--last N] [--grep PATTERN] [--copy-last] [--json]` | 0 (1 if copy-last empty) | Lists / copies last dict. |
 | `cancel [--cancel-file PATH]` | 0 | Create the cancel-file; a running `dict` discards its take. |
 | `status` | 0 shown, 1 none yet | Print the `status.json` the banner reads. |
-| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | Show or change settings.json. |
+| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. |
+| `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | unknown / bad flags | 2 | Usage on stderr. |
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
@@ -193,6 +195,9 @@ Always informational:
 | id | Meaning |
 | --- | --- |
 | `sox`, `ffmpeg` | Each binary, so a missing one is visible when the other satisfies `capture` |
+| `settings` | `ok` when settings.json parses and validates (reports banner_density etc.); `info` when absent (defaults); `missing` when corrupt |
+| `hotkeys` | `ok` — compiled-in sample binds (Right Option / Esc / double-tap Left Option); see `hammerspoon/README.md` |
+| `hammerspoon` | `ok` when the adapter dir/init.lua exists under `~/.hammerspoon/digivoice` or the data-dir hammerspoon path; `missing` otherwise |
 | `history` | JSONL path and whether the file exists |
 | `paths` | Active data directory, macOS models path, Linux models path, recordings directory |
 | `tcc` | Mic and Accessibility are not probed; see `hammerspoon/README.md` |

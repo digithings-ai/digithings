@@ -64,18 +64,21 @@ digivoice history --grep invoice
 digivoice history --copy-last
 digivoice settings
 digivoice settings set rewrite_enabled true
+digivoice setup --print
 digivoice setup --json
+digivoice doctor
 ```
 
 Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digivoice doctor`.
 
 | Command | Behavior |
 | --- | --- |
-| `digivoice doctor` | Checks `whisper-cli`, `piper`, `sox`, `ffmpeg`, and `ggml-base.en.bin` in the models directory. Prints the history path, the recordings directory, and the macOS and Linux defaults. Exit 0 when whisper-cli, piper, sox or ffmpeg, and the default model file are all present. |
+| `digivoice doctor` | Checks `whisper-cli`, `piper`, `sox`, `ffmpeg`, `ggml-base.en.bin`, settings validity, hotkey docs, and the Hammerspoon adapter. Prints the history path, the recordings directory, and the macOS and Linux defaults. Exit 0 when whisper-cli, piper, sox or ffmpeg, and the default model file are all present. |
 | `digivoice dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste]` | Records the microphone to `recordings/*.wav`, runs `whisper-cli`, prints the transcript on stdout, appends `{ts, kind:"dict", text, wav}` to the history file, and pastes into the focused app on macOS. `--toggle` stops early when the stop-file is touched or SIGINT/SIGTERM arrives. Exit 0 once a transcript exists. |
 | `digivoice speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | Piper synthesis + local playback. Appends `{kind:"speak", text}`. Exit 0 on success. |
 | `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
-| `digivoice settings` / `setup` | Show or change `settings.json` (models, rewrite on/off + preset + model + auto-route, paste_on_stop, live_banner, banner_position, banner_animations). `--json` for agents. |
+| `digivoice settings` / `setup` | `settings` shows or changes `settings.json` (models, rewrite on/off + preset + model + auto-route, paste_on_stop, live_banner, banner_position, banner_animations). `--json` for agents. `setup` is the interactive wizard (Models / Features / Hotkeys / Hardware stub / Review & save / Doctor / Quit, arrow keys + Enter on a TTY); `setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`) prints current values + the menu tree with no prompts, exit 0. |
+| `digivoice update` / `uninstall` | Thin stubs (exit 0): not wired yet — reinstall via uv / brew, or remove the tool install + data dir manually. |
 | `digivoice cancel` | Creates the cancel-file: a running `dict` discards its take (no paste, no history entry, wav deleted). Esc in the Hammerspoon sample does the same. |
 | `digivoice status` | Prints the `status.json` snapshot the banner reads. |
 
