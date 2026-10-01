@@ -6,10 +6,16 @@ describe("LocalLuxalgoWorkflow", () => {
   const html = renderToStaticMarkup(<LocalLuxalgoWorkflow />);
 
   it("keeps LuxAlgo as the chart and journal handoff", () => {
-    expect(html).toContain("Chart + journal");
+    expect(html).toContain("chart + journal");
     expect(html).toContain("Continue in LuxAlgo");
-    expect(html).toContain("No competing chart is rendered here");
+    expect(html).toContain("renders no competing chart");
     expect(html).toContain('href="https://www.luxalgo.com/"');
+  });
+
+  it("frames the search as a capability demo, not the product", () => {
+    expect(html).toContain("capability demo");
+    expect(html).toContain("not a search tool");
+    expect(html).toContain("The product is the dashboard");
   });
 
   it("renders the local-only Library search control and honest initial state", () => {

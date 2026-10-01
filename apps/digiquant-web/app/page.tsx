@@ -6,17 +6,17 @@ import { StrategyBand } from "./_bands/strategy";
 import { TearsheetsBand } from "./_bands/tearsheets";
 import { TopBand } from "./_bands/top";
 
-// Phase 0a shell: bands render in registry order. Each band is its own file so
-// later passes touch only their band. Band order lives in _bands/registry.ts.
+// Bands render in the showcase order from _bands/registry.ts. Each band is its
+// own file so a pass touches only its band.
 export default function Home() {
   return (
     <main id="main" className="[--page-step:clamp(2rem,4.5vw,3.5rem)]">
       <TopBand />
-      <ProductsBand />
+      <DashboardBand />
+      <StrategyBand />
       <PipelineBand />
       <TearsheetsBand />
-      <StrategyBand />
-      <DashboardBand />
+      <ProductsBand />
       <StartBand />
     </main>
   );
