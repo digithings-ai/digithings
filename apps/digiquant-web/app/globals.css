@@ -23,6 +23,7 @@
    OdometerStrip metrics band, word-reveal.css the pinned-blur claim,
    marquee.css the seamless stack strip, deck.css the sticky tearsheet stack. */
 @import "@digithings/ui/styles/data-layout.css";
+@import "@digithings/ui/styles/stages.css";
 @import "@digithings/ui/styles/word-reveal.css";
 @import "@digithings/ui/styles/marquee.css";
 @import "@digithings/ui/styles/deck.css";
@@ -45,6 +46,8 @@
 @source "../../../packages/ui/src/components/pricing";
 @source "../../../packages/ui/src/components/marquee";
 @source "../../../packages/ui/src/components/data-layout";
+@source "../../../packages/ui/src/components/stages";
+@source "../../../packages/ui/src/components/chrome.tsx";
 @source "../../../packages/ui/src/components/typography";
 @source "../../../packages/ui/src/components/deck";
 @source "../../../packages/ui/src/components/finance-tearsheet";
@@ -52,6 +55,7 @@
 @source "../../../packages/ui/src/components/symbols";
 /* … and the shared ContactMailto's pending dim. */
 @source "../../../packages/ui/src/components/contact";
+@source "../../../packages/ui/src/components/SocialRow.tsx";
 /* … and the vendored shadcn kit (Button/Badge/Card/…) now importable as
    @digithings/ui/ui. */
 @source "../../../packages/ui/src/ui";
@@ -139,10 +143,12 @@ html {
   scroll-behavior: auto;
   scroll-padding-top: var(--dq-nav-h);
 }
-#pipeline,
 #desk,
-#strategies,
-#pricing {
+#watch,
+#method,
+#partners,
+#story,
+#contact {
   scroll-margin-top: var(--dq-nav-h);
 }
 

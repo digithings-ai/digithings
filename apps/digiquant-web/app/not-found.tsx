@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
+import { CtaLink, Footer } from "@digithings/ui";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 
@@ -14,21 +13,18 @@ export default function NotFound() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage">
+      <main className="dq-subpage" id="main" tabIndex={-1}>
         <div className="wrap pb-[clamp(4.5rem,10vw,7rem)]">
-          <header className="dq-sechead">
+          <header className="section-head">
             <div className="kicker">{"// missing"}</div>
             <h1 className="dq-title">No such page.</h1>
-            <p className="dq-sub">
-              Nothing is filed under this address. The strategy library is the
-              fastest way back.
-            </p>
-            <div className="flex flex-wrap gap-[0.8rem]">
-              <Link className={buttonVariants({ variant: "default" })} href="/">
-                Back to top
-              </Link>
-              <Link className={buttonVariants({ variant: "ghost" })} href="/strategies">
-                Browse strategies
+            <p className="dq-sub">Nothing is filed under this address.</p>
+            <div className="mt-[1.4rem] flex flex-wrap gap-[0.8rem]">
+              <CtaLink href="/" variant="default">
+                Back to the desk
+              </CtaLink>
+              <Link className="font-mono text-[0.88rem] text-ink-mute" href="/#watch">
+                Watch
               </Link>
             </div>
           </header>

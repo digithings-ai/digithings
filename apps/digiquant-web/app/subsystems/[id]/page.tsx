@@ -49,7 +49,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
       <main className="section dq-subpage">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
-            <Link href="/#pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</Link> / {s.name.toLowerCase()}
+            <Link href="/#method" style={{ color: "var(--ink-soft)" }}>method</Link> / {s.name.toLowerCase()}
           </p>
           {/* Entrance on the page head only (#1450 polish, flagship grammar):
               breadcrumb and body stay static so content never gates on scroll;
