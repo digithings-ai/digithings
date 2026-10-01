@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
 
@@ -30,6 +31,13 @@ describe("jobsForCron", () => {
     for (const j of JOBS) {
       if (j.enabled) expect(set.has(j.cron)).toBe(true);
     }
+  });
+
+  it("keeps enabled crons aligned with wrangler triggers", () => {
+    const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+    const triggers = wrangler.split("[triggers]")[1] ?? "";
+    const configured = [...triggers.matchAll(/^\s*"([^"]+)",?$/gm)].map((match) => match[1]);
+    expect([...uniqueEnabledCrons()].sort()).toEqual(configured.sort());
   });
 
   it("workflow dispatches target the default develop branch", () => {
@@ -90,16 +98,25 @@ describe("jobsForCron", () => {
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
     }
-    expect(JOBS.find((job) => job.id === "house-run-09")?.kind).toBe("repository_dispatch");
   });
 
-  it("runs house research/portfolio retries every day without a Sunday special", () => {
+  it("sends house research/portfolio retries to digiquant-runner every day", () => {
     for (const [id, cron] of [
       ["house-run-09", "17 9 * * *"],
       ["house-run-10", "17 10 * * *"],
       ["house-run-11", "17 11 * * *"],
       ["house-run-12", "17 12 * * *"],
     ] as const) {
+      expect(JOBS.find((job) => job.id === id)).toMatchObject({
+        id,
+        cron,
+        kind: "container",
+        workflow: "pipeline-digiquant.yml",
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        timeoutSeconds: 14400,
+        codeRef: "main",
+      });
       expect(jobsForCron(cron).map((job) => job.id)).toEqual([id]);
     }
     expect(JOBS.some((job) => job.id === "house-run-sun")).toBe(false);

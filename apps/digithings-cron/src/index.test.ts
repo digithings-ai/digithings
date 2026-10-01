@@ -37,6 +37,40 @@ describe("scheduled", () => {
     expect(pending).toHaveLength(1);
     await expect(pending[0]).rejects.toThrow(/HTTP 403/);
   });
+
+  it("dispatches an ordinary house run with safe args and no GitHub call", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const pending: Promise<unknown>[] = [];
+    const scheduledTime = Date.UTC(2026, 8, 30, 9, 17);
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    await worker.scheduled(
+      { cron: "17 9 * * *", scheduledTime } as ScheduledController,
+      env,
+      executionContext(pending),
+    );
+    await Promise.all(pending);
+
+    expect(githubFetch).not.toHaveBeenCalled();
+    expect(runnerFetch).toHaveBeenCalledOnce();
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({
+      refresh_scope: "none",
+      run_date: "2026-09-30",
+    });
+  });
 });
 
 const WINTER_BEFORE_OPEN = Date.UTC(2026, 0, 15, 13, 40, 0);
@@ -99,6 +133,82 @@ describe("POST /kick", () => {
     expect(body.runs).toEqual([
       { job_id: "prices-at-open-13", run_id: "run-open", status: "accepted" },
     ]);
+  });
+
+  it("strips privileged house args from a kick without force", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.UTC(2026, 8, 30, 10, 0));
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "17 9 * * *",
+        args: {
+          refresh_scope: "all",
+          dry_run: "true",
+          resume_run_id: "prior-run",
+          run_date: "2026-09-29",
+        },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({
+      refresh_scope: "none",
+      run_date: "2026-09-30",
+    });
+  });
+
+  it("keeps privileged house args and marks a forced kick", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.UTC(2026, 8, 30, 10, 0));
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "17 9 * * *",
+        force: true,
+        args: {
+          refresh_scope: "all",
+          dry_run: "true",
+          resume_run_id: "prior-run",
+          run_date: "2026-09-29",
+        },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({
+      refresh_scope: "all",
+      dry_run: "true",
+      resume_run_id: "prior-run",
+      run_date: "2026-09-29",
+      force: "true",
+    });
   });
 });
 
