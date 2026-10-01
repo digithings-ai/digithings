@@ -22,6 +22,7 @@
  * `POST /mcp` exposes the same routes as JSON-RPC tools (see `./mcp`).
  */
 
+import { buildManifest, grantedRoutes, parseCaller } from "./access";
 import { adaptOnGet } from "./adapters";
 import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
@@ -191,6 +192,15 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = normalizePath(url.pathname);
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
+  if (request.method === "GET" && path === "/access/manifest") {
+    const manifest = buildManifest(parseCaller(request.headers));
+    return Response.json({
+      data: { ...manifest, routes: grantedRoutes(manifest) },
+      as_of: null,
+      retrieval_pin: url.searchParams.get("retrieval_pin"),
+      provenance: buildProvenance({ source: "access_policy" }),
+    });
+  }
   if (request.method === "GET" && path === "/ledger") {
     try {
       const res = await tryHandleLedger(request, ledgerBook);

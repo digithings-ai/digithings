@@ -1,10 +1,11 @@
-import { notFound, redirect } from 'next/navigation';
-import { BookBlock } from '@/components/blocks';
+import { redirect } from 'next/navigation';
+import { BlockGrid } from '@/components/BlockGrid';
 import { Gallery, GroupGallery, PortfolioGallery } from '@/components/Gallery';
 import { GROUP_PAGES } from '@/lib/group-pages';
 import { UiFixtures } from '@/components/UiFixtures';
 import { Window } from '@/components/Window';
-import { HOME, findPage } from '@/lib/nav';
+import { HOME } from '@/lib/nav';
+import { PAGE_LAYOUTS } from '@/lib/pages';
 
 /** A page is its slash-path. Pages without blocks yet show their path only. */
 export default async function Page({ params }: { params: Promise<{ path?: string[] }> }) {
@@ -16,13 +17,11 @@ export default async function Page({ params }: { params: Promise<{ path?: string
   if (full === '/blocks/portfolio') return <PortfolioGallery />;
   const grp = full.startsWith('/blocks/') ? full.slice(8) : null;
   if (grp && grp in GROUP_PAGES) return <GroupGallery group={grp} />;
-  const node = findPage(full);
-  if (!node) notFound();
-
-  if (full === '/portfolio/holdings') return <BookBlock />;
+  const layout = PAGE_LAYOUTS[full];
+  if (layout) return <BlockGrid pageId={full} initial={layout} />;
 
   return (
-    <Window no="00" label={node.label} right={full}>
+    <Window no="00" label={full.split('/').pop() ?? full} right={full}>
       <p className="note mute">No blocks placed on this page yet.</p>
     </Window>
   );

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyEvent, type PointerEvent as RPointerEvent } from 'react';
 import { COLS, ROWS, clampSize, parse, place, slot, swap, type Layout, type Placement } from '@/lib/grid';
 import { BLOCKS } from './blocks';
+import { useAccess } from './Access';
+import { StateBlock } from './ui';
+import { Window } from './Window';
 
 const key = (pageId: string) => `dq-layout:${pageId}`;
 const byId = new Map(BLOCKS.map((b) => [b.id, b]));
@@ -16,6 +19,7 @@ type Drag = { id: string; mode: 'move' | 'size'; sx: number; sy: number; start: 
  * arrows move and shift+arrows resize the focused block. Saved per page.
  */
 export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout }) {
+  const { block } = useAccess();
   const [layout, setLayout] = useState<Layout>(initial);
   const [edit, setEdit] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -112,9 +116,11 @@ export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout
           const def = byId.get(p.id);
           if (!def) return null;
           const { Component } = def;
+          const acc = block(p.id);
+          const lock = acc?.access === 'locked' ? acc.reason ?? 'Locked' : null;
           return (
             <div key={p.id} className="cell" style={{ gridColumn: `${p.x} / span ${p.w}`, gridRow: `${p.y} / span ${p.h}` }}>
-              <Component />
+              {lock ? <Window no="--" label={def.title} right="locked"><StateBlock kind="empty" title="Locked." why={`${lock}.`} /></Window> : <Component />}
               {edit ? (
                 <div
                   className="edit"

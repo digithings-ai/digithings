@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
-import { NAV, sectionOf, type NavNode } from '@/lib/nav';
+import { sectionOf, type NavNode } from '@/lib/nav';
+import { useAccess } from './Access';
 
 function Tag({ n }: { n: NavNode }) {
+  if (n.lock) return <span className="nav-tag" title={`Requires ${n.lock}`}>[{n.lock}]</span>;
   return n.status ? <span className="nav-tag">[{n.status}]</span> : null;
 }
 
@@ -13,6 +15,7 @@ function Tag({ n }: { n: NavNode }) {
  * ▾ open, ▸ closed or leaf. Folders toggle with the triangle; the path navigates.
  */
 export function NavTree({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const { nav, manifest, err } = useAccess();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const active = sectionOf(pathname);
   const isOpen = (p: string) => open[p] ?? p === active;
@@ -44,7 +47,8 @@ export function NavTree({ pathname, onNavigate }: { pathname: string; onNavigate
 
   return (
     <nav className="navtree" aria-label="Pages" onKeyDown={onKeyDown}>
-      {NAV.map((g, gi) => (
+      {!nav.length ? <p className="note mute nav-empty">{err ? 'access unavailable' : manifest ? 'no pages' : 'loading…'}</p> : null}
+      {nav.map((g, gi) => (
         <div className="nav-group" key={gi}>
           {g.title ? <div className="nav-title">{g.title}</div> : null}
           {g.items.map((n) => {
@@ -58,7 +62,7 @@ export function NavTree({ pathname, onNavigate }: { pathname: string; onNavigate
                       {isOpen(n.path) ? '▾' : '▸'}
                     </button>
                   ) : <span className="nav-tri leaf" aria-hidden="true">▸</span>}
-                  <Link href={n.path} data-path={n.path} data-folder={kids.length ? '1' : undefined} onClick={onNavigate} className={`nav-link${here ? ' on' : ''}`} aria-current={here ? 'page' : undefined} title={n.path}>
+                  <Link href={n.path} data-path={n.path} data-folder={kids.length ? '1' : undefined} onClick={onNavigate} className={`nav-link${here ? ' on' : ''}${n.lock ? ' locked' : ''}`} aria-current={here ? 'page' : undefined} title={n.path}>
                     <span className="nav-path">{n.path}</span>
                     <Tag n={n} />
                   </Link>
@@ -67,7 +71,7 @@ export function NavTree({ pathname, onNavigate }: { pathname: string; onNavigate
                   ? kids.map((c) => (
                       <div className="nav-row kid" key={c.path}>
                         <span className="nav-tri leaf" aria-hidden="true">▸</span>
-                        <Link href={c.path} data-path={c.path} data-parent={n.path} onClick={onNavigate} className={`nav-link${pathname === c.path ? ' on' : ''}`} aria-current={pathname === c.path ? 'page' : undefined} title={c.path}>
+                        <Link href={c.path} data-path={c.path} data-parent={n.path} onClick={onNavigate} className={`nav-link${pathname === c.path ? ' on' : ''}${c.lock ? ' locked' : ''}`} aria-current={pathname === c.path ? 'page' : undefined} title={c.path}>
                           <span className="nav-path">{c.path}</span>
                           <Tag n={c} />
                         </Link>

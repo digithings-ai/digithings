@@ -4,6 +4,7 @@ import '../styles/markets.css';
 import '../styles/desk.css';
 import type { ReactNode } from 'react';
 import { Geist_Mono, Inter, JetBrains_Mono } from 'next/font/google';
+import { AccessProvider } from '@/components/Access';
 import { Shell } from '@/components/Shell';
 
 export const metadata = { title: 'digiquant' };
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${brand.variable}`}>
       <body>
-        <Shell>{children}</Shell>
+        <AccessProvider>
+          <Shell>{children}</Shell>
+        </AccessProvider>
       </body>
     </html>
   );

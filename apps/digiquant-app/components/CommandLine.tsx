@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { searchPages } from '@/lib/nav';
+import { useAccess } from './Access';
 
 export type CommandLineHandle = { focus: () => void };
 
@@ -12,6 +13,7 @@ export type CommandLineHandle = { focus: () => void };
  */
 export const CommandLine = forwardRef<CommandLineHandle, { pathname: string }>(function CommandLine({ pathname }, ref) {
   const router = useRouter();
+  const { pages } = useAccess();
   const input = useRef<HTMLInputElement>(null);
   const [q, setQ] = useState<string | null>(null); // null = showing the current path
   const [sel, setSel] = useState(0);
@@ -19,7 +21,7 @@ export const CommandLine = forwardRef<CommandLineHandle, { pathname: string }>(f
   useImperativeHandle(ref, () => ({ focus: () => input.current?.focus() }));
 
   const editing = q !== null;
-  const hits = editing ? searchPages(q).slice(0, 8) : [];
+  const hits = editing ? searchPages(q, pages).slice(0, 8) : [];
 
   useEffect(() => setSel(0), [q]);
 
@@ -60,7 +62,7 @@ export const CommandLine = forwardRef<CommandLineHandle, { pathname: string }>(f
           {hits.map((h, i) => (
             <li key={h.path} id={`cmd-opt-${i}`} role="option" aria-selected={i === sel} className={i === sel ? 'on' : undefined} onMouseDown={(e) => { e.preventDefault(); go(h.path); }}>
               <span>{h.path}</span>
-              <span className="mute">{h.label}</span>
+              <span className="mute">{h.label}{h.lock ? ` [${h.lock}]` : ''}</span>
             </li>
           ))}
         </ul>
