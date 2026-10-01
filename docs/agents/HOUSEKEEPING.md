@@ -18,14 +18,14 @@ the broader delegation framework.
 
 | Coverage | Workflow | Cadence | What it does |
 |---|---|---|---|
-| Orphan issues (not in any project board) | `project-enforce-assignment.yml` | daily 09:00 UTC | Comments on unlisted issues so the routing workflow picks them up |
+| Orphan issues (not in any project board) | `project-enforce-assignment.yml` | daily 09:23 UTC (digithings-cron) | Comments on unlisted issues so the routing workflow picks them up |
 | New issue → correct project board | `project-route-issues.yml` | on `issues: labeled/opened` | Maps `component:*` label to the right module project; epics also go to digithings #1 |
 | Issue status transitions | `project-status.yml` | on issue assign / branch push / PR open / PR merge | Todo → In Progress → Review → Done across all 11 project boards |
 | Stale issues (>90d no activity) | `pipeline-maintenance.yml` — `stale-issues` job | weekly Mon 08:00 UTC | Adds `stale` label + a reminder comment. Not auto-closed. Blocked issues use a 7d threshold |
 | Stale PRs (>14d no activity) | `pipeline-maintenance.yml` — `stale-prs` job | weekly Mon 08:00 UTC | Posts an escalation comment on task/cursor/claude/module branches |
 | Label coverage drift | `pipeline-maintenance.yml` — `label-coverage` job | weekly Mon 08:00 UTC | One tracker issue listing every open issue missing `priority:*` or `component:*` |
 | Project-field coverage | the `coverage` job in `ci-pr-hygiene.yml` | daily 06:00 UTC + on PR | Runs `scripts/check_project_fields_coverage.py`: every agent-task issue in the TSV with a real phase and a valid model |
-| Agent backlog snapshot | `agent-backlog-snapshot.yml` | weekly Mon 06:00 UTC | Regenerates `docs/agent-backlog/generated-snapshot.md` |
+| Agent backlog snapshot | `agent-backlog-snapshot.yml` | weekly Mon 06:13 UTC (digithings-cron) | Regenerates `docs/agent-backlog/generated-snapshot.md` |
 
 ## Documentation hygiene
 
@@ -76,7 +76,7 @@ the broader delegation framework.
 | Stuck dispatch replay | `agent-dispatch-replay.yml` | manual `workflow_dispatch` | Bounces `agent-task` on stuck backlog issues (dry-run default) |
 | Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to agent-branch PRs |
 | Agent PR auto-merge | `agent-pr-automerge.yml` | on `automerge-agent` label + green CI | Squash auto-merge for agent PRs clearing the path-based safety gate (`verify_agent_automerge_pr.py`) |
-| Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:00 UTC + manual | Backstop for agent PRs; triage, fix dispatch, automerge when eligible |
+| Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:11 UTC (digithings-cron) + manual | Backstop for agent PRs; triage, fix dispatch, automerge when eligible |
 | PR quality gate | **removed** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges existed as `pr-quality-gate.yml` from #131 (`abc7e541`) until #378 (`5abc4f41`) replaced it with the finish-task skill. Nothing enforces it in CI today. Listed rather than deleted so the gap is visible instead of assumed-covered. |
 | PR issue linkage | removed 2026-08 per `docs/adr/0024-drop-pr-linkage-enforcement.md` (was `check-linkage` in `ci-pr-hygiene.yml`) | — | Convention only: `task/<N>-slug` branch or `Fixes #N` in PR body; nothing enforces it |
 

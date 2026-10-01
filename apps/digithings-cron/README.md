@@ -33,14 +33,14 @@ Set secrets from this directory with wrangler secret put (never echo values).
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(32 expressions after the 2026-10-01 twelve-x resume). House-run is
+(36 expressions after the Path A trap restore). House-run is
 weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
 `house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
 `checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.
-GHA `schedule:` stays off — this Worker is the SSOT. Dead Path A trap
-rows (`agent-pr-finalizer`, `agent-backlog-snapshot`, `refresh-repo-activity`,
-`project-enforce-assignment`) are gone from the job map; their YAML was
-deleted in #4919 and is not restored. twelve-x-new-york is weekday-only
+GHA `schedule:` stays off — this Worker is the SSOT. Path A traps
+(`agent-pr-finalizer`, `agent-backlog-snapshot`, `refresh-repo-activity`,
+`project-enforce-assignment`) are live `workflow_dispatch` jobs; their
+YAML is dispatch-only. twelve-x-new-york is weekday-only
 on `17 12 * * MON-FRI`.
 
 ## Local
@@ -71,8 +71,9 @@ session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
 ## Jobs
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
-intraday / daily / weekly. twelve-x-archive-maintenance dispatches with
-`dry_run=false` and `dump_before_prune=true`. House-run is `kind: container`
+intraday / daily / weekly. agent-pr-finalizer dispatches with `dry_run=false`.
+twelve-x-archive-maintenance dispatches with `dry_run=false` and
+`dump_before_prune=true`. House-run is `kind: container`
 (`house-run-09` Monday 09:17 UTC). Price jobs, market-data-refresh,
 checkpoint-archive, onchain, tearsheets, research-metrics, and
 execution-cron-check use `kind: container`. Those workflows have no

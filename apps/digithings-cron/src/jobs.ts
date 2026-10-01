@@ -260,9 +260,22 @@ export const JOBS: readonly Job[] = [
   wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml"),
   wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
 
-  // --- digithings: ops / smoke (off-grid minutes) ---
-  // Dead Path A trap YAML was deleted in #4919; do not restore job rows here.
+  // --- digithings: ops / agent / smoke (off-grid minutes) ---
+  // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
+  // only; clocks live here. dry_run must be false: workflow defaults dispatch
+  // to dry_run=true and only forced live on the old GHA schedule event.
+  wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
+    inputs: { dry_run: "false" },
+  }),
+  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml"),
   wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml"),
+  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml"),
+  wd(
+    "project-enforce-assignment",
+    "23 9 * * *",
+    DIGITHINGS,
+    "project-enforce-assignment.yml",
+  ),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
   wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
   wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
