@@ -20,7 +20,9 @@ SETTINGS_FILE_NAME = "settings.json"
 
 RewritePreset = Literal["email", "sms", "professional", "coding", "blog", "none"]
 RewriteRunnerKind = Literal["auto", "ollama", "llama.cpp"]
-BannerDensity = Literal["mini", "peek", "full"]
+BannerDensity = Literal["retract", "full"]
+
+_LEGACY_BANNER_DENSITIES: frozenset[str] = frozenset({"mini", "peek"})
 BannerPosition = Literal[
     "top-center",
     "top-left",
@@ -107,8 +109,8 @@ class VoiceSettings(BaseModel):
     # Status overlay drawn by the Hammerspoon adapter (read from status.json). Display only.
     live_banner: bool = True
     banner_position: BannerPosition = "top-center"
-    # Banner density: mini (grid only) | peek (short glimpse, auto-hides; default) | full (stays).
-    banner_density: BannerDensity = "peek"
+    # Banner density: retract (grid only, auto-hides; default) | full (stays until collapsed).
+    banner_density: BannerDensity = "retract"
     # False renders the dot-matrix icon as a still frame instead of animating it.
     banner_animations: bool = True
 
@@ -119,6 +121,16 @@ def settings_path(paths: VoicePaths) -> Path:
 
 def default_settings() -> VoiceSettings:
     return VoiceSettings()
+
+
+def _coerce_settings_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    """Map legacy banner_density values to match Hammerspoon banner_core.lua."""
+    density = raw.get("banner_density")
+    if isinstance(density, str) and density in _LEGACY_BANNER_DENSITIES:
+        coerced = dict(raw)
+        coerced["banner_density"] = "retract"
+        return coerced
+    return raw
 
 
 def load_settings(paths: VoicePaths) -> VoiceSettings:
@@ -132,7 +144,7 @@ def load_settings(paths: VoicePaths) -> VoiceSettings:
     if not isinstance(raw, dict):
         return default_settings()
     try:
-        return VoiceSettings.model_validate(raw)
+        return VoiceSettings.model_validate(_coerce_settings_raw(raw))
     except ValidationError:
         return default_settings()
 

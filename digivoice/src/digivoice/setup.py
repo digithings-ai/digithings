@@ -55,7 +55,7 @@ SETUP_MENU = (
 
 HARDWARE_EPIC_POINTER = "See epic #4939 / CHR-853 — full hardware-aware catalog not rebuilt here."
 
-_BANNER_DENSITIES: tuple[str, ...] = ("mini", "peek", "full")
+_BANNER_DENSITIES: tuple[str, ...] = ("retract", "full")
 _BANNER_POSITIONS: tuple[str, ...] = (
     "top-center",
     "top-left",

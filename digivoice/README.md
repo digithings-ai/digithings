@@ -136,7 +136,7 @@ Esc (Hammerspoon sample) or `digivoice cancel` discards an active take: the reco
 digivoice settings set live_banner false          # no overlay at all (hotkeys still armed)
 digivoice settings set banner_position top-right  # top-center (default), top-left, top-right,
                                                   # bottom-center, bottom-left, bottom-right, center
-digivoice settings set banner_density full        # mini (grid only) | peek (default, auto-hides) | full (stays)
+digivoice settings set banner_density full        # retract (grid only, default) | full (stays)
 digivoice settings set banner_animations false    # still grid frame instead of animation
 ```
 

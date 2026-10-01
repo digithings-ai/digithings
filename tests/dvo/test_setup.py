@@ -88,7 +88,7 @@ def test_setup_public_dict_extends_settings_dump(tmp_path: Path) -> None:
     from digivoice.settings import load_settings
 
     payload = setup_public_dict(load_settings(paths), paths)
-    assert payload["banner_density"] == "peek"
+    assert payload["banner_density"] == "retract"
     assert payload["setup_menu"] == list(SETUP_MENU)
 
 
@@ -106,7 +106,7 @@ def test_interactive_review_save_round_trip(
     code = run_interactive_setup(paths, stdin=fake_in, stdout=fake_out)
     assert code == 0
     assert (tmp_path / "settings.json").is_file()
-    assert load_settings(paths).banner_density == "peek"
+    assert load_settings(paths).banner_density == "retract"
     assert "digivoice setup" in fake_out.getvalue()
 
 
@@ -117,8 +117,8 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
     from digivoice.setup import run_interactive_setup
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
-    # Features → banner_density → full → Back → Review & save → Save → Quit
-    fake_in = io.StringIO("3\n6\n3\n8\n5\n1\n7\n")
+    # Features → banner_density → full (2=retract|full) → Back → Review & save → Save → Quit
+    fake_in = io.StringIO("3\n6\n2\n8\n5\n1\n7\n")
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
     assert load_settings(paths).banner_density == "full"
