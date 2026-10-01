@@ -179,6 +179,10 @@ def digigraph_path_scopes(method: str, path: str) -> list[str] | None:
 def digiquant_path_scopes(method: str, path: str) -> list[str] | None:
     if path in _PUBLIC_PATHS:
         return None
+    if method == "GET" and path == "/bars":
+        # #4880: keyless dashboard chart reads (anonymous upstream, read-only).
+        # Human-gate note: this exemption ships unmerged until reviewed.
+        return None
     if path == "/run_optimize":
         return ["digiquant:optimize"]
     if path in ("/run_pipeline", "/v1/workflow", "/v1/orchestrator_invoke"):

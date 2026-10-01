@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digivoice"
+version = "0.1.0"
+description = "digivoice – local whisper.cpp and Piper CLI for dictation, speech, and session history"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2",
+]
+
+[project.scripts]
+digivoice = "digivoice.cli:main"
+
+[dependency-groups]
+# Tools whose output gates CI stay on the current major. See AGENTS.md.
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
+
+[tool.pytest.ini_options]
+testpaths = ["../tests/dvo"]
+pythonpath = ["src"]
+markers = ["unit: Unit tests (no network, no Docker)."]

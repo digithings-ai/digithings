@@ -28,6 +28,11 @@ digiclaw:
   - tests/dc/**
   - .github/workflows/test-digiclaw.yml
 
+digivoice:
+  - digivoice/**
+  - tests/dvo/**
+  - .github/workflows/test-digivoice.yml
+
 digiquant:
   - digiquant/**
   - tests/dq/**
@@ -135,8 +140,7 @@ web:
   # check_frontend_canon.py scans this workspace for raw palette utilities, legacy
   # vocabulary and colour literals. Only its CSS class-family census skips digiweb, and
   # that is deliberate — the reference is where new families are born (CENSUS_APPS in
-  # that script). score.py reaches this directory too; what excludes apps/** + packages/** is the
-  # `score` filter below, not the tool. None of those is a lint or a typecheck.
+  # that script). None of those is a lint or a typecheck.
   #
   # It rides the `web` lane rather than a lane of its own because test-web.yml already
   # pays the root `npm ci` that wires the @digithings/design and @digithings/ui symlinks
@@ -163,31 +167,6 @@ web:
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
-
-score:
-  - digibase/**
-  - digiclaw/**
-  - digigraph/**
-  - digiquant/**
-  - digisearch/**
-  - digismith/**
-  - digikey/**
-  - digivault/**
-  # apps/** + packages/** intentionally excluded from scoring (#1310): score.py is a
-  # Python-oriented anti-pattern heuristic that misfires on CSS/JS; gitleaks
-  # still runs on frontend PRs for secrets, and app builds still gate breakage.
-  - scripts/**
-  - tests/**
-  - agents.yml
-  - agents/**
-  - .github/workflows/test-score.yml
-  # score.py's only.py restriction applies solely to its pandas/polars-specific
-  # patterns (scan() in scripts/score.py) -- every other pattern, including
-  # Security-dimension checks, scans ALL changed files regardless of extension.
-  # So a config/**-only PR (byok-providers.json, model_modes.yaml, etc.) still has
-  # content the Security >= 8 rubric should see; without this entry it never runs
-  # at all for such a PR (#2361 finding 8 follow-up).
-  - config/**
 
 e2e_contract:
   - tests/test_e2e.py
@@ -277,7 +256,6 @@ ruff_and_scripts:
   - release-please-config.json
   - apps/digichat/package.json
   - package-lock.json
-  - .github/workflows/release-please-digichat.yml
   # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
   # linkage for this workflow. A cron edit that touches nothing else would
   # otherwise skip this lane, and the failure it guards (a stale
@@ -288,7 +266,6 @@ ruff_and_scripts:
   # recorded new low-numbered files as applied without running their DDL). Without this entry a
   # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
   # edit it exists to catch. Same shape as the prices-cron entry above.
-  - .github/workflows/db-migrate.yml
   # tests/scripts/test_pipeline_digiquant_attempt.py asserts the outer-retry loop exports
   # DIGIQUANT_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
   # key (#1762). This file IS listed under research_graph, but that lane's selector is

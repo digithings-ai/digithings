@@ -1,0 +1,95 @@
+"""Paste the transcript into the focused app. macOS only, and never fatal.
+
+Two steps so no user text is ever interpolated into an AppleScript string: the
+transcript goes to the clipboard over stdin with `pbcopy`, then `osascript`
+sends a Command-V keystroke. The keystroke is what needs the Accessibility
+grant; when it is denied dictation still succeeds because the transcript is
+already on stdout.
+"""
+
+from __future__ import annotations
+
+from digivoice.models import PasteResult
+from digivoice.probe import CommandProbe
+from digivoice.runner import CommandRunner, error_tail
+
+KEYSTROKE_SCRIPT = 'tell application "System Events" to keystroke "v" using command down'
+ACCESSIBILITY_HINT = "grant Accessibility in System Settings > Privacy & Security > Accessibility"
+PASTE_TIMEOUT = 5.0
+EMPTY_TEXT_DETAIL = "nothing to paste (empty text)"
+
+
+def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) -> PasteResult:
+    if not text.strip():
+        return PasteResult(attempted=False, pasted=False, detail=EMPTY_TEXT_DETAIL)
+    if platform != "darwin":
+        return PasteResult(
+            attempted=False,
+            pasted=False,
+            detail="focused-app paste is macOS only; the transcript is on stdout",
+        )
+    pbcopy = probe.lookup("pbcopy")
+    osascript = probe.lookup("osascript")
+    missing = [name for name, path in (("pbcopy", pbcopy), ("osascript", osascript)) if not path]
+    if missing:
+        return PasteResult(
+            attempted=False,
+            pasted=False,
+            detail=f"missing on PATH: {', '.join(missing)}",
+        )
+    copied = runner([str(pbcopy)], stdin=text, timeout=PASTE_TIMEOUT)
+    if copied.code != 0:
+        reason = error_tail(copied.stderr) or f"exit {copied.code}"
+        return PasteResult(attempted=True, pasted=False, detail=f"pbcopy failed ({reason})")
+    typed = runner([str(osascript), "-e", KEYSTROKE_SCRIPT], timeout=PASTE_TIMEOUT)
+    if typed.code != 0:
+        reason = error_tail(typed.stderr) or f"exit {typed.code}"
+        return PasteResult(
+            attempted=True,
+            pasted=False,
+            detail=f"keystroke failed ({reason}); {ACCESSIBILITY_HINT}",
+        )
+    return PasteResult(attempted=True, pasted=True, detail="pasted into the focused app")
+
+
+def copy_to_clipboard(
+    platform: str,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    text: str,
+) -> PasteResult:
+    """Copy text to the system clipboard without pasting. Fail soft."""
+    if not text.strip():
+        return PasteResult(attempted=False, pasted=False, detail=EMPTY_TEXT_DETAIL)
+    if platform == "darwin":
+        pbcopy = probe.lookup("pbcopy")
+        if not pbcopy:
+            return PasteResult(
+                attempted=False,
+                pasted=False,
+                detail="pbcopy not on PATH",
+            )
+        copied = runner([str(pbcopy)], stdin=text, timeout=PASTE_TIMEOUT)
+        if copied.code != 0:
+            reason = error_tail(copied.stderr) or f"exit {copied.code}"
+            return PasteResult(attempted=True, pasted=False, detail=f"pbcopy failed ({reason})")
+        return PasteResult(attempted=True, pasted=True, detail="copied to clipboard")
+    # Linux: wl-copy then xclip then xsel.
+    for name, argv_extra in (
+        ("wl-copy", []),
+        ("xclip", ["-selection", "clipboard"]),
+        ("xsel", ["--clipboard", "--input"]),
+    ):
+        binary = probe.lookup(name)
+        if not binary:
+            continue
+        copied = runner([str(binary), *argv_extra], stdin=text, timeout=PASTE_TIMEOUT)
+        if copied.code == 0:
+            return PasteResult(attempted=True, pasted=True, detail=f"copied via {name}")
+        reason = error_tail(copied.stderr) or f"exit {copied.code}"
+        return PasteResult(attempted=True, pasted=False, detail=f"{name} failed ({reason})")
+    return PasteResult(
+        attempted=False,
+        pasted=False,
+        detail="no clipboard tool on PATH (need pbcopy, wl-copy, xclip, or xsel)",
+    )

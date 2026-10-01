@@ -46,6 +46,7 @@ export class DigiQuantRunnerContainer extends Container<Env> {
     return new RunnerSession({
       kv: kvFromStorage(this.ctx.storage),
       port: portFromContainer(this),
+      archive: this.env.ARCHIVE,
       scheduleAlarm: (delayMs: number) => {
         const seconds = Math.max(1, Math.round(delayMs / 1000));
         // Must await: void-schedule can drop the DO alarm registration when the
@@ -79,6 +80,9 @@ function portFromContainer(container: DigiQuantRunnerContainer): ContainerPort {
       });
       if (res.status === 400) {
         throw new Error("unknown command");
+      }
+      if (res.status === 409) {
+        throw new Error("container /run HTTP 409 already_running");
       }
       if (res.status !== 202 && !res.ok) {
         throw new Error(`container /run HTTP ${res.status}`);

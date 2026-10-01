@@ -78,7 +78,6 @@ Per-component workflows live under `.github/workflows/` and are orchestrated by 
 |-----|----------|-------|
 | Component tests | `test-digibase.yml`, `test-digikey.yml`, … | Path-filtered; callable via `workflow_call` |
 | Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
-| Score gate | `test-score.yml` | Heuristic diff scan via `scripts/score.py` |
 | Nautilus smoke | `test-nautilus.yml` | Linux `digiquant[nautilus]` parser tests |
 | Dashboard | `test-dashboard.yml` | Vitest + static export build (`apps/dashboard/`) |
 | Stack smoke | `smoke-stack.yml` | Nightly/manual Compose `/healthz` (REM-128) |
@@ -91,6 +90,5 @@ Run locally before push:
 ```bash
 make test-unit
 make test-baseline
-python3 scripts/score.py
 python3 scripts/agents_init.py --check
 ```

@@ -38,6 +38,22 @@ echo "--- building digithings-web (Next.js static export) ---"
 # Same-hostname digichat Container by default; override for Tunnel staging.
 export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digithings.ai}"
 echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
+# The landing price tape reads the public R2-backed market-data Worker. prebuild
+# inlines this for the client fetch AND writes the origin into the CSP
+# connect-src (apps/digithings-web/lib/security-headers.mjs), so leaving it
+# unset would inline an empty base and strand the band on its connecting line.
+export NEXT_PUBLIC_MARKET_DATA_URL="${NEXT_PUBLIC_MARKET_DATA_URL:-https://graph.digithings.ai}"
+echo "NEXT_PUBLIC_MARKET_DATA_URL=${NEXT_PUBLIC_MARKET_DATA_URL}"
+# The digiquant band reads the dashboard's own Supabase backend (published NAV
+# series + strategy index) through the same anon client digiquant.io uses — the
+# owner asked for one canonical backend across the three surfaces. Both vars are
+# read straight from the Pages project environment (a human deploy step, like the
+# digiquant site: set them on the Cloudflare Pages project, not in the repo).
+# Deliberately NO default here: a hard-coded project ref would either be wrong or
+# leak a project id. When unset the client is null, every read returns empty, the
+# band keeps its badged example series, and the CSP gains no extra origin.
+echo "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:+set}"
+echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:+set}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
 # The workspace's own `build` script passes --webpack: Turbopack (Next 16's
 # build default) production-builds this home page into an intermittent React
@@ -70,12 +86,13 @@ grep -F "frame-src ${FRAME_SRC}" dist/_headers >/dev/null \
 echo "--- writing dist/build-info.json ---"
 bash scripts/write-build-info.sh dist/build-info.json digithings.ai
 
-# Sanity: landing must exist and carry the module manifest (the per-module pages
-# were folded into the home-page terminal manifest, so /modules/* no longer exists).
-# Match the aria-label, not an implementation class — the pane is the shared
-# <TerminalManifest> primitive since #1416 (was app-local .dt-manifest markup).
+# Sanity: landing must exist and carry the module listing (the per-module pages
+# were folded into the home-page module mosaic, so /modules/* no longer exists).
+# Match the mosaic's aria-label, not an implementation class — the mosaic became
+# the listing in v15 (#4429), replacing the TerminalManifest pane that used to
+# carry this label.
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — build did not export" >&2; exit 1; }
-grep -q 'aria-label="digithings module manifest"' dist/index.html || { echo "ERROR: module manifest missing from home page" >&2; exit 1; }
+grep -q 'aria-label="digithings modules, sized by lines of code"' dist/index.html || { echo "ERROR: module listing missing from home page" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 # Public OpenAPI explorer (#2058): committed specs + Swagger UI assets must ship.

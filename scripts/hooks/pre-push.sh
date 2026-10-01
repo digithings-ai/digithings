@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Git pre-push hook. Rejects:
-#   • pushes to any remote URL not matching the pinned digithings origin
+#   • pushes to any remote URL other than GitHub, the Origin mirror, or Origin /local
+#   • origin/<slug> drafts pushed anywhere except the Origin /local endpoint
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
 #
@@ -19,7 +20,13 @@ set -euo pipefail
 remote="${1:-}"
 url="${2:-}"
 
-allowed_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
+# GitHub stays the public/release remote. Origin is the agent iteration host.
+# The mirror clone URL pass-throughs normal branches to GitHub. /local accepts
+# only refs/heads/origin/* and those refs never sync to GitHub.
+github_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
+origin_mirror_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?$'
+origin_local_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?/local/?$'
+origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 
 # Allowed branch name taxonomy. Keep in sync with BRANCHING.md and the
 # GitHub branch-naming ruleset on origin.
@@ -40,9 +47,12 @@ is_zero_sha() {
   [[ "$1" =~ ^0+$ ]]
 }
 
-if [ -n "$url" ] && ! [[ "$url" =~ $allowed_url_regex ]]; then
+is_origin_local=0
+if [[ "$url" =~ $origin_local_url_regex ]]; then
+  is_origin_local=1
+elif [ -n "$url" ] && ! [[ "$url" =~ $github_url_regex || "$url" =~ $origin_mirror_url_regex ]]; then
   echo "pre-push: refusing to push to '$url'." >&2
-  echo "         Only the pinned origin (github.com/digithings-ai/digithings) is allowed." >&2
+  echo "         Allowed: github.com/digithings-ai/digithings, or origin.cursor.com/chrizefan/digithings (and its /local endpoint)." >&2
   exit 1
 fi
 
@@ -71,7 +81,19 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Branch name validation — only for refs/heads/; tags, notes and deletions are exempt.
   if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
     branch_name="${remote_ref#refs/heads/}"
-    if ! [[ "$branch_name" =~ $branch_regex ]]; then
+    if [ "$is_origin_local" -eq 1 ]; then
+      if ! [[ "$branch_name" =~ $origin_draft_regex ]]; then
+        echo "pre-push: '$branch_name' cannot go to the Origin-only endpoint." >&2
+        echo "         origin-local accepts only origin/<slug>. Push promotion branches to origin or github." >&2
+        failed=1
+        continue
+      fi
+    elif [[ "$branch_name" == origin/* ]]; then
+      echo "pre-push: refusing to push '$branch_name' onto GitHub or the mirror remote." >&2
+      echo "         Publish Origin drafts with 'origin push local'. Promote with a task/, module/, or release/ branch." >&2
+      failed=1
+      continue
+    elif ! [[ "$branch_name" =~ $branch_regex ]]; then
       echo "pre-push: refusing to push branch '$branch_name' — doesn't match the taxonomy." >&2
       echo "         Allowed patterns (see BRANCHING.md):" >&2
       echo "           main | develop | release/vX.Y.Z" >&2

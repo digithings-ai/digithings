@@ -78,7 +78,7 @@ Agents panel (`Cmd/Ctrl + Shift + A`) and paste the issue URL, or run
    Non-negotiables: Polars only, Pydantic v2, ruff-clean, no pandas.
    Never touch: .github/workflows/, digikey/, docs/scoring/, SECURITY.md.
 
-4. Verify: `ruff check .` (and component tests). Quality bar is review, not `make score`.
+4. Verify: `ruff check .` (and component tests). Quality bar is review.
 
 5. PR: Target develop. Body must contain `Closes #<N>`. Title: feat(<component>): <title> (#<N>).
    Add label automerge-agent when CI passes.
@@ -138,7 +138,7 @@ make test-unit      # all unit tests green
 ruff check .        # zero violations
 ```
 
-Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` / in-session / `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI).
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)). Use `/review` / in-session / `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin.
 
 ### 3e. PR submission
 
@@ -224,6 +224,6 @@ and comment on the issue with the error logs from the Background Agents panel.
 | Component routing | `docs/agents/COMPONENT_ROUTING.md` |
 | Agent workflow | `docs/agents/AGENT_WORKFLOW.md` |
 | Cursor rules | `.cursor/rules/digithings.mdc` |
-| Scoring rubrics | `docs/scoring/` |
+| Review policy (sole quality gate) | `docs/agents/CODE_REVIEW_POLICY.md` |
 | Cursor Automations | [cursor.com/settings/automations](https://cursor.com/settings/automations) |
 | Issue template | `.github/ISSUE_TEMPLATE/agent_task.yml` |

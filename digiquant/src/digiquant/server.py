@@ -16,7 +16,7 @@ from digibase.http import install_request_id_logging, install_request_id_middlew
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digiquant_path_scopes
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -26,8 +26,15 @@ from digiquant import __version__
 from digiquant.addm import AddmResult, check_drift, record_sharpe
 from digiquant.audit import audit_log as dq_audit_log
 from digiquant.backtest_jobs import create_backtest_job, get_backtest_job
+from digiquant.bars import DEFAULT_LIMIT, MAX_LIMIT, BarsError, fetch_bars
 from digiquant.graph.pipeline import run_quant_workflow
-from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
+from digiquant.models import (
+    BacktestResult,
+    BarsResponse,
+    ExportResult,
+    OptimizationConstraints,
+    OptimizeResult,
+)
 from digiquant.service import (
     service_evaluate_policy_gate,
     service_get_policy_comparison,
@@ -231,6 +238,27 @@ def healthz() -> dict[str, bool]:
 def api_list_strategies() -> list[dict]:
     """Registered Nautilus strategies (name, aliases, description, default_params)."""
     return service_list_strategies()
+
+
+@app.get("/bars", response_model=BarsResponse)
+def api_get_bars(
+    symbol: str = Query(..., min_length=1, description="Listing symbol (e.g. AAPL, BTC-USD)"),
+    timeframe: str = Query("1d", description="1m | 5m | 15m | 30m | 1h | 1d | 1wk | 1mo"),
+    limit: int = Query(
+        DEFAULT_LIMIT, ge=1, le=MAX_LIMIT, description="Max bars returned (newest last)"
+    ),
+) -> BarsResponse:
+    """Keyless OHLCV bars for dashboard charts (#4880; feeds #4879 Vela wiring).
+
+    Auth-exempt and read-only: served from the anonymous Gloomberb
+    price-history path (no keys, no session cookie, no order paths).
+    Display-only — free-tier data may be delayed (see ``delay_note``) and
+    must never feed backtests.
+    """
+    try:
+        return fetch_bars(symbol, timeframe, limit)
+    except BarsError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
 
 @app.get("/check_drift", response_model=AddmResult)

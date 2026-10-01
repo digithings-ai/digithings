@@ -515,7 +515,7 @@ Close the 8 critical security gaps identified in `docs/IMPROVEMENT_PLAN_V2.md` P
 ## Acceptance Criteria
 - [ ] All 8 items resolved
 - [ ] Regression tests for each security fix
-- [ ] `make score` passes Security ≥ 8 on all three services
+- [ ] Security-lens review per `docs/agents/CODE_REVIEW_POLICY.md` on all three services
 - [ ] `docs/IMPROVEMENT_PLAN_V2.md` Phase 1 marked complete
 
 ## Files affected

@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -228,15 +228,6 @@ research-validate:
 # test-digiquant.yml runs as its first step. Run before adding a migration.
 supabase-migrations-check:
 	bash digiquant/scripts/research/verify-supabase-migrations.sh
-
-# Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
-score:
-	python3 scripts/score.py --staged
-
-# Compare staged score vs origin/develop baseline per dimension; exits 1 if any dimension regressed.
-# Run this before `make score` to catch incremental quality slippage early.
-score-delta:
-	python3 scripts/score_delta.py
 
 # Repo-health panel for housekeeping shifts (advisory only — never a gate, never a pre-flight).
 # Prints 8 metric rows and exits 0. Use readiness-write to refresh docs/agents/READINESS.md.

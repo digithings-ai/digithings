@@ -1,16 +1,20 @@
 # Gloomberb session-cookie runbook (#4099)
 
-Twelve of the 34 `digifetch_*` tools read Gloomberb's session-gated endpoints and
-need a Gloomberb session cookie supplied as `GLOOMBERB_SESSION_COOKIE`; the other
-22 are anonymous and keep working with no cookie at all. This runbook covers the
+Forty-two of the 89 `digifetch_*` tools read session-gated endpoints and
+need a session cookie: 41 take `GLOOMBERB_SESSION_COOKIE` (37 `session` + 1
+`preview` + 3 `pro`) and `digifetch_substack` takes its own
+`SUBSTACK_SESSION_COOKIE` (`venue_session`); the other 47 are anonymous and
+keep working with no cookie at all. This runbook covers the
 free-account signup, the cookie extraction, where the cookie is placed per
 deployment, the privacy rules, and exactly what an operator sees when the cookie
-is absent. It is a follow-up to #4069 (the family landed in PR #4085).
+is absent. It is a follow-up to #4069 (the family landed in PR #4085) and was
+last widened by #4837 (130-function coverage: 15 probe-backed Cloud reads and
+13 inert workspace/broker tools joined the gated set).
 
 ## What happens without the cookie
 
-The absent-cookie path is a **supported state**, not a failure: the 22 free tools
-are unaffected, and the 12 gated tools answer a typed error instead of touching
+The absent-cookie path is a **supported state**, not a failure: the 47 free tools
+are unaffected, and the 42 gated tools answer a typed error instead of touching
 the network.
 
 - **Gated tools return `auth_required` with no HTTP request.** When
@@ -19,7 +23,8 @@ the network.
   message="… GLOOMBERB_SESSION_COOKIE is not set")` (`client.py:2248-2254`).
   Zero bytes leave the process.
 - **Pro-only tools return `pro_required` for a valid free session.** A verified
-  free session that calls `digifetch_transcripts` or `digifetch_screener` is
+  free session that calls `digifetch_transcripts`, `digifetch_screener`, or
+  `digifetch_options_flow` is
   entitled to be here but not to the route; the upstream plan gate is mapped to
   a typed, non-retryable `pro_required` (distinct from `auth_required`, so a
   caller can tell a missing session from a missing plan) (`client.py:307-322`).
@@ -32,22 +37,43 @@ the network.
   cookie is unset, `available_digifetch_tools` drops the session/preview/pro
   tools (and the whole family when the kill switch is off) so a pipeline LLM is
   never handed a tool that can only error (`agent_tools.py:261-292`). The MCP
-  surface registers all 34 and answers the typed error per call.
+  surface registers all 89 and answers the typed error per call.
+- **Read-scope membership is not a read-only guarantee.** Every digifetch tool
+  — including the 13 write-shaped workspace/broker tools — is registered in
+  the `read` MCP scope, but that is a surfacing decision, not a safety
+  property. What makes the write-shaped tools safe is the Task 7 read-only
+  verdict (below): without a cookie they answer `auth_required` with zero
+  HTTP, and with one they answer the typed read-only `upstream_error`, also
+  with zero HTTP. Scope never substitutes for that verdict.
 
 ## Which tools need it
 
-12 of the 34 `digifetch_*` tools are cookie-gated, each carrying one
-entitlement (`entitlements.py:58-97`), as of 2026-09-16:
+42 of the 89 `digifetch_*` tools are cookie-gated, each carrying one
+entitlement (`entitlements.py`), as of 2026-09-30 (#4837):
 
 | Entitlement | Tools |
 |---|---|
-| `session` (9) | `digifetch_holders`, `digifetch_analyst_research`, `digifetch_corporate_actions`, `digifetch_research_search`, `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_short_interest`, `digifetch_saved_searches` |
+| `session` (37) | Original nine reads: `digifetch_holders`, `digifetch_analyst_research`, `digifetch_corporate_actions`, `digifetch_research_search`, `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_short_interest`, `digifetch_saved_searches` · 15 probe-backed Cloud reads (#4837 Task 5): `digifetch_time_and_sales`, `digifetch_quote_recap`, `digifetch_estimate_revisions`, `digifetch_short_volume`, `digifetch_hiring`, `digifetch_central_bank_rates`, `digifetch_cdx`, `digifetch_sovereign_cds`, `digifetch_cot`, `digifetch_crypto_markets`, `digifetch_iv_screen`, `digifetch_iv_history`, `digifetch_iv_surface`, `digifetch_debt_maturities`, `digifetch_session_movers` · 13 inert workspace/broker tools (#4837 Task 7): `digifetch_portfolio_view`, `digifetch_watchlist_add`, `digifetch_watchlist_remove`, `digifetch_portfolio_add`, `digifetch_portfolio_remove`, `digifetch_alert_add`, `digifetch_alert_list`, `digifetch_note_add`, `digifetch_thesis_add`, `digifetch_view_add`, `digifetch_broker_positions`, `digifetch_ibkr_preview_order`, `digifetch_ibkr_execute_order` |
 | `preview` (1) | `digifetch_equity_diagnostic` — a free session still gets a labeled `access="preview"` report instead of a hard gate |
-| `pro` (2) | `digifetch_transcripts`, `digifetch_screener` — a free session is gated with `pro_required` |
+| `pro` (3) | `digifetch_transcripts`, `digifetch_screener`, `digifetch_options_flow` — a free session is gated with `pro_required` |
+| `venue_session` (1) | `digifetch_substack` — needs its own `SUBSTACK_SESSION_COOKIE` (your own Substack account); without it the tool answers `auth_required` with login instructions and makes no request |
 
-The family total is **34 tools, 22 of them free** as of 2026-09-16; a rename or a
+The family total is **89 tools, 47 of them free** as of 2026-09-30; a rename or a
 new gated tool updates this doc in the same change (the repo-level test in
-`tests/scripts/test_gloomberb_session_cookie_runbook.py` fails otherwise).
+`tests/scripts/test_gloomberb_session_cookie_runbook.py` fails otherwise —
+it requires every non-free tool name to appear above).
+
+**Read-only posture of the write-shaped tools (#4837 Task 7).** The 13
+workspace/broker tools look like writes but cannot write in this phase: no
+personal Cloud write route was verified (the 2026-09-30 source probe found
+only team-scoped account APIs). Without a cookie they answer `auth_required`
+with zero HTTP; with one they answer the typed read-only `upstream_error`,
+also with zero HTTP. `digifetch_ibkr_preview_order` mints a local HMAC
+approval ticket (single-use, 15-minute TTL) without touching any brokerage;
+`digifetch_ibkr_execute_order` ships DISABLED pending human review of the
+approval-gate design — only `dry_run` returns data (the would-be request,
+zero brokerage traffic). Supplying a cookie therefore does not enable any
+write; it only changes which typed read-only answer these tools give.
 
 This is enrichment data, not a pipeline primary: the free tier is **delayed up
 to 15 minutes** (the client's own delay notice), so no trading or research path
@@ -56,7 +82,7 @@ should depend on a gated tool for a correctness-critical read.
 ## Get a free account
 
 A free (email-verified) account is enough for the `session` and `preview`
-tools; the two `pro` tools need a Gloomberb Pro plan, which this runbook does
+tools; the three `pro` tools need a Gloomberb Pro plan, which this runbook does
 not cover (there is no in-tree upgrade flow).
 
 The steps below mirror the shipped terminal app's own copy at
@@ -76,7 +102,7 @@ The steps below mirror the shipped terminal app's own copy at
    Verification Email**.
 
 If your environment cannot reach a browser or the signup flow is unavailable,
-stop here: the 22 free tools work without an account, and gated calls will
+stop here: the 47 free tools work without an account, and gated calls will
 simply answer `auth_required`.
 
 ## Extract the session cookie
@@ -162,7 +188,7 @@ Expected: `OK holders rows = <n>` with `n > 0`. If it prints
 `FAIL auth_required`, the cookie was not read — check the quoting and that the
 value was actually exported (`set -a` before sourcing `.env`), and that a
 `name=value` form still carries its `name=` prefix. `FAIL pro_required` means the
-session is valid but not entitled to a Pro route (you called one of the two
+session is valid but not entitled to a Pro route (you called one of the three
 `pro` tools).
 
 ## Privacy rules
@@ -189,5 +215,5 @@ session is valid but not entitled to a Pro route (you called one of the two
 - Design spec: [`docs/superpowers/specs/2026-09-16-gloomberb-session-cookie-runbook-design.md`](../superpowers/specs/2026-09-16-gloomberb-session-cookie-runbook-design.md)
 - Family spec: [`docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../superpowers/specs/2026-09-12-digifetch-scoping-design.md)
 - Component map: [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md)
-- Origin / tracking issues: [#4069](https://github.com/digithings-ai/digithings/issues/4069), [#4110](https://github.com/digithings-ai/digithings/issues/4110), [#4101](https://github.com/digithings-ai/digithings/issues/4101)
+- Origin / tracking issues: [#4069](https://github.com/digithings-ai/digithings/issues/4069), [#4110](https://github.com/digithings-ai/digithings/issues/4110), [#4101](https://github.com/digithings-ai/digithings/issues/4101), [#4837](https://github.com/digithings-ai/digithings/issues/4837)
 - Hosted-container forwarding (shipped): [#4260](https://github.com/digithings-ai/digithings/issues/4260)

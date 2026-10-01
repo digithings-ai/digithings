@@ -32,6 +32,7 @@ from digiquant.data.gloomberb import (  # noqa: E402
     GLOOMBERB_SESSION_COOKIE_ENV,
     MACRO_TOOLS,
     PM_TOOLS,
+    SUBSTACK_SESSION_COOKIE_ENV,
     TOOL_ENTITLEMENTS,
     GloomberbClient,
     agent_tools,
@@ -206,6 +207,9 @@ def test_available_digifetch_tools_defaults_to_every_schema(
     free = [n for n in TOOL_ENTITLEMENTS if TOOL_ENTITLEMENTS[n] == "free"]
     assert [t["function"]["name"] for t in available_digifetch_tools()] == free
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
+    # The venue_session reader needs its own venue cookie, not the Gloomberb one.
+    assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS) - 1
+    monkeypatch.setenv(SUBSTACK_SESSION_COOKIE_ENV, "substack.sid=test")
     assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS)
 
 

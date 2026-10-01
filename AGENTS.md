@@ -130,9 +130,9 @@ The quality bar is **review**, not a self-score. Use `/review` / in-session revi
 
 **Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `review-<subject>.md` beside the plan or ledger the review belongs to (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
 
-`make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
+Review skills are the sole quality gate. Do not treat any self-score as a substitute for review.
 
-**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `apps/**` and `packages/**` are excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
+**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
 
 ---
 
@@ -355,7 +355,6 @@ resulting fixes reviewed — the same rule the `ruff.toml` rule selection follow
 
 ```bash
 make test-unit          # unit tests (no stack required)
-make score              # optional 4-dimension rubric (human/CI; not an agent pre-flight)
 make readiness          # repo-health panel for housekeeping shifts (advisory; never a gate)
 make task ISSUE=N       # isolated git worktree for a backlog task (full pipeline)
 make doc-check          # validate internal markdown links
@@ -446,6 +445,32 @@ Standard commands are also documented in root `README.md` and `Makefile`.
 
 ---
 
+## Origin iteration, GitHub promotion
+
+digithings and twelve-x are inbound Origin mirrors (`chrizefan/digithings`, `chrizefan/twelve-x`). GitHub stays the public face and the release host. Agent iterations stay off GitHub.
+
+On a clone, `origin` is `https://origin.cursor.com/chrizefan/<repo>.git` and `github` is the GitHub URL. One-time: `origin auth login`, then `origin repo set-origin-remote`, then point `origin`'s push URL at `chrizefan/<repo>` if the command wrote `digithings-ai/<repo>` (that path is not the mirror).
+
+| Branch | Publish with | Lands on |
+|---|---|---|
+| `origin/<slug>` | `origin push local` | Origin only |
+| `task/<N>-slug`, `module/*`, `develop`, `main`, `release/*` | `git push origin` or `git push github` | GitHub, mirrored back to Origin |
+
+`git push` of any other name, including a push of `origin/<slug>` to `origin` or `github`, writes through to GitHub. Do not open a pull request from an `origin/<slug>` branch. Review starts at promotion:
+
+```bash
+git fetch origin develop
+git switch -c origin/<slug> origin/develop
+# edit, commit
+origin push local
+
+# when the slice is ready for GitHub
+git switch -c task/<N>-<slug> origin/<slug>
+git push -u origin HEAD
+```
+
+Releases, release-please, GitHub Actions, and Cloudflare Pages stay on GitHub. Do not detach the mirror.
+
 ## Branching model
 
 ```
@@ -479,6 +504,8 @@ Module branches are guarded by the `module-branch-protection` ruleset: **no forc
 Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, `bot/<slug>` for branches the workflows push, and `<handle>/<slug>` for a named human contributor.
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
+
+**PR titles into `develop` are linted.** Use Conventional Commits with a **required scope** (e.g. `feat(digillm): …`, `ci(root): …`). Scope allow-list and exemptions (release-please, develop→main promote) are in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml); short contributor note in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -535,7 +562,7 @@ release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
+Active slash commands: `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
 
 When the session also has plugin skills (`deslop`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship`, test-driven-development, …), pick those instead of inventing a numbered ritual. See [How to work](#how-to-work).
 

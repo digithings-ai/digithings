@@ -21,11 +21,14 @@ def _load() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-def test_schedule_and_dispatch() -> None:
+def test_schedule_commented_dispatch_remains() -> None:
     spec = _load()
     on = spec[True]  # YAML 1.1 parses the `on:` key as boolean True
     assert "workflow_dispatch" in on
-    assert "30 13 * * *" in [entry["cron"] for entry in on["schedule"]]
+    assert "schedule" not in on
+    blob = WORKFLOW.read_text(encoding="utf-8")
+    assert 'cron: "30 13 * * *"' in blob
+    assert blob.count("#   - cron:") >= 1
 
 
 def test_secrets_wired() -> None:

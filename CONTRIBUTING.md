@@ -37,11 +37,28 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 1. Pick or open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1). Scope the work.
 2. Branch: `feature/<short-description>` or `fix/<short-description>`.
 3. Implement with small, focused commits (conventional commit messages — `make commit MSG="feat(x): ..."` helps).
-4. Run `make score` and pass the PR gate (Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9). Rubrics: [docs/scoring/](docs/scoring/).
-5. Open a PR with the template. Include: what changed, why, how it was tested.
-6. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
+4. Open a PR with the template. Include: what changed, why, how it was tested. Quality bar is review ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
+5. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
 
 For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
+
+## PR titles (into develop)
+
+Pull requests targeting **develop** must use a [Conventional Commits](https://www.conventionalcommits.org/) title with a **required scope** from the module allow-list. Squash merges use the PR title as the commit subject, so scoped titles keep release-please working.
+
+Examples:
+
+- `feat(digillm): add streaming tool calls`
+- `ci(root): conventional-commit PR title lint`
+- `fix(digiquant): correct fill timestamp timezone`
+
+Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digiclaw, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+
+Exempt patterns (not blocked):
+
+- `chore(*): release …` / `chore(release): …` (release-please)
+- `chore: promote develop to main`
+- PRs labeled `autorelease: pending`
 
 ## Testing
 

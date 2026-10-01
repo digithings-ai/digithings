@@ -8,28 +8,30 @@ import { Prose } from "./Prose";
 import { Section } from "./Section";
 
 describe("document family", () => {
-  it("frames the page in a bordered, token-width column", () => {
+  it("frames the page between the landing rails, at the rail width", () => {
     const html = renderToStaticMarkup(
       <DocumentFrame>
         <p>body</p>
       </DocumentFrame>,
     );
-    expect(html).toContain("max-w-[var(--frame-w)]");
-    expect(html).toContain("border-x border-hair");
-    expect(html).toContain("max-[1040px]:border-x-0");
+    expect(html).toContain("line-y line-dashed");
+    expect(html).toContain("max-w-[calc(var(--frame-w)+2*var(--page-pad))]");
+    expect(html).toContain("overflow-x-clip");
+    expect(html).toContain("[counter-reset:doc-section]");
+    expect(html).not.toContain("border-x");
   });
 
-  it("separates sections with a hairline and one page step", () => {
+  it("separates sections with a full-bleed hairline and numbers the heading", () => {
     const html = renderToStaticMarkup(
       <Section id="modules" title="The modules" lede="Nine ship today.">
         <p>rows</p>
       </Section>,
     );
     expect(html).toContain('id="modules"');
-    expect(html).toContain("border-t border-hair");
+    expect(html).toContain("before:w-screen");
+    expect(html).toContain("before:bg-hair");
     expect(html).toContain("px-[var(--page-pad)]");
-    expect(html).toContain("py-[var(--page-step)]");
-    expect(html).toContain("first:border-t-0");
+    expect(html).toContain("[counter-increment:doc-section]");
     expect(html).toContain("<h2");
     expect(html).toContain("The modules");
     expect(html).toContain("Nine ship today.");
@@ -46,16 +48,19 @@ describe("document family", () => {
     expect(html).toContain("only");
   });
 
-  it("opens a page with a title and one lede, no eyebrow", () => {
-    const html = renderToStaticMarkup(
+  it("opens a page with a title and one lede, and a path line only when given", () => {
+    const bare = renderToStaticMarkup(
       <PageTitle title="Infrastructure, not a product.">
         A set of parts you assemble.
       </PageTitle>,
     );
-    expect(html).toContain("<h1");
-    expect(html).toContain("--type-page-title");
-    expect(html).toContain("A set of parts you assemble.");
-    expect(html).not.toContain("//");
+    expect(bare).toContain("<h1");
+    expect(bare).toContain("--type-page-title");
+    expect(bare).toContain("A set of parts you assemble.");
+    expect(bare).not.toContain("~/digithings");
+
+    const withPath = renderToStaticMarkup(<PageTitle path="services" title="Services" />);
+    expect(withPath).toContain("~/digithings/services");
   });
 
   it("wraps prose at the measure and leading", () => {

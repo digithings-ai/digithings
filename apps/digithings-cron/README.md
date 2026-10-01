@@ -33,11 +33,11 @@ Set secrets from this directory with wrangler secret put (never echo values).
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(38 expressions after #4761: prices-intraday removed, market-data morning
-`0 13 * * *` and evening `30 21 * * *` added). House research/portfolio
-retries (`house-run-09`…`12`) use daily `DOW=*`; twelve-x-new-york stays
-weekday-only on `17 12 * * MON-FRI`. At-open price clocks remain `MON-FRI` with
-the ET open gate.
+(20 expressions after the 2026-10-01 Human Gate pause: DigiQuant pipeline
+jobs stay in `src/jobs.ts` with `enabled: false` and are omitted from
+wrangler). twelve-x-new-york stays weekday-only on `17 12 * * MON-FRI`.
+Resume: set those jobs `enabled: true` and restore wrangler from
+`uniqueEnabledCrons()`.
 
 ## Local
 

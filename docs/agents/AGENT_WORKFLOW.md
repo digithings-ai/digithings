@@ -52,7 +52,7 @@ Run `ruff check . && ruff format --check .` after all Python changes.
 
 ## 4. Quality bar
 
-Review, not a self-score. Use `/review` / in-session / `review-and-ship` and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin. `make score` is optional (human/CI). Do not treat a passing self-score as a substitute for review.
+Review, not a self-score. Use `/review` / in-session / `review-and-ship` and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin.
 
 ---
 

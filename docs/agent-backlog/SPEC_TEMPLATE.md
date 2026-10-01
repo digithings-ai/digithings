@@ -62,17 +62,12 @@ curl -s http://localhost:{port}/{endpoint}
 
 ---
 
-## Scoring Targets
+## Review Targets
 
-| Dimension | Target | Key criteria for this task |
-|-----------|--------|---------------------------|
-| Security | ≥8/10 | {e.g., no new unauthenticated endpoints} |
-| Quality | ≥8/10 | {e.g., Pydantic v2, Polars, ruff clean, tests added} |
-| Optimization | ≥7/10 | {e.g., result cached, no N+1 query} |
-| Accuracy | ≥9/10 | {e.g., matches ARCHITECTURE.md spec, audit events emitted} |
-
-Full rubric criteria: `docs/scoring/`
-Self-scoring tool: `make score`
+Quality bar is **review**, not a self-score. Run `/review` (or an in-session
+review) when [CODE_REVIEW_POLICY.md](../agents/CODE_REVIEW_POLICY.md) needs a
+hatch. The self-score rubric (`docs/scoring/`, `make score`) was removed in
+#4868 — do not set numeric score targets for the task.
 
 ---
 

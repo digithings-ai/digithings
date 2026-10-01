@@ -1015,7 +1015,7 @@ function referenceEls(args: {
  * the span), then points whose date falls inside are kept — so two series that
  * share a span stay locked to the same calendar window regardless of sampling.
  */
-function sliceByView(
+export function sliceByView(
   points: TearsheetSeriesPoint[],
   view: ViewWindow | undefined,
   fullSpan: [string, string] | undefined,
@@ -1960,6 +1960,12 @@ export interface OverlaySeries {
    */
   color?: string;
   dashed?: boolean;
+  /**
+   * Round-dot stroke for the benchmark leg (the owner's landing-band grammar:
+   * portfolio is the solid filled curve, the benchmark is mute dots). Wins
+   * over `dashed` when both are set; call sites set exactly one.
+   */
+  dotted?: boolean;
   /** Area fill under the line (default false — overlays stay as strokes). */
   fill?: boolean;
 }
@@ -2116,7 +2122,7 @@ function MultiTimeSeriesBody({
     const line = pathForOverlay(dates, maps[si], xAt, yAt);
     if (!line) return;
     const tone = s.tone ?? "accent";
-    const dash = s.dashed ? " ts-line-dashed" : "";
+    const dash = s.dotted ? " ts-line-dotted" : s.dashed ? " ts-line-dashed" : "";
     if (s.fill) {
       const baseReal = zeroBaseline ? 0 : realLo;
       const baseY = yAt(baseReal);

@@ -68,6 +68,9 @@ apps/dashboard/public/dashboard-data.json
 # docs/openapi/ + swagger-ui-dist — never commit the vendored copies).
 apps/digithings-web/public/openapi/
 apps/digithings-web/public/swagger-ui/
+# openwiki visualizer export (scripts/build-digithings.sh writes dist/openwiki
+# on deploy; local preview generates the same tree under public/ so /openwiki works).
+apps/digithings-web/public/openwiki/
 
 
 # Secrets and credentials
@@ -152,3 +155,11 @@ canvases/
 # digiclaw scheduler durable state (local)
 .digiclaw/
 .deno/
+
+# digivoice runtime data — model weights, recorded wavs, and the session
+# history JSONL. The data directory lives outside the repo by default
+# (~/Library/Application Support/digivoice on macOS, $XDG_DATA_HOME on Linux);
+# these catch a DIGIVOICE_DATA_DIR pointed inside the tree.
+**/ggml-*.bin
+**/history.jsonl
+**/recordings/*.wav

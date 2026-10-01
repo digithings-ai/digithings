@@ -48,46 +48,101 @@ from pydantic import BaseModel, ValidationError
 from .client import (
     GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
+    SUBSTACK_SESSION_COOKIE_ENV,
     gloomberb_enabled,
 )
 from .entitlements import TOOL_ENTITLEMENTS
 from .models import (
+    AlertAddInput,
+    AlertListInput,
     AnalystResearchInput,
+    BondCalcInput,
+    BrokerPositionsInput,
     CdsInput,
+    CdxInput,
+    CentralBankRatesInput,
+    ComparePerfInput,
     CongressTradesInput,
     CorporateActionsInput,
+    CorrMatrixInput,
+    CotInput,
+    CryptoMarketsInput,
+    CustomChartInput,
+    DebtMaturitiesInput,
     DigifetchEnvelope,
     DigifetchError,
+    DividendYieldInput,
     EarningsCalendarInput,
     EconCalendarInput,
     EconSeriesInput,
     EquityDiagnosticInput,
+    EstimateRevisionsInput,
     ExchangeRateInput,
+    FearGreedInput,
     FilingEventsInput,
+    FundGraphInput,
+    FxMatrixInput,
+    HackerNewsInput,
+    HiringInput,
     HoldersInput,
+    IbkrExecuteOrderInput,
+    IbkrPreviewOrderInput,
+    IpoCalendarInput,
+    IvHistoryInput,
+    IvScreenInput,
+    IvSurfaceInput,
+    KellyInput,
+    MarketHaltsInput,
+    MarketValInput,
+    MoneyMarketsInput,
     NewsInput,
+    NoteAddInput,
+    OptionsCalcInput,
     OptionsChainInput,
+    OptionsFlowInput,
+    OptionsScenarioInput,
+    PollsInput,
+    PortfolioAddInput,
+    PortfolioRemoveInput,
+    PortfolioViewInput,
     PredictionMarketsInput,
     PriceHistoryInput,
     ProxyStatementsInput,
     QuoteInput,
+    QuoteRecapInput,
     QuotesBatchInput,
+    RatePathInput,
+    RelGraphInput,
+    RelValInput,
     ResearchSearchInput,
     RiskReportsInput,
     SavedSearchesInput,
     ScreenerInput,
     SearchInput,
     SecFilingsInput,
+    SessionMoversInput,
     ShillerInput,
     ShortInterestInput,
+    ShortVolumeInput,
+    SovrInput,
     StatementsInput,
+    SubstackInput,
+    ThesisAddInput,
     ThirteenFFundsInput,
     ThirteenFHoldingsInput,
     TickerFinancialsInput,
     TickerTweetsInput,
+    TimeAndSalesInput,
     TranscriptsInput,
+    TreasuryAuctionsInput,
+    TrendingInput,
     TweetSearchInput,
+    ValGraphInput,
     VenuesInput,
+    ViewAddInput,
+    VixTermInput,
+    WatchlistAddInput,
+    WatchlistRemoveInput,
     YieldCurveInput,
 )
 
@@ -109,15 +164,15 @@ __all__ = [
 
 # ── shared client factory + envelope serializer (moved from mcp_server, #4146) ──
 #
-# One lazily-built ``GloomberbClient`` per (kill switch, session cookie) env
-# pair. Keyed by the raw env values so an operator/test env change gets a fresh
-# client without a process restart; the default (unset) pair is the anonymous,
+# One lazily-built ``GloomberbClient`` per (kill switch, session cookie,
+# substack cookie) env triple. Keyed by the raw env values so an
+# operator/test env change gets a fresh client without a process restart; the default (unset) pair is the anonymous,
 # default-ON client. Only one client is kept alive: when the env pair changes,
 # the replaced client is closed so its transport is not leaked. The lock
 # serializes the read/close/replace dance — LangGraph runs parallel nodes, and
 # they all funnel through this one cached client.
 
-_gloomberb_clients: dict[tuple[str, str], Any] = {}
+_gloomberb_clients: dict[tuple[str, str, str], Any] = {}
 _gloomberb_clients_lock = threading.Lock()
 
 
@@ -139,6 +194,7 @@ def build_gloomberb_client() -> Any:
     key = (
         os.environ.get(GLOOMBERB_ENABLED_ENV, ""),
         os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, ""),
+        os.environ.get(SUBSTACK_SESSION_COOKIE_ENV, ""),
     )
     with _gloomberb_clients_lock:
         client = _gloomberb_clients.get(key)
@@ -171,12 +227,13 @@ def gloomberb_envelope_json(
 
 # ── curated per-phase subsets (#4146) ─────────────────────────────────────────
 #
-# Not all 35 tools everywhere (prompt budget): the equity/sector research
+# Not all 70 tools everywhere (prompt budget): the equity/sector research
 # phases get company facts + analyst views, the macro phase gets rates/credit/
 # long-run valuation, and the portfolio PM (analyst + direction) gets a
 # PM-fit mix of quotes/news/analyst views plus macro context. Every name is
 # declared in ``TOOL_ENTITLEMENTS``; ``available_digifetch_tools`` drops the
-# session-/pro-/preview-gated ones when no cookie is configured.
+# session-/preview-/pro-gated ones when no Gloomberb cookie is configured
+# (and the venue_session reader when no Substack cookie is configured).
 #
 # deliberation stays digifetch-free: it is research-tools-only by policy
 # (#2908, no generic web search in the deliberation loop), and its evidence
@@ -212,6 +269,23 @@ MACRO_TOOLS: tuple[str, ...] = (
     "digifetch_news",
     "digifetch_research_search",
     "digifetch_prediction_markets",
+    # portfolio-math compositions (130-coverage Task 3): valuation + funding
+    # context for the macro phase. compare_performance / correlation_matrix /
+    # relative_valuation stay MCP-only: EQUITY_TOOLS is at its 16-name prompt
+    # budget and evictions need owner sign-off.
+    "digifetch_market_valuation",
+    "digifetch_money_markets",
+    "digifetch_rate_path",
+    # probe-backed tools (130-coverage Task 5): rates/credit/positioning core
+    # for the macro phase.
+    "digifetch_central_bank_rates",
+    "digifetch_cdx",
+    "digifetch_sovereign_cds",
+    "digifetch_cot",
+    # ToS/direct tools (130-coverage Task 6): Treasury auction results are
+    # rates core for the macro phase (16/16 — at cap; polls and hacker_news
+    # stay MCP-only, see below).
+    "digifetch_treasury_auctions",
 )
 # ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
 # upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
@@ -230,7 +304,20 @@ PM_TOOLS: tuple[str, ...] = (
     "digifetch_earnings_calendar",
     "digifetch_shiller",
     "digifetch_cds",
+    # probe-backed tools (130-coverage Task 5): market-wide session movers +
+    # the IPO calendar.
+    "digifetch_session_movers",
+    "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6): market-wide sentiment gauge +
+    # trade-halt risk for the PM direction read (16/16 — at cap).
+    "digifetch_fear_greed",
+    "digifetch_market_halts",
 )
+# ``digifetch_polls`` and ``digifetch_hacker_news`` stay MCP-only for now
+# (130-coverage Task 6): EQUITY is at its 16-name cap and MACRO/PM filled to
+# 16 with the rates/sentiment/risk picks above. Both remain discoverable via
+# MCP and the full manifest; promote into a subset only with an eviction the
+# owner signs off.
 
 
 # ── schemas, generated from the orchestrator manifest builders ────────────────
@@ -266,6 +353,10 @@ def _session_cookie_present() -> bool:
     return bool(os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, "").strip())
 
 
+def _substack_cookie_present() -> bool:
+    return bool(os.environ.get(SUBSTACK_SESSION_COOKIE_ENV, "").strip())
+
+
 def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
     """Schemas for *subset* (default: every digifetch tool), runtime-gated.
 
@@ -279,7 +370,9 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
       typed "disabled by kill switch" ``upstream_error``; and
     * ``session`` / ``preview`` / ``pro`` tools are dropped when
       ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would return the
-      typed ``auth_required`` / ``pro_required`` error with no request (#4099).
+      typed ``auth_required`` / ``pro_required`` error with no request (#4099);
+    * the ``venue_session`` reader (``digifetch_substack``) is dropped when
+      ``SUBSTACK_SESSION_COOKIE`` is unset, for the same reason.
 
     An unknown name is a wiring bug and raises ``KeyError``.
     """
@@ -287,10 +380,16 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
         return []
     names = _DEFAULT_TOOL_NAMES if subset is None else subset
     has_session = _session_cookie_present()
+    has_substack = _substack_cookie_present()
     schemas: list[dict[str, Any]] = []
     for name in names:
         entitlement = TOOL_ENTITLEMENTS[name]
-        if entitlement != "free" and not has_session:
+        if entitlement == "free":
+            pass
+        elif entitlement == "venue_session":
+            if not has_substack:
+                continue
+        elif not has_session:
             continue
         schemas.append(_SCHEMA_BY_NAME[name])
     return schemas
@@ -360,6 +459,133 @@ DIGIFETCH_DISPATCH: dict[str, DigifetchDispatch] = {
     ),
     "digifetch_prediction_markets": DigifetchDispatch(
         PredictionMarketsInput, "prediction_markets", attributed=False
+    ),
+    # Calculators + compositions (130-coverage Task 2): derived math, never
+    # Cloud-sourced, so no deep link and no attribution.
+    "digifetch_options_calculator": DigifetchDispatch(
+        OptionsCalcInput, "options_calculator", attributed=False
+    ),
+    "digifetch_bond_calculator": DigifetchDispatch(
+        BondCalcInput, "bond_calculator", attributed=False
+    ),
+    "digifetch_kelly_sizer": DigifetchDispatch(KellyInput, "kelly_sizer", attributed=False),
+    "digifetch_dividend_yield": DigifetchDispatch(
+        DividendYieldInput, "dividend_yield", attributed=False
+    ),
+    "digifetch_fx_cross_rates": DigifetchDispatch(
+        FxMatrixInput, "fx_cross_rates", attributed=False
+    ),
+    "digifetch_vix_term_structure": DigifetchDispatch(
+        VixTermInput, "vix_term_structure", attributed=False
+    ),
+    # Options scenario (130-coverage Task 8: OSA): derived math over the
+    # options_chain read, never Cloud-sourced, so no deep link and no
+    # attribution. MCP-only: all three curated subsets are at their 16-name
+    # prompt-budget caps.
+    "digifetch_options_scenario": DigifetchDispatch(
+        OptionsScenarioInput, "options_scenario", attributed=False
+    ),
+    # Portfolio-math compositions (130-coverage Task 3): derived math over
+    # existing reads, never Cloud-sourced, so no deep link and no attribution.
+    "digifetch_compare_performance": DigifetchDispatch(
+        ComparePerfInput, "compare_performance", attributed=False
+    ),
+    "digifetch_correlation_matrix": DigifetchDispatch(
+        CorrMatrixInput, "correlation_matrix", attributed=False
+    ),
+    "digifetch_relationship_graph": DigifetchDispatch(
+        RelGraphInput, "relationship_graph", attributed=False
+    ),
+    "digifetch_relative_valuation": DigifetchDispatch(
+        RelValInput, "relative_valuation", attributed=False
+    ),
+    "digifetch_fundamental_graph": DigifetchDispatch(
+        FundGraphInput, "fundamental_graph", attributed=False
+    ),
+    "digifetch_valuation_graph": DigifetchDispatch(
+        ValGraphInput, "valuation_graph", attributed=False
+    ),
+    "digifetch_custom_chart": DigifetchDispatch(CustomChartInput, "custom_chart", attributed=False),
+    "digifetch_market_valuation": DigifetchDispatch(
+        MarketValInput, "market_valuation", attributed=False
+    ),
+    "digifetch_money_markets": DigifetchDispatch(
+        MoneyMarketsInput, "money_markets", attributed=False
+    ),
+    "digifetch_rate_path": DigifetchDispatch(RatePathInput, "rate_path", attributed=False),
+    # Probe-backed tools (130-coverage Task 5): one row per Task 4 GO verdict.
+    # The rows mirror the MCP wrappers (same input model, client method, and
+    # deep-link/attribution choice); the parity test pins both directions.
+    "digifetch_time_and_sales": DigifetchDispatch(TimeAndSalesInput, "time_and_sales", "symbol"),
+    "digifetch_quote_recap": DigifetchDispatch(QuoteRecapInput, "quote_recap", "symbol"),
+    "digifetch_estimate_revisions": DigifetchDispatch(
+        EstimateRevisionsInput, "estimate_revisions", "symbol"
+    ),
+    "digifetch_short_volume": DigifetchDispatch(ShortVolumeInput, "short_volume", "symbol"),
+    "digifetch_hiring": DigifetchDispatch(HiringInput, "hiring", "ticker"),
+    "digifetch_central_bank_rates": DigifetchDispatch(CentralBankRatesInput, "central_bank_rates"),
+    "digifetch_cdx": DigifetchDispatch(CdxInput, "cdx"),
+    "digifetch_sovereign_cds": DigifetchDispatch(SovrInput, "sovereign_cds"),
+    "digifetch_options_flow": DigifetchDispatch(OptionsFlowInput, "options_flow"),
+    "digifetch_cot": DigifetchDispatch(CotInput, "cot"),
+    "digifetch_crypto_markets": DigifetchDispatch(CryptoMarketsInput, "crypto_markets"),
+    "digifetch_iv_screen": DigifetchDispatch(IvScreenInput, "iv_screen"),
+    "digifetch_iv_history": DigifetchDispatch(IvHistoryInput, "iv_history", "symbol"),
+    "digifetch_iv_surface": DigifetchDispatch(IvSurfaceInput, "iv_surface", "symbol"),
+    "digifetch_debt_maturities": DigifetchDispatch(
+        DebtMaturitiesInput, "debt_maturities", "symbol"
+    ),
+    "digifetch_session_movers": DigifetchDispatch(SessionMoversInput, "session_movers"),
+    # Venue-direct (prediction-markets precedent): free, unattributed, per-row
+    # venue URLs, no Gloomberb claims.
+    "digifetch_trending": DigifetchDispatch(TrendingInput, "trending", attributed=False),
+    "digifetch_substack": DigifetchDispatch(SubstackInput, "substack", attributed=False),
+    "digifetch_ipo_calendar": DigifetchDispatch(IpoCalendarInput, "ipo_calendar"),
+    # ToS/direct tools (130-coverage Task 6): venue-direct, free,
+    # unattributed, per-row venue URLs, no Gloomberb claims.
+    "digifetch_fear_greed": DigifetchDispatch(FearGreedInput, "fear_greed", attributed=False),
+    "digifetch_polls": DigifetchDispatch(PollsInput, "polls", attributed=False),
+    "digifetch_treasury_auctions": DigifetchDispatch(
+        TreasuryAuctionsInput, "treasury_auctions", attributed=False
+    ),
+    "digifetch_market_halts": DigifetchDispatch(MarketHaltsInput, "market_halts", attributed=False),
+    "digifetch_hacker_news": DigifetchDispatch(HackerNewsInput, "hacker_news", attributed=False),
+    # Workspace writes + broker reads + approval-gated orders (130-coverage
+    # Task 7): no personal Cloud write route is verified, so the payloads carry
+    # no Gloomberb-sourced data and stay unattributed (like the calculators and
+    # venue-direct tools); the descriptions still name the Cloud account surface.
+    "digifetch_portfolio_view": DigifetchDispatch(
+        PortfolioViewInput, "portfolio_view", attributed=False
+    ),
+    "digifetch_watchlist_add": DigifetchDispatch(
+        WatchlistAddInput, "watchlist_add", "symbol", attributed=False
+    ),
+    "digifetch_watchlist_remove": DigifetchDispatch(
+        WatchlistRemoveInput, "watchlist_remove", "symbol", attributed=False
+    ),
+    "digifetch_portfolio_add": DigifetchDispatch(
+        PortfolioAddInput, "portfolio_add", "symbol", attributed=False
+    ),
+    "digifetch_portfolio_remove": DigifetchDispatch(
+        PortfolioRemoveInput, "portfolio_remove", "symbol", attributed=False
+    ),
+    "digifetch_alert_add": DigifetchDispatch(
+        AlertAddInput, "alert_add", "symbol", attributed=False
+    ),
+    "digifetch_alert_list": DigifetchDispatch(AlertListInput, "alert_list", attributed=False),
+    "digifetch_note_add": DigifetchDispatch(NoteAddInput, "note_add", "symbol", attributed=False),
+    "digifetch_thesis_add": DigifetchDispatch(
+        ThesisAddInput, "thesis_add", "ticker", attributed=False
+    ),
+    "digifetch_view_add": DigifetchDispatch(ViewAddInput, "view_add", attributed=False),
+    "digifetch_broker_positions": DigifetchDispatch(
+        BrokerPositionsInput, "broker_positions", attributed=False
+    ),
+    "digifetch_ibkr_preview_order": DigifetchDispatch(
+        IbkrPreviewOrderInput, "ibkr_preview_order", "symbol", attributed=False
+    ),
+    "digifetch_ibkr_execute_order": DigifetchDispatch(
+        IbkrExecuteOrderInput, "ibkr_execute_order", "symbol", attributed=False
     ),
 }
 

@@ -7,9 +7,9 @@
 # Metadata rows stay; restore path is `restore_thread` in
 # digiquant/ops/checkpoint_archive.py.
 #
-# Schedule 13:30 UTC runs after the morning daily-pipeline window (crons at
-# :17 past 09–12 UTC) plus buffer, so the just-finished run's thread is left
-# alone by --retain-days 1 and only older threads archive.
+# Schedule 13:30 UTC is the intended archive window (after the 09–12 UTC
+# house-run retries). PAUSED 2026-10-01 Human Gate: the GHA schedule block
+# is commented out until Chris resumes. workflow_dispatch remains.
 #
 # R2 prerequisites completed 2026-09-09 (issue #3761): R2 enabled, bucket
 # `digithings-archive` created, GH secrets R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
@@ -23,8 +23,11 @@
 name: "Pipeline: checkpoint archive"
 
 on:
-  schedule:
-    - cron: "30 13 * * *"
+  # PAUSED 2026-10-01 Human Gate: DigiQuant pipeline clocks off until Chris resumes.
+  # Do not restore this schedule without also re-enabling the matching
+  # digithings-cron job + wrangler cron (or merging the CHR-B+D container flip).
+  # schedule:
+  #   - cron: "30 13 * * *"
   workflow_dispatch:
 
 permissions:

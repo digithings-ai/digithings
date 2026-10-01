@@ -121,6 +121,12 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
         from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
         return get_default_minilm_embedder()
+    if name in ("multilingual", "multi", "paraphrase-multilingual", "minilm-multi"):
+        from digisearch.embedding.providers.multilingual import (
+            get_default_multilingual_embedder,
+        )
+
+        return get_default_multilingual_embedder()
     if name in ("openai", "oai"):
         api_key = os.environ.get("OPENAI_API_KEY", "").strip()
         if not api_key:
@@ -132,8 +138,7 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
 
         return OpenAIEmbedder(model=model or "text-embedding-3-small", api_key=api_key)
     raise EmbeddingConfigError(
-        f"unknown embedding provider {name!r}; expected minilm or openai "
-        "(new providers are out of scope for the wire-embed task)"
+        f"unknown embedding provider {name!r}; expected minilm, multilingual, or openai"
     )
 
 

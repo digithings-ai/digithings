@@ -3,4 +3,4 @@ description: Start a backlog task end-to-end via `make task ISSUE=N` with pre-fl
 argument-hint: <issue-number>
 ---
 
-Invoke `make task ISSUE=$ARGUMENTS`. The Makefile target is the source of truth for the full pipeline — it creates an isolated worktree, pauses for implementation, runs tests, scores, and opens a PR.
+Invoke `make task ISSUE=$ARGUMENTS`. The Makefile target is the source of truth for the full pipeline — it creates an isolated worktree, pauses for implementation, runs tests, commits, and opens a PR.

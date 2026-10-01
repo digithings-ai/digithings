@@ -184,6 +184,51 @@ describe("canon contrast contract (#4306, canon-audit S2)", () => {
       expect(rule).toBeDefined();
       expect(rule).not.toContain("color: var(--accent);");
     });
+
+    it(".ts-live-badge does not wear the raw accent", () => {
+      const rule = finance.match(/\.ts-live-badge\s*\{[^}]*\}/)?.[0];
+      expect(rule).toBeDefined();
+      expect(rule).not.toContain("color: var(--accent);");
+    });
+  });
+
+  describe("terminal muted text (--term-mute)", () => {
+    // The terminal is the one place the kit's smallest type sits on its own
+    // chrome rather than on the page ground, so it needs its own floor — and
+    // against TWO grounds, because the title bar is a 5% overlay toward the ink
+    // side. That makes the bar lighter than the body in dark and darker in
+    // light, so the bar is the worse of the two in both themes.
+    /** `--term-fill` is an `rgba()`, which `hexToken` cannot carry. */
+    function rgbaToken(block: string, name: string): { hex: string; alpha: number } {
+      const m = hexToken(block, name).match(
+        /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)/,
+      );
+      expect(m, `--${name} is an rgba() colour`).not.toBeNull();
+      const hex =
+        "#" +
+        [m![1], m![2], m![3]]
+          .map((v) => parseInt(v, 10).toString(16).padStart(2, "0"))
+          .join("");
+      return { hex, alpha: m![4] === undefined ? 1 : parseFloat(m![4]) };
+    }
+
+    for (const theme of ["dark", "light"] as const) {
+      it(`--term-mute clears AA on the body and the title bar (${theme})`, () => {
+        const block = themeBlock(theme);
+        const mute = hexToken(block, "term-mute");
+        const body = hexToken(block, "term-bg");
+        const fill = rgbaToken(block, "term-fill");
+        const bar = over(fill.hex, fill.alpha, body);
+        expect(
+          contrast(mute, body),
+          `--term-mute on --term-bg (${theme})`,
+        ).toBeGreaterThanOrEqual(AA_TEXT);
+        expect(
+          contrast(mute, bar),
+          `--term-mute on the title bar (${theme})`,
+        ).toBeGreaterThanOrEqual(AA_TEXT);
+      });
+    }
   });
 
   describe("returns-matrix cell ink (dark theme)", () => {

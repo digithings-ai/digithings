@@ -1,0 +1,194 @@
+# digivoice Hammerspoon sample
+
+Sample macOS hotkey adapter for digivoice. **Not** part of the Python package
+import path and **not** a hard dependency — copy or symlink into your Hammerspoon
+config.
+
+## Locked binds
+
+| Bind | Action |
+| --- | --- |
+| **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. |
+| **Esc** (plain, no modifiers) | Cancel the active dictation: creates the cancel-file; digivoice stops the recorder / whisper / rewrite, deletes the wav, and pastes nothing and logs nothing. Only live while a take is recording, transcribing, or rewriting; Esc is swallowed only when it cancels, otherwise it reaches the focused app. Not used for speech. |
+| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the banner says so). **No** clipboard or `kind:dict` history fallback. |
+
+Do not invent other default binds in this sample.
+
+## Status banner
+
+Status is a custom overlay banner, not Hammerspoon notifications. The one allowed toast is at Hammerspoon launch: it lists the configured commands and the resolved `digivoice` path.
+
+The banner is **display only** (a click just expands long text; it never steals focus and never starts or stops anything). Esc is the only control.
+
+| Phase | Animation (digichat `DotMatrix` port) | Text shown |
+| --- | --- | --- |
+| recording | red equalizer wave | none (`Esc to cancel`) |
+| transcribing | teal diagonal sweep | none yet (no live streaming STT) |
+| rewriting | teal circular sweep | the raw transcript, preset name |
+| pasting | teal downward sweep | the text being pasted |
+| speaking | teal equalizer | the selected text |
+| loading | teal grid twinkle | none |
+| done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final text, "take discarded", "no speech detected", or the error line |
+
+Long text is clipped to 3 lines with an ellipsis; click the banner to widen it to a 14-line box (click again to collapse). The banner reads `status.json` that the CLI writes, so it shows exactly what digivoice is doing.
+
+The menubar mark (`assets/digivoice-mark.png` + `REC`) stays during a dictation as a mic-in-use indicator, even when the banner is disabled. Errors are also printed to the Hammerspoon console.
+
+### Banner settings
+
+Stored in digivoice's `settings.json`, changed with the CLI, and **re-read at the start of every take** (no Reload Config needed):
+
+```bash
+digivoice settings set live_banner false          # disable the overlay entirely (default true)
+digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
+                                                  # | bottom-center | bottom-left | bottom-right | center
+digivoice settings set banner_animations false    # still dot-matrix frame (default true)
+digivoice settings --json                         # show everything
+```
+
+An unknown `banner_position` falls back to `top-center`.
+
+## How stop works
+
+Toggle recording uses a **stop-file** (not only the PR1 length cap):
+
+1. First Right Option → Hammerspoon starts  
+   `digivoice dict --toggle --stop-file "$DATA/dict.stop"`  
+   digivoice clears the stop-file and records with sox/ffmpeg (open-ended, with a safety cap).
+2. Second Right Option → Hammerspoon **writes** the stop-file.
+3. digivoice notices the file, sends SIGINT to the recorder process group so the
+   wav closes cleanly, then continues whisper → optional rewrite → history → paste
+   of what was captured (interrupt-safe; no resume-same-take).
+
+SIGINT/SIGTERM to the digivoice process itself takes the same early-stop path
+(Hammerspoon falls back to `task:terminate()` if the stop-file cannot be written).
+
+Default stop-file: `~/Library/Application Support/digivoice/dict.stop`  
+(or `$DIGIVOICE_DATA_DIR/dict.stop`).
+
+## Install
+
+1. Install [Hammerspoon](https://www.hammerspoon.org/) and grant **Accessibility**.
+2. Install digivoice (`uv sync --all-packages` or `pip install -e ./digivoice`) so
+   `digivoice` is on `PATH`, or set `DIGIVOICE_BIN` to the absolute binary.
+3. Symlink or copy this folder into your Hammerspoon config:
+
+   ```bash
+   mkdir -p ~/.hammerspoon
+   ln -s /path/to/digithings/digivoice/hammerspoon ~/.hammerspoon/digivoice
+   ```
+
+4. In `~/.hammerspoon/init.lua`:
+
+   ```lua
+   require("digivoice")
+   ```
+
+5. Reload Hammerspoon config (menu → Reload Config).
+
+Optional: `export DIGIVOICE_BIN=/absolute/path/to/digivoice` if PATH lookup fails
+inside Hammerspoon's environment.
+
+## Refreshing the Mac after an update (Chris's runbook)
+
+After a digivoice change lands on `develop`:
+
+1. Update the checkout and the CLI it runs:
+
+   ```bash
+   cd ~/path/to/digithings
+   git pull origin develop
+   uv sync --all-packages        # or: pip install -e ./digivoice
+   ```
+
+   The CLI is an editable install, so the pull alone updates the Python code; `uv sync` only matters if dependencies changed.
+
+2. Reload the Lua adapter: Hammerspoon menubar icon → **Reload Config** (or run `hs.reload()` in the Hammerspoon console). The adapter is symlinked from the checkout (`~/.hammerspoon/digivoice` → `digithings/digivoice/hammerspoon`), so reloading picks up the new `init.lua` and `banner_core.lua`. Settings changes need no reload.
+
+3. Check which CLI Hammerspoon will run. The launch toast prints `cli: <path>` and the Hammerspoon console logs `digivoice: armed; cli = <path>`. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. If it is wrong or missing, point it at the right binary and reload:
+
+   ```bash
+   launchctl setenv DIGIVOICE_BIN "$HOME/path/to/digithings/.venv/bin/digivoice"   # then quit/reopen Hammerspoon
+   ```
+
+   (or `export DIGIVOICE_BIN=…` in the shell that launches Hammerspoon).
+
+4. Verify the CLI is new enough: `digivoice cancel --help` and `digivoice status` must exist. A stale CLI behind a new `init.lua` still dictates, but Esc cannot discard the take (the banner will honestly report `done`).
+
+5. Smoke test: **Right Option**, say a few words, press **Esc** → banner says `cancelled`, nothing pasted, `digivoice history --last 1` unchanged. Then **Right Option**, speak, **Right Option** → text appears in the banner, then pastes.
+
+
+## Mic + Accessibility TCC runbook
+
+macOS will not prompt until the tool first needs the grant. Expect two prompts:
+
+### Microphone
+
+- **Who asks:** `sox` or `ffmpeg` (and sometimes Terminal / Hammerspoon if they
+  own the child process) when `digivoice dict` first records.
+- **Where to grant:** System Settings → Privacy & Security → Microphone.
+- **Enable for:** Hammerspoon, and the terminal you use to run `digivoice doctor`
+  / manual `dict` (Terminal, iTerm, Warp, etc.).
+- **Symptom if denied:** `digivoice dict` exits 1 with a one-line capture error;
+  no hang.
+
+### Accessibility
+
+- **Who asks:** `osascript` sending Command-V for paste (and Cmd+C for
+  `speak --selection`).
+- **Where to grant:** System Settings → Privacy & Security → Accessibility.
+- **Enable for:** Hammerspoon (hotkey-driven dict/speak) and your terminal for
+  manual CLI use.
+- **Symptom if denied:** dictation still succeeds — transcript on stdout and in
+  the clipboard via `pbcopy`; stderr notes that paste needs Accessibility.
+
+### Checklist after a fresh Mac login
+
+1. `digivoice doctor` — whisper-cli, piper, sox/ffmpeg, `ggml-base.en.bin`, Piper voice.
+2. Grant Mic to Hammerspoon (+ terminal).
+3. Grant Accessibility to Hammerspoon (+ terminal).
+4. Reload Hammerspoon; press **Right Option** once, speak, press again → paste. Press **Esc** mid-take → discarded.
+5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (the banner says so if nothing is selected).
+
+## Piper voice on Chris's Mac
+
+`speak` needs a Piper `.onnx` voice (plus the matching `.onnx.json` beside it):
+
+```bash
+# recommended: explicit path
+export DIGIVOICE_PIPER_VOICE="$HOME/Library/Application Support/digivoice/models/en_US-lessac-medium.onnx"
+
+# or drop the .onnx (+ .onnx.json) into the models directory and omit the env var
+# digivoice picks the first *.onnx there
+```
+
+Download voices from the Piper voices release (e.g. `en_US-lessac-medium`). Keep
+weights out of git. `digivoice doctor` checks that `piper` is on `PATH` (or
+`~/.local/bin/piper`); it does not require the voice file for exit 0 today —
+a missing voice fails soft on `speak` with a clear stderr line.
+
+## Manual CLI equivalents
+
+```bash
+# toggle dict with stop-file (what Hammerspoon runs)
+digivoice dict --toggle --stop-file "$HOME/Library/Application Support/digivoice/dict.stop"
+# in another terminal, to stop (transcribe + paste):
+touch "$HOME/Library/Application Support/digivoice/dict.stop"
+# or to cancel (discard: no paste, no history entry):
+digivoice cancel
+
+# speak selection only (what Hammerspoon runs)
+digivoice speak --selection
+```
+
+### Coding CLI readout (OpenCode / Claude / Cursor)
+
+**Double-tap Left Option** speaks the **current selection** only. After an assistant reply:
+
+1. Select the reply text in the terminal/TUI, then
+2. Double-tap **Left Option** (within ~350ms).
+
+If nothing is selected, digivoice exits 1 with a one-line hint and the banner
+shows it — it will **not** read the clipboard or last dictation from history.
+**Right Option** dict toggle is unchanged. Ctrl+Shift+Option is **not** bound.
+

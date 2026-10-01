@@ -139,7 +139,7 @@ make test-unit      # all unit tests green (or component-specific test-cmd)
 ruff check .        # zero violations
 ```
 
-Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` when that policy needs a hatch. `make score` is optional (human/CI).
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)). Use `/review` when that policy needs a hatch.
 
 ### 2e. PR submission
 
@@ -154,7 +154,7 @@ PR must:
 - Body must fill the PR template (test evidence, doc flag)
 - Title format: `feat(<component>): <description> (#<issue-number>)`
 
-CI may still run `make score` on the PR diff; that is optional human/CI tooling, not an agent pre-flight. Issue linkage is a convention (see [AGENTS.md](../../AGENTS.md)).
+Issue linkage is a convention (see [AGENTS.md](../../AGENTS.md)).
 
 ---
 
@@ -207,7 +207,7 @@ follow-up `exec:claude` issue with the error logs.
 | Component routing | `docs/agents/COMPONENT_ROUTING.md` |
 | Agent workflow | `docs/agents/AGENT_WORKFLOW.md` |
 | Claude rules | `AGENTS.md` (canonical) + `CLAUDE.md` (pointer) + `.claude/agents/` + `.claude/skills/` |
-| Scoring rubrics | `docs/scoring/` |
+| Review policy (sole quality gate) | `docs/agents/CODE_REVIEW_POLICY.md` |
 | Cloud dispatch | `.github/workflows/agent-claude-dispatch.yml` |
 | Project-status automation | `.github/workflows/project-status.yml` |
 | Issue template | `.github/ISSUE_TEMPLATE/agent_task.yml` |

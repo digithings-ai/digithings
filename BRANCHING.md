@@ -16,6 +16,10 @@ branch protection**, which the rulesets endpoint does not report at all — see 
 table below, and query `…/branches/<name>/protection` before concluding a branch
 is unguarded.
 
+## Origin drafts
+
+Agent iterations use a local branch named `origin/<slug>` and `origin push local`. Those refs live only on the Origin `/local` endpoint and do not sync to GitHub. They are not part of the taxonomy below. Promoting a draft means copying its tip onto a `task/`, `module/`, or `release/` branch and pushing that branch. See [AGENTS.md](AGENTS.md#origin-iteration-github-promotion).
+
 ## Three-tier branching model
 
 ```

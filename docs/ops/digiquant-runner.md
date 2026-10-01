@@ -5,9 +5,10 @@ Private Cloudflare Container Worker for the digiquant live cadence
 custom domain, no routes. digithings-cron is the only clock. It reaches this
 Worker over the `RUNNER` service binding.
 
-This Worker does not run the house research chain, broker credentials, Alpaca
-keys, or `--execute`. twelve-x stays `workflow_dispatch`. The execution probe
-is `--dry-run` only.
+The catalog includes `house-run` on this same class. digithings-cron still
+sends `repository_dispatch` until the clock flip. No broker credentials, no
+Alpaca keys, and no `--execute`. twelve-x stays `workflow_dispatch`. The
+execution probe is `--dry-run` only.
 
 ## Commands
 
@@ -134,6 +135,16 @@ One pinned Durable Object id: `runner-v1`. `max_instances = 1`,
 `instance_type = standard-2`. Idle `sleepAfter` is 2m; a held lock extends
 it to 30m. The heartbeat calls container `GET /status` about every 60s.
 
+Concurrency: the Durable Object ledger is primary (one lock per concurrency
+group, `MAX_INFLIGHT = 2`). The container also refuses a twin `POST /run` for
+the same command while a status file is still `running` (HTTP 409) — that
+backstops a premature DO watchdog timeout so two `market-data-refresh`
+processes cannot race the same R2 generation keys. The DO watchdog aligns to
+the container `started_at` and does not release a lock while `/status` still
+reports `running`; it only ledger-times-out when the container is unreachable
+past `timeout_seconds + 120s`. Artifact `publish` is bounded to 120s so status
+cannot stick on `running` forever.
+
 ## Rollback
 
 `GITHUB_OVERRIDE_JOBS` on digithings-cron defaults to empty, so migrated jobs
@@ -191,6 +202,34 @@ The same shape covers `12 0 * * *` (tearsheets), `5 22 * * *`
 
 ## Phase 3 note
 
-Phases 1–2 do not run the house research chain and do not write the
-skip-if-done ledger. A same-day GitHub Actions manual house success does not
-write `pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
+The house-run image stays on `DigiQuantRunnerContainer` (`standard-2`,
+`max_instances = 1`). Task 0 probe: phase2 Size=1274551802 (~1.187 GiB),
+house-candidate Size=1344917045 (~1.253 GiB). The bake keeps the frozen
+digiquant extras `prices` / `research` / `nautilus` and adds
+`uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres`.
+Extra copies are `digigraph`, `digillm`, `digismith`, and
+`config/byok-providers.json`, plus `.github/digiquant-pipeline.yml`,
+`.github/workflows/pipeline-digiquant-allocation-shadow.yml`, and the
+`/opt/runner` scripts `house_chain_step.py`, `wake_stack.py`, and
+`web_search_preflight.py`.
+
+A same-day GitHub Actions manual house success does not write
+`pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
+
+The implementation plan is
+[docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md](../superpowers/plans/2026-09-30-digiquant-house-run-phase3.md).
+Chris lock: one class, `DigiQuantRunnerContainer`, `instance_type = "standard-2"`.
+This note does not flip cron and does not deploy.
+
+## Phase 4 note
+
+Checkpoint archive still runs on the GitHub Actions schedule in
+`pipeline-checkpoint-archive.yml` (`30 13 * * *`). `smoke-site` and
+`smoke-stack` are still `workflow_dispatch` from digithings-cron. None of
+those clocks have moved. This note does not flip cron, delete a `schedule:`
+key, or deploy.
+
+The cutover plan (same class, `standard-2`, `max_instances = 1`) is
+[docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md](../superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md).
+Phase 3 Task 7 (secrets, deploy, house-run proof) stays a prerequisite and
+is not part of Phase 4.
