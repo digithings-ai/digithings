@@ -57,6 +57,8 @@ def test_adapter_flow(scenario: str, tmp_path: Path) -> None:
         env_extra={
             "DIGIVOICE_DATA_DIR": str(tmp_path),
             "DIGIVOICE_BIN": "/opt/test/bin/digivoice",
+            "DIGIVOICE_THEME": "dark",
+            "DIGIVOICE_PBCOPY_FILE": str(tmp_path / "clip.txt"),
         },
     )
     assert f"PASS {scenario}" in out

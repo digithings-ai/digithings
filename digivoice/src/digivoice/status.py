@@ -24,6 +24,7 @@ from pydantic import BaseModel, ValidationError
 from digivoice.models import VoicePaths
 
 STATUS_FILE_NAME = "status.json"
+BANNER_FLAG_NAME = "banner.show"
 DEFAULT_CANCEL_FILE_NAME = "dict.cancel"
 # Exit code of `dict` for a cancelled take. Not 0 (nothing was produced) and not 1
 # (nothing failed), so adapters can tell "user pressed Esc" from an error.
@@ -59,6 +60,30 @@ class StatusSnapshot(BaseModel):
 
 def status_path(paths: VoicePaths) -> Path:
     return Path(paths.data_dir) / STATUS_FILE_NAME
+
+
+def banner_flag_path(paths: VoicePaths) -> Path:
+    """Spawn flag the Hammerspoon adapter polls for preview banners."""
+    return Path(paths.data_dir) / BANNER_FLAG_NAME
+
+
+def read_banner_flag(path: str | Path) -> dict[str, object] | None:
+    """Raw spawn flag, or None when hidden / missing / unreadable."""
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return raw
+
+
+def write_banner_flag(path: str | Path, *, visible: bool, text: str = "") -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+    temp.write_text(json.dumps({"visible": visible, "text": text}) + "\n", encoding="utf-8")
+    os.replace(temp, target)
 
 
 def default_cancel_file(paths: VoicePaths) -> Path:
