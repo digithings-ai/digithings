@@ -281,6 +281,10 @@ def _verify_collection_model(index_name: str) -> None:
         )
     except EmbeddingModelMismatchError as exc:
         raise SystemExit(f"zammad error: collection model stamp mismatch: {exc}") from exc
+    except Exception as exc:
+        raise SystemExit(
+            f"zammad error: could not verify collection {index_name!r} model stamp: {exc}"
+        ) from exc
     print(f"verified collection {index_name!r} model stamp: multilingual")
 
 

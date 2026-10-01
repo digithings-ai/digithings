@@ -13,4 +13,4 @@ def compute_recall(
         hits = results_by_query.get(pair["query"], [])[:k]
         per_query[pair["query"]] = any(t in hits for t in pair["expected_ticket_ids"])
     score = sum(per_query.values()) / len(per_query) if per_query else 0.0
-    return {"recall@5": score, "per_query": per_query}
+    return {f"recall@{k}": score, "per_query": per_query}

@@ -137,7 +137,7 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # 403s the container) + wikipedia — no market/news coverage. The explicit
 # `engines: [{name: bing, disabled: false}, {name: mojeek, disabled: false}]`
 # override makes them active. See #4297.
-# Rebuild marker v11 (2026-10-01): installs digisearch[embedding-multilingual]
+# Rebuild marker v14 (2026-10-01): installs digisearch[embedding-multilingual]
 # (onnxruntime + tokenizers + numpy) for the multilingual OCC ticket/docs
 # indexes (#4756). Full rebuild required (wrangler caches by Dockerfile hash).
 # Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
