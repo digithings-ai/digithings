@@ -31,7 +31,6 @@ import {
 } from "@/lib/stackCatalog";
 import { emailSwapped, revealedLayers, swappedBoxes } from "@/lib/whyStory";
 
-import { SectionHead } from "./SectionHead";
 import { WhyPriceTable } from "./WhyPriceTable";
 
 const HEADLINE =
@@ -332,7 +331,6 @@ export function AppFirstSection() {
         onModeChange={setTourMode}
         header={
           <div className="flex w-full min-w-0 flex-col gap-[0.7rem]">
-            <SectionHead id="why" />
             <h2 className={HEADLINE}>
               <span className="why-rent">Anyones AI stack,</span>{" "}
               <span className="why-own">or a digithings stack</span>

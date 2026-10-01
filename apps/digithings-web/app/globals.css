@@ -962,6 +962,17 @@ html {
       pixel-glint var(--gp) step-end var(--g) infinite;
   }
   .pixel-word.is-live .n { animation: pixel-stray var(--t) linear var(--d) both; }
+
+  /* A reload or back/forward that lands mid-page (scrollResume.ts) must not
+     replay the hero intro behind the restored scroll: the hero shows its final
+     built state and only the ambient glint keeps running. The footer mark is
+     not a hero, so it still builds on its first scroll-in. */
+  html.scroll-resumed .pixel-word-hero .c { animation: none; opacity: var(--f); }
+  html.scroll-resumed .pixel-word-hero .g {
+    animation: pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  html.scroll-resumed .pixel-word-hero .n { animation: none; }
+  html.scroll-resumed .hero-rise { animation: none; }
 }
 
 @keyframes pixel-build {
@@ -1074,27 +1085,3 @@ html {
 }
 
 .hero-cue:hover .hero-cue__line { background: var(--ink-mute); }
-
-/* Band eyebrow — `NN / label`, numbered like the gutter rail. The tick
-   matches the rail's own stroke so the two read as one system. */
-.section-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  color: var(--ink-mute);
-}
-
-.section-eyebrow__tick {
-  display: block;
-  width: 1.1rem;
-  height: 1px;
-  background: var(--ink-mute);
-}
-
-@media (min-width: 640px) {
-  .section-eyebrow__tick { width: 1.6rem; }
-}

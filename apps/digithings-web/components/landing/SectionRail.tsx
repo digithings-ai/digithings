@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LANDING_SECTIONS, pad2 } from "./sections";
+import { LANDING_SECTIONS } from "./sections";
 
 /**
  * The landing page's wayfinding (Refs #4429): a terminal path set vertically
@@ -74,9 +74,6 @@ export function SectionRail() {
       >
         ~/digithings
         {current ? <span className="text-ink">/{current.label}</span> : null}
-        <span className="ms-[0.8em] text-ink-soft">
-          {pad2(active + 1)}/{pad2(SECTIONS.length)}
-        </span>
       </span>
     </nav>
   );
