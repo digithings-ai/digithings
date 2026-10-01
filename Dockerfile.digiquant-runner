@@ -15,6 +15,8 @@
 #
 # Task 0 probe (not a guess): phase2 Size=1274551802 (~1.187 GiB);
 # house-candidate Size=1344917045 (~1.253 GiB). Hard stop: no.
+# Phase 4 (#4761) copies the two checkpoint-archive scripts after uv sync.
+# Those COPY lines do not change the sync layers. Hard stop stays 12 GiB.
 #
 # GIT_SHA defaults to unknown. wrangler does not pass build args here;
 # a non-wrangler build can set --build-arg GIT_SHA=<sha>. /healthz reports
@@ -49,6 +51,8 @@ RUN uv sync --frozen --package digiquant --extra prices --extra research --extra
 COPY scripts/refresh_market_data_r2.py ./scripts/refresh_market_data_r2.py
 COPY scripts/backfill_market_data_r2.py ./scripts/backfill_market_data_r2.py
 COPY scripts/execution_cron_check.py ./scripts/execution_cron_check.py
+COPY scripts/digiquant_archive_checkpoints.py ./scripts/digiquant_archive_checkpoints.py
+COPY scripts/digiquant_checkpoint_size_gate.py ./scripts/digiquant_checkpoint_size_gate.py
 COPY .github/digiquant-pipeline.yml ./.github/digiquant-pipeline.yml
 COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml \
     ./.github/workflows/pipeline-digiquant-allocation-shadow.yml

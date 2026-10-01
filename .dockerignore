@@ -31,6 +31,9 @@ scripts
 !scripts/backfill_market_data_r2.py
 # execution-cron-check probe wrapper (Phase 2, #4761).
 !scripts/execution_cron_check.py
+# checkpoint-archive (Phase 4, #4761).
+!scripts/digiquant_archive_checkpoints.py
+!scripts/digiquant_checkpoint_size_gate.py
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp
