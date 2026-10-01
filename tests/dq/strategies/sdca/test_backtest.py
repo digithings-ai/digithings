@@ -222,6 +222,103 @@ class TestRunBacktestMultiDay:
         assert set(frame.columns) == EXPORT_COLUMNS
 
 
+class TestRunBacktestSellDates:
+    """Optional sell-dates veto (#4804): sells fire only on allowed dates."""
+
+    def _downhill(self) -> tuple[pl.Series, pl.Series, pl.Series]:
+        dates = _dates(4)
+        prices = pl.Series([100.0, 90.0, 80.0, 70.0])
+        risks = pl.Series([0.0, 0.0, 100.0, 100.0])
+        return dates, prices, risks
+
+    def test_empty_mask_vetoes_all_sells_buys_proceed(self) -> None:
+        dates, prices, risks = self._downhill()
+        curve = AccumDistCurve()
+        unmasked_report, _ = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+        )
+        assert unmasked_report.sell_days == 2
+        report, frame = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+            sell_dates=set(),
+        )
+        assert report.sell_days == 0
+        assert report.buy_days == unmasked_report.buy_days == 2
+        assert frame["daily_trade_usd"][2] == pytest.approx(0.0)
+        assert frame["daily_trade_usd"][3] == pytest.approx(0.0)
+        # Holdings/cash frozen after the buy window; MTM still marks.
+        assert frame["cash"][3] == pytest.approx(frame["cash"][1])
+        assert frame["asset_units"][3] == pytest.approx(frame["asset_units"][1])
+        assert frame["portfolio_value"][3] == pytest.approx(
+            frame["cash"][3] + frame["asset_units"][3] * prices[3]
+        )
+        assert report.no_trade_days == unmasked_report.no_trade_days + 2
+
+    def test_none_equals_legacy(self) -> None:
+        dates, prices, risks = self._downhill()
+        curve = AccumDistCurve()
+        legacy_report, legacy_frame = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+        )
+        report, frame = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+            sell_dates=None,
+        )
+        assert frame.equals(legacy_frame)
+        assert report.model_dump() == legacy_report.model_dump()
+
+    def test_superset_of_sell_days_equals_none(self) -> None:
+        dates, prices, risks = self._downhill()
+        curve = AccumDistCurve()
+        _, unmasked_frame = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+        )
+        date_list = dates.to_list()
+        sell_days = {
+            d for d, t in zip(date_list, unmasked_frame["daily_trade_usd"].to_list()) if t < 0
+        }
+        assert len(sell_days) == 2
+        superset = set(sell_days) | {date_list[0]}
+        masked_report, masked_frame = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+            sell_dates=superset,
+        )
+        plain_report, plain_frame = run_backtest(
+            dates=dates,
+            price=prices,
+            risk=risks,
+            curve=curve,
+            initial_cash=1000.0,
+            sell_dates=None,
+        )
+        assert masked_frame.equals(plain_frame)
+        assert masked_report.model_dump() == plain_report.model_dump()
+
+
 class TestRunBacktestInputValidation:
     def test_empty_series_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one row"):
