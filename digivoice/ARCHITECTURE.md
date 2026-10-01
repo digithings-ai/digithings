@@ -102,15 +102,17 @@ the wav path, the paste result, and the history path all go to stderr.
 ## speak
 
 1. **Resolve text.** Argv words, or `--clipboard` (`pbpaste` / `wl-paste` / `xclip` / `xsel`),
-   or `--selection` (macOS: Cmd+C via osascript then clipboard; Linux: primary selection),
-   or `--clipboard-or-history` (clipboard if non-empty, else last history entry text).
+   or `--selection` (macOS: Cmd+C via osascript only when clipboard *changes*; Linux: primary),
+   or `--clipboard-or-history` (clipboard only; **no** history fallback — not the hotkey path).
+   Hammerspoon speak uses `--selection`.
 2. **Piper** (`speak.py`). `piper --model <voice.onnx> --output_file <speak-…wav>` with text
    on stdin. Voice from `DIGIVOICE_PIPER_VOICE` or the first `*.onnx` under models.
 3. **Play.** `afplay` on darwin; `aplay` then `ffplay` on Linux.
 4. **History.** Append `{kind:"speak", text, wav:null}`.
 
-stdout is the spoken text. Missing piper, voice, player, or empty source → exit 1, one line
-on stderr.
+stdout is the spoken text. Missing piper, voice, player, or empty selection → exit 1,
+one line on stderr. Hotkey (`--selection`) soft-fails when nothing is selected — never
+falls back to clipboard or `kind:dict` history.
 
 ## Paste
 
@@ -164,8 +166,8 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option → `dict --toggle --stop-file …`
-- Ctrl+Shift+Option → `speak --clipboard-or-history`
+- Right Option (61) → `dict --toggle --stop-file …`
+- Double-tap Left Option (58) → `speak --selection` (soft-fail notify if empty; no clipboard/history)
 
 See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
 

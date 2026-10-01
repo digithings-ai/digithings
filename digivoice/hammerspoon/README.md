@@ -8,8 +8,8 @@ config.
 
 | Bind | Action |
 | --- | --- |
-| **Right Option** only | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. **Not** Left Option. |
-| **Ctrl+Shift+Option** | Speak / read-last: `digivoice speak --clipboard-or-history` (clipboard if non-empty, else last digivoice history text). |
+| **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. |
+| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails (notify) if nothing is selected. **No** clipboard or `kind:dict` history fallback. Replaces the old Ctrl+Shift+Option chord. |
 
 Do not invent other default binds in this sample.
 
@@ -83,7 +83,7 @@ macOS will not prompt until the tool first needs the grant. Expect two prompts:
 2. Grant Mic to Hammerspoon (+ terminal).
 3. Grant Accessibility to Hammerspoon (+ terminal).
 4. Reload Hammerspoon; press **Right Option** once, speak, press again → paste.
-5. Copy text, press **Ctrl+Shift+Option** → Piper playback.
+5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (notify if nothing selected).
 
 ## Piper voice on Chris's Mac
 
@@ -110,6 +110,18 @@ digivoice dict --toggle --stop-file "$HOME/Library/Application Support/digivoice
 # in another terminal, to stop:
 touch "$HOME/Library/Application Support/digivoice/dict.stop"
 
-# speak clipboard, else last history
-digivoice speak --clipboard-or-history
+# speak selection only (what Hammerspoon runs)
+digivoice speak --selection
 ```
+
+### Coding CLI readout (OpenCode / Claude / Cursor)
+
+**Double-tap Left Option** speaks the **current selection** only. After an assistant reply:
+
+1. Select the reply text in the terminal/TUI, then
+2. Double-tap **Left Option** (within ~350ms).
+
+If nothing is selected, digivoice exits 1 with a one-line hint and Hammerspoon
+notifies — it will **not** read the clipboard or last dictation from history.
+**Right Option** dict toggle is unchanged. Ctrl+Shift+Option is **not** bound.
+

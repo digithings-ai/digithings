@@ -114,15 +114,33 @@ def read_clipboard(platform: str, probe: CommandProbe, runner: CommandRunner) ->
 
 
 def read_selection(platform: str, probe: CommandProbe, runner: CommandRunner) -> str:
+    """Read the current text selection. Soft-fails when nothing is selected.
+
+    On darwin, Cmd+C via osascript only counts as a selection when the clipboard
+    *changes*. An unchanged clipboard (including leftover dictation paste) is
+    treated as empty selection — never as coding-reply readout.
+    """
     if platform == "darwin":
         osascript = probe.lookup("osascript")
         if not osascript:
             raise SpeakError("osascript not on PATH; cannot read the selection")
+        try:
+            before: str | None = read_clipboard(platform, probe, runner)
+        except SpeakError:
+            before = None
         typed = runner([osascript, "-e", COPY_SELECTION_SCRIPT], timeout=READ_SOURCE_TIMEOUT)
         if typed.code != 0:
             reason = error_tail(typed.stderr) or f"exit {typed.code}"
             raise SpeakError(f"could not copy selection ({reason})")
-        return read_clipboard(platform, probe, runner)
+        try:
+            after = read_clipboard(platform, probe, runner)
+        except SpeakError:
+            after = None
+        if after and after != before:
+            return after
+        raise SpeakError(
+            "nothing selected: select text then run speak --selection (clipboard alone is not used)"
+        )
     for name, argv_extra in (
         ("xclip", ["-o", "-selection", "primary"]),
         ("xsel", ["--primary", "--output"]),
@@ -135,7 +153,10 @@ def read_selection(platform: str, probe: CommandProbe, runner: CommandRunner) ->
                 raise SpeakError(f"selection read failed ({reason})")
             text = result.stdout.strip()
             if not text:
-                raise SpeakError("primary selection is empty")
+                raise SpeakError(
+                    "nothing selected: select text then run speak --selection "
+                    "(clipboard alone is not used)"
+                )
             return text
     raise SpeakError("no selection tool on PATH (need xclip or xsel)")
 

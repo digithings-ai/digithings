@@ -1,7 +1,7 @@
 --- digivoice Hammerspoon sample adapter
 --- Locked binds (do not invent others):
----   Right Option          → dict toggle (press start / press stop → transcribe + paste)
----   Ctrl+Shift+Option     → speak (clipboard, else last history)
+---   Right Option (61)           → dict toggle (press start / press stop → transcribe + paste)
+---   Double-tap Left Option (58) → speak --selection (fail soft notify if nothing selected)
 ---
 --- Install: see README.md in this directory.
 --- This file is a sample outside the Python package import path.
@@ -46,6 +46,9 @@ end
 local DIGIVOICE = digivoice_bin()
 local STOP_FILE = data_dir() .. "/dict.stop"
 local dict_task = nil
+
+-- Double-tap window for Left Option speak (seconds).
+local DOUBLE_TAP_SEC = 0.35
 
 local function notify(title, text)
   hs.notify.new({ title = title, informativeText = text or "" }):send()
@@ -100,14 +103,21 @@ function M.toggle_dict()
   end
 end
 
-function M.speak_clipboard_or_history()
+-- Speaks the current selection only (digivoice speak --selection).
+-- Soft-fails with a notify when nothing is selected. No clipboard/history fallback.
+function M.speak_selection()
   local task = hs.task.new(DIGIVOICE, function(exitCode, stdOut, stdErr)
     if exitCode == 0 then
-      notify("digivoice speak", ((stdOut or ""):gsub("%s+$", "")))
+      local preview = (stdOut or ""):gsub("%s+$", "")
+      notify("digivoice speak", preview ~= "" and preview or "spoken")
     else
-      notify("digivoice speak failed", ((stdErr or ""):gsub("%s+$", "")))
+      local err = (stdErr or ""):gsub("%s+$", "")
+      if err == "" then
+        err = "nothing selected — select text first"
+      end
+      notify("digivoice speak", err)
     end
-  end, { "speak", "--clipboard-or-history" })
+  end, { "speak", "--selection" })
   if task then
     task:start()
   else
@@ -115,10 +125,12 @@ function M.speak_clipboard_or_history()
   end
 end
 
--- Right Option keycode is 61; Left Option is 58 (ignored).
+-- Right Option = 61 (dict). Left Option = 58 (double-tap speak).
 local RIGHT_OPTION = 61
+local LEFT_OPTION = 58
 local right_option_down = false
-local speak_chord_latched = false
+local left_option_down = false
+local left_option_last_tap = 0
 
 local tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
   local flags = event:getFlags()
@@ -127,19 +139,25 @@ local tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e
   local alt = flags.alt == true
   local keyCode = event:getKeyCode()
 
-  -- Ctrl+Shift+Option → speak once per chord press (any Option key).
-  local speak_chord = ctrl and shift and alt
-  if speak_chord and not speak_chord_latched then
-    speak_chord_latched = true
-    M.speak_clipboard_or_history()
+  -- Double-tap Left Option alone → speak selection. Single tap is a no-op.
+  if keyCode == LEFT_OPTION and not ctrl and not shift then
+    local is_down = alt
+    if is_down and not left_option_down then
+      left_option_down = true
+      local now = hs.timer.secondsSinceEpoch()
+      if left_option_last_tap > 0 and (now - left_option_last_tap) <= DOUBLE_TAP_SEC then
+        left_option_last_tap = 0
+        M.speak_selection()
+      else
+        left_option_last_tap = now
+      end
+    elseif not is_down then
+      left_option_down = false
+    end
     return false
   end
-  if not speak_chord then
-    speak_chord_latched = false
-  end
 
-  -- Right Option alone → dict toggle on press. Skip when ctrl/shift held
-  -- so the speak chord never also starts a recording.
+  -- Right Option alone → dict toggle on press.
   if keyCode == RIGHT_OPTION and not ctrl and not shift then
     local is_down = alt
     if is_down and not right_option_down then
@@ -154,7 +172,10 @@ end)
 
 function M.start()
   tap:start()
-  notify("digivoice", "hotkeys armed: Right Option = dict; Ctrl+Shift+Option = speak")
+  notify(
+    "digivoice",
+    "hotkeys armed: Right Option = dict; double-tap Left Option = speak selection"
+  )
 end
 
 function M.stop()

@@ -13,6 +13,7 @@ from digivoice.paths import resolve_paths
 from digivoice.speak import (
     piper_argv,
     play_argv,
+    read_selection,
     resolve_voice,
     select_piper,
     select_player,
@@ -178,31 +179,90 @@ def test_cli_speak_clipboard(tmp_path: Path) -> None:
     assert "pbpaste" in runtime.runner.programs  # type: ignore[union-attr]
 
 
-def test_cli_speak_clipboard_or_history_falls_back(tmp_path: Path) -> None:
-    append_entry(tmp_path / "history.jsonl", dict_entry("from history", None))
+def test_read_selection_linux_primary(tmp_path: Path) -> None:
+    runner = FakeRunner({"xclip": FakeReply(stdout="selected coding reply")})
+    probe = FakeProbe(commands={"xclip": "/usr/bin/xclip"})
+    assert read_selection("linux", probe, runner) == "selected coding reply"
+    assert runner.calls[0].argv[1:4] == ["-o", "-selection", "primary"]
+
+
+def test_read_selection_linux_empty_fails_soft(tmp_path: Path) -> None:
+    runner = FakeRunner({"xclip": FakeReply(stdout="")})
+    probe = FakeProbe(commands={"xclip": "/usr/bin/xclip"})
+    with pytest.raises(SpeakError, match="nothing selected"):
+        read_selection("linux", probe, runner)
+
+
+def test_read_selection_darwin_requires_clipboard_change(tmp_path: Path) -> None:
+    pastes = iter(["leftover dictation", "selected coding reply"])
+
+    def pbpaste_reply(_call):
+        return FakeReply(stdout=next(pastes))
+
+    runner = FakeRunner({"pbpaste": pbpaste_reply, "osascript": FakeReply()})
+    probe = FakeProbe(commands={"pbpaste": "/usr/bin/pbpaste", "osascript": "/usr/bin/osascript"})
+    assert read_selection("darwin", probe, runner) == "selected coding reply"
+
+
+def test_read_selection_darwin_unchanged_clipboard_is_empty_selection(tmp_path: Path) -> None:
+    runner = FakeRunner(
+        {
+            "pbpaste": FakeReply(stdout="leftover dictation"),
+            "osascript": FakeReply(),
+        }
+    )
+    probe = FakeProbe(commands={"pbpaste": "/usr/bin/pbpaste", "osascript": "/usr/bin/osascript"})
+    with pytest.raises(SpeakError, match="nothing selected"):
+        read_selection("darwin", probe, runner)
+
+
+def test_cli_speak_selection_success(tmp_path: Path) -> None:
     runner = FakeRunner(
         {
             "piper": _writes_speak_wav(),
             "aplay": FakeReply(),
-            "wl-paste": FakeReply(stdout="   "),  # empty after strip → fall back
+            "xclip": FakeReply(stdout="coding CLI reply"),
         }
     )
-    runtime = _speak_runtime(tmp_path, runner=runner)
-    # Empty clipboard raises inside read_clipboard; clipboard-or-history catches it.
-    runner2 = FakeRunner(
+    runtime = _speak_runtime(tmp_path, runner=runner, commands={"xclip": "/usr/bin/xclip"})
+    result = run(["speak", "--selection"], runtime)
+    assert result.code == 0
+    assert result.stdout == "coding CLI reply\n"
+
+
+def test_cli_speak_selection_empty_fails_soft_no_dict_history(tmp_path: Path) -> None:
+    append_entry(tmp_path / "history.jsonl", dict_entry("from dict history", None))
+    runner = FakeRunner(
+        {
+            "piper": _writes_speak_wav(),
+            "aplay": FakeReply(),
+            "xclip": FakeReply(stdout=""),
+        }
+    )
+    runtime = _speak_runtime(tmp_path, runner=runner, commands={"xclip": "/usr/bin/xclip"})
+    result = run(["speak", "--selection"], runtime)
+    assert result.code == 1
+    assert "nothing selected" in result.stderr
+    assert "from dict history" not in result.stdout
+    lines = (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["kind"] == "dict"
+
+
+def test_cli_speak_clipboard_or_history_is_clipboard_only_no_history(tmp_path: Path) -> None:
+    append_entry(tmp_path / "history.jsonl", dict_entry("from dict history", None))
+    runner = FakeRunner(
         {
             "piper": _writes_speak_wav(),
             "aplay": FakeReply(),
             "wl-paste": FakeReply(stdout=""),
         }
     )
-    runtime = _speak_runtime(tmp_path, runner=runner2)
+    runtime = _speak_runtime(tmp_path, runner=runner)
     result = run(["speak", "--clipboard-or-history"], runtime)
-    assert result.code == 0
-    assert result.stdout == "from history\n"
-    entry = json.loads((tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()[-1])
-    assert entry["kind"] == "speak"
-    assert entry["text"] == "from history"
+    assert result.code == 1
+    assert "clipboard" in result.stderr.lower() or "empty" in result.stderr.lower()
+    assert "from dict history" not in result.stdout
 
 
 def test_cli_speak_missing_piper_fails_soft(tmp_path: Path) -> None:

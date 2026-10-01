@@ -90,7 +90,10 @@ def build_parser() -> _Parser:
     source.add_argument(
         "--clipboard-or-history",
         action="store_true",
-        help="Prefer clipboard text; else the last digivoice history entry",
+        help=(
+            "Read the clipboard only (no history fallback). "
+            "Hammerspoon speak hotkey uses --selection instead."
+        ),
     )
     speak_cmd.add_argument("text", nargs="*", help="Text to speak")
 
@@ -191,14 +194,8 @@ def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime) -> str:
     if args.selection:
         return read_selection(runtime.platform, runtime.probe, runner)
     if args.clipboard_or_history:
-        try:
-            return read_clipboard(runtime.platform, runtime.probe, runner)
-        except VoiceError:
-            paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
-            last = history_log.last_speakable_text(paths.history_file)
-            if last:
-                return last
-            raise VoiceError("clipboard is empty and history has nothing to speak") from None
+        # Kept for CLI callers; does NOT fall back to history (esp. not kind:dict).
+        return read_clipboard(runtime.platform, runtime.probe, runner)
     if text:
         return text
     raise UsageError("speak needs text, --clipboard, --selection, or --clipboard-or-history")
