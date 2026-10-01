@@ -66,6 +66,7 @@ from digiquant.strategies.sdca.optimize import (
     run_sdca_walk_forward,
 )
 from digiquant.strategies.sdca.risk_model import RiskModel
+from digiquant.strategies.sdca.rolling_z import RollingZRiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SdcaOptimizeObjective,
     make_walk_forward_folds,
@@ -141,10 +142,34 @@ def _make_bounded_lookback_rails_fitter(
     return _fitter
 
 
+def _make_rolling_z_rails_fitter(
+    name: str, window: int, z: float
+) -> Callable[[list[date], list[float]], RiskModel]:
+    """Inline rolling-z rails variant (#4804 Task 4): same closure pattern as
+    the bounded-lookback factory above, but constructing ``RollingZRiskModel``
+    (trailing mean-reversion rails, no time-trend fit) with the v4 seed's
+    anchor params (window 90, z 1.0). Defined inline for the same reason:
+    no behavioral gain from sharing a module with ``run_gold_rails_variants``
+    (whose factory only expresses generic_valuation kwargs).
+    """
+
+    def _fitter(dates: list[date], prices: list[float]) -> RiskModel:
+        return RollingZRiskModel(
+            pl.Series("date", dates, dtype=pl.Date),
+            pl.Series("price", prices, dtype=pl.Float64),
+            window=window,
+            z=z,
+        )
+
+    _fitter.__name__ = f"rails_fitter_{name}"
+    return _fitter
+
+
 RAILS_FITTERS = {
     "default": gold_generic_rails_fitter,
     "quad_3y": _make_bounded_lookback_rails_fitter("quad_3y", 756),
     "quad_5y": _make_bounded_lookback_rails_fitter("quad_5y", 1260),
+    "rolling90": _make_rolling_z_rails_fitter("rolling90", 90, 1.0),
 }
 
 
