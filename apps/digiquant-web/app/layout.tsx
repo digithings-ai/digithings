@@ -1,17 +1,32 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/ui";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import {
+  FooterCells,
+  HashScrollManager,
+  MotionProvider,
+  NavShell,
+  ThemeProvider,
+} from "@digithings/ui";
+import { LayoutRails } from "./_chrome/LayoutRails";
+import { SectionRail } from "./_chrome/SectionRail";
+import { Brand,DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
+
+// Self-hosted at build time by next/font, so no request leaves for Google at runtime.
+// Inter is the sans/display voice (headings, prose); JetBrains Mono is the chrome voice
+// (labels, code, figures). Same pairing as digithings.ai.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
   applicationName: "digiquant",
   title: "digiquant — a quant research desk in a glass box you own",
   description:
-    "The research stack an institutional desk would build — research runs daily, portfolio sizes the risk, "
-    + "and every run writes a decision log under its own run id, redacted on the way out. Open-source "
-    + "and self-hosted, so work that once needed a team runs for one.",
+    "A showcase of the digiquant dashboard, the product: recordings, workflows and the method behind it. "
+    + "Research runs daily, portfolio sizes the risk, and every run writes a decision log under its own "
+    + "run id, redacted on the way out. Open-source and self-hosted.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -36,8 +51,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "digiquant — a quant research desk in a glass box you own",
     description:
-      "Research runs daily, portfolio sizes the risk, and the deliberation stays on the record. Open-source, "
-      + "self-hosted, with a decision log per run.",
+      "See the digiquant dashboard at work: how a strategy is built, the method behind every run, and the "
+      + "tooling underneath. Open-source, self-hosted, with a decision log per run.",
     url: "https://digiquant.io",
     images: [
       {
@@ -52,26 +67,40 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  // suppressHydrationWarning: themeInitScript legitimately flips data-theme
-  // pre-hydration for system-light visitors; scoped to this element only.
+  // suppressHydrationWarning: the inline script sets data-theme before hydration;
+  // scoped to this element only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable} accent-digiquant no-js`}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* One solid black canvas: the page is pinned to the dark theme, so the
+            system-light flip themeInitScript does is deliberately not used. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.setAttribute('data-theme','dark')" }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
             the strategy deck); removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
-        {/* Single fallback; themeInitScript sets it to the active theme pre-paint. */}
-        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
+        
+        <meta name="theme-color" content="#000000" />{/* canon-allow: page canvas is solid black, see globals.css */}
       </head>
       <body>
-        <div className="grain" aria-hidden="true" />
-        <div className="glow" aria-hidden="true" />
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />
-            {children}
+            <NavShell
+              brand={<Brand />}
+              links={DQ_NAV_PRIMARY}
+              homeLabel="digiquant home"
+              skipTo="#main"
+              showThemeToggle={false}
+            />
+            {/* NavShell is fixed: reserve its height (nav-shell.css knob, 62px fallback). */}
+            <LayoutRails />
+            <SectionRail />
+            <div className="pt-[var(--nav-shell-h,62px)]">
+              {children}
+            </div>
+            <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
+
           </ThemeProvider>
         </MotionProvider>
       </body>
