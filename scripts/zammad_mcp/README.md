@@ -134,7 +134,8 @@ ZAMMAD_API_TOKEN=... CHROMA_PATH=/path/to/chroma \
   python -m scripts.index_occ_tickets [--dry-run]
 ```
 
-The script pins `DIGISEARCH_EMBEDDING_PROVIDER=multilingual` for the
+The script pins `DIGISEARCH_EMBEDDING_PROVIDER` to the model id
+(`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) for the
 indexing call (scoped + restored) so the backend stamps and queries the
 collection with the same model that produced the vectors — and aborts
 loud if the var is pre-set to anything else. It then re-opens the
@@ -151,15 +152,17 @@ script for a fresh snapshot.
 so the OCC tenant serves docs plus tickets with no routing-code changes:
 set the tenant's `digisearchIndex` to the comma pair (tenant map,
 `occ-embed.yaml`) after both indexes are (re)built with the multilingual
-model. All embeddings — ingest and query — must use
-`DIGISEARCH_EMBEDDING_PROVIDER=multilingual`; same 384 dims across models
+model. All embeddings — ingest and query — must set
+`DIGISEARCH_EMBEDDING_PROVIDER` to the model id
+(`Xenova/paraphrase-multilingual-MiniLM-L12-v2`); same 384 dims across models
 means a mismatch retrieves silently wrong results (MiniLM vectors are not
 interchangeable with multilingual ones).
 
 ## Docs rescrape + redeploy runbook (operator)
 
 1. Rescrape docs with the multilingual model: run `scripts/docs_onboard`
-   against a digisearch with `DIGISEARCH_EMBEDDING_PROVIDER=multilingual`
+   against a digisearch with `DIGISEARCH_EMBEDDING_PROVIDER` set to the model id
+   (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`)
    (the `/ingest` path resolves the provider from env — no code change).
    Replace the `occ_help` collection in place for the demo (delete +
    re-ingest under the same name); Chroma refuses cross-model writes via
