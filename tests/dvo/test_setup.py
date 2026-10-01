@@ -80,7 +80,7 @@ def test_render_overview_lists_all_sections(tmp_path: Path) -> None:
 
     text = render_setup_overview(load_settings(paths), paths)
     assert "Models" in text and "Features" in text and "Hotkeys" in text
-    assert "Hardware" in text
+    assert "best for" in text
 
 
 def test_setup_public_dict_extends_settings_dump(tmp_path: Path) -> None:
@@ -101,7 +101,7 @@ def test_interactive_review_save_round_trip(
     from digivoice.setup import run_interactive_setup
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
-    fake_in = io.StringIO("6\n1\n8\n")  # Review & save → Save → Quit
+    fake_in = io.StringIO("5\n1\n7\n")  # Review & save → Save → Quit
     fake_out = io.StringIO()
     code = run_interactive_setup(paths, stdin=fake_in, stdout=fake_out)
     assert code == 0
@@ -118,7 +118,7 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
     # Features → banner_density → full → Back → Review & save → Save → Quit
-    fake_in = io.StringIO("3\n6\n3\n8\n6\n1\n8\n")
+    fake_in = io.StringIO("3\n6\n3\n8\n5\n1\n7\n")
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
     assert load_settings(paths).banner_density == "full"

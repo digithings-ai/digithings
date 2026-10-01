@@ -58,7 +58,8 @@ def test_linux_home_skips_hammerspoon_without_calling_out(tmp_path: Path) -> Non
         [], Runtime(platform="linux", home=tmp_path, env=_env(tmp_path), probe=FakeProbe())
     )
     assert result.code == 0
-    assert "control: hammerspoon skipped · banner skipped" in result.stdout
+    assert "▤" in result.stdout
+    assert "hammerspoon skipped · banner skipped" in result.stdout
 
 
 def test_running_hammerspoon_shows_banner_without_open(tmp_path: Path) -> None:
@@ -388,8 +389,8 @@ def test_home_quit_tears_down_hammerspoon(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(home_mod, "fullscreen_enter", lambda _o: None)
     monkeypatch.setattr(home_mod, "fullscreen_leave", lambda _o: None)
     monkeypatch.setattr(home_mod, "play_intro", lambda *_a, **_k: None)
-    # First pick = Quit (index 7)
-    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: 7)
+    # First pick = Quit (index 5)
+    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: 5)
 
     code = home_mod.run_home(
         "darwin",

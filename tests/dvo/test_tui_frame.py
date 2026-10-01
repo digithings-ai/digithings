@@ -56,16 +56,16 @@ def test_home_frame_is_centered_with_a_step_rail() -> None:
     assert "▶" not in frame
     assert any(ch in frame for ch in "▀▄█")
     assert "STATUS" in frame
-    assert "models" in frame and "banner" in frame and "health" in frame
+    assert "▦" in frame and "▥" in frame and ("■" in frame or "□" in frame)
     for name in ("OPERATE", "MAINTAIN", "CONFIGURE", "LEAVE"):
         assert name in frame
     for item in HOME_MENU:
         assert item.split(" (")[0] in frame
     doctor = next(line for line in frame.splitlines() if "Doctor" in line)
     settings = next(line for line in frame.splitlines() if "Settings" in line)
-    assert "✓" in doctor
-    assert "○" in settings
-    assert "✓" not in settings
+    assert "■" in doctor
+    assert "□" in settings
+    assert "■" not in settings
     content = [line for line in frame.splitlines() if line.strip()]
     assert content[0].startswith(" ")
     blanks = 0
