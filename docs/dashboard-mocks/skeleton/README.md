@@ -60,4 +60,15 @@ A future surface that suggests trade setups (paper-first, never live by default)
 
 ## Craft
 
-Instrument density in the digiquant-web style: hairlines, flat panels, tabular figures, literal sidebar labels, no icons, no glass except blur on the sticky tab row. One sticky tab row per page and no nested sticky bars. Tokens mirror `packages/design/tokens.css` (dark by default, light by system setting). Type pair is Inter and JetBrains Mono with system fallbacks. Each page has at most one primary action. The dashed strip above every frame is annotation, not product chrome.
+Matches the current digiquant-web language (PR #4900), not the earlier operator-dashboard chrome:
+
+- One solid black canvas (`#000`). Panels share it, so structure is hairlines only, radius 0, no second paint, no blur, no glass.
+- Inter for prose (letter-spacing -0.011em) and JetBrains Mono for chrome, labels and figures, tabular figures throughout.
+- Dashed vertical page rails around the frame, as on the site.
+- `NN / label` eyebrows with a 1px tick on the page band and on every section (numbered by a CSS counter).
+- The sidebar is a numbered rail: tick, index, label. The active row grows its tick and takes the accent. The desk picker sits above it, and choosing a desk replaces the whole rail.
+- The pixel-cell digiquant wordmark (same glyph maps as the site's `QuantWordmark`, static, a few accent glint cells) in the sidebar, on sign in, and as the closing mark above each footer, dimmed inside the app.
+- Bracketed micro-labels (`[paper]`, `[close]`, `[live]`), dashed cards for honest empties and placeholders, hairline-square buttons with an arrow, ink-filled primary.
+- One accent (phosphor teal) per view, used for the active rail tick, glints and `[live]`. Green and red are only for signed P&L.
+- No icons, no chart library, no JS. One sticky tab row per page, no nested sticky bars. At most one primary action per page.
+- The dashed strip above every frame is annotation, not product chrome.
