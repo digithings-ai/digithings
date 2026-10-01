@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager, LayoutLines } from "@digithings/ui";
+import { SCROLL_RESUME_FLAG, SCROLL_RESUME_PLACE } from "@/lib/scrollResume";
 import { LegacyByokPurge } from "@/components/LegacyByokPurge";
 
 // Self-hosted at build time by next/font (served from /_next/static/media), so no
@@ -105,6 +106,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
             removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
+        {/* Reload / back-forward mid-page: flag the root so the hero intro is skipped
+            (see lib/scrollResume.ts); the body-end script then lands the scroll. */}
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_FLAG }} />
         {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
             Literal = tokens.css dark --bg (metas can't read CSS vars). */}
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
@@ -124,6 +128,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             {children}
           </ThemeProvider>
         </MotionProvider>
+        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_PLACE }} />
       </body>
     </html>
   );

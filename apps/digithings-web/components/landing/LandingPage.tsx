@@ -121,7 +121,6 @@ function Contact() {
         </Reveal>
         <Reveal delay={0.08} className="flex flex-col gap-[1.4rem]">
           <SectionHead
-            id="contact"
             title="You own the stack and the keys."
             titleClassName="max-w-[24ch]"
           />
@@ -174,7 +173,6 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           <Reveal>
             <SectionHead
-              id="open-source"
               title="Open source, and still shipping"
               lede="Clone it, read it, run it. The activity below is the repo's own."
             />
@@ -198,7 +196,6 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
           comparison table suffices on its own. */}
       <section id="pricing" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <Reveal className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[1.25rem]">
-          <SectionHead id="pricing" />
           <Pricing />
         </Reveal>
       </section>
