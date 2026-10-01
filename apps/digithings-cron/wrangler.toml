@@ -3,7 +3,8 @@
 # private digiquant-runner Worker (service binding RUNNER). This Worker does
 # not run Containers itself. wrangler deploy is the source of truth for
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
-# The price and market-data prefix is in that same order.
+# DigiQuant pipeline clocks paused 2026-10-01 (Human Gate) — those job
+# rows stay in jobs.ts with enabled: false and are omitted here.
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -32,25 +33,6 @@ service = "digiquant-runner"
 
 [triggers]
 crons = [
-  "40 13 * * MON-FRI",
-  "40 14 * * MON-FRI",
-  "19 */2 * * MON-FRI",
-  "19 22 * * SUN",
-  "27 21 * * MON-FRI",
-  "0 13 * * *",
-  "30 21 * * *",
-  "17 9 * * *",
-  "17 10 * * *",
-  "17 11 * * *",
-  "17 12 * * *",
-  "17 12 * * MON-FRI",
-  "5 22 * * *",
-  "12 0 * * *",
-  "40 22 * * *",
-  "15 12 * * *",
-  "8 22 * * SUN",
-  "8 8 * * MON",
-  "9 0 * * SUN",
   "11 7 * * *",
   "13 6 * * MON",
   "21 6 * * *",
@@ -63,6 +45,7 @@ crons = [
   "17 6 * * *",
   "7 0 * * MON-FRI",
   "12 7 * * MON-FRI",
+  "17 12 * * MON-FRI",
   "4 */4 * * *",
   "30 5 * * *",
   "8 7 * * SAT",

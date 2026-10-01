@@ -1,10 +1,56 @@
 import { describe, expect, it } from "vitest";
 import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
 
+const PAUSED_PIPELINE_IDS = [
+  "prices-at-open-13",
+  "prices-at-open-14",
+  "prices-fx-refresh",
+  "prices-fx-refresh-sun",
+  "prices-eod-macro",
+  "market-data-refresh-morning",
+  "market-data-refresh-evening",
+  "house-run-09",
+  "house-run-10",
+  "house-run-11",
+  "house-run-12",
+  "research-metrics",
+  "tearsheets",
+  "onchain",
+  "execution-cron-check",
+  "continuous-improvement",
+  "maintenance",
+  "provider-review",
+] as const;
+
+const KEPT_ENABLED_IDS = [
+  "agent-pr-finalizer",
+  "agent-backlog-snapshot",
+  "ci-pr-hygiene",
+  "refresh-repo-activity",
+  "project-enforce-assignment",
+  "smoke-stack",
+  "security-pip-audit",
+  "security-npm-audit",
+  "token-canary",
+  "smoke-site",
+  "twelve-x-asia",
+  "twelve-x-london",
+  "twelve-x-new-york",
+  "twelve-x-market-context-intraday",
+  "twelve-x-market-context-daily",
+  "twelve-x-market-context-weekly",
+  "twelve-x-performance-eval",
+  "twelve-x-primemarket-heartbeat",
+  "twelve-x-session-catchup",
+  "twelve-x-archive-maintenance",
+] as const;
+
 describe("jobsForCron", () => {
   it("matches exact cron strings only", () => {
-    const jobs = jobsForCron("5 22 * * *");
-    expect(jobs.map((j) => j.id)).toEqual(["research-metrics"]);
+    expect(jobsForCron("5 22 * * *")).toEqual([]);
+    expect(
+      jobsForCron("5 22 * * *", { includeDisabled: true }).map((j) => j.id),
+    ).toEqual(["research-metrics"]);
   });
 
   it("keeps twelve-x new_york on weekday-only cron", () => {
@@ -18,10 +64,12 @@ describe("jobsForCron", () => {
 
   it("at-open jobs have etOpenGate and mode at-open", () => {
     for (const cron of ["40 13 * * MON-FRI", "40 14 * * MON-FRI"]) {
-      const jobs = jobsForCron(cron);
+      expect(jobsForCron(cron)).toEqual([]);
+      const jobs = jobsForCron(cron, { includeDisabled: true });
       expect(jobs).toHaveLength(1);
       expect(jobs[0].etOpenGate).toBe(true);
       expect(jobs[0].inputs?.mode).toBe("at-open");
+      expect(jobs[0].enabled).toBe(false);
     }
   });
 
@@ -57,6 +105,7 @@ describe("jobsForCron", () => {
       expect(job?.kind).toBe("container");
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
+      expect(job?.enabled).toBe(false);
     }
   });
 
@@ -89,6 +138,7 @@ describe("jobsForCron", () => {
       expect(job?.codeRef).toBe("main");
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
+      expect(job?.enabled).toBe(false);
     }
   });
 
@@ -108,8 +158,12 @@ describe("jobsForCron", () => {
         concurrency: "digiquant-pipeline",
         timeoutSeconds: 14400,
         codeRef: "main",
+        enabled: false,
       });
-      expect(jobsForCron(cron).map((job) => job.id)).toEqual([id]);
+      expect(jobsForCron(cron)).toEqual([]);
+      expect(jobsForCron(cron, { includeDisabled: true }).map((job) => job.id)).toEqual([
+        id,
+      ]);
     }
     expect(JOBS.some((job) => job.id === "house-run-sun")).toBe(false);
     expect(jobsForCron("17 12 * * SUN")).toEqual([]);
@@ -134,5 +188,23 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("17 6 * * *");
     expect(uniqueEnabledCrons()).toContain("27 7 * * *");
     expect(uniqueEnabledCrons()).not.toContain("30 13 * * *");
+  });
+
+  it("pauses DigiQuant pipeline clocks and keeps non-pipeline jobs enabled", () => {
+    expect(
+      JOBS.filter((job) => !job.enabled)
+        .map((job) => job.id)
+        .sort(),
+    ).toEqual([...PAUSED_PIPELINE_IDS].sort());
+    expect(
+      JOBS.filter((job) => job.enabled)
+        .map((job) => job.id)
+        .sort(),
+    ).toEqual([...KEPT_ENABLED_IDS].sort());
+    expect(uniqueEnabledCrons()).toHaveLength(20);
+    expect(uniqueEnabledCrons()).toContain("17 12 * * MON-FRI");
+    expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("40 13 * * MON-FRI");
+    expect(uniqueEnabledCrons()).not.toContain("8 22 * * SUN");
   });
 });
