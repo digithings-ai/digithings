@@ -4,9 +4,11 @@
 **Audience:** Chris’s Claude Code session (real app implement — **not** another HTML remock squeeze)  
 **PR (visual SoT / HOLD hatch):** https://github.com/digithings-ai/digithings/pull/4911 (draft)  
 **Branch:** `cursor/digiquant-dashboard-skeleton-mocks-67ef`  
-**Visual tip on `:3920`:** `051f13ec` (lighter-gray headers) — Chris **APPROVED** this look as the craft SoT  
+**Visual aid on `:3920`:** tip `051f13ec` (lighter-gray headers) — Chris **APPROVED** for **layout / look-feel only** — **not** product SoT  
 **Serve:** `http://127.0.0.1:3920/` from `docs/dashboard-mocks/canvas/`  
 **HOLD:** do **not** hatch / Merge / undraft #4911. Chris runs implement here; Web does not merge.
+
+**Addendum (2026-10-01 ~22:45 Rome):** DigiCon API = data SoT (view→API ground-up). Remock `051f13ec` / `:3920` = visual aid only — not SoT / be-all.
 
 **Out of scope:** digiquant.io (Coder A / separate cloud); digithings.ai home #4916; rewriting the static canvas into another cramped one-page remock.
 
@@ -14,9 +16,13 @@
 
 ## What you are building
 
-Implement the **DigiQuant dashboard** in the real app (`apps/dashboard` and related packages), using `:3920` tip **`051f13ec`** as the **visual / density reference** (type, hairlines, section eyebrows, terminal feel).
+Implement the **DigiQuant dashboard** in the real app (`apps/dashboard` and related packages).
 
-Do **not** copy the rejected dense remock lineage (`29463fbf2`…`47734f912`). That HTML squeeze looked bad. The **behaviors** below are product requirements for the React (or app) shell — achieve them with modular components and layered composition, not by crushing every section into one static mock page.
+**Ground-up rule:** every data-showing block (chart, table, feed, pipeline, tearsheet, …) is wired to an existing **DigiCon API** function path. Build **view → DigiCon API** first; the UI is a visualization of those paths. DigiCon already exists — discover and wire each view to a real path; do not invent a parallel fake data layer.
+
+**Remock role:** `:3920` tip **`051f13ec`** is a **visual aid only** (type, hairlines, section eyebrows, terminal density / look-feel). It is **not** the source of truth, not the be-all for IA or data, and not something to pixel-clone into another HTML remock.
+
+Do **not** copy the rejected dense remock lineage (`29463fbf2`…`47734f912`). Product behaviors below = app shell requirements via modular components + DigiCon wiring.
 
 ---
 
@@ -38,7 +44,7 @@ Fold in usability / a11y / canvas locks from Chris’s comments:
 - **Locks 1–7 (product):**
   1. One viewport; panes rearrange/resize/scroll inside; overflow → sidebar sub-tabs  
   2. Nested left sidebar (no horizontal section tabs)  
-  3. Top chrome = **path only** (`house / portfolio / holdings`) — that path tree is the DigiQuant API / component map  
+  3. Top chrome = **path only** (`house / portfolio / holdings`) — that path tree mirrors DigiCon API / component paths  
   4. Narrow panes: **column priority**; every pane **fullscreen + Esc**  
   5. Desk picker: dropdown + fullscreen  
   6. **DigiChat right rail**; DigiQuant left rail stays  
@@ -53,27 +59,29 @@ Also fold: slash-path = page; keyboard jump + arrow cycle pages; DigiChat right;
 
 Do not start with a full-page remock of every Brief block jammed into one HTML file.
 
-### 6. Every view/component → DigiQuant API path
-Each view/component maps to a **DigiQuant API path** that feeds that visualization (e.g. `/book`, `/movers`, `/house/portfolio/holdings/...`). Every component has an API path; the top path chrome mirrors that tree. Structure UI so data is retrievable through the API layer 1:1 with what is on screen.
+### 6. Every data block → DigiCon API function path (ground-up)
+Every dashboard block that shows data (chart / table / etc.) maps to a **DigiCon API function path**. Build **ground-up view → DigiCon**: find the existing DigiCon endpoint/function for that view and wire it. Examples of path-shaped UI chrome: `/book`, `/movers`, `/house/portfolio/holdings/...` — the top path mirrors the DigiCon/API tree. No orphan visualizations; no mock-only data SoT.
 
 ### 7. Process
-- Visual SoT remains `:3920` / `051f13ec`.  
+- Remock `:3920` / `051f13ec` = **visual aid only** (not SoT / be-all).  
+- Data + behavior SoT = **DigiCon API** + implement brief above.  
 - **HOLD hatch** on remock PR #4911.  
 - Chris runs implement in **his Claude Code session**.  
 - Prefer OpenCode / local Claude for implement; do not burn unrelated cloud lanes without One/Chris.
 
 ---
 
-## Visual SoT (look at this, don’t remock-squeeze it)
+## Visual aid only (not SoT)
 
 | Item | Value |
 |------|--------|
-| Tip | `051f13ec` |
-| Branch tip serving it | current #4911 tip (includes this handoff) |
-| Look | Lighter-gray section headers, open mock windows, lifted type — terminal craft Chris approved |
-| Rejected | Dense one-page remock after `29463fbf2` |
+| Tip | `051f13ec` on `:3920` |
+| Role | Layout / look-feel reference only — **not** source of truth, not be-all |
+| Data SoT | Existing **DigiCon API** — wire every data block to a function path |
+| Look cues | Lighter-gray section headers, open mock windows, lifted type |
+| Rejected | Dense one-page remock after `29463fbf2`; treating the remock as product SoT |
 
-Open `http://127.0.0.1:3920/brief.html` (hard-refresh) while implementing.
+Open `http://127.0.0.1:3920/brief.html` (hard-refresh) for craft cues while implementing against DigiCon.
 
 ---
 
