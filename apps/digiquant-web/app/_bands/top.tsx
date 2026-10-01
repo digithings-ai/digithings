@@ -11,14 +11,14 @@ function rise(step: number): CSSProperties {
   return { "--rise": step } as CSSProperties;
 }
 
-/** Hero: the wordmark over an illustrative candlestick chart that keeps moving,
- *  with a crosshair over the whole hero (and only the hero). One line on what
+/** Hero: the wordmark over a live candlestick chart (a labelled simulation when the
+ *  feed is unreachable), with a crosshair and OHLC readout over the whole hero (and only the hero). One line on what
  *  digiquant does, one on where the product lives, two actions. */
 export function TopBand() {
   return (
     <section id="top" aria-labelledby="top-h" className="dq-hero relative isolate z-10 overflow-hidden border-b border-hair">
       <QuantField />
-      <div className="mx-auto flex min-h-[27rem] max-w-[64rem] flex-col items-center justify-center px-[var(--page-pad)] pb-[15rem] pt-[2.5rem] text-center sm:px-[2.5rem] lg:min-h-[calc(100svh-var(--nav-shell-h,62px))]">
+      <div className="mx-auto flex min-h-[27rem] max-w-[64rem] flex-col items-center justify-center px-[var(--page-pad)] pb-[2.5rem] pt-[2.5rem] text-center sm:px-[2.5rem] lg:min-h-[calc(100svh-var(--nav-shell-h,62px))]">
         <QuantWordmark className="block h-auto w-[264px] fill-current text-ink min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]" />
         <h1
           id="top-h"
@@ -28,7 +28,7 @@ export function TopBand() {
           Quant research that shows its work.
         </h1>
         <p className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] text-[0.9375rem] leading-[1.6] text-pretty text-ink-soft" style={rise(1)}>
-          digiquant runs daily research, sizes the risk and backtests on NautilusTrader, and logs every decision. You use it in
+          digiquant runs the daily research, sizes the risk, tests every idea against history and logs each decision. You run it in
           the dashboard. This site shows it working.
         </p>
         <div className="hero-rise mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]" style={rise(2)}>
