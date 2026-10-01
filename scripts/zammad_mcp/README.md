@@ -120,6 +120,23 @@ environment, and the Worker secret is deliberately not forwarded there); the
 server still authenticates to Zammad with its own environment (no Zammad token
 in the tenant entry).
 
+## Ticket search index (`occ_tickets`)
+
+Separate from the `occ_help` docs corpus, `scripts/index_occ_tickets.py`
+backfills every visible ticket (GET-only) plus its articles — one Chunk per
+article, full non-anonymized metadata (`ticket_id`, `customer_id`, state,
+group, priority, dates) — into the `occ_tickets` digisearch index using the
+small multilingual ONNX provider (`digisearch[embedding-multilingual]`), so
+English queries match German/Spanish ticket text.
+
+```bash
+ZAMMAD_API_TOKEN=... CHROMA_PATH=/path/to/chroma \
+  python -m scripts.index_occ_tickets [--dry-run]
+```
+
+Demo snapshot: data as of 2026-10-01. There is no sync job — re-run the
+script for a fresh snapshot.
+
 ## Privacy & exposure
 
 Demo mode (#4944): the OCC embed shows full customer names/emails and all
