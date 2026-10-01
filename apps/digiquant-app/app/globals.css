@@ -87,3 +87,14 @@ button, input { font-family: var(--mono); letter-spacing: 0; border-radius: 0; }
 .tbl .num { font: 11.5px/1.4 var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .tbl th.num { font-size: 10.5px; }
 .note { padding: 8px 12px; color: var(--ink-soft); font-size: 12px; }
+
+/* ---- Atoms: KPI grid, sparkline ---- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.kpi { padding: 8px 12px; border-right: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.kpi-l { font: 10.5px/1 var(--mono); color: var(--ink-mute); margin-bottom: 5px; }
+.kpi-v { font: 14px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.kpi-n { font: 10.5px/1.3 var(--mono); color: var(--ink-mute); margin-top: 3px; }
+.spark { display: block; width: 100%; }
+.pad { padding: 8px 12px; }
+.gal-cell { display: grid; grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--bg); }
+.gal { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); grid-auto-rows: 260px; gap: 1px; background: var(--hair); height: 100%; overflow: auto; }
