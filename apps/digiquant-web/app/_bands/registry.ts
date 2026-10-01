@@ -1,14 +1,15 @@
-/** Phase 0-owned, frozen shape: the ordered bands of the home page. page.tsx,
- *  SectionRail and the nav all read this list; passes edit only their own band
- *  file, never this one. */
-export type BandId = "top" | "products" | "pipeline" | "tearsheets" | "strategy" | "dashboard" | "start";
+/** Ordered bands of the home page. page.tsx, SectionRail and the nav all read this
+ *  list; band files edit only their own band. The order is the showcase story:
+ *  the dashboard first (it is the product), then how work gets built in it, the
+ *  method behind each run, what a run produces, and the tooling underneath. */
+export type BandId = "top" | "dashboard" | "workflow" | "pipeline" | "tearsheets" | "tooling" | "start";
 
 export const BANDS: readonly { id: BandId; label: string }[] = [
   { id: "top", label: "top" },
-  { id: "products", label: "products" },
-  { id: "pipeline", label: "pipeline" },
-  { id: "tearsheets", label: "tearsheets" },
-  { id: "strategy", label: "strategy" },
   { id: "dashboard", label: "dashboard" },
+  { id: "workflow", label: "workflow" },
+  { id: "pipeline", label: "method" },
+  { id: "tearsheets", label: "tearsheets" },
+  { id: "tooling", label: "tooling" },
   { id: "start", label: "start" },
 ];

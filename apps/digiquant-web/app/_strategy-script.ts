@@ -1,6 +1,6 @@
 import type { ChatPlaybackStep } from "@digithings/ui";
 
-/** Strategy-development demo script. Data, not a component.
+/** Workflow story script: digichat to Nautilus to inspect and hand off. Data, not a component.
  *
  *  Tool names and argument names are the real ones registered in
  *  digiquant/src/digiquant/mcp_server.py (the `*_json` arguments are JSON strings).
@@ -8,7 +8,7 @@ import type { ChatPlaybackStep } from "@digithings/ui";
  *  what. No metrics, no timings, no file paths. `AAPL` is the example symbol from
  *  the tool's own docstring; `ema_cross` is a registered strategy. */
 
-export const STRATEGY_BADGE = "Simulation · scripted · not connected to any MCP server";
+export const STRATEGY_BADGE = "Story · scripted · not connected to any MCP server";
 export const STRATEGY_HEADER = "digichat · local full-scope MCP";
 
 /** Scope of each tool: `read` is in the dashboard chat's read-scope list,
@@ -63,15 +63,16 @@ export const STRATEGY_STEPS: { tool: string; label: string; scope: ToolScope }[]
   { tool: "digiquant_list_strategies", label: "list", scope: "read" },
   { tool: "digiquant_run_backtest", label: "backtest", scope: "full" },
   { tool: "digiquant_run_optimize", label: "optimize", scope: "full" },
-  { tool: "digiquant_export", label: "export", scope: "full" },
+  { tool: "digiquant_export", label: "hand off", scope: "full" },
 ];
 
-/** Honest status ledger shown beside the demo. */
+/** Honest status ledger shown under the story. */
 export const STRATEGY_LEDGER: { key: string; value: string }[] = [
+  { key: "where it is built", value: "the dashboard is the builder; this page tells the story and builds nothing" },
   { key: "strategy development", value: "in development, not live" },
   { key: "backtest · optimize · export", value: "run locally over stdio, full-scope MCP" },
   { key: "hosted MCP", value: "none: no public server, no connect button, no URL" },
-  { key: "export", value: "writes a local JSON config only: no Pine or TradingView output, no broker or QuantConnect deployment" },
+  { key: "hand-off", value: "export writes a local JSON config only: no Pine or TradingView output, no broker or QuantConnect deployment" },
   { key: "nautilus_bundle", value: "a local zip, and for ema_cross only" },
   { key: "dashboard chat", value: "read scope: list_strategies only, from these four" },
 ];

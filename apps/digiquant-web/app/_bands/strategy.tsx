@@ -96,11 +96,11 @@ export function StrategyBand() {
   const states = useStepStates(ref);
   return (
     <Band
-      id="strategy"
+      id="workflow"
       layout="split"
-      status="in development"
-      title="Strategy development"
-      takeaway="Research with LuxAlgo, keep chart and journal context there, then use local tools to validate the idea. Not live yet."
+      status="story · in development"
+      title="From a chat to a Nautilus backtest"
+      takeaway="How a strategy gets built: describe it in digichat, validate it on Nautilus, inspect the result and hand it off. The builder lives in the dashboard; this is the story of it. Not live yet."
     >
       <div ref={ref}>
         <div className="grid gap-3 md:grid-cols-[8.5rem_minmax(0,1fr)]">
@@ -109,7 +109,7 @@ export function StrategyBand() {
             script={STRATEGY_SCRIPT}
             badge={STRATEGY_BADGE}
             header={STRATEGY_HEADER}
-            ariaLabel="Scripted strategy-building session"
+            ariaLabel="Scripted strategy-building story"
           />
         </div>
         <StatusLedger />

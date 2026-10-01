@@ -95,7 +95,7 @@ export function LocalLuxalgoWorkflow() {
     <section aria-labelledby="luxalgo-workflow-h" className="mt-3 border border-hair bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-3 py-2 font-mono">
         <h3 id="luxalgo-workflow-h" className="m-0 text-[0.78rem] font-normal text-ink">
-          LuxAlgo workflow
+          LuxAlgo, as a capability demo
         </h3>
         <Badge variant={status === "ready" ? "accent" : "neutral"}>{STATUS_COPY[status]}</Badge>
       </div>
@@ -104,24 +104,27 @@ export function LocalLuxalgoWorkflow() {
         <li className="border-b border-hair p-3 min-[760px]:border-b-0 min-[760px]:border-e">
           <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 01 ] discover</p>
           <p className="mb-0 mt-2 text-[0.78rem] leading-[1.55] text-ink-soft">
-            Search Library concepts and indicator metadata through the local read-only gateway.
+            The gateway can look up LuxAlgo Library concepts and indicator metadata. Try it below.
           </p>
         </li>
         <li className="border-b border-hair p-3 min-[760px]:border-b-0 min-[760px]:border-e">
-          <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 02 ] Chart + journal</p>
+          <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 02 ] chart + journal</p>
           <p className="mb-0 mt-2 text-[0.78rem] leading-[1.55] text-ink-soft">
-            Keep visual analysis and the decision journal in LuxAlgo. No competing chart is rendered here.
+            Visual analysis and the decision journal stay in LuxAlgo. This site shows the hand-off and renders no competing chart.
           </p>
         </li>
         <li className="p-3">
           <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 03 ] validate</p>
           <p className="mb-0 mt-2 text-[0.78rem] leading-[1.55] text-ink-soft">
-            Bring the written thesis to digiquant for a local Nautilus backtest before any export.
+            The written thesis goes to digiquant for a Nautilus backtest before any export.
           </p>
         </li>
       </ol>
 
       <div className="border-t border-hair p-3">
+        <p className="m-0 mb-2 font-mono text-[0.65rem] text-ink-mute">
+          A demo of what the gateway can reach, not a search tool. The product is the dashboard.
+        </p>
         <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
           <label htmlFor="luxalgo-library-query" className="sr-only">Search LuxAlgo Library</label>
           <Input
