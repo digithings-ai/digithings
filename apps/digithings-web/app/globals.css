@@ -926,11 +926,21 @@ html {
   .pixel-word { width: 616px; }
 }
 
+.pixel-word-band {
+  padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
+  overflow-x: clip;
+}
+
+.pixel-word.pixel-word-footer {
+  width: min(100%, 1400px);
+  margin: 0 auto;
+}
+
 .pixel-word .c { opacity: var(--f); }
 .pixel-word .n { opacity: 0; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .pixel-word .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word:not(.pixel-word-footer) .c { animation: pixel-build var(--t) linear var(--d) both; }
   .pixel-word .g {
     animation:
       pixel-build var(--t) linear var(--d) both,
