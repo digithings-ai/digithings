@@ -64,6 +64,31 @@ describe("scheduled", () => {
     expect(runnerFetch).not.toHaveBeenCalled();
     expect(pending).toHaveLength(0);
   });
+
+  it("does not dispatch a paused checkpoint-archive cron", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const runnerFetch = vi.fn();
+    const pending: Promise<unknown>[] = [];
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    await worker.scheduled(
+      { cron: "30 13 * * *", scheduledTime: Date.UTC(2026, 8, 30, 13, 30) } as ScheduledController,
+      env,
+      executionContext(pending),
+    );
+    await Promise.all(pending);
+
+    expect(githubFetch).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(pending).toHaveLength(0);
+  });
 });
 
 const WINTER_BEFORE_OPEN = Date.UTC(2026, 0, 15, 13, 40, 0);
@@ -202,6 +227,61 @@ describe("POST /kick", () => {
       run_date: "2026-09-29",
       force: "true",
     });
+  });
+
+  it("kick without force strips dry_run", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-archive", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "30 13 * * *",
+        args: { dry_run: "true" },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({});
+  });
+
+  it("kick with force keeps dry_run true", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-archive", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "30 13 * * *",
+        force: true,
+        args: { dry_run: "true" },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args.dry_run).toBe("true");
   });
 });
 
