@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import type { Envelope } from '@/lib/dq-api';
 import { useRoute } from '@/lib/use-route';
+import { StateBlock } from './ui';
 import { Window } from './Window';
 
 /**
@@ -20,7 +21,7 @@ export function Block<T>({ no, label, route, asOf, children }: {
   const stamp = env ? (asOf?.(env.data) ?? env.as_of) : null;
   return (
     <Window no={no} label={label} right={stamp ? `as of ${stamp}` : route}>
-      {err ? <p className="note" role="alert">{route}: {err}</p>
+      {err ? <StateBlock kind="error" title="Withheld." why={`${route}: ${err}`} />
         : !env ? <p className="note mute">loading…</p>
         : children(env.data, env)}
     </Window>
