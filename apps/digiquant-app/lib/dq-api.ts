@@ -18,6 +18,40 @@ export type BookRow = {
 
 export type Book = { book_as_of: string | null; rows: BookRow[] };
 
+/** Route payloads (CONTRACT §6). Nullable numbers stay nullable: null renders "—". */
+export type Portfolio = {
+  book_as_of: string | null;
+  nav_tip: { date: string; nav: number; contract: string; invested_pct: number | null; cash_pct: number | null; day_return_pct: number | null } | null;
+  seam: { crosses_nav_seam: boolean; lag_days: number; lag_direction: string } | null;
+  invested: { kpi_pct: number | null; envelope_pct: number | null; cash_pct: number | null; definition: string };
+  positions: { ticker: string; weight_pct: number; scaled_weight_pct: number; is_cash: boolean }[];
+};
+export type Brief = {
+  book_as_of: string | null;
+  nav_tip: { date: string; nav: number; contract: string } | null;
+  day_return_pct: number | null;
+  since_inception_pct: number | null;
+  since_inception_start_date: string | null;
+  overlay: { active: boolean; live_vs_mark_pct: number; badge: string };
+  invested_pct: number | null;
+  session_events: unknown[];
+};
+export type Performance = {
+  nav: { tip_date: string; base100_tip: number; points: { date: string; index: number; day_return_pct: number | null }[] };
+  metrics: { day_return_pct: number | null; since_inception_pct: number | null; excess_return_pct: number | null; alpha_pct: number | null; information_ratio: number | null; beta: number | null; overlap_days: number };
+  benchmark: { ticker: string; aligned_start: string };
+};
+export type KpisLive = {
+  quote_date: string; live_vs_mark_pct: number; day_return_live_pct: number | null;
+  since_inception_live_pct: number | null; excess_live_pct: number | null; overlay_eligible: boolean; universe: string[];
+};
+export type NavSeries = { tip: { date: string; contract: string }; points: { index: number; date: string; nav: number; day_return_pct: number | null; contract: string }[] };
+export type Benchmarks = { universe: string[]; series: Record<string, { date: string; close: number }[]>; aligned_start: string; overlap_days: number };
+export type Ledger = {
+  events: { date: string; ticker: string; type: 'OPEN' | 'ADD' | 'EXIT' | 'TRIM'; fill_price: number | null; avg_entry: number | null; realized_pct: number | null; prev_weight_pct: number | null; weight_pct: number | null }[];
+  next_cursor: string | null;
+};
+
 const base = () => (process.env.NEXT_PUBLIC_DQ_API_URL ?? '').replace(/\/+$/, '');
 
 export async function dqGet<T>(route: string): Promise<Envelope<T>> {
