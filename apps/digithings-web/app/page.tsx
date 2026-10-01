@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
-import { Colophon } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
+import { FooterWordmark } from "@/components/landing/PixelWordmark";
 import { LandingPage } from "@/components/landing/LandingPage";
 import { embedOriginForChat } from "@/lib/security-headers.mjs";
 
@@ -13,22 +13,8 @@ import { embedOriginForChat } from "@/lib/security-headers.mjs";
 // the shell: the nav, the metadata, and the footer. The vertical rails live
 // in the root layout so every route shares them.
 //
-// The closing wordmark (v15 point 15) is `<Colophon … sweep />`: the giant
-// outlined `digithings` lockup with a bright band passing through it once as
-// you scroll into it — the "bright fade through it" the owner remembered.
-// Two alternatives were weighed and rejected:
-//   • `WordReveal` (packages/ui, .word-reveal) is a pinned 150vh track whose
-//     words fill from blur on the ride up — a strong effect, but it renders a
-//     display-font *sentence* at clamp(1.55rem,4.2vw,2.6rem), not the giant
-//     mono lockup, and its pinned track would add 150vh of dead scroll between
-//     the contact band and the footer on the one page that ends here.
-//   • `word-reveal-muted` / `word-reveal-outline` are reference-gallery-only
-//     siblings (apps/reference) and are not exported from @digithings/ui.
-// The Colophon already carries both halves: a zero-JS CSS scroll-driven rise
-// (`@supports (animation-timeline: view())` in packages/design/site/site.css)
-// and the opt-in `sweep` glow, a Motion-scrubbed background-position on a
-// duplicated span. Both fall back to the static outlined lockup under
-// prefers-reduced-motion and with scripts off, so the mark is never hidden.
+// The closing wordmark is the hero's pixel lockup (`PixelWordmark`) at page
+// width, so the footer mark and the header mark are the same family.
 
 export const metadata: Metadata = {
   title: "digithings — AI infrastructure in a glass box",
@@ -52,7 +38,7 @@ export default function Home() {
         <LandingPage embedOrigin={embedOriginForChat()} />
       </main>
 
-      <Colophon name="digi" suffix="things" sweep />
+      <FooterWordmark />
       <DtFooter />
     </>
   );

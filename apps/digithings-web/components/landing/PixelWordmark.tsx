@@ -83,11 +83,13 @@ function wordCells(): { letters: Cell[]; stray: Cell[] } {
 
 const WORD = wordCells();
 
-/** Pixel lockup. Cells build in, a few glint in the accent, and strays flicker once. */
-export function PixelWordmark() {
+/** Pixel lockup. Cells build in, a few glint in the accent, and strays flicker once.
+ *  `footer` reuses the same cells at page width as the closing mark, without the
+ *  load-time build (it sits below the fold) — the pixel treatment is unchanged. */
+export function PixelWordmark({ variant = "hero" }: { variant?: "hero" | "footer" }) {
   return (
     <svg
-      className="pixel-word"
+      className={variant === "footer" ? "pixel-word pixel-word-footer" : "pixel-word"}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 88 10"
       fill="currentColor"
@@ -117,5 +119,14 @@ export function PixelWordmark() {
         />
       ))}
     </svg>
+  );
+}
+
+/** The closing mark above the footer: the header's pixel lockup, scaled up. */
+export function FooterWordmark() {
+  return (
+    <div className="pixel-word-band">
+      <PixelWordmark variant="footer" />
+    </div>
   );
 }
