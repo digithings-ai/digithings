@@ -9,6 +9,7 @@ import {
 import { Block } from './Block';
 import { KpiGrid, Sparkline, tone } from './atoms';
 import { DataTable, type Col } from './DataTable';
+import { PORTFOLIO_BLOCKS } from './blocks-portfolio';
 
 const num = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(d));
 
@@ -174,6 +175,7 @@ export function LedgerBlock() {
 /** Block registry: every placeable block, keyed by id, bound to one API route. */
 export type BlockDef = { id: string; title: string; route: string; Component: ComponentType };
 export const BLOCKS: BlockDef[] = [
+  ...PORTFOLIO_BLOCKS,
   { id: 'book', title: 'Book · allocation', route: '/allocations', Component: BookBlock },
   { id: 'portfolio', title: 'Portfolio · envelope', route: '/portfolio', Component: PortfolioBlock },
   { id: 'brief', title: 'Brief · scoreboard', route: '/brief', Component: BriefBlock },
