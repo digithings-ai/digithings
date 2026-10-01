@@ -78,7 +78,7 @@ commands write.
 | `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
-| bare `digivoice` (no args) | 0 | TTY: home shell menu (doctor, setup, settings, history, status, reload, update, uninstall, quit) with the pixel header and in-place nav. No TTY: print the home overview and exit 0. `--help` / `-h` / `help` still show argparse help. |
+| bare `digivoice` (no args) | 0 | TTY: app home shell (DIGIVOICE pixel header, build-in, context strip with models/banner/health, actions doctor, settings, history, reload, update, uninstall, setup-wizard submenu, quit) with in-place nav; setup returns to home. No TTY: print the home overview and exit 0. `--help` / `-h` / `help` still show argparse help. |
 | unknown / bad flags | 2 | Usage on stderr. |
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
