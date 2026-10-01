@@ -48,7 +48,6 @@ import {
 } from "./supabase";
 import { MCP_PATH, handleMcp } from "./mcp";
 
-export const HOUSE_WORKSPACE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319" as const;
 
 export interface Env {
   SUPABASE_URL?: string;
