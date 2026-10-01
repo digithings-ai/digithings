@@ -106,6 +106,24 @@ export interface Manifest { caller: Caller; desks: DeskEntry[] }
 
 const isTier = (v: string): v is Tier => v === "free" || v === "pro" || v === "max";
 
+/**
+ * Local-dev impersonation (`DASHBOARD_DEV_CALLER=max+12x` in .dev.vars): used only
+ * when the request carries no identity headers at all. Never set it on a deployed worker.
+ */
+export function devCaller(spec: string | undefined): Caller | null {
+  if (!spec) return null;
+  const parts = spec.split("+").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const tier = parts.find(isTier) ?? "free";
+  return { tier, groups: parts.filter((p) => !isTier(p)) };
+}
+
+/** Caller for a request: edge headers win; else the dev override; else fail closed. */
+export function callerFor(request: Request, env: { DASHBOARD_DEV_CALLER?: string }): Caller {
+  const h = request.headers;
+  if (h.get("x-digi-tier") === null && h.get("x-digi-groups") === null) return devCaller(env.DASHBOARD_DEV_CALLER) ?? parseCaller(h);
+  return parseCaller(h);
+}
+
 /** Fail closed: unknown/absent tier → free, no groups. */
 export function parseCaller(headers: { get(name: string): string | null }): Caller {
   const t = (headers.get("x-digi-tier") ?? "").trim().toLowerCase();
@@ -152,4 +170,28 @@ export function grantedRoutes(m: Manifest): string[] {
   const set = new Set<string>();
   for (const d of m.desks) for (const p of d.pages) for (const k of p.blocks) if (k.access === "granted") set.add(k.route.split("?")[0]);
   return [...set].sort();
+}
+
+/** Every route the catalog governs (granted or not), query strings stripped. */
+export function governedRoutes(desks: DeskDef[] = DESKS): string[] {
+  const set = new Set<string>();
+  for (const d of desks) for (const p of d.pages) for (const k of p.blocks) set.add(k.route.split("?")[0]!);
+  return [...set];
+}
+
+/** Does a request path match a catalog route? `{pair}`-style segments match any one segment. */
+export function routeMatches(route: string, path: string): boolean {
+  const a = route.split("/");
+  const b = path.split("/");
+  return a.length === b.length && a.every((seg, i) => (seg.startsWith("{") && seg.endsWith("}") ? b[i] !== "" : seg === b[i]));
+}
+
+/**
+ * Data-route gate shared by HTTP and MCP. A route the catalog names is allowed only
+ * if some granted block uses it; routes the catalog does not name (healthz, tables)
+ * are not this gate's business.
+ */
+export function routeVerdict(m: Manifest, path: string): "allowed" | "forbidden" | "ungoverned" {
+  if (!governedRoutes().some((r) => routeMatches(r, path))) return "ungoverned";
+  return m.desks.some((d) => d.pages.some((p) => p.blocks.some((k) => k.access === "granted" && routeMatches(k.route.split("?")[0]!, path)))) ? "allowed" : "forbidden";
 }
