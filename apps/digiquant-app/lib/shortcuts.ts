@@ -4,6 +4,9 @@ export type Shortcut = { keys: string; does: string };
 export const SHORTCUTS: Shortcut[] = [
   { keys: '/  or  ⌘K', does: 'Go to any page (command line)' },
   { keys: '↑ ↓ Enter', does: 'Move / open in the command list' },
+  { keys: 'n', does: 'Focus the sidebar (opens it if hidden)' },
+  { keys: 'sidebar ↑ ↓ Enter', does: 'Walk the page tree and load the focused page; keep going' },
+  { keys: 'sidebar → ←', does: 'Open / close a folder, step into it or back to its parent' },
   { keys: '[', does: 'Pin or unpin the sidebar' },
   { keys: 'Esc', does: 'Close menu, list or this help' },
   { keys: 'e', does: 'Edit page layout (drag to move, corner to resize)' },
