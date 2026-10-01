@@ -14,11 +14,13 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/capture.py` | Microphone to wav. `sox` first, then `ffmpeg`. Toggle early-stop via stop-file / signals. |
 | `src/digivoice/transcribe.py` | `whisper-cli` over a wav, transcript cleanup. |
 | `src/digivoice/speak.py` | Piper synthesis + local player (`afplay` / `aplay` / `ffplay`). |
-| `src/digivoice/history.py` | JSONL append, tolerant read, `--last` / `--grep` filters. |
+| `src/digivoice/history.py` | JSONL append, tolerant read, `--last` / `--grep` / `--copy-last` / `--json`. |
+| `src/digivoice/settings.py` | `settings.json` under the data dir; agent-scriptable get/set. |
+| `src/digivoice/rewrite.py` | Optional local post-STT rewrite (ollama / llama.cpp); fail soft. |
 | `src/digivoice/paste.py` | Clipboard plus Command-V into the focused app. Fails soft. |
 | `src/digivoice/errors.py` | `VoiceError` and the capture / transcribe / speak subclasses. |
-| `src/digivoice/models.py` | Pydantic v2 `VoicePaths`, `DoctorReport`, `CliResult`, `HistoryEntry`, `CaptureResult`, `Transcript`, `PasteResult`, `SpeakResult`. |
-| `hammerspoon/` | Sample hotkey adapter + TCC runbook. Outside the installable package. |
+| `src/digivoice/models.py` | Pydantic v2 models including `RewriteResult` and path/doctor/history types. |
+| `hammerspoon/` | Sample hotkey adapter, live dictation banner/menubar mark, TCC runbook. |
 
 Every external binary — `sox`, `ffmpeg`, `whisper-cli`, `piper`, `afplay`/`aplay`/`ffplay`, `pbcopy`, `osascript` — is reached
 through a `CommandRunner` (argv list, never `shell=True`), except toggle early-stop capture which uses
@@ -34,6 +36,7 @@ macOS defaults:
 - recordings: `~/Library/Application Support/digivoice/recordings/`
 - history: `~/Library/Application Support/digivoice/history.jsonl`
 - toggle stop-file: `~/Library/Application Support/digivoice/dict.stop`
+- settings: `~/Library/Application Support/digivoice/settings.json`
 - default model file: `~/Library/Application Support/digivoice/models/ggml-base.en.bin`
 
 Linux fallback (also what `doctor` prints when reporting the other platform):
@@ -42,6 +45,7 @@ Linux fallback (also what `doctor` prints when reporting the other platform):
 - recordings: `${XDG_DATA_HOME:-~/.local/share}/digivoice/recordings/`
 - history: `${XDG_DATA_HOME:-~/.local/share}/digivoice/history.jsonl`
 - toggle stop-file: `${XDG_DATA_HOME:-~/.local/share}/digivoice/dict.stop`
+- settings: `${XDG_DATA_HOME:-~/.local/share}/digivoice/settings.json`
 - same filename: `ggml-base.en.bin`
 
 `DIGIVOICE_DATA_DIR` overrides the data directory on every platform. `DIGIVOICE_PIPER_VOICE`
@@ -57,9 +61,10 @@ commands write.
 | Command | Exit | Behavior |
 | --- | --- | --- |
 | `doctor` | 0 ready, 1 not ready | Report below. |
-| `dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste]` | 0 dictated, 1 capture or transcribe failed | Record, transcribe, append, paste. |
+| `dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste] [--no-rewrite]` | 0 dictated, 1 capture or transcribe failed | Record, transcribe, optional rewrite, append, paste. |
 | `speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | 0 spoken, 1 Piper/player/source failed | Piper playback; append `kind:speak`. |
-| `history [--last N] [--grep PATTERN]` | 0 | Lists matching entries. |
+| `history [--last N] [--grep PATTERN] [--copy-last] [--json]` | 0 (1 if copy-last empty) | Lists / copies last dict. |
+| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | Show or change settings.json. |
 | unknown / bad flags | 2 | Usage on stderr. |
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
@@ -74,8 +79,9 @@ commands write.
    `-m <models_dir>/ggml-base.en.bin -f <wav> -l en -nt`. stdout is the transcript; the
    banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
    collapsed into one line.
-3. **History** (`history.py`). One JSON object appended to `history.jsonl`.
-4. **Paste** (`paste.py`). darwin only, and never fatal.
+3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local ollama / llama.cpp with a preset (email / SMS / professional / coding / blog). Auto-route from the focused app when enabled (match table is `rewrite_app_routes` in settings, not hard-coded paths). Fail soft — raw transcript on error. Disabled by default. `--no-rewrite` skips.
+4. **History** (`history.py`). One JSON object appended to `history.jsonl` (rewritten text when applied).
+5. **Paste** (`paste.py`). darwin only, and never fatal. Skipped when `paste_on_stop` is false.
 
 Recording modes:
 
@@ -95,6 +101,8 @@ pipeline. Injected fake runners keep the bounded path so unit tests need no sign
 stderr — never a hang. A failed capture leaves nothing behind. A failed transcribe keeps the
 wav and prints where it is. Nothing is appended to history for either, so silence never
 becomes an empty entry.
+
+**Interrupt / early stop.** Toggle stop (stop-file or signal) keeps the recorded wav, continues whisper → optional rewrite → history → paste of what was captured. Resume-same-take is not supported; expectation is **paste + new take**.
 
 **stdout is the transcript and nothing else**, so `digivoice dict | pbcopy` works. Progress,
 the wav path, the paste result, and the history path all go to stderr.
@@ -144,6 +152,8 @@ Always informational:
 | `history` | JSONL path and whether the file exists |
 | `paths` | Active data directory, macOS models path, Linux models path, recordings directory |
 | `tcc` | Mic and Accessibility are not probed; see `hammerspoon/README.md` |
+| `rewrite` | Disabled by default (info). When enabled: ok if local runner+model ready, else missing (dict still uses raw transcript) |
+| `interrupt` | Documents paste-on-stop + new-take behavior |
 
 ## History records
 
@@ -166,14 +176,15 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option (61) → `dict --toggle --stop-file …`
+- Right Option (61) → `dict --toggle --stop-file …` with a **persistent** menubar + canvas banner for the whole capture (uses `assets/digivoice-mark.png` when present).
 - Double-tap Left Option (58) → `speak --selection` (soft-fail notify if empty; no clipboard/history)
 
 See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
 
 ## Out of this package
 
-- Cloud STT/TTS
+- Cloud STT/TTS or cloud rewrite backends
+- Bundled rewrite GGUF weights (wiring + doctor + presets ship; download separately under the models dir)
 - Super Whisper
 - A required OpenCode plugin
 - Hammerspoon as a Python dependency (sample adapter only)

@@ -79,3 +79,14 @@ class SpeakResult(BaseModel):
     player: str
     argv_piper: list[str] = Field(default_factory=list)
     argv_play: list[str] = Field(default_factory=list)
+
+
+class RewriteResult(BaseModel):
+    """Post-STT local rewrite outcome. `applied` is False when disabled or failed soft."""
+
+    text: str
+    applied: bool
+    preset: str
+    detail: str
+    runner: str | None = None
+    app_name: str | None = None

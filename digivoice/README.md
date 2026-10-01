@@ -61,6 +61,10 @@ digivoice speak --clipboard
 digivoice speak --selection
 digivoice history --last 20
 digivoice history --grep invoice
+digivoice history --copy-last
+digivoice settings
+digivoice settings set rewrite_enabled true
+digivoice setup --json
 ```
 
 Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digivoice doctor`.
@@ -70,7 +74,8 @@ Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digi
 | `digivoice doctor` | Checks `whisper-cli`, `piper`, `sox`, `ffmpeg`, and `ggml-base.en.bin` in the models directory. Prints the history path, the recordings directory, and the macOS and Linux defaults. Exit 0 when whisper-cli, piper, sox or ffmpeg, and the default model file are all present. |
 | `digivoice dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste]` | Records the microphone to `recordings/*.wav`, runs `whisper-cli`, prints the transcript on stdout, appends `{ts, kind:"dict", text, wav}` to the history file, and pastes into the focused app on macOS. `--toggle` stops early when the stop-file is touched or SIGINT/SIGTERM arrives. Exit 0 once a transcript exists. |
 | `digivoice speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | Piper synthesis + local playback. Appends `{kind:"speak", text}`. Exit 0 on success. |
-| `digivoice history [--last N] [--grep PATTERN]` | Lists entries, newest last. `--grep` matches the text case-insensitively and applies before `--last`. Exit 0, including when the file does not exist yet. |
+| `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
+| `digivoice settings` / `setup` | Show or change `settings.json` (models, rewrite on/off + preset + model + auto-route, paste_on_stop, live_banner). `--json` for agents. |
 
 ### dict
 
@@ -102,11 +107,27 @@ OpenCode / Claude / Cursor, select the reply text then double-tap Left Option.
 `--clipboard-or-history` still reads the clipboard only (no history fallback) for
 CLI callers; it is not the hotkey command.
 
+### Post-STT rewrite (optional, local only)
+
+Disabled by default. When enabled, digivoice runs a **local** ollama or llama.cpp model after whisper and before paste. Presets: `email`, `sms`, `professional`, `coding`, `blog`, `none`. Optional `rewrite_auto_route` picks a preset from the focused app using `rewrite_app_routes` in settings (defaults cover Mail/Messages/Terminal/Cursor/etc.; fully overridable JSON map — not hard-coded in the rewrite module). Fail soft: raw transcript if the runner/model is missing or errors. No cloud LLM. Place a GGUF under the models directory or set `rewrite_model` to an Ollama tag; weights are not bundled (doctor reports readiness).
+
+```bash
+digivoice settings set rewrite_enabled true
+digivoice settings set rewrite_runner ollama
+digivoice settings set rewrite_model qwen2.5:3b
+digivoice settings set rewrite_preset email
+digivoice settings set rewrite_auto_route true
+```
+
+### Interrupt safety
+
+Stopping a toggle capture (Right Option again / stop-file / SIGINT) **keeps the wav** and continues transcribe → optional rewrite → paste of what was captured. Resume-same-take is not supported — paste what you have and start a new take.
+
 ### Hotkeys (sample)
 
 See [`hammerspoon/README.md`](hammerspoon/README.md):
 
-- **Right Option** → dict toggle (stop-file)
+- **Right Option** → dict toggle (stop-file) with persistent live banner/menubar for the whole capture
 - **Double-tap Left Option** → speak `--selection` (fail soft / notify if nothing selected; no clipboard or dict history)
 
 Mic + Accessibility TCC steps are documented there.

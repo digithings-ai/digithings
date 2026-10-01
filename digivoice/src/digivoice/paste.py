@@ -47,3 +47,44 @@ def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) 
             detail=f"keystroke failed ({reason}); {ACCESSIBILITY_HINT}",
         )
     return PasteResult(attempted=True, pasted=True, detail="pasted into the focused app")
+
+
+def copy_to_clipboard(
+    platform: str,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    text: str,
+) -> PasteResult:
+    """Copy text to the system clipboard without pasting. Fail soft."""
+    if platform == "darwin":
+        pbcopy = probe.lookup("pbcopy")
+        if not pbcopy:
+            return PasteResult(
+                attempted=False,
+                pasted=False,
+                detail="pbcopy not on PATH",
+            )
+        copied = runner([str(pbcopy)], stdin=text, timeout=PASTE_TIMEOUT)
+        if copied.code != 0:
+            reason = error_tail(copied.stderr) or f"exit {copied.code}"
+            return PasteResult(attempted=True, pasted=False, detail=f"pbcopy failed ({reason})")
+        return PasteResult(attempted=True, pasted=True, detail="copied to clipboard")
+    # Linux: wl-copy then xclip then xsel.
+    for name, argv_extra in (
+        ("wl-copy", []),
+        ("xclip", ["-selection", "clipboard"]),
+        ("xsel", ["--clipboard", "--input"]),
+    ):
+        binary = probe.lookup(name)
+        if not binary:
+            continue
+        copied = runner([str(binary), *argv_extra], stdin=text, timeout=PASTE_TIMEOUT)
+        if copied.code == 0:
+            return PasteResult(attempted=True, pasted=True, detail=f"copied via {name}")
+        reason = error_tail(copied.stderr) or f"exit {copied.code}"
+        return PasteResult(attempted=True, pasted=False, detail=f"{name} failed ({reason})")
+    return PasteResult(
+        attempted=False,
+        pasted=False,
+        detail="no clipboard tool on PATH (need pbcopy, wl-copy, xclip, or xsel)",
+    )
