@@ -151,13 +151,23 @@
    controls-core.css), so components/controls needs no line here. */
 @source "../../../packages/ui/src/ui";
 
-/* Point the token font families at the self-hosted next/font variable.
-   Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
-   Do not re-point --font-display at a serif — tokens.css already ships Geist Mono. */
+/* Point the token font families at the self-hosted next/font variables (layout.tsx).
+   digithings.ai type stack (owner-locked 2026-10-01): Inter for sans/display —
+   nav, headings, prose, form fields — and JetBrains Mono for mono chrome:
+   labels, code, commands, numerals, `.brand-word`. Geist Mono is not used on
+   this surface. The PixelWordmark SVG is the brand mark, not a font, so it is
+   unaffected. Scoped to this app: tokens.css keeps its defaults for the others. */
 :root[data-theme] {
-  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-mono);
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-sans);
+}
+
+/* web-theme.css (shared by digiquant-web and the dashboard) sets the body to
+   --font-mono; digithings.ai's body voice is the sans token instead. */
+body {
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----

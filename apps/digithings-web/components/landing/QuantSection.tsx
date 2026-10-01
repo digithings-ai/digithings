@@ -642,7 +642,7 @@ export function QuantSection({ className }: { className?: string }) {
                   the document outline skipping a level between `#open-source`
                   and `#pricing`. The band's heading is its product name; the
                   slogan under it carries the claim. */}
-              <h2 className="m-0 font-mono text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
+              <h2 className="m-0 font-display text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
                 <a
                   href={DIGIQUANT_URL}
                   target="_blank"

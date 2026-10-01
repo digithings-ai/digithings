@@ -155,7 +155,7 @@ export function Pricing() {
         featureColumnLabel="the detail"
         className="min-w-0 [&_table]:text-[0.94rem] [&_th]:text-[1rem] [&_td]:text-[0.86rem]"
       />
-      <p className="m-0 max-w-[var(--measure-prose)] font-mono text-[0.78rem] leading-[1.65] text-ink-mute">
+      <p className="m-0 max-w-[var(--measure-prose)] text-[0.8125rem] leading-[1.65] text-ink-mute">
         <span aria-hidden="true">{"// "}</span>
         The software costs nothing on any tier. What differs is who does the work. Your keys
         and your hardware stay yours throughout.

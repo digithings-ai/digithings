@@ -62,10 +62,10 @@ export function ContactForm({ className }: { className?: string }) {
   if (state.kind === "sent") {
     return (
       <div className={className}>
-        <p className="m-0 font-mono text-[0.85rem] leading-[1.7] text-ink">
+        <p className="m-0 text-[0.9rem] leading-[1.7] text-ink">
           Sent. We will reply to the address you gave.
         </p>
-        <p className="mt-[0.6rem] mb-0 font-mono text-[0.75rem] text-ink-mute">
+        <p className="mt-[0.6rem] mb-0 text-[0.8rem] text-ink-mute">
           Nothing else was stored beyond the message itself.
         </p>
       </div>
@@ -86,7 +86,7 @@ export function ContactForm({ className }: { className?: string }) {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="you@example.com"
-        className="mt-[0.4rem] w-full border border-hair bg-surface px-[0.8rem] py-[0.7rem] font-mono text-[0.85rem] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
+        className="mt-[0.4rem] w-full border border-hair bg-surface px-[0.8rem] py-[0.7rem] text-[0.9rem] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
       />
 
       <label className={`mt-[1.2rem] block ${GROUPED_LABEL}`} htmlFor="contact-message">
@@ -100,11 +100,11 @@ export function ContactForm({ className }: { className?: string }) {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="What are you running today, and what would you like to build?"
-        className="mt-[0.4rem] max-h-[24rem] min-h-[8rem] w-full resize-y border border-hair bg-surface px-[0.8rem] py-[0.7rem] font-mono text-[0.85rem] leading-[1.7] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
+        className="mt-[0.4rem] max-h-[24rem] min-h-[8rem] w-full resize-y border border-hair bg-surface px-[0.8rem] py-[0.7rem] text-[0.9rem] leading-[1.7] text-ink outline-none placeholder:text-ink-mute focus-visible:border-accent"
       />
 
       {state.kind === "error" ? (
-        <p role="alert" className="mt-[0.8rem] mb-0 font-mono text-[0.78rem] text-warn">
+        <p role="alert" className="mt-[0.8rem] mb-0 text-[0.82rem] text-warn">
           {state.message}
         </p>
       ) : null}
