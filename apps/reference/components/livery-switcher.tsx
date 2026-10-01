@@ -13,7 +13,7 @@ import { modules } from "@digithings/ui";
  * The module list is derived from the shared modules registry (roadmap tier
  * excluded), the same filter FeaturePickerReference and LIVERY_OPTIONS use —
  * this file used to hand-maintain its own separate 7-module array (missing
- * digismith/digiclaw/digibase, including roadmap-tier digistore) that
+ * digitrace/digiclaw/digibase, including roadmap-tier digistore) that
  * disagreed with both of those. The displayed hex value is read from the
  * live --accent-<module> custom property rather than a hardcoded literal, so
  * it can never drift from tokens.css.

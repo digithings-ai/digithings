@@ -13,7 +13,7 @@ const FIXTURE: Record<string, { lines: number | null; version: string | null; co
   digisearch: { lines: 24_800, version: "0.8.1", counts: "9 endpoints · 6 MCP tools" },
   digichat: { lines: 41_200, version: "1.2.0" },
   digikey: { lines: 8_900, version: "0.6.0", counts: "7 endpoints" },
-  digismith: { lines: 950, version: "0.3.0", counts: "3 endpoints" },
+  digitrace: { lines: 950, version: "0.3.0", counts: "3 endpoints" },
   digiclaw: { lines: 2_600, version: "0.4.1" },
   digibase: { lines: 5_300, version: "0.5.0" },
   digivault: { lines: 12_100, version: "0.7.0", counts: "11 endpoints · 8 MCP tools" },

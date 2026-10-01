@@ -137,7 +137,7 @@ export function ComposeCrop() {
     ["digigraph", "127.0.0.1:8000"],
     ["digiquant", "127.0.0.1:8001"],
     ["digisearch", "127.0.0.1:8002"],
-    ["digismith", "127.0.0.1:8003"],
+    ["digitrace", "127.0.0.1:8003"],
     ["digivault", "127.0.0.1:8004"],
     ["digikey", "127.0.0.1:8005"],
     ["litellm", "127.0.0.1:4000"],

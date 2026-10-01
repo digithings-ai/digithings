@@ -257,9 +257,9 @@ DIGIKEY_ALLOW_EPHEMERAL_KEY = "0"
 DIGIKEY_ALLOW_DEV_GLOBAL = "0"
 DIGIVAULT_URL = "http://127.0.0.1:8004"
 DIGISEARCH_URL = "http://127.0.0.1:8002"
-# Chat-only Profile A — digiquant / digismith HTTP are not in this Container.
+# Chat-only Profile A — digiquant / digitrace HTTP are not in this Container.
 DIGIQUANT_URL = ""
-DIGISMITH_URL = ""
+DIGITRACE_URL = ""
 # #4053: containers must read the R2 market seam — 127 drops the Supabase tables.
 DIGIQUANT_MARKET_DATA_BACKEND = "r2"
 OPENAI_API_BASE = "http://127.0.0.1:4000/v1"

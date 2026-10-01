@@ -95,7 +95,7 @@ Recording modes:
 | Mode | Cap | Early stop |
 | --- | --- | --- |
 | `--hold` | 15s | No — self-bounding `trim` / `-t`. |
-| `--toggle` | 60s safety | Yes — stop-file (default `{data_dir}/dict.stop`) or SIGINT/SIGTERM. |
+| `--toggle` | 30min safety (no UX limit) | Yes — stop-file (default `{data_dir}/dict.stop`), SIGINT/SIGTERM, or ~10s silence pause (sox). |
 | neither | 30s | No. |
 
 `--seconds N` overrides the cap. Hold / default use the bounded `CommandRunner` path.
@@ -220,11 +220,11 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 dot-matrix, ported from digichat's `DotMatrix`) and a menubar mark show the take from record through paste. Its text comes from `status.json`.
+- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) and a menubar mark show the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click cycles density mini → peek → full.
 - Esc → writes the cancel-file while a dictation is recording/transcribing/rewriting (swallowed only then). Nothing is pasted or saved.
 - Double-tap Left Option (58) → `speak --selection` (banner shows the selected text, or why there is none; no clipboard/history)
 - No Hammerspoon notifications except one launch toast listing the commands and the resolved CLI path.
-- Banner settings (`live_banner`, `banner_position`, `banner_animations`) are read from `settings.json` at the start of every take.
+- Banner settings (`live_banner`, `banner_position`, `banner_density`, `banner_animations`) are read from `settings.json` at the start of every take. Peek auto-dismisses a few seconds after idle/done; full stays until collapsed or removed; mini is grid only.
 
 See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
 

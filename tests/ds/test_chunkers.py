@@ -328,6 +328,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 127 for #4756 (MultilingualEmbedder provider-table
     row + DIGISEARCH_EMBEDDING_PROVIDER multilingual value in ARCHITECTURE.md)
     — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for this module/digisearch <-
+    develop sync: merged ARCHITECTURE.md carries both #4756 multilingual-embedder
+    prose and the #4929 digismith→digitrace rename — fixture prose only;
+    RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -436,7 +440,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ac5eea8b8b2f7820",
         "d3566df46fb1e726",
         "c0e9eb6706ab60cc",
-        "676a486feb21ee54",
+        "e33ebeedada29ae9",
         "c68c6371a8457ff8",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",

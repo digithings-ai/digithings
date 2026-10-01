@@ -19,7 +19,7 @@ Endpoints (all bind to `127.0.0.1`):
 | digigraph | http://127.0.0.1:8000 |
 | digiquant | http://127.0.0.1:8001 |
 | digisearch | http://127.0.0.1:8002 |
-| digismith | http://127.0.0.1:8003 |
+| digitrace | http://127.0.0.1:8003 |
 | LiteLLM | http://127.0.0.1:4000 |
 | digikey | http://127.0.0.1:8005 |
 | digichat (profile `digichat`) | http://127.0.0.1:3005 |
@@ -82,7 +82,7 @@ See [config/MODELS.md](../config/MODELS.md) for model lists, modes (`test` / `me
 
 ## Metrics and observability
 
-Every HTTP service in the core stack exposes a `/health` endpoint. digismith additionally exposes `/v1/status` (public — keep secret-free). Full Prometheus dashboards are a roadmap item (see [epic #4](https://github.com/digithings-ai/digithings/issues/4)).
+Every HTTP service in the core stack exposes a `/health` endpoint. digitrace additionally exposes `/v1/status` (public — keep secret-free). Full Prometheus dashboards are a roadmap item (see [epic #4](https://github.com/digithings-ai/digithings/issues/4)).
 
 Current audit artifacts:
 
@@ -128,7 +128,7 @@ For a week-long unattended run:
 ## Troubleshooting
 
 - **Ports already in use:** check for prior `docker compose up` instances (`docker ps`) or conflicting host services on 8000–8005, 4000, 3005.
-- **`make test-cov` fails to import:** requires editable installs — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"`.
+- **`make test-cov` fails to import:** requires editable installs — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digitrace"`.
 - **digichat shows "auth not configured":** set `AUTH_SECRET`, `AUTH_URL`, `DIGIKEY_BFF_TOKEN` in `.env` and recreate the container.
 - **digigraph returns 503 on `/v1/backtest`:** digiquant not healthy or upstream auth missing — check `docker compose ps digiquant` and digikey JWT/scopes.
 
