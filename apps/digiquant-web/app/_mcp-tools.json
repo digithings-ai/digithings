@@ -1,0 +1,2084 @@
+[
+  {
+    "name": "digifetch_13f_funds",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "13F fund lookup: search / top funds / ticker map / CUSIP holders (anonymous).",
+    "params": [
+      {
+        "name": "what",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "query",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "quarter",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "tickers",
+        "type": "list[str] | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "cusip",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "period_of_report",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "digifetch_13f_holdings",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "what",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "cik",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "accession_number",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "from_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "to_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "digifetch_analyst_research",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Analyst recommendation, price target, and rating actions (session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_cds",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "issuer",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "days",
+        "type": "int",
+        "required": false,
+        "default": 30
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 100
+      }
+    ]
+  },
+  {
+    "name": "digifetch_congress_trades",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "US House disclosure trades (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "digifetch_corporate_actions",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Dividends, splits, and earnings history for one symbol (session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_earnings_calendar",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Upcoming earnings dates for 1-20 symbols (Yahoo via yfinance).",
+    "params": [
+      {
+        "name": "symbols",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "horizon_days",
+        "type": "int",
+        "required": false,
+        "default": 90
+      }
+    ]
+  },
+  {
+    "name": "digifetch_econ_calendar",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Structured economic calendar (Gloomberb Cloud; anonymous).",
+    "params": []
+  },
+  {
+    "name": "digifetch_econ_series",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "series_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 100
+      },
+      {
+        "name": "sort_order",
+        "type": "str",
+        "required": false,
+        "default": "desc"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_equity_diagnostic",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "AI evidence review for one listing (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "mode",
+        "type": "str",
+        "required": false,
+        "default": "cache-first"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_exchange_rate",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "USD exchange rate for an ISO-4217 `from_currency` (Gloomberb Cloud).",
+    "params": [
+      {
+        "name": "from_currency",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "to_currency",
+        "type": "str",
+        "required": false,
+        "default": "USD"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_filing_events",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_holders",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Holder records for one symbol (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "owner_type",
+        "type": "str",
+        "required": false,
+        "default": "all"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_news",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Aggregated market news headlines (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "feed",
+        "type": "str",
+        "required": false,
+        "default": "latest"
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "story_id",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_options_chain",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Options chain for one listing (Gloomberb Cloud; JSON envelope).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "expiration",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_prediction_markets",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Prediction-markets catalog across Polymarket + Kalshi (venue-direct).",
+    "params": [
+      {
+        "name": "venue",
+        "type": "str",
+        "required": false,
+        "default": "all"
+      },
+      {
+        "name": "query",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "category",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "tab",
+        "type": "str",
+        "required": false,
+        "default": "top"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_price_history",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "start_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "end_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_proxy_statements",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Executive-compensation proxy statements (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "what",
+        "type": "str",
+        "required": false,
+        "default": "list"
+      },
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_quote",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_quotes_batch",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Batch quotes for 1-20 listings via Gloomberb Cloud (anonymous).",
+    "params": [
+      {
+        "name": "symbols",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_research_search",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Full-text research search across transcripts/news/filings (session-gated).",
+    "params": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "digifetch_risk_reports",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "what",
+        "type": "str",
+        "required": false,
+        "default": "list"
+      },
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_saved_searches",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "The signed-in session's saved searches (Gloomberb Cloud; session-gated).",
+    "params": []
+  },
+  {
+    "name": "digifetch_screener",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Market screener for gainers/losers/most-active (Gloomberb Cloud; **requires Pro**).",
+    "params": [
+      {
+        "name": "category",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "count",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "mode",
+        "type": "str",
+        "required": false,
+        "default": "cache-first"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_search",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Search listings across venues (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "digifetch_sec_filings",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "SEC filings, filing documents, or filing content (Gloomberb Cloud).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "what",
+        "type": "str",
+        "required": false,
+        "default": "filings"
+      },
+      {
+        "name": "count",
+        "type": "int",
+        "required": false,
+        "default": 15
+      },
+      {
+        "name": "cik",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "accession",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "form",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_shiller",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 240
+      }
+    ]
+  },
+  {
+    "name": "digifetch_short_interest",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Biweekly short-interest settlements (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "years",
+        "type": "int",
+        "required": false,
+        "default": 3
+      }
+    ]
+  },
+  {
+    "name": "digifetch_statements",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Annual/quarterly financial statement rows (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "period",
+        "type": "str",
+        "required": false,
+        "default": "annual"
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_ticker_financials",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Quote, profile, fundamentals, statements, and price history (Gloomberb Cloud).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "extended_statements",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digifetch_ticker_tweets",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "hours",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "include_replies",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digifetch_transcripts",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Earnings-call transcripts (Gloomberb Cloud; session-gated, requires Pro).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      },
+      {
+        "name": "transcript_id",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_tweet_search",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Search X/Twitter posts by query (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "query_type",
+        "type": "str",
+        "required": false,
+        "default": "Latest"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "hours",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_venues",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Exchange venue metadata (Gloomberb Cloud; anonymous).",
+    "params": []
+  },
+  {
+    "name": "digifetch_yield_curve",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Treasury yield-curve tenors (Gloomberb Cloud; anonymous).",
+    "params": []
+  },
+  {
+    "name": "digiquant_fetch_bgeometrics_series",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).",
+    "params": [
+      {
+        "name": "metric",
+        "type": "str",
+        "required": false,
+        "default": "mvrv"
+      },
+      {
+        "name": "startday",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "endday",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "last",
+        "type": "bool",
+        "required": false,
+        "default": false
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "token",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fetch_bitview_series",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.",
+    "params": [
+      {
+        "name": "series_ids_json",
+        "type": "str",
+        "required": false,
+        "default": "[\"mvrv\", \"asopr_24h\", \"puell_multiple\", \"rhodl_ratio\"]"
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "start",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "end",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "allow_derived",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fetch_coinbase_ohlcv",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch OHLCV bars from Coinbase (CCXT) into the price-history cache.",
+    "params": [
+      {
+        "name": "symbols_json",
+        "type": "str",
+        "required": false,
+        "default": "[\"BTC/USD\", \"ETH/USD\", \"SOL/USD\"]"
+      },
+      {
+        "name": "start",
+        "type": "str",
+        "required": false,
+        "default": "2015-07-20"
+      },
+      {
+        "name": "end",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeframe",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "through_yesterday",
+        "type": "bool",
+        "required": false,
+        "default": false
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fetch_coinmetrics_series",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch one on-chain metric for one asset from the CoinMetrics Community API.",
+    "params": [
+      {
+        "name": "metric",
+        "type": "str",
+        "required": false,
+        "default": "CapMVRVCur"
+      },
+      {
+        "name": "asset",
+        "type": "str",
+        "required": false,
+        "default": "btc"
+      },
+      {
+        "name": "start_time",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "end_time",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "page_size",
+        "type": "int",
+        "required": false,
+        "default": 10000
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "api_key",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_list_coinmetrics_catalog",
+    "family": "feeds",
+    "scope": "read",
+    "summary": "List which CoinMetrics community metrics exist for ``asset`` (or all assets).",
+    "params": [
+      {
+        "name": "asset",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "api_key",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_edge_presets",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "Catalog of hosted LuxAlgo Edge Stats preset questions (anonymous).",
+    "params": [
+      {
+        "name": "category",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_edge_report",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "One precomputed LuxAlgo Edge Stats result (anonymous).",
+    "params": [
+      {
+        "name": "preset",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_edge_symbols",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "Coverage of the hosted LuxAlgo Edge Stats store (anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_library_get_concept",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "One LuxAlgo Library concept page by slug (e.g. rsi; anonymous).",
+    "params": [
+      {
+        "name": "slug",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_get_family",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "One LuxAlgo Library indicator family by name/slug (anonymous).",
+    "params": [
+      {
+        "name": "family",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_get_indicator",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "One LuxAlgo Library indicator's metadata by slug (anonymous).",
+    "params": [
+      {
+        "name": "slug",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_list_concepts",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "List LuxAlgo Library concept pages (anonymous).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_list_families",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "List LuxAlgo Library indicator families (anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_library_list_indicators",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "List LuxAlgo Library indicator entries (anonymous).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_list_tags",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "List LuxAlgo Library tags (anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_library_search",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "Full-text search over the LuxAlgo Library (concepts + indicators; anonymous).",
+    "params": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_trackers_datasets",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "Market Trackers catalog of CC0 public-record datasets (anonymous).",
+    "params": [
+      {
+        "name": "dataset",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_trackers_latest",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "Newest ingestion day's rows for one Trackers dataset (anonymous).",
+    "params": [
+      {
+        "name": "dataset",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "text",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "where_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "sort",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_trackers_ticker",
+    "family": "luxalgo",
+    "scope": "read",
+    "summary": "One ticker across every ticker-bearing Trackers dataset (anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 5
+      }
+    ]
+  },
+  {
+    "name": "digiquant_build_sdca_risk_index",
+    "family": "models",
+    "scope": "full",
+    "summary": "Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": false,
+        "default": "BTC-USD"
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "refresh",
+        "type": "bool",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "bulk_period",
+        "type": "str",
+        "required": false,
+        "default": "max"
+      },
+      {
+        "name": "risk_model",
+        "type": "str",
+        "required": false,
+        "default": "btc_power_law"
+      },
+      {
+        "name": "profile",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "profile_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "coefficients_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "output_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "indicator_weights",
+        "type": "str",
+        "required": false,
+        "default": "{}"
+      },
+      {
+        "name": "m2_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "dxy_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "eth_ticker",
+        "type": "str",
+        "required": false,
+        "default": "ETH-USD"
+      },
+      {
+        "name": "valuation_form",
+        "type": "str",
+        "required": false,
+        "default": "log_quadratic"
+      },
+      {
+        "name": "rolling_window",
+        "type": "int",
+        "required": false,
+        "default": 90
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fit_btc_power_law",
+    "family": "models",
+    "scope": "full",
+    "summary": "Fit the BTC power-law (RAQQR) SDCA valuation rails from cached price history (#1082).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": false,
+        "default": "BTC-USD"
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "refresh",
+        "type": "bool",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "bulk_period",
+        "type": "str",
+        "required": false,
+        "default": "max"
+      },
+      {
+        "name": "output_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "notes",
+        "type": "str",
+        "required": false,
+        "default": ""
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fit_sdca_weights",
+    "family": "models",
+    "scope": "full",
+    "summary": "Stage A: fit composite weights so risk overlaps cycle windows.",
+    "params": [
+      {
+        "name": "profile",
+        "type": "str",
+        "required": false,
+        "default": "btc_v1"
+      },
+      {
+        "name": "profile_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "coefficients_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "output_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "m2_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "dxy_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "eth_ticker",
+        "type": "str",
+        "required": false,
+        "default": "ETH-USD"
+      },
+      {
+        "name": "valuation_form",
+        "type": "str",
+        "required": false,
+        "default": "log_quadratic"
+      },
+      {
+        "name": "rolling_window",
+        "type": "int",
+        "required": false,
+        "default": 90
+      }
+    ]
+  },
+  {
+    "name": "digiquant_generate_slapper_tearsheet",
+    "family": "models",
+    "scope": "full",
+    "summary": "Run the NautilusTrader backtest for the Slapper family and write TV-style tearsheet JSON to the digiquant.io frontend. ``strategy=None`` runs all three.",
+    "params": [
+      {
+        "name": "strategy",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "signal_delay_days",
+        "type": "int",
+        "required": false,
+        "default": 0
+      },
+      {
+        "name": "allow_example_calibrations",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digiquant_validate_slapper_vs_tradingview",
+    "family": "models",
+    "scope": "full",
+    "summary": "Trade-level parity check of a Slapper strategy against a TradingView 'List of Trades' CSV export (matches entry date + direction; breaks misses down by signal family). Returns match counts and the diff lists as JSON.",
+    "params": [
+      {
+        "name": "strategy",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "ohlcv_csv",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "tv_export_csv",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "start_date",
+        "type": "str",
+        "required": false,
+        "default": "2018-01-01"
+      }
+    ]
+  },
+  {
+    "name": "dashboard_evaluate_policy_gate",
+    "family": "policy",
+    "scope": "read",
+    "summary": "Evaluate immutable gate criteria (eligibility only \u2014 never activates).",
+    "params": [
+      {
+        "name": "comparison_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "criteria_version_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "dashboard_get_policy_comparison",
+    "family": "policy",
+    "scope": "read",
+    "summary": "Fetch a policy comparison summary (artifact IDs / status only).",
+    "params": [
+      {
+        "name": "comparison_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "dashboard_get_policy_gate_evaluation",
+    "family": "policy",
+    "scope": "read",
+    "summary": "Fetch a gate-evaluation summary by id (fail closed if unknown).",
+    "params": [
+      {
+        "name": "evaluation_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "dashboard_get_policy_replay",
+    "family": "policy",
+    "scope": "read",
+    "summary": "Fetch a policy replay run summary by id (fail closed if unknown).",
+    "params": [
+      {
+        "name": "run_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "dashboard_run_policy_replay",
+    "family": "policy",
+    "scope": "full",
+    "summary": "Register a policy replay run against a stored pair (summary IDs only).",
+    "params": [
+      {
+        "name": "pair_content_hash",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "run_id",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_get_macro_series",
+    "family": "research",
+    "scope": "read",
+    "summary": "Latest values + recent window for FRED macro series ids (JSON).",
+    "params": [
+      {
+        "name": "series_ids",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "lookback",
+        "type": "int",
+        "required": false,
+        "default": 6
+      },
+      {
+        "name": "as_of",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_get_price_technicals",
+    "family": "research",
+    "scope": "read",
+    "summary": "Latest technical indicators + recent daily window for a ticker (JSON).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "lookback",
+        "type": "int",
+        "required": false,
+        "default": 20
+      },
+      {
+        "name": "as_of",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_get_trade_levels",
+    "family": "research",
+    "scope": "read",
+    "summary": "Causal entry/stop/target levels for a direction (JSON, read-only).",
+    "params": [
+      {
+        "name": "direction",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "ohlc_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "pair",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "config_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_query_research",
+    "family": "research",
+    "scope": "read",
+    "summary": "Search the research pipeline and book for prior work (JSON).",
+    "params": [
+      {
+        "name": "dataset",
+        "type": "str",
+        "required": false,
+        "default": "documents"
+      },
+      {
+        "name": "run_type",
+        "type": "str",
+        "required": false,
+        "default": "baseline"
+      },
+      {
+        "name": "run_id",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "date_from",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "date_to",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "document_key",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "segment",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "sector",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "subject",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "doc_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "phase",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "include_prior",
+        "type": "bool",
+        "required": false,
+        "default": false
+      },
+      {
+        "name": "as_of_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      },
+      {
+        "name": "full_content",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digiquant_export",
+    "family": "strategies",
+    "scope": "full",
+    "summary": "Export strategy config (JSON or nautilus_bundle zip). targets: nautilus, nautilus_bundle, \u2026",
+    "params": [
+      {
+        "name": "strategy_name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "target",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "params_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_list_strategies",
+    "family": "strategies",
+    "scope": "read",
+    "summary": "List registered strategies (name, aliases, description, default_params).",
+    "params": []
+  },
+  {
+    "name": "digiquant_run_backtest",
+    "family": "strategies",
+    "scope": "full",
+    "summary": "Run a Nautilus backtest. symbols_json is a JSON array e.g. '[\"AAPL\"]'.",
+    "params": [
+      {
+        "name": "strategy_name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "symbols_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "data_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "data_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "strategy_params_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_run_optimize",
+    "family": "strategies",
+    "scope": "full",
+    "summary": "Run parameter optimization (grid, bayesian, or random).",
+    "params": [
+      {
+        "name": "strategy_name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "symbols_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "data_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "data_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "method",
+        "type": "str",
+        "required": false,
+        "default": "grid"
+      },
+      {
+        "name": "n_trials",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "param_grid_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "strategy_params_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_run_pipeline",
+    "family": "strategies",
+    "scope": "full",
+    "summary": "Run validate \u2192 backtest \u2192 optional optimize \u2192 optional export via internal LangGraph.",
+    "params": [
+      {
+        "name": "strategy_name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "symbols_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "data_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "data_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "strategy_params_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "export_target",
+        "type": "str",
+        "required": false,
+        "default": "nautilus"
+      },
+      {
+        "name": "run_optimize",
+        "type": "bool",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "run_export",
+        "type": "bool",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "method",
+        "type": "str",
+        "required": false,
+        "default": "grid"
+      },
+      {
+        "name": "n_trials",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "constraints_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  }
+]

@@ -1,52 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useMotionSafe } from "@digithings/ui";
-import { MCP_COMMAND, MCP_COMMANDS, MCP_HELP_COMMAND, MCP_OPTIONS, type McpScope } from "@/app/_mcp";
+import { MCP_COMMAND, MCP_READ_COUNT, MCP_TOOLS } from "@/app/_mcp";
+import {
+  exampleArgs,
+  groupByFamily,
+  runDemo,
+  type DemoLine,
+  type McpScope,
+  type McpTool,
+} from "@/lib/mcp-demo";
 
-const SCOPE_TONE: Record<McpScope, string> = {
-  full: "text-ink",
-  read: "text-ink-soft",
-  roadmap: "text-ink-mute",
+const LINE_TONE: Record<DemoLine["kind"], string> = {
+  call: "text-ink",
+  ok: "text-ink-soft",
+  err: "text-[var(--down)]",
+  out: "text-ink-soft",
+  mute: "text-ink-mute",
 };
-
-/** Lines print in as the block scrolls into view. Server render, reduced motion and a
- *  missing IntersectionObserver show every line from the start. */
-function useArmed(safe: boolean) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!safe || !el || typeof IntersectionObserver === "undefined") {
-      setArmed(false);
-      return;
-    }
-    setArmed(true);
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          io.disconnect();
-          setArmed(false);
-        }
-      },
-      { threshold: 0.2 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [safe]);
-  return { ref, armed };
-}
-
-function Line({ i, className, children }: { i: number; className?: string; children: ReactNode }) {
-  return (
-    <div
-      className={`transition-opacity duration-300 group-data-[armed=true]:opacity-0 motion-reduce:transition-none ${className ?? ""}`}
-      style={{ transitionDelay: `${i * 70}ms` }}
-    >
-      {children}
-    </div>
-  );
-}
+const LINE_MARK: Record<DemoLine["kind"], string> = { call: "→", ok: "✓", err: "✗", out: "←", mute: " " };
 
 const PROMPT = (
   <span aria-hidden="true" className="text-accent">
@@ -54,92 +27,234 @@ const PROMPT = (
   </span>
 );
 
-/** The MCP band's terminal: the real server command, the tools it registers as a
- *  command list (select one for its detail) and its options. Text only; nothing here
- *  is a live connection. */
-export function McpCli() {
-  const safe = useMotionSafe();
-  const { ref, armed } = useArmed(safe);
-  const [open, setOpen] = useState<string>(MCP_COMMANDS[0]?.id ?? "");
-  const optionsAt = MCP_COMMANDS.length + 3;
+function Pane({ className = "", children }: { className?: string; children: ReactNode }) {
+  return <div className={`min-w-0 overflow-y-auto ${className}`}>{children}</div>;
+}
 
+function ToolList({
+  tools,
+  selected,
+  onSelect,
+}: {
+  tools: McpTool[];
+  selected: string;
+  onSelect: (name: string) => void;
+}) {
+  const groups = useMemo(() => groupByFamily(tools), [tools]);
+  const flat = tools.map((t) => t.name);
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const at = flat.indexOf(selected);
+    const next = flat[Math.min(flat.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))];
+    if (!next) return;
+    onSelect(next);
+    e.currentTarget.querySelector<HTMLElement>(`[data-tool="${next}"]`)?.focus();
+  };
+  if (tools.length === 0) return <p className="m-0 px-1 text-ink-mute"># no tool matches</p>;
   return (
-    <div
-      ref={ref}
-      data-armed={armed}
-      className="group min-w-0 border border-hair bg-term-bg font-mono text-[0.78rem] leading-[1.7] text-ink-soft"
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
-        <span>digiquant · mcp</span>
-        <span className="truncate">stdio · local · nothing here is a live connection</span>
-      </div>
-      <div className="flex flex-col gap-4 px-4 py-4">
-        <div className="flex flex-col">
-          <Line i={0} className="break-words text-ink">
-            {PROMPT}
-            {MCP_COMMAND}
-          </Line>
-          <Line i={1} className="text-ink-mute">
-            # {MCP_COMMANDS.length} commands. pick one to read it
-          </Line>
-        </div>
-
-        <div role="list" aria-label="MCP commands" className="flex flex-col">
-          {MCP_COMMANDS.map((cmd, i) => {
-            const selected = open === cmd.id;
+    <div role="listbox" aria-label="MCP tools" onKeyDown={onKey} className="flex flex-col">
+      {groups.map((g) => (
+        <div key={g.family} role="group" aria-label={g.family} className="flex flex-col">
+          <p className="m-0 mt-2 text-ink-mute first:mt-0">
+            # {g.family} ({g.tools.length})
+          </p>
+          {g.tools.map((t) => {
+            const on = t.name === selected;
             return (
-              <Line key={cmd.id} i={i + 2}>
-                <div role="listitem">
-                  <button
-                    type="button"
-                    aria-expanded={selected}
-                    aria-controls={`mcp-detail-${cmd.id}`}
-                    onClick={() => setOpen(selected ? "" : cmd.id)}
-                    className="grid w-full grid-cols-[1.25rem_minmax(0,1fr)_auto] items-baseline gap-x-2 bg-transparent p-0 text-start font-mono text-[length:inherit] leading-[inherit] text-ink-soft hover:bg-surface-2 focus-visible:bg-surface-2 sm:grid-cols-[1.25rem_8.5rem_minmax(0,1fr)_auto]"
-                  >
-                    <span aria-hidden="true" className={selected ? "text-accent" : "text-ink-mute"}>
-                      {selected ? "▸" : ">"}
-                    </span>
-                    <span className="text-ink">{cmd.name}</span>
-                    <span className="col-start-2 truncate text-ink-mute sm:col-start-auto">{cmd.tools}</span>
-                    <span className={`col-start-3 row-start-1 sm:col-start-4 sm:row-start-auto ${SCOPE_TONE[cmd.scope]}`}>
-                      [{cmd.scope}]
-                    </span>
-                  </button>
-                  {selected ? (
-                    <p
-                      id={`mcp-detail-${cmd.id}`}
-                      className="m-0 mb-1 ms-[1.25rem] border-s border-hair ps-3 font-sans text-[0.8125rem] leading-[1.55] text-ink-soft"
-                    >
-                      {cmd.detail}
-                    </p>
-                  ) : null}
-                </div>
-              </Line>
+              <button
+                key={t.name}
+                type="button"
+                role="option"
+                aria-selected={on}
+                data-tool={t.name}
+                onClick={() => onSelect(t.name)}
+                className={`grid w-full grid-cols-[1.1rem_minmax(0,1fr)_auto] items-baseline gap-x-1 p-0 text-start font-mono text-[length:inherit] leading-[inherit] hover:bg-surface-2 focus-visible:bg-surface-2 ${
+                  on ? "bg-surface-2 text-ink" : "bg-transparent text-ink-soft"
+                }`}
+              >
+                <span aria-hidden="true" className={on ? "text-accent" : "text-ink-mute"}>
+                  {on ? "▸" : ">"}
+                </span>
+                <span className="truncate">{t.name}</span>
+                <span className="text-ink-mute">[{t.scope === "read" ? "r" : "f"}]</span>
+              </button>
             );
           })}
         </div>
+      ))}
+    </div>
+  );
+}
 
-        <div className="flex flex-col">
-          <Line i={optionsAt - 1} className="text-ink">
-            {PROMPT}
-            {MCP_HELP_COMMAND}
-          </Line>
-          {MCP_OPTIONS.map((opt, i) => (
-            <Line key={opt.flag} i={optionsAt + i} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-3">
-              <span className="text-ink">{opt.flag}</span>
-              <span className="text-ink-mute">{opt.text}</span>
-            </Line>
+function ToolDetail({ tool, serverScope }: { tool: McpTool; serverScope: McpScope }) {
+  const safe = useMotionSafe();
+  const [args, setArgs] = useState(() => JSON.stringify(exampleArgs(tool)));
+  const [lines, setLines] = useState<DemoLine[]>([]);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    const pending = timers.current;
+    return () => pending.forEach(clearTimeout);
+  }, []);
+
+  const run = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    const all = runDemo(tool, args, serverScope);
+    if (!safe) {
+      setLines(all);
+      return;
+    }
+    setLines([]);
+    all.forEach((line, i) => {
+      timers.current.push(setTimeout(() => setLines((prev) => [...prev, line]), 160 * (i + 1)));
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <p className="m-0 text-ink">
+          {PROMPT}mcp describe {tool.name}
+        </p>
+        <p className="m-0 mt-1 font-sans text-[0.8125rem] leading-[1.55] text-ink-soft">{tool.summary}</p>
+        <p className="m-0 mt-1 text-ink-mute">
+          [{tool.scope}] {tool.scope === "read" ? "served by --scope read and full" : "served by --scope full only"}
+        </p>
+      </div>
+
+      <div>
+        <p className="m-0 text-ink-mute"># args ({tool.params.length})</p>
+        {tool.params.length === 0 ? (
+          <p className="m-0 text-ink-soft">none</p>
+        ) : (
+          <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3">
+            {tool.params.map((p) => (
+              <div key={p.name} className="col-span-3 grid grid-cols-subgrid">
+                <dt className="text-ink">{p.name}</dt>
+                <dd className="m-0 truncate text-ink-mute">{p.type}</dd>
+                <dd className="m-0 text-ink-mute">
+                  {p.required ? "required" : `= ${JSON.stringify(p.default)}`}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="mcp-args" className="m-0 block text-ink">
+          {PROMPT}mcp call {tool.name}
+        </label>
+        <textarea
+          id="mcp-args"
+          value={args}
+          onChange={(e) => setArgs(e.target.value)}
+          spellCheck={false}
+          rows={2}
+          className="mt-1 block w-full resize-none border border-hair bg-transparent p-2 font-mono text-[0.72rem] leading-[1.5] text-ink focus-visible:border-ink-mute focus-visible:outline-none"
+        />
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={run}
+            className="border border-hair bg-transparent px-3 py-1 font-mono text-[0.72rem] text-ink hover:bg-surface-2 focus-visible:bg-surface-2"
+          >
+            run
+          </button>
+          <span className="text-ink-mute">demo · nothing is executed</span>
+        </div>
+      </div>
+
+      <div aria-live="polite" className="min-h-[3rem]">
+        {lines.map((line, i) => (
+          <div key={i} className={`flex gap-2 ${LINE_TONE[line.kind]}`}>
+            <span aria-hidden="true" className="shrink-0">
+              {LINE_MARK[line.kind]}
+            </span>
+            {line.kind === "out" ? (
+              <pre className="m-0 min-w-0 whitespace-pre-wrap break-words font-mono text-[length:inherit]">{line.text}</pre>
+            ) : (
+              <span className="min-w-0 break-words">{line.text}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The MCP band's terminal: the server command, then the full tool registry as a
+ *  filterable command list. Select a tool for its arguments and run it in the demo, with
+ *  the server scope switchable. Text only; nothing here is a live connection. */
+export function McpCli() {
+  const [filter, setFilter] = useState("");
+  const [selected, setSelected] = useState(MCP_TOOLS[0]?.name ?? "");
+  const [scope, setScope] = useState<McpScope>("full");
+
+  const visible = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return MCP_TOOLS.filter((t) => (scope === "read" ? t.scope === "read" : true)).filter(
+      (t) => !q || t.name.includes(q) || t.family.includes(q) || t.summary.toLowerCase().includes(q),
+    );
+  }, [filter, scope]);
+
+  const tool = MCP_TOOLS.find((t) => t.name === selected) ?? MCP_TOOLS[0];
+  const command = MCP_COMMAND.replace("--scope full", `--scope ${scope}`);
+
+  return (
+    <div className="min-w-0 border border-hair bg-term-bg font-mono text-[0.74rem] leading-[1.65] text-ink-soft">
+      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
+        <span>digiquant · mcp</span>
+        <span className="truncate">stdio · local · this page runs a demo, not a server</span>
+      </div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 px-4 pt-3">
+        <p className="m-0 min-w-0 break-words text-ink">
+          {PROMPT}
+          {command}
+        </p>
+        <div role="group" aria-label="Server scope" className="flex items-center gap-2 text-ink-mute">
+          <span># {visible.length} of {MCP_TOOLS.length} tools · scope</span>
+          {(["full", "read"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={scope === s}
+              onClick={() => setScope(s)}
+              className={`border px-2 py-0 font-mono text-[0.68rem] hover:bg-surface-2 ${
+                scope === s ? "border-ink-mute bg-surface-2 text-ink" : "border-hair bg-transparent text-ink-mute"
+              }`}
+            >
+              {s}
+            </button>
           ))}
         </div>
-
-        <div className="text-ink">
-          {PROMPT}
-          <span
-            aria-hidden="true"
-            className="inline-block h-[1em] w-[0.55ch] translate-y-[0.15em] animate-pulse bg-ink motion-reduce:animate-none"
-          />
+      </div>
+      <p className="m-0 px-4 text-ink-mute">
+        # {MCP_READ_COUNT} read-scope tools are what the dashboard chat gets; full adds backtest, optimize, export and fetches
+      </p>
+      <div className="grid gap-x-4 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="flex min-w-0 flex-col gap-2 border-hair md:border-e md:pe-4">
+          <label className="flex items-baseline gap-2 text-ink">
+            {PROMPT}
+            <span className="shrink-0">tools | grep</span>
+            <input
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="name, family or text"
+              aria-label="Filter tools"
+              className="min-w-0 flex-1 border-0 border-b border-hair bg-transparent p-0 font-mono text-[length:inherit] text-ink placeholder:text-ink-mute focus-visible:border-ink-mute focus-visible:outline-none"
+            />
+          </label>
+          <Pane className="h-[15rem] max-md:h-[10rem]">
+            <ToolList tools={visible} selected={selected} onSelect={setSelected} />
+          </Pane>
         </div>
+        <Pane className="h-[19rem] max-md:mt-3 max-md:h-[16rem]">
+          {tool ? <ToolDetail key={tool.name} tool={tool} serverScope={scope} /> : null}
+        </Pane>
       </div>
     </div>
   );
