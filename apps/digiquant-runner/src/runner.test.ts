@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import worker from "./index";
-import { dataPlaneEnv, type Env } from "./env";
+import { dataPlaneEnv, type Env, type HouseLedger } from "./env";
 import {
   HEARTBEAT_MS,
   MAX_INFLIGHT,
@@ -40,20 +40,29 @@ function post(body: RunJobRequest, token = "test-token"): Request {
   });
 }
 
+type Started = {
+  run_id: string;
+  command: string;
+  args: Record<string, string>;
+};
+
 type HarnessOptions = {
   now?: () => number;
   startRun?: ContainerPort["startRun"];
   readStatus?: ContainerPort["readStatus"];
+  archive?: HouseLedger;
 };
 
 function harness(opts: HarnessOptions = {}): {
   session: RunnerSession;
   starts: string[];
+  bodies: Started[];
   alarms: number[];
   statuses: Map<string, ContainerStatus>;
   clock: { ms: number };
 } {
   const starts: string[] = [];
+  const bodies: Started[] = [];
   const alarms: number[] = [];
   const statuses = new Map<string, ContainerStatus>();
   const clock = { ms: T0 };
@@ -62,6 +71,7 @@ function harness(opts: HarnessOptions = {}): {
       opts.startRun ??
       (async (body) => {
         starts.push(body.run_id);
+        bodies.push({ run_id: body.run_id, command: body.command, args: body.args });
         statuses.set(body.run_id, {
           status: "running",
           exit_code: null,
@@ -84,18 +94,47 @@ function harness(opts: HarnessOptions = {}): {
       alarms.push(delayMs);
     },
     now: opts.now ?? (() => clock.ms),
+    archive: opts.archive,
   });
-  return { session, starts, alarms, statuses, clock };
+  return { session, starts, bodies, alarms, statuses, clock };
 }
 
-function envFor(session: RunnerSession): Env {
+function memoryArchive(seed: Record<string, string> = {}): HouseLedger & {
+  data: Map<string, string>;
+} {
+  const data = new Map(Object.entries(seed));
   return {
+    data,
+    async head(key: string) {
+      return data.has(key) ? { key } : null;
+    },
+    async get(key: string) {
+      const text = data.get(key);
+      if (text === undefined) return null;
+      return { text: async () => text };
+    },
+    async put(key: string, body: string) {
+      data.set(key, body);
+      return { key };
+    },
+  };
+}
+
+function envFor(
+  session: RunnerSession,
+  opts: { archive?: Record<string, string> | null } = {},
+): Env {
+  const env: Env = {
     RUNNER_AUTH_TOKEN: "test-token",
     RUNNER_CONTAINER: {
       idFromName: (name: string) => name,
       get: () => ({ fetch: (request: Request) => session.fetch(request) }),
     } as unknown as DurableObjectNamespace,
   };
+  if (opts.archive !== null) {
+    env.ARCHIVE = memoryArchive(opts.archive ?? {});
+  }
+  return env;
 }
 
 describe("digiquant-runner worker", () => {
@@ -108,7 +147,7 @@ describe("digiquant-runner worker", () => {
   it("rejects an unknown command", async () => {
     const { session, starts } = harness();
     const res = await worker.fetch(
-      post(job({ command: "house-run", concurrency: "digiquant-pipeline" })),
+      post(job({ command: "not-a-command", concurrency: "digiquant-pipeline" })),
       envFor(session),
     );
     expect(res.status).toBe(400);
@@ -150,6 +189,96 @@ describe("digiquant-runner worker", () => {
     expect(body.status).toBe("already_running");
     expect(starts).toHaveLength(1);
   });
+
+  it("ignores a missing ledger for commands other than house-run", async () => {
+    const { session, starts } = harness();
+    const res = await worker.fetch(post(job()), envFor(session, { archive: null }));
+    expect(res.status).toBe(202);
+    expect(starts).toHaveLength(1);
+  });
+
+  it("skips house-run before start when today's success object exists", async () => {
+    const { session, starts } = harness();
+    const env = envFor(session, {
+      archive: { "pipeline-runs/house-run/2026-09-30/success.json": "{\"run_id\":\"old\"}" },
+    });
+    const res = await worker.fetch(
+      post(job({
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        args: { refresh_scope: "none", run_date: "2026-09-30" },
+      })),
+      env,
+    );
+    expect(res.status).toBe(202);
+    expect(await res.json()).toMatchObject({ status: "skipped", run_id: "old" });
+    expect(starts).toHaveLength(0);
+  });
+
+  it("force bypasses the success object and starts", async () => {
+    const { session, starts } = harness();
+    const env = envFor(session, {
+      archive: {
+        "pipeline-runs/house-run/2026-09-30/success.json": "{\"run_id\":\"old\"}",
+      },
+    });
+    const res = await worker.fetch(
+      post(job({
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        args: { refresh_scope: "none", run_date: "2026-09-30", force: "true" },
+        idempotency_key: "house-run-09:force",
+      })),
+      env,
+    );
+    expect(res.status).toBe(202);
+    expect((await res.json() as { status: string }).status).toBe("accepted");
+    expect(starts).toHaveLength(1);
+  });
+
+  it("refuses house-run when the ledger binding is missing", async () => {
+    const { session, starts } = harness();
+    const res = await worker.fetch(
+      post(job({
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        args: { refresh_scope: "none", run_date: "2026-09-30" },
+        idempotency_key: "house-run-09:no-ledger",
+      })),
+      envFor(session, { archive: null }),
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "house_ledger_unconfigured" });
+    expect(starts).toHaveLength(0);
+  });
+
+  it("queues prices while house-run is locked", async () => {
+    const { session, starts } = harness();
+    const env = envFor(session);
+    const house = await worker.fetch(
+      post(job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:1",
+        args: { refresh_scope: "none", run_date: "2026-09-30" },
+      })),
+      env,
+    );
+    expect(house.status).toBe(202);
+    const prices = await worker.fetch(
+      post(job({
+        command: "market-data-refresh",
+        concurrency: "market-data-refresh",
+        idempotency_key: "market-data-refresh-morning:2",
+      })),
+      env,
+    );
+    expect(prices.status).toBe(202);
+    expect((await prices.json() as { status: string }).status).toBe("accepted");
+    expect(starts).toHaveLength(1);
+  });
 });
 
 describe("heartbeat", () => {
@@ -189,18 +318,21 @@ describe("data plane env", () => {
     expect(keys).not.toContain("RUNNER_AUTH_TOKEN");
     expect(keys).not.toContain("GH_ISSUE_TOKEN");
     expect(keys).not.toContain("FRED_API_KEY");
-    expect(keys).not.toContain("OPENROUTER_API_KEY");
-    expect(keys).not.toContain("DIGIQUANT_DIGIKEY_API_KEY");
-    // #4794: the macro panel needs no vendor key — pin the whitelist exactly.
+    // House keys are on the container. allocation-shadow's allowlist still drops them.
     expect([...keys].sort()).toEqual(
       [
+        "CHEAPERINFERENCE_API_BASE",
+        "CHEAPERINFERENCE_API_KEY",
         "CLOUDFLARE_ACCOUNT_ID",
         "CLOUDFLARE_EMAIL_API_TOKEN",
         "CORE_POSTGRES_URI",
         "CORE_SUPABASE_SERVICE_KEY",
         "CORE_SUPABASE_URL",
+        "DIGIQUANT_DIGIKEY_API_KEY",
         "DIGIQUANT_RUNNER_GIT_SHA",
+        "LANGSMITH_API_KEY",
         "NOTIFY_FROM",
+        "OPENROUTER_API_KEY",
         "R2_ACCESS_KEY_ID",
         "R2_ACCOUNT_ID",
         "R2_BUCKET",
@@ -421,5 +553,93 @@ describe("watchdog and poll resilience", () => {
       expect.arrayContaining([second.run_id, queued.run_id]),
     );
     expect(alarms).toEqual([HEARTBEAT_MS]);
+  });
+
+  it("writes success.json and starts allocation-shadow after house-run succeeds", async () => {
+    const archive = memoryArchive();
+    const { session, starts, statuses, bodies } = harness({ archive });
+    const accepted = await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:success",
+        args: { refresh_scope: "none", run_date: "2026-09-30" },
+      }),
+    );
+    const remote = statuses.get(starts[0]);
+    if (!remote) throw new Error("missing status");
+    remote.status = "succeeded";
+    remote.exit_code = 0;
+    remote.finished_at = "2026-09-30T17:00:00.000Z";
+    await session.alarm();
+    const raw = archive.data.get("pipeline-runs/house-run/2026-09-30/success.json");
+    expect(raw).toBeTruthy();
+    const saved = JSON.parse(raw ?? "{}") as {
+      run_id: string;
+      git_sha: string;
+      finished_at: string;
+    };
+    expect(saved).toEqual({
+      run_id: accepted.run_id,
+      git_sha: "abc123",
+      finished_at: "2026-09-30T17:00:00.000Z",
+    });
+    const shadow = bodies.find((body) => body.command === "allocation-shadow");
+    expect(shadow?.args.artifact_prefix).toBe(`pipeline-runs/house-run/${accepted.run_id}/`);
+    expect(shadow?.args.source_branch).toBe("main");
+    expect((await session.health()).running).toEqual([shadow?.run_id]);
+  });
+
+  it("starts a queued price tick only after the house-run lock clears", async () => {
+    const { session, starts, statuses, bodies } = harness();
+    const house = await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:queue",
+        args: { refresh_scope: "none", run_date: "2026-09-30" },
+      }),
+    );
+    const prices = await session.accept(
+      job({
+        command: "market-data-refresh",
+        concurrency: "market-data-refresh",
+        idempotency_key: "market-data-refresh-morning:queued",
+        scheduled_time: 2,
+      }),
+    );
+    expect(prices.status).toBe("accepted");
+    expect(starts).toEqual([house.run_id]);
+    const remote = statuses.get(house.run_id);
+    if (!remote) throw new Error("missing status");
+    remote.status = "succeeded";
+    remote.exit_code = 0;
+    remote.finished_at = "2026-09-30T17:00:00.000Z";
+    await session.alarm();
+    expect(bodies.map((body) => body.command)).toEqual([
+      "house-run",
+      "market-data-refresh",
+      "allocation-shadow",
+    ]);
+  });
+
+  it("does not start house-run beside a live price tick", async () => {
+    const { session, starts } = harness();
+    const prices = await session.accept(job({ idempotency_key: "prices:hold" }));
+    const house = await session.accept(
+      job({
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:behind",
+        args: { refresh_scope: "none", run_date: "2026-09-30" },
+      }),
+    );
+    expect(house.status).toBe("accepted");
+    expect(starts).toEqual([prices.run_id]);
   });
 });

@@ -5,6 +5,7 @@
  */
 import commandsJson from "../commands.json";
 import { assertKnownCommand, loadCommands, type CommandSpec } from "./commands";
+import type { HouseLedger } from "./env";
 
 export const HEARTBEAT_MS = 60_000;
 export const MAX_INFLIGHT = 2;
@@ -99,6 +100,8 @@ export type SessionDeps = {
   /** May be sync or async; callers always await. */
   scheduleAlarm: (delayMs: number) => void | Promise<void>;
   now?: () => number;
+  /** House-run success ledger. Other commands ignore it. */
+  archive?: HouseLedger;
 };
 
 function emptyLedger(): Ledger {
@@ -107,6 +110,20 @@ function emptyLedger(): Ledger {
 
 function isTerminal(status: RunStatus): boolean {
   return status === "succeeded" || status === "failed" || status === "timed_out";
+}
+
+function houseLockHeld(ledger: Ledger): boolean {
+  return Object.values(ledger.locks).some(
+    (lock) => ledger.runs[lock.run_id]?.command === "house-run",
+  );
+}
+
+/** Queue instead of startRun. House-run does not share the box with other cadence. */
+function mustQueue(ledger: Ledger, command: string): boolean {
+  if (Object.keys(ledger.locks).length >= MAX_INFLIGHT) return true;
+  if (houseLockHeld(ledger) && command !== "house-run") return true;
+  if (command === "house-run" && Object.keys(ledger.locks).length > 0) return true;
+  return false;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -233,8 +250,7 @@ export class RunnerSession {
     const run = this.freshRun(request);
     ledger.idem[request.idempotency_key] = run.run_id;
     ledger.runs[run.run_id] = run;
-    const inflight = Object.keys(ledger.locks).length;
-    if (inflight >= MAX_INFLIGHT) {
+    if (mustQueue(ledger, request.command)) {
       ledger.queue.push(run.run_id);
       await this.save(ledger);
       await Promise.resolve(this.deps.scheduleAlarm(HEARTBEAT_MS));
@@ -374,9 +390,51 @@ export class RunnerSession {
     if (!remote) return true;
     if (isTerminal(run.status)) {
       delete ledger.locks[group];
+      if (run.command === "house-run" && run.status === "succeeded") {
+        await this.onHouseSucceeded(ledger, run);
+      }
       return false;
     }
     return true;
+  }
+
+  private async onHouseSucceeded(ledger: Ledger, run: RunRecord): Promise<void> {
+    const runDate = run.args.run_date?.trim() ?? "";
+    if (runDate && this.deps.archive) {
+      const key = `pipeline-runs/house-run/${runDate}/success.json`;
+      const body = JSON.stringify({
+        run_id: run.run_id,
+        finished_at: run.finished_at,
+        git_sha: run.git_sha,
+      });
+      try {
+        await this.deps.archive.put(key, body);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`house_ledger_write_failed ${message}`);
+      }
+    }
+    const idempotencyKey = `allocation-shadow:${run.run_id}`;
+    if (ledger.idem[idempotencyKey]) return;
+    const spec = COMMANDS["allocation-shadow"];
+    if (!spec) return;
+    const shadow = this.freshRun({
+      job_id: "allocation-shadow",
+      command: "allocation-shadow",
+      args: {
+        artifact_prefix: `pipeline-runs/house-run/${run.run_id}/`,
+        source_branch: "main",
+      },
+      concurrency: spec.concurrency,
+      timeout_seconds: spec.timeout_seconds,
+      code_ref: "main",
+      cron: "",
+      scheduled_time: this.now(),
+      idempotency_key: idempotencyKey,
+    });
+    ledger.idem[idempotencyKey] = shadow.run_id;
+    ledger.runs[shadow.run_id] = shadow;
+    ledger.queue.push(shadow.run_id);
   }
 
   private applyRemote(run: RunRecord, remote: ContainerStatus): void {
@@ -395,7 +453,7 @@ export class RunnerSession {
     for (const runId of waiting) {
       const run = ledger.runs[runId];
       if (!run) continue;
-      if (Object.keys(ledger.locks).length >= MAX_INFLIGHT || ledger.locks[run.concurrency]) {
+      if (ledger.locks[run.concurrency] || mustQueue(ledger, run.command)) {
         ledger.queue.push(runId);
         continue;
       }

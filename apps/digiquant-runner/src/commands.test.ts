@@ -45,7 +45,7 @@ describe("phase 1 commands", () => {
   });
 
   it("rejects an unknown command", () => {
-    expect(() => assertKnownCommand("house-run", raw)).toThrow(/unknown command/);
+    expect(() => assertKnownCommand("not-a-command", raw)).toThrow(/unknown command/);
   });
 
   it("does not declare GitHub failure issues", () => {
@@ -160,5 +160,32 @@ describe("phase 2 commands", () => {
     expect(lines[3]).toContain("--push-supabase");
     expect(lines[3]).toContain("--signal-delay-days 3");
     expect(lines[3]).toContain("--cache-dir digiquant/data/price-history");
+  });
+});
+
+describe("phase 3 house-run", () => {
+  it("house-run matches the workflow caps and does not file issues", () => {
+    const spec = assertKnownCommand("house-run", raw);
+    expect(spec.timeout_seconds).toBe(14400);
+    expect(spec.concurrency).toBe("digiquant-pipeline");
+    expect(spec.extra_env?.DIGILLM_MAX_CONCURRENT_CALLS).toBe("8");
+    expect(spec.extra_env?.DIGIQUANT_SHADOW_ARTIFACT_MODE).toBe("export");
+    const flat = JSON.stringify(spec.steps);
+    expect(flat).toContain("fetch-macro");
+    expect(flat).toContain("fedprob");
+    expect(flat).toContain("validate-providers.py");
+    expect(flat).toContain("house_chain_step.py");
+    expect(spec).not.toHaveProperty("failure_issue");
+  });
+
+  it("allocation-shadow allowlist is empty and the checker is first", () => {
+    const spec = assertKnownCommand("allocation-shadow", raw);
+    expect(spec.env).toEqual([]);
+    expect(spec.alias_supabase).toBeFalsy();
+    const first = spec.steps[0];
+    const argv = Array.isArray(first) ? first : first.argv;
+    expect(argv.join(" ")).toContain("check_allocation_shadow_isolation.py");
+    expect(JSON.stringify(spec)).not.toContain("OPENROUTER");
+    expect(JSON.stringify(spec)).not.toContain("CORE_SUPABASE");
   });
 });
