@@ -78,7 +78,10 @@ export const DESKS: DeskDef[] = [
       { path: "/strategies", label: "Strategies", status: "wip", ...PRO, blocks: [b("st-kpis", "/strategies/summary"), b("st-catalog", "/strategies"), b("st-deployments", "/strategies/deployments")] },
       { path: "/strategies/detail", label: "Detail", status: "wip", ...PRO, blocks: [b("st-overview", "/strategies/default"), b("st-parameters", "/strategies/default/parameters"), b("st-track-record", "/strategies/default/performance"), b("st-runs", "/strategies/default/runs")] },
       { path: "/strategies/deploy", label: "Deploy", status: "wip", tier: "max", blocks: [b("st-targets", "/strategies/targets"), b("st-deploy-flow", "/strategies/deploy-flow"), b("st-deploy-draft", "/strategies/default/deploy-draft")] },
-      { path: "/tools/charts", label: "Charts", status: "wip", ...PRO, blocks: [b("mk-price-pane", "/charts/series"), b("mk-chart-series", "/charts/series")] },
+      // Coming soon: listed in the sidebar, no blocks until built.
+      { path: "/tools/terminal", label: "Terminal", status: "soon", blocks: [] },
+      { path: "/tools/luxalgo", label: "LuxAlgo", status: "soon", blocks: [] },
+      { path: "/tools/charts", label: "Charts", status: "soon", blocks: [] },
       { path: "/tools/chat", label: "digichat", status: "wip", ...PRO, blocks: [b("ch-sessions", "/chat/sessions"), b("ch-thread", "/chat/sessions/current"), b("ch-composer", "/chat/sessions/current")] },
       { path: "/settings", label: "Settings", blocks: [b("se-prefs", "/settings/prefs"), b("se-desk", "/settings/desk")] },
       { path: "/settings/paper", label: "Paper", ...PRO, blocks: [b("se-brokers", "/settings/brokers")] },
