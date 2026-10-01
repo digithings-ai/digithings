@@ -5,7 +5,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from 'react';
@@ -25,20 +24,23 @@ export interface PageHeaderSpec {
   layout?: LayoutMode;
 }
 
-type Ctx = {
-  spec: PageHeaderSpec;
-  setSpec: (spec: PageHeaderSpec | null) => void;
-};
+type SetSpec = (spec: PageHeaderSpec | null) => void;
 
-const PageHeaderContext = createContext<Ctx | null>(null);
+// Spec and setter are separate contexts so a page that registers a header never
+// re-renders when the spec changes; with one context, any spec value that is a
+// fresh object per render (inline crumbs or actions) re-ran the registering
+// effect forever.
+const PageHeaderSpecContext = createContext<PageHeaderSpec | null>(null);
+const PageHeaderSetContext = createContext<SetSpec | null>(null);
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
   const [spec, setSpecState] = useState<PageHeaderSpec>({});
-  // setSpec must keep one identity: usePageHeader lists it as an effect dep, so a
-  // per-spec setter re-runs that effect on every registration and never settles.
-  const setSpec = useCallback((s: PageHeaderSpec | null) => setSpecState(s ?? {}), []);
-  const value = useMemo<Ctx>(() => ({ spec, setSpec }), [spec, setSpec]);
-  return <PageHeaderContext.Provider value={value}>{children}</PageHeaderContext.Provider>;
+  const setSpec = useCallback<SetSpec>((s) => setSpecState(s ?? {}), []);
+  return (
+    <PageHeaderSetContext.Provider value={setSpec}>
+      <PageHeaderSpecContext.Provider value={spec}>{children}</PageHeaderSpecContext.Provider>
+    </PageHeaderSetContext.Provider>
+  );
 }
 
 /**
@@ -47,8 +49,7 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
  * per-route title stays in the prerendered HTML until a page overrides it.
  */
 export function usePageHeader(spec: PageHeaderSpec) {
-  const ctx = useContext(PageHeaderContext);
-  const setSpec = ctx?.setSpec;
+  const setSpec = useContext(PageHeaderSetContext);
   const { title, crumbs, asOf, actions, layout } = spec;
   useEffect(() => {
     setSpec?.({ title, crumbs, asOf, actions, layout });
@@ -59,15 +60,14 @@ export function usePageHeader(spec: PageHeaderSpec) {
 /** Layout mode for the current route: page override, else the nav registry default. */
 export function usePageLayout(): LayoutMode {
   const pathname = usePathname();
-  const ctx = useContext(PageHeaderContext);
-  return ctx?.spec.layout ?? layoutFor(pathname, dashboardBasePath());
+  const spec = useContext(PageHeaderSpecContext);
+  return spec?.layout ?? layoutFor(pathname, dashboardBasePath());
 }
 
 export function PageHeader() {
   const pathname = usePathname();
-  const ctx = useContext(PageHeaderContext);
+  const spec = useContext(PageHeaderSpecContext) ?? {};
   const { data } = useDashboard();
-  const spec = ctx?.spec ?? {};
   const path = normalizePath(pathname, dashboardBasePath());
   const dest = destinationFor(path);
   const title = spec.title ?? titleFor(pathname, dashboardBasePath());

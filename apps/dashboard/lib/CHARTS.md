@@ -21,8 +21,9 @@ not package surface).
 ## Classification
 
 TIME-SERIES = the x-axis is trading time (NAV/equity curves, price charts,
-drawdown area, rolling metrics, comparable NAV). Everything else (bars keyed by
-ticker/bucket/leg, stacked composition, trivial sparklines) stays on recharts.
+drawdown area, rolling metrics, comparable NAV). Categorical and composition charts
+(bars keyed by ticker/bucket/leg, stacked composition) stay on recharts. Sparklines,
+score bars and small multiples use kit primitives and need neither engine.
 
 ### Migrated to lightweight-charts
 
@@ -64,8 +65,9 @@ priceFormat.
 | `components/observability/AttributionTab.tsx` | Contribution by position bars | Categorical (x = ticker). |
 | `components/observability/DecisionScorecardTab.tsx` | Hit-rate by conviction bucket bars | Categorical (x = conviction bucket). |
 
-The list is exact: `lib/lw-chart-canon.test.ts` fails if a component imports
-recharts without a row here. `components/twelve-x/ConsensusTab.tsx` left the
+The list is exact: `lib/lw-chart-canon.test.ts` keeps `RECHARTS_SANCTIONED` in step
+with this table and fails if any file under `components/` imports recharts without
+being on it. `components/twelve-x/ConsensusTab.tsx` left the
 list in the dashboard shell rebuild — its score lines and position split are now
 per-currency kit `Sparkline` / `ScoreBar` / `CompositionBar` small multiples,
 with no chart engine.

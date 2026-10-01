@@ -23,6 +23,10 @@ describe('single <main> landmark', () => {
     expect(files).toContain(SHELL);
   });
 
+  it('the app shell still owns the one <main>', () => {
+    expect(readFileSync(join(root, SHELL), 'utf8')).toMatch(/<main[\s>]/);
+  });
+
   it('only the app shell renders <main>; pages and views never nest another', () => {
     const offenders = files.filter(
       (rel) => rel !== SHELL && /<main[\s>]/.test(readFileSync(join(root, rel), 'utf8')),
