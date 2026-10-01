@@ -29,6 +29,9 @@ from typing import TextIO
 #   on the first paint, cursor-home redraws after that. Never scroll-append.
 # - Screen control (alt / clear / home / hide-cursor) follows the TTY + TERM,
 #   not color. `NO_COLOR` only skips SGR — otherwise frames append and stack.
+# - Menu loops hold raw *input* so CSI arrows stay intact, but keep OPOST so
+#   NL→CRLF still runs. Full setraw clears OPOST; frames joined with bare LF
+#   then staircase (scattered labels / broken wordmark) on Terminal.app.
 # - Color is SGR on the terminal's own foreground, so light and dark both work.
 #   `NO_COLOR` or `TERM=dumb` skips color. `DIGIVOICE_REDUCE_MOTION=1` skips
 #   the build-in and the idle pulse.
@@ -207,6 +210,21 @@ def _use_ansi() -> bool:
 
 def _reduce_motion() -> bool:
     return bool(os.environ.get("DIGIVOICE_REDUCE_MOTION"))
+
+
+def _set_menu_raw(fd: int) -> None:
+    """Raw input for the menu loop, but keep OPOST so frame newlines stay CRLF.
+
+    ``tty.setraw`` clears ``OPOST``. Digivoice paints while that mode is held, and
+    frames are joined with ``\n``. With OPOST off the terminal treats LF as
+    "down one row, same column" — every line shifts right and the home layout
+    explodes. Re-enable ``OPOST|ONLCR`` after setraw so paints match cooked
+    intro frames; input stays non-canonical / no-echo for CSI reads.
+    """
+    tty.setraw(fd)
+    attrs = termios.tcgetattr(fd)
+    attrs[1] |= termios.OPOST | termios.ONLCR
+    termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
 
 
 def _is_tty(stream: TextIO) -> bool:
@@ -623,8 +641,11 @@ def _compose(
     else:
         prefix = ""
     suffix = _ANSI_CLEAR_DOWN if screen_ok and (clear or redraw) else ""
-    gap = "\n" * top
-    return prefix + gap + "\n".join(placed) + "\n" + suffix
+    # Explicit CRLF: menu loops hold raw input; if OPOST were off, bare LF would
+    # staircase. Harmless under cooked ONLCR (extra CR stays on column 0).
+    nl = "\r\n"
+    gap = nl * top
+    return prefix + gap + nl.join(placed) + nl + suffix
 
 
 def render_screen(
@@ -752,9 +773,9 @@ def _read_key(stdin: TextIO, timeout: float | None = None) -> str | None:
     ``select`` on the fd splits CSI tails (``\\x1b[A`` → esc, then ``[``, ``A``),
     and home treats esc as quit. Also accepts SS3 application-cursor ``\\x1bOA``.
 
-    One-shot callers enter/leave raw here. Menu loops should hold raw mode for
-    the whole session (see :func:`choose`) so cooked restore cannot eat a
-    queued CSI that arrived with the previous key.
+    One-shot callers enter/leave raw here. Menu loops hold raw *input* for the
+    whole session via :func:`_set_menu_raw` (OPOST kept on) so cooked restore
+    cannot eat a queued CSI and paints still get NL→CRLF.
     """
     fd = stdin.fileno()
     old = termios.tcgetattr(fd)
@@ -809,7 +830,7 @@ def choose(
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
         try:
-            tty.setraw(fd)
+            _set_menu_raw(fd)
             _cursor(stdout, False)
             while True:
                 stdout.write(
@@ -896,7 +917,7 @@ def choose_many(
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
         try:
-            tty.setraw(fd)
+            _set_menu_raw(fd)
             _cursor(stdout, False)
             while True:
                 stdout.write(
@@ -1084,6 +1105,7 @@ __all__ = [
     "_read_key",
     "_render_menu_frame",
     "_use_ansi",
+    "_set_menu_raw",
     "_use_screen",
     "_write_info_frame",
     "choose",

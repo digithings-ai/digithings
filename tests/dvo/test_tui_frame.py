@@ -159,3 +159,34 @@ def test_read_key_keeps_csi_and_ss3_arrows_intact() -> None:
     os.close(slave)
     os.close(master)
     assert got == ["up", "down", "up", "down", "q"], got
+
+
+def test_compose_uses_crlf_line_breaks() -> None:
+    """Frames must use CRLF so paints under held-raw input do not staircase."""
+    frame = _frame(use_screen=True, clear=True)
+    assert "\r\n" in frame
+    without_crlf = frame.replace("\r\n", "")
+    assert "\n" not in without_crlf
+
+
+def test_menu_raw_keeps_opost_for_newline_translation() -> None:
+    """tty.setraw clears OPOST; menu raw must put it back or home paints explode."""
+    import os
+    import pty
+    import termios
+
+    from digivoice.tui import _set_menu_raw
+
+    master, slave = pty.openpty()
+    try:
+        before = termios.tcgetattr(slave)
+        assert before[1] & termios.OPOST
+        _set_menu_raw(slave)
+        after = termios.tcgetattr(slave)
+        assert after[1] & termios.OPOST, "OPOST must stay on while menu raw is held"
+        assert after[1] & termios.ONLCR, "ONLCR must stay on for NL→CRLF"
+        assert not (after[3] & termios.ICANON), "input must stay non-canonical"
+        assert not (after[3] & termios.ECHO), "echo must stay off"
+    finally:
+        os.close(slave)
+        os.close(master)
