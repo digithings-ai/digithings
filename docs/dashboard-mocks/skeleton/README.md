@@ -60,11 +60,11 @@ A future surface that suggests trade setups (paper-first, never live by default)
 
 ## Craft
 
-A dense operator desk, not a site. The digiquant design system (tokens, type, rails) is the only thing carried over from digiquant-web. Its landing patterns (hero bands, one-viewport sections, big lede copy, closing wordmark) are not used.
+A dense operator desk, not a site. The digiquant design system (tokens, type, hairlines) is the only thing carried over from digiquant-web. Its landing patterns (hero bands, one-viewport sections, big lede copy, closing wordmark) are not used.
 
-- **Shell.** A 40px top bar (pixel wordmark, dated close marks for a handful of names, posture and run status), a 192px numbered rail (desk picker above the spine), a one-line page band (path, title, job, posture), one sticky tab row, and a thin footer line.
+- **Shell.** Full-bleed, edge to edge: no max-width, no outer page or column guide lines (those belong to the website); only internal panel hairlines. A 40px top bar (pixel wordmark, dated close marks for a handful of names, posture and run status), a 192px numbered rail (desk picker above the spine), a one-line page band (path, title, job, posture), one sticky tab row, and a thin footer line.
 - **Content.** Panels tile on a 12-column grid and share hairlines. Brief is a scoreboard strip of eight figures, then Decision and Signals, then allocation, movers and break conditions, then run health. Holdings is grouped by sleeve with weight bars, thesis links and mark source, beside a symbol pane and sleeve exposure. Pipeline is the run canvas, node document, call trace and artifact ledger on one screen.
-- **Tokens.** One solid black canvas, hairlines only, radius 0, Inter for prose and JetBrains Mono for chrome and figures at 10.5 to 15px, tabular figures, dashed page rails, `NN / label` eyebrows, bracketed micro-labels (`[paper]`, `[close]`), one accent (teal) used for the active rail tick and `[live]` only. Green and red only on signed P&L and mark change.
+- **Tokens.** One solid black canvas, hairlines only, radius 0, Inter for prose and JetBrains Mono for chrome and figures at 10.5 to 15px, tabular figures, `NN / label` eyebrows, bracketed micro-labels (`[paper]`, `[close]`), one accent (teal) used for the active rail tick and `[live]` only. Green and red only on signed P&L and mark change.
 - **Charts.** The locked plan (decisions 9, section 7) allows no drawn curves in these mocks, no chart library, and LuxAlgo as the only chart backbone. So charts appear as labeled, display-only LuxAlgo and Gloomberb panes beside tables (Holdings, dossier, Watchlist), not as drawn series. Tearsheet stays a report. Weight bars inside table cells are the only drawn data marks.
 - No icons, no JS. At most one primary action per page. The dashed strip above every frame is annotation, not product chrome.
 

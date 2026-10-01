@@ -1,6 +1,6 @@
 /* digiquant dashboard skeleton, phase B static mocks: a dense operator desk.
    Design system only (digiquant-web tokens): one solid black canvas, hairlines, radius 0,
-   Inter for prose, JetBrains Mono for chrome and figures, dashed page rails, `NN / label`
+   Inter for prose, JetBrains Mono for chrome and figures, full-bleed (no page rails), `NN / label`
    eyebrows, bracketed micro-labels, pixel wordmark, one accent. No hero bands, no marketing
    copy scale. Panels tile on a 12-column grid and share hairlines. No icons, no chart library,
    no JS. Chart and symbol areas are labeled placeholder panes, per the locked plan. */
@@ -64,14 +64,11 @@ input, select, textarea { font-family: var(--mono); letter-spacing: 0; }
 }
 .eyebrow .tick, .eyebrow > i { display: block; flex: none; width: 1rem; height: 1px; background: var(--ink-mute); }
 
-/* App frame: dashed page rails; top bar spans the frame, rail + main below. */
+/* App frame: full-bleed, no page rails; top bar spans the frame, rail + main below. */
 .app {
   display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: var(--top) 1fr;
-  max-width: 1480px; margin: 0 clamp(0px, 1.5vw, 24px);
-  border-inline: 1px dashed var(--hair-strong);
-  min-height: calc(100vh - 28px); overflow: clip;
+  width: 100%; margin: 0; min-height: calc(100vh - 28px); overflow: clip;
 }
-@media (min-width: 1540px) { .app { margin-inline: auto; } }
 
 /* Top bar: wordmark, dated close marks (labeled), posture and run status. */
 .top {
@@ -296,8 +293,7 @@ ul.plain li:last-child { border-bottom: 0; }
 .foot { display: flex; flex-wrap: wrap; gap: 3px 18px; padding: 6px 12px; font: 10.5px var(--mono); letter-spacing: 0; color: var(--ink-mute); border-bottom: 0; }
 
 /* Auth, outside the frame */
-.auth { min-height: calc(100vh - 28px); display: grid; place-items: center; padding: 28px 20px; max-width: 1480px; margin: 0 clamp(0px, 1.5vw, 24px); border-inline: 1px dashed var(--hair-strong); }
-@media (min-width: 1540px) { .auth { margin-inline: auto; } }
+.auth { min-height: calc(100vh - 28px); display: grid; place-items: center; padding: 28px 20px; width: 100%; }
 .auth-box { width: 100%; max-width: 340px; }
 .auth-box .auth-wm { width: 200px; margin: 16px 0 12px; }
 .auth-box .lede { color: var(--ink-soft); font-size: 12.5px; margin-bottom: 20px; }
@@ -305,7 +301,7 @@ ul.plain li:last-child { border-bottom: 0; }
 .auth-box .row { margin-top: 6px; }
 
 /* Index */
-.index { max-width: 1000px; margin: 0 auto; border-inline: 1px dashed var(--hair-strong); }
+.index { width: 100%; margin: 0; }
 .index .band { display: block; padding: 18px 16px 14px; border-bottom: 1px solid var(--hair); }
 .index .idx-wm { width: 200px; margin: 14px 0 10px; }
 .index .lede { display: block; max-width: 74ch; color: var(--ink-soft); font-size: 12.5px; }
@@ -321,7 +317,7 @@ ul.frames .d { color: var(--ink-soft); }
 
 @media (max-width: 900px) {
   :root { --rail: 100%; }
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--top) auto 1fr; margin: 0; border-inline: 0; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--top) auto 1fr; }
   .brand { width: auto; border-right: 0; }
   .mkts { display: none; }
   .stat { margin-left: auto; border-left: 0; }
@@ -349,7 +345,6 @@ ul.frames .d { color: var(--ink-soft); }
   .kv { grid-template-columns: 1fr; }
   .grid2, .grid3 { grid-template-columns: 1fr; }
   ul.frames li a { grid-template-columns: 1fr; gap: 0; }
-  .auth, .index { margin: 0; border-inline: 0; }
 }
 
 @media print { .mock-note { display: none; } }
