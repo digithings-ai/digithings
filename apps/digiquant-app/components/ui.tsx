@@ -69,7 +69,7 @@ export function BulletList({ items }: { items: string[] }) {
 /** Empty / loading / error with a reason and next actions. One layout for all three. */
 export function StateBlock({ kind, title, why, next }: { kind: 'empty' | 'loading' | 'error'; title: string; why?: string; next?: { label: string; href?: string; onClick?: () => void }[] }) {
   return (
-    <div className={`state ${kind}`} role={kind === 'error' ? 'alert' : undefined} aria-busy={kind === 'loading' || undefined}>
+    <div className={`state ${kind}`} role={kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : undefined} aria-busy={kind === 'loading' || undefined}>
       <p className="state-t">{title}</p>
       {why ? <p className="state-w">{why}</p> : null}
       {next?.length ? (

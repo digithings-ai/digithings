@@ -55,12 +55,27 @@ export function swap(layout: Layout, moved: Placement): Layout | null {
   return next.some((a, i) => next.some((b, j) => i < j && hit(a, b))) ? null : next;
 }
 
-/** First free spot (scan row-major) for a new block of the default size; null if the grid is full. */
+/** Keep a resize inside the grid by capping w/h at the edge, so x/y (the origin) never move. */
+export const clampSize = (p: Placement): Placement => ({
+  ...p,
+  w: Math.min(p.w, COLS - p.x + 1),
+  h: Math.min(p.h, ROWS - p.y + 1),
+});
+
+/**
+ * First free spot (scan row-major) for a new block. Tries the default size, then shrinks
+ * (largest area first) down to MIN_W × MIN_H; null only when no free rectangle exists at all.
+ */
 export function slot(layout: Layout, id: string, w = 4, h = 4): Placement | null {
-  for (let y = 1; y + h - 1 <= ROWS; y++) {
-    for (let x = 1; x + w - 1 <= COLS; x++) {
-      const p = { id, x, y, w, h };
-      if (!layout.some((o) => hit(p, o))) return p;
+  const sizes: [number, number][] = [];
+  for (let ww = w; ww >= MIN_W; ww--) for (let hh = h; hh >= MIN_H; hh--) sizes.push([ww, hh]);
+  sizes.sort((a, b) => b[0] * b[1] - a[0] * a[1]);
+  for (const [sw, sh] of sizes) {
+    for (let y = 1; y + sh - 1 <= ROWS; y++) {
+      for (let x = 1; x + sw - 1 <= COLS; x++) {
+        const p = { id, x, y, w: sw, h: sh };
+        if (!layout.some((o) => hit(p, o))) return p;
+      }
     }
   }
   return null;

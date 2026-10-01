@@ -90,7 +90,9 @@ export async function dqGet<T>(route: string): Promise<Envelope<T>> {
   if (!base()) throw new Error('NEXT_PUBLIC_DQ_API_URL is not set');
   const res = await fetch(`${base()}${route}`);
   if (!res.ok) throw new Error(`${route} failed (${res.status})`);
-  return (await res.json()) as Envelope<T>;
+  const body: unknown = await res.json();
+  if (!body || typeof body !== 'object' || (body as { data?: unknown }).data == null) throw new Error(`${route} returned no data`);
+  return body as Envelope<T>;
 }
 
 /** Fail closed to an em dash — never invent a number. */

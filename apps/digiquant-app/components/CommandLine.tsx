@@ -36,8 +36,11 @@ export const CommandLine = forwardRef<CommandLineHandle, { pathname: string }>(f
         className="cmd-in"
         spellCheck={false}
         aria-label="Go to page"
-        aria-expanded={editing}
-        aria-controls="cmd-list"
+        aria-expanded={editing && hits.length > 0}
+        aria-controls={editing && hits.length > 0 ? 'cmd-list' : undefined}
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        aria-activedescendant={editing && hits[sel] ? `cmd-opt-${sel}` : undefined}
         role="combobox"
         value={editing ? q : pathname}
         placeholder="/ go to…"
@@ -51,10 +54,11 @@ export const CommandLine = forwardRef<CommandLineHandle, { pathname: string }>(f
           else if (e.key === 'Escape') { setQ(null); e.currentTarget.blur(); }
         }}
       />
+      <span className="sr" role="status" aria-live="polite">{editing && q ? (hits.length ? `${hits.length} pages` : 'no matching pages') : ''}</span>
       {editing && hits.length > 0 ? (
         <ul id="cmd-list" role="listbox" className="cmd-list">
           {hits.map((h, i) => (
-            <li key={h.path} role="option" aria-selected={i === sel} className={i === sel ? 'on' : undefined} onMouseDown={(e) => { e.preventDefault(); go(h.path); }}>
+            <li key={h.path} id={`cmd-opt-${i}`} role="option" aria-selected={i === sel} className={i === sel ? 'on' : undefined} onMouseDown={(e) => { e.preventDefault(); go(h.path); }}>
               <span>{h.path}</span>
               <span className="mute">{h.label}</span>
             </li>

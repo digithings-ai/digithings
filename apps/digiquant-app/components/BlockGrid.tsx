@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as RKeyEvent, type PointerEvent as RPointerEvent } from 'react';
-import { COLS, ROWS, parse, place, slot, swap, type Layout, type Placement } from '@/lib/grid';
+import { COLS, ROWS, clampSize, parse, place, slot, swap, type Layout, type Placement } from '@/lib/grid';
 import { BLOCKS } from './blocks';
 
 const key = (pageId: string) => `dq-layout:${pageId}`;
@@ -38,13 +38,18 @@ export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
-      if (e.key === 'e' && !e.metaKey && !e.ctrlKey) setEdit((v) => !v);
+      if (t instanceof HTMLSelectElement || t?.isContentEditable || document.querySelector('[role="dialog"]')) return;
+      if (e.key === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        drag.current = null;
+        setEdit((v) => !v);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const begin = (e: RPointerEvent<HTMLElement>, p: Placement, mode: Drag['mode']) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -53,11 +58,12 @@ export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout
   const move = (e: RPointerEvent<HTMLElement>) => {
     const d = drag.current, box = ref.current?.getBoundingClientRect();
     if (!d || !box) return;
+    if (e.buttons === 0) { end(); return; }
     const dx = Math.round((e.clientX - d.sx) / (box.width / COLS));
     const dy = Math.round((e.clientY - d.sy) / (box.height / ROWS));
     const next = d.mode === 'move'
       ? { ...d.from, x: d.from.x + dx, y: d.from.y + dy }
-      : { ...d.from, w: d.from.w + dx, h: d.from.h + dy };
+      : clampSize({ ...d.from, w: d.from.w + dx, h: d.from.h + dy });
     const l = place(d.start, next) ?? (d.mode === 'move' ? swap(d.start, next) : null);
     if (l) setLayout(l);
   };
@@ -73,7 +79,7 @@ export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout
     const s = step[e.key];
     if (!s) return;
     e.preventDefault();
-    const n = e.shiftKey ? { ...p, w: p.w + s[0], h: p.h + s[1] } : { ...p, x: p.x + s[0], y: p.y + s[1] };
+    const n = e.shiftKey ? clampSize({ ...p, w: p.w + s[0], h: p.h + s[1] }) : { ...p, x: p.x + s[0], y: p.y + s[1] };
     const l = place(layout, n) ?? (e.shiftKey ? null : swap(layout, n));
     if (l) commit(l);
   };
@@ -87,9 +93,12 @@ export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout
           <>
             <span className="mute">layout · drag to move, corner to resize, arrows / shift+arrows, Del removes</span>
             <span className="bg-acts">
-              {unplaced.map((b) => (
-                <button key={b.id} type="button" className="btn" onClick={() => { const p = slot(layout, b.id); if (p) commit([...layout, p]); }}>+ {b.id}</button>
-              ))}
+              {unplaced.map((b) => {
+                const free = slot(layout, b.id);
+                return (
+                  <button key={b.id} type="button" className="btn" disabled={!free} title={free ? undefined : 'no free space — remove or shrink a block'} onClick={() => { if (free) commit([...layout, free]); }}>+ {b.id}</button>
+                );
+              })}
               <button type="button" className="btn" onClick={() => commit(initial)}>reset</button>
               <button type="button" className="btn" onClick={() => setEdit(false)}>done</button>
             </span>
@@ -115,11 +124,13 @@ export function BlockGrid({ pageId, initial }: { pageId: string; initial: Layout
                   onPointerDown={(e) => begin(e, p, 'move')}
                   onPointerMove={move}
                   onPointerUp={end}
+                  onPointerCancel={end}
+                  onLostPointerCapture={end}
                   onKeyDown={(e) => onKeyCell(e, p)}
                 >
                   <span className="edit-t">{def.id} · {p.w}×{p.h}</span>
                   <button type="button" className="btn edit-x" aria-label={`Remove ${def.title}`} onPointerDown={(e) => e.stopPropagation()} onClick={() => commit(layout.filter((q) => q.id !== p.id))}>remove</button>
-                  <span className="edit-r" aria-hidden="true" onPointerDown={(e) => begin(e, p, 'size')} onPointerMove={move} onPointerUp={end} />
+                  <span className="edit-r" aria-hidden="true" onPointerDown={(e) => begin(e, p, 'size')} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} />
                 </div>
               ) : null}
             </div>

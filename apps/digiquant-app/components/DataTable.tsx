@@ -16,19 +16,19 @@ export type Col<R> = {
 export function DataTable<R>({ rows, cols, rowKey, variant, empty = 'no rows' }: {
   rows: R[];
   cols: Col<R>[];
-  rowKey: (r: R) => string;
+  rowKey: (r: R, i: number) => string;
   variant?: (r: R) => 'grp' | 'total' | 'sel' | undefined;
   empty?: string;
 }) {
-  if (!rows.length) return <p className="note mute">{empty}</p>;
+  if (!Array.isArray(rows) || !rows.length) return <p className="note mute">{empty}</p>;
   return (
     <table className="tbl">
       <thead>
         <tr>{cols.map((c) => <th key={c.key} className={c.num ? 'num' : undefined}>{c.label}</th>)}</tr>
       </thead>
       <tbody>
-        {rows.map((r) => (
-          <tr key={rowKey(r)} className={variant?.(r)}>
+        {rows.map((r, i) => (
+          <tr key={rowKey(r, i)} className={variant?.(r)}>
             {cols.map((c) => {
               const w = c.bar?.(r);
               const cls = [c.num ? 'num' : '', c.wrap ? 'wrap' : '', c.tone?.(r) ?? ''].join(' ').trim() || undefined;
