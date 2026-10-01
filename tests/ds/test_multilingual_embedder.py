@@ -45,14 +45,35 @@ def test_multilingual_default_singleton_is_shared() -> None:
 
 
 def test_factory_builds_multilingual_provider() -> None:
-    provider = _build_raw_provider("multilingual", None)
+    from digisearch.embedding.providers.multilingual import MULTILINGUAL_MODEL_ID
+
+    # The env var carries the model id itself (lowercased by resolution);
+    # the factory literal must stay identical to the canonical constant.
+    assert MULTILINGUAL_MODEL_ID.lower() == "xenova/paraphrase-multilingual-minilm-l12-v2"
+    provider = _build_raw_provider(MULTILINGUAL_MODEL_ID, None)
     assert isinstance(provider, MultilingualEmbedder)
+    provider = _build_raw_provider(MULTILINGUAL_MODEL_ID.lower(), None)
+    assert isinstance(provider, MultilingualEmbedder)
+    from digisearch.embedding.factory import EmbeddingConfigError
+
+    with pytest.raises(EmbeddingConfigError, match="single model"):
+        _build_raw_provider(MULTILINGUAL_MODEL_ID, "some-other-model")
+
+
+def test_factory_rejects_alias_names_without_model_id() -> None:
+    from digisearch.embedding.factory import EmbeddingConfigError
+
+    for alias in ("multilingual", "multi", "paraphrase-multilingual", "minilm-multi"):
+        with pytest.raises(EmbeddingConfigError, match="unknown embedding provider"):
+            _build_raw_provider(alias, None)
 
 
 def test_factory_resolves_multilingual_pipeline(
     monkeypatch: pytest.MonkeyPatch, tmp_path=None
 ) -> None:
-    monkeypatch.setenv("DIGISEARCH_EMBEDDING_PROVIDER", "multilingual")
+    from digisearch.embedding.providers.multilingual import MULTILINGUAL_MODEL_ID
+
+    monkeypatch.setenv("DIGISEARCH_EMBEDDING_PROVIDER", MULTILINGUAL_MODEL_ID)
     monkeypatch.setenv("DIGISEARCH_EMBED_CACHE", "0")
     monkeypatch.delenv("DIGISEARCH_EMBED", raising=False)
     pipeline = resolve_embedding_pipeline()
@@ -291,8 +312,10 @@ def test_backfill_indexing_pins_and_restores_provider(
     summary = backfill_module.backfill(dry_run=False)
     assert seen["index"] == "occ_tickets"
     assert seen["chunks"] == 1
-    # Backend saw the multilingual pin during indexing ...
-    assert seen["provider_env"] == "multilingual"
+    # Backend saw the model-id pin during indexing ...
+    from digisearch.embedding.providers.multilingual import MULTILINGUAL_MODEL_ID
+
+    assert seen["provider_env"] == MULTILINGUAL_MODEL_ID
     # ... and the process env is restored afterwards (no leakage).
     assert "DIGISEARCH_EMBEDDING_PROVIDER" not in os.environ
     assert summary["chunks"] == 1

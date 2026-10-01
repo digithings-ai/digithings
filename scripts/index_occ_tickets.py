@@ -6,7 +6,8 @@ non-anonymized metadata (demo mode, same contract as
 the zammad MCP tools after #4944), and indexes into ``occ_tickets`` — a
 separate index from the ``occ_help`` docs corpus — using the small
 multilingual ONNX provider, so English queries match German/Spanish text.
-The script pins ``DIGISEARCH_EMBEDDING_PROVIDER=multilingual`` (unless
+The script pins ``DIGISEARCH_EMBEDDING_PROVIDER`` to the model id
+(``Xenova/paraphrase-multilingual-MiniLM-L12-v2``) (unless
 already set) so the backend stamps and queries the collection with the
 same model that produced the vectors.
 
@@ -138,7 +139,8 @@ def backfill(
 ) -> dict[str, Any]:
     """Fetch tickets + articles, build chunks, index them. Returns a summary.
 
-    Pins ``DIGISEARCH_EMBEDDING_PROVIDER=multilingual`` (unless already set)
+    Pins ``DIGISEARCH_EMBEDDING_PROVIDER`` to the model id
+    (``Xenova/paraphrase-multilingual-MiniLM-L12-v2``) (unless already set)
     so the backend stamps and queries the collection with the same model
     that produced the vectors.
     """
@@ -207,13 +209,13 @@ def backfill(
     raw_provider = get_default_multilingual_embedder()
     provider = wrap_embedding_pipeline(raw_provider, batch_size=64, use_cache=False)
     # The backend re-resolves its provider from env when stamping the
-    # collection: an unset var is pinned to multilingual here, but a
+    # collection: an unset var is pinned to the model id here, but a
     # conflicting pre-set (e.g. minilm) aborts loud instead of stamping the
     # wrong model id over multilingual vectors (same 384 dims, silently
     # wrong retrieval). Scoped + restored: no process-global side effects.
     preset_provider = os.environ.get("DIGISEARCH_EMBEDDING_PROVIDER")
     if preset_provider is None:
-        os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = "multilingual"
+        os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = MULTILINGUAL_MODEL_ID
     else:
         try:
             backend_provider = unwrap_embedding_provider(resolve_backend_embedding_provider())
@@ -223,7 +225,7 @@ def backfill(
             raise SystemExit(
                 "zammad error: refusing to index: DIGISEARCH_EMBEDDING_PROVIDER resolves to "
                 f"{backend_provider.model_id!r}, not {MULTILINGUAL_MODEL_ID!r}; unset it or "
-                "set it to 'multilingual' so backend stamp and vectors agree"
+                f"set it to {MULTILINGUAL_MODEL_ID!r} so backend stamp and vectors agree"
             )
     try:
         index_chunks(index_name, chunks, embedding_provider=provider)

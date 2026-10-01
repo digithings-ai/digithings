@@ -332,6 +332,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     develop sync: merged ARCHITECTURE.md carries both #4756 multilingual-embedder
     prose and the #4929 digismith→digitrace rename — fixture prose only;
     RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for #4756 (model-id provider
+    value in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -456,7 +458,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
         "3a05c94596483aed",
-        "9f90d4fc05b96535",
+        "9c818ae221f9e5fd",
         "954c318c778a99e7",
         "828033af601c3c57",
         "05bb8905105bc94e",

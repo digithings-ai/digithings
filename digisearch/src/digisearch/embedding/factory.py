@@ -121,11 +121,21 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
         from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
         return get_default_minilm_embedder()
-    if name in ("multilingual", "multi", "paraphrase-multilingual", "minilm-multi"):
+    # The env var carries the model id itself (no alias table to drift):
+    # DIGISEARCH_EMBEDDING_PROVIDER=Xenova/paraphrase-multilingual-MiniLM-L12-v2.
+    # Canonical id lives in providers.multilingual.MULTILINGUAL_MODEL_ID;
+    # tests pin the literal below to it.
+    if name.strip().lower() == "xenova/paraphrase-multilingual-minilm-l12-v2":
         from digisearch.embedding.providers.multilingual import (
+            MULTILINGUAL_MODEL_ID,
             get_default_multilingual_embedder,
         )
 
+        if model is not None and model.strip().lower() != MULTILINGUAL_MODEL_ID.lower():
+            raise EmbeddingConfigError(
+                f"embedding provider {name!r} ships a single model "
+                f"({MULTILINGUAL_MODEL_ID!r}); got model {model!r}"
+            )
         return get_default_multilingual_embedder()
     if name in ("openai", "oai"):
         api_key = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -138,7 +148,8 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
 
         return OpenAIEmbedder(model=model or "text-embedding-3-small", api_key=api_key)
     raise EmbeddingConfigError(
-        f"unknown embedding provider {name!r}; expected minilm, multilingual, or openai"
+        f"unknown embedding provider {name!r}; expected minilm, openai, "
+        "or a model id (e.g. 'Xenova/paraphrase-multilingual-MiniLM-L12-v2')"
     )
 
 
