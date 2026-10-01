@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import urllib.parse
+from collections.abc import Callable
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -620,6 +621,30 @@ def _resolve_publish_path(raw_path: str) -> Path:
     return WORKDIR / path
 
 
+def publish_paths_present(paths: list[str], exists: Callable[[str], bool]) -> list[str]:
+    """Keep publish_if_present paths the caller says exist. Missing paths are skipped."""
+    return [path for path in paths if exists(path)]
+
+
+def raise_if_required_missing(path: str) -> None:
+    """Required publish entries fail when the path is not a file."""
+    if not Path(path).is_file():
+        raise RuntimeError(f"publish file missing: {path}")
+
+
+def _selected_publish_paths(spec: dict[str, Any]) -> list[str]:
+    """Required paths stay. Optional paths stay only when the file exists."""
+    required = [str(path) for path in (spec.get("publish") or [])]
+    raw_optional = spec.get("publish_if_present") or []
+    optional: list[str] = []
+    if isinstance(raw_optional, list):
+        optional = publish_paths_present(
+            [str(path) for path in raw_optional],
+            exists=lambda raw: _resolve_publish_path(raw).is_file(),
+        )
+    return required + optional
+
+
 def _publish_entries(command: str, run_id: str, paths: list[str]) -> list[tuple[Path, str]]:
     """File keys keep the basename. A directory uses paths relative to that root."""
     entries: list[tuple[Path, str]] = []
@@ -641,8 +666,7 @@ def _publish(command: str, run_id: str, paths: list[str]) -> None:
     """Upload step outputs to R2. boto3 stays inside _r2_client so unit tests are stdlib-only."""
     client, bucket = _require_r2()
     for path, key in _publish_entries(command, run_id, paths):
-        if not path.is_file():
-            raise RuntimeError(f"publish file missing: {path}")
+        raise_if_required_missing(str(path))
         client.upload_file(str(path), bucket, key)
 
 
@@ -727,7 +751,7 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
             )
             if hard_failure:
                 outcome = "failed"
-    publish_paths = [str(path) for path in (spec.get("publish") or [])]
+    publish_paths = _selected_publish_paths(spec)
     publish_dir = spec.get("publish_dir")
     if isinstance(publish_dir, str) and publish_dir:
         resolved = _resolve_publish_path(publish_dir)
