@@ -22,7 +22,7 @@ const RESUMED_PIPELINE_IDS = [
 
 const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
 
-const DEAD_PATH_A_TRAP_IDS = [
+const PATH_A_TRAP_IDS = [
   "agent-pr-finalizer",
   "agent-backlog-snapshot",
   "refresh-repo-activity",
@@ -30,7 +30,11 @@ const DEAD_PATH_A_TRAP_IDS = [
 ] as const;
 
 const PATH_A_ENABLED_IDS = [
+  "agent-pr-finalizer",
+  "agent-backlog-snapshot",
   "ci-pr-hygiene",
+  "refresh-repo-activity",
+  "project-enforce-assignment",
   "smoke-stack",
   "security-pip-audit",
   "security-npm-audit",
@@ -68,7 +72,11 @@ const ENABLED_CRONS = [
   "8 22 * * SUN",
   "8 8 * * MON",
   "9 0 * * SUN",
+  "11 7 * * *",
+  "13 6 * * MON",
   "21 6 * * *",
+  "10 6 * * MON",
+  "23 9 * * *",
   "27 7 * * *",
   "33 6 * * MON",
   "37 6 * * MON",
@@ -255,10 +263,7 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("30 13 * * *");
   });
 
-  it("resumes twelve-x clocks; drops dead Path A traps; weekly Mon house-run only", () => {
-    for (const id of DEAD_PATH_A_TRAP_IDS) {
-      expect(JOBS.some((job) => job.id === id)).toBe(false);
-    }
+  it("resumes twelve-x clocks and Path A traps; weekly Mon house-run only", () => {
     expect(
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
@@ -280,10 +285,25 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("17 9 * * MON");
     expect(uniqueEnabledCrons()).toContain("40 13 * * MON-FRI");
     expect(uniqueEnabledCrons()).toContain("8 22 * * SUN");
-    expect(uniqueEnabledCrons()).not.toContain("11 7 * * *");
-    expect(uniqueEnabledCrons()).not.toContain("13 6 * * MON");
-    expect(uniqueEnabledCrons()).not.toContain("10 6 * * MON");
-    expect(uniqueEnabledCrons()).not.toContain("23 9 * * *");
+    expect(uniqueEnabledCrons()).toContain("11 7 * * *");
+    expect(uniqueEnabledCrons()).toContain("13 6 * * MON");
+    expect(uniqueEnabledCrons()).toContain("10 6 * * MON");
+    expect(uniqueEnabledCrons()).toContain("23 9 * * *");
+    const finalizer = JOBS.find((job) => job.id === "agent-pr-finalizer");
+    expect(finalizer).toMatchObject({
+      kind: "workflow_dispatch",
+      workflow: "agent-pr-finalizer.yml",
+      cron: "11 7 * * *",
+      enabled: true,
+      inputs: { dry_run: "false" },
+      repo: "digithings-ai/digithings",
+    });
+    for (const id of PATH_A_TRAP_IDS) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.enabled).toBe(true);
+      expect(job?.kind).toBe("workflow_dispatch");
+      expect(job?.repo).toBe("digithings-ai/digithings");
+    }
     const archive = JOBS.find((job) => job.id === "twelve-x-archive-maintenance");
     expect(archive?.enabled).toBe(true);
     expect(archive?.inputs).toEqual({ dry_run: "false", dump_before_prune: "true" });
