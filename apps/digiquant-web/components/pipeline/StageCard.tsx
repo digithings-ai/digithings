@@ -19,7 +19,7 @@ export function StageCard({
   const copy = STAGE_COPY[name];
   const n = String(index + 1).padStart(2, "0");
   return (
-    <article aria-label={`Stage ${index + 1} of ${total}: ${name}`} className="flex h-full w-full min-w-0 flex-col border border-hair bg-surface">
+    <article aria-label={`Stage ${index + 1} of ${total}: ${name}`} className="flex h-full min-h-[16rem] w-full min-w-0 flex-col border border-hair bg-surface">
       <div className="flex items-baseline justify-between border-b border-hair px-3 py-1.5 font-mono text-[0.64rem] text-ink-mute">
         <span>
           {n}/{String(total).padStart(2, "0")}
@@ -28,9 +28,9 @@ export function StageCard({
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
         <h3 className="m-0 font-display text-[1.05rem] font-medium leading-tight tracking-[-0.02em] text-ink">{name}</h3>
-        <p className="m-0 line-clamp-3 text-[0.75rem] leading-[1.5] text-ink-soft">{copy.does}</p>
+        <p className="m-0 text-[0.75rem] leading-[1.5] text-ink-soft">{copy.does}</p>
         <ul className="m-0 flex list-none flex-col gap-1 p-0 font-mono text-[0.66rem] text-ink-soft">
-          {copy.steps.slice(0, 2).map((s) => (
+          {copy.steps.map((s) => (
             <li key={s} className="flex gap-2 border-t border-hair pt-1">
               <span aria-hidden="true" className="text-ink-mute">
                 ▸
@@ -38,7 +38,6 @@ export function StageCard({
               {s}
             </li>
           ))}
-          {copy.steps.length > 2 ? <li className="pt-1 text-ink-mute">+{copy.steps.length - 2} more</li> : null}
         </ul>
         <div className="mt-auto border-t border-hair pt-2 font-mono text-[0.64rem] text-ink-mute">
           {recorded ? (
@@ -69,7 +68,7 @@ export function StageCard({
 export function ExecutionCard({ index, total, status }: { index: number; total: number; status: string }) {
   const n = String(index + 1).padStart(2, "0");
   return (
-    <article aria-label={`Stage ${index + 1} of ${total}: Execution, ${status}`} className="flex h-full w-full min-w-0 flex-col border border-dashed border-hair bg-transparent">
+    <article aria-label={`Stage ${index + 1} of ${total}: Execution, ${status}`} className="flex h-full min-h-[16rem] w-full min-w-0 flex-col border border-dashed border-hair bg-transparent">
       <div className="flex items-baseline justify-between border-b border-dashed border-hair px-3 py-1.5 font-mono text-[0.64rem] text-ink-mute">
         <span>
           {n}/{String(total).padStart(2, "0")}

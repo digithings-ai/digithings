@@ -82,17 +82,18 @@ export function ChatBand() {
   return (
     <Band
       id="chat"
+      fill
       status="story · in development"
       title="From a chat to a tested strategy"
       takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. Scripted, not live: the builder lives in the dashboard."
     >
-      <div ref={ref} className="mx-auto flex w-full max-w-[52rem] flex-col gap-3">
+      <div ref={ref} className="mx-auto flex w-full max-w-[64rem] flex-1 flex-col gap-3">
         <ChatPlayback
           script={STRATEGY_SCRIPT}
           badge={STRATEGY_BADGE}
           header={STRATEGY_HEADER}
           ariaLabel="Scripted strategy-building story"
-          className="[&>div.overflow-y-auto]:h-[19rem]"
+          className="min-h-0 flex-1 [&>div.overflow-y-auto]:h-[min(34rem,calc(100svh-22rem))]"
         />
         <StepLedger states={states} />
       </div>

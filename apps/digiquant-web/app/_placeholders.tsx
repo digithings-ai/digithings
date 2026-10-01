@@ -24,7 +24,7 @@ export function DashboardViewPlaceholder() {
     <Placeholder
       title="Dashboard · product view"
       note="A framed screenshot or embed of the digiquant dashboard: strategy builder, strategies and journal. This page shows the product; it does not rebuild it."
-      bodyClassName="min-h-[16rem]"
+      bodyClassName="h-full min-h-[22rem]"
     >
       <div className="grid h-full min-h-[14rem] grid-cols-[7rem_minmax(0,1fr)] gap-3 max-sm:grid-cols-[4rem_minmax(0,1fr)]">
         <div className="flex flex-col gap-2">
