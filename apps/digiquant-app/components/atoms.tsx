@@ -16,7 +16,8 @@ export function KpiGrid({ items }: { items: Kpi[] }) {
 }
 
 /** Line atom: single series, auto-scaled, hairline stroke. Needs ≥2 points. */
-export function Sparkline({ values, height = 56 }: { values: number[]; height?: number }) {
+export function Sparkline({ values: raw, height = 56 }: { values: (number | null | undefined)[]; height?: number }) {
+  const values = (raw ?? []).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   if (values.length < 2) return <p className="note mute">not enough points</p>;
   const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
   const pts = values.map((v, i) => `${((i / (values.length - 1)) * 100).toFixed(2)},${(100 - ((v - lo) / span) * 100).toFixed(2)}`).join(' ');
