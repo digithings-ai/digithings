@@ -3,7 +3,7 @@
 --- Holds everything the status banner decides:
 ---   * the square status-grid animations (a port of the digichat 5x5 grid states)
 ---   * which state to show (local phase vs the CLI's status.json)
----   * density (mini/peek/full), text wrapping/clipping, box size, screen position
+---   * density (retract/full), text wrapping, box size, screen position
 ---   * banner settings from settings.json
 ---   * theme chrome (digichat light/dark flips; RYG status colors stay)
 ---   * drag/snap anchors, hover controls layout, reanchoring
@@ -35,15 +35,14 @@ M.POSITIONS = {
 }
 
 M.DENSITIES = {
-  ["mini"] = true,
-  ["peek"] = true,
+  ["retract"] = true,
   ["full"] = true,
 }
 
 M.DEFAULTS = {
   live_banner = true,
   banner_position = "top-center",
-  banner_density = "peek",
+  banner_density = "retract",
   banner_animations = true,
 }
 
@@ -72,14 +71,12 @@ function M.parse_settings(raw)
   return out
 end
 
---- Click cycles density mini → peek → full → mini (no dedicated expand button).
+--- Click toggles retract → full → retract (no dedicated expand button).
 function M.next_density(density)
-  if density == "mini" then
-    return "peek"
-  elseif density == "peek" then
+  if density == "retract" then
     return "full"
   end
-  return "mini"
+  return "retract"
 end
 
 function M.launch_notice(bin)
@@ -345,7 +342,7 @@ function M.linger_seconds(state, density)
   elseif state == "cancelled" then
     return 1.2
   end
-  -- Peek (and mini) auto-dismiss a few seconds after idle/done.
+  -- Retract auto-dismisses a few seconds after idle/done.
   return 4.0
 end
 
@@ -357,13 +354,10 @@ M.FONT_SIZE = 11
 M.LINE_HEIGHT = 18
 M.PAD = 10
 M.ICON = 18
--- Max caps; the box hugs content up to these widths (no min-width gutter).
-M.WIDTH_COLLAPSED = 380
+-- Full hugs content up to this width (no min-width gutter).
 M.WIDTH_EXPANDED = 580
--- Mock soft caps: peek hugs visible glyphs, full locks to the longest line.
-M.PEEK_MAX_CH = 36
+-- Full locks to the longest line, capped in characters.
 M.FULL_MAX_CH = 47
-M.LINES_COLLAPSED = 3
 M.LINES_EXPANDED = 14
 M.MARGIN = 16
 M.SNAP_PX = 36
@@ -437,23 +431,6 @@ function M.wrap(text, cols)
   return lines
 end
 
---- Keep `max` lines; the last kept line ends in an ellipsis when text was cut.
-function M.clip_lines(lines, max, cols)
-  if #lines <= max then
-    return lines, false
-  end
-  local out = {}
-  for i = 1, max do
-    out[i] = lines[i]
-  end
-  local last = out[max]
-  if #last > cols - 1 then
-    last = last:sub(1, cols - 1)
-  end
-  out[max] = (last:gsub("%s+$", "")) .. "…"
-  return out, true
-end
-
 --- Square frame for status-grid cell `i` (0-based, row-major): DigiChat-style
 --- squares, not dots. The grid hugs the top-left with equal padding.
 function M.cell_box(i)
@@ -495,25 +472,25 @@ function M.text_origin_y()
 end
 
 --- Box geometry for a view at a density. No chrome: no title line, no hints —
---- state reads from the grid symbol/animation alone. Mini is grid only.
---- Peek is a short glimpse; full widens and shows the whole transcript.
+--- state reads from the grid symbol/animation alone. Retract is the grid only.
+--- Full widens and shows the whole transcript.
 --- The box hugs content (no min-width gutter): width derives from the longest
---- wrapped line, capped at the density max. The width locks from the full
---- wrapped text up front, so peek→full never re-wraps what is already shown.
+--- wrapped line, capped at the full max. The width locks from the full
+--- wrapped text up front.
 --- Empty text hugs the grid. `raw` is the full transcript for copy.
 function M.layout(view, kind, density, opts)
   kind = kind -- kind no longer changes geometry; kept for call shape.
   opts = opts or {}
-  if density ~= "peek" and density ~= "full" then
-    density = "mini"
+  if density ~= "full" then
+    density = "retract"
   end
   local text_x = M.PAD + M.ICON + 10
   local text_y = M.text_origin_y()
-  local mini_side = M.PAD * 2 + M.ICON
+  local grid_side = M.PAD * 2 + M.ICON
   local function grid_only()
     return {
-      w = mini_side,
-      h = mini_side,
+      w = grid_side,
+      h = grid_side,
       text_x = text_x,
       text_y = text_y,
       text_w = 0,
@@ -527,16 +504,11 @@ function M.layout(view, kind, density, opts)
       raw = "",
     }
   end
-  if density == "mini" then
-    return grid_only()
-  end
   local body = M.body_for(view)
-  if body == "" then
+  if density ~= "full" or body == "" then
     return grid_only()
   end
-  local max_width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
-  local max_ch = density == "full" and M.FULL_MAX_CH or M.PEEK_MAX_CH
-  local cols = math.min(math.floor((max_width - text_x - M.PAD) / M.CHAR_WIDTH), max_ch)
+  local cols = math.min(math.floor((M.WIDTH_EXPANDED - text_x - M.PAD) / M.CHAR_WIDTH), M.FULL_MAX_CH)
   cols = math.max(8, cols)
   local all = M.wrap(body, cols)
   local longest = 0
@@ -544,29 +516,19 @@ function M.layout(view, kind, density, opts)
     longest = math.max(longest, #line)
   end
   longest = math.max(longest, 1)
-  local limit = density == "full" and M.LINES_EXPANDED or M.LINES_COLLAPSED
-  if density == "full" then
-    limit = math.min(limit, M.full_max_lines(opts.screen_h))
-  end
+  local limit = math.min(M.LINES_EXPANDED, M.full_max_lines(opts.screen_h))
   -- Full scrolls instead of truncating: plain window, no ellipsis mid-list.
-  -- Peek keeps the glimpse ellipsis.
-  local lines, clipped
-  if density == "full" then
-    local padded = M.pad_lines(all, longest)
-    clipped = #padded > limit
-    lines = {}
-    for i = 1, math.min(limit, #padded) do
-      lines[i] = padded[i]
-    end
-  else
-    lines, clipped = M.clip_lines(all, limit, cols)
-    lines = M.pad_lines(lines, longest)
+  local padded = M.pad_lines(all, longest)
+  local clipped = #padded > limit
+  local lines = {}
+  for i = 1, math.min(limit, #padded) do
+    lines[i] = padded[i]
   end
   local width = text_x + longest * M.CHAR_WIDTH + M.PAD
   -- Text sits beside the grid. The box is the taller of the grid and the
   -- lines, plus the same PAD on every side. No header row under the text.
-  local height = math.max(mini_side, M.PAD + #lines * M.LINE_HEIGHT + M.PAD)
-  if type(opts.screen_h) == "number" and opts.screen_h > 0 and density == "full" then
+  local height = math.max(grid_side, M.PAD + #lines * M.LINE_HEIGHT + M.PAD)
+  if type(opts.screen_h) == "number" and opts.screen_h > 0 then
     height = math.min(height, math.floor(opts.screen_h * 0.5))
   end
   return {
@@ -716,11 +678,11 @@ function M.reanchor(prev, size, anchor)
 end
 
 --- Hover controls below the banner: icon-only copy + close, 18px squares.
---- Mini stacks them centered; wider densities row them right-aligned.
+--- Retract stacks them centered; full rows them right-aligned.
 --- Frames are relative to the banner's top-left (y starts below the box).
 function M.controls_layout(box_w, box_h, density)
   local y = box_h + M.CTRL_GAP
-  if density == "mini" then
+  if density ~= "full" then
     local x = (box_w - M.CTRL_SIZE) / 2
     return {
       dir = "stack",
@@ -743,7 +705,7 @@ end
 
 --- Extra canvas height the hover controls need below the box.
 function M.controls_height(density)
-  if density == "mini" then
+  if density ~= "full" then
     return M.CTRL_GAP + M.CTRL_SIZE * 2 + M.CTRL_GAP
   end
   return M.CTRL_GAP + M.CTRL_SIZE

@@ -3,16 +3,16 @@
 ---   Right Option (61)           → dict toggle (press start / press stop → transcribe + paste)
 ---   Esc                         → cancel an active take (discard; no paste, no history)
 ---                                 Esc on a preview banner only hides the preview.
----   Double-tap Left Option (58) → speak --selection (fail soft; banner says why)
+---   Double-tap Left Option (58) → speak --selection (fail soft; the grid is the status)
 ---
 --- Status: a custom overlay banner (banner_core.lua) draws what the digivoice CLI
 --- writes to status.json. It is display only: no title chrome, no hints, no
---- settings UI — a click cycles density mini → peek → full, Esc cancels a take.
+--- settings UI — a click toggles density retract → full, Esc cancels a take.
 --- Ship model: background only — no Dock icon, no digivoice menubar mark, no
 --- launch toast. Customize and Quit live in the digivoice TUI (Quit tears HS down;
 --- closing the Terminal alone leaves Hammerspoon running).
---- Hover shows icon-only copy + close below the banner (stacked when mini,
---- right-aligned row when wider). The glyphs are the digichat lucide copy and
+--- Hover shows icon-only copy + close below the banner (stacked when
+--- retracted, right-aligned row when full). The glyphs are the digichat lucide copy and
 --- x marks. Drag moves it freely; release near one of the 9 anchors snaps and
 --- persists the position. Dictated text appears at once (no typewriter).
 --- Close hides instantly.
@@ -528,8 +528,7 @@ end
 
 local function cycle_density(s)
   local next = core.next_density(s.density)
-  local order = { mini = 0, peek = 1, full = 2 }
-  if (order[next] or 0) < (order[s.density] or 0) then
+  if next ~= "full" then
     collapse_to(s, next)
   else
     s.density = next
@@ -815,7 +814,7 @@ local function finish_session(s, exit_code, stdout, stderr)
   if s.config.live_banner then
     s.signature = nil
     render(s)
-    -- Full density stays until collapsed or removed; peek/mini auto-dismiss.
+    -- Full density stays until collapsed or removed; retract auto-dismisses.
     local wait = core.linger_seconds(s.final.state, s.density)
     if wait ~= nil then
       hide_timer = hs.timer.doAfter(wait, function()

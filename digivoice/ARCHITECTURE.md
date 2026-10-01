@@ -236,14 +236,14 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) shows the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click cycles density mini → peek → full. No digivoice menubar mark; background HS only (no Dock icon, no launch toast — TUI Quit tears HS down).
+- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) shows the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click toggles density retract → full. No digivoice menubar mark; background HS only (no Dock icon, no launch toast — TUI Quit tears HS down).
 - The banner hugs content (no min-width gutter; equal 10px pad, no leftover header row) with the grid top-left. The first transcript line is centered on that icon row. Chrome follows the system appearance: dark ground is the digiquant remock canvas (`#000`), light ground is the ivory paper (`#F9F8F6`); RYG status colors stay. Dictated text appears at once. Full caps near half the screen height and wheel-scrolls with no scrollbar; lines share one uniform width and the width locks from the longest line up front. Cancelled, empty, and error stay on the grid — no status sentence beside it.
-- Hover reveals icon-only copy + close below the banner (the digichat copy and close marks; stacked when mini, right-aligned row when wider). Drag moves it freely; release near one of the 9 anchors snaps and persists to `banner_pos.json`. Center pins keep the center on expand; edge pins grow outward. Close hides instantly (never discards); Esc still discards a take.
+- Hover reveals icon-only copy + close below the banner (the digichat copy and close marks; stacked when retracted, right-aligned row when full). Drag moves it freely; release near one of the 9 anchors snaps and persists to `banner_pos.json`. Center pins keep the center on expand; edge pins grow outward. Close hides instantly (never discards); Esc still discards a take.
 - The banner is hidden by default: `banner show [--text T]` (or the adapter's `spawn_preview()`) reveals a preview with no dictation; `banner hide` / `toggle` flips the flag; Esc on a preview only hides it.
 - Esc → writes the cancel-file while a dictation is recording/transcribing/rewriting (swallowed only then). Nothing is pasted or saved.
 - Double-tap Left Option (58) → `speak --selection` (banner shows the selected text, or why there is none; no clipboard/history)
 - No digivoice menubar mark and no Hammerspoon launch toast (background ship; TUI is chrome for customize / Quit).
-- Banner settings (`live_banner`, `banner_position`, `banner_density`, `banner_animations`) are read from `settings.json` at the start of every take. Peek auto-dismisses a few seconds after idle/done; full stays until collapsed or removed; mini is grid only.
+- Banner settings (`live_banner`, `banner_position`, `banner_density`, `banner_animations`) are read from `settings.json` at the start of every take. Retract (default) is the grid and auto-dismisses a few seconds after idle/done; full stays until collapsed or removed.
 
 See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
 
