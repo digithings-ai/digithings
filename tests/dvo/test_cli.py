@@ -1,4 +1,4 @@
-"""CLI: doctor, the live dict pipeline, speak's remaining stub, and history."""
+"""CLI: doctor, the live dict pipeline, speak, and history."""
 
 from __future__ import annotations
 
@@ -84,17 +84,10 @@ def test_help_lists_commands() -> None:
     assert "doctor" in result.stdout
 
 
-def test_speak_is_still_a_stub() -> None:
-    speak = run(["speak", "--clipboard"], RUNTIME)
-    assert speak.code == 2
-    assert "not implemented yet" in speak.stderr
-    assert "source: clipboard" in speak.stderr
-    assert "No audio was played." in speak.stderr
-
-
 def test_rejects_bad_args() -> None:
     assert run(["dict", "--hold", "--toggle"], RUNTIME).code == 2
     assert "speak needs text" in run(["speak"], RUNTIME).stderr
+    assert run(["speak", "--clipboard", "--selection"], RUNTIME).code == 2
     assert run(["history", "--last", "0"], RUNTIME).code == 2
     assert "--grep expects a pattern" in run(["history", "--grep", ""], RUNTIME).stderr
     assert "--seconds expects a positive integer" in run(["dict", "--seconds", "0"], RUNTIME).stderr

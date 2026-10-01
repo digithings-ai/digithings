@@ -145,3 +145,82 @@ def test_record_bounds_the_recorder_with_a_timeout(paths: VoicePaths) -> None:
     runner = FakeRunner({"sox": writes_wav()})
     record(paths, FakeProbe(commands={"sox": "/usr/bin/sox"}), runner, seconds=15)
     assert runner.calls[0].timeout is not None
+
+
+def test_unbounded_sox_argv_omits_trim() -> None:
+    argv = capture_argv("sox", "/usr/bin/sox", Path("/tmp/a.wav"), 60, "darwin", unbounded=True)
+    assert "trim" not in argv
+    assert "rec" not in argv
+
+
+def test_unbounded_ffmpeg_argv_omits_duration() -> None:
+    argv = capture_argv(
+        "ffmpeg", "/usr/bin/ffmpeg", Path("/tmp/b.wav"), 60, "darwin", unbounded=True
+    )
+    assert "-t" not in argv
+    assert argv[-1] == "/tmp/b.wav"
+
+
+def test_default_stop_file_under_data_dir(paths: VoicePaths) -> None:
+    from digivoice.capture import DEFAULT_STOP_FILE_NAME, default_stop_file
+
+    stop = default_stop_file(paths)
+    assert stop == Path(paths.data_dir) / DEFAULT_STOP_FILE_NAME
+
+
+def test_early_stop_via_stop_file_with_real_subprocess(tmp_path: Path, paths: VoicePaths) -> None:
+    """Fake recorder ignores mic; exits on SIGINT after writing the wav."""
+    import threading
+    import time
+
+    from digivoice.capture import record
+    from digivoice.runner import run_command
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "sox"
+    # argv shape: sox -q -d -r … -c … -b … OUT.wav  (unbounded, no trim)
+    script.write_text(
+        """#!/bin/sh
+out=""
+for arg in "$@"; do
+  case "$arg" in
+    *.wav) out="$arg" ;;
+  esac
+done
+[ -n "$out" ] || exit 2
+trap 'printf "RIFF0000WAVEfmt " > "$out"; exit 0' INT TERM
+# Stay alive until signal; safety for the test harness.
+i=0
+while [ "$i" -lt 200 ]; do
+  i=$((i + 1))
+  sleep 0.05
+done
+printf "RIFF0000WAVEfmt " > "$out"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    stop = tmp_path / "dict.stop"
+    probe = FakeProbe(commands={"sox": str(script)})
+
+    def _touch_later() -> None:
+        time.sleep(0.2)
+        stop.write_text("stop\n", encoding="utf-8")
+
+    threading.Thread(target=_touch_later, daemon=True).start()
+    result = record(
+        paths,
+        probe,
+        run_command,
+        mode="toggle",
+        seconds=30,
+        platform="linux",
+        stop_file=stop,
+        early_stop=True,
+    )
+    assert Path(result.wav_path).is_file()
+    assert result.stopped_early is True
+    assert result.tool == "sox"
+    assert not stop.exists()  # cleared after stop

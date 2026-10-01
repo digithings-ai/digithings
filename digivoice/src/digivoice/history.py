@@ -24,6 +24,10 @@ def dict_entry(text: str, wav: str | None) -> HistoryEntry:
     return HistoryEntry(ts=utc_now_iso(), kind="dict", text=text, wav=wav)
 
 
+def speak_entry(text: str) -> HistoryEntry:
+    return HistoryEntry(ts=utc_now_iso(), kind="speak", text=text, wav=None)
+
+
 def append_entry(path: str | Path, entry: HistoryEntry) -> Path:
     """Append one JSON object as a line. Parent directories are created."""
     target = Path(path)
@@ -65,6 +69,16 @@ def select(
     if last is not None:
         picked = picked[-last:]
     return picked
+
+
+def last_speakable_text(path: str | Path) -> str | None:
+    """Most recent history entry with non-empty text (dict or speak)."""
+    reading = read_history(path)
+    for entry in reversed(reading.entries):
+        text = entry.text.strip()
+        if text:
+            return text
+    return None
 
 
 def format_entry(entry: HistoryEntry) -> str:
