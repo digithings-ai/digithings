@@ -35,7 +35,7 @@ hosts:
       speech: false
     backend:
       type: digigraph
-      digisearchIndex: occ_help
+      digisearchIndex: occ_help,occ_tickets
       vaultPathPrefix: clients/online-compliance-center
     tools:
       allowUserToggle: true

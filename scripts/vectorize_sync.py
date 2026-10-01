@@ -349,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
+    from digisearch.embedding.factory import resolve_backend_embedding_provider
     from digisearch.indexes.backends.vectorize import DEFAULT_BATCH_SIZE, VectorizeBackend
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
     from digivault.d1_errors import D1StoreError
@@ -415,15 +415,25 @@ def main(argv: list[str] | None = None) -> int:
             http_post=_mutation_capturing_post(_default_http_post, mutation_ids),
         )
 
+    # Embedder comes from env/config (DIGISEARCH_EMBEDDING_PROVIDER), not a
+    # hardcoded model: the same process must embed, stamp, and — at query
+    # time — embed queries, or same-dim vectors silently miss (#4756).
+    # Resolved even for --dry-run (construction is lazy; no model loads and
+    # no inference runs) so the reported stamp is always the real one.
+    embedder = resolve_backend_embedding_provider()
+    model_id = (
+        str(getattr(embedder, "model_id", None) or getattr(embedder, "model", "")).strip()
+        or "unknown"
+    )
     if not args.dry_run:
-        assert_index_model(sink, model_id=MINILM_MODEL_ID, dimensions=384)
+        assert_index_model(sink, model_id=model_id, dimensions=embedder.dimensions)
 
     total = sync_corpus(
         notes,
         SegmentAwareChunker(),
-        None if args.dry_run else MiniLMEmbedder(),
+        None if args.dry_run else embedder,
         sink,
-        model_id=MINILM_MODEL_ID,
+        model_id=model_id,
         embed=not args.dry_run,
         # Single source of truth for the flush threshold — VectorizeBackend's own
         # batch size — so this can never drift from what the backend actually sends

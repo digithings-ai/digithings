@@ -240,13 +240,13 @@ def test_assert_index_model_warns_but_does_not_block_on_other_probe_errors(
 
 
 def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A future MINILM_MODEL_ID change must reach the guard and the stamp identically.
+    """Guard and stamp must track the configured provider together.
 
-    Regression for the stale-constant finding: the guard used to be called with a
-    hand-maintained literal while ``sync_corpus`` was stamped with the imported
-    ``MINILM_MODEL_ID`` — nothing enforced they stayed equal.
+    The embedder comes from env/config resolution, not a hardcoded model:
+    simulating a configured provider with a custom id must reach both the
+    model guard and the chunk stamp identically.
     """
-    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.embedding.factory as factory_module
     import digisearch.indexes.backends.vectorize as vectorize_module
     import digivault.d1_store as d1_store_module
 
@@ -263,6 +263,13 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
+    class _CustomProvider:
+        model_id = "custom-model-id"
+
+        @property
+        def dimensions(self) -> int:
+            return 123
+
     seen: dict[str, str] = {}
 
     def _fake_assert_index_model(backend: Any, *, model_id: str, dimensions: int) -> None:
@@ -276,8 +283,10 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
     monkeypatch.setattr(vectorize_module, "VectorizeBackend", _FakeVectorizeBackend)
-    # Simulate a model upgrade: the guard and the stamp must track this together.
-    monkeypatch.setattr(minilm_module, "MINILM_MODEL_ID", "temporarily-different-id")
+    # Simulate a configured non-default provider: guard and stamp must track it.
+    monkeypatch.setattr(
+        factory_module, "resolve_backend_embedding_provider", lambda: _CustomProvider()
+    )
     monkeypatch.setattr(vectorize_sync_module, "assert_index_model", _fake_assert_index_model)
     monkeypatch.setattr(vectorize_sync_module, "sync_corpus", _fake_sync_corpus)
     monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
@@ -287,7 +296,7 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
         ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
     )
 
-    assert seen["guard"] == seen["sync"] == "temporarily-different-id"
+    assert seen["guard"] == seen["sync"] == "custom-model-id"
 
 
 # ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
@@ -298,13 +307,20 @@ def _credential_capturing_main(monkeypatch: pytest.MonkeyPatch) -> dict[str, dic
     resolved to instead of hitting the network. Returns the ``captured`` dict, keyed
     ``"d1"``/``"vectorize"``.
     """
-    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.embedding.factory as factory_module
     import digisearch.indexes.backends.vectorize as vectorize_module
     import digivault.d1_store as d1_store_module
 
     import scripts.vectorize_sync as vectorize_sync_module
 
     captured: dict[str, dict[str, str]] = {}
+
+    class _StubProvider:
+        model_id = "stub-model-id"
+
+        @property
+        def dimensions(self) -> int:
+            return 384
 
     class _FakeD1Store:
         def __init__(self, database_id: str, *, account_id: str, api_token: str) -> None:
@@ -314,11 +330,16 @@ def _credential_capturing_main(monkeypatch: pytest.MonkeyPatch) -> dict[str, dic
             return []
 
     class _FakeVectorizeBackend:
-        def __init__(self, index_name: str, *, account_id: str, api_token: str, **kwargs: Any) -> None:
+        def __init__(
+            self, index_name: str, *, account_id: str, api_token: str, **kwargs: Any
+        ) -> None:
             captured["vectorize"] = {"account_id": account_id, "api_token": api_token}
 
     monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
     monkeypatch.setattr(vectorize_module, "VectorizeBackend", _FakeVectorizeBackend)
+    monkeypatch.setattr(
+        factory_module, "resolve_backend_embedding_provider", lambda: _StubProvider()
+    )
     monkeypatch.setattr(
         vectorize_sync_module, "assert_index_model", lambda backend, *, model_id, dimensions: None
     )
@@ -327,9 +348,6 @@ def _credential_capturing_main(monkeypatch: pytest.MonkeyPatch) -> dict[str, dic
         "sync_corpus",
         lambda notes, chunker, embedder, sink, *, model_id, **kwargs: 0,
     )
-    # `lambda: object()` is just a wrapper around `object` itself -- calling `object`
-    # with no args already returns a bare instance, so patch to the class directly.
-    monkeypatch.setattr(minilm_module, "MiniLMEmbedder", object)
     return captured
 
 
