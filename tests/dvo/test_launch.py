@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from digivoice.cli import Runtime, run
 from digivoice.paths import resolve_paths
-from digivoice.reload import ensure_home_control
+from digivoice.reload import ensure_home_control, stop_home_control
 from digivoice.settings import VoiceSettings, save_settings
 from digivoice.status import StatusReporter, status_path
 
@@ -325,3 +325,79 @@ def test_up_but_out_of_budget_stays_up(tmp_path: Path) -> None:
         sleep=clock.sleep,
     )
     assert report.summary == "hammerspoon up · banner hidden"
+
+
+def test_stop_home_control_quits_hammerspoon(tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    def reply(call: FakeCall) -> FakeReply:
+        seen.append(" ".join(call.argv))
+        name = Path(call.argv[0]).name
+        if name == "hs" and "m.stop" in call.argv[-1]:
+            return FakeReply(code=0, stdout="stopped\n")
+        if name == "osascript":
+            return FakeReply(code=0, stdout="")
+        return FakeReply(code=1, stdout="unexpected")
+
+    report = stop_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply, "osascript": reply}),
+        which_hs=lambda: "/usr/local/bin/hs",
+        which_osascript=lambda: "/usr/bin/osascript",
+    )
+    assert report.summary == "hammerspoon quit"
+    assert any("m.stop" in line for line in seen)
+    assert any("osascript" in line for line in seen)
+
+
+def test_stop_home_control_skips_on_linux(tmp_path: Path) -> None:
+    def boom(_call: FakeCall) -> FakeReply:
+        raise AssertionError("linux quit must not spawn Hammerspoon")
+
+    report = stop_home_control(
+        "linux",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": boom, "osascript": boom}),
+        which_hs=lambda: "/usr/bin/hs",
+        which_osascript=lambda: "/usr/bin/osascript",
+    )
+    assert report.summary == "hammerspoon skipped"
+
+
+def test_home_quit_tears_down_hammerspoon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """TTY Quit calls stop_home_control; process kill / Terminal close does not."""
+    from digivoice.reload import LaunchReport
+
+    from digivoice import home as home_mod
+
+    calls: list[str] = []
+
+    def fake_ensure(*_a, **_k) -> LaunchReport:
+        return LaunchReport(summary="hammerspoon up · banner shown", lines=[])
+
+    def fake_stop(*_a, **_k) -> LaunchReport:
+        calls.append("stop")
+        return LaunchReport(summary="hammerspoon quit", lines=["hammerspoon .. quit"])
+
+    monkeypatch.setattr(home_mod, "ensure_home_control", fake_ensure)
+    monkeypatch.setattr(home_mod, "stop_home_control", fake_stop)
+    monkeypatch.setattr(home_mod, "_is_tty", lambda _s: True)
+    monkeypatch.setattr(home_mod, "fullscreen_enter", lambda _o: None)
+    monkeypatch.setattr(home_mod, "fullscreen_leave", lambda _o: None)
+    monkeypatch.setattr(home_mod, "play_intro", lambda *_a, **_k: None)
+    # First pick = Quit (index 7)
+    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: 7)
+
+    code = home_mod.run_home(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        stdin=__import__("io").StringIO(""),
+        stdout=__import__("io").StringIO(),
+        launch=LaunchReport(summary="hammerspoon up · banner shown", lines=[]),
+    )
+    assert code == 0
+    assert calls == ["stop"]

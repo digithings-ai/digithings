@@ -25,7 +25,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/status.py` | `status.json` feed for the banner, cancel-file token, `CANCELLED_EXIT`. Fails soft. |
 | `src/digivoice/errors.py` | `VoiceError` and the capture / transcribe / speak subclasses. |
 | `src/digivoice/models.py` | Pydantic v2 models including `RewriteResult` and path/doctor/history types. |
-| `hammerspoon/` | Sample hotkey adapter (`init.lua`), status banner logic (`banner_core.lua`, pure Lua), menubar mark, TCC runbook. |
+| `hammerspoon/` | Sample hotkey adapter (`init.lua`), status banner logic (`banner_core.lua`, pure Lua), background-only (no Dock/menubar/toast), TCC runbook. |
 
 Every external binary — `sox`, `ffmpeg`, `whisper-cli`, `piper`, `afplay`/`aplay`/`ffplay`, `pbcopy`, `osascript` — is reached
 through a `CommandRunner` (argv list, never `shell=True`), except toggle early-stop capture which uses
@@ -78,7 +78,7 @@ commands write.
 | `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
-| bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle glint), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down, loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
+| bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle glint), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit stops the adapter and quits Hammerspoon; closing the Terminal alone leaves HS running. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
 | unknown / bad flags | 2 | Usage on stderr. |
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
@@ -230,7 +230,7 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) and a menubar mark show the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click cycles density mini → peek → full.
+- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) shows the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click cycles density mini → peek → full. No digivoice menubar mark.
 - Esc → writes the cancel-file while a dictation is recording/transcribing/rewriting (swallowed only then). Nothing is pasted or saved.
 - Double-tap Left Option (58) → `speak --selection` (banner shows the selected text, or why there is none; no clipboard/history)
 - No Hammerspoon notifications except one launch toast listing the commands and the resolved CLI path.

@@ -1,8 +1,10 @@
 """`digivoice reload` and the bare-`digivoice` Hammerspoon launch.
 
-Reload refreshes local control without touching the menubar. Home launch
-(`ensure_home_control`) opens Hammerspoon when it is down and asks the
-adapter to show the banner. Both are bounded.
+Reload refreshes local control. Home launch (`ensure_home_control`) opens
+Hammerspoon when it is down and asks the adapter to show the banner (background
+only: no digivoice menubar, no Dock icon, no launch toast). TUI Quit calls
+`stop_home_control` to tear Hammerspoon down; closing the Terminal alone does
+not — HS keeps running. Both start and stop are bounded.
 
 Reload re-resolves the CLI path (same lookup order the Hammerspoon adapter
 uses), re-validates settings, checks the installed Lua adapter (following the
@@ -40,6 +42,12 @@ _BANNER_EXPR = (
     'if not ok or type(m) ~= "table" or type(m.ensure_banner) ~= "function" then '
     'return "missing" end; '
     "return m.ensure_banner()"
+)
+_STOP_EXPR = (
+    "pcall(function() "
+    'local ok, m = pcall(require, "digivoice"); '
+    'if ok and type(m) == "table" and type(m.stop) == "function" then m.stop() end '
+    "end); return 'stopped'"
 )
 
 
@@ -402,3 +410,80 @@ def _ensure_home_control(
     detail = token or ("no reply" if ok else "ipc failed")
     lines.append(f"banner ....... not shown ({detail})")
     return LaunchReport(summary="hammerspoon up · banner hidden", lines=lines)
+
+
+def stop_home_control(
+    platform: str,
+    home: Path,
+    env: Mapping[str, str],
+    runner: CommandRunner | None = None,
+    which_hs: Callable[[], str | None] | None = None,
+    which_osascript: Callable[[], str | None] | None = None,
+    budget: float = LAUNCH_BUDGET_SECONDS,
+) -> LaunchReport:
+    """Tear down digivoice's Hammerspoon on explicit TUI Quit.
+
+    Stops the adapter (hotkeys + banner), then quits the Hammerspoon app.
+    Closing the Terminal alone must NOT call this — lock: leave HS running.
+    Bounded; never raises. Non-macOS is a skip.
+    """
+    try:
+        return _stop_home_control(platform, home, env, runner, which_hs, which_osascript, budget)
+    except Exception as exc:
+        return LaunchReport(
+            summary=f"hammerspoon stop skipped ({exc})",
+            lines=[f"hammerspoon .. stop skipped ({exc})"],
+        )
+
+
+def _stop_home_control(
+    platform: str,
+    home: Path,
+    env: Mapping[str, str],
+    runner: CommandRunner | None,
+    which_hs: Callable[[], str | None] | None,
+    which_osascript: Callable[[], str | None] | None,
+    budget: float,
+) -> LaunchReport:
+    _ = home  # reserved for future adapter-path checks
+    if platform != "darwin":
+        return LaunchReport(
+            summary="hammerspoon skipped",
+            lines=["hammerspoon .. skipped (not macOS)"],
+        )
+
+    active = runner or run_command
+    lines: list[str] = []
+    timeout = max(0.2, min(budget, LAUNCH_BUDGET_SECONDS))
+
+    hs_path = which_hs() if which_hs is not None else shutil.which("hs", path=env.get("PATH", ""))
+    if hs_path:
+        ok, token = _hs_ok(active, _STOP_EXPR, timeout)
+        if ok:
+            lines.append(f"adapter ...... stopped ({token or 'ok'})")
+        else:
+            detail = token or "ipc failed"
+            lines.append(f"adapter ...... stop skipped ({detail})")
+    else:
+        lines.append("adapter ...... skipped (hs not on PATH)")
+
+    if which_osascript is not None:
+        osa = which_osascript()
+    else:
+        osa = shutil.which("osascript", path=env.get("PATH", ""))
+    if not osa:
+        lines.append("hammerspoon .. not quit (osascript not on PATH)")
+        return LaunchReport(summary="hammerspoon stop partial", lines=lines)
+
+    quit_result = active(
+        [osa, "-e", 'tell application "Hammerspoon" to quit'],
+        timeout=timeout,
+    )
+    if quit_result.code == 0:
+        lines.append("hammerspoon .. quit")
+        return LaunchReport(summary="hammerspoon quit", lines=lines)
+
+    detail = (quit_result.stderr or quit_result.stdout or f"exit {quit_result.code}").strip()
+    first = detail.splitlines()[0] if detail else "unknown"
+    lines.append(f"hammerspoon .. quit failed ({first})")
+    return LaunchReport(summary="hammerspoon quit failed", lines=lines)

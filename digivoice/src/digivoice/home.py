@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TextIO
 
 from digivoice.paths import resolve_paths
-from digivoice.reload import LaunchReport, ensure_home_control
+from digivoice.reload import LaunchReport, ensure_home_control, stop_home_control
 from digivoice.runner import CommandRunner
 from digivoice.tui import (
     _is_tty,
@@ -229,6 +229,9 @@ def run_home(
                 groups=HOME_GROUPS,
             )
             if picked is None or HOME_MENU[picked] == "Quit":
+                # Explicit TUI exit tears Hammerspoon down. Closing the Terminal
+                # alone (SIGHUP/SIGTERM) never reaches here — HS stays running.
+                stop_home_control(platform, home, env, runner=runner)
                 return 0
             entry = HOME_MENU[picked]
             if entry.startswith("Doctor"):

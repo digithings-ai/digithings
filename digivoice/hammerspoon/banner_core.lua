@@ -12,7 +12,7 @@ local M = {}
 M.GRID = 5
 M.ESC_KEYCODE = 53
 
--- Hammerspoon launch toast is the only place a notification is allowed.
+-- Ship model: no launch toast / menubar. COMMANDS stays for docs and doctor text.
 M.COMMANDS = {
   "Right Option = dictate (press again to stop)",
   "Esc = cancel the take",

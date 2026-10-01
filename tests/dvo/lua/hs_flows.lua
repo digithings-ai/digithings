@@ -1,5 +1,5 @@
 -- Drives digivoice/hammerspoon/init.lua against a fake `hs` so the banner, Esc cancel,
--- and notification rules can be checked without a Mac.
+-- and background-only rules (no toast / menubar / Dock) can be checked without a Mac.
 -- Usage: lua hs_flows.lua <scenario>   (env: DIGIVOICE_DATA_DIR, DIGIVOICE_BIN)
 
 local scenario = arg[1]
@@ -135,7 +135,13 @@ local function live_canvas()
   return nil
 end
 
+local dockicon_hidden = false
+
 hs = {
+  dockicon = {
+    hide = function() dockicon_hidden = true end,
+    show = function() dockicon_hidden = false end,
+  },
   fs = {
     pathToAbsolute = function(p) return p end,
     mkdir = function(p) os.execute('mkdir -p "' .. p .. '"') end,
@@ -285,13 +291,10 @@ local function body_of(c) return c[2].text end
 
 local scenarios = {}
 
-function scenarios.launch_notice_is_the_only_toast()
-  eq(#notifications, 1, "one launch toast")
-  local text = notifications[1].informativeText
-  check(text:find("Esc", 1, true), "lists Esc cancel")
-  check(text:find("Right Option", 1, true), "lists dictate")
-  check(text:find("Left Option", 1, true), "lists speak")
-  check(text:find("cli: " .. os.getenv("DIGIVOICE_BIN"), 1, true), "shows the CLI path")
+function scenarios.launch_is_background_only()
+  eq(#notifications, 0, "no launch toast")
+  eq(#menubars, 0, "no digivoice menubar mark on arm")
+  eq(dockicon_hidden, true, "Dock icon hidden on start")
   press_right_option()
   advance(0.5)
   press_right_option()
@@ -301,7 +304,8 @@ function scenarios.launch_notice_is_the_only_toast()
   double_tap_left_option()
   tasks[2]:finish(1, "", "digivoice speak: nothing selected\n")
   advance(5)
-  eq(#notifications, 1, "no toast for dict, speak, or errors")
+  eq(#notifications, 0, "no toast for dict, speak, or errors")
+  eq(#menubars, 0, "no digivoice menubar mark during takes")
 end
 
 function scenarios.dict_banner_recording_then_done()
@@ -319,7 +323,7 @@ function scenarios.dict_banner_recording_then_done()
   eq(body_of(c), "", "recording shows the grid, no chrome text")
   eq(c.frame.x, (1440 - 380) / 2, "top-center x")
   eq(c.frame.y, 12, "top-center y")
-  eq(menubars[1].title, " REC", "menubar mark while recording")
+  eq(#menubars, 0, "no digivoice menubar mark while recording")
   find_taps()
   check(esc_tap.enabled, "Esc tap armed while a take is active")
   press_right_option()
@@ -332,7 +336,7 @@ function scenarios.dict_banner_recording_then_done()
   t:finish(0, "Hello there, world.\n", "")
   c = live_canvas()
   eq(body_of(c), "Hello there, world.", "final text")
-  eq(menubars[1].deleted, true, "menubar removed on exit")
+  eq(#menubars, 0, "still no digivoice menubar after take")
   advance(5)
   eq(live_canvas(), nil, "peek banner clears a few seconds after done")
   find_taps()
@@ -353,7 +357,7 @@ function scenarios.esc_cancels_and_swallows()
   tasks[1]:finish(3, "", "digivoice dict: cancelled\n")
   local c = live_canvas()
   check(body_of(c):find("discarded", 1, true), "says the take was discarded")
-  eq(#notifications, 1, "no cancel toast")
+  eq(#notifications, 0, "no cancel toast")
   advance(3)
   eq(live_canvas(), nil, "banner clears")
 end
@@ -403,7 +407,7 @@ function scenarios.speak_failure_goes_to_the_banner()
   tasks[1]:finish(1, "", "digivoice speak: nothing selected: select text first\n")
   local c = live_canvas()
   eq(body_of(c), "nothing selected: select text first", "reason shown, prefix stripped, no chrome")
-  eq(#notifications, 1, "no toast")
+  eq(#notifications, 0, "no toast")
 end
 
 function scenarios.error_and_empty_exit_states()
@@ -446,12 +450,12 @@ function scenarios.banner_disabled()
   write(DATA .. "/settings.json", '{"live_banner": false}')
   press_right_option()
   eq(live_canvas(), nil, "no canvas when disabled")
-  eq(menubars[1].title, " REC", "menubar mic indicator stays")
+  eq(#menubars, 0, "no digivoice menubar when banner off")
   eq(press_esc(), true, "Esc still cancels")
   check(exists(DATA .. "/dict.cancel"), "cancel-file written")
   tasks[1]:finish(3, "", "")
   eq(live_canvas(), nil, "still no canvas")
-  eq(#notifications, 1, "still no toast")
+  eq(#notifications, 0, "still no toast")
 end
 
 function scenarios.animations_toggle()
@@ -546,7 +550,7 @@ function scenarios.cli_missing_is_reported()
   hs.task.new = function() return nil end
   press_right_option()
   eq(live_canvas(), nil, "no banner without a task")
-  eq(#notifications, 1, "no toast")
+  eq(#notifications, 0, "no toast")
 end
 
 local run = scenarios[scenario]
