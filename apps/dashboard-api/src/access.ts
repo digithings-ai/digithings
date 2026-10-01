@@ -90,11 +90,11 @@ export const DESKS: DeskDef[] = [
     blurb: "FX ideas, levels and rates. Invite-only (12x group).",
     group: "12x",
     pages: [
-      { path: "/fx", label: "FX Hub", status: "soon", blocks: [b("fx-summary", "/fx/summary"), b("fx-pairs", "/fx/pairs"), b("fx-levels", "/fx/levels")] },
-      { path: "/fx/ideas", label: "Ideas", blocks: [b("fx-ideas", "/fx/ideas"), b("fx-idea-detail", "/fx/ideas/selected")] },
-      { path: "/fx/watch", label: "Watch", blocks: [b("fx-pairs", "/fx/pairs"), b("fx-flags", "/fx/flags"), b("fx-paper-exposure", "/fx/paper-exposure")] },
-      { path: "/fx/rates", label: "Rates", blocks: [b("rt-summary", "/rates/summary"), b("rt-curve", "/rates/curve"), b("rt-watchlist", "/rates/watchlist")] },
-      { path: "/fx/settings", label: "Settings", blocks: [b("se-fx-feed", "/settings/fx-feed"), b("fx-directives", "/fx/directives")] },
+      { path: "/fx", label: "FX Hub", status: "soon", blocks: [b("fx-summary", "/fx/summary"), b("fx-pairs", "/fx/pairs"), b("fx-levels", "/fx/levels"), b("fx-pair-path", "/fx/pairs/{pair}/path"), b("fx-sessions", "/fx/sessions")] },
+      { path: "/fx/ideas", label: "Ideas", blocks: [b("fx-ideas", "/fx/ideas"), b("fx-idea-detail", "/fx/ideas/{pair}"), b("fx-flags", "/fx/flags/{pair}"), b("fx-pair-path", "/fx/pairs/{pair}/path")] },
+      { path: "/fx/watch", label: "Watch", blocks: [b("fx-pairs", "/fx/pairs"), b("fx-levels", "/fx/levels"), b("fx-paper-exposure", "/fx/paper-exposure"), b("fx-flags", "/fx/flags/{pair}")] },
+      { path: "/fx/rates", label: "Rates", blocks: [b("rt-summary", "/rates/summary"), b("rt-curve", "/rates/curve"), b("rt-watchlist", "/rates/watchlist"), b("rt-theses", "/theses?desk=rates")] },
+      { path: "/fx/settings", label: "Settings", blocks: [b("se-fx-feed", "/settings/fx-feed"), b("fx-directives", "/fx/directives"), b("se-brokers", "/settings/brokers")] },
     ],
   },
 ];
