@@ -672,6 +672,9 @@ function scenarios.hover_controls_row()
   write_status("dict", "rewriting", "hover me", "")
   advance(1)
   eq(#button_frames(live_canvas()), 0, "no controls until hover")
+  local plain = live_canvas()
+  local face_h, face_w = plain[1].frame.h, plain[1].frame.w
+  eq(plain.frame.h, face_h, "no gutter without hover")
   hover(true)
   local c = live_canvas()
   local copy, close = button_frame(c, "copy"), button_frame(c, "close")
@@ -680,6 +683,12 @@ function scenarios.hover_controls_row()
   eq(close.x, copy.x + 18 + 4, "copy sits left of close")
   eq(copy.x + 18 + 4 + 18, c.frame.w, "row is right-aligned under the banner")
   eq(copy.w, 18, "icon squares match the grid")
+  -- Single-canvas chrome (mock .float-root): banner face stays box.h, the
+  -- control gutter below is transparent canvas, not a stretched fill.
+  eq(c[1].frame.h, face_h, "banner face keeps box.h on hover")
+  eq(c[1].frame.w, face_w, "banner face keeps box.w on hover")
+  eq(copy.y, face_h + 4, "controls sit below with the CTRL_GAP margin")
+  eq(c.frame.h, face_h + 4 + 18, "canvas grows by exactly the row gutter")
   -- Equal padding: the grid hugs the top-left corner.
   check(math.abs(c[3].frame.x - 10) < 3 and math.abs(c[3].frame.y - 10) < 3, "grid top-left with even pad")
   click("copy")

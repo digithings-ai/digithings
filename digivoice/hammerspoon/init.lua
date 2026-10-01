@@ -327,6 +327,17 @@ local function build_canvas(s, view, box)
   -- A click only cycles density; it must never steal focus from the app being typed into.
   canvas:clickActivating(false)
   canvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
+  -- One window only: banner + controls share this canvas. Never a second
+  -- canvas/window for the buttons. Disable the window shadow when the host
+  -- exposes it so the 18px pills read as chrome of this float unit instead
+  -- of independent floating canvases (mock .float-root, not windows).
+  pcall(function()
+    canvas:shadow(false)
+  end)
+
+  -- Banner face stays box.h. The control gutter below (CTRL_GAP + pills) is
+  -- transparent canvas: sibling chrome of the same float unit, never a
+  -- stretch of the banner fill/stroke (mock .banner + .controls-under).
 
   -- No chrome: background + body text only. State reads from the grid alone.
   canvas:appendElements({
@@ -340,7 +351,7 @@ local function build_canvas(s, view, box)
       trackMouseDown = true,
       trackMouseEnterExit = true,
       id = "background",
-      frame = { x = 0, y = 0, w = box.w, h = canvas_h },
+      frame = { x = 0, y = 0, w = box.w, h = box.h },
     },
     {
       type = "text",
@@ -405,6 +416,7 @@ local function build_canvas(s, view, box)
     end
     if message == "mouseEnter" then
       hover_seq = hover_seq + 1
+      hover_timer = cancel_timer(hover_timer)
       if not s.hover then
         s.hover = true
         rebuild(s)
@@ -414,10 +426,25 @@ local function build_canvas(s, view, box)
       hover_seq = seen
       hover_timer = cancel_timer(hover_timer)
       hover_timer = hs.timer.doAfter(0.25, function()
-        if session == s and hover_seq == seen and s.hover then
-          s.hover = false
-          rebuild(s)
+        if session ~= s or hover_seq ~= seen or not s.hover then
+          return
         end
+        -- Same-canvas chrome: banner face, the CTRL_GAP gutter, and the pills
+        -- are one window. Moving pointer banner<->controls (or pausing in the
+        -- transparent gap, which fires exit with no enter) must not dismiss.
+        local ok, pos = pcall(hs.mouse.getAbsolutePosition)
+        if ok and pos and s.origin and s.size then
+          if
+            pos.x >= s.origin.x
+            and pos.x < s.origin.x + s.size.w
+            and pos.y >= s.origin.y
+            and pos.y < s.origin.y + s.size.h
+          then
+            return
+          end
+        end
+        s.hover = false
+        rebuild(s)
       end)
     elseif message == "mouseDown" and id == "background" then
       start_drag(s)
