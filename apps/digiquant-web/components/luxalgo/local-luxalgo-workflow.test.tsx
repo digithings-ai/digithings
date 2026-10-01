@@ -12,8 +12,8 @@ describe("LocalLuxalgoWorkflow", () => {
     expect(html).toContain('href="https://www.luxalgo.com/"');
   });
 
-  it("frames the search as a capability demo, not the product", () => {
-    expect(html).toContain("capability demo");
+  it("frames the search as a demo, not the product", () => {
+    expect(html).toContain("as a demo");
     expect(html).toContain("not a search tool");
     expect(html).toContain("The product is the dashboard");
   });

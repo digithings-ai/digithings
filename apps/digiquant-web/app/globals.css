@@ -56,7 +56,77 @@
 }
 
 :root[data-theme] {
-  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-mono);
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-sans);
+}
+
+/* web-theme.css sets the body to --font-mono; prose is sans here, and mono is
+   opt-in (`font-mono`) for chrome, labels and figures. */
+body {
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
+}
+
+/* Band eyebrow: `NN / label`, numbered like the gutter rail. The tick matches the
+   rail's own stroke so the two read as one system. */
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.section-eyebrow__tick {
+  display: block;
+  width: 1.1rem;
+  height: 1px;
+  background: var(--ink-mute);
+}
+
+@media (min-width: 640px) {
+  .section-eyebrow__tick { width: 1.6rem; }
+}
+
+/* Hero entrance: the copy settles in after the bars have started to build. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 0.7s var(--ease) calc(0.5s + var(--rise, 0) * 0.09s) both;
+  }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.hero-action {
+  transition:
+    background-color var(--duration-hover) var(--ease),
+    border-color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover { border-color: var(--ink-mute); }
+
+.hero-action:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.hero-action__arrow {
+  display: inline-block;
+  margin-inline-start: 0.6em;
+  color: var(--ink-mute);
+  transition:
+    transform var(--duration-hover) var(--ease),
+    color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover .hero-action__arrow {
+  color: var(--ink);
+  transform: translateY(2px);
 }

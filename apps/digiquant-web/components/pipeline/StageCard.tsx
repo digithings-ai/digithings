@@ -19,17 +19,17 @@ export function StageCard({
   const copy = STAGE_COPY[name];
   const n = String(index + 1).padStart(2, "0");
   return (
-    <article aria-label={`Stage ${index + 1} of ${total}: ${name}`} className="flex min-h-[25rem] w-full flex-col border border-hair bg-surface font-mono">
-      <div className="flex items-baseline justify-between border-b border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
+    <article aria-label={`Stage ${index + 1} of ${total}: ${name}`} className="flex min-h-[25rem] w-full flex-col border border-hair bg-surface">
+      <div className="flex items-baseline justify-between border-b border-hair px-4 py-2 font-mono text-[0.68rem] text-ink-mute">
         <span>
           {n}/{String(total).padStart(2, "0")}
         </span>
         <span>{hasRun ? (recorded?.status === "recorded" ? "recorded" : "not recorded") : "no recorded run"}</span>
       </div>
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <h3 className="m-0 text-[1.25rem] font-normal leading-tight text-ink">{name}</h3>
-        <p className="m-0 text-[0.78rem] leading-[1.6] text-ink-soft">{copy.does}</p>
-        <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[0.72rem] text-ink-soft">
+        <h3 className="m-0 font-display text-[1.25rem] font-medium leading-tight tracking-[-0.02em] text-ink">{name}</h3>
+        <p className="m-0 text-[0.8125rem] leading-[1.6] text-ink-soft">{copy.does}</p>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0 font-mono text-[0.72rem] text-ink-soft">
           {copy.steps.map((s) => (
             <li key={s} className="flex gap-2 border-t border-hair pt-1">
               <span aria-hidden="true" className="text-ink-mute">
@@ -39,7 +39,7 @@ export function StageCard({
             </li>
           ))}
         </ul>
-        <div className="mt-auto border-t border-hair pt-3 text-[0.68rem] text-ink-mute">
+        <div className="mt-auto border-t border-hair pt-3 font-mono text-[0.68rem] text-ink-mute">
           {recorded ? (
             <>
               <p className="m-0 text-ink-soft">
@@ -68,17 +68,17 @@ export function StageCard({
 export function ExecutionCard({ index, total, status }: { index: number; total: number; status: string }) {
   const n = String(index + 1).padStart(2, "0");
   return (
-    <article aria-label={`Stage ${index + 1} of ${total}: Execution, ${status}`} className="flex min-h-[25rem] w-full flex-col border border-dashed border-hair bg-transparent font-mono">
-      <div className="flex items-baseline justify-between border-b border-dashed border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
+    <article aria-label={`Stage ${index + 1} of ${total}: Execution, ${status}`} className="flex min-h-[25rem] w-full flex-col border border-dashed border-hair bg-transparent">
+      <div className="flex items-baseline justify-between border-b border-dashed border-hair px-4 py-2 font-mono text-[0.68rem] text-ink-mute">
         <span>
           {n}/{String(total).padStart(2, "0")}
         </span>
         <span>{status}</span>
       </div>
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <h3 className="m-0 text-[1.25rem] font-normal leading-tight text-ink-soft">Execution</h3>
-        <p className="m-0 text-[0.78rem] leading-[1.6] text-ink-mute">
-          Not built. The six stages end in a recorded decision; nothing here places an order, and there is no live trading.
+        <h3 className="m-0 font-display text-[1.25rem] font-medium leading-tight tracking-[-0.02em] text-ink-soft">Execution</h3>
+        <p className="m-0 text-[0.8125rem] leading-[1.6] text-ink-mute">
+          Not built. The six stages end in a recorded decision. Nothing here places an order, and there is no live trading.
         </p>
       </div>
     </article>
