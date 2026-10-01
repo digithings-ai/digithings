@@ -405,3 +405,76 @@ def test_trade_size_only_passed_when_config_declares_it() -> None:
     )
     assert not hasattr(sdca_cfg, "trade_size")
     assert sdca_cfg.risk_path == str(risk)
+
+
+@requires_nautilus
+def test_gold_sdca_registry_resolves_v3_nodes_and_btc_undisturbed() -> None:
+    """Registry gap net (#4804): gold resolves to honest-v3 nodes; btc untouched.
+
+    The Task-1 offline gold test fakes ``run_nautilus``, so it structurally
+    cannot catch a missing registry entry (Task-3 STOP). This test exercises
+    the real registry: ``gold_sdca`` must resolve to the v3 gated curve
+    (shape 35/45/50/30/1.0/2.0, mids null) and the staged ``gold_optimized``
+    preset nodes, while ``btc_sdca`` resolution is byte-identical.
+    The full unfaked live path is proven by the Task-3 proof command re-run,
+    not duplicated here (engine-run harness + Nautilus version drift cost).
+    """
+    import digiquant.strategies.sdca.nautilus_strategy  # noqa: F401  # side-effect register
+    from digiquant.strategies.registry import config_declares_field, get_strategy
+    from digiquant.strategies.sdca.curve import DEFAULT_BTC_NODES
+    from digiquant.strategies.sdca.presets import load_preset
+    from digiquant.strategy_specs import get_param_specs
+    from nautilus_trader.model import BarType
+    from nautilus_trader.model.identifiers import InstrumentId
+
+    # Staged preset shape is the honest-v3 gated shape (read, never re-derived
+    # here beyond this pin).
+    preset = load_preset("gold_optimized")
+    assert preset.shape is not None
+    assert preset.shape.model_dump() == {
+        "buy_max_rate": 35.0,
+        "buy_knee_risk": 45.0,
+        "sell_knee_risk": 50.0,
+        "sell_max_rate": 30.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "buy_mid_knee_risk": None,
+        "buy_mid_curvature": 1.0,
+        "sell_mid_knee_risk": None,
+        "sell_mid_curvature": 1.0,
+    }
+
+    assert config_declares_field("gold_sdca", "trade_size") is False
+    assert config_declares_field("gold_sdca", "risk_path") is True
+
+    inst = InstrumentId.from_str("GLD-USD.SIM")
+    bar = BarType.from_str("GLD-USD.SIM-1-DAY-LAST-EXTERNAL")
+    risk = Path("/tmp/sdca_publish_test_risk_gold.parquet")
+    _, gold_cfg = get_strategy(
+        "gold_sdca",
+        inst,
+        bar,
+        trade_size=Decimal("99"),
+        risk_path=str(risk),
+    )
+    assert not hasattr(gold_cfg, "trade_size")
+    assert gold_cfg.risk_path == str(risk)
+    assert tuple(gold_cfg.curve_nodes) == preset.curve_nodes
+    assert gold_cfg.long_only is False
+    assert gold_cfg.initial_cash == 1000.0
+
+    # Paired parity assert: btc resolution undisturbed.
+    btc_inst = InstrumentId.from_str("BTC-USD.SIM")
+    btc_bar = BarType.from_str("BTC-USD.SIM-1-DAY-LAST-EXTERNAL")
+    _, btc_cfg = get_strategy(
+        "btc_sdca",
+        btc_inst,
+        btc_bar,
+        trade_size=Decimal("99"),
+        risk_path=str(risk),
+    )
+    assert tuple(btc_cfg.curve_nodes) == DEFAULT_BTC_NODES
+    assert tuple(gold_cfg.curve_nodes) != tuple(btc_cfg.curve_nodes)
+
+    # Optimize/export param-spec path resolves gold to the shared sdca specs.
+    assert get_param_specs("gold_sdca") == get_param_specs("btc_sdca")
