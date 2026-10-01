@@ -36,6 +36,27 @@ npm run typecheck --workspace dashboard-api
 npm run dev --workspace dashboard-api
 ```
 
+### Live data for the digiquant-app
+
+```bash
+cp .dev.vars.example .dev.vars      # then paste SUPABASE_SERVICE_ROLE_KEY
+npx wrangler dev --port 8788
+# in apps/digiquant-app:
+NEXT_PUBLIC_DQ_API_URL=http://localhost:8788 npx next dev -p 3930
+```
+
+Only the contracted routes (§6.1–6.9) exist on the worker; blocks bound to
+routes not built yet show "Withheld" (never invented numbers).
+
+### Access gate
+
+HTTP routes and MCP tools share one policy (`src/access.ts`): identity comes
+from edge headers `x-digi-tier` / `x-digi-groups`; a route named by the catalog
+is served only if the caller's manifest grants it (403 `forbidden`, MCP
+`-32003`). `tools/list` returns only the tools the caller may call, so an
+MCP-only client sees the same desks and tiers as the app. `get_access_manifest`
+is the discovery tool.
+
 Canonical serving path is the `/dashboard-api/*` mount on the digithings-stack
 worker (#4687) — the standalone deploy below stays until cutover.
 Deploy is via [`.github/workflows/deploy-dashboard-api.yml`](../../.github/workflows/deploy-dashboard-api.yml)

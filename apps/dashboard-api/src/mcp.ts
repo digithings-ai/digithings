@@ -14,11 +14,14 @@
  * `wrangler dev` only. No Python/FastMCP; this is a TS worker.
  */
 
+import { buildManifest, callerFor, routeVerdict, type Manifest } from './access';
+
 export const MCP_PATH = '/mcp';
 export const MCP_KEY_HEADER = 'x-digi-mcp-key';
 
 export interface McpEnv {
   MCP_EDGE_KEY?: string;
+  DASHBOARD_DEV_CALLER?: string;
 }
 
 export interface McpToolDef {
@@ -34,6 +37,13 @@ export interface McpToolDef {
 const STR = { type: 'string' };
 
 export const MCP_TOOLS: readonly McpToolDef[] = [
+  {
+    name: 'get_access_manifest',
+    description: 'Desks, pages, blocks and data routes visible to the caller, with locked reasons (contract §6.9). Call first to learn what else you may read.',
+    inputSchema: { type: 'object', properties: {} },
+    path: '/access/manifest',
+    params: [],
+  },
   {
     name: 'get_portfolio',
     description: 'Committed-book snapshot + invested envelope (contract §6.1).',
@@ -146,9 +156,16 @@ function toolResultText(tool: McpToolDef, args: Record<string, unknown>): URLSea
   return query;
 }
 
+/** MCP gate = the app's gate: a tool is visible and callable only if the caller's manifest grants its route. */
+function toolAllowed(tool: McpToolDef, m: Manifest): boolean {
+  return routeVerdict(m, tool.path) !== 'forbidden';
+}
+
 async function handleOne(
   raw: unknown,
   dispatch: (req: Request) => Promise<Response>,
+  m: Manifest,
+  identity: Record<string, string>,
 ): Promise<Record<string, unknown>> {
   const req = (raw ?? {}) as JsonRpcRequest;
   const id: JsonRpcId = req.id ?? null;
@@ -160,7 +177,7 @@ async function handleOne(
       jsonrpc: '2.0',
       id,
       result: {
-        tools: MCP_TOOLS.map((t) => ({
+        tools: MCP_TOOLS.filter((t) => toolAllowed(t, m)).map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
@@ -181,9 +198,12 @@ async function handleOne(
     if (typeof args !== 'object' || Array.isArray(args)) {
       return { jsonrpc: '2.0', id, error: { code: -32602, message: 'arguments must be an object' } };
     }
-    // Shared service layer: run the worker's own route handler.
+    if (!toolAllowed(tool, m)) {
+      return { jsonrpc: '2.0', id, error: { code: -32003, message: `forbidden: ${tool.name} is not available to this caller (tier ${m.caller.tier})` } };
+    }
+    // Shared service layer: run the worker's own route handler (identity forwarded, so the HTTP gate agrees).
     const url = `https://internal${tool.path}?${toolResultText(tool, args).toString()}`;
-    const res = await dispatch(new Request(url, { method: 'GET' }));
+    const res = await dispatch(new Request(url, { method: 'GET', headers: identity }));
     const text = await res.text();
     return {
       jsonrpc: '2.0',
@@ -213,6 +233,12 @@ export async function handleMcp(
     // Stack precedent: plain fail-closed 401, no envelope.
     return new Response('dashboard-api: unauthorized', { status: 401 });
   }
+  const m = buildManifest(callerFor(request, env));
+  const identity: Record<string, string> = {};
+  for (const h of ['x-digi-tier', 'x-digi-groups']) {
+    const v = request.headers.get(h);
+    if (v !== null) identity[h] = v;
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -222,8 +248,8 @@ export async function handleMcp(
   if (Array.isArray(body)) {
     if (body.length === 0) return rpcError(null, -32600, 'invalid request');
     const out = [];
-    for (const item of body) out.push(await handleOne(item, dispatch));
+    for (const item of body) out.push(await handleOne(item, dispatch, m, identity));
     return Response.json(out);
   }
-  return Response.json(await handleOne(body, dispatch));
+  return Response.json(await handleOne(body, dispatch, m, identity));
 }
