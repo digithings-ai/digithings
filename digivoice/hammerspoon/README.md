@@ -18,7 +18,7 @@ Do not invent other default binds in this sample.
 
 Status is a custom overlay banner, not Hammerspoon notifications. The one allowed toast is at Hammerspoon launch: it lists the configured commands and the resolved `digivoice` path.
 
-The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only control.
+The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows icon-only copy + × below the banner (stacked when mini, right-aligned row when wider); × hides instantly and never discards. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. Center pins keep the center on expand, edge pins grow outward. Text types in fast; peek→full continues the caret while collapse/close hides instantly. Full caps near half the screen height and wheel-scrolls with no scrollbar. Chrome follows the system appearance (digichat light/dark); RYG status colors stay. The banner is hidden by default: `digivoice banner show [--text T]` (or `hide` / `toggle`) spawns a preview with no dictation; Esc on a preview only hides it.
 
 | Phase | Animation (digichat 5x5 square grid) | Text shown |
 | --- | --- | --- |
@@ -48,10 +48,18 @@ Stored in digivoice's `settings.json`, changed with the CLI, and **re-read at th
 ```bash
 digivoice settings set live_banner false          # disable the overlay entirely (default true)
 digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
-                                                  # | bottom-center | bottom-left | bottom-right | center
+                                                  # | middle-left | middle-right | bottom-center
+                                                  # | bottom-left | bottom-right | center
 digivoice settings set banner_density full        # mini (grid only) | peek (default) | full (stays)
-digivoice settings set banner_animations false    # still grid frame (default true)
+digivoice settings set banner_animations false    # still grid frame + instant text (default true)
 digivoice settings --json                         # show everything
+```
+
+Show the banner without dictating (preview; hidden again with `hide`):
+
+```bash
+digivoice banner show --text "sound check"
+digivoice banner hide   # or: toggle
 ```
 
 An unknown `banner_position` falls back to `top-center`; an unknown `banner_density` falls back to `peek`.

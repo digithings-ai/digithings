@@ -188,3 +188,16 @@ def test_banner_position_rejects_unknown_values(tmp_path: Path) -> None:
     bad = run(["settings", "set", "banner_position", "middle-ish"], runtime)
     assert bad.code == 2
     assert not (tmp_path / "settings.json").exists()
+
+
+def test_banner_position_accepts_middle_anchors(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    assert run(["settings", "set", "banner_position", "middle-left"], runtime).code == 0
+    assert run(["settings", "set", "banner_position", "middle-right"], runtime).code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    assert load_settings(paths).banner_position == "middle-right"
