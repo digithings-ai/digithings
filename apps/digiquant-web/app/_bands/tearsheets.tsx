@@ -6,7 +6,7 @@ export function TearsheetsBand() {
     <Band
       id="tearsheets"
       title="Tearsheets"
-      takeaway="What a strategy leaves behind: a backtest tearsheet, as the dashboard lists them. In-sample and illustrative, labelled as such."
+      takeaway="Every strategy ends in a backtest tearsheet, as the dashboard lists them. Results are in-sample and illustrative."
       status="backtest only"
     >
       <StrategyRailLive />
