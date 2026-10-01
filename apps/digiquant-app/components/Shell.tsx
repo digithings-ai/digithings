@@ -8,25 +8,23 @@ import { NavTree } from './NavTree';
 const PIN_KEY = 'dq-nav-pinned';
 
 /**
- * Terminal shell. The whole page is the workspace; the nav is a drop-down
- * from the top bar that goes away after use, unless pinned into a left rail.
+ * Terminal shell. The sidebar starts pinned. Unpinned, it is hidden and a
+ * menu button drops the same sidebar over the page; it closes after use.
  */
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname() || '/';
-  const [menu, setMenu] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  const [pinned, setPinned] = useState(true);
+  const [drop, setDrop] = useState(false);
   const cmd = useRef<CommandLineHandle>(null);
 
   useEffect(() => {
-    try { setPinned(localStorage.getItem(PIN_KEY) === '1'); } catch { /* storage unavailable */ }
+    try { if (localStorage.getItem(PIN_KEY) === '0') setPinned(false); } catch { /* storage unavailable */ }
   }, []);
 
-  const togglePin = () => {
-    setPinned((p) => {
-      try { localStorage.setItem(PIN_KEY, p ? '0' : '1'); } catch { /* storage unavailable */ }
-      return !p;
-    });
-    setMenu(false);
+  const setPin = (next: boolean) => {
+    setPinned(next);
+    setDrop(false);
+    try { localStorage.setItem(PIN_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
   };
 
   useEffect(() => {
@@ -36,45 +34,45 @@ export function Shell({ children }: { children: ReactNode }) {
       if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !typing)) {
         e.preventDefault();
         cmd.current?.focus();
-      } else if (e.key === 'Escape') setMenu(false);
+      } else if (e.key === 'Escape') setDrop(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const rail = (
+    <>
+      <div className="rail-head">
+        <span>nav</span>
+        <button type="button" className="btn" onClick={() => setPin(!pinned)} aria-pressed={pinned}>
+          {pinned ? 'unpin' : 'pin'}
+        </button>
+      </div>
+      <NavTree pathname={pathname} onNavigate={() => setDrop(false)} />
+    </>
+  );
+
   return (
     <div className={`shell${pinned ? ' has-rail' : ''}`}>
       <header className="top">
-        {pinned ? null : (
-          <button type="button" className="top-btn" aria-expanded={menu} aria-controls="nav-menu" onClick={() => setMenu((m) => !m)}>
-            menu <span aria-hidden>{menu ? '▴' : '▾'}</span>
-          </button>
-        )}
-        <span className="brand">DIGIQUANT</span>
+        <div className="brand">
+          {pinned ? null : (
+            <button type="button" className="btn" aria-expanded={drop} aria-controls="nav-drop" onClick={() => setDrop((d) => !d)}>
+              menu
+            </button>
+          )}
+          <span className="wm">DIGIQUANT</span>
+        </div>
         <CommandLine ref={cmd} pathname={pathname} />
-        <span className="top-spacer" />
-        <button type="button" className={`top-btn${pinned ? ' on' : ''}`} aria-pressed={pinned} onClick={togglePin} title="Keep the navigation on the page">
-          {pinned ? 'unpin nav' : 'pin nav'}
-        </button>
       </header>
 
-      {menu && !pinned ? (
-        <>
-          <div className="scrim" onClick={() => setMenu(false)} />
-          <div id="nav-menu" className="drop">
-            <NavTree pathname={pathname} variant="menu" onNavigate={() => setMenu(false)} />
-            <div className="drop-foot mute">
-              <span>/ or ⌘K — go to any page by path</span>
-              <button type="button" className="top-btn" onClick={togglePin}>pin as sidebar</button>
-            </div>
-          </div>
-        </>
-      ) : null}
+      {pinned ? <aside className="rail">{rail}</aside> : null}
 
-      {pinned ? (
-        <aside className="rail">
-          <NavTree pathname={pathname} variant="rail" />
-        </aside>
+      {!pinned && drop ? (
+        <>
+          <div className="scrim" onClick={() => setDrop(false)} />
+          <aside id="nav-drop" className="rail drop">{rail}</aside>
+        </>
       ) : null}
 
       <main className="main">{children}</main>
