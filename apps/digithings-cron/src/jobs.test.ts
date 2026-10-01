@@ -35,7 +35,7 @@ describe("jobsForCron", () => {
 
   it("keeps enabled crons aligned with wrangler triggers", () => {
     const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-    const triggers = wrangler.split("[triggers]")[1] ?? "";
+    const triggers = wrangler.match(/\[triggers\]\s*crons\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
     const configured = [...triggers.matchAll(/^\s*"([^"]+)",?$/gm)].map((match) => match[1]);
     expect([...uniqueEnabledCrons()].sort()).toEqual(configured.sort());
   });
