@@ -95,6 +95,18 @@ export async function dqGet<T>(route: string): Promise<Envelope<T>> {
   return body as Envelope<T>;
 }
 
+/** Write route (PUT/POST/DELETE). Throws with the route and status; never pretends a write succeeded. */
+export async function dqSend<T = unknown>(method: 'PUT' | 'POST' | 'DELETE', route: string, body?: unknown): Promise<T | null> {
+  if (!base()) throw new Error('NEXT_PUBLIC_DQ_API_URL is not set');
+  const res = await fetch(`${base()}${route}`, {
+    method,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${method} ${route} failed (${res.status})`);
+  return res.status === 204 ? null : ((await res.json()) as T);
+}
+
 /** Fail closed to an em dash — never invent a number. */
 export const pct = (v: number | null) => (v === null || !Number.isFinite(v) ? '—' : `${v.toFixed(2)}%`);
 export const px = (v: number | null) => (v === null || !Number.isFinite(v) ? '—' : v.toFixed(2));
