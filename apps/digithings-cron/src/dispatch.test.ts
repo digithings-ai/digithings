@@ -224,6 +224,40 @@ describe("dispatch", () => {
     expect(result.run_id).toBe("run-held");
   });
 
+  it("treats a skipped container run as success", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json(
+          { ok: true, run_id: "run-finished", status: "skipped" },
+          { status: 202 },
+        ),
+    );
+    const job: Job = {
+      id: "house-run-09",
+      cron: "17 9 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-digiquant.yml",
+      ref: "develop",
+      command: "house-run",
+      concurrency: "digiquant-pipeline",
+      timeoutSeconds: 14400,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const result = await dispatch(env, job, job.cron, 42);
+
+    expect(result.ok).toBe(true);
+    expect(result.container_status).toBe("skipped");
+    expect(result.run_id).toBe("run-finished");
+  });
+
   it("requires RUNNER_AUTH_TOKEN and does not call the runner without it", async () => {
     const runnerFetch = vi.fn();
     const job: Job = {
