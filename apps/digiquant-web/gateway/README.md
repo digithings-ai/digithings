@@ -21,6 +21,8 @@ calls to the digiquant MCP server without any secret reaching the browser.
 
 ## Run the local pair (`:3910` + `:8792`)
 
+Chris can run the site and gateway together with two terminals:
+
 Terminal 1, from the repo root:
 
 ```sh
@@ -43,9 +45,12 @@ NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL=http://127.0.0.1:8792
 NEXT_PUBLIC_MARKET_DATA_URL=http://127.0.0.1:8792
 ```
 
-Do not set `NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL` in production or staging. Even if
-it is set accidentally, the browser client refuses to connect from a non-loopback
-page or to a non-loopback URL.
+Do not use either loopback value in production or staging.
+`NEXT_PUBLIC_MARKET_DATA_URL` must keep pointing at the deployed R2-backed market
+worker there; unlike the dedicated gateway client, that existing market-data
+client does not apply a loopback guard. If `NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL` is
+set accidentally, its client still refuses to connect from a non-loopback page
+or to a non-loopback URL.
 
 Env: `DQ_GATEWAY_PORT` (8792), `DQ_GATEWAY_ORIGINS` (comma list, exact match;
 default `http://localhost:3910,http://127.0.0.1:3910`). Port 3005 is not used.
