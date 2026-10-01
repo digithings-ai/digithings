@@ -291,6 +291,7 @@ Installs Prometheus instrumentation on *app* per [ADR-0003](../docs/adr/0003-obs
 
 ```python
 resolve_otel_endpoint() -> str
+resolve_otel_headers() -> dict[str, str]
 inject_trace_context(headers: MutableMapping[str, str]) -> None
 setup_otel_fastapi(app: Any, *, service_name: str, service_version: str | None = None) -> None
 ```
@@ -298,6 +299,11 @@ setup_otel_fastapi(app: Any, *, service_name: str, service_version: str | None =
 Endpoint resolution (#222): prefers `DIGI_OTEL_ENDPOINT`, then the OpenTelemetry
 standard `OTEL_EXPORTER_OTLP_ENDPOINT`. Empty / unset → tracing disabled
 (zero overhead).
+
+Headers resolution (#4927): prefers `DIGI_OTEL_HEADERS`, then the OpenTelemetry
+standard `OTEL_EXPORTER_OTLP_HEADERS`. Comma-separated `key=value` pairs with
+URL-decoded values; empty / unset → `{}` and malformed pairs are skipped.
+`setup_otel_fastapi` passes `headers=` to `OTLPSpanExporter` only when non-empty.
 
 When an endpoint is set, attempts to import OpenTelemetry SDK packages; if they
 are missing (base install without `[otel]`), logs a warning and returns. When
