@@ -949,14 +949,19 @@ html {
 .pixel-word .c { opacity: var(--f); }
 .pixel-word .n { opacity: 0; }
 
+/* Cells build when the mark is live: the hero from first paint, the footer the
+   first time it scrolls into view (FooterWordmark). Until then the footer stays
+   blank, but only where JS can start it (html.no-js is cleared pre-paint) and
+   only when motion is allowed — otherwise the final state shows. */
 @media (prefers-reduced-motion: no-preference) {
-  .pixel-word:not(.pixel-word-footer) .c { animation: pixel-build var(--t) linear var(--d) both; }
-  .pixel-word .g {
+  html:not(.no-js) .pixel-word:not(.is-live) .c { opacity: 0; }
+  .pixel-word.is-live .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word.is-live .g {
     animation:
       pixel-build var(--t) linear var(--d) both,
       pixel-glint var(--gp) step-end var(--g) infinite;
   }
-  .pixel-word .n { animation: pixel-stray var(--t) linear var(--d) both; }
+  .pixel-word.is-live .n { animation: pixel-stray var(--t) linear var(--d) both; }
 }
 
 @keyframes pixel-build {

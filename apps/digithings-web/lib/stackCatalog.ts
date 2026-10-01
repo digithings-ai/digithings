@@ -476,7 +476,7 @@ export function pricePick(
     label: string,
     amount: number,
     recurring: boolean,
-    layer: LayerId,
+    layer: LayerId | "email",
     estimate?: boolean,
     unpriced?: boolean,
   ) => {
