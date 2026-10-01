@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   CardRail,
-  DigiquantMark,
   LOOKBACK_OPTIONS,
   MultiTimeSeries,
   SegToggle,
@@ -29,6 +28,7 @@ import {
 } from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
 import { windowAlpha, windowBeta } from "@/lib/bookMath";
+import { QuantWordmark } from "./QuantWordmark";
 
 /**
  * The digiquant band (v15 point 9, #4429; reworked across rounds 3–5).
@@ -80,10 +80,12 @@ import { windowAlpha, windowBeta } from "@/lib/bookMath";
  * would be if we place the DigiQuant dashboard logo behind this DigiQuant section
  * and have it animated. A bit faded and animated."
  *
- * The band is full-bleed — the section in LandingPage carries no horizontal
- * padding, so this component paints digiquant's own livery and tinted background
- * (`accent-digiquant` + `.quant-band`) edge to edge while the content stays on
- * the page's frame.
+ * Brand (#4900, digiquant.io's solid-black craft). The band wears no livery of
+ * its own: no teal accent scope, no tinted gradient, no animated dashboard-mark
+ * watermark. It sits on the page's own canvas between hairline rails like every
+ * other band, in the page's Inter + JetBrains Mono, with ink as the only accent
+ * (the chart's "accent" tone resolves to ink here). The one brand element is the
+ * digiquant pixel wordmark from digiquant.io, which is also the link to it.
  *
  * HONESTY (binding). With the market tape gone, EVERY figure on this band is
  * synthetic and badged as such — the performance pair, the three window reads
@@ -606,18 +608,7 @@ export function QuantSection({ className }: { className?: string }) {
     live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
 
   return (
-    <div className={`accent-digiquant quant-band relative overflow-hidden ${className ?? ""}`}>
-      {/* The dashboard mark, behind everything, faded and animated — the
-          section's branding without a bar the owner has to maintain. */}
-      <span
-        aria-hidden="true"
-        className="quant-mark pointer-events-none absolute -top-[6%] end-[-4%] w-[58%] max-w-[46rem] select-none text-accent"
-      >
-        <DigiquantMark size={720} className="h-auto w-full" />
-      </span>
-
-      {/* Full width is the band's, not the content's: the background bleeds to
-          the viewport edges and the frame below keeps the page grid. */}
+    <div className={`relative ${className ?? ""}`}>
       <div className="relative px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           {/* Title on the left, the strategy library rail beside it. The rail
@@ -627,31 +618,30 @@ export function QuantSection({ className }: { className?: string }) {
               from that min-content and push the page wider than the viewport.
               `minmax(0,1fr)` + `min-w-0` pin the track to the container. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-[2rem] min-[980px]:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] min-[980px]:gap-[2.4rem]">
-            {/* Left: the product name as a link to digiquant.io, with the claim
-                below it. Round 16 (owner): "top of the digiquant.io seciton
-                should have a hyperlink to the website that serves as the section
-                title too" and then "I want the text digiquant.io visible that was
-                suposed to be the hyperlink" — so the visible title is the domain,
-                linking to the product site, and the slogan sits under it. The two
-                CTA buttons were removed in the same pass ("remove the open
-                dashboard and tearsheet buttons"). */}
+            {/* Left: the digiquant pixel wordmark and its domain as one link to
+                digiquant.io, with the claim below. The wordmark is the same mark
+                digiquant.io draws, in ink; the visible domain stays under it
+                because the owner asked for the text to be visible. */}
             <div className="flex min-w-0 flex-col justify-center gap-[1rem]">
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
                   the document outline skipping a level between `#open-source`
                   and `#pricing`. The band's heading is its product name; the
                   slogan under it carries the claim. */}
-              <h2 className="m-0 font-display text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
+              <h2 className="m-0">
                 <a
                   href={DIGIQUANT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-ink underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors hover:decoration-accent focus-visible:decoration-accent"
+                  className="group flex w-full max-w-[22rem] flex-col gap-[0.7rem] text-ink no-underline"
                 >
-                  digiquant.io
+                  <QuantWordmark className="block h-auto w-full" />
+                  <span className="font-mono text-[0.78rem] tracking-[0.04em] text-ink-mute underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors group-hover:text-ink group-focus-visible:text-ink">
+                    digiquant.io
+                  </span>
                 </a>
               </h2>
               <p className="m-0 max-w-[var(--measure-prose)] text-[0.92rem] leading-[1.6] text-ink-soft">
-                A hedge fund in a glass box you own.
+                A quant research desk in a glass box you own.
               </p>
             </div>
 
