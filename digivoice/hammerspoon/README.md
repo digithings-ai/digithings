@@ -18,7 +18,7 @@ Do not invent other default binds in this sample.
 
 Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
-The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows icon-only copy + × below the banner (stacked when mini, right-aligned row when wider); × hides instantly and never discards. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. Center pins keep the center on expand, edge pins grow outward. Text types in fast; peek→full continues the caret while collapse/close hides instantly. Full caps near half the screen height and wheel-scrolls with no scrollbar. Chrome follows the system appearance (digichat light/dark); RYG status colors stay. The banner is hidden by default: `digivoice banner show [--text T]` (or `hide` / `toggle`) spawns a preview with no dictation; Esc on a preview only hides it.
+The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows icon-only copy + close below the banner (stacked when mini, right-aligned row when wider), using the digichat copy and close marks; close hides instantly and never discards. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. Center pins keep the center on expand, edge pins grow outward. Dictated text appears at once. The box hugs the text with equal padding, and the first line sits on the status-icon row. Full caps near half the screen height and wheel-scrolls with no scrollbar. Chrome follows the system appearance (remock dark ground, ivory light ground); RYG status colors stay. Status is the grid only — no discarded/empty/error sentence beside it. The banner is hidden by default: `digivoice banner show [--text T]` (or `hide` / `toggle`) spawns a preview with no dictation; Esc on a preview only hides it.
 
 | Phase | Animation (digichat 5x5 square grid) | Text shown |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ The banner is **display only** (a click cycles density mini → peek → full; i
 | pasting | teal downward sweep | the text being pasted |
 | speaking | teal equalizer | the selected text |
 | loading | teal grid twinkle | none |
-| done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final text, "take discarded", "no speech detected", or the error line |
+| done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final transcript, or nothing (the grid is the status) |
 
 No titles, no hints, no settings UI on the banner — state reads from the grid alone.
 Density comes from settings: **mini** is grid only, **peek** (default) is a short

@@ -6,8 +6,9 @@
 ---   * density (mini/peek/full), text wrapping/clipping, box size, screen position
 ---   * banner settings from settings.json
 ---   * theme chrome (digichat light/dark flips; RYG status colors stay)
----   * drag/snap anchors, hover controls layout, typewriter slicing, reanchoring
+---   * drag/snap anchors, hover controls layout, reanchoring
 --- init.lua only draws what this module computes. No chrome: no titles, no hints.
+--- Dictated text is shown at once. Status labels stay off the banner; the grid is the state.
 
 local M = {}
 
@@ -356,7 +357,6 @@ M.FONT_SIZE = 11
 M.LINE_HEIGHT = 18
 M.PAD = 10
 M.ICON = 18
-M.HEAD_HEIGHT = 18
 -- Max caps; the box hugs content up to these widths (no min-width gutter).
 M.WIDTH_COLLAPSED = 380
 M.WIDTH_EXPANDED = 580
@@ -366,8 +366,6 @@ M.FULL_MAX_CH = 47
 M.LINES_COLLAPSED = 3
 M.LINES_EXPANDED = 14
 M.MARGIN = 16
--- v5.8 typewriter: 9ms/char, faster than v5.7 (14ms).
-M.TW_SEC = 0.009
 M.SNAP_PX = 36
 M.CTRL_SIZE = 18
 M.CTRL_GAP = 4
@@ -375,17 +373,22 @@ M.CTRL_GAP = 4
 M.CHAR_WIDTH = M.FONT_SIZE * 0.6
 
 --- DigiChat light/dark flips. Status (RYG) colors stay; only chrome flips.
---- Mock: dark pill #12181c / text #f2f5f6, light pill #ffffff / text #1a2228.
+--- Dark ground is the digiquant remock canvas (docs/dashboard-mocks/canvas/mock.css
+--- on the remock branch): --bg #000, --ink #ededed, --hair white at 0.16.
+--- That sheet is dark-only. Light ground is the paired ivory paper for
+--- digithings.ai / digiquant in packages/design/spec/index.html
+--- (--paper #F9F8F6, --paper-ink #141413, --paper-hair #E8E6DC).
+--- Neither pair is the live tokens.css canvas (#0A0E0C / #FBFBF9).
 M.CHROME = {
   dark = {
-    bg = { red = 0x12 / 255, green = 0x18 / 255, blue = 0x1C / 255, alpha = 0.94 },
-    text = { red = 0xF2 / 255, green = 0xF5 / 255, blue = 0xF6 / 255, alpha = 1 },
-    border = { red = 0x2A / 255, green = 0x35 / 255, blue = 0x3C / 255, alpha = 1 },
+    bg = { red = 0, green = 0, blue = 0, alpha = 1 },
+    text = { red = 0xED / 255, green = 0xED / 255, blue = 0xED / 255, alpha = 1 },
+    border = { red = 1, green = 1, blue = 1, alpha = 0.16 },
   },
   light = {
-    bg = { red = 1, green = 1, blue = 1, alpha = 0.96 },
-    text = { red = 0x1A / 255, green = 0x22 / 255, blue = 0x28 / 255, alpha = 1 },
-    border = { red = 0xC5 / 255, green = 0xCE / 255, blue = 0xD3 / 255, alpha = 1 },
+    bg = { red = 0xF9 / 255, green = 0xF8 / 255, blue = 0xF6 / 255, alpha = 1 },
+    text = { red = 0x14 / 255, green = 0x14 / 255, blue = 0x13 / 255, alpha = 1 },
+    border = { red = 0xE8 / 255, green = 0xE6 / 255, blue = 0xDC / 255, alpha = 1 },
   },
 }
 
@@ -396,14 +399,9 @@ function M.theme_colors(theme)
   return M.CHROME.dark
 end
 
+--- Transcript only. Cancelled, empty, and error stay on the grid; no status
+--- sentence sits beside the icon.
 function M.body_for(view)
-  if view.state == "error" then
-    return view.detail ~= "" and view.detail or "see the Hammerspoon console"
-  elseif view.state == "cancelled" or view.state == "cancelling" then
-    return "take discarded; nothing pasted or saved"
-  elseif view.state == "empty" then
-    return "no speech detected; nothing pasted"
-  end
   return view.text or ""
 end
 
@@ -482,19 +480,18 @@ function M.pad_lines(lines, width)
 end
 
 --- Full density caps near half the viewport height (mock: max-height 50vh).
+--- The budget is the box inside equal padding — no leftover header row.
 function M.full_max_lines(screen_h)
   if type(screen_h) ~= "number" or screen_h <= 0 then
     return M.LINES_EXPANDED
   end
-  return math.max(1, math.floor((screen_h * 0.5 - M.PAD - M.HEAD_HEIGHT - M.PAD) / M.LINE_HEIGHT))
+  return math.max(1, math.floor((screen_h * 0.5 - M.PAD * 2) / M.LINE_HEIGHT))
 end
 
---- Typewriter slice: reveal `text` up to `caret` chars. The caller keeps the
---- caret across peek→full so expansion continues instead of restarting.
-function M.tw_slice(text, caret)
-  text = tostring(text or "")
-  caret = math.max(0, math.min(#text, math.floor(caret or 0)))
-  return { shown = text:sub(1, caret), done = caret >= #text }
+--- Vertical origin of the transcript so the first line's em-box centers on
+--- the status-icon row. A one-line banner then reads as centered.
+function M.text_origin_y()
+  return M.PAD + (M.ICON - M.FONT_SIZE) / 2
 end
 
 --- Box geometry for a view at a density. No chrome: no title line, no hints —
@@ -502,8 +499,8 @@ end
 --- Peek is a short glimpse; full widens and shows the whole transcript.
 --- The box hugs content (no min-width gutter): width derives from the longest
 --- wrapped line, capped at the density max. The width locks from the full
---- wrapped text up front, so the typewriter reveals within a stable width and
---- peek→full never re-wraps what is already shown. Empty text hugs the grid.
+--- wrapped text up front, so peek→full never re-wraps what is already shown.
+--- Empty text hugs the grid. `raw` is the full transcript for copy.
 function M.layout(view, kind, density, opts)
   kind = kind -- kind no longer changes geometry; kept for call shape.
   opts = opts or {}
@@ -511,12 +508,14 @@ function M.layout(view, kind, density, opts)
     density = "mini"
   end
   local text_x = M.PAD + M.ICON + 10
+  local text_y = M.text_origin_y()
   local mini_side = M.PAD * 2 + M.ICON
-  if density == "mini" then
+  local function grid_only()
     return {
       w = mini_side,
       h = mini_side,
       text_x = text_x,
+      text_y = text_y,
       text_w = 0,
       cols = 0,
       lines = {},
@@ -525,23 +524,15 @@ function M.layout(view, kind, density, opts)
       total = 0,
       longest = 0,
       all = {},
+      raw = "",
     }
+  end
+  if density == "mini" then
+    return grid_only()
   end
   local body = M.body_for(view)
   if body == "" then
-    return {
-      w = mini_side,
-      h = mini_side,
-      text_x = text_x,
-      text_w = 0,
-      cols = 0,
-      lines = {},
-      body = "",
-      clipped = false,
-      total = 0,
-      longest = 0,
-      all = {},
-    }
+    return grid_only()
   end
   local max_width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
   local max_ch = density == "full" and M.FULL_MAX_CH or M.PEEK_MAX_CH
@@ -572,7 +563,9 @@ function M.layout(view, kind, density, opts)
     lines = M.pad_lines(lines, longest)
   end
   local width = text_x + longest * M.CHAR_WIDTH + M.PAD
-  local height = math.max(mini_side, M.PAD + M.HEAD_HEIGHT + #lines * M.LINE_HEIGHT + M.PAD)
+  -- Text sits beside the grid. The box is the taller of the grid and the
+  -- lines, plus the same PAD on every side. No header row under the text.
+  local height = math.max(mini_side, M.PAD + #lines * M.LINE_HEIGHT + M.PAD)
   if type(opts.screen_h) == "number" and opts.screen_h > 0 and density == "full" then
     height = math.min(height, math.floor(opts.screen_h * 0.5))
   end
@@ -580,6 +573,7 @@ function M.layout(view, kind, density, opts)
     w = width,
     h = height,
     text_x = text_x,
+    text_y = text_y,
     text_w = width - text_x - M.PAD,
     cols = cols,
     lines = lines,
@@ -588,6 +582,7 @@ function M.layout(view, kind, density, opts)
     total = #all,
     longest = longest,
     all = M.pad_lines(all, longest),
+    raw = body,
   }
 end
 

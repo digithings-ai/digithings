@@ -12,9 +12,10 @@
 --- launch toast. Customize and Quit live in the digivoice TUI (Quit tears HS down;
 --- closing the Terminal alone leaves Hammerspoon running).
 --- Hover shows icon-only copy + close below the banner (stacked when mini,
---- right-aligned row when wider). Drag moves it freely; release near one of the
---- 9 anchors snaps and persists the position. Text types in fast (9ms/char);
---- peek→full continues the caret, collapse/close hides instantly (no reverse).
+--- right-aligned row when wider). The glyphs are the digichat lucide copy and
+--- x marks. Drag moves it freely; release near one of the 9 anchors snaps and
+--- persists the position. Dictated text appears at once (no typewriter).
+--- Close hides instantly.
 --- Full caps near half the screen height and wheel-scrolls with no scrollbar.
 --- The banner is hidden by default: takes spawn it, or spawn a preview without
 --- any dictation via `digivoice banner show` (CLI) / M.spawn_preview() (console).
@@ -106,13 +107,11 @@ local FLAG_FILE = DATA_DIR .. "/banner.show"
 -- Double-tap window for Left Option speak (seconds).
 local DOUBLE_TAP_SEC = 0.35
 local FRAME_SEC = 1 / 15
-local TW_STEP = 1
 
 local session = nil -- the one banner session on screen (dict, speak, or preview)
 local canvas = nil
 local frame_timer = nil
 local hide_timer = nil
-local tw_timer = nil
 local theme_timer = nil
 local drag_timer = nil
 local hover_timer = nil
@@ -123,7 +122,6 @@ local hover_seq = 0
 
 -- Forward declarations: defined below their first use site.
 local current_view
-local ensure_tw
 local ensure_scroll_tap
 local ensure_esc_tap
 
@@ -199,10 +197,6 @@ local function cancel_timer(timer)
   return nil
 end
 
-local function stop_tw()
-  tw_timer = cancel_timer(tw_timer)
-end
-
 local function stop_scroll_tap()
   if scroll_tap then
     scroll_tap:stop()
@@ -220,30 +214,11 @@ local function cell_color(state, i, t, animate)
   }
 end
 
---- Typewriter target: full scrolls over all lines; peek/mini reveal the glimpse.
-local function tw_target(s, box)
-  if s.density == "full" and box.clipped and box.all and #box.all > 0 then
-    return table.concat(box.all, "\n")
-  end
-  return box.body
-end
-
-local function split_lines(text)
-  local out = {}
-  for line in (tostring(text or "") .. "\n"):gmatch("(.-)\r?\n") do
-    out[#out + 1] = line
-  end
-  if #out > 0 and out[#out] == "" then
-    out[#out] = nil
-  end
-  return out
-end
-
---- Currently visible body text: typewriter prefix, then the scroll window.
+--- Visible body: the transcript at once. Full density that overflows shows
+--- the scroll window over the already-wrapped lines.
 local function visible_text(s, box)
-  local revealed = core.tw_slice(s.tw_target or box.body, s.caret or 0).shown
-  if s.density == "full" and box.clipped then
-    local rows = split_lines(revealed)
+  if s.density == "full" and box.clipped and box.all and #box.all > 0 then
+    local rows = box.all
     local size = math.max(1, #box.lines)
     local max_top = math.max(0, #rows - size)
     local top = math.min(s.scroll or 0, max_top)
@@ -254,7 +229,7 @@ local function visible_text(s, box)
     end
     return table.concat(win, "\n")
   end
-  return revealed
+  return box.body or ""
 end
 
 local function scroll_max(s, box)
@@ -264,25 +239,45 @@ local function scroll_max(s, box)
   return 0
 end
 
+--- DigiChat copy mark: lucide `copy` as drawn by CopyIcon in
+--- packages/ui/src/components/chat/stock/thread.aui.tsx (lucide-react 0.577).
+--- Two 14px rounded sheets on a 24px grid: back at (2,2), front at (8,8).
 local function icon_copy(x, y, color, id)
-  -- Two overlapping outline squares (pure vector, no font glyph needed).
-  local s = core.CTRL_SIZE
-  return {
-    { type = "rectangle", action = "stroke", strokeColor = color, strokeWidth = 1.2,
-      frame = { x = x + 4, y = y + 5, w = s - 9, h = s - 9 }, id = id },
-    { type = "rectangle", action = "stroke", strokeColor = color, strokeWidth = 1.2,
-      frame = { x = x + 6, y = y + 3, w = s - 9, h = s - 9 }, id = id },
-  }
+  local k = core.CTRL_SIZE / 24
+  local radius = 2 * k
+  local function sheet(px, py)
+    return {
+      type = "rectangle",
+      action = "stroke",
+      strokeColor = color,
+      strokeWidth = 2 * k,
+      roundedRectRadii = { xRadius = radius, yRadius = radius },
+      frame = { x = x + px * k, y = y + py * k, w = 14 * k, h = 14 * k },
+      id = id,
+    }
+  end
+  return { sheet(2, 2), sheet(8, 8) }
 end
 
+--- DigiChat close mark: lucide `x` (XIcon), stroke 2, round caps.
+--- Paths M18 6 L6 18 and M6 6 L18 18 on the same 24px grid.
 local function icon_close(x, y, color, id)
-  local s = core.CTRL_SIZE
-  return {
-    { type = "segments", action = "stroke", strokeColor = color, strokeWidth = 1.2,
-      coordinates = { { x = x + 5, y = y + 5 }, { x = x + s - 5, y = y + s - 5 } }, id = id },
-    { type = "segments", action = "stroke", strokeColor = color, strokeWidth = 1.2,
-      coordinates = { { x = x + s - 5, y = y + 5 }, { x = x + 5, y = y + s - 5 } }, id = id },
-  }
+  local k = core.CTRL_SIZE / 24
+  local function pt(px, py)
+    return { x = x + px * k, y = y + py * k }
+  end
+  local function seg(a, b)
+    return {
+      type = "segments",
+      action = "stroke",
+      strokeColor = color,
+      strokeWidth = 2 * k,
+      strokeCap = "round",
+      coordinates = { pt(a[1], a[2]), pt(b[1], b[2]) },
+      id = id,
+    }
+  end
+  return { seg({ 18, 6 }, { 6, 18 }), seg({ 6, 6 }, { 18, 18 }) }
 end
 
 local function build_canvas(s, view, box)
@@ -339,9 +334,9 @@ local function build_canvas(s, view, box)
       id = "body",
       frame = {
         x = box.text_x,
-        y = core.PAD,
+        y = box.text_y or core.text_origin_y(),
         w = box.text_w,
-        h = math.max(0, box.h - core.PAD * 2),
+        h = math.max(0, box.h - (box.text_y or core.text_origin_y()) - core.PAD),
       },
     },
   })
@@ -443,18 +438,11 @@ function rebuild(s)
   local view = current_view(s)
   local box = core.layout(view, s.kind, s.density, { screen_h = screen:frame().h })
   s.box = box
-  s.tw_target = tw_target(s, box)
-  if not s.config.banner_animations then
-    s.caret = #s.tw_target
-  else
-    s.caret = math.min(s.caret or 0, #s.tw_target)
-  end
   local prev = { x = s.origin.x, y = s.origin.y, w = s.size.w, h = s.size.h }
   local extra = s.hover and core.controls_height(s.density) or 0
   local next = core.reanchor(prev, { w = box.w, h = box.h + extra }, s.anchor)
   s.origin = next
   build_canvas(s, view, box)
-  ensure_tw(s)
   ensure_scroll_tap(s, box)
 end
 
@@ -491,16 +479,13 @@ local function render(s)
   local box = core.layout(view, s.kind, s.density, { screen_h = frame.h })
   s.box = box
   local theme = detect_theme()
-  local target = tw_target(s, box)
-  if target ~= s.tw_target then
-    -- New text extends the target; the caret continues (no restart).
-    s.tw_target = target
-    s.caret = math.min(s.caret or 0, #target)
-  end
-  if not s.config.banner_animations then
-    s.caret = #target
-  end
-  local signature = table.concat({ view.state, target, s.density, theme, tostring(s.hover) }, "\0")
+  local signature = table.concat({
+    view.state,
+    box.raw or box.body or "",
+    s.density,
+    theme,
+    tostring(s.hover),
+  }, "\0")
   if signature ~= s.signature or not canvas then
     s.signature = signature
     s.theme = theme
@@ -523,7 +508,6 @@ local function render(s)
       )
     end
     build_canvas(s, view, box)
-    ensure_tw(s)
   else
     paint_cells(s, view)
     if canvas then
@@ -533,39 +517,11 @@ local function render(s)
   ensure_scroll_tap(s, box)
 end
 
---------------------------------------------------------------------------------
--- typewriter: fast reveal, peek→full continues, collapse/close is instant
---------------------------------------------------------------------------------
-
-ensure_tw = function(s)
-  stop_tw()
-  if not s.config.banner_animations then
-    return
-  end
-  if (s.caret or 0) >= #(s.tw_target or "") then
-    return
-  end
-  tw_timer = hs.timer.doEvery(core.TW_SEC, function()
-    if session ~= s or not canvas then
-      stop_tw()
-      return
-    end
-    s.caret = math.min(#(s.tw_target or ""), (s.caret or 0) + TW_STEP)
-    canvas[BODY_INDEX].text = visible_text(s, s.box)
-    if s.caret >= #(s.tw_target or "") then
-      stop_tw()
-    end
-  end)
-end
-
---- Collapse to a smaller density: instant clip, no reverse typewriter.
+--- Collapse to a smaller density. The transcript is already fully shown.
 local function collapse_to(s, density)
-  stop_tw()
   s.density = density
   s.hover = false
   s.scroll = 0
-  s.tw_target = nil
-  s.caret = 1e9 -- reveal everything instantly; tw_slice clamps.
   s.signature = nil
   render(s)
 end
@@ -576,12 +532,10 @@ local function cycle_density(s)
   if (order[next] or 0) < (order[s.density] or 0) then
     collapse_to(s, next)
   else
-    -- Expand: keep the caret so peek→full continues mid-stream.
     s.density = next
     s.scroll = 0
     s.signature = nil
     render(s)
-    ensure_tw(s)
   end
 end
 
@@ -672,10 +626,9 @@ local function copy_body(text)
   return true
 end
 
---- Close = instant hide (no reverse typewriter). Takes keep running silently;
---- previews end. Esc still discards a take; close never does.
+--- Close hides at once. Takes keep running silently; previews end.
+--- Esc still discards a take; close never does.
 local function hide_banner(s)
-  stop_tw()
   stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
   hover_timer = cancel_timer(hover_timer)
@@ -716,7 +669,7 @@ function finish_click(s, id)
     id = hit_test(s)
   end
   if id == "copy" then
-    copy_body(s.tw_target or (s.box and s.box.body) or "")
+    copy_body((s.box and (s.box.raw or s.box.body)) or "")
   elseif id == "close" then
     hide_banner(s)
   else
@@ -785,7 +738,6 @@ local function end_session(s)
   end
   frame_timer = cancel_timer(frame_timer)
   hide_timer = cancel_timer(hide_timer)
-  stop_tw()
   stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
   hover_timer = cancel_timer(hover_timer)
@@ -813,11 +765,10 @@ local function begin_session(kind)
     origin = nil,
     anchor = nil,
     box = nil,
-    caret = 0,
-    tw_target = "",
     scroll = 0,
     hover = false,
     hidden = false,
+    standby = false,
     preview_text = "",
   }
   session = s
@@ -917,10 +868,8 @@ local function poll_flag()
       M.hide_preview()
     elseif type(flag.text) == "string" and flag.text ~= session.preview_text then
       session.preview_text = flag.text
-      session.caret = 0
       session.signature = nil
       render(session)
-      ensure_tw(session)
     end
     return
   end
@@ -1032,8 +981,9 @@ end
 
 -- Speaks the current selection only (digivoice speak --selection).
 -- Fails soft: the banner shows why (e.g. nothing selected). No clipboard/history fallback.
+-- A standby banner (home launch, no task) is not a take and must not block this.
 function M.speak_selection()
-  if session and session.kind == "dict" then
+  if session and session.kind == "dict" and not session.standby then
     return
   end
   local s = begin_session("speak")
@@ -1099,6 +1049,33 @@ local tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e
   return false
 end)
 
+--- True when the banner canvas is on screen. Home launch calls `M.ensure_banner`.
+function M.banner_visible()
+  return canvas ~= nil
+end
+
+function M.ensure_banner()
+  local config = core.parse_settings(read_json(SETTINGS_FILE))
+  if not config.live_banner then
+    return "disabled"
+  end
+  if canvas ~= nil then
+    return "visible"
+  end
+  if session and session.task and session.task.isRunning and session.task:isRunning() then
+    start_frames(session)
+    return canvas ~= nil and "shown" or "hidden"
+  end
+  local s = begin_session("dict")
+  s.local_state = "loading"
+  s.standby = true
+  start_frames(s)
+  if canvas ~= nil then
+    return "shown"
+  end
+  return "hidden"
+end
+
 function M.start()
   tap:start()
   -- Poll the spawn flag so `digivoice banner show` reveals a preview. Hidden
@@ -1115,7 +1092,6 @@ end
 function M.stop()
   tap:stop()
   idle_timer = cancel_timer(idle_timer)
-  stop_tw()
   stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
   hover_timer = cancel_timer(hover_timer)
