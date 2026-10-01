@@ -36,7 +36,9 @@ _EXAMPLE_COEFFS = (
 )
 
 
-def _daily_ohlcv(start: date, days: int, *, close0: float = 10_000.0) -> pl.DataFrame:
+def _daily_ohlcv(
+    start: date, days: int, *, close0: float = 10_000.0, symbol: str = "BTC-USD"
+) -> pl.DataFrame:
     dates = [start + timedelta(days=i) for i in range(days)]
     closes = [close0 * (1.001**i) for i in range(days)]
     return pl.DataFrame(
@@ -47,7 +49,7 @@ def _daily_ohlcv(start: date, days: int, *, close0: float = 10_000.0) -> pl.Data
             "low": [c * 0.99 for c in closes],
             "close": closes,
             "volume": [1.0] * days,
-            "symbol": ["BTC-USD"] * days,
+            "symbol": [symbol] * days,
         }
     )
 
@@ -275,6 +277,105 @@ def test_run_and_write_windows_engine_bars_to_trade_start(
     assert str(captured["min"])[:10] >= "2018-01-01"
     payload = json.loads((output / "btc_sdca.json").read_text())
     assert payload["period_start"] >= "2018-01-01"
+
+
+def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gold live-path plumbing (#4804): entry-driven dispatch, no live fit.
+
+    Canned ``gold_sdca``-shaped run through ``run_and_write`` with the rails
+    seam stubbed (assert dispatch *name*, not fit values) and only a UUP
+    sibling staged: uup must survive the drop-guard while the unstaged m2 leg
+    is zeroed, and provenance must name uup + the generic risk model.
+    """
+    from types import SimpleNamespace
+
+    import digiquant.strategies.sdca.providers as providers_mod
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2020, 1, 1), 300
+    _daily_ohlcv(start, days, close0=2500.0, symbol="GLD-USD").write_csv(cache / "GLD-USD.csv")
+    uup_dates = [start + timedelta(days=i) for i in range(days)]
+    pl.DataFrame({"date": uup_dates, "value": [28.0 * (1.0005**i) for i in range(days)]}).write_csv(
+        cache / "UUP.csv"
+    )
+    output = tmp_path / "out"
+
+    resolved_names: list[str] = []
+
+    class _StubRiskModel:
+        """Canned corridor rails; provenance shaped like a real fit."""
+
+        def __init__(self) -> None:
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        resolved_names.append(name)
+        return _StubRiskModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    captured: dict[str, object] = {}
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        assert strategy == "gold_sdca"
+        assert symbol == "GLD-USD"
+        assert calibration is not None
+        assert "risk_path" in calibration
+        assert Path(calibration["risk_path"]).exists()
+        captured["indicator_weights"] = calibration["indicator_weights"]
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    settings = gts.load_settings()
+    entry = gts.run_and_write(
+        "gold_sdca",
+        "GLD-USD",
+        settings,
+        cache,
+        output,
+        cal_source="file",
+        signal_delay_days=0,
+    )
+    assert entry is not None
+    assert entry["kind"] == "dca"
+    # Rails dispatch reads the entry's risk_model (no live fit in tests).
+    assert resolved_names == ["generic_valuation"]
+    # Drop-guard: staged uup survives, unstaged m2 is zeroed.
+    published = settings["strategies"]["gold_sdca"]["sdca"]["indicator_weights"]
+    assert published["uup"] == 0.5
+    kept = captured["indicator_weights"]
+    assert isinstance(kept, dict)
+    assert kept.get("uup") == 0.5
+    assert kept.get("m2") == 0.0
+    payload = json.loads((output / "gold_sdca.json").read_text())
+    notes = " ".join(payload["notes"])
+    assert "uup:0.5" in notes
+    assert "risk_model=generic_valuation" in notes
+    assert "Preset gold_optimized" in notes
+    assert "Coefficients" in notes
+    assert payload["dca"] is not None
+    assert payload["kind"] == "dca"
 
 
 @requires_nautilus
