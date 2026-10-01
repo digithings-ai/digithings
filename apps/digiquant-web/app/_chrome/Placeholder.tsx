@@ -8,6 +8,7 @@ import { Badge } from "@digithings/ui/ui";
 export function Placeholder({
   title,
   note,
+  status,
   bodyClassName = "min-h-[14rem]",
   className = "",
   children,
@@ -15,6 +16,8 @@ export function Placeholder({
   title: string;
   /** What this block will eventually show. Rendered as the design note. */
   note: string;
+  /** Honest status of the thing the slot stands for, shown beside the placeholder chip. */
+  status?: string;
   bodyClassName?: string;
   className?: string;
   children?: ReactNode;
@@ -23,9 +26,12 @@ export function Placeholder({
     <figure role="group" aria-label={`${title} (placeholder)`} className={`m-0 flex min-w-0 flex-col border border-dashed border-hair ${className}`}>
       <div className="flex items-center justify-between gap-3 border-b border-dashed border-hair px-3 py-2 font-mono text-[0.68rem] text-ink-mute">
         <span className="truncate">{title}</span>
-        <Badge variant="outline" className="shrink-0 border-dashed text-[0.62rem] text-ink-mute">
-          placeholder
-        </Badge>
+        <span className="flex shrink-0 items-center gap-2">
+          {status ? <Badge variant="neutral">{status}</Badge> : null}
+          <Badge variant="outline" className="border-dashed text-[0.62rem] text-ink-mute">
+            placeholder
+          </Badge>
+        </span>
       </div>
       <div aria-hidden="true" className={`flex-1 p-3 ${bodyClassName}`}>
         {children}
