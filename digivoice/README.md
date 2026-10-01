@@ -58,7 +58,7 @@ digivoice dict --hold
 digivoice dict --toggle --no-paste
 digivoice speak "hello from digivoice"
 digivoice speak --clipboard
-digivoice speak --clipboard-or-history
+digivoice speak --selection
 digivoice history --last 20
 digivoice history --grep invoice
 ```
@@ -90,17 +90,24 @@ stderr carries the recording length, the model used, the paste result, and the h
 ```bash
 digivoice speak "ship the release notes"
 digivoice speak --clipboard
-digivoice speak --clipboard-or-history   # hotkey path: clipboard, else last history
+digivoice speak --selection              # hotkey path: selection only
 ```
 
 Needs `piper` and a voice file (`DIGIVOICE_PIPER_VOICE` or `*.onnx` under models) plus `afplay` / `aplay` / `ffplay`. stdout is the spoken text; history gets `kind:speak`.
+
+`--selection` is the Hammerspoon speak hotkey path: speak the current selection
+only (on macOS, Cmd+C via osascript counts only when the clipboard changes). Empty
+selection fails soft — no clipboard and no `kind:dict` history fallback. For
+OpenCode / Claude / Cursor, select the reply text then double-tap Left Option.
+`--clipboard-or-history` still reads the clipboard only (no history fallback) for
+CLI callers; it is not the hotkey command.
 
 ### Hotkeys (sample)
 
 See [`hammerspoon/README.md`](hammerspoon/README.md):
 
 - **Right Option** → dict toggle (stop-file)
-- **Ctrl+Shift+Option** → speak `--clipboard-or-history`
+- **Double-tap Left Option** → speak `--selection` (fail soft / notify if nothing selected; no clipboard or dict history)
 
 Mic + Accessibility TCC steps are documented there.
 

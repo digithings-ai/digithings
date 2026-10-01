@@ -38,7 +38,7 @@ Before editing `digivoice/`:
 - `dict` and `speak` keep stdout to the text alone so they can be piped. Progress goes to stderr.
 - Public results are Pydantic v2 models in `models.py`. Do not return bare dicts from `doctor`, `run`, or the pipeline stages.
 - Tests inject `FakeProbe` and `FakeRunner` from `tests/dvo/fakes.py`. No test may need a real microphone, sound card, model, or clipboard.
-- Hotkeys belong in `digivoice/hammerspoon/` (sample adapter), not in the installable Python package. Locked sample binds: Right Option = dict toggle; Ctrl+Shift+Option = speak/clipboard-or-history. Not hold-to-talk; not Left Option; not Ctrl+Shift+S.
+- Hotkeys belong in `digivoice/hammerspoon/` (sample adapter), not in the installable Python package. Locked sample binds: Right Option = dict toggle; double-tap Left Option = speak `--selection` (soft-fail if empty; no clipboard/history fallback). Not hold-to-talk; not Ctrl+Shift+Option; not Ctrl+Shift+S.
 - Toggle early-stop uses a stop-file (default `{data_dir}/dict.stop`) and/or SIGINT/SIGTERM — not only the length cap.
 
 ## Tests

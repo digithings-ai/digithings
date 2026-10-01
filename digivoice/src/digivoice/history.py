@@ -71,8 +71,24 @@ def select(
     return picked
 
 
+def last_dict_text(path: str | Path) -> str | None:
+    """Most recent kind:dict entry with non-empty text, if any."""
+    reading = read_history(path)
+    for entry in reversed(reading.entries):
+        if entry.kind != "dict":
+            continue
+        text = entry.text.strip()
+        if text:
+            return text
+    return None
+
+
 def last_speakable_text(path: str | Path) -> str | None:
-    """Most recent history entry with non-empty text (dict or speak)."""
+    """Most recent history entry with non-empty text (dict or speak).
+
+    Kept for callers that want any text. Hotkey speak uses --selection only and
+    must not fall back to history (especially not kind:dict).
+    """
     reading = read_history(path)
     for entry in reversed(reading.entries):
         text = entry.text.strip()
