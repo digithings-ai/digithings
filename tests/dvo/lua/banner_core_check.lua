@@ -166,6 +166,7 @@ eq(core.linger_seconds("cancelled", "peek"), 1.2, "cancelled clears fast")
 local hug = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "peek")
 check(hug.w < core.WIDTH_COLLAPSED, "peek hugs short text")
 check(hug.w > core.PAD * 2 + core.ICON, "peek wider than grid-only")
+eq(hug.h, core.PAD * 2 + math.max(core.ICON, core.LINE_HEIGHT), "one line hugs the grid row")
 local hug_empty = core.layout({ state = "recording", text = "", detail = "" }, "dict", "peek")
 eq(hug_empty.w, core.PAD * 2 + core.ICON, "empty hugs the grid")
 eq(hug_empty.h, core.PAD * 2 + core.ICON, "empty hugs the grid")
@@ -181,8 +182,8 @@ local a = core.layout({ state = "done", text = "same longest line here yes\nshor
 local b = core.layout({ state = "done", text = "same longest line here yes\nshort plus more", detail = "" }, "dict", "full", { screen_h = 900 })
 eq(a.w, b.w, "width locks from the longest line")
 -- full caps near half the viewport: tiny screen clamps the line budget
-eq(core.full_max_lines(900), 22, "50vh budget on a normal screen")
-eq(core.full_max_lines(200), 3, "small screen clamps lines")
+eq(core.full_max_lines(900), 23, "50vh budget on a normal screen")
+eq(core.full_max_lines(200), 4, "small screen clamps lines")
 local tall = core.layout(
   { state = "rewriting", text = string.rep("word ", 400), detail = "" }, "dict", "full", { screen_h = 200 }
 )

@@ -356,7 +356,6 @@ M.FONT_SIZE = 11
 M.LINE_HEIGHT = 18
 M.PAD = 10
 M.ICON = 18
-M.HEAD_HEIGHT = 18
 -- Max caps; the box hugs content up to these widths (no min-width gutter).
 M.WIDTH_COLLAPSED = 380
 M.WIDTH_EXPANDED = 580
@@ -482,11 +481,12 @@ function M.pad_lines(lines, width)
 end
 
 --- Full density caps near half the viewport height (mock: max-height 50vh).
+--- The budget is the box inside equal padding — no leftover header row.
 function M.full_max_lines(screen_h)
   if type(screen_h) ~= "number" or screen_h <= 0 then
     return M.LINES_EXPANDED
   end
-  return math.max(1, math.floor((screen_h * 0.5 - M.PAD - M.HEAD_HEIGHT - M.PAD) / M.LINE_HEIGHT))
+  return math.max(1, math.floor((screen_h * 0.5 - M.PAD * 2) / M.LINE_HEIGHT))
 end
 
 --- Typewriter slice: reveal `text` up to `caret` chars. The caller keeps the
@@ -525,6 +525,7 @@ function M.layout(view, kind, density, opts)
       total = 0,
       longest = 0,
       all = {},
+      raw = "",
     }
   end
   local body = M.body_for(view)
@@ -541,6 +542,7 @@ function M.layout(view, kind, density, opts)
       total = 0,
       longest = 0,
       all = {},
+      raw = "",
     }
   end
   local max_width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
@@ -572,7 +574,9 @@ function M.layout(view, kind, density, opts)
     lines = M.pad_lines(lines, longest)
   end
   local width = text_x + longest * M.CHAR_WIDTH + M.PAD
-  local height = math.max(mini_side, M.PAD + M.HEAD_HEIGHT + #lines * M.LINE_HEIGHT + M.PAD)
+  -- Text sits beside the grid, so the box is the taller of the grid and the
+  -- lines, plus the same PAD on every side. No header row under the text.
+  local height = math.max(mini_side, M.PAD + #lines * M.LINE_HEIGHT + M.PAD)
   if type(opts.screen_h) == "number" and opts.screen_h > 0 and density == "full" then
     height = math.min(height, math.floor(opts.screen_h * 0.5))
   end
@@ -588,6 +592,7 @@ function M.layout(view, kind, density, opts)
     total = #all,
     longest = longest,
     all = M.pad_lines(all, longest),
+    raw = body,
   }
 end
 
