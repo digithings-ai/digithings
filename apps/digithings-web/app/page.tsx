@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
-import { FooterWordmark } from "@/components/landing/PixelWordmark";
+import { FooterWordmark } from "@/components/landing/FooterWordmark";
 import { LandingPage } from "@/components/landing/LandingPage";
 import { embedOriginForChat } from "@/lib/security-headers.mjs";
 
