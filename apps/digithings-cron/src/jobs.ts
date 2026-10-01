@@ -107,7 +107,8 @@ function cj(
 
 /** All org production clocks. Source of truth alongside wrangler [triggers]. */
 export const JOBS: readonly Job[] = [
-  // PAUSED 2026-10-01 Human Gate: DigiQuant pipeline clocks off until Chris resumes. Resume: set enabled true + restore wrangler crons via uniqueEnabledCrons().
+  // Resumed 2026-10-01: DigiQuant pipeline clocks live again (Human Gate unlock
+  // reversing #4917). House-run is weekly Monday morning only (cost lock).
   // --- digithings: digiquant prices + market-data (container, #4761) ---
   // inputs stay for the GITHUB_OVERRIDE_JOBS workflow_dispatch path only.
   cj(
@@ -117,7 +118,7 @@ export const JOBS: readonly Job[] = [
     "prices-at-open",
     "digiquant-at-open",
     900,
-    { inputs: { mode: "at-open" }, etOpenGate: true, enabled: false },
+    { inputs: { mode: "at-open" }, etOpenGate: true },
   ),
   cj(
     "prices-at-open-14",
@@ -126,7 +127,7 @@ export const JOBS: readonly Job[] = [
     "prices-at-open",
     "digiquant-at-open",
     900,
-    { inputs: { mode: "at-open" }, etOpenGate: true, enabled: false },
+    { inputs: { mode: "at-open" }, etOpenGate: true },
   ),
   cj(
     "prices-fx-refresh",
@@ -135,7 +136,7 @@ export const JOBS: readonly Job[] = [
     "prices-fx-candles",
     "digiquant-fx-candles",
     600,
-    { inputs: { mode: "fx-refresh" }, enabled: false },
+    { inputs: { mode: "fx-refresh" } },
   ),
   cj(
     "prices-fx-refresh-sun",
@@ -144,7 +145,7 @@ export const JOBS: readonly Job[] = [
     "prices-fx-candles",
     "digiquant-fx-candles",
     600,
-    { inputs: { mode: "fx-refresh" }, enabled: false },
+    { inputs: { mode: "fx-refresh" } },
   ),
   cj(
     "prices-eod-macro",
@@ -153,7 +154,7 @@ export const JOBS: readonly Job[] = [
     "prices-eod-macro",
     "digiquant-eod-macro",
     1200,
-    { inputs: { mode: "eod-macro" }, enabled: false },
+    { inputs: { mode: "eod-macro" } },
   ),
   cj(
     "market-data-refresh-morning",
@@ -162,11 +163,9 @@ export const JOBS: readonly Job[] = [
     "market-data-refresh",
     "market-data-refresh",
     1800,
-    { enabled: false },
   ),
   // --- digithings: checkpoint archive (container, #4761 Phase 4) ---
-  // PAUSED with DigiQuant peers (Human Gate #4917). Wire is digiquant-runner;
-  // do not enable until Chris resumes clocks / Platform hatch.
+  // Clock is digithings-cron → digiquant-runner. GHA keeps workflow_dispatch only.
   cj(
     "checkpoint-archive",
     "30 13 * * *",
@@ -174,7 +173,6 @@ export const JOBS: readonly Job[] = [
     "checkpoint-archive",
     "checkpoint-archive",
     3600,
-    { enabled: false },
   ),
   cj(
     "market-data-refresh-evening",
@@ -183,19 +181,19 @@ export const JOBS: readonly Job[] = [
     "market-data-refresh",
     "market-data-refresh",
     1800,
-    { enabled: false },
   ),
 
   // --- digithings: house-run (container, #4761) ---
+  // Live cadence: weekly Monday morning only (cost lock 2026-10-01).
   cj(
     "house-run-09",
-    "17 9 * * *",
+    "17 9 * * MON",
     "pipeline-digiquant.yml",
     "house-run",
     "digiquant-pipeline",
     14400,
-    { enabled: false },
   ),
+  // Daily 10/11/12 retries stay off (weekly Mon lock 2026-10-01).
   cj(
     "house-run-10",
     "17 10 * * *",
@@ -233,7 +231,6 @@ export const JOBS: readonly Job[] = [
     "research-metrics",
     "research-refresh-metrics",
     1200,
-    { enabled: false },
   ),
   cj(
     "tearsheets",
@@ -242,7 +239,6 @@ export const JOBS: readonly Job[] = [
     "tearsheets",
     "digiquant-tearsheets",
     2700,
-    { enabled: false },
   ),
   cj(
     "onchain",
@@ -251,7 +247,6 @@ export const JOBS: readonly Job[] = [
     "onchain-bitview",
     "digiquant-onchain",
     900,
-    { enabled: false },
   ),
   cj(
     "execution-cron-check",
@@ -260,21 +255,10 @@ export const JOBS: readonly Job[] = [
     "execution-cron-check",
     "execution-cron-check",
     600,
-    { enabled: false },
   ),
-  wd(
-    "continuous-improvement",
-    "8 22 * * SUN",
-    DIGITHINGS,
-    "pipeline-continuous-improvement.yml",
-    { enabled: false },
-  ),
-  wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml", {
-    enabled: false,
-  }),
-  wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml", {
-    enabled: false,
-  }),
+  wd("continuous-improvement", "8 22 * * SUN", DIGITHINGS, "pipeline-continuous-improvement.yml"),
+  wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml"),
+  wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
 
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
   // PAUSED 2026-10-01 Human Gate (GHA simplify Path A): GHA targets stay disabled;
@@ -314,7 +298,7 @@ export const JOBS: readonly Job[] = [
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml", {
     enabled: false,
   }),
-  // Weekday FX Hub clock; house-run-12 is daily (`17 12 * * *`) and separate.
+  // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
   wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml", {
     enabled: false,
   }),
