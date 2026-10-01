@@ -220,3 +220,16 @@ The implementation plan is
 [docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md](../superpowers/plans/2026-09-30-digiquant-house-run-phase3.md).
 Chris lock: one class, `DigiQuantRunnerContainer`, `instance_type = "standard-2"`.
 This note does not flip cron and does not deploy.
+
+## Phase 4 note
+
+Checkpoint archive still runs on the GitHub Actions schedule in
+`pipeline-checkpoint-archive.yml` (`30 13 * * *`). `smoke-site` and
+`smoke-stack` are still `workflow_dispatch` from digithings-cron. None of
+those clocks have moved. This note does not flip cron, delete a `schedule:`
+key, or deploy.
+
+The cutover plan (same class, `standard-2`, `max_instances = 1`) is
+[docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md](../superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md).
+Phase 3 Task 7 (secrets, deploy, house-run proof) stays a prerequisite and
+is not part of Phase 4.
