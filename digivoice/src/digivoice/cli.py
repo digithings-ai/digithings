@@ -190,6 +190,16 @@ def build_parser() -> _Parser:
     )
     sub.add_parser("update", help="Reinstall hint (not wired yet)")
     sub.add_parser("uninstall", help="Removal hint (not wired yet)")
+    reload_cmd = sub.add_parser(
+        "reload",
+        help="Refresh local control: CLI path, settings, Lua adapter, Hammerspoon",
+    )
+    reload_cmd.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="Print the reload report as JSON (no prompts)",
+    )
     return parser
 
 
@@ -239,6 +249,34 @@ def _setup(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
     )
     code = run_interactive_setup(paths, run_doctor=lambda: report.text)
+    return CliResult(code=code, stdout="", stderr="")
+
+
+def _reload(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    from digivoice.reload import run_reload
+
+    return run_reload(
+        runtime.platform,
+        runtime.home,
+        dict(runtime.env),
+        runner=runtime.runner,
+        as_json=bool(getattr(args, "as_json", False)),
+    )
+
+
+def _home(runtime: Runtime) -> CliResult:
+    """Bare `digivoice`: TUI home on a TTY, printed overview otherwise."""
+    from digivoice.home import run_home
+
+    if not sys.stdin.isatty():
+        # Never hang an agent/pipe: print the overview instead of the shell.
+        from digivoice.home import render_home_overview
+        from digivoice.settings import format_settings_text, load_settings
+
+        paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+        text = render_home_overview(format_settings_text(load_settings(paths), paths))
+        return CliResult(code=0, stdout=text + "\n", stderr="")
+    code = run_home(runtime.platform, runtime.home, dict(runtime.env))
     return CliResult(code=code, stdout="", stderr="")
 
 
@@ -634,8 +672,10 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
 
 def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     parser = build_parser()
-    if not argv or argv[0] in {"help", "-h", "--help"}:
+    if argv and argv[0] in {"help", "-h", "--help"}:
         return CliResult(code=0, stdout=parser.format_help(), stderr="")
+    if not argv:
+        return _home(runtime)
     try:
         args = parser.parse_args(list(argv))
     except UsageError as exc:
@@ -669,6 +709,10 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         return _update()
     if command == "uninstall":
         return _uninstall()
+    if command == "reload":
+        if not hasattr(args, "as_json"):
+            args.as_json = False
+        return _reload(args, runtime)
     return _usage(f"unknown command: {command}")
 
 
