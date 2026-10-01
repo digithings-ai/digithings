@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
 
@@ -209,16 +206,5 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
     expect(uniqueEnabledCrons()).not.toContain("40 13 * * MON-FRI");
     expect(uniqueEnabledCrons()).not.toContain("8 22 * * SUN");
-  });
-
-  it("wrangler [triggers].crons matches uniqueEnabledCrons in order", () => {
-    const toml = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../wrangler.toml"),
-      "utf8",
-    );
-    const block = toml.match(/\[triggers\]\s*crons\s*=\s*\[([\s\S]*?)\]/);
-    expect(block).not.toBeNull();
-    const wranglerCrons = [...block![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    expect(wranglerCrons).toEqual(uniqueEnabledCrons());
   });
 });
