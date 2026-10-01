@@ -29,6 +29,7 @@ import {
 import { GROUPED_LABEL } from "./label";
 import { windowAlpha, windowBeta } from "@/lib/bookMath";
 import { QuantWordmark } from "./QuantWordmark";
+import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
 
 /**
  * The digiquant band (v15 point 9, #4429; reworked across rounds 3–5).
@@ -50,9 +51,9 @@ import { QuantWordmark } from "./QuantWordmark";
  * So the band reads, top to bottom: the digiquant.io brand header with the two
  * ways into the product (the dashboard and the tearsheets); the title with the
  * strategy library rail beside it and the MCP tooling line under it; the
- * pipeline as one thin row; the book (portfolio against benchmark, with the
- * lookback controls, the chart compressed and the window's three reads beside
- * it). No positions blotter — that surface belongs to digiquant.io — and no lead
+ * pipeline as one horizontal rail of the real phase-folder cards; the book
+ * (portfolio against benchmark, with the lookback controls, the chart
+ * compressed and the window's three reads beside it). No positions blotter — that surface belongs to digiquant.io — and no lead
  * paragraph or closing footnote: the owner asked for the title on its own,
  * "simple and clean".
  *
@@ -153,82 +154,60 @@ const FULL_SPAN: [string, string] = [
 ];
 
 /**
- * The pipeline, in the dashboard's own categories.
+ * The pipeline, in the dashboard's own phase folders.
  *
- * The owner asked for the simple presentation version rather than every folder:
- * the six stages the dashboard's pipeline page shows — inputs → research →
- * synthesis → selection → decision → learning — as one thin row, with each
- * stage's one-line mechanism under its name. No diagnostics: this is the
- * pipeline as a *definition*, not a completed run, so there is no wall time or
- * token count to report.
+ * Real phase-folder cards from `apps/digiquant-web/.../PipelineScene.tsx`
+ * (via the `digiquantPipeline.ts` copy): research preflight → publish (10) and
+ * portfolio thesis review → commit run (9), with execution honestly marked "in
+ * development" — routing is off by default and no live venue is wired, so the
+ * band shows the stage and says so rather than drawing folders that do not
+ * exist. Same card grammar as the digiquant site's `dqp-step`: mono folder id,
+ * phase name, one-line mechanism; hairline border on the page surface; ink
+ * only, no module livery. One horizontal rail with engine divider chips, so
+ * the band stays at a readable height instead of growing a detail panel.
  */
-const STAGES: { id: string; label: string; detail: string; steps: string[] }[] = [
-  {
-    id: "inputs",
-    label: "Inputs",
-    detail: "Market and reference data validated before any research runs.",
-    steps: ["preflight", "attention plan"],
-  },
-  {
-    id: "research",
-    label: "Research",
-    detail: "Independent specialist reads, before any of them are combined.",
-    steps: ["alt-data", "institutional", "macro", "asset classes", "sectors"],
-  },
-  {
-    id: "synthesis",
-    label: "Synthesis",
-    detail: "The reads reconciled into one directional call and a narrative.",
-    steps: ["consolidate", "digest"],
-  },
-  {
-    id: "selection",
-    label: "Selection",
-    detail: "Challenged, screened and risk-sized portfolio candidates.",
-    steps: ["thesis", "screener", "analysts", "deliberation", "PM direction", "risk sizing"],
-  },
-  {
-    id: "decision",
-    label: "Decision",
-    detail: "The recommendation, with the evidence chain that produced it.",
-    steps: ["commit"],
-  },
-  {
-    id: "learning",
-    label: "Learning",
-    detail: "Resolved outcomes folded back in on the next run.",
-    steps: ["beliefs"],
-  },
-];
-
-/**
- * The six stages as one thin row — the simple version the owner asked for over
- * the kit's `Pipeline` panel. It stays readable at band height and never adds a
- * detail panel's worth of vertical space.
- */
-function StageStrip() {
+function PipelineRail() {
   return (
-    <ol
-      className="m-0 flex list-none flex-wrap items-stretch gap-[0.4rem] p-0"
-      aria-label="digiquant pipeline stages"
+    <div
+      className="flex min-w-0 gap-[0.5rem] overflow-x-auto pb-[0.2rem]"
+      role="list"
+      aria-label="digiquant pipeline phases"
     >
-      {STAGES.map((stage, index) => (
-        <li key={stage.id} className="flex min-w-[9rem] flex-1 items-stretch gap-[0.4rem]">
-          <div className="flex flex-1 flex-col gap-[0.25rem] border border-hair bg-surface p-[0.6rem]">
-            <span className="font-mono text-[0.6rem] tracking-[0.06em] text-ink-mute">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-            <span className="font-mono text-[0.8rem] text-ink">{stage.label}</span>
-            <span className="text-[0.72rem] leading-[1.45] text-ink-mute">{stage.detail}</span>
-          </div>
-          {index < STAGES.length - 1 ? (
-            <span aria-hidden="true" className="self-center font-mono text-[0.8rem] text-ink-mute">
-              →
-            </span>
+      {PIPELINE_ENGINES.map((engine) => (
+        <div key={engine.id} className="flex min-w-0 items-stretch gap-[0.5rem]">
+          <span className="flex items-center font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+            {engine.label}
+          </span>
+          {engine.phases.map((phase) => (
+            <div
+              key={phase.id}
+              role="listitem"
+              title={`Phase folder ${phase.id}`}
+              className="flex w-[10.5rem] shrink-0 snap-start flex-col gap-[0.2rem] border border-hair bg-surface p-[0.6rem]"
+            >
+              <span className="font-mono text-[0.6rem] tracking-[0.06em] text-ink-mute">
+                {phase.id}
+              </span>
+              <span className="font-mono text-[0.78rem] text-ink">{phase.name}</span>
+              <span className="text-[0.7rem] leading-[1.45] text-ink-mute">{phase.detail}</span>
+            </div>
+          ))}
+          {engine.phases.length === 0 ? (
+            <div
+              role="listitem"
+              className="flex w-[10.5rem] shrink-0 snap-start flex-col gap-[0.2rem] border border-dashed border-hair bg-surface p-[0.6rem]"
+            >
+              <span className="font-mono text-[0.6rem] uppercase tracking-[0.06em] text-ink-mute">
+                in development
+              </span>
+              <span className="text-[0.7rem] leading-[1.45] text-ink-mute">
+                Research and portfolio run today. Live execution is next.
+              </span>
+            </div>
           ) : null}
-        </li>
+        </div>
       ))}
-    </ol>
+    </div>
   );
 }
 
@@ -606,6 +585,9 @@ export function QuantSection({ className }: { className?: string }) {
   const book = liveIndex ?? { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
   const cards: StrategyCardData[] =
     live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
+  /* Honesty: the fallback cards are deterministic examples, not live reads —
+     badge them as such and never show a live mark over them. */
+  const showExampleBadge = live.strategies.length === 0;
 
   return (
     <div className={`relative ${className ?? ""}`}>
@@ -647,7 +629,10 @@ export function QuantSection({ className }: { className?: string }) {
 
             {/* Right: the library, in the kit's horizontal rail — the element
                 promoted from the design reference's changelog rail. */}
-            <div className="flex min-w-0 flex-col justify-center">
+            <div className="flex min-w-0 flex-col justify-center gap-[0.5rem]">
+              <span className={GROUPED_LABEL}>
+                {showExampleBadge ? "flagship strategies · example" : "flagship strategies"}
+              </span>
               <CardRail ariaLabel="Flagship digiquant strategies">
                 {cards.map((strategy) => (
                   <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
@@ -658,6 +643,7 @@ export function QuantSection({ className }: { className?: string }) {
                             <span className="ts-card-name">{strategy.name}</span>
                             <span className="ts-card-period">
                               {strategy.symbol} · {strategy.kind}
+                              {showExampleBadge ? " · example" : ""}
                             </span>
                           </div>
                         </div>
@@ -675,8 +661,8 @@ export function QuantSection({ className }: { className?: string }) {
           </div>
 
           <div className="flex min-w-0 flex-col gap-[0.7rem]">
-            <span className={GROUPED_LABEL}>the pipeline</span>
-            <StageStrip />
+            <span className={GROUPED_LABEL}>the pipeline · 19 phase folders</span>
+            <PipelineRail />
           </div>
 
           <Book series={book.series} fullSpan={book.fullSpan} live={Boolean(liveIndex)} />
