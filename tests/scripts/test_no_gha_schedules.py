@@ -31,7 +31,7 @@ def _on(doc: dict) -> object:
 
 def _schedule_offenders() -> list[str]:
     offenders: list[str] = []
-    for path in sorted(WORKFLOW_DIR.glob("*.yml")):
+    for path in sorted((*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml"))):
         on = _on(yaml.safe_load(path.read_text(encoding="utf-8")))
         if isinstance(on, dict) and "schedule" in on:
             offenders.append(path.name)
