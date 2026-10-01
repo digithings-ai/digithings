@@ -3,16 +3,15 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import {
-  FooterCells,
   HashScrollManager,
   MotionProvider,
   NavShell,
   ThemeProvider,
 } from "@digithings/ui";
-import { FooterWordmark } from "./_chrome/FooterWordmark";
+import { Footer } from "./_chrome/Footer";
 import { LayoutRails } from "./_chrome/LayoutRails";
 import { SectionRail } from "./_chrome/SectionRail";
-import { Brand,DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
+import { Brand, DQ_NAV_PRIMARY } from "./_nav";
 
 // Self-hosted at build time by next/font, so no request leaves for Google at runtime.
 // Inter is the sans/display voice (headings, prose); JetBrains Mono is the chrome voice
@@ -100,8 +99,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="pt-[var(--nav-shell-h,62px)]">
               {children}
             </div>
-            <FooterWordmark />
-            <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
+            <Footer />
           </ThemeProvider>
         </MotionProvider>
       </body>
