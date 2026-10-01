@@ -22,6 +22,37 @@ PIPER_TIMEOUT = 120.0
 PLAY_TIMEOUT = 300.0
 COPY_SELECTION_SCRIPT = 'tell application "System Events" to keystroke "c" using command down'
 READ_SOURCE_TIMEOUT = 5.0
+# Accessibility query for the focused element's selected text. Static script, no
+# user text interpolated: every external binary goes through CommandRunner argv.
+AX_SELECTED_TEXT_ARGS: list[str] = [
+    "-e",
+    'tell application "System Events"',
+    "-e",
+    "tell (first process whose frontmost is true)",
+    "-e",
+    "set allElems to entire contents of window 1",
+    "-e",
+    "repeat with e in allElems",
+    "-e",
+    "if focused of e is true then",
+    "-e",
+    'set sel to value of attribute "AXSelectedText" of e',
+    "-e",
+    "if sel is not missing value then return sel",
+    "-e",
+    "end if",
+    "-e",
+    "end repeat",
+    "-e",
+    "end tell",
+    "-e",
+    "end tell",
+]
+FRONTMOST_APP_SCRIPT = (
+    'tell application "System Events" to get name of first process whose frontmost is true'
+)
+GHOSTTY_APP_NAME = "Ghostty"
+GHOSTTY_SELECTION_PBOARD = "com.mitchellh.ghostty.selection"
 
 
 def select_piper(probe: CommandProbe, home: Path) -> str | None:
@@ -113,17 +144,63 @@ def read_clipboard(platform: str, probe: CommandProbe, runner: CommandRunner) ->
     return text
 
 
+def _ax_selected_text(osascript: str, runner: CommandRunner) -> str | None:
+    """Focused element's AX selected text, or None when unavailable or empty.
+
+    osascript renders a missing AppleScript value as the literal string
+    "missing value" with exit 0, so that output must not count as a selection.
+    """
+    result = runner([osascript, *AX_SELECTED_TEXT_ARGS], timeout=READ_SOURCE_TIMEOUT)
+    if result.code != 0:
+        return None
+    cleaned = result.stdout.strip()
+    if not cleaned or cleaned.casefold() == "missing value":
+        return None
+    return cleaned
+
+
+def _frontmost_is_ghostty(osascript: str, runner: CommandRunner) -> bool:
+    """True when the frontmost process is Ghostty. Never raises: unknown means no."""
+    result = runner([osascript, "-e", FRONTMOST_APP_SCRIPT], timeout=READ_SOURCE_TIMEOUT)
+    if result.code != 0:
+        return False
+    return result.stdout.strip().casefold() == GHOSTTY_APP_NAME.casefold()
+
+
+def _named_pasteboard(pbpaste: str, runner: CommandRunner, name: str) -> str | None:
+    """Text from a named pasteboard, or None when missing, unreadable, or empty."""
+    result = runner([pbpaste, "-pboard", name], timeout=READ_SOURCE_TIMEOUT)
+    if result.code != 0:
+        return None
+    return result.stdout.strip() or None
+
+
 def read_selection(platform: str, probe: CommandProbe, runner: CommandRunner) -> str:
     """Read the current text selection. Soft-fails when nothing is selected.
 
-    On darwin, Cmd+C via osascript only counts as a selection when the clipboard
-    *changes*. An unchanged clipboard (including leftover dictation paste) is
-    treated as empty selection — never as coding-reply readout.
+    On darwin, in order:
+
+    1. the focused element's Accessibility selected text (no clipboard touched);
+    2. Ghostty's selection pasteboard, when Ghostty is frontmost (Ghostty's
+       copy-on-select writes the highlight there instead of the general clipboard);
+    3. Cmd+C via osascript, which only counts as a selection when the clipboard
+       *changes*.
+
+    An unchanged clipboard (including leftover dictation paste) is treated as
+    empty selection — never as coding-reply readout.
     """
     if platform == "darwin":
         osascript = probe.lookup("osascript")
         if not osascript:
             raise SpeakError("osascript not on PATH; cannot read the selection")
+        selected = _ax_selected_text(osascript, runner)
+        if selected:
+            return selected
+        pbpaste = probe.lookup("pbpaste")
+        if pbpaste and _frontmost_is_ghostty(osascript, runner):
+            ghostty = _named_pasteboard(pbpaste, runner, GHOSTTY_SELECTION_PBOARD)
+            if ghostty:
+                return ghostty
         try:
             before: str | None = read_clipboard(platform, probe, runner)
         except SpeakError:
