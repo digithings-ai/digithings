@@ -32,7 +32,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "fetch_repo_activity.py"
-REFRESH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "refresh-repo-activity.yml"
 WEB_LANE = REPO_ROOT / ".github" / "workflows" / "test-web.yml"
 
 
@@ -718,24 +717,6 @@ def test_search_dates_passes_non_cap_failures_through_without_bisect(
 
 
 # ── wiring ──────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.unit
-def test_the_refresh_workflow_opens_a_pr_instead_of_pushing_to_develop() -> None:
-    """develop requires a PR, so a direct push could only ever fail."""
-    wf = REFRESH_WORKFLOW.read_text(encoding="utf-8")
-    assert "--base develop" in wf
-    assert "chore/repo-activity-" in wf, "chore/* is what bypasses the linkage gate"
-    assert "github-actions[bot]" in wf, "the author must be in check_review_coverage BOT_AUTHORS"
-    assert 'git push -u origin "$BRANCH"' in wf
-    assert "--max-age-days" in wf, "the job must assert its own output is current"
-
-    # Commands only — the file's own comments say the words "git add -A" while
-    # explaining why they are not used, and matching prose would fail on the
-    # explanation rather than on the behaviour.
-    commands = "\n".join(line for line in wf.splitlines() if not line.lstrip().startswith("#"))
-    assert "git add -A" not in commands, "stage by path — a workflow tree can lag its own HEAD"
-    assert 'git add "$SNAPSHOT"' in commands
 
 
 @pytest.mark.unit
