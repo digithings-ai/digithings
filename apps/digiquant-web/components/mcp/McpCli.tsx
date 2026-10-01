@@ -270,7 +270,7 @@ export function McpCli() {
     <div
       tabIndex={0}
       onKeyDown={onShellKey}
-      className="flex min-h-[min(36rem,calc(100svh-18rem))] min-w-0 flex-1 flex-col border border-hair bg-term-bg font-mono text-[0.74rem] leading-[1.65] text-ink-soft outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-hair"
+      className="flex h-[calc(100svh-var(--nav-shell-h,62px))] max-h-[52rem] min-h-[32rem] min-w-0 flex-1 flex-col overflow-hidden border border-hair bg-term-bg font-mono text-[0.74rem] leading-[1.65] text-ink-soft outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-hair"
     >
       <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
         <span>digiquant · mcp</span>

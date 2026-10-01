@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { CtaLink, MediaFrame } from "@digithings/ui";
 import { DASHBOARD_VIDEO_POSTER, DASHBOARD_VIDEO_SRC } from "@/components/dashboard/dashboard-video";
 import { Band } from "../_chrome/Band";
@@ -13,9 +16,18 @@ const DASHBOARD_SURFACES: { key: string; value: string }[] = [
 ];
 
 /** The product band: the dashboard view (a labelled placeholder until a recording
- *  or screenshot exists) beside what it holds. The dashboard is a separate app and
+ *  or screenshot exists) beside what it holds. Surfaces auto-cycle when idle;
+ *  any interaction pauses the cycle. The dashboard is a separate app and
  *  is not embedded here. */
 export function DashboardBand() {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused) return;
+    const t = setInterval(() => setActive((a) => (a + 1) % DASHBOARD_SURFACES.length), 4000);
+    return () => clearInterval(t);
+  }, [paused]);
   return (
     <Band
       id="dashboard"
@@ -38,11 +50,24 @@ export function DashboardBand() {
           <DashboardViewPlaceholder />
         )}
 
-        <div className="flex min-w-0 flex-col gap-4">
+        <div
+          className="flex min-w-0 flex-col gap-4"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          onFocus={() => setPaused(true)}
+          onBlur={() => setPaused(false)}
+        >
           <dl className="m-0 flex-1 border border-hair text-left font-mono text-[0.72rem] leading-[1.55]">
-            {DASHBOARD_SURFACES.map((row) => (
-              <div key={row.key} className="border-b border-hair px-3 py-2 last:border-b-0">
-                <dt className="text-ink-mute">[ {row.key} ]</dt>
+            {DASHBOARD_SURFACES.map((row, i) => (
+              <div
+                key={row.key}
+                onMouseEnter={() => setActive(i)}
+                onFocus={() => setActive(i)}
+                tabIndex={0}
+                aria-current={i === active ? "true" : undefined}
+                className={`border-b border-hair px-3 py-2 last:border-b-0 ${i === active ? "bg-surface-2" : ""}`}
+              >
+                <dt className={i === active ? "text-ink" : "text-ink-mute"}>[ {row.key} ]{i === active ? " ●" : ""}</dt>
                 <dd className="m-0 mt-1 font-sans text-[0.8125rem] text-ink-soft">{row.value}</dd>
               </div>
             ))}

@@ -88,13 +88,37 @@ export function ChatBand() {
       takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. Scripted, not live: the builder lives in the dashboard."
     >
       <div ref={ref} className="mx-auto flex w-full max-w-[64rem] flex-1 flex-col gap-3">
-        <ChatPlayback
-          script={STRATEGY_SCRIPT}
-          badge={STRATEGY_BADGE}
-          header={STRATEGY_HEADER}
-          ariaLabel="Scripted strategy-building story"
-          className="min-h-0 flex-1 [&>div.overflow-y-auto]:h-[min(34rem,calc(100svh-22rem))]"
-        />
+        <div
+          aria-label="digichat container"
+          className="overflow-hidden border border-hair bg-surface"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-hair bg-surface-2 px-4 py-2">
+            <span className="flex items-center gap-2 font-mono text-[0.68rem] text-ink-mute">
+              <span aria-hidden="true" className="flex gap-1.5">
+                <span className="inline-block size-2.5 rounded-full bg-hair" />
+                <span className="inline-block size-2.5 rounded-full bg-hair" />
+                <span className="inline-block size-2.5 rounded-full bg-accent" />
+              </span>
+              digichat · strategy thread
+            </span>
+            <span className="font-mono text-[0.68rem] text-ink-mute">read scope · scripted replay</span>
+          </div>
+          <div className="grid md:grid-cols-[12rem_minmax(0,1fr)]">
+            <div aria-hidden="true" className="hidden border-e border-hair p-3 font-mono text-[0.66rem] leading-[1.7] text-ink-mute md:block">
+              <p className="m-0 text-ink">threads</p>
+              <p className="m-0 text-ink-soft">▸ vela breakout v3</p>
+              <p className="m-0">mean-revert spy</p>
+              <p className="m-0">edge report q3</p>
+            </div>
+            <ChatPlayback
+              script={STRATEGY_SCRIPT}
+              badge={STRATEGY_BADGE}
+              header={STRATEGY_HEADER}
+              ariaLabel="Scripted strategy-building story"
+              className="min-h-0 flex-1 [&>div.overflow-y-auto]:h-[min(34rem,calc(100svh-22rem))]"
+            />
+          </div>
+        </div>
         <StepLedger states={states} />
       </div>
     </Band>

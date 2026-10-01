@@ -1,5 +1,4 @@
 import { CtaLink } from "@digithings/ui";
-import { LocalLuxalgoWorkflow } from "@/components/luxalgo/local-luxalgo-workflow";
 import { IntegrationMark, integrationHref, type IntegrationId } from "@/components/integrations/marks";
 import { Band } from "../_chrome/Band";
 import { MCP_TOOLS } from "../_mcp";
@@ -9,20 +8,22 @@ const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(
 const CARD =
   "flex h-auto min-h-full w-full flex-col items-stretch gap-3 border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal no-underline hover:bg-surface-2";
 
-const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
+const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string; visual: string }[] = [
   {
     id: "gloomberb",
     name: "Gloomberg",
     role: "market data",
     line: "Quotes, filings, macro and options for the research stages. Enrichment, never the record the backtests run on.",
     fact: `${toolCount("digifetch_")} MCP tools`,
+    visual: "Terminal-style quote strip with sparkline — live market context feed.",
   },
   {
     id: "luxalgo",
     name: "LuxAlgo",
-    role: "indicator library",
-    line: "The indicator and concept library strategies are built from, plus edge reports and tracker data.",
-    fact: `${toolCount("luxalgo_")} MCP tools`,
+    role: "Vela backbone · live signals",
+    line: "Real Vela engine behind the hero chart and every signal overlay. Price engine + indicator backbone digiquant research runs on — not a demo card.",
+    fact: `${toolCount("luxalgo_")} MCP tools · live on hero`,
+    visual: "Live Vela candlestick preview — same engine as the hero chart.",
   },
   {
     id: "nautilus",
@@ -30,6 +31,7 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
     role: "engine",
     line: "The event-driven engine every backtest and optimize run goes through. One engine, no second code path.",
     fact: "validate → backtest → optimize → export",
+    visual: "Backtest run timeline — validate, backtest, optimize, export.",
   },
 ];
 
@@ -47,14 +49,15 @@ const SECONDARY: { id: IntegrationId; name: string; role: string }[] = [
 
 /** Integrations: the only band that names partners. The three architectural drivers lead,
  *  digithings follows as the platform under the agents and chat, brokers and feeds sit
- *  last and quiet. Showcase only: nothing here places an order. */
+ *  last and quiet. Showcase only: nothing here places an order. LuxAlgo Vela is the live
+ *  price backbone (see the hero), not a demo widget. */
 export function IntegrationsBand() {
   return (
     <Band
       id="integrations"
       status="showcase only"
       title="What the engine is built on"
-      takeaway="Three integrations drive digiquant: Gloomberg for data, LuxAlgo for indicators, NautilusTrader for the engine. digithings runs the agents and the chat around them."
+      takeaway="Three integrations drive digiquant: Gloomberg for data, LuxAlgo Vela for live signals, NautilusTrader for the engine. digithings runs the agents and the chat around them."
     >
       <div className="flex flex-col gap-4">
         <ul aria-label="Architectural drivers" className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">
@@ -67,6 +70,12 @@ export function IntegrationsBand() {
                     <span className="block font-display text-[1.25rem] font-medium leading-tight tracking-[-0.02em] text-ink">{d.name}</span>
                     <span className="block font-mono text-[0.68rem] font-normal text-ink-mute">{d.role}</span>
                   </span>
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="block overflow-hidden border border-hair bg-term-bg px-3 py-2 font-mono text-[0.66rem] leading-[1.5] text-ink-mute"
+                >
+                  {d.visual}
                 </span>
                 <span className="text-[0.8125rem] font-normal leading-[1.55] text-ink-soft">{d.line}</span>
                 <span className="mt-auto border-t border-hair pt-2 font-mono text-[0.68rem] font-normal text-ink-mute">{d.fact}</span>
@@ -106,9 +115,8 @@ export function IntegrationsBand() {
             </span>
           ))}
         </p>
-        <LocalLuxalgoWorkflow />
         <p className="m-0 font-mono text-[0.66rem] text-ink-mute">
-          This site only shows them: it places no orders and there is no live trading. The hero chart is LuxAlgo Vela on the
+          This site only shows them: it places no orders and there is no live trading. The hero chart is live LuxAlgo Vela on the
           public Coinbase feed. Names and marks belong to their owners; listing one implies no affiliation.
         </p>
       </div>
