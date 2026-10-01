@@ -505,6 +505,8 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 
+**PR titles into `develop` are linted.** Use Conventional Commits with a **required scope** (e.g. `feat(digillm): …`, `ci(root): …`). Scope allow-list and exemptions (release-please, develop→main promote) are in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml); short contributor note in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Liveness vs status
