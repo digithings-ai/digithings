@@ -17,10 +17,11 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/history.py` | JSONL append, tolerant read, `--last` / `--grep` / `--copy-last` / `--json`. |
 | `src/digivoice/settings.py` | `settings.json` under the data dir; agent-scriptable get/set. |
 | `src/digivoice/rewrite.py` | Optional local post-STT rewrite (ollama / llama.cpp); fail soft. |
-| `src/digivoice/paste.py` | Clipboard plus Command-V into the focused app. Fails soft. |
+| `src/digivoice/paste.py` | Clipboard plus Command-V into the focused app. Fails soft. Never pastes blank text. |
+| `src/digivoice/status.py` | `status.json` feed for the banner, cancel-file token, `CANCELLED_EXIT`. Fails soft. |
 | `src/digivoice/errors.py` | `VoiceError` and the capture / transcribe / speak subclasses. |
 | `src/digivoice/models.py` | Pydantic v2 models including `RewriteResult` and path/doctor/history types. |
-| `hammerspoon/` | Sample hotkey adapter, live dictation banner/menubar mark, TCC runbook. |
+| `hammerspoon/` | Sample hotkey adapter (`init.lua`), status banner logic (`banner_core.lua`, pure Lua), menubar mark, TCC runbook. |
 
 Every external binary — `sox`, `ffmpeg`, `whisper-cli`, `piper`, `afplay`/`aplay`/`ffplay`, `pbcopy`, `osascript` — is reached
 through a `CommandRunner` (argv list, never `shell=True`), except toggle early-stop capture which uses
@@ -36,6 +37,8 @@ macOS defaults:
 - recordings: `~/Library/Application Support/digivoice/recordings/`
 - history: `~/Library/Application Support/digivoice/history.jsonl`
 - toggle stop-file: `~/Library/Application Support/digivoice/dict.stop`
+- cancel-file: `~/Library/Application Support/digivoice/dict.cancel`
+- banner status feed: `~/Library/Application Support/digivoice/status.json`
 - settings: `~/Library/Application Support/digivoice/settings.json`
 - default model file: `~/Library/Application Support/digivoice/models/ggml-base.en.bin`
 
@@ -45,6 +48,8 @@ Linux fallback (also what `doctor` prints when reporting the other platform):
 - recordings: `${XDG_DATA_HOME:-~/.local/share}/digivoice/recordings/`
 - history: `${XDG_DATA_HOME:-~/.local/share}/digivoice/history.jsonl`
 - toggle stop-file: `${XDG_DATA_HOME:-~/.local/share}/digivoice/dict.stop`
+- cancel-file: `${XDG_DATA_HOME:-~/.local/share}/digivoice/dict.cancel`
+- banner status feed: `${XDG_DATA_HOME:-~/.local/share}/digivoice/status.json`
 - settings: `${XDG_DATA_HOME:-~/.local/share}/digivoice/settings.json`
 - same filename: `ggml-base.en.bin`
 
@@ -61,9 +66,11 @@ commands write.
 | Command | Exit | Behavior |
 | --- | --- | --- |
 | `doctor` | 0 ready, 1 not ready | Report below. |
-| `dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste] [--no-rewrite]` | 0 dictated, 1 capture or transcribe failed | Record, transcribe, optional rewrite, append, paste. |
+| `dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--cancel-file PATH] [--no-paste] [--no-rewrite]` | 0 dictated, 1 capture / transcribe failed or nothing recognized, 3 cancelled | Record, transcribe, optional rewrite, append, paste. |
 | `speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | 0 spoken, 1 Piper/player/source failed | Piper playback; append `kind:speak`. |
 | `history [--last N] [--grep PATTERN] [--copy-last] [--json]` | 0 (1 if copy-last empty) | Lists / copies last dict. |
+| `cancel [--cancel-file PATH]` | 0 | Create the cancel-file; a running `dict` discards its take. |
+| `status` | 0 shown, 1 none yet | Print the `status.json` the banner reads. |
 | `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | Show or change settings.json. |
 | unknown / bad flags | 2 | Usage on stderr. |
 
@@ -103,6 +110,28 @@ wav and prints where it is. Nothing is appended to history for either, so silenc
 becomes an empty entry.
 
 **Interrupt / early stop.** Toggle stop (stop-file or signal) keeps the recorded wav, continues whisper → optional rewrite → history → paste of what was captured. Resume-same-take is not supported; expectation is **paste + new take**.
+
+### Cancel (Esc) and empty-take discard
+
+A take can end three ways without producing text, and none of them leaves anything behind:
+
+| Outcome | Trigger | Exit | wav | history | paste | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| cancelled | cancel-file appears (Esc in the Hammerspoon adapter, or `digivoice cancel`) | 3 | deleted | none | none | `cancelled` |
+| empty | whisper returns nothing, or only a silence marker (`[BLANK_AUDIO]`, `[ Silence ]`, `(silence)`), or the final text is blank | 1 | deleted | none | none | `empty` |
+| failed | missing tool, whisper error, permission denied | 1 | kept (transcribe failure) | none | none | `error` |
+
+`dict` clears any stale cancel-file at start and again on exit, so a late Esc never kills the next take. The cancel-file is checked while the recorder runs (the recorder process group is signalled and the wav deleted), while `whisper-cli` / the rewrite model run (the real runner polls and kills the child), and between stages. The last check is immediately before the history append; once the history line is written the take is committed and a late cancel is ignored. `paste` / `copy_to_clipboard` also refuse blank text as a last line of defence. Cancelling mid-recording needs `--toggle` (the open-ended recorder, which is what the adapter runs). With `--hold` / default the recorder is bounded and cannot be interrupted, so the cancel lands when it finishes.
+
+## Status feed (banner)
+
+`dict` and `speak` write `status.json` (atomic replace) as they move through stages. The Hammerspoon banner polls it. It is display only. Fails soft: an unwritable file never changes the exit code. Skipped entirely when `live_banner` is false.
+
+```json
+{"session":"1a2b3c4d5e6f","kind":"dict","state":"rewriting","text":"hey ship the notes","detail":"preset email","updated_ms":1790000000000,"pid":4242}
+```
+
+`kind` is `dict` or `speak`. `state` is one of `loading`, `recording`, `transcribing`, `rewriting`, `pasting`, `speaking`, `done`, `cancelled`, `empty`, `error`. `text` is the transcript (dict: raw while transcribing/rewriting, final once pasting), the selected text (speak), or the finished text (`done`). `detail` is the rewrite preset, the paste result, or the error line. `updated_ms` is epoch milliseconds; the adapter ignores any snapshot older than its own session start. Live streaming STT is out of scope: the transcript appears after whisper returns.
 
 **stdout is the transcript and nothing else**, so `digivoice dict | pbcopy` works. Progress,
 the wav path, the paste result, and the history path all go to stderr.
@@ -153,7 +182,7 @@ Always informational:
 | `paths` | Active data directory, macOS models path, Linux models path, recordings directory |
 | `tcc` | Mic and Accessibility are not probed; see `hammerspoon/README.md` |
 | `rewrite` | Disabled by default (info). When enabled: ok if local runner+model ready, else missing (dict still uses raw transcript) |
-| `interrupt` | Documents paste-on-stop + new-take behavior |
+| `interrupt` | Documents paste-on-stop + new-take behavior, and Esc / `digivoice cancel` discard |
 
 ## History records
 
@@ -176,8 +205,11 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option (61) → `dict --toggle --stop-file …` with a **persistent** menubar + canvas banner for the whole capture (uses `assets/digivoice-mark.png` when present).
-- Double-tap Left Option (58) → `speak --selection` (soft-fail notify if empty; no clipboard/history)
+- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 dot-matrix, ported from digichat's `DotMatrix`) and a menubar mark show the take from record through paste. Its text comes from `status.json`.
+- Esc → writes the cancel-file while a dictation is recording/transcribing/rewriting (swallowed only then). Nothing is pasted or saved.
+- Double-tap Left Option (58) → `speak --selection` (banner shows the selected text, or why there is none; no clipboard/history)
+- No Hammerspoon notifications except one launch toast listing the commands and the resolved CLI path.
+- Banner settings (`live_banner`, `banner_position`, `banner_animations`) are read from `settings.json` at the start of every take.
 
 See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
 
