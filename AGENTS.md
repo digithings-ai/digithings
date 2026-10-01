@@ -68,7 +68,7 @@ GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do n
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
 
 ---
 
@@ -100,7 +100,7 @@ Every Digi product, module, package, and service name is **always lowercase** in
 | digiquant | DigiQuant, Digiquant |
 | digisearch | DigiSearch, Digisearch |
 | digikey | DigiKey, Digikey |
-| digismith | DigiSmith, Digismith |
+| digitrace | DigiTrace, Digitrace |
 | digiclaw | DigiClaw, Digiclaw |
 | digibase | DigiBase, Digibase |
 | digiskills | DigiSkills, Digiskills |
@@ -414,7 +414,7 @@ Copy config once per session if missing: `cp .env.example .env` (set `GROQ_API_K
 ### Running services without Docker
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digismith :8003, LiteLLM :4000
+PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digitrace :8003, LiteLLM :4000
 PATH="$PWD/.venv/bin:$PATH" ./scripts/stop_stack_local.sh
 ```
 
@@ -512,7 +512,7 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 ## Liveness vs status
 
 - `GET /healthz` — liveness probe, auth-exempt, always `{"ok": true}`, no downstream checks
-- `GET /v1/status` (digismith) — operator diagnostic, may report config/versions; not for load balancers
+- `GET /v1/status` (digitrace) — operator diagnostic, may report config/versions; not for load balancers
 
 ---
 

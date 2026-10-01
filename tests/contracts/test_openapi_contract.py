@@ -60,8 +60,8 @@ def test_digisearch_openapi_has_query_and_ingest() -> None:
 
 
 @pytest.mark.unit
-def test_digismith_openapi_has_status() -> None:
-    from digismith.server import app as sm_app
+def test_digitrace_openapi_has_status() -> None:
+    from digitrace.server import app as sm_app
 
     schema = sm_app.openapi()
     paths = schema.get("paths", {})
@@ -88,7 +88,7 @@ def test_digivault_openapi_has_notes() -> None:
         "digiquant.server:app",
         "digikey.server:app",
         "digisearch.server:app",
-        "digismith.server:app",
+        "digitrace.server:app",
         "digivault.server:app",
     ],
 )

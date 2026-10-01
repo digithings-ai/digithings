@@ -16,7 +16,7 @@ relevance:
 
 ## What it is
 
-digillm is the standalone LLM client/wrapper library for the digithings stack. It speaks to any OpenAI-compatible endpoint and carries no FastAPI or service coupling and no hard dependency on digismith. It was extracted from the mature `digigraph.llm` implementation so that every component — services and libraries alike — shares one well-tested path to the model layer instead of each reinventing routing, caching, retries, and the tool-calling loop.
+digillm is the standalone LLM client/wrapper library for the digithings stack. It speaks to any OpenAI-compatible endpoint and carries no FastAPI or service coupling and no hard dependency on digitrace. It was extracted from the mature `digigraph.llm` implementation so that every component — services and libraries alike — shares one well-tested path to the model layer instead of each reinventing routing, caching, retries, and the tool-calling loop.
 
 It is provider-agnostic by design: a registered `provider/model_id` prefix routes to that provider; a bare model id is sent on the wire unchanged. There is no hidden environment- or YAML-driven model substitution — mode selection (test/medium/best) is an explicit, opt-in call.
 
@@ -38,13 +38,13 @@ Shipped and in active use:
 - `structured_completion` — OpenAI `json_schema` → validated Pydantic model
 - `resolve_model` — opt-in test/medium/best resolution (no implicit substitution)
 - Per-request override contextvars for proxy key and BYOK (bring-your-own-key)
-- Optional digismith/LangSmith tracing via the `[trace]` extra
+- Optional digitrace/LangSmith tracing via the `[trace]` extra
 
 ## Capabilities — 12-month roadmap
 
 - digigraph and digisearch fully migrated off their in-tree LLM modules onto digillm
 - Streaming (SSE) response support exposed through the shared client
-- Richer cost/usage accounting surfaced to digismith
+- Richer cost/usage accounting surfaced to digitrace
 - Pluggable cache backends (today an in-process cache; Redis-backed shared cache is future digibase work)
 
 ## Open source vs. proprietary

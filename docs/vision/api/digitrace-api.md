@@ -1,5 +1,5 @@
 ---
-title: "digismith — API reference"
+title: "digitrace — API reference"
 type: reference
 status: generated
 created: 2026-09-22
@@ -7,9 +7,9 @@ tags:
   - api
   - support
 relevance:
-  - digismith
+  - digitrace
 ---
-# digismith — API reference
+# digitrace — API reference
 
 > Correlation IDs across every hop — and prompts logged by length, never by text.
 
@@ -26,11 +26,11 @@ Status and metrics are public diagnostics. Tracing is a library wrapper, not an 
 
 ## Run locally
 ```bash
-docker compose up -d digismith
+docker compose up -d digitrace
 ```
 
 ```bash
-uvicorn digismith.server:app
+uvicorn digitrace.server:app
 ```
 
 ## Configuration
@@ -40,7 +40,7 @@ uvicorn digismith.server:app
 
 ## Endpoints
 
-Base URL: `$DIGISMITH_URL` (the service URL from docker-compose.yml).
+Base URL: `$DIGITRACE_URL` (the service URL from docker-compose.yml).
 
 ### GET /v1/status
 Tracing configuration diagnostic (operator-facing; secret-free).
@@ -59,7 +59,7 @@ Response example:
 ```
 
 ```bash
-curl $DIGISMITH_URL/v1/status
+curl $DIGITRACE_URL/v1/status
 ```
 
 ### GET /metrics
@@ -68,8 +68,8 @@ Prometheus metrics (text/plain 0.0.4).
 auth: none
 
 ## Public interface
-- `from digismith.trace import traceable` — @traceable("name") wraps a function with langsmith.traceable when LANGSMITH_API_KEY is set; otherwise a no-op. PII is redacted from span inputs/outputs.
-- `from digismith.config import tracing_enabled` — Returns True when tracing is configured (key set + SDK importable).
+- `from digitrace.trace import traceable` — @traceable("name") wraps a function with langsmith.traceable when LANGSMITH_API_KEY is set; otherwise a no-op. PII is redacted from span inputs/outputs.
+- `from digitrace.config import tracing_enabled` — Returns True when tracing is configured (key set + SDK importable).
 
 ## Notes
 - Span attributes SHOULD include workflow_id, request_id, session_id, job_id.
@@ -84,4 +84,4 @@ digigraph, digiclaw, digibase
 ## Links
 - [Source](https://github.com/digithings-ai)
 
-See also [[digismith]].
+See also [[digitrace]].

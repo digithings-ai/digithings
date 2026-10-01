@@ -39,7 +39,7 @@
     <g transform="translate(950 400)"><circle class="n" r="32"/><circle fill="#5aa3c4" opacity="0.5" r="3"/><text class="l" y="-42">DIGISEARCH</text><text class="sl" y="48">RETRIEVAL</text></g>
     <g transform="translate(880 560)"><circle class="n" r="32"/><circle fill="#4fa39b" opacity="0.5" r="3"/><text class="l" y="-42">DIGILINK</text><text class="sl" y="48">PROTOCOL</text></g>
     <g transform="translate(250 560)"><circle class="n" r="32"/><circle fill="#7b7fc7" opacity="0.5" r="3"/><text class="l" y="-42">DIGISTORE</text><text class="sl" y="48">STORAGE</text></g>
-    <g transform="translate(430 620)"><circle class="n" r="32"/><circle fill="#6fa3a3" opacity="0.5" r="3"/><text class="l" y="-42">DIGISMITH</text><text class="sl" y="48">OBSERVABILITY</text></g>
+    <g transform="translate(430 620)"><circle class="n" r="32"/><circle fill="#6fa3a3" opacity="0.5" r="3"/><text class="l" y="-42">DIGITRACE</text><text class="sl" y="48">OBSERVABILITY</text></g>
     <g transform="translate(620 620)"><circle class="n" r="32"/><circle fill="#b87840" opacity="0.5" r="3"/><text class="l" y="-42">DIGICLAW</text><text class="sl" y="48">RUNNER</text></g>
     <g transform="translate(800 620)"><circle class="n" r="32"/><circle fill="#9ea0a5" opacity="0.5" r="3"/><text class="l" y="-42">DIGIBASE</text><text class="sl" y="48">LIBRARY</text></g>
   </g>

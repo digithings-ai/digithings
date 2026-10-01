@@ -42,7 +42,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper + BTC-SDCA tearsheet regen: Coinbase + M2/DXY siblings, Nautilus generate, upsert `strategy_tearsheets` (#1068, #3453). Checkout pinned to `main`. | Working | none |
 | `test-digiquant.yml` | Test: digiquant | workflow_call | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
-| `test-digismith.yml` | Test: digismith | workflow_call | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |
+| `test-digitrace.yml` | Test: digitrace | workflow_call | digitrace unit tests | Working | `digitrace/**`, `tests/dsm/**` |
 | `ci-docs.yml` | CI: docs | push (main/develop), PR | Internal markdown link check + agents-init drift check (single job) | Working | markdown, agents surface |
 | `project-enforce-assignment.yml` | Project: enforce assignment | schedule (daily 09:00), dispatch | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
 | `security-gitleaks.yml` | Security: gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | PR: paths-ignore `**.md`, `docs/**` |
@@ -54,7 +54,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `sync-architecture-vault.yml` | sync-architecture-vault | push (`main`), dispatch | Mirror digivault-managed `docs/vision/**` → Supabase `public.architecture_notes` for the digithings.ai docs chat; `production` env (human gate); needs migration 048 | Working | `docs/vision/**`, sync script |
 | `project-route-issues.yml` | Project: route issues | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `pipeline-maintenance.yml` | Pipeline: scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
-| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working (do not inject empty `REDIS_URL` into LiteLLM) | none |
+| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digitrace | Working (do not inject empty `REDIS_URL` into LiteLLM) | none |
 | `ci-type-check.yml` | CI: type check | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 | `test-digivault.yml` | Test: digivault | workflow_call | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
 | `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/docs/`, stable `/og.png` canaries (SPA-fallback MIME masking, #671 / #800); one further job per site (`freshness`, `freshness-digithings`) checks that site's deploy build stamp so a frozen Pages project is detected rather than discovered (#1759) | Working | none |
@@ -271,7 +271,7 @@ Current watched workflows in `agent-ci-failure-triage.yml`:
 - `digikey tests` → `test-digikey.yml`
 - `digiquant tests` → `test-digiquant.yml`
 - `digisearch tests` → `test-digisearch.yml`
-- `digismith tests` → `test-digismith.yml`
+- `digitrace tests` → `test-digitrace.yml`
 
 ---
 

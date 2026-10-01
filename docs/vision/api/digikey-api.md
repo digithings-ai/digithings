@@ -121,7 +121,7 @@ Response example:
 PyJWT, cryptography, bcrypt, SQLAlchemy, Postgres, Redis
 
 ## Related
-digichat, digigraph, digismith
+digichat, digigraph, digitrace
 
 ## Links
 - [Source](https://github.com/digithings-ai)

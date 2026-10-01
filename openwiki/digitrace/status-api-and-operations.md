@@ -1,17 +1,17 @@
 ---
 type: api-operations-guide
 title: Status API and Operations
-description: digismith HTTP surface and operations — health probes, secret-free status, metrics, middleware, env vars, and container wiring.
-tags: [digismith, status-api, operations, health, metrics]
+description: digitrace HTTP surface and operations — health probes, secret-free status, metrics, middleware, env vars, and container wiring.
+tags: [digitrace, status-api, operations, health, metrics]
 sources:
   - id: openwiki-source-acc01443fc8b95f02bdc8db2
     resource: repo://digibase/src/digibase/otel.py
   - id: openwiki-source-5c7b6be6bf0bcff60bbd689d
-    resource: repo://digismith/Dockerfile
+    resource: repo://digitrace/Dockerfile
   - id: openwiki-source-e502a2c67cf187dc015ba472
-    resource: repo://digismith/src/digismith/config.py
+    resource: repo://digitrace/src/digitrace/config.py
   - id: openwiki-source-01a7f90e3c3e6e8ce426b71e
-    resource: repo://digismith/src/digismith/server.py
+    resource: repo://digitrace/src/digitrace/server.py
   - id: openwiki-source-77a4ffd4726d030792a3851c
     resource: repo://tests/dsm/test_cors.py
   - id: openwiki-source-951b7db648e549f088d67857
@@ -28,7 +28,7 @@ verified:
 
 # Status API and Operations
 
-The digismith HTTP service (`digismith.server:app`) is a thin, read-only
+The digitrace HTTP service (`digitrace.server:app`) is a thin, read-only
 surface: two liveness probes, one secret-free tracing-status diagnostic, and
 a Prometheus metrics endpoint, fronted by shared digibase middleware. It
 holds no state and is optional — removing the container never breaks
@@ -46,7 +46,7 @@ Liveness answers "is the process up"; status answers "is tracing configured".
 
 ## Operator diagnostic: `GET /v1/status`
 
-Returns a `SmithStatus` object describing the runtime tracing configuration:
+Returns a `TraceStatus` object describing the runtime tracing configuration:
 
 ```json
 {
@@ -77,23 +77,23 @@ check is explicitly deferred — do not document or implement it here.
 ## Metrics: `GET /metrics`
 
 Installed via the shared `digibase.metrics.install_metrics` helper with
-`service="digismith"`. The endpoint exposes the standard cross-service
+`service="digitrace"`. The endpoint exposes the standard cross-service
 series (`http_requests_total`, `http_request_duration_seconds`,
 `http_requests_in_flight`) labelled with `service`, `version`, and
 `environment` (`version` from the package `__version__`, `environment` from
 `DIGI_ENV`, default `"dev"`). Like `/healthz`, it is unauthenticated for
-internal Prometheus scraping. digismith does not export trace-derived
+internal Prometheus scraping. digitrace does not export trace-derived
 counters — that remains a Phase 2 follow-up.
 
 ## Middleware stack
 
 In order at app construction: Prometheus instrumentation, CORS
-(`digibase.cors.install_cors` with `service="digismith"`), request-ID
+(`digibase.cors.install_cors` with `service="digitrace"`), request-ID
 middleware plus request-ID logging, FastAPI error handlers, and OTel
 FastAPI auto-instrumentation (`setup_otel_fastapi`, a no-op unless
 `OTEL_EXPORTER_OTLP_ENDPOINT` is set).
 
-CORS allowlist precedence is `DIGISMITH_CORS_ORIGINS` →
+CORS allowlist precedence is `DIGITRACE_CORS_ORIGINS` →
 `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty
 (deny). Origins not on the allowlist receive no
 `access-control-allow-origin` response header.
@@ -107,7 +107,7 @@ CORS allowlist precedence is `DIGISMITH_CORS_ORIGINS` →
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | When set, enables OTel HTTP/protobuf export of the service's own HTTP spans |
 | `DIGI_ENV` | No | Environment label on metrics (default `"dev"`) |
 | `DIGI_PII_PATTERNS` | No | Extra comma-separated redaction regexes (see tracing page) |
-| `DIGISMITH_CORS_ORIGINS` / `DIGI_CORS_ORIGINS` | No | CORS allowlist |
+| `DIGITRACE_CORS_ORIGINS` / `DIGI_CORS_ORIGINS` | No | CORS allowlist |
 
 All are sourced from `.env` via `env_file` in Compose; the key lives in the
 container environment, so host access to `docker inspect`/`exec` is part of
@@ -115,19 +115,19 @@ the trust boundary.
 
 ## Container wiring
 
-The Compose service builds from the repo root (`digismith/Dockerfile`,
-which installs `digibase` then `digismith[langsmith]`), publishes
+The Compose service builds from the repo root (`digitrace/Dockerfile`,
+which installs `digibase` then `digitrace[langsmith]`), publishes
 `127.0.0.1:8003:8003` on the host, and healthchecks
 `http://127.0.0.1:8003/healthz` every 15s. The image runs uvicorn as
-`digismith.server:app --host 0.0.0.0 --port 8003`. No other service depends
-on it; `digigraph` carries a reserved `DIGISMITH_URL` and digichat a
-`DIGISMITH_INTERNAL_URL`, both for future status polling, neither read by
+`digitrace.server:app --host 0.0.0.0 --port 8003`. No other service depends
+on it; `digigraph` carries a reserved `DIGITRACE_URL` and digichat a
+`DIGITRACE_INTERNAL_URL`, both for future status polling, neither read by
 service code today.
 
 ## Smoke checks
 
 ```bash
 curl -s http://localhost:8003/healthz    # {"ok": true}
-curl -s http://localhost:8003/v1/status  # SmithStatus JSON, no secrets
+curl -s http://localhost:8003/v1/status  # TraceStatus JSON, no secrets
 curl -s http://localhost:8003/metrics    # Prometheus text exposition
 ```

@@ -57,19 +57,19 @@ def test_token_claims_round_trip() -> None:
 
 @pytest.mark.baseline
 def test_smith_status_round_trip() -> None:
-    """digismith.config.SmithStatus — observability status model."""
-    from digismith.config import SmithStatus
+    """digitrace.config.TraceStatus — observability status model."""
+    from digitrace.config import TraceStatus
 
     data = {
         "version": "0.1.0",
         "tracing_configured": False,
         "langsmith_sdk_installed": False,
     }
-    obj = SmithStatus(**data)
+    obj = TraceStatus(**data)
     dumped = obj.model_dump()
     assert dumped["version"] == "0.1.0"
     assert dumped["tracing_configured"] is False
-    SmithStatus(**dumped)
+    TraceStatus(**dumped)
 
 
 @pytest.mark.baseline

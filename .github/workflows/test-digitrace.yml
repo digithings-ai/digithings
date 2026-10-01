@@ -1,4 +1,4 @@
-name: "Test: digismith"
+name: "Test: digitrace"
 
 # Installs from the committed uv.lock rather than resolving fresh (#1714).
 #
@@ -27,7 +27,7 @@ jobs:
         run: uv sync --frozen --all-packages --all-extras
 
       - name: Ruff
-        run: uv run --frozen --no-sync ruff check digismith/src
+        run: uv run --frozen --no-sync ruff check digitrace/src
 
       - name: Pytest
         run: uv run --frozen --no-sync pytest tests/dsm/ -m unit -v --tb=short

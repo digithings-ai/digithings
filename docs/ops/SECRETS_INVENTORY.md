@@ -64,7 +64,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `GEMINI_API_KEY` · `ANTHROPIC_API_KEY` · `XAI_API_KEY` · `OLLAMA_API_KEY` | `digigraph/src/digigraph/model_config.py:510`; `digillm/src/digillm/client.py:233` | `project_config.py:26-27`; `.env.example:24,34` | yes (`.env`) | respective provider models 401 | local `.env` only | BYOK / operator keys |
 | `LITELLM_MASTER_KEY` · `LITELLM_PROXY_API_KEY` · `DIGIKEY_LITELLM_PROXY_KEY` | `digillm/src/digillm/client.py:362`; stack `src/index.ts:109`; `digikey/src/digikey/server.py:300` | stack `src/index.ts:108-109`; `docker-compose.yml:36,127` | no — write-only | LiteLLM proxy auth; digichat proxy bearer | stack Worker + compose `DIGIKEY_*` fallback | `LITELLM_MASTER_KEY` live but undocumented |
 | `MISTRAL_API_KEY` · `CEREBRAS_API_KEY` · `DEEPSEEK_API_KEY` · `NVIDIA_API_KEY` | `pipeline-provider-review.yml:92-97` | org secrets | n/a | provider-review job probes fail | CI only | not used by services |
-| `LANGSMITH_API_KEY` | `digismith/src/digismith/config.py:27`; `openwiki-update.yml` | org secret (2026-09-18) | n/a | tracing export stops | GH only | #4357 dropped the separate `OPENWIKI_LANGSMITH_API_KEY` read — the OpenWiki step reuses this key |
+| `LANGSMITH_API_KEY` | `digitrace/src/digitrace/config.py:27`; `openwiki-update.yml` | org secret (2026-09-18) | n/a | tracing export stops | GH only | #4357 dropped the separate `OPENWIKI_LANGSMITH_API_KEY` read — the OpenWiki step reuses this key |
 | `FRED_API_KEY` | stack `src/index.ts:180`; `digiquant/src/digiquant/cli/prices.py:519` | org secret only (the repo copy was deleted 2026-09-18 — `repo-over-org` is clean); `wrangler.toml:151`; committed example | no — write-only | macro/market-data reads fail | GH + stack (documented) + committed example | absent live (R9); `plaintext-literal` in example |
 | `EXA_API_KEY` · `EXA_MONITOR_WEBHOOK_SECRET` | `digisearch/src/digisearch/web_exa.py:34`; monitors | `.env.example:102,112` | yes (`.env`) | web search dormant; webhook fails closed | local `.env` | |
 | `AZURE_SEARCH_API_KEY` · `COHERE_API_KEY` | `digisearch/.../azure_search.py:36`; `search/reranker.py:50` | `.env.example` | yes (`.env`) | backend disabled / rerank falls back | local `.env` | optional backends |
@@ -122,7 +122,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 | Name | Consumer (file:line) | Defined in (file:line) | Readback? | Rotation blast radius | Duplicate copies | Notes |
 |---|---|---|---|---|---|---|
-| `DIGIGRAPH_INTERNAL_URL` · `DIGIKEY_URL` · `DIGIQUANT_INTERNAL_URL` · `DIGISMITH_INTERNAL_URL` · `DIGISEARCH_INTERNAL_URL` | digichat `src/index.ts:49-50` | digichat `wrangler.toml:52-53` | no — write-only | chat backend / JWT exchange upstream | digichat Worker; GH var `DIGIKEY_URL` | URLs stored as secrets |
+| `DIGIGRAPH_INTERNAL_URL` · `DIGIKEY_URL` · `DIGIQUANT_INTERNAL_URL` · `DIGITRACE_INTERNAL_URL` · `DIGISEARCH_INTERNAL_URL` | digichat `src/index.ts:49-50` | digichat `wrangler.toml:52-53` | no — write-only | chat backend / JWT exchange upstream | digichat Worker; GH var `DIGIKEY_URL` | URLs stored as secrets |
 | `DIGISEARCH_URL` | `pipeline-digiquant.yml:155` | not set; the workflow falls back to `https://search.digithings.ai` | n/a | pipeline uses the hosted URL | — | the `docs-reindex-guide.yml` apply step was removed (#4357): it posts a local filesystem path with no auth header |
 | `DIGIKEY_ISSUER` · `DIGIKEY_AUDIENCE` · `DIGIKEY_KEY_ID` · `DIGIKEY_JWKS_URL` | stack `src/index.ts:61-62,73`; `jwt_verify.py:60` | stack `wrangler.toml:202-203`; code defaults `src/index.ts:62,73`, `digikey/src/digikey/crypto_keys.py:62` | yes | `iss`/`aud` mismatch fails all verification | wrangler + entrypoint defaults | plain vars, not secrets |
 | `DIGICHAT_EMBED_HOSTS` | `apps/digichat-cloudflare/src/index.ts:41` | `apps/digichat-cloudflare/wrangler.toml:74` | yes | embed CSP `frame-ancestors` | wrangler + index default | not a secret |
@@ -272,7 +272,7 @@ rg -n "secrets\.[A-Z_]+|vars\.[A-Z_]+|^\s*environment:" .github/workflows
 rg -n "^[A-Z][A-Z0-9_]+=" .env.example apps/digichat/.env.example \
   infra/digichat-release/.env.profile-*.example docker-compose.yml
 # 5. Python settings / os.environ reads.
-rg -n "os\.getenv|os\.environ" --glob '*/src/**/*.py' digibase digikey digigraph digillm digiquant digisearch digismith digivault digiclaw
+rg -n "os\.getenv|os\.environ" --glob '*/src/**/*.py' digibase digikey digigraph digillm digiquant digisearch digitrace digivault digiclaw
 ```
 
 `.worktrees/` is gitignored (`.gitignore:5` — `/.worktrees/`), so a search launched from the main checkout silently skips a task worktree. Pass the worktree root as an explicit path argument, or add `--no-ignore`, when refreshing from inside one.

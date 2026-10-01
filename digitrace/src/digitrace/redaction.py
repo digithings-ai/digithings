@@ -1,4 +1,4 @@
-"""PII redaction for digismith trace payloads before LangSmith submission.
+"""PII redaction for digitrace trace payloads before LangSmith submission.
 
 ``PiiRedactor`` walks arbitrary dict / list / tuple structures and replaces
 PII-looking substrings inside string values with opaque sentinels. Built-in
@@ -14,7 +14,7 @@ variable are appended and render as ``[REDACTED]``. Non-string values pass
 through (nested structures recurse).
 
 The module has no runtime dependency on ``langsmith``; it operates on plain
-Python structures. ``digismith.trace`` wires it into ``langsmith.traceable``
+Python structures. ``digitrace.trace`` wires it into ``langsmith.traceable``
 via the SDK's native ``process_inputs`` / ``process_outputs`` hooks.
 """
 

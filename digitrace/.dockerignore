@@ -1,4 +1,4 @@
-# digismith – keep build context small and fast
+# digitrace – keep build context small and fast
 .git
 .pytest_cache
 *.egg-info

@@ -38,7 +38,7 @@ export const edges: { a: string; b: string }[] = [
   { a: "digigraph", b: "digisearch" },
   { a: "digigraph", b: "digichat" },
   { a: "digigraph", b: "digikey" },
-  { a: "digigraph", b: "digismith" },
+  { a: "digigraph", b: "digitrace" },
   { a: "digigraph", b: "digiclaw" },
   { a: "digigraph", b: "digivault" },
   { a: "digiquant", b: "digistore" },
@@ -48,7 +48,7 @@ export const edges: { a: string; b: string }[] = [
   { a: "digichat", b: "digikey" },
   { a: "digichat", b: "digisearch" },
   { a: "digiclaw", b: "digiquant" },
-  { a: "digismith", b: "digichat" },
+  { a: "digitrace", b: "digichat" },
 ];
 
 export const modules: ModuleNode[] = [
@@ -213,15 +213,15 @@ export const modules: ModuleNode[] = [
     },
     api: [{ label: "Issuer config", code: "DIGIKEY_ISSUER=https://…" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
-    related: ["digichat", "digigraph", "digismith"],
+    related: ["digichat", "digigraph", "digitrace"],
   },
   {
-    id: "digismith",
-    name: "digismith",
+    id: "digitrace",
+    name: "digitrace",
     tier: "support",
     graphOrder: 5,
     graph: { x: 95, y: 300, r: 20 },
-    emblem: "digismith",
+    emblem: "digitrace",
     role: "Observability · spans · correlation IDs",
     tagline: "Correlation IDs across every hop — and prompts logged by length, never by text.",
     summary: [
@@ -234,7 +234,7 @@ export const modules: ModuleNode[] = [
       { name: "Prometheus", icon: "prometheus" },
       { name: "FastAPI", icon: "fastapi" },
     ],
-    dockerCmd: "docker compose up -d digismith",
+    dockerCmd: "docker compose up -d digitrace",
     initSnippet: {
       lang: "python",
       code: "from digibase.http import install_request_id_middleware\ninstall_request_id_middleware(app)",
@@ -264,7 +264,7 @@ export const modules: ModuleNode[] = [
     initSnippet: { lang: "bash", code: "python -m digiclaw   # runs on an interval" },
     api: [{ label: "Run the daemon", code: "python -m digiclaw" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
-    related: ["digiquant", "digismith"],
+    related: ["digiquant", "digitrace"],
   },
   {
     id: "digibase",
@@ -292,7 +292,7 @@ export const modules: ModuleNode[] = [
     },
     api: [{ label: "Import", code: "from digibase.audit import redact_mapping" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
-    related: ["digismith", "digisearch"],
+    related: ["digitrace", "digisearch"],
   },
   {
     id: "digivault",

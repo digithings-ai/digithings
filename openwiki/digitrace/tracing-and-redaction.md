@@ -1,20 +1,20 @@
 ---
 type: behavior-guide
 title: Tracing and Redaction
-description: How digismith traceable() activates, what tracing_enabled() reports, and how PiiRedactor scrubs span payloads before LangSmith submission.
-tags: [digismith, tracing, langsmith, pii-redaction]
+description: How digitrace traceable() activates, what tracing_enabled() reports, and how PiiRedactor scrubs span payloads before LangSmith submission.
+tags: [digitrace, tracing, langsmith, pii-redaction]
 verified:
   - by: openwiki/0.5.0
     at: 2026-09-09T14:37:17.158Z
 sources:
   - id: openwiki-source-4b364849947e51d0e3e08109
-    resource: repo://digismith/ARCHITECTURE.md
+    resource: repo://digitrace/ARCHITECTURE.md
   - id: openwiki-source-e502a2c67cf187dc015ba472
-    resource: repo://digismith/src/digismith/config.py
+    resource: repo://digitrace/src/digitrace/config.py
   - id: openwiki-source-9fad818d57858b73e94fed57
-    resource: repo://digismith/src/digismith/redaction.py
+    resource: repo://digitrace/src/digitrace/redaction.py
   - id: openwiki-source-c00fdd1354f900a1d45b111a
-    resource: repo://digismith/src/digismith/trace.py
+    resource: repo://digitrace/src/digitrace/trace.py
   - id: openwiki-source-42c8be06536f30eafbc5f1c8
     resource: repo://tests/dsm/test_redaction.py
   - id: openwiki-source-ecab72add51be212920aacbe
@@ -24,7 +24,7 @@ generated: { by: "opencode", at: "2026-09-07T22:31:53.755Z" }
 
 # Tracing and Redaction
 
-Tracing in digismith is a conditional decorator plus a value-pattern
+Tracing in digitrace is a conditional decorator plus a value-pattern
 redactor attached to the LangSmith SDK's native input/output hooks. The
 rule of thumb: **no key or no SDK means the decorator does not exist at
 runtime** — the function object passes through untouched.
@@ -32,7 +32,7 @@ runtime** — the function object passes through untouched.
 ## `traceable(name)` activation semantics
 
 ```python
-from digismith.trace import traceable
+from digitrace.trace import traceable
 
 @traceable("chat_completion")
 def chat_completion(...): ...
@@ -66,7 +66,7 @@ hooks, spans would flow unredacted.
 
 ## `tracing_enabled()` and helpers
 
-`digismith.config` provides the runtime introspection used by both the
+`digitrace.config` provides the runtime introspection used by both the
 decorator path and `/v1/status`:
 
 - `tracing_enabled()` — true when the API key is non-empty **and** the SDK
@@ -108,7 +108,7 @@ structures.
 
 ## Span attribute contract (advisory, unenforced)
 
-digismith documents which span attributes traces *should* carry
+digitrace documents which span attributes traces *should* carry
 (`workflow_id`, `request_id`, `session_id`, `job_id`, tool/run name) and
 which they *must not* (`raw prompts/completions`, API keys/tokens,
 unapproved file paths, full document bodies). No runtime validator enforces

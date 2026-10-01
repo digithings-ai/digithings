@@ -40,10 +40,10 @@ def langsmith_host_sanitized() -> str | None:
     return host
 
 
-class SmithStatus(BaseModel):
+class TraceStatus(BaseModel):
     """Public status for GET /v1/status."""
 
-    version: str = Field(description="digismith package version")
+    version: str = Field(description="digitrace package version")
     tracing_configured: bool = Field(
         description="LangSmith tracing would activate (key + langsmith installed)"
     )
@@ -56,3 +56,8 @@ class SmithStatus(BaseModel):
         default=None,
         description="X-Request-ID of the call that produced this status (echoed for correlation)",
     )
+
+
+# Temporary compat alias for the pre-rename model name (Phase 0, #4929).
+# Prefer TraceStatus in new code; SmithStatus will be removed in Phase 3.
+SmithStatus = TraceStatus

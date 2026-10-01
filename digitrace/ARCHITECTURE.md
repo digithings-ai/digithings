@@ -1,6 +1,6 @@
-# digismith Architecture
+# digitrace Architecture
 
-**Component:** digismith — LangSmith-aligned observability helpers + HTTP status API
+**Component:** digitrace — backend-neutral observability helpers + HTTP status API (LangSmith backend in Phase 0)
 **Version:** 0.1.0
 **Status:** Minimal viable implementation — library complete, HTTP service stable, Phase 2 observability platform deferred
 
@@ -8,9 +8,9 @@
 
 ## 1. Overview
 
-digismith occupies the observability role in the digithings stack. It has two distinct faces:
+digitrace occupies the observability role in the digithings stack. It has two distinct faces:
 
-**As a Python library** (`digismith.trace`, `digismith.config`), it provides a thin conditional wrapper around the LangSmith SDK. Every service in the stack can import it and immediately get LangSmith tracing for key functions — or get a transparent no-op when LangSmith is not configured. The library has zero mandatory dependencies beyond the packages already present in any digithings service (`pydantic`, `fastapi`); the LangSmith SDK is a soft optional (`digismith[langsmith]`).
+**As a Python library** (`digitrace.trace`, `digitrace.config`), it provides a thin conditional wrapper around the LangSmith SDK. Every service in the stack can import it and immediately get LangSmith tracing for key functions — or get a transparent no-op when LangSmith is not configured. The library has zero mandatory dependencies beyond the packages already present in any digithings service (`pydantic`, `fastapi`); the LangSmith SDK is a soft optional (`digitrace[tracing]`).
 
 **As an HTTP microservice** (port 8003), it exposes two read-only endpoints that tell orchestrators and dashboards whether tracing is active, which LangSmith host is configured, and whether the SDK is installed — all without ever surfacing a secret.
 
@@ -28,23 +28,23 @@ Every digithings FastAPI service exposes the same three Prometheus series via `d
 
 `service`, `version`, and `environment` are the cross-service identity labels that enable unified Grafana dashboards to slice by deployed version and environment. `version` is sourced from each service's `__version__` (falls back to `"0.1.0"`); `environment` is read from `DIGI_ENV` (defaults to `"dev"`). The `/metrics` endpoint is unauthenticated — the same trust boundary as `/health` — so Prometheus can scrape it on the internal network.
 
-The rollout covers five FastAPI services: digigraph, digiquant, digisearch, digikey, and digismith. digiclaw is intentionally excluded — it is a CLI runner (`python -m digiclaw`), not an HTTP service.
+The rollout covers five FastAPI services: digigraph, digiquant, digisearch, digikey, and digitrace. digiclaw is intentionally excluded — it is a CLI runner (`python -m digiclaw`), not an HTTP service.
 
 ---
 
 ## 2. Current Implementation State
 
-digismith ships exactly five source files under `digismith/src/digismith/`:
+digitrace ships exactly five source files under `digitrace/src/digitrace/`:
 
 | File | Role | Truly implemented | Placeholder / stub |
 |------|------|------------------|--------------------|
 | `__init__.py` | Package identity, `__version__ = "0.1.0"` | Version string | Everything else |
-| `config.py` | Environment introspection + `SmithStatus` model | All four public symbols | Nothing deferred |
+| `config.py` | Environment introspection + `TraceStatus` model | All four public symbols | Nothing deferred |
 | `trace.py` | `traceable(name)` decorator | Conditional wrapping, no-op fallback, PII redaction hookup | Span attribute enforcement, sampling |
 | `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads | Emails, API-key prefixes, phone numbers, `DIGI_PII_PATTERNS` extras | Key-name allowlists, length-based document summarization |
 | `server.py` | FastAPI application, `/health`, `/v1/status`, `/metrics` | All three endpoints, OTel wiring, correlation ID, Prometheus instrumentation | `/v1/status/detailed` |
 
-There is no database, no background worker, no queue, and no internal LangGraph graph. digismith does not receive traces — it only enables other services to emit them via the LangSmith SDK.
+There is no database, no background worker, no queue, and no internal LangGraph graph. digitrace does not receive traces — it only enables other services to emit them via the LangSmith SDK.
 
 ---
 
@@ -63,7 +63,7 @@ No authentication required. No secrets in response. Safe to expose to any intern
 
 ### `GET /v1/status`
 
-Returns a `SmithStatus` JSON object reflecting the current runtime environment. Designed to be **public metadata**: orchestrators and dashboards can poll it to decide whether to display trace links. Must never return a secret.
+Returns a `TraceStatus` JSON object reflecting the current runtime environment. Designed to be **public metadata**: orchestrators and dashboards can poll it to decide whether to display trace links. Must never return a secret.
 
 ```
 HTTP 200 OK
@@ -78,10 +78,10 @@ HTTP 200 OK
 
 `tracing_configured` is `true` iff `LANGSMITH_API_KEY` is non-empty **and** `langsmith` is importable. `langsmith_host` is the hostname extracted from `LANGSMITH_ENDPOINT` (no path, no credentials, no query string). If `LANGSMITH_ENDPOINT` is not set, the default `api.smith.langchain.com` appears. `request_id` echoes the `X-Request-ID` of the call that produced this response (sourced from `digibase.http.install_request_id_middleware`) so operators can correlate the status response with logs and traces (task #213).
 
-### Python library: `digismith.trace.traceable`
+### Python library: `digitrace.trace.traceable`
 
 ```python
-from digismith.trace import traceable
+from digitrace.trace import traceable
 
 @traceable("chat_completion")
 def chat_completion(...): ...
@@ -89,10 +89,10 @@ def chat_completion(...): ...
 
 A higher-order decorator. When `LANGSMITH_API_KEY` is set and `langsmith` is importable, wraps the function with `langsmith.traceable(name=name)`. Otherwise returns the original function unmodified. The decorator is applied at module import time; there is no per-call check.
 
-### Python library: `digismith.config.tracing_enabled`
+### Python library: `digitrace.config.tracing_enabled`
 
 ```python
-from digismith.config import tracing_enabled
+from digitrace.config import tracing_enabled
 
 if tracing_enabled():
     ...
@@ -104,12 +104,12 @@ A runtime boolean function. Re-reads `LANGSMITH_API_KEY` on each call, so it is 
 
 ## 4. Data Model
 
-### `SmithStatus` (Pydantic v2)
+### `TraceStatus` (Pydantic v2)
 
-Defined in `digismith/src/digismith/config.py`:
+Defined in `digitrace/src/digitrace/config.py`:
 
 ```python
-class SmithStatus(BaseModel):
+class TraceStatus(BaseModel):
     version: str
     tracing_configured: bool
     langsmith_sdk_installed: bool
@@ -121,7 +121,7 @@ All fields are non-secret by construction. The model is used directly as the Fas
 
 ### Span attribute contract
 
-digismith defines a contract (documented in `ARCHITECTURE.md`) for what span attributes LangSmith traces SHOULD carry. This is a documentation contract, not an enforced schema:
+digitrace defines a contract (documented in `ARCHITECTURE.md`) for what span attributes LangSmith traces SHOULD carry. This is a documentation contract, not an enforced schema:
 
 **Required (SHOULD include when known):**
 - `workflow_id` — correlates spans to a single digigraph workflow execution
@@ -145,14 +145,14 @@ This contract is referenced by digigraph and digiquant but is not enforced by an
 ### Module structure
 
 ```
-digismith/
-  src/digismith/
+digitrace/
+  src/digitrace/
     __init__.py     # __version__ only
-    config.py       # SmithStatus model + env introspection helpers
+    config.py       # TraceStatus model + env introspection helpers
     trace.py        # traceable() decorator
     server.py       # FastAPI app
   pyproject.toml    # deps: pydantic, fastapi, uvicorn, digibase; optional: langsmith, otel
-  Dockerfile        # python:3.12-slim, installs digibase + digismith[langsmith]
+  Dockerfile        # python:3.12-slim, installs digibase + digitrace[tracing]
 ```
 
 ### Conditional tracing decorator pattern
@@ -174,15 +174,15 @@ except ImportError:
 
 ### Non-invasive design
 
-digismith imposes no mandatory runtime dependency on any other digithings service. digigraph (the primary consumer) imports `digismith.trace.traceable` directly as a decorator on `chat_completion` and `chat_completion_with_tools` in `digigraph/src/digigraph/llm.py`. If `digismith` is not installed, digigraph fails at startup — so the library is a hard dependency of digigraph's image, but the LangSmith SDK inside it is soft.
+digitrace imposes no mandatory runtime dependency on any other digithings service. digigraph (the primary consumer) imports `digitrace.trace.traceable` directly as a decorator on `chat_completion` and `chat_completion_with_tools` in `digigraph/src/digigraph/llm.py`. If `digitrace` is not installed, digigraph fails at startup — so the library is a hard dependency of digigraph's image, but the LangSmith SDK inside it is soft.
 
-The digismith HTTP service is never called by digigraph for tracing. Traces go directly from the LangSmith SDK embedded in digigraph's process to the LangSmith API endpoint. The HTTP service exists solely for status introspection.
+The digitrace HTTP service is never called by digigraph for tracing. Traces go directly from the LangSmith SDK embedded in digigraph's process to the LangSmith API endpoint. The HTTP service exists solely for status introspection.
 
 ### OTel integration path
 
-`server.py` calls `setup_otel_fastapi(app, service_name="digismith")` from `digibase.otel`. This call is a no-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When set, it installs:
+`server.py` calls `setup_otel_fastapi(app, service_name="digitrace")` from `digibase.otel`. This call is a no-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When set, it installs:
 
-1. A `TracerProvider` with `Resource({"service.name": "digismith"})`
+1. A `TracerProvider` with `Resource({"service.name": "digitrace"})`
 2. An `OTLPSpanExporter` (HTTP/protobuf) pointing at the configured endpoint
 3. A `BatchSpanProcessor` for async export
 4. `FastAPIInstrumentor` auto-instrumentation for all HTTP requests
@@ -201,7 +201,7 @@ The endpoint deliberately returns only non-secret metadata. `langsmith_host_sani
 
 ### PII redaction before LangSmith submission
 
-`digismith.trace.traceable` attaches a :class:`~digismith.redaction.PiiRedactor`
+`digitrace.trace.traceable` attaches a :class:`~digitrace.redaction.PiiRedactor`
 to every active LangSmith span via the SDK's native `process_inputs` and
 `process_outputs` callbacks. Inputs and outputs are walked recursively
 (`dict`, `list`, `tuple`, `str`) and value-pattern redaction replaces:
@@ -228,7 +228,7 @@ The contract documented in `ARCHITECTURE.md` is advisory only. No validator chec
 
 ### LangSmith API key in environment
 
-`LANGSMITH_API_KEY` is read from the environment. In Docker Compose, it is sourced from `.env` via `env_file`. The key is never written to any log, metric, or response. However, the digismith service container holds the key in its environment, which is accessible to anyone who can `docker inspect` the container or `exec` into it.
+`LANGSMITH_API_KEY` is read from the environment. In Docker Compose, it is sourced from `.env` via `env_file`. The key is never written to any log, metric, or response. However, the digitrace service container holds the key in its environment, which is accessible to anyone who can `docker inspect` the container or `exec` into it.
 
 **Risk:** The `GET /v1/status` endpoint confirms whether a key is configured (`tracing_configured: true`) and reveals the LangSmith host. An attacker who knows tracing is active and the host is `api.smith.langchain.com` gains no direct access, but can infer that LangSmith is in use and target it separately.
 
@@ -238,7 +238,7 @@ The contract documented in `ARCHITECTURE.md` is advisory only. No validator chec
 
 ### HTTP service is optional for library usage
 
-digigraph does not call the digismith HTTP service at all. The service is optional — useful for health dashboards and status checks, but removing it from a deployment does not break tracing. This is a well-designed separation.
+digigraph does not call the digitrace HTTP service at all. The service is optional — useful for health dashboards and status checks, but removing it from a deployment does not break tracing. This is a well-designed separation.
 
 ### LangSmith SDK async batching
 
@@ -249,9 +249,9 @@ digigraph does not call the digismith HTTP service at all. The service is option
 
 ### OTel collector bottleneck
 
-When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `BatchSpanProcessor` exports via HTTP/protobuf to the configured collector. The default batch settings (512 spans, 5s timeout) are suitable for low-to-moderate traffic on the digismith HTTP service itself (only two endpoints). At high request rates, the exporter may drop spans if the collector is slow; `BatchSpanProcessor` uses a fixed-size queue and silently drops when full.
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `BatchSpanProcessor` exports via HTTP/protobuf to the configured collector. The default batch settings (512 spans, 5s timeout) are suitable for low-to-moderate traffic on the digitrace HTTP service itself (only two endpoints). At high request rates, the exporter may drop spans if the collector is slow; `BatchSpanProcessor` uses a fixed-size queue and silently drops when full.
 
-For digismith's current traffic profile (health checks + status polls), this is a non-issue. If digismith grows to handle trace aggregation itself, the OTel export path would need tuning.
+For digitrace's current traffic profile (health checks + status polls), this is a non-issue. If digitrace grows to handle trace aggregation itself, the OTel export path would need tuning.
 
 ---
 
@@ -277,7 +277,7 @@ The SDK accumulates spans and sends them in background HTTP requests to LangSmit
 
 ### OTel OTLP gRPC vs HTTP export
 
-`digibase/otel.py` uses `OTLPSpanExporter` from `opentelemetry.exporter.otlp.proto.http.trace_exporter` — the HTTP/protobuf variant, not gRPC. HTTP/protobuf is slightly higher overhead than gRPC due to HTTP framing, but avoids the gRPC dependency and is compatible with most collectors (Jaeger, Tempo, OTEL Collector) out of the box. For digismith's traffic volume, the difference is immaterial.
+`digibase/otel.py` uses `OTLPSpanExporter` from `opentelemetry.exporter.otlp.proto.http.trace_exporter` — the HTTP/protobuf variant, not gRPC. HTTP/protobuf is slightly higher overhead than gRPC due to HTTP framing, but avoids the gRPC dependency and is compatible with most collectors (Jaeger, Tempo, OTEL Collector) out of the box. For digitrace's traffic volume, the difference is immaterial.
 
 ---
 
@@ -285,10 +285,10 @@ The SDK accumulates spans and sends them in background HTTP requests to LangSmit
 
 ### digigraph
 
-digigraph is the only service that currently uses the digismith library. The integration is in `digigraph/src/digigraph/llm.py`:
+digigraph is the only service that currently uses the digitrace library. The integration is in `digigraph/src/digigraph/llm.py`:
 
 ```python
-from digismith.trace import traceable as _traceable
+from digitrace.trace import traceable as _traceable
 
 @_traceable("chat_completion")
 def chat_completion(...): ...
@@ -297,26 +297,26 @@ def chat_completion(...): ...
 def chat_completion_with_tools(...): ...
 ```
 
-Both top-level LLM entry points are decorated. The decorator wraps the entire function including the tool-calling loop in `chat_completion_with_tools`. digigraph installs `digismith[langsmith]` in its Docker image (via `digigraph/Dockerfile`, which copies and installs the `digismith` package with langsmith extras).
+Both top-level LLM entry points are decorated. The decorator wraps the entire function including the tool-calling loop in `chat_completion_with_tools`. digigraph installs `digitrace[tracing]` in its Docker image (via `digigraph/Dockerfile`, which copies and installs the `digitrace` package with tracing extras).
 
-digigraph also has `DIGISMITH_URL=http://digismith:8003` in its Docker Compose environment, but this URL is not read by any digigraph source code in v1. It is reserved for future discovery and health-check integration.
+digigraph also has `DIGITRACE_URL=http://digitrace:8003` in its Docker Compose environment, but this URL is not read by any digigraph source code in v1. It is reserved for future discovery and health-check integration.
 
 ### Other services
 
-digisearch, digiquant, and digiclaw do not currently import `digismith`. They use `digibase[otel]` directly (via `setup_otel_fastapi`) for infrastructure-level OTel tracing when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. They do not emit LangSmith spans.
+digisearch, digiquant, and digiclaw do not currently import `digitrace`. They use `digibase[otel]` directly (via `setup_otel_fastapi`) for infrastructure-level OTel tracing when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. They do not emit LangSmith spans.
 
 ### digichat
 
-digichat (Next.js BFF) references `DIGISMITH_INTERNAL_URL=http://digismith:8003` in its Docker Compose environment. The intended use is to poll `GET /v1/status` to display tracing status in the UI. This integration is reserved for future implementation.
+digichat (Next.js BFF) references `DIGITRACE_INTERNAL_URL=http://digitrace:8003` in its Docker Compose environment. The intended use is to poll `GET /v1/status` to display tracing status in the UI. This integration is reserved for future implementation.
 
 ### Optional Docker service vs library-only usage
 
-digismith can be used in two modes:
+digitrace can be used in two modes:
 
-1. **Library-only**: Install `digismith[langsmith]` in the consuming service's image. No digismith container needed. Tracing works independently.
-2. **Full service**: Run the digismith container (port 8003). Adds health and status introspection without affecting tracing behavior.
+1. **Library-only**: Install `digitrace[tracing]` in the consuming service's image. No digitrace container needed. Tracing works independently.
+2. **Full service**: Run the digitrace container (port 8003). Adds health and status introspection without affecting tracing behavior.
 
-The Dockerfile installs `digismith[langsmith]`, so the Docker service image includes both modes.
+The Dockerfile installs `digitrace[tracing]`, so the Docker service image includes both modes.
 
 ---
 
@@ -324,15 +324,15 @@ The Dockerfile installs `digismith[langsmith]`, so the Docker service image incl
 
 ### Docker Compose service definition
 
-digismith is defined as a first-class service in `docker-compose.yml` (not behind a profile):
+digitrace is defined as a first-class service in `docker-compose.yml` (not behind a profile):
 
 ```yaml
-digismith:
+digitrace:
   build:
     context: .
-    dockerfile: digismith/Dockerfile
-  image: digi-digismith:latest
-  container_name: digi-digismith
+    dockerfile: digitrace/Dockerfile
+  image: digi-digitrace:latest
+  container_name: digi-digitrace
   ports:
     - "127.0.0.1:8003:8003"
   env_file:
@@ -347,7 +347,7 @@ digismith:
 
 The service binds to loopback (`127.0.0.1:8003`) on the host, following the stack-wide least-privilege network policy. The container runs on all interfaces (`0.0.0.0:8003`) inside Docker's internal network, which is correct for inter-container communication.
 
-Unlike digigraph, digismith does not depend on any other service in Compose. It starts independently.
+Unlike digigraph, digitrace does not depend on any other service in Compose. It starts independently.
 
 ### Environment variables
 
@@ -355,13 +355,13 @@ Unlike digigraph, digismith does not depend on any other service in Compose. It 
 |----------|----------|---------|
 | `LANGSMITH_API_KEY` | No | Enables LangSmith trace export. If absent, tracing is a no-op. |
 | `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | If set, enables OTel HTTP/protobuf export from the digismith HTTP service itself. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | If set, enables OTel HTTP/protobuf export from the digitrace HTTP service itself. |
 
-The `LANGSMITH_API_KEY` and `LANGSMITH_ENDPOINT` variables are sourced from the `.env` file via `env_file`. They are available to the digismith container but are also available to digigraph and any other service using the same `.env` — tracing is configured per-container, not centrally.
+The `LANGSMITH_API_KEY` and `LANGSMITH_ENDPOINT` variables are sourced from the `.env` file via `env_file`. They are available to the digitrace container but are also available to digigraph and any other service using the same `.env` — tracing is configured per-container, not centrally.
 
 ### No MCP server
 
-digismith does not expose an MCP server. There are no MCP tools, no tool registry entries, and no `POST /v1/orchestrator_tools` endpoint. digismith is a passive observability component, not an agent tool. This is correct by design.
+digitrace does not expose an MCP server. There are no MCP tools, no tool registry entries, and no `POST /v1/orchestrator_tools` endpoint. digitrace is a passive observability component, not an agent tool. This is correct by design.
 
 ---
 
@@ -369,7 +369,7 @@ digismith does not expose an MCP server. There are no MCP tools, no tool registr
 
 ### PII validation and redaction layer — IMPLEMENTED (#214)
 
-Baseline value-pattern redaction now ships in `digismith.redaction.PiiRedactor`
+Baseline value-pattern redaction now ships in `digitrace.redaction.PiiRedactor`
 and is wired into `traceable` via LangSmith's `process_inputs`/`process_outputs`
 callbacks. Remaining follow-ups: length-based document body summarization,
 hash-and-count replacement for large blobs, and key-name deny-lists shared
@@ -381,11 +381,11 @@ LangSmith and the OTel `BatchSpanProcessor` use default sampling (all spans). Th
 
 ### Centralized trace dashboard
 
-The intended future state — described in the `ARCHITECTURE.md` digibase roadmap — is for a digibase HTTP data-plane to aggregate trace metadata and expose it to digichat's UI. Today, the digichat BFF has `DIGISMITH_INTERNAL_URL` wired but no code to use it. A `/v1/traces` endpoint or a trace search proxy is absent.
+The intended future state — described in the `ARCHITECTURE.md` digibase roadmap — is for a digibase HTTP data-plane to aggregate trace metadata and expose it to digichat's UI. Today, the digichat BFF has `DIGITRACE_INTERNAL_URL` wired but no code to use it. A `/v1/traces` endpoint or a trace search proxy is absent.
 
 ### Trace-derived Prometheus metrics (roadmap)
 
-digismith exposes HTTP request metrics via `digibase.metrics.install_metrics` at `GET /metrics` (same contract as other FastAPI services). It does **not** yet export LangSmith/trace-derived series (`digismith_llm_calls_total`, latency histograms from `traceable` wrappers). Those remain a Phase 2 follow-up.
+digitrace exposes HTTP request metrics via `digibase.metrics.install_metrics` at `GET /metrics` (same contract as other FastAPI services). It does **not** yet export LangSmith/trace-derived series (`digitrace_llm_calls_total`, latency histograms from `traceable` wrappers). Those remain a Phase 2 follow-up.
 
 ### Span schema validation
 
@@ -395,11 +395,11 @@ The span attribute contract (Section 4) is documented but unenforced. No Pydanti
 
 ## 12. Redesign Recommendations
 
-The following are specific, actionable changes that would materially improve digismith's production readiness. They are ordered by risk reduction impact.
+The following are specific, actionable changes that would materially improve digitrace's production readiness. They are ordered by risk reduction impact.
 
 ### (a) Enforce PII redaction as middleware before LangSmith export
 
-`langsmith.traceable` accepts `process_inputs` and `process_outputs` callbacks for filtering span data before export. digismith should define a standard `_sanitize_llm_inputs` function that:
+`langsmith.traceable` accepts `process_inputs` and `process_outputs` callbacks for filtering span data before export. digitrace should define a standard `_sanitize_llm_inputs` function that:
 - Strips or truncates `messages` list entries longer than a configurable character limit
 - Removes any dict key matching a deny-list pattern (e.g. `api_key`, `token`, `password`, `secret`)
 - Replaces full document body strings with a hash and character count
@@ -408,7 +408,7 @@ This function should be applied in the `traceable` decorator wrapper, not left t
 
 ### (b) Add trace-derived counters on existing `/metrics`
 
-HTTP metrics already ship via `install_metrics`. Add in-memory counters on the `traceable` wrapper (`digismith_traceable_calls_total`, `digismith_traceable_duration_seconds`) and expose them on the existing `GET /metrics` scrape path.
+HTTP metrics already ship via `install_metrics`. Add in-memory counters on the `traceable` wrapper (`digitrace_traceable_calls_total`, `digitrace_traceable_duration_seconds`) and expose them on the existing `GET /metrics` scrape path.
 
 ### (c) Add structured span schema validation via Pydantic
 
@@ -441,11 +441,11 @@ LangSmith is an external SaaS product with a per-trace billing model and opinion
 - Export via OTLP to any collector (Jaeger, Tempo, Honeycomb, LangSmith's OTLP endpoint)
 - Allow LangSmith to be one optional backend among many, not the sole tracing target
 
-The `digibase.otel` module already provides the foundation. Replacing `langsmith.traceable` with a custom OTel span wrapper would decouple digismith from LangSmith's SDK entirely and give operators control over where traces go without code changes.
+The `digibase.otel` module already provides the foundation. Replacing `langsmith.traceable` with a custom OTel span wrapper would decouple digitrace from LangSmith's SDK entirely and give operators control over where traces go without code changes.
 
 ### (f) Add sampling rate configuration per workflow type
 
-Define a `DIGISMITH_SAMPLE_RATES` environment variable accepting JSON:
+Define a `DIGITRACE_SAMPLE_RATES` environment variable accepting JSON:
 
 ```json
 {"default": 1.0, "chat_completion": 0.1, "backtest": 1.0}
@@ -459,4 +459,4 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 ## CORS
 
-CORS is installed via the shared `digibase.cors.install_cors(app, service="digismith")` helper; allowlist precedence is `DIGISMITH_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. See `SECURITY.md` §"CORS policy".
+CORS is installed via the shared `digibase.cors.install_cors(app, service="digitrace")` helper; allowlist precedence is `DIGITRACE_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. Phase 0 compat (#4929): a set `DIGISMITH_CORS_ORIGINS` is honored for one release when `DIGITRACE_CORS_ORIGINS` is empty. See `SECURITY.md` §"CORS policy".

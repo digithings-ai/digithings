@@ -50,7 +50,7 @@ The following is built and functional as of this architecture review (March 2026
 | digistore (session-scoped named datasets) | Built | `digistore.py`, `run_storage.py` |
 | MCP server (FastMCP, streamable-http + stdio) | Built | `mcp_server.py` |
 | Thread state / history / resume endpoints (opt-in) | Built | `server.py` |
-| digismith tracing (`traceable` wrappers) | Built | `digillm` (via `digismith.trace.traceable`) |
+| digitrace tracing (`traceable` wrappers) | Built | `digillm` (via `digitrace.trace.traceable`) |
 | OpenTelemetry export (opt-in) | Built | `server.py` (via `digibase.otel.setup_otel_fastapi`) |
 | Ordered body-free run call events | Built | `usage.py`, `graph/research_agent.py`, `digillm` observer |
 | Logical provider-call purpose and lineage | Built | `llm_client.py`, `usage.py`, `graph/research_agent.py`, `digillm` contracts |
@@ -992,14 +992,14 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - The middleware populates `request.state.digi_auth` (key_prefix, tenant_slug, project_id, jti) and `request.state.digi_bearer` (raw token) for downstream use.
 - Per-request LiteLLM proxy key override: `X-LiteLLM-Proxy-Key` header is parsed by the `lite_llm_proxy_header_context` middleware (`llm_auth.py`) and forwarded to digillm's proxy-key `ContextVar`, used by digillm's client.
 
-### 9.4 digismith
+### 9.4 digitrace
 
 **Protocol:** Library calls (no HTTP)
 
-- `digismith.trace.traceable` decorates `completion` and `run_tools` in `digillm`.
+- `digitrace.trace.traceable` decorates `completion` and `run_tools` in `digillm`.
 - Activates when `LANGSMITH_API_KEY` is set and `langsmith` is installed.
 - Span attributes must include `workflow_id`, `request_id`, `session_id`. Raw prompts, API keys, and full doc bodies must not appear in spans.
-- In Docker Compose, a digismith container exposes `GET /v1/status` on port 8003. digigraph does not make HTTP calls to digismith; the library communicates with LangSmith directly.
+- In Docker Compose, a digitrace container exposes `GET /v1/status` on port 8003. digigraph does not make HTTP calls to digitrace; the library communicates with LangSmith directly.
 
 ### 9.5 digichat
 
@@ -1087,7 +1087,7 @@ digigraph:
 | `DIGIQUANT_URL` | `http://digiquant:8001` | digiquant HTTP base URL |
 | `DIGISEARCH_URL` | `http://digisearch:8002` | digisearch HTTP base URL; empty = search disabled |
 | `DIGIVAULT_URL` | `http://digivault:8004` | digivault HTTP base URL; empty = `digivault_search_notes` / `digivault_get_note` disabled |
-| `DIGISMITH_URL` | `http://digismith:8003` | digismith status URL (unused by digigraph HTTP) |
+| `DIGITRACE_URL` | `http://digitrace:8003` | digitrace status URL (unused by digigraph HTTP) |
 | `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | JWT public key endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience claim |
@@ -1223,7 +1223,7 @@ Until this is implemented, `DIGI_ALLOW_CODE_EXEC` should default to `0` and oper
 - `digigraph_active_streaming_sessions` (gauge)
 - `digigraph_rate_limit_rejections_total` (labels: path)
 
-This complements digismith's LangSmith tracing with operational metrics visible to Grafana or similar systems.
+This complements digitrace's LangSmith tracing with operational metrics visible to Grafana or similar systems.
 
 ### 12.7 Compiled Graph Cache
 

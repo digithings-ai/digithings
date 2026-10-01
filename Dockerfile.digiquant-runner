@@ -42,7 +42,7 @@ COPY digifetch ./digifetch
 COPY digiquant ./digiquant
 COPY digigraph ./digigraph
 COPY digillm ./digillm
-COPY digismith ./digismith
+COPY digitrace ./digitrace
 COPY config/byok-providers.json ./config/byok-providers.json
 
 RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus \

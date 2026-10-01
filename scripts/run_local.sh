@@ -6,7 +6,7 @@
 set -e
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-PYTHONPATH="${ROOT}/digibase/src:${ROOT}/digiquant/src:${ROOT}/digigraph/src:${ROOT}/digismith/src:${ROOT}"
+PYTHONPATH="${ROOT}/digibase/src:${ROOT}/digiquant/src:${ROOT}/digigraph/src:${ROOT}/digitrace/src:${ROOT}"
 export PYTHONPATH
 
 # Local-only ports (Docker uses 8000/8001)

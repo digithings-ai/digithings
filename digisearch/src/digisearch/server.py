@@ -543,7 +543,7 @@ def health() -> dict[str, str]:
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digitrace's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}

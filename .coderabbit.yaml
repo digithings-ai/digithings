@@ -22,7 +22,7 @@
 #      module -> develop umbrella PR that did get reviewed is an accumulation
 #      of already-merged work, which the same doc argues is the worst moment to
 #      review. Net effect: two-hop components (digigraph, digikey, digiquant,
-#      digisearch, digismith, digibase, digiclaw, digichat) got no automatic
+#      digisearch, digitrace, digibase, digiclaw, digichat) got no automatic
 #      review at any useful point, while one-hop components routed straight to
 #      `develop` did. Nobody chose that asymmetry.
 #

@@ -161,7 +161,7 @@ export const DIGI_LAYERS: Layer[] = [
     id: "telemetry",
     label: "Telemetry",
     options: [
-      { id: "digismith", label: "digismith", vendor: "digithings" },
+      { id: "digitrace", label: "digitrace", vendor: "digithings" },
       { id: "langsmith", label: "LangSmith", vendor: "LangSmith" },
       { id: "langfuse", label: "Langfuse", vendor: "Langfuse" },
       { id: "helicone", label: "Helicone", vendor: "Helicone" },
@@ -201,7 +201,7 @@ export const DEFAULT_DIGI_PICK: StackPick = {
   models: "local",
   embeddings: "local",
   vector: "self",
-  telemetry: "digismith",
+  telemetry: "digitrace",
   hosting: "own",
 };
 
@@ -352,7 +352,7 @@ export function hostBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): 
 export function traceBill(id: string, workload: RagWorkload = DEFAULT_WORKLOAD): MenuRate {
   const queries = queriesPerMonth(workload);
   const p = RAG_PRICING;
-  if (id === "self" || id === "digismith") return { amount: 0, estimate: false };
+  if (id === "self" || id === "digitrace") return { amount: 0, estimate: false };
   if (id === "langsmith") {
     const over = Math.max(0, queries - p.langsmithIncludedTraces);
     return { amount: p.langsmithSeatMonthly + (over * p.langsmithTraceOveragePerK) / 1000, estimate: false };
@@ -516,7 +516,7 @@ export function pricePick(
 
   const traces = traceBill(telemetry.id, workload);
   const traceLabel =
-    telemetry.id === "digismith" ? "digismith traces" : telemetry.id === "self" ? "Self-hosted traces" : telemetry.label;
+    telemetry.id === "digitrace" ? "digitrace traces" : telemetry.id === "self" ? "Self-hosted traces" : telemetry.label;
   add(traceLabel, traces.amount, true, "telemetry", traces.estimate);
 
   const host = hostBill(hosting.id, workload);
@@ -588,7 +588,7 @@ const TELEMETRY_BOX: Record<string, string> = {
   arize: "Arize AX",
   datadog: "Datadog",
   self: "own traces",
-  digismith: "digismith",
+  digitrace: "digitrace",
 };
 
 /** Short box names. Menu labels can be longer; a box has about 14 characters. */

@@ -325,6 +325,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 126 for merge of #4849 (luxalgo wave-2, +3) and
     #4856 (twin-identity priority note, +1) prose — fixture prose only;
     RecursiveChunker unchanged.
+    Hashes only (count still 126) re-recorded for #4929 (digismith→digitrace rename in ARCHITECTURE.md) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -433,7 +435,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ac5eea8b8b2f7820",
         "d3566df46fb1e726",
         "c0e9eb6706ab60cc",
-        "676a486feb21ee54",
+        "e33ebeedada29ae9",
         "c68c6371a8457ff8",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
