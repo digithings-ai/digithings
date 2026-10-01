@@ -138,6 +138,23 @@ def _configured_crons() -> list[str]:
     return parsed["triggers"]["crons"]
 
 
+def _enabled_worker_crons(worker_jobs: dict[str, str]) -> set[str]:
+    """Crons for jobs that are still enabled (Human Gate pause uses enabled: false)."""
+    text = JOBS_SOURCE.read_text(encoding="utf-8")
+    call = re.compile(r'(?:wd|rd|cj|pj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
+    matches = list(call.finditer(text))
+    enabled: set[str] = set()
+    for i, match in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        block = text[match.start() : end]
+        if "enabled: false" in block:
+            continue
+        enabled.add(match.group(2))
+    assert enabled, "expected at least one enabled worker cron"
+    assert enabled <= set(worker_jobs.values())
+    return enabled
+
+
 # --------------------------------------------------------------------------- #
 # The schedules themselves, in both ET offsets
 # --------------------------------------------------------------------------- #
@@ -222,7 +239,7 @@ def test_worker_jobs_and_wrangler_triggers_have_exact_cron_parity(
 ) -> None:
     configured = _configured_crons()
     assert len(configured) == len(set(configured)), "wrangler has duplicate cron triggers"
-    assert set(worker_jobs.values()) == set(configured)
+    assert _enabled_worker_crons(worker_jobs) == set(configured)
 
 
 # --------------------------------------------------------------------------- #
