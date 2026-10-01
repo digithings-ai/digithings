@@ -19,6 +19,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/setup.py` | Interactive `setup` wizard (stdlib arrow/numbered menus) + `--print` overview and `recommend_models()` hardware stub (#4939 hook). |
 | `src/digivoice/tui.py` | Shared stdlib TUI: alternate-screen frames, centered DIGIVOICE half-block wordmark, step-rail menus, intro build-in. |
 | `src/digivoice/home.py` | Bare-`digivoice` home shell: fullscreen centered menu on a TTY, printed overview otherwise. |
+| `src/digivoice/install.py` | `install` / `update` / `uninstall`: Hammerspoon symlink, models dir, tip SHA stamp; SHA-guards Application Support copies (never rsync). |
 | `src/digivoice/reload.py` | `reload`: CLI path, settings, Lua adapter tip, bounded Hammerspoon reload; clears stale status on failure. |
 | `src/digivoice/rewrite.py` | Optional local post-STT rewrite (ollama / llama.cpp); fail soft. |
 | `src/digivoice/paste.py` | Clipboard plus Command-V into the focused app. Fails soft. Never pastes blank text. |
@@ -46,6 +47,7 @@ macOS defaults:
 - banner spawn flag: `~/Library/Application Support/digivoice/banner.show`
 - banner drag position: `~/Library/Application Support/digivoice/banner_pos.json`
 - settings: `~/Library/Application Support/digivoice/settings.json`
+- install stamp: `~/Library/Application Support/digivoice/install.json` (tip SHA + adapter paths)
 - default model file: `~/Library/Application Support/digivoice/models/ggml-base.en.bin`
 
 Linux fallback (also what `doctor` prints when reporting the other platform):
@@ -59,6 +61,7 @@ Linux fallback (also what `doctor` prints when reporting the other platform):
 - banner spawn flag: `${XDG_DATA_HOME:-~/.local/share}/digivoice/banner.show`
 - banner drag position: `${XDG_DATA_HOME:-~/.local/share}/digivoice/banner_pos.json`
 - settings: `${XDG_DATA_HOME:-~/.local/share}/digivoice/settings.json`
+- install stamp: `${XDG_DATA_HOME:-~/.local/share}/digivoice/install.json`
 - same filename: `ggml-base.en.bin`
 
 `DIGIVOICE_DATA_DIR` overrides the data directory on every platform. `DIGIVOICE_PIPER_VOICE`
@@ -81,7 +84,8 @@ commands write.
 | `status` | 0 shown, 1 none yet | Print the `status.json` the banner reads. |
 | `banner show [--text T]` / `hide` / `toggle` | 0 | Write the `banner.show` spawn flag the adapter polls; shows a preview without dictation. |
 | `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. Detection flags (`word_detection`, `spelling_detection`) default off; stubs only, not wired to STT yet. |
-| `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
+| `install` / `update` [`--fetch-models`] [`--json`] | 0 wired, 1 App Support adapter SHA mismatch when `--replace-app-support-adapter` | Symlink `~/.hammerspoon/digivoice` → checkout `hammerspoon/`, create models/recordings dirs, write `{data_dir}/install.json` with the git tip SHA. Never rsync Application Support. `--fetch-models` curls `ggml-base.en.bin` (skip if present; fail-soft). One-command from a checkout: `bash digivoice/scripts/install.sh`. |
+| `uninstall` [`--purge-data`] [`--json`] | 0 | Remove the user adapter symlink and install stamp. Keep models/history unless `--purge-data`. CLI package is left to `uv pip uninstall digivoice`. |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
 | bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle glint), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit stops the adapter and quits Hammerspoon; closing the Terminal alone leaves HS running. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
 | unknown / bad flags | 2 | Usage on stderr. |

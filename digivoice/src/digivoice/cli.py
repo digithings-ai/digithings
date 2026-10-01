@@ -208,8 +208,54 @@ def build_parser() -> _Parser:
         dest="print_only",
         help="Print current settings + menu tree (no prompts; same as env noninteractive)",
     )
-    sub.add_parser("update", help="Reinstall hint (not wired yet)")
-    sub.add_parser("uninstall", help="Removal hint (not wired yet)")
+    install_cmd = sub.add_parser(
+        "install",
+        help="Wire CLI + Hammerspoon symlink + models dir (same as update)",
+    )
+    update_cmd = sub.add_parser(
+        "update",
+        help="Refresh the local install: adapter symlink, models dir, tip stamp",
+    )
+    for ship_cmd in (install_cmd, update_cmd):
+        ship_cmd.add_argument(
+            "--fetch-models",
+            action="store_true",
+            help="Download ggml-base.en.bin into the models dir (curl; skip if present)",
+        )
+        ship_cmd.add_argument(
+            "--reinstall-cli",
+            action="store_true",
+            help="Run uv/pip install -e on the checkout package",
+        )
+        ship_cmd.add_argument(
+            "--replace-app-support-adapter",
+            action="store_true",
+            help=(
+                "Inspect the Application Support hammerspoon copy (still never rsyncs; "
+                "refuses unless .digivoice-tip matches the checkout SHA)"
+            ),
+        )
+        ship_cmd.add_argument(
+            "--json",
+            action="store_true",
+            dest="as_json",
+            help="Print the install report as JSON",
+        )
+    uninstall_cmd = sub.add_parser(
+        "uninstall",
+        help="Remove the Hammerspoon symlink; keep data unless --purge-data",
+    )
+    uninstall_cmd.add_argument(
+        "--purge-data",
+        action="store_true",
+        help="Also delete the data dir (models, history, settings)",
+    )
+    uninstall_cmd.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="Print the uninstall report as JSON",
+    )
     reload_cmd = sub.add_parser(
         "reload",
         help="Refresh local control: CLI path, settings, Lua adapter, Hammerspoon",
@@ -324,22 +370,35 @@ def _home(runtime: Runtime) -> CliResult:
     return CliResult(code=code, stdout="", stderr="")
 
 
-def _update() -> CliResult:
-    return CliResult(
-        code=0,
-        stdout="digivoice update: not wired yet — reinstall via uv / brew when available\n",
-        stderr="",
+def _install(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    from digivoice.install import run_install
+
+    return run_install(
+        runtime.platform,
+        runtime.home,
+        dict(runtime.env),
+        fetch_models=bool(getattr(args, "fetch_models", False)),
+        reinstall_cli=bool(getattr(args, "reinstall_cli", False)),
+        replace_app_support_adapter=bool(getattr(args, "replace_app_support_adapter", False)),
+        runner=runtime.runner,
+        as_json=bool(getattr(args, "as_json", False)),
     )
 
 
-def _uninstall() -> CliResult:
-    return CliResult(
-        code=0,
-        stdout=(
-            "digivoice uninstall: not wired yet — "
-            "remove the uv tool install and the data dir manually\n"
-        ),
-        stderr="",
+def _update(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    """Same path as install — idempotent refresh of adapter + models dir + stamp."""
+    return _install(args, runtime)
+
+
+def _uninstall(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    from digivoice.install import run_uninstall
+
+    return run_uninstall(
+        runtime.platform,
+        runtime.home,
+        dict(runtime.env),
+        purge_data=bool(getattr(args, "purge_data", False)),
+        as_json=bool(getattr(args, "as_json", False)),
     )
 
 
@@ -769,10 +828,10 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         if not hasattr(args, "as_json"):
             args.as_json = False
         return _settings(args, runtime)
-    if command == "update":
-        return _update()
+    if command in {"install", "update"}:
+        return _update(args, runtime)
     if command == "uninstall":
-        return _uninstall()
+        return _uninstall(args, runtime)
     if command == "reload":
         if not hasattr(args, "as_json"):
             args.as_json = False

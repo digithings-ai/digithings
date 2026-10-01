@@ -123,7 +123,10 @@ def _hammerspoon_check(home: Path, paths: VoicePaths, probe: CommandProbe) -> Do
     return DoctorCheck(
         id="hammerspoon",
         status="missing",
-        detail=(f"no adapter at {user_dir} or {data_dir} (copy digivoice/hammerspoon there)"),
+        detail=(
+            f"no adapter at {user_dir} or {data_dir} "
+            "(symlink via `digivoice install` / `bash digivoice/scripts/install.sh`)"
+        ),
     )
 
 

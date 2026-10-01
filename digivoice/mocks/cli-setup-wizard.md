@@ -107,12 +107,18 @@ digivoice doctor
 result: ok
 ```
 
-## Thin stubs
+## Install / update / uninstall
 
 ```
+$ bash digivoice/scripts/install.sh
+# or, once the CLI is on PATH:
 $ digivoice update
-digivoice update: not wired yet — reinstall via uv / brew when available
+adapter ...... symlink …/.hammerspoon/digivoice -> …/digivoice/hammerspoon
+models ....... dir …/models (no ggml-base.en.bin; pass --fetch-models or copy the weights in)
+stamp ........ …/install.json tip 99fdde3c
+next ......... digivoice doctor && digivoice reload && digivoice banner show
 
 $ digivoice uninstall
-digivoice uninstall: not wired yet — remove uv tool + data dir manually
+adapter ...... removed …/.hammerspoon/digivoice
+data ......... kept … (models, history). Pass --purge-data to delete it.
 ```

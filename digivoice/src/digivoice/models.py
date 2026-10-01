@@ -90,3 +90,12 @@ class RewriteResult(BaseModel):
     detail: str
     runner: str | None = None
     app_name: str | None = None
+
+
+class InstallStamp(BaseModel):
+    """Record of the last `digivoice install` / `update` on this machine."""
+
+    tip_sha: str
+    adapter_source: str
+    adapter_target: str
+    cli: str = "digivoice"
