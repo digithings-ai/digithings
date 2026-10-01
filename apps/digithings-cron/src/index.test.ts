@@ -39,13 +39,10 @@ describe("scheduled", () => {
     await expect(pending[0]).rejects.toThrow(/HTTP 403/);
   });
 
-  it("dispatches an ordinary house run with safe args and no GitHub call", async () => {
+  it("does not dispatch a paused house-run cron", async () => {
     const githubFetch = vi.fn();
     vi.stubGlobal("fetch", githubFetch);
-    const runnerFetch = vi.fn(
-      async () =>
-        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
-    );
+    const runnerFetch = vi.fn();
     const pending: Promise<unknown>[] = [];
     const scheduledTime = Date.UTC(2026, 8, 30, 9, 17);
     const env: Env = {
@@ -64,13 +61,8 @@ describe("scheduled", () => {
     await Promise.all(pending);
 
     expect(githubFetch).not.toHaveBeenCalled();
-    expect(runnerFetch).toHaveBeenCalledOnce();
-    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
-    expect(body.args).toEqual({
-      refresh_scope: "none",
-      run_date: "2026-09-30",
-    });
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(pending).toHaveLength(0);
   });
 });
 

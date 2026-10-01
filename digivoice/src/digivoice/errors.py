@@ -13,3 +13,7 @@ class CaptureError(VoiceError):
 
 class TranscribeError(VoiceError):
     """whisper-cli was missing, errored, or recognized no speech."""
+
+
+class SpeakError(VoiceError):
+    """Piper was missing, the voice file was missing, or playback failed."""

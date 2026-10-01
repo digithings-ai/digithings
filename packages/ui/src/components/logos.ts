@@ -10,8 +10,8 @@
 import {
   siDocker, siDrizzle, siFastapi, siLangchain, siLanggraph,
   siModelcontextprotocol, siNextdotjs, siOpenai, siOpentelemetry, siOptuna,
-  siPolars, siPostgresql, siPrometheus, siPydantic, siReact, siRedis,
-  siSqlite, siSupabase, siVercel,
+  siPolars, siPostgresql, siPrometheus, siPydantic, siReact, siRedis, siSqlite,
+  siSupabase, siVercel,
 } from "simple-icons";
 
 export interface SimpleIcon { hex: string; path: string }

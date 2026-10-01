@@ -24,6 +24,8 @@ type RunOptions = {
   args?: Record<string, string>;
   /** POST /kick awaits so the response can include run ids. */
   awaitDispatch?: boolean;
+  /** Manual /kick may start paused jobs; scheduled() never sets this. */
+  includeDisabled?: boolean;
 };
 
 export function houseArgs(
@@ -59,7 +61,7 @@ async function runJobsForCron(
   ctx: ExecutionContext,
   opts: RunOptions = {},
 ): Promise<{ started: string[]; skipped: string[]; runs: StartedRun[] }> {
-  const jobs = jobsForCron(cron);
+  const jobs = jobsForCron(cron, { includeDisabled: opts.includeDisabled });
   const started: string[] = [];
   const skipped: string[] = [];
   const pending: Promise<StartedRun>[] = [];
@@ -211,6 +213,7 @@ export default {
         force,
         args,
         awaitDispatch: true,
+        includeDisabled: true,
       });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }

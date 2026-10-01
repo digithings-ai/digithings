@@ -19,7 +19,6 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
 VERIFY_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "verify-supabase-migrations.sh"
-DB_MIGRATE = REPO_ROOT / ".github" / "workflows" / "db-migrate.yml"
 CALENDAR_CREATOR = MIGRATIONS_DIR / "111_trading_calendar.sql"
 POLICY_CONSUMER = MIGRATIONS_DIR / "116_authenticated_read_public_reference.sql"
 
@@ -85,10 +84,3 @@ def test_verify_guard_fails_on_duplicate_prefix(tmp_path: Path) -> None:
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Duplicate migration prefix 025" in result.stderr
 
-
-def test_db_migrate_fails_on_duplicates_not_warns() -> None:
-    workflow = DB_MIGRATE.read_text(encoding="utf-8")
-    assert "::warning::duplicate migration" not in workflow
-    assert "::error::duplicate migration version prefix" in workflow
-    tail = workflow.split("::error::duplicate migration version prefix", 1)[1]
-    assert "exit 1" in tail[:400], "duplicate check must exit non-zero"

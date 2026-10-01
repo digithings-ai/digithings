@@ -61,11 +61,11 @@ PER_RUN_TOKENS = ("github.run_id", "github.run_number")
 
 # The gated jobs as they stand. Pinned rather than derived, so that removing an
 # `environment:` cannot quietly turn an assertion into a skip — see the test below.
-ENVIRONMENT_GATED = {
-    "db-migrate.yml": {"migrate"},
-    "docs-onboard-digithings.yml": {"apply"},
-    "sync-architecture-vault.yml": {"sync"},
-}
+# 2026-10-01 GHA strict-essentials: former gated workflows (db-migrate,
+# docs-onboard-digithings, sync-architecture-vault) deleted from tree. New
+# environment-gated jobs still get caught by the parametrised sweep below;
+# pin any survivors here so dropping `environment:` cannot quietly skip.
+ENVIRONMENT_GATED: dict[str, set[str]] = {}
 
 
 def _gated_jobs(workflow: dict) -> dict[str, dict]:

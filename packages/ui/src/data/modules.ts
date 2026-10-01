@@ -128,10 +128,10 @@ export const modules: ModuleNode[] = [
     graph: { x: 620, y: 175, r: 26 },
     emblem: "digisearch",
     role: "Vector retrieval · multi-backend",
-    tagline: "Production RAG without a stack rewrite when you switch vector DB.",
+    tagline: "RAG without a stack rewrite when you switch vector DB.",
     summary: [
       "One client over Cloudflare Vectorize, Azure AI Search, or Chroma, with backend-neutral entities so you swap engines without touching business code.",
-      "Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup and pdfplumber handle ingest, Polars throughout.",
+      "Dense, sparse and hybrid retrieval all ship; BeautifulSoup and pdfplumber handle ingest, Polars throughout.",
     ],
     stack: [
       { name: "Cloudflare Vectorize", icon: null, mono: "CF" },
@@ -160,7 +160,7 @@ export const modules: ModuleNode[] = [
     graph: { x: 460, y: 440, r: 26 },
     emblem: "digichat",
     role: "Chat surface · Next.js BFF · BYOK",
-    tagline: "Talk to your stack with your keys, your models, your audit log.",
+    tagline: "Talk to your stack with your keys, models and audit log.",
     summary: [
       "A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key forwarded per request — never stored, never logged.",
       "NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.",
@@ -225,7 +225,7 @@ export const modules: ModuleNode[] = [
     role: "Observability · spans · correlation IDs",
     tagline: "Correlation IDs across every hop — and prompts logged by length, never by text.",
     summary: [
-      "Structured logging, Prometheus metrics, and OpenTelemetry spans thread through every request so a multi-hop run is traceable end to end.",
+      "Structured logging, Prometheus metrics and OpenTelemetry spans thread through every request, so a multi-hop run is traceable.",
       "Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Optional LangSmith export runs a regex PII redactor on the way out.",
     ],
     stack: [

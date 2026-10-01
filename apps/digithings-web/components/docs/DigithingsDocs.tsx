@@ -7,7 +7,9 @@ import {
   StackRow,
   Emblem,
   DocsLayout as DocsShell,
+  DocsSearch,
   type DocsNavGroup,
+  type DocsNavItem,
   EndpointDoc,
   type DocsEndpoint,
   DocsCodeBlock,
@@ -63,6 +65,59 @@ const NAV: DocsNavGroup[] = [
       .filter((m) => m.tier === t.key)
       .map((m) => ({ id: m.id, label: <ModuleWordmark id={m.id} /> })),
   })).filter((g) => g.items.length > 0),
+  { label: "OpenAPI", items: [{ id: "openapi", label: "Explorer", href: "/docs/api/" }] },
+];
+
+// Sub-section anchors: `<entry>--<slug>`, so a heading shared by every module
+// ("Endpoints") still gets one id per module.
+const subId = (entry: string, title: string) =>
+  `${entry}--${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+/** The blocks ModuleDoc renders for `m`, in order — the rail's source of truth. */
+function moduleSections(m: ModuleNode): string[] {
+  const d: ModuleApiDoc = apiDocs[m.id] ?? {};
+  return [
+    "Overview",
+    d.authNote || d.scopes?.length ? "Authentication" : null,
+    d.run ? "Run locally" : null,
+    d.env?.length ? "Configuration" : null,
+    d.endpoints?.length ? "Endpoints" : null,
+    d.publicInterface?.length ? "Public interface" : null,
+    d.mcp?.length ? "MCP tools" : null,
+    d.notes?.length ? "Notes" : null,
+    "Stack",
+    m.related.length ? "Related" : null,
+    m.links.length ? "Links" : null,
+  ].filter((t): t is string => t !== null);
+}
+
+const guideSections = (blocks: Block[]) =>
+  blocks.flatMap((b) => (b.kind === "h" ? [b.text] : []));
+
+// On this page: the sub-sections of whichever entry is being read.
+const RAIL: Record<string, DocsNavItem[]> = Object.fromEntries([
+  ...guides.map((g) => [
+    g.id,
+    guideSections(g.blocks).map((t) => ({ id: subId(g.id, t), label: t })),
+  ]),
+  ...ordered.map((m) => [
+    m.id,
+    moduleSections(m).map((t) => ({ id: subId(m.id, t), label: t })),
+  ]),
+]);
+
+// ⌘K over every entry and sub-section. Labels are plain strings so the
+// filter can match them; a sub-section names its entry so "Endpoints" is
+// never ambiguous.
+const SEARCH: DocsNavItem[] = [
+  ...guides.flatMap((g) => [
+    { id: g.id, label: g.title },
+    ...guideSections(g.blocks).map((t) => ({ id: subId(g.id, t), label: `${g.title} · ${t}` })),
+  ]),
+  ...ordered.flatMap((m) => [
+    { id: m.id, label: m.id },
+    ...moduleSections(m).map((t) => ({ id: subId(m.id, t), label: `${m.id} · ${t}` })),
+  ]),
 ];
 
 // App boundary: apiDocs examples are keyed by language id; the shared CodeTabs
@@ -122,11 +177,16 @@ function Inline({ text }: { text: string }): ReactNode {
   );
 }
 
-function Blocks({ blocks }: { blocks: Block[] }) {
+function Blocks({ entry, blocks }: { entry: string; blocks: Block[] }) {
   return (
     <>
       {blocks.map((b, i) => {
-        if (b.kind === "h") return <h3 key={i} className="doc-guide-h">{b.text}</h3>;
+        if (b.kind === "h")
+          return (
+            <h3 key={i} id={subId(entry, b.text)} className="doc-guide-h">
+              {b.text}
+            </h3>
+          );
         if (b.kind === "code") return <DocsCodeBlock key={i} code={b.code} />;
         if (b.kind === "list")
           return (
@@ -195,6 +255,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
   const d: ModuleApiDoc = apiDocs[m.id] ?? {};
   const suffix = m.id.replace(/^digi/, "");
   const isRoad = m.tier === "roadmap";
+  const sid = (title: string) => subId(m.id, title);
   return (
     <article className="doc-mod" id={m.id}>
       {/* Entrance on the section head only — the body stays static so the
@@ -216,7 +277,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
 
       <p className="doc-tagline">{m.tagline}</p>
 
-      <section className="doc-block">
+      <section className="doc-block" id={sid("Overview")}>
         <h3>Overview</h3>
         {m.summary.map((s, i) => (
           <p className="doc-summary" key={i}>
@@ -226,7 +287,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       </section>
 
       {(d.authNote || d.scopes?.length) && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Authentication")}>
           <h3>Authentication</h3>
           {d.authNote && <p className="doc-summary">{d.authNote}</p>}
           {d.scopes && d.scopes.length > 0 && (
@@ -247,7 +308,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {d.run && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Run locally")}>
           <h3>Run locally</h3>
           {d.run.compose && <RunBlock label="compose" code={d.run.compose} />}
           {d.run.standalone && <RunBlock label="standalone" code={d.run.standalone} />}
@@ -257,7 +318,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {d.env && d.env.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Configuration")}>
           <h3>Configuration</h3>
           <Table>
             <TableBody>
@@ -279,7 +340,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {d.endpoints && d.endpoints.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Endpoints")}>
           <h3>Endpoints</h3>
           {d.baseUrlVar && (
             <p className="m-0 mt-[0.5rem] text-[0.8rem] text-ink-mute">
@@ -296,7 +357,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {d.publicInterface && d.publicInterface.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Public interface")}>
           <h3>Public interface</h3>
           <ul className="doc-iface">
             {d.publicInterface.map((it, i) => (
@@ -310,7 +371,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {d.mcp && d.mcp.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("MCP tools")}>
           <h3>MCP tools</h3>
           <ul className="doc-iface">
             {d.mcp.map((t) => (
@@ -324,7 +385,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {d.notes && d.notes.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Notes")}>
           <h3>Notes</h3>
           <ul className="doc-guide-list">
             {d.notes.map((n, i) => (
@@ -336,13 +397,13 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
         </section>
       )}
 
-      <section className="doc-block">
+      <section className="doc-block" id={sid("Stack")}>
         <h3>Stack</h3>
         <StackRow items={m.stack} />
       </section>
 
       {m.related.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Related")}>
           <h3>Related</h3>
           <nav className="doc-links">
             {m.related.map((r) => (
@@ -356,7 +417,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       )}
 
       {m.links.length > 0 && (
-        <section className="doc-block">
+        <section className="doc-block" id={sid("Links")}>
           <h3>Links</h3>
           <nav className="doc-links">
             {m.links.map((l, i) => (
@@ -375,6 +436,8 @@ export function DigithingsDocs() {
   return (
     <DocsShell
       nav={NAV}
+      rail={RAIL}
+      search={<DocsSearch items={SEARCH} label="Search the docs" />}
       ariaLabel="docs"
       contentsLabel="contents"
       hero={{
@@ -399,7 +462,7 @@ export function DigithingsDocs() {
           <Reveal as="h2" className="doc-guide-title">
             {g.title}
           </Reveal>
-          <Blocks blocks={g.blocks} />
+          <Blocks entry={g.id} blocks={g.blocks} />
         </section>
       ))}
 

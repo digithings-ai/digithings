@@ -11,8 +11,10 @@ from digivoice.history import (
     append_entry,
     dict_entry,
     format_entry,
+    last_dict_text,
     read_history,
     select,
+    speak_entry,
     utc_now_iso,
 )
 from digivoice.models import HistoryEntry
@@ -109,3 +111,12 @@ def test_no_match_returns_nothing() -> None:
 def test_format_entry_is_one_line_with_ts_kind_and_text() -> None:
     entry = HistoryEntry(ts="2026-09-30T12:00:00.000Z", kind="dict", text="ship it", wav=None)
     assert format_entry(entry) == "2026-09-30T12:00:00.000Z  dict  ship it"
+
+
+def test_last_dict_text_skips_speak_and_empty(tmp_path: Path) -> None:
+    target = tmp_path / "history.jsonl"
+    append_entry(target, dict_entry("first dict", None))
+    append_entry(target, speak_entry("spoken later"))
+    append_entry(target, dict_entry("   ", None))
+    assert last_dict_text(target) == "first dict"
+    assert last_dict_text(tmp_path / "missing.jsonl") is None

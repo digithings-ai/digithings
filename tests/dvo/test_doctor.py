@@ -87,3 +87,12 @@ def test_empty_models_dir_still_wants_ggml_base_en() -> None:
     assert detail.startswith("missing ")
     assert "ggml-base.en" in detail
     assert MODEL in detail
+
+
+def test_rewrite_and_interrupt_are_informational_when_disabled() -> None:
+    report = _report(_ready())
+    assert report.ok is True
+    assert "rewrite" in report.text
+    assert "disabled" in _check(report, "rewrite")
+    assert "interrupt" in report.text
+    assert "paste + start a new take" in _check(report, "interrupt")
