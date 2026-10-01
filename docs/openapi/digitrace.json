@@ -4,6 +4,36 @@
       "TraceStatus": {
         "description": "Public status for GET /v1/status.",
         "properties": {
+          "dual_export": {
+            "default": false,
+            "description": "Both LangSmith and OTLP legs are active",
+            "title": "Dual Export",
+            "type": "boolean"
+          },
+          "export_backend": {
+            "default": "none",
+            "description": "One of dual|langsmith|langfuse-otlp|otel|none",
+            "title": "Export Backend",
+            "type": "string"
+          },
+          "langfuse_configured": {
+            "default": false,
+            "description": "A Langfuse-specific endpoint/host env var is set",
+            "title": "Langfuse Configured",
+            "type": "boolean"
+          },
+          "langfuse_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sanitized Langfuse host (no secrets)",
+            "title": "Langfuse Host"
+          },
           "langsmith_host": {
             "anyOf": [
               {
@@ -19,6 +49,12 @@
           "langsmith_sdk_installed": {
             "description": "langsmith Python package is importable",
             "title": "Langsmith Sdk Installed",
+            "type": "boolean"
+          },
+          "otel_export_configured": {
+            "default": false,
+            "description": "An OTLP endpoint env var is set (OTel fan-out leg active)",
+            "title": "Otel Export Configured",
             "type": "boolean"
           },
           "request_id": {
