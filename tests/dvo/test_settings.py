@@ -28,6 +28,19 @@ def test_defaults_keep_rewrite_disabled(tmp_path: Path) -> None:
     assert settings.rewrite_enabled is False
     assert settings.rewrite_preset == "none"
     assert settings.paste_on_stop is True
+    assert settings.word_detection is False
+    assert settings.spelling_detection is False
+
+
+def test_detection_flags_set_get_round_trip(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    set_setting(paths, "word_detection", "true")
+    set_setting(paths, "spelling_detection", "on")
+    saved = load_settings(paths)
+    assert saved.word_detection is True
+    assert saved.spelling_detection is True
+    set_setting(paths, "word_detection", "off")
+    assert load_settings(paths).word_detection is False
 
 
 def test_save_and_load_round_trip(tmp_path: Path) -> None:

@@ -101,6 +101,9 @@ class VoiceSettings(BaseModel):
     rewrite_timeout_seconds: float = 30.0
     # Feature toggles agents can flip without touching code.
     paste_on_stop: bool = True
+    # Word / spelling detection stubs (MVP off; settings only, not wired to STT yet).
+    word_detection: bool = False
+    spelling_detection: bool = False
     # Status overlay drawn by the Hammerspoon adapter (read from status.json). Display only.
     live_banner: bool = True
     banner_position: BannerPosition = "top-center"
@@ -233,6 +236,8 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  rewrite_app_routes:    {len(settings.rewrite_app_routes)} fragment→preset entries",
         f"  rewrite_timeout_seconds: {settings.rewrite_timeout_seconds}",
         f"  paste_on_stop:          {settings.paste_on_stop}",
+        f"  word_detection:         {settings.word_detection}",
+        f"  spelling_detection:     {settings.spelling_detection}",
         f"  live_banner:            {settings.live_banner}",
         f"  banner_position:        {settings.banner_position}",
         f"  banner_density:         {settings.banner_density}",

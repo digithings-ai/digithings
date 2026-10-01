@@ -138,6 +138,33 @@ def _paths(home: Path, paths: VoicePaths) -> DoctorCheck:
     return DoctorCheck(id="paths", status="info", detail=detail)
 
 
+def _detection_check(paths: VoicePaths) -> DoctorCheck:
+    """Word/spelling detection stubs: settings only, never required for ok."""
+    try:
+        settings = load_settings(paths)
+        word = bool(settings.word_detection)
+        spelling = bool(settings.spelling_detection)
+    except Exception:
+        word, spelling = False, False
+    if not word and not spelling:
+        return DoctorCheck(
+            id="detection",
+            status="info",
+            detail=(
+                "word_detection=false spelling_detection=false "
+                "(stubs; not wired to STT yet — settings only)"
+            ),
+        )
+    return DoctorCheck(
+        id="detection",
+        status="info",
+        detail=(
+            f"word_detection={str(word).lower()} spelling_detection={str(spelling).lower()} "
+            "(stub; STT pipeline still uses whisper as today — no behavior change yet)"
+        ),
+    )
+
+
 def _rewrite_check(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
     settings = load_settings(paths)
     status, detail = rewrite_doctor_detail(paths, settings, probe, run_command)
@@ -174,6 +201,7 @@ def doctor_checks(
         _history(paths, probe),
         _paths(home, paths),
         _rewrite_check(paths, probe),
+        _detection_check(paths),
         DoctorCheck(
             id="tcc",
             status="info",
