@@ -14,9 +14,36 @@ export type BookRow = {
   entry_price: number | null;
   current_price: number | null;
   unrealized_pct: number | null;
+  /** Proposed /allocations extension (BLOCKS.md). Absent until the worker ships them → "—". */
+  name?: string | null;
+  sleeve?: string | null;
+  shares?: number | null;
+  value?: number | null;
+  day_return_pct?: number | null;
+  thesis_id?: string | null;
+  is_cash?: boolean;
 };
 
-export type Book = { book_as_of: string | null; rows: BookRow[] };
+export type Book = {
+  book_as_of: string | null;
+  rows: BookRow[];
+  /** Proposed extension. */
+  cash_value?: number | null;
+  book_value?: number | null;
+  sleeves?: { sleeve: string; names: number; weight_pct: number }[];
+};
+
+/** Proposed routes (BLOCKS.md): not in CONTRACT yet. */
+export type Theses = {
+  theses: { id: string; name: string; state: 'active' | 'watch' | 'exited'; vehicles: string[]; evidence: string | null; kill_condition: string | null; note?: string | null }[];
+  counts: { active: number; watch: number; exited: number };
+};
+export type Attribution = {
+  window: { start: string; end: string };
+  sleeves: { sleeve: string; contribution_bp: number | null }[];
+  names: { ticker: string; sleeve: string | null; contribution_bp: number | null }[];
+};
+export type CashLedger = { entries: { date: string; kind: string; amount: number | null; balance: number | null }[] };
 
 /** Route payloads (CONTRACT §6). Nullable numbers stay nullable: null renders "—". */
 export type Portfolio = {
@@ -35,11 +62,16 @@ export type Brief = {
   overlay: { active: boolean; live_vs_mark_pct: number; badge: string };
   invested_pct: number | null;
   session_events: unknown[];
+  /** Proposed extensions. */
+  decision?: { lead: string; body: string | null; run_date: string | null } | null;
+  risks?: string[];
 };
 export type Performance = {
   nav: { tip_date: string; base100_tip: number; points: { date: string; index: number; day_return_pct: number | null }[] };
   metrics: { day_return_pct: number | null; since_inception_pct: number | null; excess_return_pct: number | null; alpha_pct: number | null; information_ratio: number | null; beta: number | null; overlap_days: number };
   benchmark: { ticker: string; aligned_start: string };
+  /** Proposed extension. */
+  drawdown?: { max_pct: number | null; peak_date: string | null; trough_date: string | null; current_pct: number | null };
 };
 export type KpisLive = {
   quote_date: string; live_vs_mark_pct: number; day_return_live_pct: number | null;
