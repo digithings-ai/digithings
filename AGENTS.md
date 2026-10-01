@@ -445,6 +445,32 @@ Standard commands are also documented in root `README.md` and `Makefile`.
 
 ---
 
+## Origin iteration, GitHub promotion
+
+digithings and twelve-x are inbound Origin mirrors (`chrizefan/digithings`, `chrizefan/twelve-x`). GitHub stays the public face and the release host. Agent iterations stay off GitHub.
+
+On a clone, `origin` is `https://origin.cursor.com/chrizefan/<repo>.git` and `github` is the GitHub URL. One-time: `origin auth login`, then `origin repo set-origin-remote`, then point `origin`'s push URL at `chrizefan/<repo>` if the command wrote `digithings-ai/<repo>` (that path is not the mirror).
+
+| Branch | Publish with | Lands on |
+|---|---|---|
+| `origin/<slug>` | `origin push local` | Origin only |
+| `task/<N>-slug`, `module/*`, `develop`, `main`, `release/*` | `git push origin` or `git push github` | GitHub, mirrored back to Origin |
+
+`git push` of any other name, including a push of `origin/<slug>` to `origin` or `github`, writes through to GitHub. Do not open a pull request from an `origin/<slug>` branch. Review starts at promotion:
+
+```bash
+git fetch origin develop
+git switch -c origin/<slug> origin/develop
+# edit, commit
+origin push local
+
+# when the slice is ready for GitHub
+git switch -c task/<N>-<slug> origin/<slug>
+git push -u origin HEAD
+```
+
+Releases, release-please, GitHub Actions, and Cloudflare Pages stay on GitHub. Do not detach the mirror.
+
 ## Branching model
 
 ```
