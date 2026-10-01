@@ -296,3 +296,39 @@ def test_backfill_indexing_pins_and_restores_provider(
     # ... and the process env is restored afterwards (no leakage).
     assert "DIGISEARCH_EMBEDDING_PROVIDER" not in os.environ
     assert summary["chunks"] == 1
+
+
+def test_backfill_refuses_conflicting_preset_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import os
+
+    import scripts.index_occ_tickets as backfill_module
+    from scripts.zammad_mcp import client as zammad_client_module
+
+    class _FakeClient:
+        def list_tickets(self) -> list[dict]:
+            return [{"id": 231, "number": "1", "title": "t"}]
+
+        def get_articles(self, ticket_id: int) -> list[dict]:
+            return [
+                {
+                    "id": 1,
+                    "sender": "Customer",
+                    "type": "web",
+                    "internal": False,
+                    "body": "<p>hi</p>",
+                    "created_at": "2026-09-15T12:00:00.000Z",
+                }
+            ]
+
+        def resolve_user(self, user_id: int) -> str:
+            return "Jane Doe"
+
+    monkeypatch.setattr(zammad_client_module, "ZammadClient", _FakeClient)
+    monkeypatch.setenv("ZAMMAD_API_TOKEN", "test-token")
+    monkeypatch.setenv("DIGISEARCH_EMBEDDING_PROVIDER", "minilm")
+    with pytest.raises(SystemExit, match="refusing to index"):
+        backfill_module.backfill(dry_run=False)
+    # Conflicting preset is left exactly as found.
+    assert os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] == "minilm"
