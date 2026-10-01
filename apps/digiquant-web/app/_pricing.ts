@@ -31,7 +31,7 @@ export const PRICING_TIERS: readonly PricingTier[] = [
     cadence: "· MIT",
     desc: "Run the full stack on your own infrastructure with your own model keys.",
     features: ["All core services", "Bring your own key", "Community support"],
-    // CTA rendered as <CloneRepoButton /> in the page (real self-host action).
+    // CTA: a GitHub link, rendered by components/start/pricing-strip.tsx.
   },
   {
     id: "managed",
