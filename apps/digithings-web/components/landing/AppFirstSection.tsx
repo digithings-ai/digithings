@@ -311,7 +311,7 @@ export function AppFirstSection() {
   const popSelected =
     pop?.layer === "email"
       ? emailId
-      : pop && pop.layer !== "email"
+      : pop
         ? (pop.side === "provider" ? effProvider : effDigi)[pop.layer]
         : "";
 

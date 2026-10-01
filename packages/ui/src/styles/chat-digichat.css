@@ -634,10 +634,27 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md[data-status="running"]::after,
-  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md[data-status="running"] *::after {
-    animation: none;
-  }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"]):empty::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:not(ol):not(ul):not(pre)):last-child::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"]) > pre:last-child code::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)::after {
+  animation: none;
+}
 }
 
 /* Increment 6 — cube matrix. Snap on/off; color by data-state. */
