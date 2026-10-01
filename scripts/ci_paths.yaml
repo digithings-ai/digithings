@@ -164,6 +164,10 @@ web:
   # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
   # Same install-input / web-lane cover as digichat-cloudflare above.
   - apps/digithings-stack-cloudflare/**
+  # digitrace Langfuse Web+Worker Containers (#4930 Phase 1).
+  - apps/digitrace-langfuse/**
+  - Dockerfile.digitrace-langfuse-web
+  - Dockerfile.digitrace-langfuse-worker
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
