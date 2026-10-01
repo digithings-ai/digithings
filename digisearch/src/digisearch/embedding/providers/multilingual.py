@@ -69,6 +69,8 @@ class MultilingualEmbedder(EmbeddingProvider):
         self._session: object | None = None
         self._tokenizer: object | None = None
         self._load_lock = threading.Lock()
+        #: Texts truncated to max_tokens across embed() calls (diagnostic).
+        self.truncated_texts = 0
 
     @property
     def dimensions(self) -> int:
@@ -100,12 +102,20 @@ class MultilingualEmbedder(EmbeddingProvider):
             from huggingface_hub import snapshot_download
         except ImportError:
             raise _missing_dep_error() from None
-        cache = Path(
-            snapshot_download(
-                repo_id=MULTILINGUAL_MODEL_ID,
-                allow_patterns=[MULTILINGUAL_MODEL_FILE, MULTILINGUAL_TOKENIZER_FILE],
+        try:
+            cache = Path(
+                snapshot_download(
+                    repo_id=MULTILINGUAL_MODEL_ID,
+                    allow_patterns=[MULTILINGUAL_MODEL_FILE, MULTILINGUAL_TOKENIZER_FILE],
+                )
             )
-        )
+        except Exception as exc:
+            raise RuntimeError(
+                "multilingual model download failed for "
+                f"{MULTILINGUAL_MODEL_ID}; pre-download with "
+                "scripts/download_multilingual_model.py or set "
+                f"DIGISEARCH_MULTILINGUAL_MODEL_DIR (HF_HUB_OFFLINE=1 disables downloads): {exc}"
+            ) from exc
         return cache / MULTILINGUAL_MODEL_FILE, cache / MULTILINGUAL_TOKENIZER_FILE
 
     def _resolve_under(self, root: Path) -> tuple[Path, Path]:
@@ -131,10 +141,17 @@ class MultilingualEmbedder(EmbeddingProvider):
             except ImportError:
                 raise _missing_dep_error() from None
             model_path, tokenizer_path = self._resolve_files()
-            session = onnxruntime.InferenceSession(
-                str(model_path), providers=["CPUExecutionProvider"]
-            )
-            tokenizer = Tokenizer.from_file(str(tokenizer_path))
+            try:
+                session = onnxruntime.InferenceSession(
+                    str(model_path), providers=["CPUExecutionProvider"]
+                )
+                tokenizer = Tokenizer.from_file(str(tokenizer_path))
+            except Exception as exc:
+                raise RuntimeError(
+                    f"multilingual model load failed ({model_path}); re-run "
+                    "scripts/download_multilingual_model.py or check "
+                    f"DIGISEARCH_MULTILINGUAL_MODEL_DIR: {exc}"
+                ) from exc
             self._session, self._tokenizer = session, tokenizer
             return session, tokenizer
 
@@ -148,7 +165,10 @@ class MultilingualEmbedder(EmbeddingProvider):
         masks: list[list[int]] = []
         type_ids: list[list[int]] = []
         width = 1
+        truncated = 0
         for encoding in encodings:
+            if len(encoding.ids) > cap:
+                truncated += 1
             token_ids = list(encoding.ids)[:cap]
             attention = list(encoding.attention_mask)[:cap]
             kinds = list(encoding.type_ids)[:cap] if encoding.type_ids else [0] * len(token_ids)
@@ -183,13 +203,14 @@ class MultilingualEmbedder(EmbeddingProvider):
                 if name not in feed and leftover:
                     feed[name] = leftover.pop(0)
         outputs = session.run(None, feed)
-        hidden = np.asarray(outputs[0], dtype=float)
-        weights = feed_mask.astype(float)[..., None]
+        hidden = np.asarray(outputs[0], dtype=np.float32)
+        weights = feed_mask.astype(np.float32)[..., None]
         summed = (hidden * weights).sum(axis=1)
         counts = weights.sum(axis=1).clip(min=1.0)
         pooled = summed / counts
         norms = np.linalg.norm(pooled, axis=1, keepdims=True)
         norms[norms == 0.0] = 1.0
+        self.truncated_texts += truncated
         return [[float(x) for x in row] for row in (pooled / norms).tolist()]
 
 

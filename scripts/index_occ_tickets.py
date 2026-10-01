@@ -192,25 +192,100 @@ def backfill(
     }
     if dry_run or not chunks:
         return summary
-    from digisearch.embedding.factory import wrap_embedding_pipeline
-    from digisearch.embedding.providers.multilingual import get_default_multilingual_embedder
+    from digisearch.embedding.factory import (
+        resolve_backend_embedding_provider,
+        unwrap_embedding_provider,
+        wrap_embedding_pipeline,
+    )
+    from digisearch.embedding.providers.multilingual import (
+        MULTILINGUAL_MODEL_ID,
+        MultilingualEmbedder,
+        get_default_multilingual_embedder,
+    )
     from digisearch.pipeline.ingest import index_chunks
 
-    provider = wrap_embedding_pipeline(get_default_multilingual_embedder(), use_cache=False)
-    # Pin the provider for the backend too: route_add_chunks re-resolves it
-    # from env, and an unset default (minilm) would stamp the collection
-    # with the wrong model id and embed queries in the wrong space.
-    # Scoped + restored so the one-shot leaves no process-global side effects.
-    previous_provider = os.environ.get("DIGISEARCH_EMBEDDING_PROVIDER")
-    os.environ.setdefault("DIGISEARCH_EMBEDDING_PROVIDER", "multilingual")
+    raw_provider = get_default_multilingual_embedder()
+    provider = wrap_embedding_pipeline(raw_provider, batch_size=64, use_cache=False)
+    # The backend re-resolves its provider from env when stamping the
+    # collection: an unset var is pinned to multilingual here, but a
+    # conflicting pre-set (e.g. minilm) aborts loud instead of stamping the
+    # wrong model id over multilingual vectors (same 384 dims, silently
+    # wrong retrieval). Scoped + restored: no process-global side effects.
+    preset_provider = os.environ.get("DIGISEARCH_EMBEDDING_PROVIDER")
+    if preset_provider is None:
+        os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = "multilingual"
+    else:
+        try:
+            backend_provider = unwrap_embedding_provider(resolve_backend_embedding_provider())
+        except Exception as exc:
+            raise SystemExit(f"zammad error: cannot resolve embedding provider: {exc}") from exc
+        if not isinstance(backend_provider, MultilingualEmbedder):
+            raise SystemExit(
+                "zammad error: refusing to index: DIGISEARCH_EMBEDDING_PROVIDER resolves to "
+                f"{backend_provider.model_id!r}, not {MULTILINGUAL_MODEL_ID!r}; unset it or "
+                "set it to 'multilingual' so backend stamp and vectors agree"
+            )
     try:
         index_chunks(index_name, chunks, embedding_provider=provider)
     finally:
-        if previous_provider is None:
+        if preset_provider is None:
             os.environ.pop("DIGISEARCH_EMBEDDING_PROVIDER", None)
         else:
-            os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = previous_provider
+            os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = preset_provider
+    summary["truncated_texts"] = raw_provider.truncated_texts
+    # Chroma-side verification: confirm the collection stamp matches the vectors.
+    _verify_collection_model(index_name)
     return summary
+
+
+def _verify_collection_model(index_name: str) -> None:
+    """Confirm the written collection's model stamp matches the vectors.
+
+    Chroma stamps ``embedding_model_id`` on create and asserts it on open, so
+    re-opening with the multilingual provider fails loud on any mislabeled
+    collection. Vectorize stores no model identity (same-dim vectors are
+    indistinguishable there), so that leg relies on the env check above —
+    said explicitly instead of pretending otherwise.
+    """
+    from digisearch.embedding.providers.multilingual import get_default_multilingual_embedder
+
+    def _first(*names: str) -> str:
+        for name in names:
+            value = os.environ.get(name, "").strip()
+            if value:
+                return value
+        return ""
+
+    if _first("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first(
+        "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
+    ):
+        print("note: Vectorize leg stores no model identity; env check above is the guard")
+        return
+    chroma_path = os.environ.get("CHROMA_PATH", "").strip() or None
+    chroma_host = os.environ.get("CHROMA_HOST", "").strip() or None
+    if not chroma_path and not chroma_host:
+        return
+    from digisearch.indexes.backends.chroma import (
+        ChromaBackend,
+        EmbeddingModelMismatchError,
+    )
+
+    port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+    try:
+        ChromaBackend(
+            name=index_name,
+            persist_path=chroma_path,
+            embedding_provider=get_default_multilingual_embedder(),
+            chroma_host=chroma_host,
+            chroma_port=int(port_raw),
+        )
+    except EmbeddingModelMismatchError as exc:
+        raise SystemExit(f"zammad error: collection model stamp mismatch: {exc}") from exc
+    except Exception as exc:
+        raise SystemExit(
+            f"zammad error: could not verify collection {index_name!r} model stamp: {exc}"
+        ) from exc
+    print(f"verified collection {index_name!r} model stamp: multilingual")
 
 
 def main(argv: list[str] | None = None) -> None:
