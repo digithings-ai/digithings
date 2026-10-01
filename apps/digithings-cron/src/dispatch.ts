@@ -18,7 +18,7 @@ export type DispatchResult = {
   dry_run: boolean;
   /** Present only on a container accept. Omitted on the GitHub path. */
   run_id?: string;
-  /** accepted | already_running | duplicate. Omitted on the GitHub path. */
+  /** accepted | already_running | duplicate | skipped. Omitted on the GitHub path. */
   container_status?: string;
 };
 
@@ -82,14 +82,19 @@ type ContainerAccept = {
 function isContainerSuccess(
   status: number,
   body: ContainerAccept,
-): body is { ok: true; run_id: string; status: "accepted" | "already_running" | "duplicate" } {
+): body is {
+  ok: true;
+  run_id: string;
+  status: "accepted" | "already_running" | "duplicate" | "skipped";
+} {
   return (
     status === 202 &&
     body.ok === true &&
     typeof body.run_id === "string" &&
     (body.status === "accepted" ||
       body.status === "already_running" ||
-      body.status === "duplicate")
+      body.status === "duplicate" ||
+      body.status === "skipped")
   );
 }
 
@@ -182,9 +187,9 @@ async function dispatchContainer(
 
 /**
  * Dispatch one job.
- * Container jobs POST digiquant-runner. 202 accepted / already_running / duplicate
- * is success (the same idea as a benign GitHub 422). DRY_RUN=1 logs and does not call.
- * A job id in GITHUB_OVERRIDE_JOBS uses workflow_dispatch and logs github_override.
+ * Container jobs POST digiquant-runner. Accepted, already-running, duplicate, and
+ * skipped 202 responses are successful. DRY_RUN=1 logs and does not call. A job id
+ * in GITHUB_OVERRIDE_JOBS uses workflow_dispatch and logs github_override.
  */
 export async function dispatch(
   env: Env,

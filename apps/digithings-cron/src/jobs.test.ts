@@ -90,16 +90,25 @@ describe("jobsForCron", () => {
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
     }
-    expect(JOBS.find((job) => job.id === "house-run-09")?.kind).toBe("repository_dispatch");
   });
 
-  it("runs house research/portfolio retries every day without a Sunday special", () => {
+  it("sends house research/portfolio retries to digiquant-runner every day", () => {
     for (const [id, cron] of [
       ["house-run-09", "17 9 * * *"],
       ["house-run-10", "17 10 * * *"],
       ["house-run-11", "17 11 * * *"],
       ["house-run-12", "17 12 * * *"],
     ] as const) {
+      expect(JOBS.find((job) => job.id === id)).toMatchObject({
+        id,
+        cron,
+        kind: "container",
+        workflow: "pipeline-digiquant.yml",
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        timeoutSeconds: 14400,
+        codeRef: "main",
+      });
       expect(jobsForCron(cron).map((job) => job.id)).toEqual([id]);
     }
     expect(JOBS.some((job) => job.id === "house-run-sun")).toBe(false);

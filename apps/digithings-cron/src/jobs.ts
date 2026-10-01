@@ -52,23 +52,6 @@ function wd(
   };
 }
 
-function rd(
-  id: string,
-  cron: string,
-  repo: Job["repo"],
-  event_type: string,
-  opts: { enabled?: boolean } = {},
-): Job {
-  return {
-    id,
-    cron,
-    repo,
-    kind: "repository_dispatch",
-    event_type,
-    enabled: opts.enabled ?? true,
-  };
-}
-
 /** Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
 function cj(
   id: string,
@@ -165,16 +148,42 @@ export const JOBS: readonly Job[] = [
     1800,
   ),
 
-  // --- digithings: house-run via repository_dispatch digiquant-baseline ---
-  // Research/portfolio retries run every day; ordinary source cadence decides
-  // refresh. Manual workflow_dispatch still owns explicit refresh_scope.
-  rd("house-run-09", "17 9 * * *", DIGITHINGS, "digiquant-baseline"),
-  rd("house-run-10", "17 10 * * *", DIGITHINGS, "digiquant-baseline"),
-  rd("house-run-11", "17 11 * * *", DIGITHINGS, "digiquant-baseline"),
-  rd("house-run-12", "17 12 * * *", DIGITHINGS, "digiquant-baseline"),
+  // --- digithings: house-run (container, #4761) ---
+  cj(
+    "house-run-09",
+    "17 9 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+  ),
+  cj(
+    "house-run-10",
+    "17 10 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+  ),
+  cj(
+    "house-run-11",
+    "17 11 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+  ),
+  cj(
+    "house-run-12",
+    "17 12 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+  ),
 
   // Phase 2 (#4761). Probe CLIs are on main, so this cutover stays codeRef main.
-  // Do not point the container at develop. House-run stays repository_dispatch.
+  // Do not point the container at develop.
   cj(
     "research-metrics",
     "5 22 * * *",
