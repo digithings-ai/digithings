@@ -134,6 +134,11 @@ ZAMMAD_API_TOKEN=... CHROMA_PATH=/path/to/chroma \
   python -m scripts.index_occ_tickets [--dry-run]
 ```
 
+The script pins `DIGISEARCH_EMBEDDING_PROVIDER=multilingual` (unless already
+set) so the backend stamps and queries the collection with the same model
+that produced the vectors — never query `occ_tickets` with the `occ_help`
+provider or vice versa.
+
 Demo snapshot: data as of 2026-10-01. There is no sync job — re-run the
 script for a fresh snapshot.
 

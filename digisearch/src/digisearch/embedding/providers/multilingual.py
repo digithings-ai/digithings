@@ -169,17 +169,19 @@ class MultilingualEmbedder(EmbeddingProvider):
             [[*row, *[0] * (width - len(row))] for row in type_ids], dtype=np.int64
         )
         names = [entry.name for entry in session.get_inputs()]
-        feed: dict[str, object] = {}
-        for name, values in (
-            ("input_ids", feed_ids),
-            ("token_type_ids", feed_types),
-            ("attention_mask", feed_mask),
-        ):
-            if name in names:
-                feed[name] = values
+        known = {
+            "input_ids": feed_ids,
+            "attention_mask": feed_mask,
+            "token_type_ids": feed_types,
+        }
+        feed: dict[str, object] = {name: known[name] for name in names if name in known}
         if len(feed) < len(names):
-            ordered = [feed_ids, feed_types, feed_mask]
-            feed = {name: ordered[index] for index, name in enumerate(names[:3])}
+            # Unknown input names: fill positionally in conventional ONNX
+            # export order, keeping entries that already matched by name.
+            leftover = [values for key, values in known.items() if key not in feed]
+            for name in names:
+                if name not in feed and leftover:
+                    feed[name] = leftover.pop(0)
         outputs = session.run(None, feed)
         hidden = np.asarray(outputs[0], dtype=float)
         weights = feed_mask.astype(float)[..., None]

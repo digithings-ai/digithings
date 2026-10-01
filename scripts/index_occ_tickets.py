@@ -1,10 +1,14 @@
 """One-shot backfill of Zammad tickets into a digisearch index (#4756).
 
-Reads every visible ticket (GET-only) plus its articles, builds one Chunk
-per article with full non-anonymized metadata (demo mode, same contract as
+Reads every visible ticket (GET-only, up to the 500-ticket list cap) plus
+its articles, builds one Chunk per article with a body with full
+non-anonymized metadata (demo mode, same contract as
 the zammad MCP tools after #4944), and indexes into ``occ_tickets`` — a
 separate index from the ``occ_help`` docs corpus — using the small
 multilingual ONNX provider, so English queries match German/Spanish text.
+The script pins ``DIGISEARCH_EMBEDDING_PROVIDER=multilingual`` (unless
+already set) so the backend stamps and queries the collection with the
+same model that produced the vectors.
 
 Snapshot semantics: this is a point-in-time demo backfill (data as of
 2026-10-01). There is no cron/daemon; re-run the script for a fresh
@@ -27,19 +31,6 @@ from typing import Any
 SNAPSHOT_DATE = "2026-10-01"
 
 DEFAULT_INDEX = "occ_tickets"
-
-
-def _text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, dict):
-        for key in ("name", "login", "email", "title", "fullname"):
-            candidate = value.get(key)
-            if candidate:
-                return str(candidate)
-        return ""
-    text = str(value).strip()
-    return "" if text == "-" else text
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -69,10 +60,12 @@ def build_ticket_chunks(
     ticket: dict[str, Any],
     articles: list[dict[str, Any]],
     customer_name: str | None = None,
+    snapshot_date: str = SNAPSHOT_DATE,
 ) -> list[Any]:
-    """Build one Chunk per non-empty article (full metadata, no masking)."""
+    """Build one Chunk per article with a body (full metadata, no masking)."""
     from digisearch.core.models import Chunk
 
+    from scripts.zammad_mcp.formatting import _field as _text
     from scripts.zammad_mcp.formatting import html_to_text
 
     ticket_id = _int_or_none(ticket.get("id"))
@@ -83,6 +76,8 @@ def build_ticket_chunks(
     chunks: list[Any] = []
     for index, article in enumerate(articles, start=1):
         body = html_to_text(article.get("body"))
+        if not body:
+            continue
         sender = _text(article.get("sender")) or "unknown"
         kind = _text(article.get("type")) or "unknown"
         author = _text(article.get("from"))
@@ -99,12 +94,10 @@ def build_ticket_chunks(
         if body:
             parts.append(body)
         content = "\n".join(parts).strip()
-        if not content:
-            continue
         metadata = _clean_metadata(
             {
                 "source": "zammad",
-                "snapshot_date": SNAPSHOT_DATE,
+                "snapshot_date": snapshot_date,
                 "ticket_id": ticket_id,
                 "number": number,
                 "title": title,
@@ -143,19 +136,27 @@ def backfill(
     dry_run: bool = False,
     snapshot_date: str = SNAPSHOT_DATE,
 ) -> dict[str, Any]:
-    """Fetch tickets + articles, build chunks, index them. Returns a summary."""
-    global SNAPSHOT_DATE
+    """Fetch tickets + articles, build chunks, index them. Returns a summary.
+
+    Pins ``DIGISEARCH_EMBEDDING_PROVIDER=multilingual`` (unless already set)
+    so the backend stamps and queries the collection with the same model
+    that produced the vectors.
+    """
     from scripts.zammad_mcp.client import ZammadClient, ZammadError
 
     if not os.environ.get("ZAMMAD_API_TOKEN", "").strip():
         raise SystemExit("zammad error: ZAMMAD_API_TOKEN is not set")
+    if max_tickets is not None and max_tickets < 1:
+        raise SystemExit("zammad error: --max-tickets must be a positive integer")
+    os.environ.setdefault("DIGISEARCH_EMBEDDING_PROVIDER", "multilingual")
     client = ZammadClient()
     try:
         tickets = client.list_tickets()
     except ZammadError as exc:
         raise SystemExit(f"zammad error: {exc}") from exc
+    capped_at_500 = max_tickets is None and len(tickets) == 500
     if max_tickets is not None:
-        tickets = tickets[: max(1, max_tickets)]
+        tickets = tickets[:max_tickets]
     chunks: list[Any] = []
     resolved: dict[int, str] = {}
     failures = 0
@@ -178,10 +179,13 @@ def backfill(
                 except ZammadError:
                     resolved[customer_id] = ""
             customer_name = resolved[customer_id] or None
-        chunks.extend(build_ticket_chunks(ticket, articles, customer_name))
+        chunks.extend(
+            build_ticket_chunks(ticket, articles, customer_name, snapshot_date=snapshot_date)
+        )
     summary: dict[str, Any] = {
         "index": index_name,
         "tickets_scanned": len(tickets),
+        "capped_at_500": capped_at_500,
         "ticket_failures": failures,
         "chunks": len(chunks),
         "snapshot_date": snapshot_date,

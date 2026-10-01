@@ -111,3 +111,135 @@ def test_build_ticket_chunks_full_metadata_no_masking() -> None:
     assert second.metadata["internal"] is True
     assert "[internal]" in second.content
     assert "internal-only note body" in second.content
+
+
+def test_embed_onnx_mean_pools_masked_tokens_and_normalizes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import numpy as np
+
+    provider = MultilingualEmbedder()
+
+    class _Encoding:
+        def __init__(self, ids: list[int]) -> None:
+            self.ids = ids
+            self.attention_mask = [1] * len(ids)
+            self.type_ids = [0] * len(ids)
+
+    class _Tokenizer:
+        def encode_batch(self, texts: list[str]) -> list[_Encoding]:
+            return [_Encoding([101, 102, 103]) for _ in texts]
+
+        def token_to_id(self, token: str) -> int | None:
+            return None
+
+    class _Input:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    class _Session:
+        def __init__(self) -> None:
+            self.feeds: list[dict] = []
+
+        def get_inputs(self) -> list[_Input]:
+            return [_Input("input_ids"), _Input("attention_mask"), _Input("token_type_ids")]
+
+        def run(self, _output_names: object, feed: dict) -> list:
+            self.feeds.append(feed)
+            hidden = np.zeros((1, 3, MULTILINGUAL_DIMENSIONS))
+            hidden[0, 0, 0] = 3.0
+            hidden[0, 1, 1] = 4.0
+            hidden[0, 2, :] = 99.0  # masked out: must not leak into the pool
+            return [hidden]
+
+    session = _Session()
+    monkeypatch.setattr(provider, "_load", lambda: (session, _Tokenizer()))
+    # Mask the third token out via the attention mask path.
+    original_encode = _Tokenizer.encode_batch
+
+    def _masked_encode(self: _Tokenizer, texts: list[str]) -> list[_Encoding]:
+        encodings = original_encode(self, texts)
+        for encoding in encodings:
+            encoding.attention_mask = [1, 1, 0]
+        return encodings
+
+    monkeypatch.setattr(_Tokenizer, "encode_batch", _masked_encode)
+    vectors = provider.embed(["hello world"])
+    assert len(vectors) == 1 and len(vectors[0]) == MULTILINGUAL_DIMENSIONS
+    import math
+
+    assert vectors[0][0] == pytest.approx(0.6)
+    assert vectors[0][1] == pytest.approx(0.8)
+    assert all(v == pytest.approx(0.0) for v in vectors[0][2:])
+    assert math.sqrt(sum(v * v for v in vectors[0])) == pytest.approx(1.0)
+    assert set(session.feeds[0]) == {"input_ids", "attention_mask", "token_type_ids"}
+
+
+def test_backfill_dry_run_pins_provider_threads_snapshot_and_validates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.index_occ_tickets as backfill_module
+    from scripts.zammad_mcp import client as zammad_client_module
+
+    ticket = {
+        "id": 231,
+        "number": "28312",
+        "title": "Example ticket subject",
+        "state": "open",
+        "group": "Sitaas",
+        "priority": "2 normal",
+        "customer": "jane.doe@example.test",
+        "customer_id": 7,
+        "owner": "ada",
+        "created_at": "2026-09-15T12:00:00.000Z",
+        "updated_at": "2026-09-16T12:00:00.000Z",
+    }
+    articles = [
+        {
+            "id": 1,
+            "sender": "Customer",
+            "type": "web",
+            "internal": False,
+            "from": "jane.doe@example.test",
+            "body": "<p>Cannot log in</p>",
+            "created_at": "2026-09-15T12:00:00.000Z",
+        },
+        {
+            "id": 2,
+            "sender": "Agent",
+            "type": "note",
+            "internal": False,
+            "from": "support@example.test",
+            "body": "",
+            "created_at": "2026-09-15T13:00:00.000Z",
+        },
+    ]
+
+    class _FakeClient:
+        def list_tickets(self) -> list[dict]:
+            return [ticket]
+
+        def get_articles(self, ticket_id: int) -> list[dict]:
+            assert ticket_id == 231
+            return articles
+
+        def resolve_user(self, user_id: int) -> str:
+            assert user_id == 7
+            return "Jane Doe"
+
+    monkeypatch.setattr(zammad_client_module, "ZammadClient", _FakeClient)
+    monkeypatch.setenv("ZAMMAD_API_TOKEN", "test-token")
+    monkeypatch.delenv("DIGISEARCH_EMBEDDING_PROVIDER", raising=False)
+    summary = backfill_module.backfill(dry_run=True, snapshot_date="2026-11-01")
+    assert summary["tickets_scanned"] == 1
+    assert summary["ticket_failures"] == 0
+    assert summary["snapshot_date"] == "2026-11-01"
+    assert summary["capped_at_500"] is False
+    # Empty-body article skipped; snapshot date threads into chunk metadata.
+    assert summary["chunks"] == 1
+    # Backend provider pinned so collection stamp matches the vectors.
+    import os
+
+    assert os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] == "multilingual"
+    with pytest.raises(SystemExit):
+        backfill_module.backfill(max_tickets=0, dry_run=True)

@@ -138,8 +138,7 @@ def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
 
         return OpenAIEmbedder(model=model or "text-embedding-3-small", api_key=api_key)
     raise EmbeddingConfigError(
-        f"unknown embedding provider {name!r}; expected minilm, multilingual, or openai "
-        "(new providers are out of scope for the wire-embed task)"
+        f"unknown embedding provider {name!r}; expected minilm, multilingual, or openai"
     )
 
 
