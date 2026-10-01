@@ -28,23 +28,19 @@ describe('buildCommandItems (F2 palette — static rows only)', () => {
     const items = buildCommandItems(data);
     expect(items.some((i) => i.id.startsWith('doc-'))).toBe(false);
   });
-  it('separates tearsheet / ledger from attribution analysis (no Period nav)', () => {
+  it('mirrors the sidebar portfolio IA: Book, Performance, Decisions (no Period nav)', () => {
     const items = buildCommandItems(data);
-    expect(items.find((i) => i.id === 'go-perf')).toMatchObject({
-      title: 'Portfolio — Tearsheet',
-      href: '/portfolio/performance',
-      hint: 'Returns & position performance',
-    });
-    expect(items.find((i) => i.id === 'go-ledger')).toMatchObject({
-      href: '/portfolio/ledger',
-    });
+    const portfolio = items.filter((i) => i.title.startsWith('Portfolio — '));
+    expect(portfolio.map((i) => [i.title, i.href])).toEqual([
+      ['Portfolio — Book', '/portfolio'],
+      ['Portfolio — Performance', '/portfolio/performance'],
+      ['Portfolio — Decisions', '/portfolio?tab=decisions'],
+      ['Portfolio — Theses', '/portfolio?tab=decisions&pane=theses'],
+      ['Portfolio — Ledger', '/portfolio/ledger'],
+    ]);
     expect(items.find((i) => i.id === 'go-period')).toBeUndefined();
     expect(items.find((i) => i.id === 'go-house')).toMatchObject({
       href: '/house?tab=corpus',
-    });
-    expect(items.find((i) => i.id === 'go-attribution')).toMatchObject({
-      href: '/portfolio/attribution',
-      hint: 'Position decomposition & recommendation quality',
     });
   });
 });
