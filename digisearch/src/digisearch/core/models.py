@@ -92,7 +92,8 @@ class SearchResponse:
     total_count: int | None = (
         None  # full match count when include_total_count was True (Azure get_count())
     )
-    #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``); None if unknown.
+    #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``,
+    #: ``multi`` for comma-separated fan-out); None if unknown.
     backend: str | None = None
 
 
