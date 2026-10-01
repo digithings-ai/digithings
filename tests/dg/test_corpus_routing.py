@@ -377,3 +377,34 @@ def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyP
     req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
     out = _with_digi_request_context(_merge_http("baseline"), req)
     assert out.research_system_prompt_override is None
+
+
+def test_resolve_map_accepts_comma_separated_fan_out() -> None:
+    """A comma-separated index pair (#4756 fan-out) passes validation intact,
+    while empty elements and bad chars still fail closed."""
+    mapped = {
+        "occ": TenantCorpusOverride(
+            digisearch_index="occ_help,occ_tickets",
+            vault_path_prefix="clients/online-compliance-center",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="occ",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index == "occ_help,occ_tickets"
+    assert out.vault_path_prefix == "clients/online-compliance-center"
+
+    for bad in ("occ_help,", ",occ_help", "occ_help,,occ_tickets", "occ help,occ_tickets"):
+        out = resolve_corpus_override(
+            headers={},
+            tenant_slug="occ",
+            corpus_map={
+                "occ": TenantCorpusOverride(
+                    digisearch_index=bad,
+                    vault_path_prefix="clients/online-compliance-center",
+                ),
+            },
+        )
+        assert out.digisearch_index is None

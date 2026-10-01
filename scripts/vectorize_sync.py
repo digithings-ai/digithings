@@ -419,7 +419,8 @@ def main(argv: list[str] | None = None) -> int:
     # hardcoded model: the same process must embed, stamp, and — at query
     # time — embed queries, or same-dim vectors silently miss (#4756).
     # Resolved even for --dry-run (construction is lazy; no model loads and
-    # no inference runs) so the reported stamp is always the real one.
+    # no inference runs) so a misconfigured provider fails fast and the
+    # printed embedding_model is always the real one.
     embedder = resolve_backend_embedding_provider()
     model_id = (
         str(getattr(embedder, "model_id", None) or getattr(embedder, "model", "")).strip()
@@ -442,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=DEFAULT_BATCH_SIZE,
     )
     print(f"{'would upsert' if args.dry_run else 'upserted'} {total} vectors → {args.index}")
+    print(f"embedding_model={model_id}")
     if not args.dry_run:
         completed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
         print(f"sync_completed_at={completed_at}", file=sys.stderr)

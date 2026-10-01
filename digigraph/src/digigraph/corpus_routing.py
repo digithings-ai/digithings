@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 _ENV_VAR = "DIGI_TENANT_CORPUS_MAP"
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-_INDEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
+# One index name, or a comma-separated fan-out list (e.g. "occ_help,occ_tickets",
+# #4756): each element follows the single-index shape; empty elements rejected.
+_INDEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}(,[a-zA-Z0-9][a-zA-Z0-9._-]{0,127})*$")
 _HEADER_CORPUS_INDEX = "x-digi-corpus-index"
 _HEADER_VAULT_PREFIX = "x-digi-vault-prefix"
 _HEADER_TENANT = "x-digi-tenant"

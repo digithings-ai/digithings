@@ -274,6 +274,7 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
 
     def _fake_assert_index_model(backend: Any, *, model_id: str, dimensions: int) -> None:
         seen["guard"] = model_id
+        seen["guard_dimensions"] = str(dimensions)
 
     def _fake_sync_corpus(
         notes: Any, chunker: Any, embedder: Any, sink: Any, *, model_id: str, **kwargs: Any
@@ -297,6 +298,7 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
     )
 
     assert seen["guard"] == seen["sync"] == "custom-model-id"
+    assert seen["guard_dimensions"] == "123"
 
 
 # ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
@@ -440,14 +442,13 @@ def test_main_requires_cloudflare_credentials_for_a_real_run(
 def test_dry_run_makes_zero_embed_calls(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """--dry-run must not construct or call the embedder — chunk-and-count only.
+    """--dry-run resolves (not constructs-then-calls) the embedder — chunk-and-count only.
 
-    Still needs credentials: `--dry-run` skips the embedder and the Vectorize
-    upsert, but the D1 read that supplies the notes to chunk happens either way
-    (#2239 review), so the credential presence check `main()` now runs before that
-    read must see a non-empty pair here too.
+    Resolution runs even for `--dry-run` so a misconfigured provider fails fast
+    instead of passing dry-run and exploding on apply; `embed()` is never called.
+    Still needs credentials: the D1 read happens either way (#2239 review).
     """
-    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.embedding.factory as factory_module
     import digivault.d1_store as d1_store_module
 
     from scripts.vectorize_sync import main
@@ -458,6 +459,8 @@ def test_dry_run_makes_zero_embed_calls(
     embed_calls: list[list[str]] = []
 
     class _SpyEmbedder:
+        model_id = "spy-model-id"
+
         def embed(self, texts: list[str]) -> list[list[float]]:
             embed_calls.append(list(texts))
             return [[0.0] * 384 for _ in texts]
@@ -473,7 +476,9 @@ def test_dry_run_makes_zero_embed_calls(
         def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
             return [_note("clients/acme/a", "# A\n\nSome real body text worth chunking.\n")]
 
-    monkeypatch.setattr(minilm_module, "MiniLMEmbedder", _SpyEmbedder)
+    monkeypatch.setattr(
+        factory_module, "resolve_backend_embedding_provider", lambda: _SpyEmbedder()
+    )
     monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
 
     exit_code = main(
@@ -485,6 +490,7 @@ def test_dry_run_makes_zero_embed_calls(
     out = capsys.readouterr().out
     assert "would upsert" in out
     assert "would upsert 0 vectors" not in out
+    assert "embedding_model=spy-model-id" in out
 
 
 # --- #2239: vectorize_sync reads notes from D1, not Supabase ---------------------
@@ -755,7 +761,8 @@ def test_apply_prints_sync_completion_metadata(
     )
     assert rc == 0
     out = capsys.readouterr()
-    assert out.out.strip() == "upserted 3 vectors → acme-docs"
+    assert "upserted 3 vectors → acme-docs" in out.out
+    assert "embedding_model=" in out.out
     assert "sync_completed_at=" in out.err
 
 

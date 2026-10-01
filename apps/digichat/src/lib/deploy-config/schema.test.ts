@@ -315,7 +315,7 @@ describe("DigichatConfigSchema", () => {
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
     if (occHost?.backend.type === "digigraph") {
-      expect(occHost.backend.digisearchIndex).toBe("occ_help");
+      expect(occHost.backend.digisearchIndex).toBe("occ_help,occ_tickets");
       expect(occHost.backend.vaultPathPrefix).toBe("clients/online-compliance-center");
     }
     expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual([
