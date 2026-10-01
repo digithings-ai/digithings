@@ -70,11 +70,11 @@
    runtime, so the app needs the two sheets that dress it:
    - chat-aui.css maps the assistant-ui/shadcn vars onto digiweb tokens and owns
      the `.aui-theme-stage` frame the Thread is mounted inside;
-   - chatbot.css is the product import of the gallery grammar sheet and owns the
+   - chat-digichat.css is the product import of the gallery grammar sheet and owns the
      welcome slot, example rows, composer and tool rows.
    chat-aui.css must come first: the gallery sheet wins same-specificity ties. */
 @import "@digithings/ui/styles/chat-aui.css";
-@import "@digithings/ui/styles/chatbot.css";
+@import "@digithings/ui/styles/chat-digichat.css";
 /* Terminal loaders sheet (legacy DigiChatSession Searching… chrome). Kept for
    any residual .tl-* usage on the marketing shell; the live chat UI lives in
    the iframe. AFTER chat-core.css. */
