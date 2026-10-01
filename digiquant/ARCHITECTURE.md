@@ -1166,6 +1166,39 @@ implication: in gold's secular bull, cash-holding + profit-taking drag vs lump
 is structural to the SDCA family, not tunable within it; beating lump needs a
 different family (or accepting flat-DCA as the bar).
 
+**Decoupled sell gate (gold v6, #4804) — NEGATIVE as-shipped; frontier
+follow-up proposed as a NEW plan.** Mechanism is generic, not a gold
+special-case: `run_backtest(..., sell_dates: set[date] | None = None)` vetoes
+only the sell branch (a vetoed day holds exactly like a null-risk day but
+keeps its negative rate in frame — visuals key off `daily_trade_usd` / fill
+sell days, never rate sign); `SdcaStrategyConfig.sell_dates` + `on_bar`
+mirror it; `None` default reproduces legacy exactly (BTC-identical). Gold
+supplies mask CONTENT via `scripts/build_gold_sell_mask.py`: frozen strict
+box z<=-2.0 & m>=1.5 (exploratory origin disclosed; re-freezing after results
+is a plan violation), causal by construction (shipped `real_rate_z` trailing
+1260d + trailing-1000d SMA mirror, truncation-equality asserted every build),
+74 days spanning 2009-11-27..2020-08-06. Buy vote = v4 vote unchanged
+(rolling-z 90d / z 1.0 + m2/uup 0.5 + weekly RSI / log-MACD / SMA-band 0.25;
+v6 `search`/`gated_shape` blocks byte-identical to v4). Outcome
+(`.scratch/gold_curve_search_v6.json`, causal rolling, holdout absent):
+mean OOS vs flat +15.38% (beats) / vs lump −1.72% (miss); folds
+f0 +33.20/−11.14 (73 mask days), f1 −5.84/+5.57 (ZERO mask days — pure
+buy-and-hold-plus-oscillator-noise), f2 +18.77/+0.41 (1 day, 2020-08-06);
+all feasible; sens UNSTABLE 2.75 (`buy_knee_risk:+5%`, same worst key as v4).
+Robustness is report-only (8 box variants, same binary, selection untouched):
+means cluster tight (flat +14.43..+15.38, lump −2.35..−1.72), none beats lump
+— the miss is systematic, not a knife-edge. Verdict NEGATIVE: lump half
+misses AND sens fails (flat half passes). Frontier-both is 144/1080 NONZERO
+(vs v5 0/432) — shapes exist that beat both under this vote+mask, but the
+winner-as-shipped is not one of them, so re-selecting among the frontier on
+a lump-aware criterion is a NEW plan with its own bar, not this one.
+Diagnostics: `scripts/build_gold_v6_diagnostic_tearsheet.py` renders the
+masked full-history curve-sim run (slug `gold_sdca_v6`, fill sell days 34 vs
+1344 curve-sign sell days — the veto in one number); `plot_gold_secular_legs.py`
+adds `gold_mask_rug.svg` (full-history GLD close + 74-day rug + fire/silent
+event labels). Preview served JSON + chart only — no `page.tsx` entry, because
+pages are candidates and v6 is not one.
+
 ## Secular-leg firing verdict for gold phase-b decision (#4804, Plan 14a Task 3 — NO-GO)
 
 Real-rate leg (DFII10 staged 5940 rows, 2003-01-02→2026-09-29; `real_rate_z` window-1260, no-flip washout, voteless default; 5480 valid z days; full-history deciles 10/25/50/75/90 = -2.115/-1.432/+0.128/+1.070/+1.743, clipped ±3.0) and 200w leg (causal completed-weeks, 1000d SMA, first-valid 2008-11-06, 4500-row series in untracked `digiquant/.scratch/gold_mayer_multiple.json`) fire as follows — judged read-only on the recorded Ruling-3 / Task-2 numbers, no new runs, no weight/window/threshold changes: | event | real-rate z | 200w multiple | — 2011-09 top: z −2.522 (below 10th-pct −2.115 → top-decile rich, rich side passes) / multiple 1.7159 (week-end 2011-09-02, close 183.24 / sma200w 106.7877); 2015-12 bottom: z +1.066 (≈75th-pct 1.070, vs 90th-pct +1.743 → NOT top-decile cheap, misses by 0.677) / multiple 0.7672; 2020-08 high: z −3.000 (clip floor) / multiple 1.4819; 2022-10 dip: z +2.252 / multiple 0.9836; now: z +1.530 (2026-09-29) / multiple 1.4707 (week-end 2026-09-25). Half-a (real-rate) FAILS: the bar needs top-decile cheap spanning the 2015 bottom AND top-decile rich spanning the 2011 top, and the 2015 reading (+1.066) sits at ~75th percentile, not top-decile (≥ +1.743). Half-b (200w) FAILS on selectivity: the 2011 level passes (1.7159 ≥ 1.5) but 349 grind-days sit above 1.5 outside the ±6mo 2011 window (2011-03-06→2012-03-06), i.e. 349/4500 = 7.76% ≥ 5% bar (5% budget = 225d; excess = 124d; all-valid-days >1.5 = 423/4500 = 9.4%; >1.7 outside = 154d, concentrated 2025-09-30→2026-05-14). Verdict: **NO-GO for phase-b engine design** — both halves fail, so no engine extension follows from this plan; COT / Dow-gold / CPI-oil legs stay recon-listed, not tasked.

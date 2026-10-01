@@ -45,6 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DFII10_CSV = ROOT / "data" / "price-history" / "DFII10.csv"
 GLD_CSV = ROOT / "data" / "price-history" / "GLD-USD.csv"
 MAYER_JSON = ROOT / ".scratch" / "gold_mayer_multiple.json"
+MASK_JSON = ROOT / ".scratch" / "gold_sell_mask.json"
 OUT_DIR = ROOT / ".scratch" / "gold_pngs"
 
 WINDOW = 1260
@@ -303,6 +304,107 @@ def svg_scatter(
     return "\n".join(parts) + "\n"
 
 
+def read_gld_closes(path: Path) -> list[tuple[date, float]]:
+    """Full-history (date, close) from GLD-USD.csv (timestamp + close columns)."""
+    out = []
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            y, m, d = (int(p) for p in row["timestamp"][:10].split("-"))
+            out.append((date(y, m, d), float(row["close"])))
+    out.sort(key=lambda p: p[0])
+    return out
+
+
+def svg_price_with_mask_rug(
+    pts: list[tuple[date, float]],
+    mask_days: set[date],
+    events: list[tuple[str, str]],
+    title: str,
+    y_lo: float,
+    y_hi: float,
+    y_ticks: list[float],
+) -> str:
+    """Full-history GLD close with strict-box mask days as a red rug.
+
+    Same 960x440 pattern as svg_chart: price polyline, year grid, event
+    vlines + labels; mask days are short ticks along the bottom axis
+    (dense 2011 cluster vs sparse elsewhere shows at a glance how rarely
+    the mask binds). Veto accounting: ticks mark sell-allow days, not
+    fills — fills need curve + book state (see the v6 tearsheet's
+    fill_sell_days, keyed off daily_trade_usd, not rate sign).
+    """
+    pw, ph = W - ML - MR, H - MT - MB
+    d0, d1 = pts[0][0].toordinal(), pts[-1][0].toordinal()
+
+    def sx(d: date) -> float:
+        return ML + (d.toordinal() - d0) / max(d1 - d0, 1) * pw
+
+    def sy(v: float) -> float:
+        return MT + (1.0 - (v - y_lo) / (y_hi - y_lo)) * ph
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" font-family="sans-serif">',
+        f"<title>{escape(title)}</title>",
+        f'<text x="{W / 2}" y="22" text-anchor="middle" font-size="15" '
+        f'font-weight="bold">{escape(title)}</text>',
+        f'<text x="14" y="{MT + ph / 2}" font-size="12" text-anchor="middle" '
+        f'transform="rotate(-90 14 {MT + ph / 2})">GLD close (USD)</text>',
+    ]
+    for t in y_ticks:
+        y = sy(t)
+        parts.append(
+            f'<line x1="{ML}" y1="{y:.1f}" x2="{W - MR}" y2="{y:.1f}" '
+            'stroke="#cccccc" stroke-width="1"/>'
+        )
+        parts.append(
+            f'<text x="{ML - 6}" y="{y + 4:.1f}" text-anchor="end" font-size="11">{t:g}</text>'
+        )
+    for yr in range(pts[0][0].year, pts[-1][0].year + 1):
+        x = sx(date(yr, 1, 1))
+        if ML - 1 <= x <= W - MR + 1:
+            parts.append(
+                f'<line x1="{x:.1f}" y1="{MT}" x2="{x:.1f}" y2="{MT + ph}" '
+                'stroke="#e8e8e8" stroke-width="1"/>'
+            )
+            parts.append(
+                f'<text x="{x:.1f}" y="{MT + ph + 16}" text-anchor="middle" '
+                f'font-size="11">{yr}</text>'
+            )
+    for ev, state in events:
+        y, m, d = (int(p) for p in ev.split("-"))
+        ed = date(y, m, d)
+        if not (pts[0][0] <= ed <= pts[-1][0]):
+            continue
+        x = sx(ed)
+        color = "#cc0000" if state == "fires" else "#555555"
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{MT}" x2="{x:.1f}" y2="{MT + ph}" '
+            f'stroke="{color}" stroke-width="1" stroke-dasharray="3,3"/>'
+        )
+        parts.append(
+            f'<text x="{x + 3:.1f}" y="{MT + 12}" font-size="10" fill="{color}">{escape(ev)} {state}</text>'
+        )
+    pts_str = " ".join(f"{sx(d):.1f},{sy(v):.1f}" for d, v in pts)
+    parts.append(f'<polyline points="{pts_str}" fill="none" stroke="#1f5fa8" stroke-width="1.5"/>')
+    for md in sorted(mask_days):
+        if not (pts[0][0] <= md <= pts[-1][0]):
+            continue
+        x = sx(md)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{MT + ph - 12}" x2="{x:.1f}" y2="{MT + ph}" '
+            'stroke="#cc0000" stroke-width="1.5"/>'
+        )
+    parts.append(
+        f'<text x="{W - MR - 4}" y="{MT + ph - 16:.1f}" text-anchor="end" '
+        f'font-size="11" fill="#cc0000">mask rug ({len(mask_days)} days)</text>'
+    )
+    parts.append(
+        f'<rect x="{ML}" y="{MT}" width="{pw}" height="{ph}" fill="none" stroke="#000000"/>'
+    )
+    parts.append("</svg>")
+    return "\n".join(parts) + "\n"
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -417,6 +519,36 @@ def main() -> None:
     out_j = OUT_DIR / "joint_conjunction.svg"
     out_j.write_text(svg_j)
 
+    # --- mask-rug chart (v6, #4804): full-history GLD close + strict-box rug ---
+    close_pts = read_gld_closes(GLD_CSV)
+    mask_doc = json.loads(MASK_JSON.read_text())
+    mask_set = {date(*[int(p) for p in ds.split("-")]) for ds in mask_doc["mask_days"]}
+    lo_c = min(v for _, v in close_pts)
+    hi_c = max(v for _, v in close_pts)
+    pad_c = (hi_c - lo_c) * 0.08
+    step_c = 50.0
+    ticks_c = [lo_c + i * step_c for i in range(int((hi_c - lo_c) / step_c) + 2)]
+    title_k = (
+        f"GLD close with strict-box sell mask rug: {len(mask_set)} days "
+        "(2011 cluster binds, 2020+/now silent) — NEGATIVE v6 evidence"
+    )
+    svg_k = svg_price_with_mask_rug(
+        decimate(close_pts),
+        mask_set,
+        [
+            ("2011-09-06", "fires"),
+            ("2015-12-17", "silent"),
+            ("2020-08-07", "silent"),
+            ("2022-10-21", "silent"),
+        ],
+        title_k,
+        lo_c - pad_c,
+        hi_c + pad_c,
+        [t for t in ticks_c if lo_c - pad_c <= t <= hi_c + pad_c],
+    )
+    out_k = OUT_DIR / "gold_mask_rug.svg"
+    out_k.write_text(svg_k)
+
     # --- verification block (stdout; quoted in the SDD report) ---
     print(f"z 2011-09-06 = {z2011:.4f} (Ruling-3 -2.522, delta {z2011 + 2.522:+.4f})")
     print(f"z 2015-12-17 = {z2015:.4f} (Ruling-3 +1.066, delta {z2015 - 1.066:+.4f})")
@@ -426,7 +558,8 @@ def main() -> None:
         print(f"spot {d}: DFII10={src[date(y, m, dd)]}")
     m_by_date = {r["date"]: r["multiple"] for r in payload["series"]}
     print(f"mayer 2011-09-02 multiple={m_by_date['2011-09-02']}")
-    for p in (out_r, out_m, out_j):
+    print(f"mask days: {len(mask_set)} ({mask_doc['thresholds']})")
+    for p in (out_r, out_m, out_j, out_k):
         print(f"{p.name}: {p.stat().st_size} bytes")
 
 
