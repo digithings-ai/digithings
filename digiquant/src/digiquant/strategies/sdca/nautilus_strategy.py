@@ -84,6 +84,12 @@ class SdcaStrategyConfig(StrategyConfig, frozen=True):
     # sells, regardless of curve_nodes' own sign.
     long_only: bool = False
 
+    # Optional veto on the sell branch only (#4804): when not None, a bar
+    # with a negative curve rate sells only if its date is a member of the
+    # set; otherwise the bar is held like a null-risk day. None (default)
+    # disables the veto. An empty set vetoes every sell.
+    sell_dates: frozenset[date] | None = None
+
     def __post_init__(self) -> None:
         if len(self.curve_nodes) != len(RISK_NODES):
             raise ValueError(
@@ -194,6 +200,8 @@ class SdcaStrategy(Strategy):
                 return
             self._submit_market(OrderSide.BUY, buy_usd / close, bar_date, price=close)
         elif rate < 0:
+            if self.config.sell_dates is not None and bar_date not in self.config.sell_dates:
+                return
             if sell_units <= 0:
                 return
             self._submit_market(OrderSide.SELL, sell_units, bar_date, price=close)
