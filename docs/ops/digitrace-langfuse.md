@@ -22,8 +22,10 @@ Platform** follow-ups.
 | ClickHouse | **External** managed or VM | **Not** a lite CF Container. Floor ≈ **2 CPU / 8 GiB** |
 | Redis | **External** managed or VM | Queues + cache |
 
-Phase 0 digitrace still uses the LangSmith SDK until Phase 2 dual-export. Do not
-claim dual-export works yet. Do **not** set `LANGSMITH_ENDPOINT` to Langfuse.
+Phase 0 digitrace used the LangSmith SDK only. Phase 2 (#4931) dual-export is
+**shipped**: `digitrace.trace.traceable` fans out to LangSmith **and**
+Langfuse-OTLP — see [Dual-export (Phase 2)](#dual-export-phase-2) below. Do
+**not** set `LANGSMITH_ENDPOINT` to Langfuse.
 
 ## Recommended managed providers (guidance)
 
@@ -155,6 +157,30 @@ bash scripts/smoke_digitrace_langfuse_otlp.sh
 The script **fails closed** if endpoint or auth headers are missing and never
 prints secret values.
 
+## Dual-export (Phase 2, shipped #4931)
+
+Every `@traceable`-decorated call (digillm `completion` / `run_tools`,
+digigraph workflow run + node spans) emits to **both** backends when both
+are configured; either leg degrades to the other, both missing is a no-op.
+
+| Backend | Env (values never committed) |
+|---------|------------------------------|
+| LangSmith | `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT` (real LangSmith only), `LANGSMITH_PROJECT` |
+| Langfuse OTLP | `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` (e.g. `https://trace.digithings.ai/api/public/otel`) or `LANGFUSE_OTLP_ENDPOINT`; auth via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` as `Authorization=Basic <redacted>` (public:secret base64) |
+
+digigraph also defaults `LANGSMITH_TRACING=true` / `LANGCHAIN_TRACING_V2=true`
+on when a LangSmith key is present (see `digigraph.tracing`), so LangGraph
+run/node traces flow without code changes. Operator visibility (secret-free):
+
+```bash
+curl -s http://127.0.0.1:8003/v1/status
+# {"tracing_configured":true,"export_backend":"dual","dual_export":true,
+#  "langfuse_configured":true,"otel_export_configured":true,
+#  "langsmith_host":"api.smith.langchain.com","langfuse_host":"trace.digithings.ai",...}
+```
+
+Do **not** point `LANGSMITH_ENDPOINT` at Langfuse (no LangSmith API shim).
+
 ## Deferred to human / Platform
 
 - [ ] Create R2 bucket `digitrace-langfuse-events` + S3 API token
@@ -169,5 +195,6 @@ prints secret values.
 ## Out of scope
 
 - DigiQuant clocks / house-run cadence
-- Dual-export / cut LangSmith / Task 7 secret remap (Phases 2–4)
+- Dual-export cutover / stop-LangSmith / Task 7 secret remap (Phases 3–4;
+  Phase 2 dual-export itself is shipped, #4931)
 - DigiVoice / #4947

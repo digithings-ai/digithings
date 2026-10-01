@@ -56,8 +56,103 @@ class TraceStatus(BaseModel):
         default=None,
         description="X-Request-ID of the call that produced this status (echoed for correlation)",
     )
+    # Phase 2 dual-export (#4931): LangSmith AND Langfuse-OTLP fan-out.
+    # All fields are non-secret by construction (booleans + sanitized host only).
+    langfuse_configured: bool = Field(
+        default=False,
+        description="A Langfuse-specific endpoint/host env var is set",
+    )
+    otel_export_configured: bool = Field(
+        default=False,
+        description="An OTLP endpoint env var is set (OTel fan-out leg active)",
+    )
+    dual_export: bool = Field(
+        default=False,
+        description="Both LangSmith and OTLP legs are active",
+    )
+    export_backend: str = Field(
+        default="none",
+        description="One of dual|langsmith|langfuse-otlp|otel|none",
+    )
+    langfuse_host: str | None = Field(
+        default=None,
+        description="Sanitized Langfuse host (no secrets)",
+    )
 
 
 # Temporary compat alias for the pre-rename model name (Phase 0, #4929).
 # Prefer TraceStatus in new code; SmithStatus will be removed in Phase 3.
 SmithStatus = TraceStatus
+
+
+# Phase 2 dual-export env (#4931). Langfuse OTLP ingest is plain OTel
+# HTTP/protobuf, so the Langfuse leg reuses the standard OTLP endpoint +
+# headers variables already honored by digibase.otel (headers carry the
+# Langfuse public:secret Basic auth). LANGSMITH_ENDPOINT always stays the
+# real LangSmith API — never point it at Langfuse.
+_LANGFUSE_ENDPOINT_ENVS = (
+    "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
+    "LANGFUSE_OTLP_ENDPOINT",
+)
+_LANGFUSE_HOST_ENVS = ("LANGFUSE_HOST", "LANGFUSE_URL")
+_OTLP_ENDPOINT_ENVS = (
+    "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
+    "LANGFUSE_OTLP_ENDPOINT",
+    "DIGI_OTEL_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+)
+
+
+def langfuse_otlp_endpoint() -> str:
+    """Return the configured Langfuse OTLP endpoint, or ``""`` when unset."""
+    for key in _LANGFUSE_ENDPOINT_ENVS:
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def langfuse_configured() -> bool:
+    """True when a Langfuse-specific endpoint/host env var is set (no secret check)."""
+    if langfuse_otlp_endpoint():
+        return True
+    return any((os.environ.get(key) or "").strip() for key in _LANGFUSE_HOST_ENVS)
+
+
+def otel_export_configured() -> bool:
+    """True when any OTLP endpoint env var is set (the OTel fan-out leg is active)."""
+    return any((os.environ.get(key) or "").strip() for key in _OTLP_ENDPOINT_ENVS)
+
+
+def langfuse_host_sanitized() -> str | None:
+    """Hostname of the configured Langfuse endpoint/host (no path, credentials, or query)."""
+    raw = langfuse_otlp_endpoint()
+    if not raw:
+        for key in _LANGFUSE_HOST_ENVS:
+            value = (os.environ.get(key) or "").strip()
+            if value:
+                raw = value
+                break
+    if not raw:
+        return None
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    return urlparse(raw).hostname
+
+
+def dual_export_enabled() -> bool:
+    """True when both the LangSmith leg and the OTLP leg (e.g. Langfuse) are active."""
+    return tracing_enabled() and otel_export_configured()
+
+
+def export_backend() -> str:
+    """Backend summary: ``dual|langsmith|langfuse-otlp|otel|none`` (no secrets)."""
+    langsmith = tracing_enabled()
+    otel = otel_export_configured()
+    if langsmith and otel:
+        return "dual"
+    if langsmith:
+        return "langsmith"
+    if otel:
+        return "langfuse-otlp" if langfuse_configured() else "otel"
+    return "none"

@@ -22,9 +22,34 @@ ClickHouse + Redis. Operator runbook:
 [`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md). App:
 [`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/).
 
-**Phase 0 still uses the LangSmith SDK** via `digitrace.trace.traceable` until
-Phase 2 dual-export. Do not claim dual-export or Langfuse-backed `traceable`
-works yet. Do not point `LANGSMITH_ENDPOINT` at Langfuse.
+Phase 2 (#4931) dual-export is **shipped** (see § Phase 2 dual-export below).
+Do not point `LANGSMITH_ENDPOINT` at Langfuse.
+
+### Phase 2 dual-export (shipped, #4931)
+
+`digitrace.trace.traceable` now fans out per call to **both** backends:
+
+- **LangSmith leg** — as before, when `LANGSMITH_API_KEY` is set (PII
+  redaction via `process_inputs` / `process_outputs`).
+- **OTel leg** — when an OTLP endpoint env var is set
+  (`DIGITRACE_LANGFUSE_OTLP_ENDPOINT`, `LANGFUSE_OTLP_ENDPOINT`,
+  `DIGI_OTEL_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`). Opens one span per
+  call named `digitrace.<name>` carrying only the run name plus short
+  correlation ids (`digi.workflow_id`, `digi.request_id`, `digi.session_id`).
+  Against Langfuse, point the endpoint at `/api/public/otel` and pass the
+  public:secret Basic auth via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`
+  (parsed by `digibase.otel`, #4934).
+
+Either leg degrades to the other; both missing is a pure no-op. Backend
+summary helpers live in `digitrace.config` (`export_backend()` →
+`dual|langsmith|langfuse-otlp|otel|none`) and are surfaced secret-free on
+`GET /v1/status`. digigraph wraps its three workflow entry points in a shared
+`digigraph_workflow_run` span plus per-node spans for the plain-function
+nodes (supervisor / validate / backtest / optimize); the compiled research
+subgraph stays unwrapped so `graph.stream(..., subgraphs=True)` custom events
+keep flowing — its spans come from LangSmith auto-instrumentation
+(`LANGSMITH_TRACING` defaulted on by `digigraph.tracing`). `LANGSMITH_ENDPOINT`
+remains the real LangSmith API.
 
 ### Current scope vs. intended platform
 
@@ -366,7 +391,11 @@ Unlike digigraph, digitrace does not depend on any other service in Compose. It 
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `LANGSMITH_API_KEY` | No | Enables LangSmith trace export. If absent, tracing is a no-op. |
-| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. |
+| `LANGSMITH_ENDPOINT` | No | LangSmith API base URL. Default: `https://api.smith.langchain.com`. Hostname appears in `/v1/status`. Never point at Langfuse. |
+| `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` | No | Phase 2 (#4931): Langfuse OTLP ingest URL (e.g. `https://trace.digithings.ai/api/public/otel`). Enables the OTel fan-out leg. |
+| `LANGFUSE_OTLP_ENDPOINT` | No | Alias for the Langfuse OTLP ingest URL. |
+| `LANGFUSE_HOST` / `LANGFUSE_URL` | No | Langfuse host (status display only; endpoint vars drive export). |
+| `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS` | No | OTLP auth headers (`Authorization=Basic …` from Langfuse public:secret). Parsed by `digibase.otel`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | If set, enables OTel HTTP/protobuf export from the digitrace HTTP service itself. |
 
 The `LANGSMITH_API_KEY` and `LANGSMITH_ENDPOINT` variables are sourced from the `.env` file via `env_file`. They are available to the digitrace container but are also available to digigraph and any other service using the same `.env` — tracing is configured per-container, not centrally.
