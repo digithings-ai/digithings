@@ -9,8 +9,9 @@ Plan: the [dashboard skeleton plan in PR #4908](https://github.com/digithings-ai
 A **desk** is a swappable research configuration. Choosing a desk replaces the **entire sidebar**, not a page inside a fixed one.
 
 - The **desk picker** sits at the top of the sidebar, under the wordmark. It is the only control that changes the desk. It is not a paper/live switch and not a book switcher. Each option previews its own spine, so the remount is obvious before you click.
-- **house** (baseline, always-on, read-only) defines: Brief, Portfolio, Pipeline, Settings. Settings is pinned at the foot.
-- **rates watch** (custom, research only) defines: Digest, Watchlist, Theses, Run, Config, Settings. Different items, labels, order and surfaces. Same chrome shell, so it reads as one product.
+- **house** (baseline, always-on, read-only) defines: Brief, Portfolio, Pipeline, then the product block below. Settings is pinned at the foot.
+- **rates watch** (custom, research only) defines: Digest, Watchlist, Theses, Run, Config, then the same product block. Different desk items, labels, order and surfaces. Same chrome shell, so it reads as one product.
+- **Product block**, in every desk spine, so the full product map is always visible: Strategies, a Tools group (Terminal, LuxAlgo, Charts, digichat), FX Hub, and Settings at the foot. Items that are not built carry a `[wip]` or `[soon]` tag in the rail and open a frame with a Coming soon or WIP banner. Nothing is a blank dead end.
 - There is no "Desks" destination. Desks are the picker.
 
 Auth sits outside the frame. The ticker dossier is a deep link from a Holdings row, with no sidebar item and no sixth tab.
@@ -24,6 +25,8 @@ Start at `index.html`. Frames are grouped there the same way.
 | Auth | `00-sign-in` |
 | house desk | `01` Brief, `02` Holdings, `03` Theses, `04` thesis detail, `05` Tearsheet, `06` Ledger, `07` Ledger empty, `08` Attribution, `09` ticker dossier, `10` Pipeline (frames `11` to `13` are retired) |
 | house desk, Settings by plan | `14` Profile, `15` Keys, `16` Brokers, `17` Notifications, `18` Billing (not configured), `19` About, `20` Desk plan, `21` Brief plan |
+| product vision, house chrome (WIP / coming soon) | `22` Strategies, `23` strategy detail, `24` deploy flow, `25` Tools: Terminal, `26` Tools: LuxAlgo, `27` Tools: Charts, `28` FX Hub, `29` Tools: digichat full screen |
+| product vision, rates watch chrome | `51` to `57`: the same pages as `22` to `28` under the rates watch spine (digichat `29` is shared) |
 | desk picker | `30` open on house, `31` open on rates watch, `32` both spines side by side (review aid) |
 | rates watch desk | `40` Digest, `41` Watchlist, `42` Theses, `43` Run, `44` Config, `45` to `50` Settings tabs |
 
@@ -34,13 +37,24 @@ Omission by plan is shown, not greyed. Frame `20` (Desk plan) has four Settings 
 All twelve Human Gate defaults, with the desk correction on top.
 
 - One Portfolio item with sticky tabs Holdings, Theses, Tearsheet, Ledger, Attribution. There is no House item: the former House surfaces (Corpus, Book, Profile) are removed because their purpose was unclear.
-- FX Hub, journal, builder, tools, calendars, integrations hub, embedded digichat, command line: not drawn, no chips.
+- Journal, builder, calendars, integrations hub, command line: not drawn, no chips.
+- **Superseded by the product-vision gate on #4911.** FX Hub, Tools and a full-screen digichat were "not drawn". They are now drawn as vision surfaces, every one marked `[wip]` or `[coming soon]`. digichat is a full-screen frame with its own sessions sidebar, not an iframe inside another page.
 - Paper brokers live in Settings, Brokers. Live execution is one disabled control with a `Paper` chip. No header paper/live switch.
 - `/why` and `/pipeline` are redirects in the plan; `/why` is not drawn. In the house desk `/pipeline` is a real item again, because "Desks" is now the picker and not a page.
 - Tearsheet is a report: accounting NAV, method, tables. No curve and no second chart library. The LuxAlgo and Gloomberb panes are labeled placeholders, and the LuxAlgo one appears on the ticker dossier only.
 - Published strategy tearsheets stay on the digiquant-web showcase.
 - Missing marks are an em dash with an `unavailable` badge. Alpha and information ratio show an em dash until 20 daily pairs exist (the window has 16).
 - Job words only. digi* names are lowercase.
+
+## Product vision: Strategies and Tools (WIP)
+
+These frames map the whole product in the rail even though almost none of it is built. They are mocks, not commitments.
+
+- **Strategies** (`22` to `24`, `51` to `53`). Every strategy lives in the dashboard. A subscribed user deploys it to a paper account or a portfolio, and connects a paper broker from Settings, Brokers. The deploy flow is four steps (subscribe, connect broker, choose target, review and deploy), all disabled, with a Coming soon banner. No strategy has a track record; the empty states say so and estimate nothing.
+- **Tools** (`25` to `29`, `54` to `56`). Terminal (Bloomberg Terminal / gloomberb embed surface), LuxAlgo charting, Charts (own charting) and digichat. The first three are labeled display-only placeholder panes with disabled toolbars; they never feed validate, backtest, optimize or export. Charts is the one place internal drawn curves would live; the tearsheet stays a report.
+- **digichat full screen** (`29`). A logged-in vision: a sessions sidebar with search and history grouped by day, the thread, tool-call lines, and a composer. It is full viewport, with a back link to digiquant. Replies and sessions are placeholders.
+- **FX Hub** (`28`, `57`). Planned modules (pairs, rate differentials, strategy S-07, research) behind a Coming soon banner.
+- **Paper posture only.** No live-trading, order-routing or broker-account claims. Wording is paper, subscribe and deploy as product vision. Live execution is not drawn.
 
 ## Trading and setups engine: future slot, off nav
 
@@ -56,7 +70,9 @@ A future surface that suggests trade setups (paper-first, never live by default)
 6. **Tier word.** "Desk" is also a plan tier name. Frames use the word `plan` in annotations and never use the tier as a nav label.
 7. **Routes for custom desks** are not decided. Annotation strips show `/watchlist (desk: rates watch)` as a placeholder.
 8. **Figures.** The plan says phase B draws no sample positions, but a Holdings row is needed to reach the dossier. Figures are layout placeholders, labeled in every frame's annotation strip, and internally consistent: 17 book events replay to 11 open positions, NAV points reproduce the headline figures, and contribution sums to +118 bp. They are not book data.
-9. **Command palette** is not drawn. It would list the active desk's spine plus deep links.
+9. **Product map in every spine.** Strategies, Tools and FX Hub appear in both desk spines, not only house. Say so if a custom desk should be able to omit them.
+10. **Terminal spelling.** The product block says Terminal (Bloomberg Terminal / gloomberb embed). `gloomberb` follows the repo's spelling.
+11. **Command palette** is not drawn. It would list the active desk's spine plus deep links.
 
 ## Craft
 
