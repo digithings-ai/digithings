@@ -66,13 +66,10 @@ export const STRATEGY_STEPS: { tool: string; label: string; scope: ToolScope }[]
   { tool: "digiquant_export", label: "hand off", scope: "full" },
 ];
 
-/** Honest status ledger shown under the story. */
+/** Honest status ledger shown beside the story. */
 export const STRATEGY_LEDGER: { key: string; value: string }[] = [
   { key: "where it is built", value: "In the dashboard. This page tells the story and builds nothing." },
   { key: "status", value: "In development, not live." },
-  { key: "backtest, optimize, export", value: "Run locally over stdio with the full-scope MCP server." },
-  { key: "hosted MCP", value: "None. No public server, no connect button, no URL." },
-  { key: "hand-off", value: "Export writes a local JSON config. No Pine or TradingView output, no broker or QuantConnect deployment." },
-  { key: "nautilus_bundle", value: "A local zip, for ema_cross only." },
-  { key: "dashboard chat", value: "Read scope: list_strategies only." },
+  { key: "backtest, optimize, export", value: "Run locally with the full-scope MCP server." },
+  { key: "hand-off", value: "Export writes a local file for you to review. Nothing is deployed and nothing trades." },
 ];

@@ -6,7 +6,7 @@ import { Band } from "../_chrome/Band";
 import { ResearchRunsPlaceholder } from "../_placeholders";
 import { EXECUTION_STAGE, PIPELINE_STAGES } from "../_stages";
 
-/** The method band; the page's only pin. The frame chrome above the cards says what the data is:
+/** The pipeline band, straight after the dashboard; the page's only pin. The frame chrome above the cards says what the data is:
  *  a recorded run (date, run type) or, when none was captured, that there is none. */
 export function PipelineBand() {
   const latest = getLatestRun();
@@ -29,9 +29,8 @@ export function PipelineBand() {
   return (
     <Band
       id="pipeline"
-      tint
       status={snap ? "recorded" : "no recorded run"}
-      title="The method, stage by stage"
+      title="The pipeline, stage by stage"
       takeaway="Every run goes through six stages, from inputs to learning, and each one leaves a record. This is a recorded run, not a live one."
     >
       <HorizontalScrollTrack

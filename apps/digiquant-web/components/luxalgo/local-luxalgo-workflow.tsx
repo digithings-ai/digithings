@@ -92,7 +92,7 @@ export function LocalLuxalgoWorkflow() {
   }
 
   return (
-    <section aria-labelledby="luxalgo-workflow-h" className="border border-hair bg-surface">
+    <section aria-labelledby="luxalgo-workflow-h" className="border border-hair">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-3 py-2 font-mono">
         <h3 id="luxalgo-workflow-h" className="m-0 text-[0.78rem] font-normal text-ink">
           LuxAlgo, as a demo
@@ -100,71 +100,59 @@ export function LocalLuxalgoWorkflow() {
         <Badge variant={status === "ready" ? "accent" : "neutral"}>{STATUS_COPY[status]}</Badge>
       </div>
 
-      <ol className="m-0 grid list-none p-0 min-[760px]:grid-cols-3">
-        <li className="border-b border-hair p-3 min-[760px]:border-b-0 min-[760px]:border-e">
-          <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 01 ] discover</p>
-          <p className="mb-0 mt-2 text-[0.8125rem] leading-[1.55] text-ink-soft">
-            The local gateway can look up LuxAlgo Library concepts and indicator metadata. Try it below.
+      <div className="grid gap-x-6 gap-y-3 p-3 min-[900px]:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div>
+          <p className="m-0 text-[0.8125rem] leading-[1.55] text-ink-soft">
+            Charts and the trade journal stay in LuxAlgo; this site renders no competing chart. The local gateway looks up
+            Library concepts and indicator metadata, and an idea goes to digiquant for a Nautilus backtest before anything
+            is exported.
           </p>
-        </li>
-        <li className="border-b border-hair p-3 min-[760px]:border-b-0 min-[760px]:border-e">
-          <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 02 ] chart + journal</p>
-          <p className="mb-0 mt-2 text-[0.8125rem] leading-[1.55] text-ink-soft">
-            Charts and the trade journal stay in LuxAlgo. This site renders no competing chart.
+          <p className="m-0 mt-2 font-mono text-[0.65rem] text-ink-mute">
+            A demo of what the gateway can reach, not a search tool. The product is the dashboard.
           </p>
-        </li>
-        <li className="p-3">
-          <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 03 ] validate</p>
-          <p className="mb-0 mt-2 text-[0.8125rem] leading-[1.55] text-ink-soft">
-            The written idea goes to digiquant for a Nautilus backtest before anything is exported.
+        </div>
+        <div className="min-w-0">
+          <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+            <label htmlFor="luxalgo-library-query" className="sr-only">Search LuxAlgo Library</label>
+            <Input
+              id="luxalgo-library-query"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              maxLength={60}
+              pattern={"[A-Za-z0-9 .,&'_-]{1,60}"}
+              aria-describedby="luxalgo-search-status"
+              placeholder="Search LuxAlgo Library"
+              disabled={status !== "ready" || searching}
+            />
+            <Button type="submit" variant="outline" disabled={status !== "ready" || searching || !query.trim()}>
+              {searching ? "Searching…" : "Search LuxAlgo Library"}
+            </Button>
+            <CtaLink href="https://www.luxalgo.com/" external variant="ghost">
+              Continue in LuxAlgo ↗
+            </CtaLink>
+          </form>
+
+          <p id="luxalgo-search-status" aria-live="polite" className="mb-0 mt-2 font-mono text-[0.65rem] text-ink-mute">
+            {message}
           </p>
-        </li>
-      </ol>
 
-      <div className="border-t border-hair p-3">
-        <p className="m-0 mb-2 font-mono text-[0.65rem] text-ink-mute">
-          A demo of what the gateway can reach, not a search tool. The product is the dashboard.
-        </p>
-        <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
-          <label htmlFor="luxalgo-library-query" className="sr-only">Search LuxAlgo Library</label>
-          <Input
-            id="luxalgo-library-query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            maxLength={60}
-            pattern={"[A-Za-z0-9 .,&'_-]{1,60}"}
-            aria-describedby="luxalgo-search-status"
-            placeholder="Search LuxAlgo Library"
-            disabled={status !== "ready" || searching}
-          />
-          <Button type="submit" variant="outline" disabled={status !== "ready" || searching || !query.trim()}>
-            {searching ? "Searching…" : "Search LuxAlgo Library"}
-          </Button>
-          <CtaLink href="https://www.luxalgo.com/" external variant="ghost">
-            Continue in LuxAlgo ↗
-          </CtaLink>
-        </form>
+          {rows.length > 0 ? (
+            <ul className="mb-0 mt-3 grid list-none gap-px border border-hair bg-border p-0 sm:grid-cols-2">
+              {rows.map((row) => (
+                <li key={`${row.kind ?? "reference"}:${row.name}`} className="bg-bg px-3 py-2">
+                  <span className="block text-[0.78rem] text-ink">{row.name}</span>
+                  <span className="font-mono text-[0.62rem] text-ink-mute">
+                    {[row.kind, row.family].filter(Boolean).join(" · ") || "Library reference"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-        <p id="luxalgo-search-status" aria-live="polite" className="mb-0 mt-2 font-mono text-[0.65rem] text-ink-mute">
-          {message}
-        </p>
-
-        {rows.length > 0 ? (
-          <ul className="mb-0 mt-3 grid list-none gap-px border border-hair bg-border p-0 sm:grid-cols-2">
-            {rows.map((row) => (
-              <li key={`${row.kind ?? "reference"}:${row.name}`} className="bg-surface px-3 py-2">
-                <span className="block text-[0.78rem] text-ink">{row.name}</span>
-                <span className="font-mono text-[0.62rem] text-ink-mute">
-                  {[row.kind, row.family].filter(Boolean).join(" · ") || "Library reference"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {attribution.length > 0 ? (
-          <p className="mb-0 mt-2 text-[0.62rem] text-ink-mute">{attribution.join(" · ")}</p>
-        ) : null}
+          {attribution.length > 0 ? (
+            <p className="mb-0 mt-2 text-[0.62rem] text-ink-mute">{attribution.join(" · ")}</p>
+          ) : null}
+        </div>
       </div>
     </section>
   );

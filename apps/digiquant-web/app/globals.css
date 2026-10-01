@@ -61,6 +61,26 @@
   --font-display: var(--font-sans);
 }
 
+/* One solid black canvas for the whole page. Surfaces share it, so cards, ledgers and
+   the nav are separated by hairlines only, never by a second paint. */
+:root[data-theme="dark"] {
+  --bg: #000;
+  --surface: #000;
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --term-bg: #000;
+}
+
+html,
+body {
+  background: var(--bg);
+}
+
+/* Crosshair, hero only: the pointer becomes a crosshair over the hero (QuantField
+   draws the matching lines). Links and buttons keep the kit's pointer. */
+.dq-hero {
+  cursor: crosshair;
+}
+
 /* web-theme.css sets the body to --font-mono; prose is sans here, and mono is
    opt-in (`font-mono`) for chrome, labels and figures. */
 body {

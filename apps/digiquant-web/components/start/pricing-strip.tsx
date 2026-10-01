@@ -36,7 +36,7 @@ export function PricingStrip() {
           key={tier.id}
           className={`flex flex-col border-b border-hair p-[1.3rem] text-left ${
             i > 0 ? "min-[860px]:border-l" : ""
-          } ${tier.featured ? "bg-surface" : ""}`}
+          }`}
         >
           <div className="flex min-h-[1.5rem] items-center justify-between gap-2 font-mono text-[0.68rem] text-ink-mute">
             <span>[ {tier.name.toLowerCase()} ]</span>

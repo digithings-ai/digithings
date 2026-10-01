@@ -26,9 +26,9 @@ export function DashboardViewPlaceholder() {
     <Placeholder
       title="Dashboard · product view"
       note="A framed screenshot or embed of the digiquant dashboard: strategy builder, strategies and journal. This page shows the product; it does not rebuild it."
-      bodyClassName="min-h-[22rem]"
+      bodyClassName="min-h-[16rem]"
     >
-      <div className="grid h-full min-h-[20rem] grid-cols-[7rem_minmax(0,1fr)] gap-3 max-sm:grid-cols-[4rem_minmax(0,1fr)]">
+      <div className="grid h-full min-h-[14rem] grid-cols-[7rem_minmax(0,1fr)] gap-3 max-sm:grid-cols-[4rem_minmax(0,1fr)]">
         <div className="flex flex-col gap-2">
           {[0, 1, 2, 3, 4].map((i) => (
             <Wire key={i} className="h-5" />
@@ -57,13 +57,13 @@ export function DashboardFlowPlaceholder() {
   return (
     <Placeholder
       title="Dashboard pipeline · strategy path"
-      note="The strategy path as the dashboard shows it: digichat, then Nautilus, then inspect and hand off. Final art comes from the dashboard; this slot fixes where it sits."
-      bodyClassName="min-h-[7rem]"
+      note="The strategy path as the dashboard shows it: digichat, then Nautilus, then inspect and hand off. Final art comes from the dashboard."
+      bodyClassName="min-h-0"
     >
       <ol className="m-0 grid list-none items-stretch gap-3 p-0 font-mono md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
         {nodes.flatMap((node, i) => [
-          <li key={node.name} className="flex flex-col gap-1 border border-dashed border-hair px-3 py-2">
-            <span className="text-[0.62rem] text-ink-mute">[ {String(i + 1).padStart(2, "0")} ]</span>
+          <li key={node.name} className="flex flex-wrap items-baseline gap-x-2 border border-dashed border-hair px-3 py-2">
+            <span className="text-[0.62rem] text-ink-mute">[{String(i + 1).padStart(2, "0")}]</span>
             <span className="text-[0.82rem] text-ink">{node.name}</span>
             <span className="text-[0.68rem] text-ink-mute">{node.sub}</span>
           </li>,
@@ -84,7 +84,7 @@ export function ResearchRunsPlaceholder() {
     <Placeholder
       title="Research runs · sample timeline"
       note="A run timeline and stage status from a real desk session. Static mock for layout; the rows below are not a real run."
-      bodyClassName="min-h-[9rem]"
+      bodyClassName="min-h-0"
     >
       <div className="grid gap-2 font-mono text-[0.68rem] text-ink-mute">
         {SAMPLE_RUNS.map((run) => (
@@ -116,11 +116,13 @@ export function ResearchRunsPlaceholder() {
 export function ChartFramePlaceholder() {
   return (
     <Placeholder
-      title="Embedded chart · LuxAlgo / Vela-style frame"
-      note="A live ticker chart for the company or asset picked above it. Charting stays in a LuxAlgo or Vela-style embed; this frame only hosts it."
-      bodyClassName="min-h-[18rem]"
+      title="Embedded chart · frame"
+      status="story embed"
+      note="A LuxAlgo or Vela-style chart: a live ticker chart for the asset picked above it. This frame only hosts it."
+      bodyClassName="min-h-[8rem]"
+      className="h-full"
     >
-      <div className="flex h-full min-h-[16rem] flex-col gap-3">
+      <div className="flex h-full min-h-[6rem] flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Wire className="h-7 w-48 max-w-full border-dashed" />
           <div className="ms-auto flex gap-1 font-mono text-[0.65rem] text-ink-mute">
@@ -147,11 +149,12 @@ export function GloombergTerminalPlaceholder() {
   return (
     <Placeholder
       title="Gloomberb terminal · teaser"
-      note="Bloomberg-style profile and tearsheet tabs for a selected company. Richer data routes through MCP tools later. A teaser only: no affiliation is implied."
-      bodyClassName="min-h-[16rem]"
+      status="integrated"
+      note="Bloomberg-style profile and tearsheet tabs. Richer data routes through MCP tools later. Sourced from Gloomberb; free-tier data is delayed up to 15 minutes. No affiliation implied."
+      bodyClassName="min-h-[8rem]"
       className="h-full"
     >
-      <div className="flex h-full min-h-[14rem] flex-col gap-3 font-mono text-[0.68rem] text-ink-mute">
+      <div className="flex h-full min-h-[6rem] flex-col gap-3 font-mono text-[0.68rem] text-ink-mute">
         <div className="flex flex-wrap gap-1">
           {TABS.map((tab, i) => (
             <span key={tab} className={`border px-2 py-1 ${i === 0 ? "border-ink-mute text-ink" : "border-hair"}`}>
@@ -177,8 +180,9 @@ export function BrokerCardsPlaceholder() {
   return (
     <Placeholder
       title="Broker integrations · cards"
-      note="Connected brokers with status chips, shown as the dashboard shows them. Showcase only: this page places no orders and there is no live trading."
-      bodyClassName="min-h-[16rem]"
+      status="in development"
+      note="Connected brokers with status chips, as the dashboard shows them. Showcase only: no orders, no live trading."
+      bodyClassName="min-h-[8rem]"
       className="h-full"
     >
       <div className="grid gap-2">

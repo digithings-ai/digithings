@@ -18,10 +18,11 @@ export const Brand = () => (
 
 export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Dashboard", href: "/#dashboard" },
-  { label: "Workflow", href: "/#workflow" },
-  { label: "Method", href: "/#pipeline" },
+  { label: "Pipeline", href: "/#pipeline" },
+  { label: "Chat", href: "/#chat" },
+  { label: "MCP", href: "/#mcp" },
   { label: "Tearsheets", href: "/#tearsheets" },
-  { label: "Tooling", href: "/#tooling" },
+  { label: "Integrations", href: "/#integrations" },
   { label: "Changelog", href: "/changelog" },
   { label: "digithings.ai", href: "https://digithings.ai", external: true },
 ];
