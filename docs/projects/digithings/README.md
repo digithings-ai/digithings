@@ -57,19 +57,20 @@ DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.di
 digiquant.io is **crawl-only** unless a human later requests iframing digithings
 chat as an embed parent.
 
-## CI on `main` (automatic)
+## Onboard on `main` (operator / local)
 
-[`.github/workflows/docs-onboard-digithings.yml`](../../../.github/workflows/docs-onboard-digithings.yml)
-runs on pushes to `main` that touch onboard sources (manifest, repo-docs /
-OpenAPI globs, pipeline scripts). It dry-runs classification, then **applies**
-a local vault sink and publishes via `scripts/sync_onboard_vault.py` to core
-Supabase `architecture_notes` (same `production` / `CORE_SUPABASE_*` pattern as
-`sync-architecture-vault.yml`). Manual runs: Actions → **Docs: onboard
-digithings** (`dry-run` / `apply`, optional website crawl).
+The former `docs-onboard-digithings.yml` workflow was removed in the
+strict-essentials cut. Use the operator path below for onboard sources (manifest,
+repo-docs / OpenAPI globs, and pipeline scripts): it dry-runs classification,
+then **applies** a local vault sink and publishes via
+`scripts/sync_onboard_vault.py` to core Supabase `architecture_notes` under the
+`production` / `CORE_SUPABASE_*` pattern.
 
-digisearch dual-sink is **not** applied from Actions (ingest needs a
-server-visible path). Use the operator path below; `docs-reindex-guide.yml`
-only dry-runs (its apply step was removed in #4357).
+The former `sync-architecture-vault.yml` and Actions-based manual run were also
+removed in the strict-essentials cut. digisearch dual-sink is **not** applied
+from Actions (ingest needs a server-visible path); use the operator path below.
+The former `docs-reindex-guide.yml` workflow was also removed in the
+strict-essentials cut.
 
 ## First onboard (operator / local)
 

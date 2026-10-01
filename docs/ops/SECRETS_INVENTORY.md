@@ -16,7 +16,7 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 
 ## Storage surfaces
 
-**Cloudflare Worker secret (`secret_text`).** Set with `wrangler secret put` or the Workers Secrets HTTP API (`{"type":"secret_text"}` — [`.github/workflows/sync-cheaperinference-cf-secrets.yml`](../../.github/workflows/sync-cheaperinference-cf-secrets.yml)). Write-only. Live sets at this audit's commit, names only:
+**Cloudflare Worker secret (`secret_text`).** Set with `wrangler secret put` or the Workers Secrets HTTP API (`{"type":"secret_text"}`). The former `sync-cheaperinference-cf-secrets.yml` workflow was removed in the strict-essentials cut. Write-only. Live sets at this audit's commit, names only:
 
 - `digithings-digichat` (10): AUTH_SECRET, CHEAPERINFERENCE_API_KEY, DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY, DIGICHAT_DASHBOARD_SUPABASE_URL, DIGICHAT_EMBED_TENANTS, DIGICHAT_PLAN_PROOF_SECRET, DIGIGRAPH_INTERNAL_URL, DIGIKEY_BFF_TOKEN, DIGIKEY_URL, OPENROUTER_API_KEY
 - `digithings-stack` (16): CHEAPERINFERENCE_API_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, D1_DATABASE_MAP, DIGIKEY_ADMIN_TOKEN, DIGIKEY_BFF_TOKEN, DIGIKEY_DATABASE_URL, DIGIKEY_PRIVATE_KEY_PEM, GROQ_API_KEY, LITELLM_MASTER_KEY, LITELLM_PROXY_API_KEY, MCP_EDGE_KEY, OPENROUTER_API_KEY, VECTORIZE_ACCOUNT_ID, VECTORIZE_API_TOKEN, ZAMMAD_API_TOKEN

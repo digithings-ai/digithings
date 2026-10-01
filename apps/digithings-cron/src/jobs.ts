@@ -265,55 +265,78 @@ export const JOBS: readonly Job[] = [
   }),
 
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
+  // PAUSED 2026-10-01 Human Gate (GHA simplify Path A): GHA targets stay disabled;
+  // stop CF→disabled dispatch noise. Resume only with matching gh workflow enable.
   // dry_run must be false: workflow defaults dispatch to dry_run=true and only
   // forced live on the old GHA schedule event.
   wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
+    enabled: false,
   }),
-  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml"),
-  wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml"),
-  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml"),
+  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml", {
+    enabled: false,
+  }),
+  wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml"), // KEEP enabled
+  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml", {
+    enabled: false,
+  }),
   wd(
     "project-enforce-assignment",
     "23 9 * * *",
     DIGITHINGS,
     "project-enforce-assignment.yml",
+    { enabled: false },
   ),
-  pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
-  wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
-  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
+  pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"), // KEEP (probe)
+  wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"), // KEEP
+  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"), // KEEP
   // Daily, not weekly: an expired credential should surface in <=24h, which is
-  // the point of the canary (#3522).
+  // the point of the canary (#3522). Path A keeps canary enabled.
   wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
-  pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
+  pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"), // KEEP (probe)
 
-  // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---
-  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
-  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
+  // --- twelve-x (FX Hub) — PAUSED until twelve-x GHA clocks resume ---
+  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml", {
+    enabled: false,
+  }),
+  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml", {
+    enabled: false,
+  }),
   // Weekday FX Hub clock; house-run-12 is daily (`17 12 * * *`) and separate.
-  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
+  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml", {
+    enabled: false,
+  }),
   wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
+    enabled: false,
   }),
   wd("twelve-x-market-context-daily", "30 5 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "daily" },
+    enabled: false,
   }),
   wd("twelve-x-market-context-weekly", "8 7 * * SAT", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "weekly" },
+    enabled: false,
   }),
-  wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml"),
+  wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml", {
+    enabled: false,
+  }),
   wd(
     "twelve-x-primemarket-heartbeat",
     "3 6,18 * * *",
     TWELVE_X,
     "primemarket_session_heartbeat.yml",
+    { enabled: false },
   ),
-  wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml"),
+  wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml", {
+    enabled: false,
+  }),
   // dry_run must be false: workflow defaults dispatch to dry_run=true and only
   // forced live on the old GHA schedule event. Pre-prune R2 dump stays on so the
   // transient market-context tables are always recoverable.
   wd("twelve-x-archive-maintenance", "30 2 * * *", TWELVE_X, "archive_maintenance.yml", {
     inputs: { dry_run: "false", dump_before_prune: "true" },
+    enabled: false,
   }),
 ];
 
