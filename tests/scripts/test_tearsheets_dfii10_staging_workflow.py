@@ -10,6 +10,7 @@ in cache)" — noted here, not asserted (this pin is workflow-only).
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -100,3 +101,29 @@ def test_existing_steps_unmodified() -> None:
     assert "export_sdca_macro.py" in macro_run
     gold_run = _step_by_name(GOLD_STEP_NAME).get("run", "")
     assert "fetch-quotes" in gold_run
+
+
+# Ruling 2 (Plan 17): post-develop-merge the workflow (from develop) can
+# invoke `--series DFII10` against a main-pinned export script without DFII10
+# support → parser.error exit 2, blocking the whole nightly. The step must
+# guard on script series-support and skip-with-warning, never hard-fail.
+PROBE = "grep -q '\"DFII10\"' digiquant/scripts/export_sdca_macro.py"
+
+
+def test_dfii10_staging_step_guards_on_series_support() -> None:
+    run = _step_by_name(STEP_NAME).get("run", "")
+    assert PROBE in run  # capability probe mirrors the -f main-lag idiom
+    assert "skip staging" in run  # skip-with-warning path present
+    assert "exit 1" not in run  # never hard-fail
+
+
+def test_series_support_probe_skips_when_unsupported(tmp_path: Path) -> None:
+    # Stub the probe negative: a main-era script without the DFII10 key.
+    stub = tmp_path / "export_sdca_macro.py"
+    stub.write_text('SERIES_FILES = {"M2SL": "M2SL.csv"}\n', encoding="utf-8")
+    negative = subprocess.run(["grep", "-q", '"DFII10"', str(stub)], check=False)
+    assert negative.returncode != 0  # skip path taken, step exits 0
+    # Positive control: this branch's script carries the DFII10 key.
+    script = Path(__file__).resolve().parents[2] / "digiquant" / "scripts" / "export_sdca_macro.py"
+    positive = subprocess.run(["grep", "-q", '"DFII10"', str(script)], check=False)
+    assert positive.returncode == 0
