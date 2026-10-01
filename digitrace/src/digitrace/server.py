@@ -14,8 +14,13 @@ from fastapi import FastAPI, Request
 from digitrace import __version__
 from digitrace.config import (
     TraceStatus,
+    dual_export_enabled,
+    export_backend,
+    langfuse_configured,
+    langfuse_host_sanitized,
     langsmith_host_sanitized,
     langsmith_sdk_importable,
+    otel_export_configured,
     tracing_enabled,
 )
 
@@ -69,6 +74,11 @@ def status(request: Request) -> TraceStatus:
         langsmith_sdk_installed=langsmith_sdk_importable(),
         langsmith_host=langsmith_host_sanitized(),
         request_id=getattr(request.state, "request_id", None),
+        langfuse_configured=langfuse_configured(),
+        otel_export_configured=otel_export_configured(),
+        dual_export=dual_export_enabled(),
+        export_backend=export_backend(),
+        langfuse_host=langfuse_host_sanitized(),
     )
 
 

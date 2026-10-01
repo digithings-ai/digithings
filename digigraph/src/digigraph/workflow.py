@@ -21,6 +21,7 @@ from digigraph.tool_policy import (
     require_tool_calls_for_workflow,
     state_list_from_frozen,
 )
+from digigraph.tracing import configure_langgraph_tracing, trace_run
 
 __all__ = [
     "run_digigraph_workflow",
@@ -453,11 +454,13 @@ def _workflow_end_payload(
     return payload
 
 
+@trace_run
 def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     """
     Single custom skill entrypoint: chat idea → research (LLM + digisearch) → backtest (optional).
     When backtest disabled (e.g. Sitas): research-only, returns research output.
     """
+    configure_langgraph_tracing()
     workflow_id = str(uuid.uuid4())
     dg_audit_log(
         "workflow_start",
@@ -571,12 +574,14 @@ def _workflow_result_from_state(final: dict) -> WorkflowResult:
     )
 
 
+@trace_run
 def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     """
     Run the workflow using graph.stream(..., stream_mode="updates") then get_state.
     Same result as run_digigraph_workflow but exercises LangGraph native streaming.
     Use for debugging or when you want to consume per-node updates (e.g. map to SSE).
     """
+    configure_langgraph_tracing()
     workflow_id = str(uuid.uuid4())
     dg_audit_log(
         "workflow_start",
@@ -679,6 +684,7 @@ def _tool_result_error(data: dict[str, Any]) -> str | None:
     return None
 
 
+@trace_run
 def run_digigraph_workflow_streaming(
     req: WorkflowRequest,
     event_queue: Queue,
@@ -693,6 +699,7 @@ def run_digigraph_workflow_streaming(
     tool loop still emits tool/content events via the same callback.
     Intended to be run in a thread; the server consumes the queue and emits SSE.
     """
+    configure_langgraph_tracing()
     from digigraph.trace_events import TraceEventV1
 
     workflow_id = str(uuid.uuid4())
