@@ -233,9 +233,7 @@ def test_origins_from_env_rejects_nonlocal_or_malformed_values(
 
 
 @pytest.mark.parametrize("raw", ["0", "65536", "abc"])
-def test_port_from_env_rejects_invalid_values(
-    monkeypatch: pytest.MonkeyPatch, raw: str
-) -> None:
+def test_port_from_env_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
     monkeypatch.setenv("DQ_GATEWAY_PORT", raw)
     with pytest.raises(ValueError, match="DQ_GATEWAY_PORT"):
         lg.port_from_env()
