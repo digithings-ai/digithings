@@ -11,7 +11,7 @@ function Cta({ tier }: { tier: PricingTier }) {
   if (tier.id === "self") {
     return (
       <CtaLink href={REPO} external variant="default" className={LOUD}>
-        Clone the repo
+        View on GitHub
       </CtaLink>
     );
   }
