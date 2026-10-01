@@ -217,6 +217,92 @@ def svg_chart(
     return "\n".join(parts) + "\n"
 
 
+def svg_scatter(
+    pts: list[tuple[float, float]],
+    events: list[tuple[float, float, str]],
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    box: tuple[float, float, float, float],
+    box_label: str,
+    x_lo: float,
+    x_hi: float,
+    x_ticks: list[float],
+    y_lo: float,
+    y_hi: float,
+    y_ticks: list[float],
+) -> str:
+    """Scatter (x=mayer multiple, y=rate z) with the sell-box shaded.
+
+    Points are pre-decimated by the caller (every-Nth). Events are
+    highlighted red with labels. Box = (x0, x1, y0, y1) sell region.
+    """
+    pw, ph = W - ML - MR, H - MT - MB
+
+    def sx(v: float) -> float:
+        return ML + (v - x_lo) / (x_hi - x_lo) * pw
+
+    def sy(v: float) -> float:
+        return MT + (1.0 - (v - y_lo) / (y_hi - y_lo)) * ph
+
+    x0, x1, y0, y1 = box
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" font-family="sans-serif">',
+        f"<title>{escape(title)}</title>",
+        f'<text x="{W / 2}" y="22" text-anchor="middle" font-size="15" '
+        f'font-weight="bold">{escape(title)}</text>',
+        f'<text x="{W / 2}" y="{H - 6}" text-anchor="middle" font-size="12">{escape(xlabel)}</text>',
+        f'<text x="14" y="{MT + ph / 2}" font-size="12" text-anchor="middle" '
+        f'transform="rotate(-90 14 {MT + ph / 2})">{escape(ylabel)}</text>',
+    ]
+    for t in y_ticks:
+        y = sy(t)
+        parts.append(
+            f'<line x1="{ML}" y1="{y:.1f}" x2="{W - MR}" y2="{y:.1f}" '
+            'stroke="#cccccc" stroke-width="1"/>'
+        )
+        parts.append(
+            f'<text x="{ML - 6}" y="{y + 4:.1f}" text-anchor="end" font-size="11">{t:g}</text>'
+        )
+    for t in x_ticks:
+        x = sx(t)
+        parts.append(
+            f'<line x1="{x:.1f}" y1="{MT}" x2="{x:.1f}" y2="{MT + ph}" '
+            'stroke="#e8e8e8" stroke-width="1"/>'
+        )
+        parts.append(
+            f'<text x="{x:.1f}" y="{MT + ph + 16}" text-anchor="middle" font-size="11">{t:g}</text>'
+        )
+    parts.append(
+        f'<rect x="{sx(x0):.1f}" y="{sy(y1):.1f}" width="{sx(x1) - sx(x0):.1f}" '
+        f'height="{sy(y0) - sy(y1):.1f}" fill="#cc0000" fill-opacity="0.10" '
+        'stroke="#cc0000" stroke-width="1.5" stroke-dasharray="6,3"/>'
+    )
+    parts.append(
+        f'<text x="{sx(x1) - 4:.1f}" y="{sy(y1) + 14:.1f}" text-anchor="end" '
+        f'font-size="11" fill="#cc0000">{escape(box_label)}</text>'
+    )
+    for xv, yv in pts:
+        parts.append(
+            f'<circle cx="{sx(xv):.1f}" cy="{sy(yv):.1f}" r="1.6" '
+            'fill="#1f5fa8" fill-opacity="0.30"/>'
+        )
+    for xv, yv, label in events:
+        parts.append(
+            f'<circle cx="{sx(xv):.1f}" cy="{sy(yv):.1f}" r="4.5" '
+            'fill="#cc0000" stroke="#ffffff" stroke-width="1"/>'
+        )
+        parts.append(
+            f'<text x="{sx(xv) + 7:.1f}" y="{sy(yv) - 6:.1f}" font-size="11" '
+            f'fill="#cc0000">{escape(label)}</text>'
+        )
+    parts.append(
+        f'<rect x="{ML}" y="{MT}" width="{pw}" height="{ph}" fill="none" stroke="#000000"/>'
+    )
+    parts.append("</svg>")
+    return "\n".join(parts) + "\n"
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -281,6 +367,56 @@ def main() -> None:
     out_m = OUT_DIR / "mayer_multiple.svg"
     out_m.write_text(svg_m)
 
+    # --- joint sell-box scatter (mayer x, rate-z y; exploratory, no thresholds frozen) ---
+    m_by_date = {r["date"]: float(r["multiple"]) for r in payload["series"]}
+    joint = [
+        (m_by_date[ds], zv) for ds, zv in ((d.isoformat(), v) for d, v in full) if ds in m_by_date
+    ]
+    scatter_pts = joint[::3]  # 4500 -> 1500 evenly; scatter needs no extremes logic
+    lo_win, hi_win = date(2011, 3, 6), date(2012, 3, 6)
+    n_joint = sum(1 for m, z in joint if z <= -2.0 and m >= 1.5)
+    n_out = sum(
+        1
+        for ds, (m, z) in (
+            (d.isoformat(), (m_by_date[d.isoformat()], v))
+            for d, v in full
+            if d.isoformat() in m_by_date
+        )
+        if z <= -2.0 and m >= 1.5 and not (lo_win.isoformat() <= ds <= hi_win.isoformat())
+    )
+    ev_labels = {
+        "2011-09-06": "2011 top (fires)",
+        "2015-12-17": "2015 bottom (no fire)",
+        "2020-08-07": "2020 high (no fire)",
+        "2022-10-21": "2022 dip (no fire)",
+    }
+    ev_pts = [
+        (m_by_date[ds], by_date[date(*[int(p) for p in ds.split("-")])], label)
+        for ds, label in ev_labels.items()
+    ]
+    title_j = (
+        f"Sell-box conjunction (z<=-2 & m>=1.5): {n_joint} joint days, "
+        f"{n_out} outside 2011 window ({100.0 * n_out / len(joint):.1f}%) "
+        "vs 349 mayer-alone"
+    )
+    svg_j = svg_scatter(
+        scatter_pts,
+        ev_pts,
+        title_j,
+        "200w Mayer multiple",
+        "real-rate z",
+        (1.5, 1.85, -3.2, -2.0),
+        "sell box",
+        0.7,
+        1.85,
+        [0.8, 1.0, 1.2, 1.4, 1.5, 1.6, 1.8],
+        -3.2,
+        3.2,
+        [-3, -2, -1, 0, 1, 2, 3],
+    )
+    out_j = OUT_DIR / "joint_conjunction.svg"
+    out_j.write_text(svg_j)
+
     # --- verification block (stdout; quoted in the SDD report) ---
     print(f"z 2011-09-06 = {z2011:.4f} (Ruling-3 -2.522, delta {z2011 + 2.522:+.4f})")
     print(f"z 2015-12-17 = {z2015:.4f} (Ruling-3 +1.066, delta {z2015 - 1.066:+.4f})")
@@ -290,7 +426,7 @@ def main() -> None:
         print(f"spot {d}: DFII10={src[date(y, m, dd)]}")
     m_by_date = {r["date"]: r["multiple"] for r in payload["series"]}
     print(f"mayer 2011-09-02 multiple={m_by_date['2011-09-02']}")
-    for p in (out_r, out_m):
+    for p in (out_r, out_m, out_j):
         print(f"{p.name}: {p.stat().st_size} bytes")
 
 
