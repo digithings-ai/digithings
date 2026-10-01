@@ -1,9 +1,10 @@
 """Bare-`digivoice` app home: status strip plus actions over the commands.
 
-A TTY gets the in-place app shell (pixel DIGIVOICE header, brief build-in,
-one-frame redraw per key). Pipes, CI, and agents get a printed overview and
-exit 0 — never a hang. Setup is a submenu entry that returns to home; it is
-not the home screen. Every entry routes to the handlers the subcommands use.
+A TTY takes the whole viewport: alternate screen, content centered, DIGIVOICE
+half-block wordmark (build-in, then a quiet glint), status strip, and a
+step-rail menu. Pipes, CI, and agents get a printed overview and exit 0 —
+never a hang. Setup is a submenu entry that returns to home; it is not the
+home screen. Every entry routes to the handlers the subcommands use.
 """
 
 from __future__ import annotations
@@ -15,11 +16,15 @@ from pathlib import Path
 from typing import TextIO
 
 from digivoice.paths import resolve_paths
+from digivoice.reload import LaunchReport, ensure_home_control
+from digivoice.runner import CommandRunner
 from digivoice.tui import (
     _is_tty,
     _pause,
     _write_info_frame,
     choose,
+    fullscreen_enter,
+    fullscreen_leave,
     play_intro,
 )
 
@@ -39,6 +44,14 @@ HOME_MENU = (
     "Uninstall",
     "Setup (wizard…)",
     "Quit",
+)
+
+# Contiguous slices of HOME_MENU. Status is the context strip, not a row.
+HOME_GROUPS: tuple[tuple[str, int, int], ...] = (
+    ("Operate", 0, 3),
+    ("Maintain", 3, 6),
+    ("Configure", 6, 7),
+    ("Leave", 7, 8),
 )
 
 MIC_HINT = (
@@ -159,12 +172,18 @@ def render_home_overview(
     return "\n".join(lines)
 
 
+def _context_with_control(context: list[str], summary: str) -> list[str]:
+    return [*context, f"control: {summary}"]
+
+
 def run_home(
     platform: str,
     home: Path,
     env: Mapping[str, str],
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
+    runner: CommandRunner | None = None,
+    launch: LaunchReport | None = None,
 ) -> int:
     """Run the home shell. Returns a process exit code; never hangs a pipe."""
     from digivoice import cli as _cli
@@ -173,10 +192,16 @@ def run_home(
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     paths = resolve_paths(platform, home, env)
+    report = (
+        launch if launch is not None else ensure_home_control(platform, home, env, runner=runner)
+    )
 
     if not _is_tty(stdin):
         settings_text = format_settings_text(load_settings(paths), paths)
-        context = build_context_lines(platform, home, env, probe=_cli.real_probe(env.get("PATH")))
+        context = _context_with_control(
+            build_context_lines(platform, home, env, probe=_cli.real_probe(env.get("PATH"))),
+            report.summary,
+        )
         stdout.write(render_home_overview(settings_text, context_lines=context) + "\n")
         stdout.flush()
         return 0
@@ -184,61 +209,71 @@ def run_home(
     runtime = _cli.Runtime(
         platform=platform, home=home, env=env, probe=_cli.real_probe(env.get("PATH"))
     )
-    play_intro(stdout, HOME_SUBTITLE)
-    while True:
-        context = build_context_lines(platform, home, env, probe=runtime.probe)
-        picked = choose(
-            HOME_TITLE,
-            list(HOME_MENU),
-            stdin,
-            stdout,
-            subtitle=HOME_SUBTITLE,
-            context=context,
-        )
-        if picked is None or HOME_MENU[picked] == "Quit":
-            return 0
-        entry = HOME_MENU[picked]
-        if entry.startswith("Doctor"):
-            result = _cli._doctor(runtime)
-            _write_info_frame(
+    fullscreen_enter(stdout)
+    try:
+        play_intro(stdout, "local speech control")
+        while True:
+            context = _context_with_control(
+                build_context_lines(platform, home, env, probe=runtime.probe),
+                report.summary,
+            )
+            picked = choose(
+                "Actions",
+                list(HOME_MENU),
+                stdin,
                 stdout,
-                "— Doctor —",
-                result.stdout.splitlines() or [result.stderr],
-                subtitle=HOME_SUBTITLE,
+                subtitle="local speech control",
+                context=context,
+                hero=True,
+                pulse=True,
+                groups=HOME_GROUPS,
             )
-            _pause(stdin, stdout)
-        elif entry.startswith("Settings"):
-            text = format_settings_text(load_settings(paths), paths)
-            _write_info_frame(stdout, "— Settings —", text.splitlines(), subtitle=HOME_SUBTITLE)
-            _pause(stdin, stdout)
-        elif entry.startswith("History"):
-            args = argparse.Namespace(last=5, grep=None, copy_last=False, as_json=False)
-            result = _cli._history(args, runtime)
-            _write_info_frame(
-                stdout,
-                "— History (last 5) —",
-                result.stdout.splitlines(),
-                subtitle=HOME_SUBTITLE,
-            )
-            _pause(stdin, stdout)
-        elif entry.startswith("Reload"):
-            args = argparse.Namespace(as_json=False)
-            result = _cli._reload(args, runtime)
-            body = result.stdout.splitlines() or [result.stderr.strip()]
-            _write_info_frame(stdout, "— Reload —", body, subtitle=HOME_SUBTITLE)
-            _pause(stdin, stdout)
-        elif entry.startswith("Update"):
-            result = _cli._update()
-            _write_info_frame(
-                stdout, "— Update —", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
-            )
-            _pause(stdin, stdout)
-        elif entry.startswith("Uninstall"):
-            result = _cli._uninstall()
-            _write_info_frame(
-                stdout, "— Uninstall —", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
-            )
-            _pause(stdin, stdout)
-        elif entry.startswith("Setup"):
-            # Submenu: run the wizard, then return to home (never exit).
-            _cli._setup(argparse.Namespace(print_only=False, as_json=False), runtime)
+            if picked is None or HOME_MENU[picked] == "Quit":
+                return 0
+            entry = HOME_MENU[picked]
+            if entry.startswith("Doctor"):
+                result = _cli._doctor(runtime)
+                _write_info_frame(
+                    stdout,
+                    "Doctor",
+                    result.stdout.splitlines() or [result.stderr],
+                    subtitle=HOME_SUBTITLE,
+                )
+                _pause(stdin, stdout)
+            elif entry.startswith("Settings"):
+                text = format_settings_text(load_settings(paths), paths)
+                _write_info_frame(stdout, "Settings", text.splitlines(), subtitle=HOME_SUBTITLE)
+                _pause(stdin, stdout)
+            elif entry.startswith("History"):
+                args = argparse.Namespace(last=5, grep=None, copy_last=False, as_json=False)
+                result = _cli._history(args, runtime)
+                _write_info_frame(
+                    stdout,
+                    "History",
+                    result.stdout.splitlines(),
+                    subtitle=HOME_SUBTITLE,
+                )
+                _pause(stdin, stdout)
+            elif entry.startswith("Reload"):
+                args = argparse.Namespace(as_json=False)
+                result = _cli._reload(args, runtime)
+                body = result.stdout.splitlines() or [result.stderr.strip()]
+                _write_info_frame(stdout, "Reload", body, subtitle=HOME_SUBTITLE)
+                _pause(stdin, stdout)
+            elif entry.startswith("Update"):
+                result = _cli._update()
+                _write_info_frame(
+                    stdout, "Update", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
+                )
+                _pause(stdin, stdout)
+            elif entry.startswith("Uninstall"):
+                result = _cli._uninstall()
+                _write_info_frame(
+                    stdout, "Uninstall", result.stdout.splitlines(), subtitle=HOME_SUBTITLE
+                )
+                _pause(stdin, stdout)
+            elif entry.startswith("Setup"):
+                # Submenu: run the wizard, then return to home (never exit).
+                _cli._setup(argparse.Namespace(print_only=False, as_json=False), runtime)
+    finally:
+        fullscreen_leave(stdout)

@@ -1,0 +1,234 @@
+"""Bare `digivoice` starts Hammerspoon and the banner without hanging."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import pytest
+from digivoice.cli import Runtime, run
+from digivoice.reload import ensure_home_control
+from digivoice.settings import VoiceSettings, save_settings
+from digivoice.status import StatusReporter
+
+from tests.dvo.fakes import FakeCall, FakeProbe, FakeReply, FakeRunner
+
+pytestmark = pytest.mark.unit
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def monotonic(self) -> float:
+        return self.t
+
+    def sleep(self, seconds: float) -> None:
+        self.t += seconds
+
+
+def _env(tmp_path: Path) -> dict[str, str]:
+    return {"DIGIVOICE_DATA_DIR": str(tmp_path), "PATH": "/usr/bin"}
+
+
+def _install_adapter(home: Path) -> None:
+    adapter = home / ".hammerspoon" / "digivoice"
+    adapter.mkdir(parents=True)
+    (adapter / "init.lua").write_text("-- adapter\n", encoding="utf-8")
+    (adapter / "banner_core.lua").write_text("-- core\n", encoding="utf-8")
+
+
+def test_linux_home_skips_hammerspoon_without_calling_out(tmp_path: Path) -> None:
+    def boom(_call: FakeCall) -> FakeReply:
+        raise AssertionError("linux home launch must not spawn Hammerspoon")
+
+    started = time.monotonic()
+    report = ensure_home_control(
+        "linux",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": boom, "open": boom}),
+        which_hs=lambda: "/usr/bin/hs",
+        which_open=lambda: "/usr/bin/open",
+    )
+    assert time.monotonic() - started < 1
+    assert report.summary == "hammerspoon skipped · banner skipped"
+    result = run(
+        [], Runtime(platform="linux", home=tmp_path, env=_env(tmp_path), probe=FakeProbe())
+    )
+    assert result.code == 0
+    assert "control: hammerspoon skipped · banner skipped" in result.stdout
+
+
+def test_running_hammerspoon_shows_banner_without_open(tmp_path: Path) -> None:
+    def reply(call: FakeCall) -> FakeReply:
+        expr = call.argv[-1]
+        if expr == "return 'ok'":
+            return FakeReply(code=0, stdout="ok\n")
+        if "ensure_banner" in expr:
+            return FakeReply(code=0, stdout="shown\n")
+        return FakeReply(code=0, stdout="")
+
+    clock = _Clock()
+    runner = FakeRunner({"hs": reply, "open": reply})
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=runner,
+        which_hs=lambda: "/usr/local/bin/hs",
+        which_open=lambda: "/usr/bin/open",
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert report.summary == "hammerspoon up · banner shown"
+    assert all(call.program != "open" for call in runner.calls)
+    assert any("ensure_banner" in call.argv[-1] for call in runner.calls)
+    assert all(call.timeout is not None and call.timeout <= 4 for call in runner.calls)
+
+
+def test_opens_hammerspoon_then_shows_banner(tmp_path: Path) -> None:
+    clock = _Clock()
+    probes = {"n": 0}
+
+    def reply(call: FakeCall) -> FakeReply:
+        if call.program == "open":
+            return FakeReply(code=0, stdout="")
+        expr = call.argv[-1]
+        if expr == "return 'ok'":
+            probes["n"] += 1
+            if probes["n"] == 1:
+                return FakeReply(code=1, stderr="connection refused")
+            return FakeReply(code=0, stdout="ok\n")
+        if "ensure_banner" in expr:
+            return FakeReply(code=0, stdout="visible\n")
+        return FakeReply(code=0, stdout="")
+
+    runner = FakeRunner({"hs": reply, "open": reply})
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=runner,
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+        budget=4,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert report.summary == "hammerspoon up · banner visible"
+    assert any(
+        call.program == "open" and call.argv[1:] == ["-a", "Hammerspoon"] for call in runner.calls
+    )
+    assert clock.t < 4
+    assert all(call.timeout is not None for call in runner.calls)
+
+
+def test_down_hammerspoon_returns_inside_budget(tmp_path: Path) -> None:
+    clock = _Clock()
+    runner = FakeRunner(
+        {
+            "hs": FakeReply(code=1, stderr="connection refused"),
+            "open": FakeReply(code=1, stderr="unable to find application"),
+        }
+    )
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=runner,
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+        budget=1.0,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert "banner hidden" in report.summary
+    assert clock.t <= 1.2
+    assert runner.calls
+
+
+def test_live_banner_false_does_not_ask_to_show(tmp_path: Path) -> None:
+    from digivoice.paths import resolve_paths
+
+    paths = resolve_paths("darwin", tmp_path, _env(tmp_path))
+    save_settings(paths, VoiceSettings(live_banner=False))
+
+    def reply(call: FakeCall) -> FakeReply:
+        if "ensure_banner" in call.argv[-1]:
+            raise AssertionError("banner ipc while live_banner is false")
+        return FakeReply(code=0, stdout="ok\n")
+
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+    )
+    assert report.summary == "hammerspoon up · banner off"
+
+
+def test_active_take_is_left_alone(tmp_path: Path) -> None:
+    from digivoice.paths import resolve_paths
+    from digivoice.status import status_path
+
+    paths = resolve_paths("darwin", tmp_path, _env(tmp_path))
+    StatusReporter(status_path(paths), "dict").update("recording", text="hello")
+
+    def reply(call: FakeCall) -> FakeReply:
+        if "ensure_banner" in call.argv[-1]:
+            raise AssertionError("must not repaint over a live take")
+        return FakeReply(code=0, stdout="ok\n")
+
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+    )
+    assert "banner busy" in report.summary
+
+
+def test_require_line_is_added_then_reloaded(tmp_path: Path) -> None:
+    _install_adapter(tmp_path)
+    init = tmp_path / ".hammerspoon" / "init.lua"
+    init.write_text("hs.logger.default = 1\n", encoding="utf-8")
+
+    def reply(call: FakeCall) -> FakeReply:
+        expr = call.argv[-1]
+        if "hs.reload" in expr:
+            return FakeReply(code=0, stdout="")
+        if "ensure_banner" in expr:
+            return FakeReply(code=0, stdout="shown\n")
+        return FakeReply(code=0, stdout="ok\n")
+
+    clock = _Clock()
+    runner = FakeRunner({"hs": reply})
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=runner,
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert 'require("digivoice")' in init.read_text(encoding="utf-8")
+    assert any("hs.reload()" in call.argv for call in runner.calls)
+    assert report.summary == "hammerspoon up · banner shown"
+    again = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+    )
+    text = init.read_text(encoding="utf-8")
+    assert text.count('require("digivoice")') == 1
+    assert again.summary == "hammerspoon up · banner shown"

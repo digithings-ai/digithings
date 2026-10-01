@@ -97,7 +97,7 @@ Default stop-file: `~/Library/Application Support/digivoice/dict.stop`
    require("digivoice")
    ```
 
-5. Reload Hammerspoon config (menu → Reload Config).
+5. Reload Hammerspoon config (menu → Reload Config), or just run bare `digivoice`. That launch opens Hammerspoon if it is not running, adds `require("digivoice")` to `~/.hammerspoon/init.lua` when the adapter is installed but not required, and shows the banner. It does not depend on the menubar. The attempt is capped at a few seconds and never blocks the shell.
 
 Optional: `export DIGIVOICE_BIN=/absolute/path/to/digivoice` if PATH lookup fails
 inside Hammerspoon's environment.

@@ -17,8 +17,8 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/history.py` | JSONL append, tolerant read, `--last` / `--grep` / `--copy-last` / `--json`. |
 | `src/digivoice/settings.py` | `settings.json` under the data dir; agent-scriptable get/set. |
 | `src/digivoice/setup.py` | Interactive `setup` wizard (stdlib arrow/numbered menus) + `--print` overview and `recommend_models()` hardware stub (#4939 hook). |
-| `src/digivoice/tui.py` | Shared stdlib TUI primitives: ANSI in-place frames, DIGIVOICE pixel wordmark, `choose` / `choose_many`, intro build-in. |
-| `src/digivoice/home.py` | Bare-`digivoice` home shell: TTY menu over every command, printed overview otherwise. |
+| `src/digivoice/tui.py` | Shared stdlib TUI: alternate-screen frames, centered DIGIVOICE half-block wordmark, step-rail menus, intro build-in. |
+| `src/digivoice/home.py` | Bare-`digivoice` home shell: fullscreen centered menu on a TTY, printed overview otherwise. |
 | `src/digivoice/reload.py` | `reload`: CLI path, settings, Lua adapter tip, bounded Hammerspoon reload; clears stale status on failure. |
 | `src/digivoice/rewrite.py` | Optional local post-STT rewrite (ollama / llama.cpp); fail soft. |
 | `src/digivoice/paste.py` | Clipboard plus Command-V into the focused app. Fails soft. Never pastes blank text. |
@@ -78,7 +78,7 @@ commands write.
 | `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
-| bare `digivoice` (no args) | 0 | TTY: app home shell (DIGIVOICE pixel header, build-in, context strip with models/banner/health, actions doctor, settings, history, reload, update, uninstall, setup-wizard submenu, quit) with in-place nav; setup returns to home. No TTY: print the home overview and exit 0. `--help` / `-h` / `help` still show argparse help. |
+| bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle glint), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down, loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. Budget 4s; failure is a status line, not a hang. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
 | unknown / bad flags | 2 | Usage on stderr. |
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
