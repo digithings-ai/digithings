@@ -40,9 +40,10 @@ jobs:
             echo "Exempt: promote develop to main"
             exit 0
           fi
-          # chore(release): … and chore(<scope>): release …
-          if [[ "$TITLE" =~ ^chore\(release\):[[:space:]].+ ]] || \
-             [[ "$TITLE" =~ ^chore\([^)]+\):[[:space:]]+release[[:space:]].+ ]]; then
+          # Patterns in vars — bash [[ =~ ]] misparses [^)] inline.
+          re_release='^chore\(release\):[[:space:]].+'
+          re_scope_release='^chore\([^)]+\):[[:space:]]+release[[:space:]].+'
+          if [[ "$TITLE" =~ $re_release ]] || [[ "$TITLE" =~ $re_scope_release ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Exempt: release / release-please title"
             exit 0
