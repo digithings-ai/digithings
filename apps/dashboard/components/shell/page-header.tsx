@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -33,7 +34,10 @@ const PageHeaderContext = createContext<Ctx | null>(null);
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
   const [spec, setSpecState] = useState<PageHeaderSpec>({});
-  const value = useMemo<Ctx>(() => ({ spec, setSpec: (s) => setSpecState(s ?? {}) }), [spec]);
+  // setSpec must keep one identity: usePageHeader lists it as an effect dep, so a
+  // per-spec setter re-runs that effect on every registration and never settles.
+  const setSpec = useCallback((s: PageHeaderSpec | null) => setSpecState(s ?? {}), []);
+  const value = useMemo<Ctx>(() => ({ spec, setSpec }), [spec, setSpec]);
   return <PageHeaderContext.Provider value={value}>{children}</PageHeaderContext.Provider>;
 }
 
