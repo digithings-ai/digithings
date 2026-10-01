@@ -131,6 +131,27 @@ class TestBuildRiskIndex:
         assert frame["date"][-1] == dates[-1]
         assert frame["risk"].null_count() == 0
 
+    def test_zero_valuation_weight_omits_valuation_null_mask(self) -> None:
+        dates, price = _dates_and_price(n=3)
+        extra = [
+            IndicatorWeight(
+                name="m2like",
+                z=pl.Series("m2like", [0.5, 0.5, 0.5]),
+                weight=1.0,
+            ),
+        ]
+        frame = build_risk_index(
+            dates,
+            price,
+            StaticRiskModel(null_row=1),
+            extra_indicators=extra,
+            valuation_weight=0.0,
+        )
+        assert frame["risk"][0] is not None
+        assert frame["risk"][1] is not None
+        assert frame["risk"][2] is not None
+        assert frame["risk"].null_count() == 0
+
 
 class TestWriteRiskIndex:
     def test_round_trips_through_sdca_strategy_load(self, tmp_path: Path) -> None:
