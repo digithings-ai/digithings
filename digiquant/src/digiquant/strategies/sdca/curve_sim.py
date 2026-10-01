@@ -34,8 +34,16 @@ def evaluate_sdca_trial_curve_sim(
     extra_indicators: Sequence[IndicatorWeight] | None = None,
     *,
     initial_cash: float = DEFAULT_TRIAL_CASH,
+    sell_dates: set[date] | None = None,
 ) -> SdcaTrialMetrics:
-    """Score one window via ``run_backtest`` (no NautilusTrader import)."""
+    """Score one window via ``run_backtest`` (no NautilusTrader import).
+
+    ``sell_dates`` passes through to ``run_backtest`` unchanged (``None`` =
+    legacy unmasked behavior, the default so the ``SdcaTrialEvaluator``
+    protocol and every existing positional caller are untouched). The gold v6
+    gate threads its strict-box mask here per OOS window; selection/search
+    never passes it (vote-only selection stays mask-independent).
+    """
     if len(dates) != len(prices) or not dates:
         raise ValueError("evaluate_sdca_trial_curve_sim needs aligned non-empty dates/prices")
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
@@ -53,6 +61,7 @@ def evaluate_sdca_trial_curve_sim(
         index["risk"],
         AccumDistCurve(shape.to_nodes()),
         initial_cash,
+        sell_dates=sell_dates,
     )
     return SdcaTrialMetrics(
         vs_flat_dca_pct=report.vs_flat_dca_pct,

@@ -242,6 +242,7 @@ def run_causal_rolling_gate(
     objective: SdcaOptimizeObjective | None = None,
     sensitivity_frac: float = 0.05,
     frontier_params: list[dict[str, float | int | str]] | None = None,
+    sell_mask: set[date] | None = None,
 ) -> dict:
     """Causal rolling walk-forward gate: per-fold OOS via concatenated history.
 
@@ -256,6 +257,13 @@ def run_causal_rolling_gate(
     loop and ``frontier_beats_both`` counts the entries whose mean OOS beats
     BOTH flat and lump. No holdout metric: the tail stays unscored
     (recorded as absent by the caller).
+
+    When ``sell_mask`` is given, EVERY trial evaluation in this loop — winner
+    OOS, sensitivity neighbors, frontier re-scores, all through ``_score_oos``
+    below — passes the window-sliced allow-set to
+    ``evaluate_sdca_trial_curve_sim``; ``None`` reproduces the unmasked gate
+    exactly. The search phase stays vote-only: selection never sees the mask
+    (mask-robustness variants are report-only, never selected on).
     """
     obj = objective or SdcaOptimizeObjective()
     folds, _holdout = make_walk_forward_folds(dates, n_folds=3, holdout_frac=0.2, oos_frac=0.25)
@@ -269,8 +277,16 @@ def run_causal_rolling_gate(
             model = causal_rolling_model_for_fold(dates, prices, fold, window=window, z=z)
             oos_dates, oos_prices = window_slice(dates, prices, fold.oos_start, fold.oos_end)
             extras = extra_indicators_for_window(oos_dates, dates, extra_z, w)
+            # Mask choke point: the window-sliced allow-set (possibly empty,
+            # which vetoes all sells — never None-collapsed) reaches every
+            # evaluation in this gate: winner OOS, neighbors, frontier.
+            window_sell = None
+            if sell_mask is not None:
+                window_sell = {d for d in oos_dates if d in sell_mask}
             out.append(
-                evaluate_sdca_trial_curve_sim(oos_dates, oos_prices, model, s, w.valuation, extras)
+                evaluate_sdca_trial_curve_sim(
+                    oos_dates, oos_prices, model, s, w.valuation, extras, sell_dates=window_sell
+                )
             )
         return out
 
@@ -284,6 +300,11 @@ def run_causal_rolling_gate(
             "oos_capital_deployed_peak_pct": m.capital_deployed_peak_pct,
             "max_drawdown_pct": m.max_drawdown_pct,
             "feasible": is_feasible(m, obj),
+            "oos_sell_mask_days": (
+                sum(1 for d in sell_mask if fold.oos_start <= d <= fold.oos_end)
+                if sell_mask is not None
+                else 0
+            ),
         }
         for fold, m in zip(folds, oos, strict=True)
     ]
@@ -386,9 +407,30 @@ def main() -> None:
             "history would estimate parameters on OOS."
         ),
     )
+    parser.add_argument(
+        "--sell-mask",
+        default=None,
+        help=(
+            "Strict-box mask JSON (gold_sell_mask.json). The mask affects GATE "
+            "scoring only — the search stays vote-only, so selection never "
+            "depends on the mask (mask-robustness variants are report-only, "
+            "never selected on). Requires --causal-rolling."
+        ),
+    )
     args = parser.parse_args()
     if args.causal_rolling and args.rails_variant not in CAUSAL_ROLLING_VARIANTS:
         parser.error("--causal-rolling requires --rails-variant rolling90 or rolling1260")
+    if args.sell_mask is not None and not args.causal_rolling:
+        parser.error("--sell-mask requires --causal-rolling (v6 reuses the causal loop)")
+    sell_mask: set[date] | None = None
+    mask_thresholds: dict | None = None
+    if args.sell_mask is not None:
+        mask_payload = json.loads(Path(args.sell_mask).read_text())
+        sell_mask = {date.fromisoformat(d) for d in mask_payload["mask_days"]}
+        mask_thresholds = mask_payload["thresholds"]
+        print(
+            f"sell mask: {len(sell_mask)} days thresholds={mask_thresholds} from {args.sell_mask}"
+        )
     seed = json.loads(Path(args.seed_path).read_text())
     dates = [date.fromisoformat(d) for d in seed["dates"]]
     prices = list(seed["prices"])
@@ -488,6 +530,7 @@ def main() -> None:
             weights=composite_weights_from_params(winner_params),
             objective=objective,
             frontier_params=feasible_params,
+            sell_mask=sell_mask,
         )
         per_fold = causal_gate["per_fold"]
         print(
@@ -530,12 +573,13 @@ def main() -> None:
             f"(max_abs_delta={result.sensitivity.max_abs_delta_oos_pct:.2f})"
         )
     for f in per_fold:
+        mask_note = f" mask_days={f['oos_sell_mask_days']}" if causal_gate is not None else ""
         print(
             f"  fold {f['fold']}: oos_vs_flat={f['oos_vs_flat_dca_pct']:+.2f}% "
             f"oos_vs_lump={f['oos_vs_lump_dca_pct']:+.2f}% "
             f"deployed={f['oos_capital_deployed_pct']:.2f}% "
             f"peak={f['oos_capital_deployed_peak_pct']:.2f}% "
-            f"max_dd={f['max_drawdown_pct']:.2f}% feasible={f['feasible']}"
+            f"max_dd={f['max_drawdown_pct']:.2f}% feasible={f['feasible']}{mask_note}"
         )
 
     if causal_gate is not None:
@@ -558,6 +602,16 @@ def main() -> None:
             "rolling_z": causal_gate["rolling_z"],
             "engine_path_used": False,
             "holdout": causal_gate["holdout"],
+            "sell_mask": (
+                {
+                    "source": args.sell_mask,
+                    "thresholds": mask_thresholds,
+                    "mask_days": sorted(str(d) for d in sell_mask) if sell_mask is not None else [],
+                    "mask_count": len(sell_mask) if sell_mask is not None else 0,
+                }
+                if sell_mask is not None
+                else None
+            ),
         }
     else:
         assert result is not None
