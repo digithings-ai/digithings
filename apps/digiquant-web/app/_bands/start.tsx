@@ -22,7 +22,7 @@ function Step({ n, label, children }: { n: string; label: string; children: Reac
 
 export function StartBand() {
   return (
-    <Band id="start" layout="center" title="Get started" takeaway="Own it, or have it run for you." status="open core">
+    <Band id="start" layout="center" title="Run it yourself" takeaway="The dashboard is open core. Self-host it free, or have it run for you." status="open core">
       <div className="mx-auto max-w-[60rem]">
         <div className="grid grid-cols-[minmax(0,1fr)] border border-hair">
           <Step n="01" label="clone">

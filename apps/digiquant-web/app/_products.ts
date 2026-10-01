@@ -40,7 +40,7 @@ export const PRODUCT_ROWS: TerminalManifestRow[] = [
     status: "roadmap",
     blurb: "chat-driven building, in development",
     detail:
-      "Building a strategy from chat through MCP tools is in development. Backtest, optimize and export run today through the local MCP server; export writes JSON only. Nothing trades live.",
+      "The strategy builder in the dashboard (digichat, then Nautilus, then inspect and hand off) is in development. Backtest, optimize and export run today through the local MCP server; export writes JSON only. Nothing trades live.",
   },
 ];
 
@@ -83,6 +83,6 @@ export const INTEGRATIONS: IntegrationRow[] = [
     id: "luxalgo",
     name: "LuxAlgo",
     status: "local only",
-    what: "Chart and journal workspace. The local gateway adds Library concepts and indicator metadata only. No signals, no source code.",
+    what: "Chart and journal workspace, shown here as a story embed. The local gateway adds Library concepts and indicator metadata only. No signals, no source code.",
   },
 ];
