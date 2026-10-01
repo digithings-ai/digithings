@@ -429,13 +429,16 @@ function scenarios.esc_cancels_and_swallows()
   check(exists(DATA .. "/dict.cancel"), "cancel-file written")
   check(not exists(DATA .. "/dict.stop"), "cancel is not a stop")
   advance(1)
-  check(body_of(live_canvas()):find("discarded", 1, true), "discard note shown, no chrome")
+  local cancelling = live_canvas()
+  check(cancelling, "banner stays up while cancelling")
+  eq(body_of(cancelling), "", "no discard label beside the grid")
   eq(press_esc(), false, "second Esc passes through")
   press_right_option()
   check(not exists(DATA .. "/dict.stop"), "Right Option ignored while cancelling")
   tasks[1]:finish(3, "", "digivoice dict: cancelled\n")
   local c = live_canvas()
-  check(body_of(c):find("discarded", 1, true), "says the take was discarded")
+  check(c, "banner stays through the linger")
+  eq(body_of(c), "", "grid only after cancel")
   eq(#notifications, 0, "no cancel toast")
   advance(3)
   eq(live_canvas(), nil, "banner clears")
@@ -486,7 +489,8 @@ function scenarios.speak_failure_goes_to_the_banner()
   tasks[1]:finish(1, "", "digivoice speak: nothing selected: select text first\n")
   advance(1)
   local c = live_canvas()
-  eq(body_of(c), "nothing selected: select text first", "reason shown, prefix stripped, no chrome")
+  check(c, "failure stays on the banner")
+  eq(body_of(c), "", "failure stays on the grid, no status sentence")
   eq(#notifications, 0, "no toast")
 end
 
@@ -495,7 +499,9 @@ function scenarios.error_and_empty_exit_states()
   press_right_option()
   tasks[1]:finish(1, "", "digivoice dict: whisper-cli failed (boom)\n")
   advance(1)
-  eq(body_of(live_canvas()), "whisper-cli failed (boom)", "error detail")
+  local err = live_canvas()
+  check(err, "error banner stays")
+  eq(body_of(err), "", "error detail is not a label")
   advance(5)
   press_right_option()
   press_right_option()
@@ -503,7 +509,8 @@ function scenarios.error_and_empty_exit_states()
   tasks[2]:finish(1, "", "digivoice dict: whisper-cli returned no text; take discarded\n")
   advance(1)
   local c = live_canvas()
-  check(body_of(c):find("nothing pasted", 1, true), "says nothing was pasted, no chrome")
+  check(c, "empty banner stays")
+  eq(body_of(c), "", "empty take is grid only")
 end
 
 function scenarios.stale_status_is_ignored()
@@ -712,6 +719,18 @@ function scenarios.hover_controls_row()
   eq(c.frame.h, face_h + 4 + 18, "canvas grows by exactly the row gutter")
   -- Equal padding: the grid hugs the top-left corner.
   check(math.abs(c[3].frame.x - 10) < 3 and math.abs(c[3].frame.y - 10) < 3, "grid top-left with even pad")
+  check(math.abs(plain[2].frame.y - (10 + (18 - 11) / 2)) < 0.001, "first line centers on the icon row")
+  local rounded, round_cap = false, false
+  for _, el in ipairs(c.elements) do
+    if el.id == "copy" and el.roundedRectRadii then
+      rounded = true
+    end
+    if el.id == "close" and el.strokeCap == "round" then
+      round_cap = true
+    end
+  end
+  check(rounded, "copy uses the DigiChat rounded sheets")
+  check(round_cap, "close uses the DigiChat round-cap mark")
   click("copy")
   local clip = io.open(os.getenv("DIGIVOICE_PBCOPY_FILE"), "r")
   eq(clip:read("*a"), "hover me", "copy puts the banner text on the clipboard")
@@ -780,21 +799,21 @@ function scenarios.drag_snaps_and_persists()
   eq(c.frame.y, 16, "next take reuses the persisted y")
 end
 
-function scenarios.typewriter_continues_peek_to_full()
+function scenarios.instant_text_no_typewriter()
   local long = string.rep("word ", 60)
   press_right_option()
   write_status("dict", "rewriting", long, "")
-  advance(0.15)
-  local partial = body_of(live_canvas())
-  check(#partial >= 5 and #partial < 60, "mid-typewriter glimpse is partial")
-  click(nil) -- peek → full, must continue the caret, never restart
-  local shown = body_of(live_canvas())
-  eq(#shown, #partial, "full continues from the peek caret")
-  check(shown:sub(1, 5) == "word ", "same stream, no restart")
   advance(0.2)
-  check(#body_of(live_canvas()) > #shown, "reveal keeps going after expand")
-  advance(8)
-  check(body_of(live_canvas()):find("word", 1, true), "full text arrives")
+  local peek = body_of(live_canvas())
+  check(#peek > 20, "peek shows the glimpse at once")
+  check(peek:find("word", 1, true), "transcript is present immediately")
+  check(peek:find("…", 1, true), "peek still clips with an ellipsis")
+  click(nil) -- peek → full
+  local shown = body_of(live_canvas())
+  check(#shown > #peek, "full shows more than the peek glimpse at once")
+  check(shown:find("word", 1, true), "same transcript, shown in full window")
+  advance(0.2)
+  eq(body_of(live_canvas()), shown, "text does not keep revealing")
 end
 
 function scenarios.full_scroll_caps_and_wheels()
@@ -841,9 +860,9 @@ function scenarios.theme_chrome_dark()
   advance(0.2)
   local c = live_canvas()
   local bg = c[1].fillColor
-  check(math.abs(bg.red - 0x12 / 255) < 0.002, "dark pill background")
+  check(math.abs(bg.red) < 0.002 and math.abs(bg.green) < 0.002 and math.abs(bg.blue) < 0.002, "remock dark ground")
   local ink = c[2].textColor
-  check(math.abs(ink.red - 0xF2 / 255) < 0.002, "dark banner text")
+  check(math.abs(ink.red - 0xED / 255) < 0.002, "remock dark ink")
   eq(c[3].fillColor.red, 0.94, "recording red stays across themes")
 end
 

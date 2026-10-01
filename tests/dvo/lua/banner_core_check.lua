@@ -166,6 +166,14 @@ eq(core.linger_seconds("cancelled", "peek"), 1.2, "cancelled clears fast")
 local hug = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "peek")
 check(hug.w < core.WIDTH_COLLAPSED, "peek hugs short text")
 check(hug.w > core.PAD * 2 + core.ICON, "peek wider than grid-only")
+eq(hug.h, core.PAD * 2 + math.max(core.ICON, core.LINE_HEIGHT), "one line hugs the grid row")
+local icon_mid = core.PAD + core.ICON / 2
+local text_mid = hug.text_y + core.FONT_SIZE / 2
+check(math.abs(icon_mid - text_mid) < 0.001, "first line centers on the icon row")
+eq(core.body_for({ state = "cancelled", text = "", detail = "" }), "", "cancel is grid only")
+eq(core.body_for({ state = "empty", text = "", detail = "n" }), "", "empty is grid only")
+eq(core.body_for({ state = "error", text = "", detail = "boom" }), "", "error detail is not a label")
+eq(core.body_for({ state = "rewriting", text = "hi", detail = "preset" }), "hi", "transcript stays")
 local hug_empty = core.layout({ state = "recording", text = "", detail = "" }, "dict", "peek")
 eq(hug_empty.w, core.PAD * 2 + core.ICON, "empty hugs the grid")
 eq(hug_empty.h, core.PAD * 2 + core.ICON, "empty hugs the grid")
@@ -181,8 +189,8 @@ local a = core.layout({ state = "done", text = "same longest line here yes\nshor
 local b = core.layout({ state = "done", text = "same longest line here yes\nshort plus more", detail = "" }, "dict", "full", { screen_h = 900 })
 eq(a.w, b.w, "width locks from the longest line")
 -- full caps near half the viewport: tiny screen clamps the line budget
-eq(core.full_max_lines(900), 22, "50vh budget on a normal screen")
-eq(core.full_max_lines(200), 3, "small screen clamps lines")
+eq(core.full_max_lines(900), 23, "50vh budget on a normal screen")
+eq(core.full_max_lines(200), 4, "small screen clamps lines")
 local tall = core.layout(
   { state = "rewriting", text = string.rep("word ", 400), detail = "" }, "dict", "full", { screen_h = 200 }
 )
@@ -195,17 +203,16 @@ for _, line in ipairs(tall.lines) do
 end
 
 -- theme chrome flips, status colors stay (RYG untouched by theme)
-check(core.theme_colors("dark").bg.red < 0.1, "dark pill")
-check(core.theme_colors("light").bg.red > 0.9, "light pill")
-check(core.theme_colors("bogus").bg.red < 0.1, "unknown theme falls back to dark")
+-- Dark is the remock canvas #000; light is ivory paper #F9F8F6.
+eq(core.theme_colors("dark").bg.red, 0, "remock dark ground")
+eq(core.theme_colors("dark").bg.green, 0, "remock dark ground green")
+eq(core.theme_colors("dark").bg.blue, 0, "remock dark ground blue")
+check(math.abs(core.theme_colors("dark").text.red - 0xED / 255) < 0.002, "remock dark ink")
+check(math.abs(core.theme_colors("light").bg.red - 0xF9 / 255) < 0.002, "ivory light ground")
+check(math.abs(core.theme_colors("light").bg.green - 0xF8 / 255) < 0.002, "ivory light ground green")
+check(math.abs(core.theme_colors("light").bg.blue - 0xF6 / 255) < 0.002, "ivory light ground blue")
+check(core.theme_colors("bogus").bg.red == 0, "unknown theme falls back to dark")
 eq(core.matrix_for("recording").color.red, 0.94, "recording red stays")
-
--- typewriter slices
-local tw = core.tw_slice("hello", 2)
-eq(tw.shown, "he", "caret prefix")
-eq(tw.done, false, "not done")
-eq(core.tw_slice("hello", 99).done, true, "clamped caret finishes")
-eq(core.tw_slice("hello", 0).shown, "", "zero caret shows nothing")
 
 -- 9 anchors, snap, clamp, saved, reanchor
 local frame9 = { x = 0, y = 0, w = 1440, h = 900 }
