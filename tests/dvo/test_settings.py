@@ -155,7 +155,7 @@ def test_banner_defaults_and_knobs(tmp_path: Path) -> None:
     shown = json.loads(run(["settings", "--json"], runtime).stdout)
     assert shown["live_banner"] is True
     assert shown["banner_position"] == "top-center"
-    assert shown["banner_density"] == "peek"
+    assert shown["banner_density"] == "retract"
     assert shown["banner_animations"] is True
     assert run(["settings", "set", "banner_position", "bottom-right"], runtime).code == 0
     assert run(["settings", "set", "banner_density", "full"], runtime).code == 0
@@ -177,6 +177,30 @@ def test_banner_defaults_and_knobs(tmp_path: Path) -> None:
     on_disk = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     assert on_disk["banner_position"] == "bottom-right"
     assert on_disk["banner_density"] == "full"
+
+
+def test_banner_density_rejects_legacy_mini_peek(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    for legacy in ("mini", "peek"):
+        bad = run(["settings", "set", "banner_density", legacy], runtime)
+        assert bad.code == 2, legacy
+        assert not (tmp_path / "settings.json").exists()
+
+
+def test_load_settings_coerces_legacy_banner_density(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    settings_path(paths).parent.mkdir(parents=True, exist_ok=True)
+    for legacy in ("mini", "peek"):
+        settings_path(paths).write_text(
+            json.dumps({"banner_density": legacy}),
+            encoding="utf-8",
+        )
+        assert load_settings(paths).banner_density == "retract"
 
 
 def test_banner_density_rejects_unknown_values(tmp_path: Path) -> None:
