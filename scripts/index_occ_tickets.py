@@ -148,7 +148,6 @@ def backfill(
         raise SystemExit("zammad error: ZAMMAD_API_TOKEN is not set")
     if max_tickets is not None and max_tickets < 1:
         raise SystemExit("zammad error: --max-tickets must be a positive integer")
-    os.environ.setdefault("DIGISEARCH_EMBEDDING_PROVIDER", "multilingual")
     client = ZammadClient()
     try:
         tickets = client.list_tickets()
@@ -198,7 +197,19 @@ def backfill(
     from digisearch.pipeline.ingest import index_chunks
 
     provider = wrap_embedding_pipeline(get_default_multilingual_embedder(), use_cache=False)
-    index_chunks(index_name, chunks, embedding_provider=provider)
+    # Pin the provider for the backend too: route_add_chunks re-resolves it
+    # from env, and an unset default (minilm) would stamp the collection
+    # with the wrong model id and embed queries in the wrong space.
+    # Scoped + restored so the one-shot leaves no process-global side effects.
+    previous_provider = os.environ.get("DIGISEARCH_EMBEDDING_PROVIDER")
+    os.environ.setdefault("DIGISEARCH_EMBEDDING_PROVIDER", "multilingual")
+    try:
+        index_chunks(index_name, chunks, embedding_provider=provider)
+    finally:
+        if previous_provider is None:
+            os.environ.pop("DIGISEARCH_EMBEDDING_PROVIDER", None)
+        else:
+            os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = previous_provider
     return summary
 
 

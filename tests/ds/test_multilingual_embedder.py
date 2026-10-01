@@ -237,9 +237,62 @@ def test_backfill_dry_run_pins_provider_threads_snapshot_and_validates(
     assert summary["capped_at_500"] is False
     # Empty-body article skipped; snapshot date threads into chunk metadata.
     assert summary["chunks"] == 1
-    # Backend provider pinned so collection stamp matches the vectors.
+    # Dry run indexes nothing and leaves the process env untouched.
     import os
 
-    assert os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] == "multilingual"
+    assert "DIGISEARCH_EMBEDDING_PROVIDER" not in os.environ
     with pytest.raises(SystemExit):
         backfill_module.backfill(max_tickets=0, dry_run=True)
+
+
+def test_backfill_indexing_pins_and_restores_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import os
+
+    import scripts.index_occ_tickets as backfill_module
+    from scripts.zammad_mcp import client as zammad_client_module
+
+    ticket = {"id": 231, "number": "28312", "title": "Example", "customer_id": 7}
+    articles = [
+        {
+            "id": 1,
+            "sender": "Customer",
+            "type": "web",
+            "internal": False,
+            "body": "<p>Cannot log in</p>",
+            "created_at": "2026-09-15T12:00:00.000Z",
+        },
+    ]
+
+    class _FakeClient:
+        def list_tickets(self) -> list[dict]:
+            return [ticket]
+
+        def get_articles(self, ticket_id: int) -> list[dict]:
+            return articles
+
+        def resolve_user(self, user_id: int) -> str:
+            return "Jane Doe"
+
+    seen: dict[str, object] = {}
+
+    def _fake_index_chunks(
+        index_name: str, chunks: list, embedding_provider: object = None
+    ) -> None:
+        seen["index"] = index_name
+        seen["chunks"] = len(chunks)
+        seen["provider_env"] = os.environ.get("DIGISEARCH_EMBEDDING_PROVIDER")
+
+    monkeypatch.setattr(zammad_client_module, "ZammadClient", _FakeClient)
+    monkeypatch.setattr("digisearch.pipeline.ingest.index_chunks", _fake_index_chunks)
+    monkeypatch.setenv("ZAMMAD_API_TOKEN", "test-token")
+    monkeypatch.delenv("DIGISEARCH_EMBEDDING_PROVIDER", raising=False)
+    summary = backfill_module.backfill(dry_run=False)
+    assert seen["index"] == "occ_tickets"
+    assert seen["chunks"] == 1
+    # Backend saw the multilingual pin during indexing ...
+    assert seen["provider_env"] == "multilingual"
+    # ... and the process env is restored afterwards (no leakage).
+    assert "DIGISEARCH_EMBEDDING_PROVIDER" not in os.environ
+    assert summary["chunks"] == 1
