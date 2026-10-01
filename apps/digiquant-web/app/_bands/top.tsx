@@ -18,7 +18,7 @@ export function TopBand() {
   return (
     <section id="top" aria-labelledby="top-h" className="dq-hero relative isolate z-10 overflow-hidden border-b border-hair">
       <QuantField />
-      <div className="mx-auto flex min-h-[27rem] max-w-[64rem] flex-col items-center justify-center px-[var(--page-pad)] pb-[2.5rem] pt-[2.5rem] text-center sm:px-[2.5rem] lg:min-h-[calc(100svh-var(--nav-shell-h,62px))]">
+      <div className="pointer-events-none relative mx-auto flex min-h-[27rem] max-w-[64rem] flex-col items-center justify-center px-[var(--page-pad)] pb-[2.5rem] pt-[2.5rem] text-center before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-[radial-gradient(ellipse_at_center,rgb(0_0_0/0.82),rgb(0_0_0/0.28)_46%,transparent_74%)] sm:px-[2.5rem] lg:min-h-[calc(100svh-var(--nav-shell-h,62px))]">
         <QuantWordmark className="block h-auto w-[264px] fill-current text-ink min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]" />
         <h1
           id="top-h"
@@ -31,7 +31,7 @@ export function TopBand() {
           digiquant runs the daily research, sizes the risk, tests every idea against history and logs each decision. You run it in
           the dashboard. This site shows it working.
         </p>
-        <div className="hero-rise mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]" style={rise(2)}>
+        <div className="hero-rise pointer-events-auto mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]" style={rise(2)}>
           <CtaLink href="#dashboard" variant="ghost" className={HERO_ACTION}>
             See the dashboard
             <span aria-hidden="true" className="hero-action__arrow">

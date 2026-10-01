@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@digithings/design": "*",
+    "@luxalgo/vela": "^0.8.0",
     "@digithings/ui": "*",
     "@supabase/supabase-js": "^2.101.1",
     "motion": "^12.23.12",

@@ -143,6 +143,14 @@ export function runDemo(tool: McpTool, rawArgs: string, serverScope: McpScope): 
   return lines;
 }
 
+/** Next tool name when arrow keys move through a filtered list. */
+export function cycleName(names: readonly string[], current: string, dir: 1 | -1): string {
+  if (names.length === 0) return current;
+  const at = names.indexOf(current);
+  const base = at < 0 ? (dir > 0 ? -1 : 0) : at;
+  return names[(base + dir + names.length) % names.length] ?? current;
+}
+
 export function groupByFamily(tools: McpTool[]): { family: string; tools: McpTool[] }[] {
   const groups = new Map<string, McpTool[]>();
   for (const t of tools) groups.set(t.family, [...(groups.get(t.family) ?? []), t]);

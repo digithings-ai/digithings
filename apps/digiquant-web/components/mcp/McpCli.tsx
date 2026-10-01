@@ -1,25 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { useMotionSafe } from "@digithings/ui";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { MCP_COMMAND, MCP_READ_COUNT, MCP_TOOLS } from "@/app/_mcp";
+import { fetchGatewayCatalog, fetchGatewayProbe, type CatalogProbe } from "@/lib/gateway/gateway-client";
 import {
+  cycleName,
   exampleArgs,
   groupByFamily,
   runDemo,
-  type DemoLine,
   type McpScope,
   type McpTool,
 } from "@/lib/mcp-demo";
 
-const LINE_TONE: Record<DemoLine["kind"], string> = {
-  call: "text-ink",
-  ok: "text-ink-soft",
-  err: "text-[var(--down)]",
-  out: "text-ink-soft",
-  mute: "text-ink-mute",
-};
-const LINE_MARK: Record<DemoLine["kind"], string> = { call: "→", ok: "✓", err: "✗", out: "←", mute: " " };
+type TryResult = { status: number; ms: number; source: "gateway" | "demo"; body: string };
 
 const PROMPT = (
   <span aria-hidden="true" className="text-accent">
@@ -45,11 +38,10 @@ function ToolList({
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    const at = flat.indexOf(selected);
-    const next = flat[Math.min(flat.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))];
-    if (!next) return;
+    e.stopPropagation();
+    const next = cycleName(flat, selected, e.key === "ArrowDown" ? 1 : -1);
     onSelect(next);
-    e.currentTarget.querySelector<HTMLElement>(`[data-tool="${next}"]`)?.focus();
+    e.currentTarget.querySelector<HTMLElement>(`[data-tool="${CSS.escape(next)}"]`)?.focus();
   };
   if (tools.length === 0) return <p className="m-0 px-1 text-ink-mute"># no tool matches</p>;
   return (
@@ -87,111 +79,168 @@ function ToolList({
   );
 }
 
-function ToolDetail({ tool, serverScope }: { tool: McpTool; serverScope: McpScope }) {
-  const safe = useMotionSafe();
-  const [args, setArgs] = useState(() => JSON.stringify(exampleArgs(tool)));
-  const [lines, setLines] = useState<DemoLine[]>([]);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+function queryFromArgs(raw: string): Record<string, string> | null {
+  try {
+    const parsed: unknown = raw.trim() ? JSON.parse(raw) : {};
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value === undefined || value === null) continue;
+      out[key] = typeof value === "string" ? value : JSON.stringify(value);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    const pending = timers.current;
-    return () => pending.forEach(clearTimeout);
-  }, []);
+function ToolDetail({
+  tool,
+  serverScope,
+  probes,
+}: {
+  tool: McpTool;
+  serverScope: McpScope;
+  probes: CatalogProbe[];
+}) {
+  const [args, setArgs] = useState(() => JSON.stringify(exampleArgs(tool), null, 2));
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<TryResult | null>(null);
+  const probe = probes.find((p) => p.tool === tool.name) ?? null;
 
-  const run = () => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-    const all = runDemo(tool, args, serverScope);
-    if (!safe) {
-      setLines(all);
+  const execute = async () => {
+    const started = performance.now();
+    if (probe) {
+      const query = queryFromArgs(args);
+      if (!query) {
+        setResult({ status: 400, ms: 0, source: "demo", body: "arguments are not a JSON object" });
+        return;
+      }
+      setBusy(true);
+      const live = await fetchGatewayProbe(probe.id, query);
+      setBusy(false);
+      if (!live.ok) {
+        setResult({ status: 0, ms: Math.round(performance.now() - started), source: "gateway", body: live.error });
+        return;
+      }
+      setResult({
+        status: live.status,
+        ms: live.envelope.latencyMs || Math.round(performance.now() - started),
+        source: "gateway",
+        body: JSON.stringify(live.envelope, null, 2),
+      });
       return;
     }
-    setLines([]);
-    all.forEach((line, i) => {
-      timers.current.push(setTimeout(() => setLines((prev) => [...prev, line]), 160 * (i + 1)));
+    const lines = runDemo(tool, args, serverScope);
+    const failed = lines.some((line) => line.kind === "err");
+    const body = lines.find((line) => line.kind === "out")?.text ?? lines.map((line) => line.text).join("\n");
+    setResult({
+      status: failed ? 400 : 200,
+      ms: Math.round(performance.now() - started),
+      source: "demo",
+      body,
     });
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hair pb-2">
         <p className="m-0 text-ink">
-          {PROMPT}mcp describe {tool.name}
+          <span className="text-accent">POST</span> /tools/{tool.name}
         </p>
-        <p className="m-0 mt-1 font-sans text-[0.8125rem] leading-[1.55] text-ink-soft">{tool.summary}</p>
-        <p className="m-0 mt-1 text-ink-mute">
-          [{tool.scope}] {tool.scope === "read" ? "served by --scope read and full" : "served by --scope full only"}
+        <p className="m-0 text-ink-mute">
+          [{tool.scope}] {probe ? "live · local gateway" : "demo · not executed"}
         </p>
       </div>
+      <p className="m-0 font-sans text-[0.8125rem] leading-[1.55] text-ink-soft">{tool.summary}</p>
 
-      <div>
-        <p className="m-0 text-ink-mute"># args ({tool.params.length})</p>
+      <div className="min-h-0">
+        <p className="m-0 text-ink-mute">parameters</p>
         {tool.params.length === 0 ? (
           <p className="m-0 text-ink-soft">none</p>
         ) : (
-          <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3">
-            {tool.params.map((p) => (
-              <div key={p.name} className="col-span-3 grid grid-cols-subgrid">
-                <dt className="text-ink">{p.name}</dt>
-                <dd className="m-0 truncate text-ink-mute">{p.type}</dd>
-                <dd className="m-0 text-ink-mute">
-                  {p.required ? "required" : `= ${JSON.stringify(p.default)}`}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <table className="mt-1 w-full border-collapse text-start">
+            <thead>
+              <tr className="text-ink-mute">
+                <th className="py-0.5 pe-3 text-start font-normal">name</th>
+                <th className="py-0.5 pe-3 text-start font-normal">type</th>
+                <th className="py-0.5 text-start font-normal">required</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tool.params.map((p) => (
+                <tr key={p.name} className="border-t border-hair">
+                  <td className="py-0.5 pe-3 text-ink">{p.name}</td>
+                  <td className="py-0.5 pe-3 text-ink-mute">{p.type}</td>
+                  <td className="py-0.5 text-ink-mute">{p.required ? "yes" : "no"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
-      <div>
-        <label htmlFor="mcp-args" className="m-0 block text-ink">
-          {PROMPT}mcp call {tool.name}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <label htmlFor="mcp-args" className="m-0 block text-ink-mute">
+          request body
         </label>
         <textarea
           id="mcp-args"
           value={args}
           onChange={(e) => setArgs(e.target.value)}
           spellCheck={false}
-          rows={2}
-          className="mt-1 block w-full resize-none border border-hair bg-transparent p-2 font-mono text-[0.72rem] leading-[1.5] text-ink focus-visible:border-ink-mute focus-visible:outline-none"
+          rows={4}
+          className="mt-1 block min-h-[5.5rem] w-full flex-1 resize-none border border-hair bg-transparent p-2 font-mono text-[0.72rem] leading-[1.5] text-ink focus-visible:border-ink-mute focus-visible:outline-none"
         />
         <div className="mt-2 flex items-center gap-3">
           <button
             type="button"
-            onClick={run}
-            className="border border-hair bg-transparent px-3 py-1 font-mono text-[0.72rem] text-ink hover:bg-surface-2 focus-visible:bg-surface-2"
+            onClick={() => void execute()}
+            disabled={busy}
+            className="border border-hair bg-transparent px-3 py-1 font-mono text-[0.72rem] text-ink hover:bg-surface-2 focus-visible:bg-surface-2 disabled:opacity-50"
           >
-            run
+            {busy ? "sending" : "Execute"}
           </button>
-          <span className="text-ink-mute">demo · nothing is executed</span>
+          <span className="text-ink-mute">{probe ? `GET /v1/probe/${probe.id}` : "local signature check"}</span>
         </div>
       </div>
 
-      <div aria-live="polite" className="min-h-[3rem]">
-        {lines.map((line, i) => (
-          <div key={i} className={`flex gap-2 ${LINE_TONE[line.kind]}`}>
-            <span aria-hidden="true" className="shrink-0">
-              {LINE_MARK[line.kind]}
-            </span>
-            {line.kind === "out" ? (
-              <pre className="m-0 min-w-0 whitespace-pre-wrap break-words font-mono text-[length:inherit]">{line.text}</pre>
-            ) : (
-              <span className="min-w-0 break-words">{line.text}</span>
-            )}
-          </div>
-        ))}
+      <div aria-live="polite" className="min-h-[6rem] border border-hair p-2">
+        {result ? (
+          <>
+            <p className={`m-0 ${result.status >= 400 || result.status === 0 ? "text-[var(--down)]" : "text-ink"}`}>
+              {result.status || "—"} · {result.ms} ms · {result.source}
+            </p>
+            <pre className="m-0 mt-1 max-h-[12rem] overflow-auto whitespace-pre-wrap break-words font-mono text-[0.72rem] text-ink-soft">
+              {result.body}
+            </pre>
+          </>
+        ) : (
+          <p className="m-0 text-ink-mute">response</p>
+        )}
       </div>
     </div>
   );
 }
 
-/** The MCP band's terminal: the server command, then the full tool registry as a
- *  filterable command list. Select a tool for its arguments and run it in the demo, with
- *  the server scope switchable. Text only; nothing here is a live connection. */
+/** The MCP band's terminal: the server command, then the full tool registry.
+ *  Arrow keys cycle tools. A tool the local gateway exposes is a live GET;
+ *  everything else is a signature check styled like an OpenAPI try-it panel. */
 export function McpCli() {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState(MCP_TOOLS[0]?.name ?? "");
   const [scope, setScope] = useState<McpScope>("full");
+  const [probes, setProbes] = useState<CatalogProbe[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchGatewayCatalog().then((result) => {
+      if (active && result.ok) setProbes(result.probes);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -203,11 +252,29 @@ export function McpCli() {
   const tool = MCP_TOOLS.find((t) => t.name === selected) ?? MCP_TOOLS[0];
   const command = MCP_COMMAND.replace("--scope full", `--scope ${scope}`);
 
+  const onShellKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    e.preventDefault();
+    const next = cycleName(
+      visible.map((t) => t.name),
+      selected,
+      e.key === "ArrowDown" ? 1 : -1,
+    );
+    setSelected(next);
+    e.currentTarget.querySelector<HTMLElement>(`[data-tool="${CSS.escape(next)}"]`)?.scrollIntoView({ block: "nearest" });
+  };
+
   return (
-    <div className="min-w-0 border border-hair bg-term-bg font-mono text-[0.74rem] leading-[1.65] text-ink-soft">
+    <div
+      tabIndex={0}
+      onKeyDown={onShellKey}
+      className="flex min-h-[min(36rem,calc(100svh-18rem))] min-w-0 flex-1 flex-col border border-hair bg-term-bg font-mono text-[0.74rem] leading-[1.65] text-ink-soft outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-hair"
+    >
       <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
         <span>digiquant · mcp</span>
-        <span className="truncate">stdio · local · this page runs a demo, not a server</span>
+        <span className="truncate">↑↓ cycle tools · Execute hits the local gateway when that tool is a probe</span>
       </div>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 px-4 pt-3">
         <p className="m-0 min-w-0 break-words text-ink">
@@ -234,8 +301,8 @@ export function McpCli() {
       <p className="m-0 px-4 text-ink-mute">
         # {MCP_READ_COUNT} read-scope tools are what the dashboard chat gets; full adds backtest, optimize, export and fetches
       </p>
-      <div className="grid gap-x-4 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <div className="flex min-w-0 flex-col gap-2 border-hair md:border-e md:pe-4">
+      <div className="grid min-h-0 flex-1 gap-x-4 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="flex min-h-0 min-w-0 flex-col gap-2 border-hair md:border-e md:pe-4">
           <label className="flex items-baseline gap-2 text-ink">
             {PROMPT}
             <span className="shrink-0">tools | grep</span>
@@ -248,12 +315,12 @@ export function McpCli() {
               className="min-w-0 flex-1 border-0 border-b border-hair bg-transparent p-0 font-mono text-[length:inherit] text-ink placeholder:text-ink-mute focus-visible:border-ink-mute focus-visible:outline-none"
             />
           </label>
-          <Pane className="h-[15rem] max-md:h-[10rem]">
+          <Pane className="min-h-[16rem] flex-1 max-md:min-h-[12rem]">
             <ToolList tools={visible} selected={selected} onSelect={setSelected} />
           </Pane>
         </div>
-        <Pane className="h-[19rem] max-md:mt-3 max-md:h-[16rem]">
-          {tool ? <ToolDetail key={tool.name} tool={tool} serverScope={scope} /> : null}
+        <Pane className="min-h-[20rem] flex-1 max-md:mt-3">
+          {tool ? <ToolDetail key={tool.name} tool={tool} serverScope={scope} probes={probes} /> : null}
         </Pane>
       </div>
     </div>

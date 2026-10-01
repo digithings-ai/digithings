@@ -19,11 +19,12 @@ export function DashboardBand() {
   return (
     <Band
       id="dashboard"
+      fill
       status={DASHBOARD_VIDEO_SRC ? "recording" : "recording to come"}
       title="The dashboard is the product"
       takeaway="Build strategies, read the results and keep notes in one app. This page shows it; the tools live there."
     >
-      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+      <div className="grid min-h-[min(36rem,calc(100svh-18rem))] flex-1 items-stretch gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         {DASHBOARD_VIDEO_SRC ? (
           <MediaFrame
             src={DASHBOARD_VIDEO_SRC}

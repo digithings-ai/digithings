@@ -1,12 +1,29 @@
+import Image from "next/image";
 import { siCoinbase } from "simple-icons";
 
-/** Marks for the integrations band. Real vendor marks where a single-path monochrome
- *  asset exists in the monorepo's dependencies; a monogram chip where none does
- *  (LuxAlgo, NautilusTrader, digithings, Alpaca, Interactive Brokers have none here).
- *  Everything is drawn in currentColor so the marks sit in the page's ink. Product names and marks
- *  belong to their owners; showing one implies no affiliation. */
+/** Marks for the integrations band. DigiThings, LuxAlgo and NautilusTrader use
+ *  the vendors' own assets: the digithings favicon, the LuxAlgo app icon, and the
+ *  nautilus shell cropped from the nautilus_trader logo (the wordmark would repeat
+ *  the card title). Gloomberb is the monochrome adaptation already used in the
+ *  dashboard. Coinbase is the simple-icons path. Alpaca and Interactive Brokers
+ *  publish no single-path asset in this repo, so they stay a letter chip. Product
+ *  names and marks belong to their owners; showing one implies no affiliation. */
 
 export type IntegrationId = "gloomberb" | "luxalgo" | "nautilus" | "digithings" | "coinbase" | "alpaca" | "ibkr";
+
+const HREF: Record<IntegrationId, string> = {
+  gloomberb: "https://github.com/gloom-sh/gloomberb",
+  luxalgo: "https://www.luxalgo.com/",
+  nautilus: "https://nautilustrader.io/",
+  digithings: "https://digithings.ai",
+  coinbase: "https://www.coinbase.com/",
+  alpaca: "https://alpaca.markets/",
+  ibkr: "https://www.interactivebrokers.com/",
+};
+
+export function integrationHref(id: IntegrationId): string {
+  return HREF[id];
+}
 
 /** Gloomberb candlestick mark: monochrome adaptation of the Gloomberb mark (source
  *  gloom-sh/gloomberb, MIT; Copyright (c) 2026 Gloomberb Contributors). Same drawing as
@@ -26,16 +43,23 @@ function GloomberbMark({ size }: { size: number }) {
   );
 }
 
-const MONOGRAMS: Record<"luxalgo" | "nautilus" | "digithings" | "alpaca" | "ibkr", string> = {
-  luxalgo: "LA",
-  nautilus: "NT",
-  digithings: "dt",
-  alpaca: "Al",
-  ibkr: "IB",
-};
-
 export function IntegrationMark({ id, size = 20 }: { id: IntegrationId; size?: number }) {
   if (id === "gloomberb") return <GloomberbMark size={size} />;
+  if (id === "digithings") {
+    return (
+      <Image src="/favicon-dg.svg" alt="" width={size} height={size} unoptimized className="shrink-0" />
+    );
+  }
+  if (id === "luxalgo") {
+    return (
+      <Image src="/marks/luxalgo-mark.png" alt="" width={size} height={size} unoptimized className="shrink-0" />
+    );
+  }
+  if (id === "nautilus") {
+    return (
+      <Image src="/marks/nautilus-mark.png" alt="" width={size} height={size} unoptimized className="shrink-0" />
+    );
+  }
   if (id === "coinbase") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
@@ -43,13 +67,14 @@ export function IntegrationMark({ id, size = 20 }: { id: IntegrationId; size?: n
       </svg>
     );
   }
+  const letter = id === "alpaca" ? "Al" : "IB";
   return (
     <span
       aria-hidden="true"
       className="inline-grid shrink-0 place-items-center border border-current font-mono font-medium leading-none"
       style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
     >
-      {MONOGRAMS[id]}
+      {letter}
     </span>
   );
 }
