@@ -54,6 +54,10 @@ def test_factory_builds_multilingual_provider() -> None:
     assert isinstance(provider, MultilingualEmbedder)
     provider = _build_raw_provider(MULTILINGUAL_MODEL_ID.lower(), None)
     assert isinstance(provider, MultilingualEmbedder)
+    from digisearch.embedding.factory import EmbeddingConfigError
+
+    with pytest.raises(EmbeddingConfigError, match="single model"):
+        _build_raw_provider(MULTILINGUAL_MODEL_ID, "some-other-model")
 
 
 def test_factory_rejects_alias_names_without_model_id() -> None:
