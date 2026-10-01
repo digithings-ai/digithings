@@ -110,13 +110,28 @@ the wav path, the paste result, and the history path all go to stderr.
 ## speak
 
 1. **Resolve text.** Argv words, or `--clipboard` (`pbpaste` / `wl-paste` / `xclip` / `xsel`),
-   or `--selection` (macOS: Cmd+C via osascript only when clipboard *changes*; Linux: primary),
+   or `--selection` (macOS, in order: focused element's Accessibility selected
+   text, then Ghostty's selection pasteboard when Ghostty is frontmost, then
+   Cmd+C via osascript only when the clipboard *changes*; Linux: primary),
    or `--clipboard-or-history` (clipboard only; **no** history fallback — not the hotkey path).
    Hammerspoon speak uses `--selection`.
 2. **Piper** (`speak.py`). `piper --model <voice.onnx> --output_file <speak-…wav>` with text
    on stdin. Voice from `DIGIVOICE_PIPER_VOICE` or the first `*.onnx` under models.
 3. **Play.** `afplay` on darwin; `aplay` then `ffplay` on Linux.
 4. **History.** Append `{kind:"speak", text, wav:null}`.
+
+### `--selection` path per app (macOS)
+
+| Frontmost app | Step 1: AX selected text | Step 2: Ghostty pasteboard | Step 3: Cmd+C change-detect |
+| --- | --- | --- | --- |
+| Ghostty | Miss (terminal grid exposes no `AXSelectedText`; osascript's `missing value` is filtered, never spoken) | **Hit** — `pbpaste -pboard com.mitchellh.ghostty.selection` (copy-on-select) | Skipped (never reached; clipboard untouched) |
+| TextEdit / Notes / Mail (NSText) | **Hit** — focused text view's `AXSelectedText` | Skipped (not Ghostty) | Fallback for non-text focus |
+| Safari / Chrome | Hit in text fields; miss on page content | Skipped | **Hit** — page selections copy via Cmd+C |
+| Grok Bot / other apps | Hit when a text field holds the selection | Skipped | **Hit** (previously the only path; unchanged) |
+
+An unchanged general clipboard at step 3 is empty selection, never readout:
+leftover dictation or coding replies are not spoken, and no `kind:dict` history
+is consulted. Every step fails soft to the next; all three empty is exit 1.
 
 stdout is the spoken text. Missing piper, voice, player, or empty selection → exit 1,
 one line on stderr. Hotkey (`--selection`) soft-fails when nothing is selected — never
