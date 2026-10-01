@@ -19,7 +19,6 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any  # score:allow untyped any — dynamically loaded module
-from urllib.parse import urlsplit
 
 import pytest
 import yaml
