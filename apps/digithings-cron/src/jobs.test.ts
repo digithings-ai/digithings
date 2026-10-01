@@ -9,6 +9,7 @@ const PAUSED_PIPELINE_IDS = [
   "prices-eod-macro",
   "market-data-refresh-morning",
   "market-data-refresh-evening",
+  "checkpoint-archive",
   "house-run-09",
   "house-run-10",
   "house-run-11",
@@ -196,9 +197,26 @@ describe("jobsForCron", () => {
       workflow: "smoke-stack.yml",
       ref: "develop",
     });
-    expect(JOBS.find((job) => job.id === "checkpoint-archive")).toBeUndefined();
     expect(uniqueEnabledCrons()).toContain("17 6 * * *");
     expect(uniqueEnabledCrons()).toContain("27 7 * * *");
+  });
+
+  it("wires checkpoint-archive to digiquant-runner at 13:30 UTC (paused)", () => {
+    expect(JOBS.find((job) => job.id === "checkpoint-archive")).toMatchObject({
+      kind: "container",
+      command: "checkpoint-archive",
+      concurrency: "checkpoint-archive",
+      timeoutSeconds: 3600,
+      cron: "30 13 * * *",
+      workflow: "pipeline-checkpoint-archive.yml",
+      ref: "develop",
+      codeRef: "main",
+      enabled: false,
+    });
+    expect(jobsForCron("30 13 * * *")).toEqual([]);
+    expect(
+      jobsForCron("30 13 * * *", { includeDisabled: true }).map((job) => job.id),
+    ).toEqual(["checkpoint-archive"]);
     expect(uniqueEnabledCrons()).not.toContain("30 13 * * *");
   });
 
