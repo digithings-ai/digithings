@@ -336,14 +336,18 @@
     }
 
     col.querySelectorAll(".sec[data-pane-id]").forEach(function (sec) {
-      sec.setAttribute("draggable", "true");
+      // Only the explicit grip may start native HTML5 rearrange. In particular,
+      // keep the section itself non-draggable so resize handles remain isolated.
+      sec.setAttribute("draggable", "false");
       var handle = sec.querySelector("[data-pane-drag]");
-      if (handle) {
-        handle.addEventListener("pointerdown", function () {
-          sec.setAttribute("draggable", "true");
-        });
-      }
+      if (handle) handle.setAttribute("draggable", "true");
       sec.addEventListener("dragstart", function (ev) {
+        var target = ev.target;
+        var grip = target && target.closest ? target.closest("[data-pane-drag]") : null;
+        if (!grip || grip.closest(".sec") !== sec) {
+          ev.preventDefault();
+          return;
+        }
         dragSec = sec;
         sec.classList.add("is-dragging");
         col.classList.add("rearranging");
@@ -382,6 +386,154 @@
         if (foot) col.appendChild(foot);
         persist();
       });
+    });
+  }
+
+  /* ── pane size drag ── */
+  var PANE_SIZE_KEY = "dq-canvas-pane-size:";
+  var PANE_MIN_HEIGHT = 120;
+
+  function paneSizeKey() {
+    return PANE_SIZE_KEY + fileName();
+  }
+
+  function paneSpan(sec) {
+    var span = 12;
+    sec.classList.forEach(function (name) {
+      var match = /^s(\d+)$/.exec(name);
+      if (match) span = parseInt(match[1], 10);
+    });
+    return Math.max(4, Math.min(12, span));
+  }
+
+  function setPaneSpan(sec, span) {
+    var next = Math.max(4, Math.min(12, Math.round(span)));
+    Array.prototype.slice.call(sec.classList).forEach(function (name) {
+      if (/^s\d+$/.test(name)) sec.classList.remove(name);
+    });
+    sec.classList.add("s" + next);
+  }
+
+  function paneSizeEntries(col) {
+    var sizes = {};
+    col.querySelectorAll(".sec[data-pane-id]").forEach(function (sec) {
+      var id = sec.getAttribute("data-pane-id");
+      if (!id) return;
+      var entry = { cols: paneSpan(sec) };
+      var height = parseFloat(sec.style.minHeight);
+      if (isFinite(height) && height > 0) entry.height = Math.round(height);
+      sizes[id] = entry;
+    });
+    return sizes;
+  }
+
+  function persistPaneSizes(col) {
+    try { sessionStorage.setItem(paneSizeKey(), JSON.stringify(paneSizeEntries(col))); } catch (e) {}
+  }
+
+  function restorePaneSizes(col) {
+    var saved;
+    try { saved = JSON.parse(sessionStorage.getItem(paneSizeKey()) || "null"); } catch (e) { saved = null; }
+    if (!saved || typeof saved !== "object") return;
+    col.querySelectorAll(".sec[data-pane-id]").forEach(function (sec) {
+      var entry = saved[sec.getAttribute("data-pane-id")];
+      if (!entry || typeof entry !== "object") return;
+      if (isFinite(entry.cols)) setPaneSpan(sec, entry.cols);
+      if (isFinite(entry.height)) {
+        var height = Math.max(PANE_MIN_HEIGHT, Math.round(entry.height));
+        sec.style.minHeight = height + "px";
+      }
+    });
+  }
+
+  function addPaneResizeHandle(sec, kind, col) {
+    var handle = document.createElement("div");
+    handle.className = "pane-resize pane-resize-" + kind;
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", kind === "width" ? "vertical" : "horizontal");
+    handle.setAttribute("aria-label", kind === "width" ? "Resize pane width" : "Resize pane height");
+    handle.tabIndex = 0;
+    sec.appendChild(handle);
+
+    var dragging = false;
+    var startY = 0;
+    var startHeight = 0;
+
+    function finish(ev) {
+      if (!dragging) return;
+      dragging = false;
+      if (ev && handle.releasePointerCapture && handle.hasPointerCapture && handle.hasPointerCapture(ev.pointerId)) {
+        handle.releasePointerCapture(ev.pointerId);
+      }
+      document.documentElement.classList.remove("pane-resizing");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      persistPaneSizes(col);
+    }
+
+    function move(ev) {
+      if (!dragging) return;
+      if (document.documentElement.classList.contains("pane-fs")) {
+        finish(ev);
+        return;
+      }
+      if (kind === "width") {
+        var colRect = col.getBoundingClientRect();
+        var secRect = sec.getBoundingClientRect();
+        var columnWidth = colRect.width / 12;
+        if (!columnWidth) return;
+        var startCol = Math.round((secRect.left - colRect.left) / columnWidth) + 1;
+        var maxSpan = Math.max(4, 12 - startCol + 1);
+        var span = Math.round((ev.clientX - secRect.left) / columnWidth);
+        setPaneSpan(sec, Math.max(4, Math.min(maxSpan, span)));
+      } else {
+        var maxHeight = Math.max(PANE_MIN_HEIGHT, startHeight, Math.min(window.innerHeight * 0.8, col.clientHeight || window.innerHeight * 0.8));
+        var height = Math.max(PANE_MIN_HEIGHT, Math.min(maxHeight, startHeight + ev.clientY - startY));
+        sec.style.minHeight = Math.round(height) + "px";
+      }
+      persistPaneSizes(col);
+    }
+
+    handle.addEventListener("pointerdown", function (ev) {
+      if (document.documentElement.classList.contains("pane-fs")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      dragging = true;
+      startY = ev.clientY;
+      startHeight = sec.getBoundingClientRect().height;
+      document.documentElement.classList.add("pane-resizing");
+      if (handle.setPointerCapture) handle.setPointerCapture(ev.pointerId);
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    });
+
+    handle.addEventListener("keydown", function (ev) {
+      if (document.documentElement.classList.contains("pane-fs")) return;
+      if (kind === "width" && (ev.key === "ArrowLeft" || ev.key === "ArrowRight")) {
+        var delta = ev.key === "ArrowLeft" ? -1 : 1;
+        setPaneSpan(sec, paneSpan(sec) + delta);
+        persistPaneSizes(col);
+        ev.preventDefault();
+      }
+      if (kind === "height" && (ev.key === "ArrowUp" || ev.key === "ArrowDown")) {
+        var deltaHeight = ev.key === "ArrowUp" ? -16 : 16;
+        var current = parseFloat(sec.style.minHeight) || sec.getBoundingClientRect().height;
+        sec.style.minHeight = Math.max(PANE_MIN_HEIGHT, Math.round(current + deltaHeight)) + "px";
+        persistPaneSizes(col);
+        ev.preventDefault();
+      }
+    });
+  }
+
+  function wirePaneResize() {
+    var col = document.querySelector("main.main > .col");
+    if (!col) return;
+    restorePaneSizes(col);
+    col.querySelectorAll(".sec[data-pane-id]").forEach(function (sec) {
+      if (!sec.querySelector(":scope > .pane-resize-width")) addPaneResizeHandle(sec, "width", col);
+      if (!sec.querySelector(":scope > .pane-resize-height")) addPaneResizeHandle(sec, "height", col);
     });
   }
 
@@ -487,6 +639,7 @@
     wireDeskExpand();
     wirePaneFullscreen();
     wirePaneRearrange();
+    wirePaneResize();
     wireChartWheel();
 
     var chatPage = fileName() === "chat.html";
