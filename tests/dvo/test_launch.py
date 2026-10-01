@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 from digivoice.cli import Runtime, run
+from digivoice.paths import resolve_paths
 from digivoice.reload import ensure_home_control
 from digivoice.settings import VoiceSettings, save_settings
-from digivoice.status import StatusReporter
+from digivoice.status import StatusReporter, status_path
 
 from tests.dvo.fakes import FakeCall, FakeProbe, FakeReply, FakeRunner
 
@@ -149,8 +150,6 @@ def test_down_hammerspoon_returns_inside_budget(tmp_path: Path) -> None:
 
 
 def test_live_banner_false_does_not_ask_to_show(tmp_path: Path) -> None:
-    from digivoice.paths import resolve_paths
-
     paths = resolve_paths("darwin", tmp_path, _env(tmp_path))
     save_settings(paths, VoiceSettings(live_banner=False))
 
@@ -171,9 +170,6 @@ def test_live_banner_false_does_not_ask_to_show(tmp_path: Path) -> None:
 
 
 def test_active_take_is_left_alone(tmp_path: Path) -> None:
-    from digivoice.paths import resolve_paths
-    from digivoice.status import status_path
-
     paths = resolve_paths("darwin", tmp_path, _env(tmp_path))
     StatusReporter(status_path(paths), "dict").update("recording", text="hello")
 
@@ -232,3 +228,78 @@ def test_require_line_is_added_then_reloaded(tmp_path: Path) -> None:
     text = init.read_text(encoding="utf-8")
     assert text.count('require("digivoice")') == 1
     assert again.summary == "hammerspoon up · banner shown"
+
+
+def test_take_in_progress_is_not_reloaded(tmp_path: Path) -> None:
+    _install_adapter(tmp_path)
+    init = tmp_path / ".hammerspoon" / "init.lua"
+    init.write_text("hs.logger.default = 1\n", encoding="utf-8")
+    paths = resolve_paths("darwin", tmp_path, _env(tmp_path))
+    StatusReporter(status_path(paths), "dict").update("recording", text="hello")
+
+    def reply(call: FakeCall) -> FakeReply:
+        if "hs.reload" in call.argv[-1] or "ensure_banner" in call.argv[-1]:
+            raise AssertionError(call.argv[-1])
+        return FakeReply(code=0, stdout="ok\n")
+
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+    )
+    assert report.summary == "hammerspoon up · banner busy"
+    assert 'require("digivoice")' in init.read_text(encoding="utf-8")
+
+
+def test_missing_banner_reloads_once_then_shows(tmp_path: Path) -> None:
+    reloaded = {"n": 0}
+
+    def reply(call: FakeCall) -> FakeReply:
+        expr = call.argv[-1]
+        if "hs.reload" in expr:
+            reloaded["n"] += 1
+            return FakeReply(code=0, stdout="")
+        if "ensure_banner" in expr:
+            token = "shown" if reloaded["n"] else "missing"
+            return FakeReply(code=0, stdout=token + "\n")
+        return FakeReply(code=0, stdout="ok\n")
+
+    clock = _Clock()
+    runner = FakeRunner({"hs": reply})
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=runner,
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert report.summary == "hammerspoon up · banner shown"
+    assert reloaded["n"] == 1
+    assert clock.t < 4
+
+
+def test_up_but_out_of_budget_stays_up(tmp_path: Path) -> None:
+    clock = _Clock()
+
+    def reply(call: FakeCall) -> FakeReply:
+        clock.t += 4
+        return FakeReply(code=0, stdout="ok\n")
+
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+        budget=4,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+    assert report.summary == "hammerspoon up · banner hidden"

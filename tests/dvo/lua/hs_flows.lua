@@ -525,6 +525,23 @@ function scenarios.bad_density_falls_back_to_peek()
   eq(live_canvas().frame.w, 380, "peek width")
 end
 
+function scenarios.home_banner_stands_by_without_blocking_hotkeys()
+  eq(adapter.ensure_banner(), "shown", "standby banner shown")
+  check(live_canvas(), "canvas up")
+  eq(#tasks, 0, "standby starts no CLI")
+  eq(#menubars, 0, "standby does not touch the menubar")
+  eq(adapter.ensure_banner(), "visible", "second call sees the canvas")
+  press_right_option()
+  eq(#tasks, 1, "dict still starts over standby")
+  eq(table.concat(tasks[1].args, " "), "dict --toggle --stop-file " .. DATA .. "/dict.stop", "dict args")
+  tasks[1]:finish(0, "hello\n", "")
+  advance(5)
+  eq(adapter.ensure_banner(), "shown", "banner returns after the take")
+  double_tap_left_option()
+  eq(#tasks, 2, "speak still starts over standby")
+  eq(table.concat(tasks[2].args, " "), "speak --selection", "speak args")
+end
+
 function scenarios.cli_missing_is_reported()
   hs.task.new = function() return nil end
   press_right_option()

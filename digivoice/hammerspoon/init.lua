@@ -442,8 +442,9 @@ end
 
 -- Speaks the current selection only (digivoice speak --selection).
 -- Fails soft: the banner shows why (e.g. nothing selected). No clipboard/history fallback.
+-- A standby banner (home launch, no task) is not a take and must not block this.
 function M.speak_selection()
-  if session and session.kind == "dict" then
+  if session and session.kind == "dict" and not session.standby then
     return
   end
   local s = begin_session("speak")
@@ -508,8 +509,7 @@ local tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e
   return false
 end)
 
---- Home launch (`digivoice` with no args) calls this over `hs -c`.
---- Shows the existing banner canvas. Does not arm a take and does not touch the menubar.
+--- True when the banner canvas is on screen. Home launch calls `M.ensure_banner`.
 function M.banner_visible()
   return canvas ~= nil
 end

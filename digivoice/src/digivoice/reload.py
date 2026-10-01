@@ -227,13 +227,20 @@ def ensure_digivoice_require(home: Path, paths: VoicePaths) -> tuple[str, bool]:
                 return "config ...... digivoice already required", False
             if text and not text.endswith("\n"):
                 text += "\n"
-            init.write_text(text + f"\n{needle_a}\n", encoding="utf-8")
+            _replace_text(init, text + f"\n{needle_a}\n")
             return 'config ...... added require("digivoice")', True
-        init.parent.mkdir(parents=True, exist_ok=True)
-        init.write_text(f"{needle_a}\n", encoding="utf-8")
+        _replace_text(init, f"{needle_a}\n")
         return 'config ...... wrote init.lua require("digivoice")', True
     except OSError as exc:
         return f"config ...... not written ({exc})", False
+
+
+def _replace_text(path: Path, text: str) -> None:
+    """Replace a file via rename so a crash cannot truncate the original."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.tmp")
+    temporary.write_text(text, encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def _take_in_progress(paths: VoicePaths) -> bool:
@@ -338,13 +345,25 @@ def _ensure_home_control(
             pause(min(0.2, max(0.0, left())))
             running, _ = _hs_ok(active, _PROBE_EXPR, min(0.8, max(0.0, left())))
 
-    if config_changed and was_running and running and left() > 0.3:
-        message, _ok = reload_hammerspoon(active, hs_path, min(1.5, left()))
-        lines.append(message)
-        running = False
+    def wait_until_up() -> None:
+        nonlocal running
         while not running and hs_path and left() > 0.25:
             pause(min(0.2, max(0.0, left())))
             running, _ = _hs_ok(active, _PROBE_EXPR, min(0.8, max(0.0, left())))
+
+    def reload_and_wait() -> None:
+        nonlocal running
+        message, _ok = reload_hammerspoon(active, hs_path, min(1.5, max(0.0, left())))
+        lines.append(message)
+        running = False
+        wait_until_up()
+
+    # A take owns the banner. Reloading would kill its hs.task.
+    take = _take_in_progress(paths)
+    reloaded = False
+    if config_changed and was_running and running and not take and left() > 0.3:
+        reload_and_wait()
+        reloaded = True
     elif was_running:
         lines.append("hammerspoon .. already running")
     elif running:
@@ -352,20 +371,25 @@ def _ensure_home_control(
     else:
         lines.append("hammerspoon .. not running")
 
+    hs_word = "up" if running else "down"
     if not live_banner:
         lines.append("banner ....... off (live_banner false)")
-        summary = "hammerspoon up · banner off" if running else "hammerspoon down · banner off"
-        return LaunchReport(summary=summary, lines=lines)
-    if _take_in_progress(paths):
+        return LaunchReport(summary=f"hammerspoon {hs_word} · banner off", lines=lines)
+    if take:
         lines.append("banner ....... left up (take in progress)")
-        summary = "hammerspoon up · banner busy" if running else "hammerspoon down · banner busy"
-        return LaunchReport(summary=summary, lines=lines)
+        return LaunchReport(summary=f"hammerspoon {hs_word} · banner busy", lines=lines)
     if not running or not hs_path or left() <= 0:
         lines.append("banner ....... not shown")
-        summary = "hammerspoon down · banner hidden"
-        return LaunchReport(summary=summary, lines=lines)
+        return LaunchReport(summary=f"hammerspoon {hs_word} · banner hidden", lines=lines)
 
-    ok, token = _hs_ok(active, _BANNER_EXPR, min(1.5, left()))
+    ok, token = _hs_ok(active, _BANNER_EXPR, min(1.5, max(0.0, left())))
+    # An already-running Hammerspoon may still have the previous adapter loaded.
+    if ok and token == "missing" and not reloaded and left() > 0.3:
+        reload_and_wait()
+        if running and left() > 0:
+            ok, token = _hs_ok(active, _BANNER_EXPR, min(1.5, max(0.0, left())))
+        else:
+            ok, token = False, "missing"
     if ok and token in {"shown", "visible"}:
         lines.append(f"banner ....... {token}")
         state = "shown" if token == "shown" else "visible"
