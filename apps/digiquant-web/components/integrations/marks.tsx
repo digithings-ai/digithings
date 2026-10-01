@@ -4,7 +4,7 @@ import { siCoinbase } from "simple-icons";
 /** Marks for the integrations band. DigiThings, LuxAlgo and NautilusTrader use
  *  the vendors' own assets: the digithings favicon, the LuxAlgo app icon, and the
  *  nautilus shell cropped from the nautilus_trader logo (the wordmark would repeat
- *  the card title). Gloomberb is the monochrome adaptation already used in the
+ *  the card title). Gloomberg is the monochrome adaptation already used in the
  *  dashboard. Coinbase is the simple-icons path. Alpaca and Interactive Brokers
  *  publish no single-path asset in this repo, so they stay a letter chip. Product
  *  names and marks belong to their owners; showing one implies no affiliation. */
@@ -25,10 +25,10 @@ export function integrationHref(id: IntegrationId): string {
   return HREF[id];
 }
 
-/** Gloomberb candlestick mark: monochrome adaptation of the Gloomberb mark (source
- *  gloom-sh/gloomberb, MIT; Copyright (c) 2026 Gloomberb Contributors). Same drawing as
+/** Gloomberg candlestick mark: monochrome adaptation of the Gloomberg mark (source
+ *  gloom-sh/gloomberb, MIT; Copyright (c) 2026 Gloomberg Contributors). Same drawing as
  *  apps/dashboard/components/gloomberb-mark.tsx. */
-function GloomberbMark({ size }: { size: number }) {
+function GloombergMark({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" focusable="false">
       <g transform="translate(256 248) scale(1.15) translate(-256 -248)">
@@ -44,7 +44,7 @@ function GloomberbMark({ size }: { size: number }) {
 }
 
 export function IntegrationMark({ id, size = 20 }: { id: IntegrationId; size?: number }) {
-  if (id === "gloomberb") return <GloomberbMark size={size} />;
+  if (id === "gloomberb") return <GloombergMark size={size} />;
   if (id === "digithings") {
     return (
       <Image src="/favicon-dg.svg" alt="" width={size} height={size} unoptimized className="shrink-0" />
