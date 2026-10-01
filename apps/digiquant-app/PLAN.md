@@ -88,3 +88,9 @@ Phases 1-3 are independent after Phase 0: run as parallel **worktree-isolated** 
 - Confirm decisions 1, 5, 7.
 - Local `SUPABASE_SERVICE_ROLE_KEY` (core) and, for FX, the twelve-x project key as a secret.
 - OK to add a twelve-x table (flags/directives) later: schema change is a human gate.
+
+## 6. Decisions confirmed (2026-10-02)
+1. Tiers: real ladder `free|brief|desk|studio|enterprise`; `12x` = `fx_hub`.
+2. FX: separate twelve-x reader; new-table migrations (flags, paper exposure, directives) are **drafted as files only, not applied** (schema change = human gate).
+3. Scope includes writes (prefs, directives PUT). Writes fail closed without a verified user id from the edge; no auth/session changes in this slice.
+4. Phase 0 first (worker + app in parallel, disjoint files), then parallel phases with read-only reviewers.
