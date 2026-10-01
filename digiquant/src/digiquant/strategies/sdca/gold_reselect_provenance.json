@@ -1,0 +1,101 @@
+{
+  "preset": "gold_reselect",
+  "supersedes": "gold_optimized",
+  "supersession_reasons": [
+    "Reselected #1 beats BOTH flat DCA (mean OOS +24.32%) and lump (mean OOS +3.85%); v3 beat flat only (+9.97%) (gold_reselect_v6.json: chosen_table_means; gold_optimized_provenance.json: mean_oos_vs_flat_dca_pct).",
+    "v3 trails the honest holdout (-21.16% vs flat DCA, 2022-05-12..2026-09-29); the reselect has no holdout score, but its OOS means clear both baselines where v3 cleared one (gold_optimized_provenance.json: holdout_vs_flat_dca_pct)."
+  ],
+  "selection_record": "digiquant/.scratch/gold_reselect_v6.json",
+  "frontier_record": "digiquant/.scratch/gold_curve_search_v6b.json",
+  "seed_record": "digiquant/.scratch/gold_seed_v4.json",
+  "attempt": 1,
+  "chosen_rank": 1,
+  "eligible_count": 144,
+  "frozen_criterion": "argmax min(mean_flat, mean_lump); tie-breaks higher-lump, lower-DD",
+  "evaluator": "curve_simulator",
+  "evaluator_note": "Gate frontier scored via curve-sim trials (Linux-safe simulator class, same as v3); not a Nautilus walk-forward. Feasible on all folds under Rule-B (gold_reselect_v6.json: fresh_per_fold[].feasible all true).",
+  "risk_model": "generic_valuation",
+  "rails": "rolling_z/90d/z1.0 trailing mean-reversion (no time trend)",
+  "rolling_window": 90,
+  "rolling_z": 1.0,
+  "best_params": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 60.0,
+    "sell_knee_risk": 65.0,
+    "sell_max_rate": 30.0,
+    "buy_curvature": 1.0,
+    "sell_curvature": 1.0,
+    "buy_mid_knee_risk": null,
+    "buy_mid_curvature": 1.0,
+    "sell_mid_knee_risk": null,
+    "sell_mid_curvature": 1.0,
+    "valuation_weight": 1.0,
+    "m2_weight": 0.5,
+    "rs_eth_weight": 0.0,
+    "dxy_weight": 0.0,
+    "uup_weight": 0.5,
+    "gvz_weight": 0.0,
+    "walcl_weight": 0.0,
+    "hy_oas_weight": 0.0,
+    "ig_oas_weight": 0.0,
+    "breakeven_5y_weight": 0.0,
+    "nfci_weight": 0.0,
+    "gdx_gld_weight": 0.0,
+    "gld_slv_weight": 0.0,
+    "real_rate_weight": 0.0,
+    "weekly_rsi_weight": 0.25,
+    "weekly_macd_weight": 0.25,
+    "sma_band_weight": 0.25
+  },
+  "mean_oos_vs_flat_dca_pct": 24.321143737074134,
+  "mean_oos_vs_lump_dca_pct": 3.852892415834841,
+  "per_fold": [
+    {
+      "fold": 0,
+      "oos_vs_flat_dca_pct": 63.52364216386444,
+      "oos_vs_lump_dca_pct": 9.089570202024566,
+      "max_drawdown_pct": 33.21813142426011,
+      "feasible": true,
+      "oos_sell_mask_days": 73
+    },
+    {
+      "fold": 1,
+      "oos_vs_flat_dca_pct": -7.882900522129832,
+      "oos_vs_lump_dca_pct": 3.2837751641945356,
+      "max_drawdown_pct": 24.49286457323315,
+      "feasible": true,
+      "oos_sell_mask_days": 0
+    },
+    {
+      "fold": 2,
+      "oos_vs_flat_dca_pct": 17.322689569487792,
+      "oos_vs_lump_dca_pct": -0.8146681187145788,
+      "max_drawdown_pct": 18.686498190090166,
+      "feasible": true,
+      "oos_sell_mask_days": 1
+    }
+  ],
+  "sensitivity_stable": true,
+  "sensitivity_max_abs_delta": 1.6300156870418547,
+  "sensitivity_neighbor_count": 48,
+  "sensitivity_worst_neighbor_key": "sell_knee_risk:-5%",
+  "sensitivity_pass_le_2": true,
+  "frontier_beats_both": 144,
+  "frontier_total": 1080,
+  "gate_projection_drops_mid_tier": true,
+  "sell_mask": {
+    "z_thresh": -2.0,
+    "m_thresh": 1.5,
+    "z_window": 1260,
+    "sma_window": 1000
+  },
+  "holdout": "ABSENT for the reselect (spent on v3, never re-scored; grep holdout = 0 in gold_reselect_v6.json). v3 holdout retained on record: -21.15507952929604 vs flat DCA (gold_optimized_provenance.json: holdout_vs_flat_dca_pct).",
+  "disclosures": [
+    "Selection-on-metric optimism: the argmax-min(mean_flat, mean_lump) criterion picked this shape from 144 eligible; OOS means are selection-conditioned, not unbiased estimates (gold_reselect_v6.json: frozen_criterion, eligible_count).",
+    "Thin lump margin: mean +3.85% vs lump with fold 2 at -0.81% on a single mask day (gold_reselect_v6.json: chosen_table_means.lump, fresh_per_fold[2]).",
+    "Fold 1 ran with ZERO mask days (gold_reselect_v6.json: fresh_per_fold[1].oos_sell_mask_days = 0) — its +3.28% vs lump is an unmasked read.",
+    "Ranks 1-4 are a projection tie: identical means (24.321143737074134 / 3.852892415834841), differing only in mid-tier keys the gate projects out (gold_reselect_v6.json: top5[0..3]; gold_curve_search_v6b.json: gate_projection_drops_mid_tier = true)."
+  ],
+  "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
+  "notes": "Reselected #1 = frontier rank 1, single-knee projection (buy 35/60, sell 65/30, curvatures 1.0/1.0, mids null -- the projection the gate evaluated; gate_projection_drops_mid_tier=true, so null mid keys are omitted from best_params shape identity, not hidden). Weights valuation 1.0/m2 0.5/uup 0.5/osc 0.25 (v4 vote, gold_seed_v4.json: weights; hy/ig at zero, BAML depth work outstanding). Rails rolling_z 90d/z1.0 (gold_seed_v4.json: rails; rolling_z.py DEFAULT_ROLLING_WINDOW). Mask strict box z<=-2.0 & m>=1.5 (build_gold_sell_mask.py FROZEN_*). Fresh sensitivity STABLE 1.63 (48 neighbors, worst sell_knee_risk:-5%). A candidate, not a proven beat. Detail: digiquant/.scratch/gold_reselect_v6.json + digiquant/.scratch/gold_curve_search_v6b.json. Do not --push-supabase from the agent environment."
+}

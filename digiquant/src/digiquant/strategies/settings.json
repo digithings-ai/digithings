@@ -60,8 +60,10 @@
       "kind": "dca",
       "strategy_type": "sdca",
       "sdca": {
-        "preset": "gold_optimized",
+        "preset": "gold_reselect",
         "risk_model": "generic_valuation",
+        "rolling_window": 90,
+        "rolling_z": 1.0,
         "long_only": false,
         "initial_cash": 1000.0,
         "sell_mask": {
@@ -84,11 +86,12 @@
           "nfci": 0.0,
           "gdx_gld": 0.0,
           "gld_slv": 0.0,
-          "weekly_rsi": 0.0,
-          "weekly_macd": 0.0,
-          "sma_band": 0.0
+          "weekly_rsi": 0.25,
+          "weekly_macd": 0.25,
+          "sma_band": 0.25
         }
-      }
+      },
+      "promotion_note": "Reselected #1 (gold_reselect_v6.json attempt 1, chosen rank 1) supersedes the honest-v3 candidate (gold_optimized preset + gold_optimized_provenance.json, kept in-tree for history): reselect beats BOTH flat DCA (mean OOS +24.32%) and lump (mean OOS +3.85%) where v3 beat flat only (+9.97%) and trailed the honest holdout (-21.16% vs flat DCA, 2022-05-12..2026-09-29). CAVEAT thin margin: the lump beat is +3.85 with f2 lump -0.81 on 1 mask day; f1 ran with 0 mask days; ranks 1-4 are a projection tie (identical means, mid-tier keys only); selection-on-metric optimism applies; holdout ABSENT for the reselect (spent on v3, never re-scored). Do not --push-supabase from the agent environment."
     }
   }
 }
