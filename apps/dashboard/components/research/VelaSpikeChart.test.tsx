@@ -14,14 +14,14 @@ const BARS: VelaSpikeBar[] = [
 ];
 
 describe('VelaSpikeChart', () => {
-  it('renders the symbol caption with bar count and range plus the experimental badge', () => {
+  it('renders the symbol caption with bar count and range, without the retired experimental badge', () => {
     const html = renderToStaticMarkup(
       createElement(VelaSpikeChart, { bars: BARS, symbol: 'BTCUSDT', timeframe: '1D' })
     );
     expect(html).toContain('data-testid="vela-spike-chart"');
     expect(html).toContain('BTCUSDT');
     expect(html).toContain('3 bars');
-    expect(html).toContain('experimental');
+    expect(html).not.toContain('experimental');
     expect(html).toContain('data-testid="vela-spike-host"');
   });
 
