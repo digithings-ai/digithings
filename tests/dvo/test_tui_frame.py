@@ -99,3 +99,63 @@ def test_non_tty_overview_stays_the_plain_tree() -> None:
     assert text.startswith("┌─ DIGIVOICE")
     assert "▶ Doctor" in text
     assert "settings-body" in text
+
+
+def test_no_color_still_emits_clear_home_when_screen_on() -> None:
+    """NO_COLOR must not disable clear/home — that stacks intro+home frames."""
+    frame = render_screen(
+        "Actions",
+        list(HOME_MENU),
+        0,
+        hero=True,
+        groups=HOME_GROUPS,
+        cols=100,
+        rows=40,
+        use_ansi=False,
+        use_screen=True,
+        clear=True,
+    )
+    assert "\x1b[2J" in frame and "\x1b[H" in frame
+    assert "\x1b[7m" not in frame  # no inverse SGR without color
+
+
+def test_read_key_keeps_csi_and_ss3_arrows_intact() -> None:
+    """Buffered stdin.read + select(fd) used to split \x1b[A into esc/[ /A."""
+    import os
+    import pty
+    import termios
+    import threading
+    import time
+    import tty
+
+    from digivoice.tui import _read_key, _read_key_on_fd
+
+    master, slave = pty.openpty()
+    # One-shot path: a single CSI must not become esc (the home quit key).
+    stdin = os.fdopen(slave, "r", buffering=1)
+
+    def feed_one() -> None:
+        time.sleep(0.05)
+        os.write(master, b"\x1b[A")
+
+    threading.Thread(target=feed_one, daemon=True).start()
+    assert _read_key(stdin, timeout=0.5) == "up"
+    stdin.close()
+    os.close(master)
+
+    # Held-raw path (menu loop): bulk CSI+SS3 must each decode, none lost to
+    # cooked restore between keys.
+    master, slave = pty.openpty()
+    saved = termios.tcgetattr(slave)
+    tty.setraw(slave)
+
+    def feed_many() -> None:
+        time.sleep(0.05)
+        os.write(master, b"\x1b[A\x1b[B\x1bOA\x1bOBq")
+
+    threading.Thread(target=feed_many, daemon=True).start()
+    got = [_read_key_on_fd(slave, timeout=0.5) for _ in range(5)]
+    termios.tcsetattr(slave, termios.TCSADRAIN, saved)
+    os.close(slave)
+    os.close(master)
+    assert got == ["up", "down", "up", "down", "q"], got
