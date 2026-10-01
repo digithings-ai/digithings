@@ -1,14 +1,14 @@
 # digiquant dashboard skeleton plan
 
-**Status:** Human Gate draft. One file. No UI, no static HTML, no route code.
+**Status:** Human Gate draft. §0.1 is Chris's corrected desk lock (2026-10-01). One file. No UI, no static HTML, no route code.
 
-**Date:** 2026-10-01
+**Date:** 2026-10-01. Correction same day: a desk is a full spine configuration, not a nav item. The trading-engine slot (Setups) stays off the nav until it is real.
 
 **Issue:** [GitHub #4895](https://github.com/digithings-ai/digithings/issues/4895)
 
-**What this file is.** The single gate document for the ground-up digiquant dashboard. Sections 0–2 are the synergy review. Sections 3–6 are the four lane documents copied in full. Those four sections were not shortened, paraphrased, or dropped. Tables, route lists, MCP counts, settings controls, and wiring notes are the original lane text.
+**What this file is.** The single gate document for the ground-up digiquant dashboard. Sections 0–2 are the synergy review, including the corrected desk lock. Sections 3–6 are the four lane documents copied in full. Those four sections were not shortened, paraphrased, or dropped. Tables, route lists, MCP counts, settings controls, and wiring notes are the original lane text. Section 5's five-item sidebar is the baseline house desk, not a chrome that can never change. §0.1 says how.
 
-**How to read it.** Answer section 0 before any mockup. Section 1 says where the lanes agree, where they contradict, and which section 0 item that contradiction maps to. When a sentence in section 1 and a paragraph in sections 3–6 disagree, the lane paragraph is the evidence and section 0 is the decision still open. Do not treat a lane's own "lane 1 / lane 2 / lane 3" numbering as the build order. The build order is phase A, phase B, phase C in section 1.4. Those letters are not [#4761](https://github.com/digithings-ai/digithings/issues/4761) phase numbers.
+**How to read it.** §0.1 is locked. §0.2 keeps the earlier defaults wherever they do not fight that lock. Section 1 says where the lanes agree, where they contradict, and which section 0 item that maps to. Do not treat a lane's own "lane 1 / lane 2 / lane 3" numbering as the build order. The build order is phase A, phase B, phase C in section 1.4. Those letters are not [#4761](https://github.com/digithings-ai/digithings/issues/4761) phase numbers.
 
 **Link note.** The market scan was written for `docs/plans/`. It is reproduced in section 6 from this directory, so its four relative links were rewritten from `../` to `../../`. No other lane text was edited.
 
@@ -23,28 +23,58 @@ Vision beside the lanes: [docs/vision/dashboard.md](../../vision/dashboard.md), 
 
 ---
 
-## 0. Open Human Gate
+## 0. Human Gate
 
-Reply **defaults** to accept every recommended answer below. Override by number. Phase B (static HTML of the spine) waits on this list.
+Chris corrected the desk lock on 2026-10-01. §0.1 is that correction. §0.2 keeps the earlier defaults where they still fit. Phase B uses both. Sections 3–6 stay the evidence and are not rewritten.
 
-The recommendations below are the synergy review's proposed locks. They are not a substitute for the lane text in sections 3–6.
+An earlier reading of the same addendum put **Desks** in the sidebar in place of Pipeline (`Brief · Portfolio · Desks · House · Settings`) and sent `/pipeline` to a `/desks` page. That reading is withdrawn. A desk is not a section inside a fixed five-item chrome.
 
-| # | Decide | Recommended answer |
+### 0.1 Locked — the spine is the desk config
+
+**What a desk is.** A desk is one full configuration of the app. It owns which top-level items exist, the label on each, the order they appear, and which pages sit behind them. Selecting a desk swaps that entire spine. It does not open a page called Desks, and it does not leave Brief, Portfolio, House, and Settings standing while only one slot changes.
+
+Customers will create and customize their own desks. A custom desk is an alternate full configuration: investor preferences, a research layout, a pipeline layout, or some other layout. Those are examples of what a config may emphasize. They are not extra items glued onto the house spine.
+
+**House desk first.** The baseline is the house desk. It is the default config, and it is the only config phase B and phase C ship. Its top-level items are the list in item 1: **Brief · Portfolio · Pipeline · House · Settings**, with that item's tabs, auth outside the frame, and the ticker dossier as a deep link. Pipeline on that config is still the glass box (`/pipeline`). Settings → Pipeline is still the Studio+ knobs. Those two uses of the word stay distinct, as section 1.1 already says.
+
+**Many desks later, without a redesign.** A workspace may hold more than one desk. The frame has a desk switcher that is not itself a spine item. On the house desk it shows House selected. "New desk" is a disabled control on that switcher with a status chip (`Not available`). It is not a sidebar row, and phase B does not draw a second spine full of sample pages. An unknown desk id is an empty state, not a fabricated layout. Phase C implements the house desk as data the shell reads (items, labels, order, routes), not as five labels written only into the sidebar component. Adding a custom desk later is a new config, not a new navigation model.
+
+**What the switcher does not do.** It does not swap the house paper book for a user book, and it does not toggle paper and live (item 12 and item 3). A future custom desk may simply not include the book surfaces. That is a different layout, not a portfolio switcher.
+
+**Routes on the house desk.** No `/desks` product page. `/pipeline` stays the house desk's glass box and keeps `date`, `stage`, and `node`. `/why` still redirects there (item 4). Other legacy redirects in section 5 stay. A future desk may point the same job at a different route. That mapping belongs to the config. This plan does not design those other routes.
+
+**Words that must not collapse.**
+
+| Word | What it is | What it is not |
 |---|---|---|
-| 1 | Sidebar and book-tab wording | Sidebar is **Brief · Portfolio · Pipeline · House · Settings**. Portfolio is one item. Its sticky tabs are **Holdings · Theses · Tearsheet · Ledger · Attribution**. House tabs are **Corpus · Book · Profile**. Auth stays outside the frame. The ticker dossier is a deep link, not a sixth sidebar item and not a sixth portfolio tab. |
-| 2 | FX Hub | **Out of this skeleton.** No sidebar row, no palette entry, no reduced invite screen, no phase B frame. It returns only if you say the `fx_hub` invite is in scope for this pass. |
-| 3 | Paper brokers in Settings, live hidden | **Yes.** Desk and above see Settings → Brokers: Alpaca paper OAuth, Alpaca paper API key, IBKR beta paper, paper fills. Live execute is a disabled control with a `Paper` chip on that page. No header paper/live switch. No live nav item. |
-| 4 | `/why` | **Redirect to `/pipeline`.** Keep it out of the nav. Keep the page only if "The read" and "Deliberations" still have a job the Pipeline canvas does not cover. |
-| 5 | Pipeline below Desk | **Omit the Pipeline nav item** for Observer and Brief. Do not grey it and do not open a locked diagram. Desk and above see the glass box. Economics stay a Desk detail inside that page, which is what the live app already gates. |
+| desk | One full spine configuration: items, labels, order, and the pages behind them. | A sidebar section. A plan tier. A brokerage account. |
+| house desk | The default config phase B and phase C ship. Its spine is item 1. | A claim that every future workspace looks like that spine. |
+| desk switcher | Frame chrome that selects which config is active. House is the only real row for now. | A nav item labeled Desks. A paper/live switch. A house-book / user-book switch. |
+| Pipeline | On the house desk: the glass-box item and the route `/pipeline`. Also the Settings tab name. | The product noun for "a desk". |
+| Desk | Plan tier between Brief and Studio. | A desk config. |
+| Setups | Future trading-engine surface. Off the house desk nav until it is real. | A desk, Portfolio, FX Hub, or a live order ticket. |
+| twelve-x | The source idea for that trading-engine path, and today's separate FX Hub product. | A reason to put FX Hub on the house desk. Item 2 still omits it. |
+
+**Trading engine, coming soon.** Parallel to the investment book (on the house desk that book is Portfolio: holdings, theses, tearsheet, ledger, attribution), the product will have a trading-engine path. Its job is to suggest real potential trade setups. It does not execute live by default. Setups are paper-first. A human gate sits in front of any live use. The source idea is twelve-x. The job word for the future surface is **Setups**. "Trading desk" is not used: it collides with desk-as-config and with the Desk tier. "Engine" is not a nav label. No Olympus, Atlas, Hermes, or Kairos label. Setups is omitted from the house desk nav, the palette, and phase B. It is not a grey row and not a chip on Portfolio. When it is real, a desk config may include it as one of its surfaces. Until then, no config shows it.
+
+### 0.2 Defaults that still stand
+
+Item 1 is the house desk's spine, not a universal chrome. Items 4 and 5 apply to that house desk. They are not a `/desks` route. Items 2, 3, and 6–12 are unchanged, with item 11 and item 12 worded so they follow §0.1.
+
+| # | Decide | Standing answer |
+|---|---|---|
+| 1 | House desk spine and book tabs | The house desk's sidebar is **Brief · Portfolio · Pipeline · House · Settings**. Portfolio is one item. Its sticky tabs are **Holdings · Theses · Tearsheet · Ledger · Attribution**. House tabs are **Corpus · Book · Profile**. Auth stays outside the frame. The ticker dossier is a deep link, not a sidebar item and not a sixth portfolio tab. This list is the baseline config. It is not a fixed chrome with a Desks section, and Pipeline is not renamed Desks. |
+| 2 | FX Hub | **Out of this skeleton.** No sidebar row, no palette entry, no reduced invite screen, no phase B frame. It returns only if the `fx_hub` invite is explicitly in scope for a later pass. twelve-x as the idea behind Setups does not put FX Hub on the house desk. |
+| 3 | Paper brokers in Settings, live hidden | **Yes.** On the house desk, Desk and above see Settings → Brokers: Alpaca paper OAuth, Alpaca paper API key, IBKR beta paper, paper fills. Live execute is a disabled control with a `Paper` chip on that page. No header paper/live switch. No live nav item. |
+| 4 | `/why` | **Redirect to `/pipeline`** on the house desk. Keep it out of the nav. Keep the page only if "The read" and "Deliberations" still have a job the Pipeline canvas does not cover. |
+| 5 | Pipeline below the Desk tier | On the house desk, **omit the Pipeline nav item** for Observer and Brief. Do not grey it and do not open a locked diagram. Desk and above see the glass box. Economics stay a Desk-tier detail inside that page. A future custom desk may include or omit a glass box under its own label. That does not put Pipeline back on Observer's house desk. |
 | 6 | Journal on Ledger | **Invisible.** No sidebar row and no "journal later" chip on Ledger. |
-| 7 | Published strategy library | **Not on this spine.** `strategies` / `strategy_tearsheets` stay on the digiquant-web showcase until a later dashboard surface exists. They do not land on the house Tearsheet and they do not become a sidebar item in phase B or C. |
+| 7 | Published strategy library | **Not on the house desk.** `strategies` / `strategy_tearsheets` stay on the digiquant-web showcase until a later dashboard surface exists. They do not land on the house Tearsheet and they do not become a house-desk sidebar item in phase B or C. |
 | 8 | digichat popup | **Phase C does not carry the current iframe.** Embedded digichat stays off the nav until it is a real surface. When it exists, it does not gain an order action. |
 | 9 | Tearsheet picture | **Report only** in the mockups: accounting NAV, method line, table. No equity curve on Tearsheet. A labeled LuxAlgo placeholder is allowed on the ticker dossier only. Do not draw lightweight-charts, recharts, or a second curve. Do not blend a strategy backtest into the house NAV. |
-| 10 | Ticker dossier in phase B | **One static frame**, opened from a Holdings row, no sidebar item. Say "cut" if the first pictures should be only the five sidebar destinations. |
-| 11 | Command line | **Out.** No Bloomberg / Koyfin command bar in this plan. A palette of the five labels plus the deep links already in section 5 is enough, and it is not a new taxonomy. |
-| 12 | House book vs a user-book switcher | **Never merge them into one switcher.** House stays the operator paper book. Studio+ profile is an overlay, not a second anonymous book and not a paper/live toggle. |
-
-Items 1–3 are the ones called out for this gate by name. Items 4–12 are the remaining places the lanes do not already say the same thing, or a lane explicitly left the call open.
+| 10 | Ticker dossier in phase B | **One static frame**, opened from a Holdings row, no sidebar item. |
+| 11 | Command line | **Out.** No Bloomberg / Koyfin command bar. The palette lists the active desk's items plus that desk's deep links. On the house desk those items are the five in item 1. |
+| 12 | House book vs a user-book switcher | **Never merge them into one switcher.** House stays the operator paper book. Studio+ profile is an overlay, not a second anonymous book and not a paper/live toggle. The desk switcher in §0.1 changes the whole spine. It is not this switcher. |
 
 ---
 
@@ -90,7 +120,7 @@ These are the same lock in more than one lane. Section 0 does not reopen them ex
 
 Each row is a real disagreement or an internal split. The recommended lock is the matching section 0 item. The lane text that contains the disagreement is reproduced later and was not edited to hide it.
 
-**Sidebar candidate lists.** Section 3's "Web UX" block records a later-lane sidebar of Chat / Strategies / Journal / Research|Portfolio|Signals / Tools|Integrations / Settings. The same section's lab spine, and the whole of section 5, record Brief · Portfolio · Pipeline · House · Settings. Section 6's IA implications name the same five. Today's `NAV` is a third list: Brief, Portfolio, Pipeline, FX Hub, plus an external Gloomberb terminal link, with House only in the command palette. **Recommended lock is item 1.** Chat, Strategies, Journal, Tools, and Integrations are products the dashboard will own later. They are coming-soon, so they are not sidebar items now. The inventory list is a product-ownership inventory, not the navigation.
+**Sidebar candidate lists.** Section 3's "Web UX" block records a later-lane sidebar of Chat / Strategies / Journal / Research|Portfolio|Signals / Tools|Integrations / Settings. The same section's lab spine, and the whole of section 5, record Brief · Portfolio · Pipeline · House · Settings. Section 6's IA implications name the same five. Today's `NAV` is a third list: Brief, Portfolio, Pipeline, FX Hub, plus an external Gloomberb terminal link, with House only in the command palette. **Item 1 keeps that five-item list as the house desk's baseline config.** Chat, Strategies, Journal, Tools, and Integrations are products the dashboard will own later. They are coming-soon, so they are not items on the house desk. The inventory list is a product-ownership inventory, not the navigation. §0.1 then says the five items are not an immutable chrome: another desk may replace the whole list. Desks is not inserted as a sixth label and does not rename Pipeline.
 
 **Book as five sidebar items vs one item with tabs.** Section 5 locks one Portfolio item and a sticky tab row. Section 6 question 1 asks you to confirm that against five sidebar words, and notes the live `PortfolioSectionNav` already uses the sticky row. Promoting each word to its own sidebar item would copy the kitchen-sink tab problem section 6 tells us to avoid, and it would add a second sticky layer if the tabs remained. **Item 1.**
 
@@ -158,22 +188,24 @@ These letters are this plan's order. They are not #4761 phases. Section 5 §9 is
 |---|---|---|
 | A. Plan lock | This document, after section 0 is answered | UI, HTML, route edits, chart code |
 | B. Static HTML mockups | Spine only, after the section 0 answers: instrument craft, literal labels, sticky section tabs, honest empties, embed-pane placeholders labeled LuxAlgo or Gloomberb | App routes, greyed soon-nav, fake live P&L, a chart library, showcase pages, the coming-soon slots |
-| C. Implement `apps/dashboard` | Shell and the five-item nav, auth, settings omit-by-tier, then Brief, portfolio tabs, Pipeline (including the book-database exemption), House, ticker dossier when a deep link needs it, then the embed panes | Builder, journal, tools, calendars, integrations hub, live execute, embedded digichat, an FX Hub rebuild, `/why` as a second hub |
+| C. Implement `apps/dashboard` | Shell that reads the active desk config; ship the house desk (item 1) including auth, settings omit-by-tier, Brief, portfolio tabs, Pipeline (including the book-database exemption), House, ticker dossier when a deep link needs it, then the embed panes. The desk switcher shows House only. | Builder, journal, tools, calendars, integrations hub, live execute, embedded digichat, an FX Hub rebuild, `/why` as a second hub, a second desk, Setups, a nav item named Desks |
 
 Phase C order inside the app, after the shell, is the numbered list in section 5 §9. A coming-soon route is not the next step after that list. It waits until the capability exists, then ships as the real surface.
 
-What phase B draws, assuming section 0 defaults:
+What phase B draws, using §0.1 and §0.2:
 
 - Sign-in, outside the frame, no book chrome.
+- The house desk, named in a frame switcher that is not a spine item. The switcher shows House selected. "New desk" is disabled, with a `Not available` chip. No second layout is drawn.
+- That desk's sidebar: Brief, Portfolio, Pipeline, House, Settings. Not a Desks item.
 - Brief. Figures and links. No chart pane.
 - Portfolio with the five tabs. Include one honest empty (no fills, or no thesis) so the empty state is visible.
-- Pipeline. One canvas. Stage names are the job words already listed in section 5 §3.7.
+- Pipeline. One canvas. Stage names are the job words already listed in section 5 §3.7. The route in the mockup is `/pipeline`, not `/desks`.
 - House with Corpus, Book, and Profile.
-- Settings at more than one tier so omission is visible. Desk shows Brokers, Notifications, Billing, About. A caption or a second frame shows Studio adding Profile, Pipeline, and Keys, and shows Observer / Brief without Brokers. Billing unset is the "not configured" block, not fake invoices. Brokers shows the `Paper` chip and no live arming control.
-- Ticker dossier, one frame, if item 10 stays. LuxAlgo and Gloomberb are labeled placeholders.
+- Settings at more than one tier so omission is visible. Desk shows Brokers, Notifications, Billing, About. A caption or a second frame shows Studio adding Profile, Pipeline, and Keys, and shows Observer / Brief without Brokers (Pipeline omitted, not greyed). Billing unset is the "not configured" block, not fake invoices. Brokers shows the `Paper` chip and no live arming control.
+- Ticker dossier, one frame, per item 10. LuxAlgo and Gloomberb are labeled placeholders.
 - Redirect notes are not pages. `/strategy` and `/why` are not drawn as products.
 
-What phase B does not draw: FX Hub, builder, journal, tools, calendars, integrations hub, `/why` as a hub, a Strategies library, a digichat panel, a command line, a paper/live switch, grey nav rows, sample positions, a starter equity curve.
+What phase B does not draw: a nav item or page named Desks, a custom desk's alternate spine, FX Hub, builder, journal, tools, calendars, integrations hub, Setups, `/why` as a hub, a Strategies library, a digichat panel, a command line, a paper/live switch, a house-book / user-book switch, grey nav rows, sample positions, a starter equity curve.
 
 ### 1.5 Market patterns, applied
 
@@ -217,13 +249,27 @@ Section 6's ten questions map onto section 0 as follows. The question text is un
 | 7. Command bar | 11 |
 | 8. House and the user book never merge | 12 |
 | 9. Tearsheet blending backtest and paper P&L | 9 |
-| 10. Brief density, no custom panels | Agreement in §1.1. Custom panels are out. No extra item. |
+| 10. Brief density, no custom panels | Agreement in §1.1. Custom panels are out of the house desk's Brief. A future desk is a different spine, not a widget canvas on Brief. |
+
+### 1.6 Desk correction against the lanes
+
+Section 5 locks a five-item sidebar and says command palette and mobile use those same five labels. That lock stands for the **house desk**. §0.1 adds the rule section 5 does not contain: the shell must be able to swap the entire list when another desk is selected. Phase B still draws only the house list, plus the switcher, so the pictures match section 5's surfaces and do not invent a Desks section those lanes never specified.
+
+What this changes in the earlier synergy, and what it leaves:
+
+- Item 1's book tabs, House tabs, auth, and ticker dossier stay. They are house-desk structure.
+- Pipeline stays the house desk's glass-box label and the `/pipeline` route. The withdrawn reading (rename that item to Desks, add `/desks`) is not in the lane text and is not the lock.
+- Item 5's omit-below-Desk-tier rule stays on the house desk. A custom desk's own items are future config, not a way around that omit.
+- Setups stays off every nav until the trading-engine path is real. twelve-x is the idea. FX Hub stays out (item 2).
+- Item 12 stays. The desk switcher replaces the spine. It does not replace the book.
+
+Sections 3–6 are untouched by this correction, including every route table, settings control, MCP count, and market note.
 
 ---
 
 ## 2. What was merged, and what was not changed
 
-Sections 3–6 are the lane files. Heading text is unchanged, so in-page anchors inside section 5 (for example `#7-chart-and-symbol-panes`) still point at that lane's headings. No two headings in the four lanes slug to the same anchor.
+Sections 3–6 are the lane files. Heading text is unchanged, so in-page anchors inside section 5 (for example `#7-chart-and-symbol-panes`) still point at that lane's headings. No two headings in the four lanes slug to the same anchor. The desk correction in §0.1 and §1.6 is appended in the review. It does not replace those lane bodies.
 
 Not merged into the prose, on purpose:
 
