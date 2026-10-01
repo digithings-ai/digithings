@@ -52,13 +52,13 @@ function Hero() {
       <div className="relative z-10 mx-auto flex max-w-[64rem] flex-col items-center px-[var(--page-pad)] pb-[6rem] pt-[2.5rem] text-center sm:px-[2.5rem] sm:pb-[7rem]">
         <PixelWordmark />
         <h1
-          className="hero-rise m-0 mt-[2rem] font-mono text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
+          className="hero-rise m-0 mt-[2rem] font-display text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
           style={rise(0)}
         >
           AI infrastructure, in a glass box you own.
         </h1>
         <p
-          className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] font-mono text-[0.875rem] leading-[1.6] text-pretty text-ink-soft"
+          className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] text-[0.9375rem] leading-[1.6] text-pretty text-ink-soft"
           style={rise(1)}
         >
           Chat, research and quant modules on your own keys and hardware.

@@ -35,7 +35,7 @@ import { SectionHead } from "./SectionHead";
 import { WhyPriceTable } from "./WhyPriceTable";
 
 const HEADLINE =
-  "m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink";
+  "m-0 font-display text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-ink";
 const LEDE =
   "m-0 max-w-[var(--measure-prose)] text-[length:var(--type-body)] leading-[var(--leading-prose)] text-ink-soft";
 const LABEL = "font-mono text-[0.68rem] uppercase tracking-[0.08em] text-ink-mute";

@@ -1,9 +1,25 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager, LayoutLines } from "@digithings/ui";
 import { LegacyByokPurge } from "@/components/LegacyByokPurge";
+
+// Self-hosted at build time by next/font (served from /_next/static/media), so no
+// request ever leaves for fonts.googleapis.com. Inter is the sans/display voice
+// (nav, headings, prose, form fields); JetBrains Mono is the mono voice (labels,
+// code, commands, tabular figures). Both are variable fonts: weights come from the
+// axis, not from synthesized bold.
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digithings.ai"),
@@ -78,7 +94,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // legitimately flip data-theme + meta pre-hydration; scoped to this
   // element's attributes only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable} no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Stored theme choice (all routes) — pre-paint so no dark→light flip at hydration. */}

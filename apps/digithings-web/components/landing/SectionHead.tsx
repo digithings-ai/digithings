@@ -30,12 +30,12 @@ export function SectionHead({
         {sectionEyebrow(id)}
       </p>
       {title ? (
-        <Heading className={`m-0 font-mono text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-balance text-ink ${titleClassName}`}>
+        <Heading className={`m-0 font-display text-[length:var(--type-section-stand)] font-medium leading-[1.2] tracking-[-0.025em] text-balance text-ink ${titleClassName}`}>
           {title}
         </Heading>
       ) : null}
       {lede ? (
-        <p className="m-0 max-w-[var(--measure-prose)] font-mono text-[0.875rem] leading-[1.65] text-ink-soft">
+        <p className="m-0 max-w-[var(--measure-prose)] text-[0.9375rem] leading-[1.65] text-ink-soft">
           {lede}
         </p>
       ) : null}

@@ -90,7 +90,7 @@ export function FaqList() {
               event.preventDefault();
               setOpen(open === i ? null : i);
             }}
-            className="flex items-center justify-between gap-[1rem] py-[1.1rem] font-mono text-[0.92rem] text-ink"
+            className="flex items-center justify-between gap-[1rem] py-[1.1rem] text-[0.95rem] text-ink"
           >
             {item.q}
             <span
