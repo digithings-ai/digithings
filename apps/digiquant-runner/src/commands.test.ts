@@ -1,5 +1,8 @@
+// Workers tsconfig types are @cloudflare/workers-types only. This file reads
+// wrangler.toml the same way apps/digichat-cloudflare/src/embed-flag.test.ts does.
+/// <reference types="node" />
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import commandsJson from "../commands.json";
 import {
@@ -181,7 +184,7 @@ describe("phase 3 house-run", () => {
   });
 
   it("keeps one standard-2 container class", () => {
-    const toml = readFileSync(fileURLToPath(new URL("../wrangler.toml", import.meta.url)), "utf8");
+    const toml = readFileSync(join(__dirname, "../wrangler.toml"), "utf8");
     const containers = toml.match(/^\[\[containers\]\]/gm) ?? [];
     expect(containers).toHaveLength(1);
     expect(toml).toContain('class_name = "DigiQuantRunnerContainer"');
