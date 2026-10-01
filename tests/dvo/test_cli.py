@@ -245,6 +245,44 @@ def test_history_lists_appended_entries(tmp_path: Path) -> None:
     assert "no matching entries" in empty.stdout
 
 
+def _banner_runtime(tmp_path: Path) -> Runtime:
+    return Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+
+
+def test_banner_show_hide_toggle(tmp_path: Path) -> None:
+    runtime = _banner_runtime(tmp_path)
+    flag = tmp_path / "banner.show"
+
+    shown = run(["banner", "show", "--text", "hello preview"], runtime)
+    assert shown.code == 0
+    payload = json.loads(flag.read_text(encoding="utf-8"))
+    assert payload == {"visible": True, "text": "hello preview"}
+
+    toggled = run(["banner", "toggle"], runtime)
+    assert toggled.code == 0
+    assert json.loads(flag.read_text(encoding="utf-8"))["visible"] is False
+
+    toggled_again = run(["banner", "toggle"], runtime)
+    assert toggled_again.code == 0
+    assert json.loads(flag.read_text(encoding="utf-8"))["visible"] is True
+
+    hidden = run(["banner", "hide"], runtime)
+    assert hidden.code == 0
+    assert json.loads(flag.read_text(encoding="utf-8")) == {"visible": False, "text": ""}
+
+
+def test_banner_show_defaults_to_empty_text(tmp_path: Path) -> None:
+    runtime = _banner_runtime(tmp_path)
+    assert run(["banner", "show"], runtime).code == 0
+    payload = json.loads((tmp_path / "banner.show").read_text(encoding="utf-8"))
+    assert payload == {"visible": True, "text": ""}
+
+
 def test_module_doctor_runs(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["DIGIVOICE_DATA_DIR"] = str(tmp_path)

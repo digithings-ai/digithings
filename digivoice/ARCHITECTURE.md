@@ -43,6 +43,8 @@ macOS defaults:
 - toggle stop-file: `~/Library/Application Support/digivoice/dict.stop`
 - cancel-file: `~/Library/Application Support/digivoice/dict.cancel`
 - banner status feed: `~/Library/Application Support/digivoice/status.json`
+- banner spawn flag: `~/Library/Application Support/digivoice/banner.show`
+- banner drag position: `~/Library/Application Support/digivoice/banner_pos.json`
 - settings: `~/Library/Application Support/digivoice/settings.json`
 - default model file: `~/Library/Application Support/digivoice/models/ggml-base.en.bin`
 
@@ -54,6 +56,8 @@ Linux fallback (also what `doctor` prints when reporting the other platform):
 - toggle stop-file: `${XDG_DATA_HOME:-~/.local/share}/digivoice/dict.stop`
 - cancel-file: `${XDG_DATA_HOME:-~/.local/share}/digivoice/dict.cancel`
 - banner status feed: `${XDG_DATA_HOME:-~/.local/share}/digivoice/status.json`
+- banner spawn flag: `${XDG_DATA_HOME:-~/.local/share}/digivoice/banner.show`
+- banner drag position: `${XDG_DATA_HOME:-~/.local/share}/digivoice/banner_pos.json`
 - settings: `${XDG_DATA_HOME:-~/.local/share}/digivoice/settings.json`
 - same filename: `ggml-base.en.bin`
 
@@ -75,6 +79,7 @@ commands write.
 | `history [--last N] [--grep PATTERN] [--copy-last] [--json]` | 0 (1 if copy-last empty) | Lists / copies last dict. |
 | `cancel [--cancel-file PATH]` | 0 | Create the cancel-file; a running `dict` discards its take. |
 | `status` | 0 shown, 1 none yet | Print the `status.json` the banner reads. |
+| `banner show [--text T]` / `hide` / `toggle` | 0 | Write the `banner.show` spawn flag the adapter polls; shows a preview without dictation. |
 | `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
@@ -132,7 +137,7 @@ A take can end three ways without producing text, and none of them leaves anythi
 
 ## Status feed (banner)
 
-`dict` and `speak` write `status.json` (atomic replace) as they move through stages. The Hammerspoon banner polls it. It is display only. Fails soft: an unwritable file never changes the exit code. Skipped entirely when `live_banner` is false.
+`dict` and `speak` write `status.json` (atomic replace) as they move through stages. The Hammerspoon banner polls it. It is display only. Fails soft: an unwritable file never changes the exit code. Skipped entirely when `live_banner` is false. `banner show [--text T]` / `hide` / `toggle` writes the `banner.show` spawn flag the adapter polls about once a second; a visible flag reveals a preview banner with no dictation behind it.
 
 ```json
 {"session":"1a2b3c4d5e6f","kind":"dict","state":"rewriting","text":"hey ship the notes","detail":"preset email","updated_ms":1790000000000,"pid":4242}
@@ -230,10 +235,13 @@ matching entries. A missing history file is not an error: `history` prints that 
 
 Under `digivoice/hammerspoon/` (not imported by the Python package):
 
-- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) shows the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click cycles density mini → peek → full. No digivoice menubar mark.
+- Right Option (61) → `dict --toggle --stop-file …`. A custom canvas banner (5x5 square status grid, ported from digichat) shows the take from record through paste. Its text comes from `status.json`. No chrome on the banner (no titles/hints); click cycles density mini → peek → full. No digivoice menubar mark; background HS only (no Dock icon, no launch toast — TUI Quit tears HS down).
+- The banner hugs content (no min-width gutter; equal 10px pad all densities) with the grid top-left. Chrome follows the system appearance (digichat light/dark); RYG status colors stay. Text types in fast (9ms/char); peek→full continues the caret while collapse/close hides instantly. Full caps near half the screen height and wheel-scrolls with no scrollbar; lines share one uniform width and the width locks from the longest line up front.
+- Hover reveals icon-only copy + × below the banner (stacked when mini, right-aligned row when wider). Drag moves it freely; release near one of the 9 anchors snaps and persists to `banner_pos.json`. Center pins keep the center on expand; edge pins grow outward. × hides instantly (never discards); Esc still discards a take.
+- The banner is hidden by default: `banner show [--text T]` (or the adapter's `spawn_preview()`) reveals a preview with no dictation; `banner hide` / `toggle` flips the flag; Esc on a preview only hides it.
 - Esc → writes the cancel-file while a dictation is recording/transcribing/rewriting (swallowed only then). Nothing is pasted or saved.
 - Double-tap Left Option (58) → `speak --selection` (banner shows the selected text, or why there is none; no clipboard/history)
-- No Hammerspoon notifications except one launch toast listing the commands and the resolved CLI path.
+- No digivoice menubar mark and no Hammerspoon launch toast (background ship; TUI is chrome for customize / Quit).
 - Banner settings (`live_banner`, `banner_position`, `banner_density`, `banner_animations`) are read from `settings.json` at the start of every take. Peek auto-dismisses a few seconds after idle/done; full stays until collapsed or removed; mini is grid only.
 
 See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
