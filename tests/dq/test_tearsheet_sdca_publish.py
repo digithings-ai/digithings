@@ -633,6 +633,8 @@ def test_run_and_write_gold_sell_mask_threads_veto_offline(
     # Provenance names the mask-day count.
     gold_payload = json.loads((output / "gold_sdca.json").read_text())
     assert f"{len(expected_days)} mask days" in " ".join(gold_payload["notes"])
+    # Ruling 1 companion (LOW, #4804): the count labels its frame.
+    assert "full delayed frame" in " ".join(gold_payload["notes"])
 
     # PAIRED BTC-None assert: identical outputs, no mask.
     btc_entry = gts.run_and_write(
@@ -643,3 +645,142 @@ def test_run_and_write_gold_sell_mask_threads_veto_offline(
     assert set(captured["btc_sdca"]) == set(captured["gold_sdca"]) - {"sell_dates"}
     btc_payload = json.loads((output / "btc_sdca.json").read_text())
     assert "mask days" not in " ".join(btc_payload["notes"])
+
+
+def _run_fail_closed_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, dfii10_body: str | None
+) -> tuple[dict, dict, str, str]:
+    """Shared stubbed harness for the Ruling-1 fail-closed tests (#4804).
+
+    ``dfii10_body=None`` → DFII10.csv absent; otherwise that exact body is
+    staged (a corrupt body proves the unreadable path). Runs gold (mask
+    specified) + BTC (no mask) through ``run_and_write`` and returns
+    ``(gold_calibration, btc_calibration, gold_notes, btc_notes)``.
+    """
+    import copy
+
+    import digiquant.strategies.sdca.providers as providers_mod
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2020, 1, 1), 60
+    closes = [100.0] * days
+    gld_dates = [start + timedelta(days=i) for i in range(days)]
+    pl.DataFrame(
+        {
+            "timestamp": [d.isoformat() for d in gld_dates],
+            "open": closes,
+            "high": closes,
+            "low": closes,
+            "close": closes,
+            "volume": [1.0] * days,
+            "symbol": ["GLD-USD"] * days,
+        }
+    ).write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    pl.DataFrame({"date": gld_dates, "value": [28.0] * days}).write_csv(cache / "UUP.csv")
+    if dfii10_body is None:
+        assert not (cache / "DFII10.csv").exists()
+    else:
+        (cache / "DFII10.csv").write_text(dfii10_body)
+    output = tmp_path / "out"
+
+    class _StubRiskModel:
+        def __init__(self) -> None:
+            from types import SimpleNamespace
+
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        return _StubRiskModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    captured: dict[str, dict] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured[strategy] = dict(calibration or {})
+        assert Path(captured[strategy]["risk_path"]).exists()
+        ts = ohlcv["timestamp"].to_list()
+        closes_ = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes_, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes_, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    settings = copy.deepcopy(gts.load_settings())
+    settings["strategies"]["gold_sdca"]["sdca"]["sell_mask"] = {
+        "z_thresh": -2.0,
+        "m_thresh": 1.5,
+        "z_window": 20,
+        "sma_window": 10,
+    }
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert btc_entry is not None
+    gold_notes = " ".join(json.loads((output / "gold_sdca.json").read_text())["notes"])
+    btc_notes = " ".join(json.loads((output / "btc_sdca.json").read_text())["notes"])
+    return captured["gold_sdca"], captured["btc_sdca"], gold_notes, btc_notes
+
+
+def test_run_and_write_gold_sell_mask_missing_dfii10_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed mask, Ruling 1 (#4804): mask specified but DFII10 missing.
+
+    ``sell_dates`` is the EMPTY set (sells blocked — premise-preserving for a
+    long-biased system), never absent; provenance carries an explicit
+    ``mask_unavailable`` flag, never silence. Paired BTC arm proves trigger
+    exactness: no-mask entries keep None (no ``sell_dates`` key, no flag).
+    """
+    gold_cal, btc_cal, gold_notes, btc_notes = _run_fail_closed_case(
+        tmp_path, monkeypatch, dfii10_body=None
+    )
+    assert gold_cal["sell_dates"] == frozenset()
+    assert isinstance(gold_cal["sell_dates"], frozenset)
+    assert "mask_unavailable" in gold_notes
+    assert "sell_dates" not in btc_cal
+    assert set(btc_cal) == set(gold_cal) - {"sell_dates"}
+    assert "mask_unavailable" not in btc_notes
+
+
+def test_run_and_write_gold_sell_mask_unreadable_dfii10_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed mask, Ruling 1 (#4804): mask specified but DFII10 corrupt.
+
+    Same empty-set + flag contract as the missing-file case; paired BTC arm
+    again proves the trigger never leaks onto no-mask entries.
+    """
+    gold_cal, btc_cal, gold_notes, btc_notes = _run_fail_closed_case(
+        tmp_path,
+        monkeypatch,
+        # One valid row (so the extra-sources loader still parses) + one
+        # corrupt date row (so the mask reader raises) — the unreadable path.
+        dfii10_body="observation_date,DFII10\n2020-01-01,2.0\nnot-a-date,2.0\n",
+    )
+    assert gold_cal["sell_dates"] == frozenset()
+    assert isinstance(gold_cal["sell_dates"], frozenset)
+    assert "mask_unavailable" in gold_notes
+    assert "sell_dates" not in btc_cal
+    assert set(btc_cal) == set(gold_cal) - {"sell_dates"}
+    assert "mask_unavailable" not in btc_notes

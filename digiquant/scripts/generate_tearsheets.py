@@ -875,18 +875,29 @@ def run_and_write(
             from build_gold_sell_mask import read_dfii10_csv
 
             dfii10_path = Path(cache_dir) / "DFII10.csv"
+            mask_result = None
             if dfii10_path.exists():
-                src_dates, src_vals = read_dfii10_csv(dfii10_path)
-                mask_result = build_gold_sell_mask(
-                    idx_dates.to_list(),
-                    [float(c) for c in ohlcv["close"].to_list()],
-                    src_dates,
-                    src_vals,
-                    z_thresh=float(mask_cfg.get("z_thresh", -2.0)),
-                    m_thresh=float(mask_cfg.get("m_thresh", 1.5)),
-                    z_window=int(mask_cfg.get("z_window", 1260)),
-                    sma_window=int(mask_cfg.get("sma_window", 1000)),
-                )
+                try:
+                    src_dates, src_vals = read_dfii10_csv(dfii10_path)
+                    mask_result = build_gold_sell_mask(
+                        idx_dates.to_list(),
+                        [float(c) for c in ohlcv["close"].to_list()],
+                        src_dates,
+                        src_vals,
+                        z_thresh=float(mask_cfg.get("z_thresh", -2.0)),
+                        m_thresh=float(mask_cfg.get("m_thresh", 1.5)),
+                        z_window=int(mask_cfg.get("z_window", 1260)),
+                        sma_window=int(mask_cfg.get("sma_window", 1000)),
+                    )
+                except Exception as exc:
+                    # Fail-closed (Ruling 1, #4804): the mask was specified
+                    # but its inputs are unreadable — handled below.
+                    logger.warning(
+                        "Gold sell mask unavailable (unreadable %s): %s",
+                        dfii10_path,
+                        exc,
+                    )
+            if mask_result is not None:
                 mask_days = [
                     day
                     for day, flagged in zip(mask_result["dates"], mask_result["mask"], strict=True)
@@ -902,10 +913,19 @@ def run_and_write(
                     f"Sell mask (strict box z<={mask_result['z_thresh']} & "
                     f"m>={mask_result['m_thresh']}, z_window={mask_result['z_window']}, "
                     f"sma_window={mask_result['sma_window']}): "
-                    f"{len(mask_days)} mask days {first_last}."
+                    f"{len(mask_days)} mask days over the full delayed frame {first_last}."
                 )
             else:
-                provenance_notes.append("Sell mask omitted (missing DFII10.csv in cache).")
+                # Fail-closed (Ruling 1, #4804): mask specified but its
+                # inputs are missing/unreadable → EMPTY set blocks sells
+                # (premise-preserving for a long-biased system) + explicit
+                # mask_unavailable flag, never silent. No-mask entries (BTC)
+                # never enter this branch.
+                calibration["sell_dates"] = frozenset()
+                provenance_notes.append(
+                    "Sell mask UNAVAILABLE (mask_unavailable: DFII10.csv missing "
+                    "or unreadable in cache) — sell_dates empty, sells blocked."
+                )
         extra_weights = tuple(
             weight for name, weight in published_weights.model_dump().items() if name != "valuation"
         )
