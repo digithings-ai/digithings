@@ -82,6 +82,9 @@ export function PageGate({ children }: { children: ReactNode }) {
   if (!hit) return <StateBlock kind="empty" title="Not available." why={`${pathname} is not part of any desk you can see.`} next={[{ label: 'Brief', href: '/brief' }]} />;
   const why = hit.desk.access === 'locked' ? hit.desk.reason : hit.page.access === 'locked' ? hit.page.reason : null;
   if (why) return <StateBlock kind="empty" title="Locked." why={`${hit.page.label} (${pathname}): ${why}.`} next={[{ label: 'Brief', href: '/brief' }]} />;
+  if (hit.page.status === 'soon' && hit.page.blocks.length === 0) {
+    return <StateBlock kind="empty" title="Coming soon." why={`${hit.page.label} is not built yet. It is listed so you can see what is on the way.`} next={[{ label: 'Brief', href: '/brief' }]} />;
+  }
   return <>{children}</>;
 }
 
