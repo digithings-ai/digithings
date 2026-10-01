@@ -53,6 +53,7 @@ MACRO_INDICATOR_NAMES: tuple[str, ...] = (
     "nfci",
     "gdx_gld",
     "gld_slv",
+    "real_rate",
 )
 GOLD_MACRO_NAMES: tuple[str, ...] = (
     "gvz",
@@ -64,6 +65,7 @@ GOLD_MACRO_NAMES: tuple[str, ...] = (
     "gdx_gld",
     "gld_slv",
     "uup",
+    "real_rate",
 )
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
@@ -86,6 +88,7 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "nfci": "nfci_weight",
     "gdx_gld": "gdx_gld_weight",
     "gld_slv": "gld_slv_weight",
+    "real_rate": "real_rate_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -106,6 +109,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "nfci": "financial conditions (NFCI)",
     "gdx_gld": "GDX/GLD participation",
     "gld_slv": "gold/silver ratio",
+    "real_rate": "real yield (DFII10)",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -144,6 +148,7 @@ class SdcaCompositeWeights(BaseModel):
     nfci: float = Field(0.0, ge=0.0)
     gdx_gld: float = Field(0.0, ge=0.0)
     gld_slv: float = Field(0.0, ge=0.0)
+    real_rate: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -168,6 +173,7 @@ class SdcaCompositeWeights(BaseModel):
             ("nfci", self.nfci),
             ("gdx_gld", self.gdx_gld),
             ("gld_slv", self.gld_slv),
+            ("real_rate", self.real_rate),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -211,6 +217,8 @@ class ExtraIndicatorSources(BaseModel):
     gdx_close: pl.Series | None = None
     slv_dates: pl.Series | None = None
     slv_close: pl.Series | None = None
+    real_rate_dates: pl.Series | None = None
+    real_rate_values: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -229,6 +237,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         nfci=float(params.get("nfci_weight", 0.0)),
         gdx_gld=float(params.get("gdx_gld_weight", 0.0)),
         gld_slv=float(params.get("gld_slv_weight", 0.0)),
+        real_rate=float(params.get("real_rate_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -257,6 +266,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         nfci=float(payload.get("nfci", 0.0)),
         gdx_gld=float(payload.get("gdx_gld", 0.0)),
         gld_slv=float(payload.get("gld_slv", 0.0)),
+        real_rate=float(payload.get("real_rate", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
@@ -357,6 +367,25 @@ def uup_z(
     """
     aligned = align_to_dates(dates, uup_dates, uup_values, forward_fill=True)
     return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("uup")
+
+
+def real_rate_z(
+    dates: pl.Series,
+    dfii10_dates: pl.Series,
+    dfii10_values: pl.Series,
+    *,
+    window: int = 1260,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """DFII10 real-yield level rolling-z, NOT sign-flipped (washout semantics).
+
+    High real yields = fear washed out = cheap (+z, buy); cratered real yields
+    = crowded fear-bid = rich (−z, sell). The uup/dxy headwind flip is
+    deliberately absent: this leg buys washes for a long-biased system.
+    Window 1260d matches the v5 secular rationale (half-swing).
+    """
+    aligned = align_to_dates(dates, dfii10_dates, dfii10_values, forward_fill=True)
+    return causal_rolling_z(aligned, window=window, min_samples=min_samples).alias("real_rate")
 
 
 def _macro_level_z(
@@ -705,6 +734,23 @@ def build_extra_indicators(
                 weight=enabled["gld_slv"],
             )
         )
+    if "real_rate" in enabled:
+        real_rate_dates = _require_pair(
+            sources.real_rate_dates, sources.real_rate_values, "real_rate"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="real_rate",
+                z=real_rate_z(
+                    dates,
+                    real_rate_dates,
+                    sources.real_rate_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["real_rate"],
+            )
+        )
     if "weekly_rsi" in enabled:
         extras.append(
             IndicatorWeight(
@@ -908,6 +954,7 @@ __all__ = [
     "missing_extra_names",
     "nfci_z",
     "parse_indicator_weights_json",
+    "real_rate_z",
     "rs_eth_z",
     "sources_from_optional_paths",
     "walcl_liquidity_z",
