@@ -1,4 +1,7 @@
 import './globals.css';
+import '../styles/pipeline.css';
+import '../styles/markets.css';
+import '../styles/desk.css';
 import type { ReactNode } from 'react';
 import { Geist_Mono, Inter, JetBrains_Mono } from 'next/font/google';
 import { Shell } from '@/components/Shell';

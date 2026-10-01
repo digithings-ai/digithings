@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { BookBlock } from '@/components/blocks';
-import { Gallery, PortfolioGallery } from '@/components/Gallery';
+import { Gallery, GroupGallery, PortfolioGallery } from '@/components/Gallery';
+import { GROUP_PAGES } from '@/lib/group-pages';
 import { UiFixtures } from '@/components/UiFixtures';
 import { Window } from '@/components/Window';
 import { HOME, findPage } from '@/lib/nav';
@@ -13,6 +14,8 @@ export default async function Page({ params }: { params: Promise<{ path?: string
   if (full === '/blocks') return <Gallery />;
   if (full === '/blocks/ui') return <UiFixtures />;
   if (full === '/blocks/portfolio') return <PortfolioGallery />;
+  const grp = full.startsWith('/blocks/') ? full.slice(8) : null;
+  if (grp && grp in GROUP_PAGES) return <GroupGallery group={grp} />;
   const node = findPage(full);
   if (!node) notFound();
 
