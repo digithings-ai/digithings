@@ -82,7 +82,7 @@ export const INTEGRATIONS: IntegrationRow[] = [
   {
     id: "luxalgo",
     name: "LuxAlgo",
-    status: "integrated",
+    status: "local only",
     what: "Chart and journal workspace. The local gateway adds Library concepts and indicator metadata only. No signals, no source code.",
   },
 ];

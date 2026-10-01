@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CtaLink } from "@digithings/ui";
 import { Badge, Button, Input } from "@digithings/ui/ui";
 import {
@@ -42,6 +42,7 @@ const STATUS_COPY: Record<BridgeStatus, string> = {
 };
 
 export function LocalLuxalgoWorkflow() {
+  const mounted = useRef(false);
   const [status, setStatus] = useState<BridgeStatus>("checking");
   const [query, setQuery] = useState("risk management");
   const [rows, setRows] = useState<SearchRow[]>([]);
@@ -50,18 +51,18 @@ export function LocalLuxalgoWorkflow() {
   const [message, setMessage] = useState("Research metadata only · no source code or signals");
 
   useEffect(() => {
-    let active = true;
+    mounted.current = true;
     void (async () => {
       const state = resolveGatewayState();
       if (!state.available) {
-        if (active) setStatus(state.reason === "unset" ? "unset" : "blocked");
+        if (mounted.current) setStatus(state.reason === "unset" ? "unset" : "blocked");
         return;
       }
       const result = await fetchHealthz();
-      if (active) setStatus(result.ok ? "ready" : "offline");
+      if (mounted.current) setStatus(result.ok ? "ready" : "offline");
     })();
     return () => {
-      active = false;
+      mounted.current = false;
     };
   }, []);
 
@@ -72,6 +73,7 @@ export function LocalLuxalgoWorkflow() {
     setSearching(true);
     setMessage("Searching the local read-only bridge…");
     const result = await fetchLuxalgoSearch(trimmed, 4);
+    if (!mounted.current) return;
     setSearching(false);
     if (!result.ok) {
       setRows([]);
