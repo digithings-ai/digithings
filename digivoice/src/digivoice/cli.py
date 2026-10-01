@@ -174,14 +174,22 @@ def build_parser() -> _Parser:
     settings_sub.add_parser("path", help="Print the settings.json path")
     setup = sub.add_parser(
         "setup",
-        help="Alias for settings — show config agents can drive (same as settings)",
+        help="Interactive setup wizard (models, features, hotkeys, hardware stub, doctor)",
     )
     setup.add_argument(
         "--json",
         action="store_true",
         dest="as_json",
-        help="Print settings as JSON",
+        help="Print settings + menu tree as JSON (no prompts)",
     )
+    setup.add_argument(
+        "--print",
+        action="store_true",
+        dest="print_only",
+        help="Print current settings + menu tree (no prompts; same as env noninteractive)",
+    )
+    sub.add_parser("update", help="Reinstall hint (not wired yet)")
+    sub.add_parser("uninstall", help="Removal hint (not wired yet)")
     return parser
 
 
@@ -198,6 +206,59 @@ def _doctor(runtime: Runtime) -> CliResult:
 
 def _notes(lines: list[str]) -> str:
     return "".join(f"digivoice: {line}\n" for line in lines)
+
+
+def _setup(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    """Real setup entry: interactive wizard, or print/json for agents."""
+    import json as _json
+
+    from digivoice.setup import (
+        render_setup_overview,
+        run_interactive_setup,
+        setup_public_dict,
+    )
+
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    settings = load_settings(paths)
+    noninteractive = bool(getattr(args, "print_only", False)) or bool(
+        runtime.env.get("DIGIVOICE_SETUP_NONINTERACTIVE", "")
+    )
+    if bool(getattr(args, "as_json", False)):
+        payload = setup_public_dict(settings, paths)
+        return CliResult(code=0, stdout=_json.dumps(payload, indent=2) + "\n", stderr="")
+    if noninteractive:
+        return CliResult(code=0, stdout=render_setup_overview(settings, paths) + "\n", stderr="")
+    if not sys.stdin.isatty():
+        # Never hang an agent/pipe waiting for arrow keys: print instead.
+        return CliResult(
+            code=0,
+            stdout=render_setup_overview(settings, paths) + "\n",
+            stderr="digivoice: stdin is not a TTY; printed setup instead of the wizard\n",
+        )
+    report = render_doctor(
+        doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
+    )
+    code = run_interactive_setup(paths, run_doctor=lambda: report.text)
+    return CliResult(code=code, stdout="", stderr="")
+
+
+def _update() -> CliResult:
+    return CliResult(
+        code=0,
+        stdout="digivoice update: not wired yet — reinstall via uv / brew when available\n",
+        stderr="",
+    )
+
+
+def _uninstall() -> CliResult:
+    return CliResult(
+        code=0,
+        stdout=(
+            "digivoice uninstall: not wired yet — "
+            "remove the uv tool install and the data dir manually\n"
+        ),
+        stderr="",
+    )
 
 
 def _runner(runtime: Runtime) -> CommandRunner:
@@ -593,11 +654,21 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     if command == "history":
         return _history(args, runtime)
     if command in {"settings", "setup"}:
+        if command == "setup":
+            if not hasattr(args, "as_json"):
+                args.as_json = False
+            if not hasattr(args, "print_only"):
+                args.print_only = False
+            return _setup(args, runtime)
         if not hasattr(args, "settings_command"):
             args.settings_command = None
         if not hasattr(args, "as_json"):
             args.as_json = False
         return _settings(args, runtime)
+    if command == "update":
+        return _update()
+    if command == "uninstall":
+        return _uninstall()
     return _usage(f"unknown command: {command}")
 
 
