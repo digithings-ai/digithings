@@ -182,3 +182,34 @@ button, input { font-family: var(--mono); letter-spacing: 0; border-radius: 0; }
   .cell { grid-column: auto !important; grid-row: auto !important; flex: none; min-height: 280px; }
   .bg-edit, .edit { display: none; }
 }
+
+/* ---- Form, flow and chart primitives ---- */
+.fld { display: grid; grid-template-columns: minmax(8ch, 14ch) minmax(0, 1fr); gap: 2px 12px; padding: 4px 12px; border-bottom: 1px solid var(--hair); align-items: baseline; }
+.fld-l { font: 10.5px/1.5 var(--mono); color: var(--ink-mute); }
+.fld-in { min-width: 0; font: 12px/1.4 var(--mono); color: var(--ink); background: transparent; border: 0; padding: 0; outline: 0; }
+.fld-in:focus, .fld-in:focus-visible { outline: 1px solid var(--accent); padding-left: 4px; }
+.fld-in option { background: var(--win); }
+.fld-v { overflow-wrap: anywhere; }
+.fld-h { grid-column: 2; font-size: 11px; color: var(--ink-mute); overflow-wrap: anywhere; }
+.tgl { grid-column: 1 / -1; text-align: left; background: none; border: 0; padding: 0; color: var(--ink); font: 12px/1.4 var(--mono); cursor: pointer; }
+.tgl:focus-visible { outline: 1px solid var(--accent); }
+.frow { padding: 4px 0; }
+.steps { list-style: none; padding: 6px 12px; display: grid; gap: 6px; }
+.step { display: flex; gap: 10px; align-items: baseline; color: var(--ink-mute); }
+.step-n { flex: none; width: 2ch; text-align: right; }
+.step-b { display: grid; min-width: 0; }
+.step-l { overflow-wrap: anywhere; }
+.step-d { font-size: 11px; color: var(--ink-mute); overflow-wrap: anywhere; }
+.step.done { color: var(--ink-soft); } .step.active { color: var(--ink); } .step.active .step-n { color: var(--accent); } .step.failed { color: var(--down); }
+.flow { display: flex; gap: 14px; padding: 10px 12px; overflow: auto; align-items: flex-start; min-height: 0; }
+.flow-col { display: grid; gap: 8px; flex: 0 0 auto; width: clamp(110px, 16ch, 200px); }
+.fnode { display: grid; gap: 2px; text-align: left; padding: 5px 7px; background: var(--bg); border: 1px solid var(--hair-strong); color: var(--ink); font: 11px/1.3 var(--mono); cursor: pointer; min-width: 0; }
+.fnode > span { overflow-wrap: anywhere; }
+.fnode-m, .fnode-e { color: var(--ink-mute); font-size: 10px; }
+.fnode.ok { border-left: 2px solid var(--up); } .fnode.running { border-left: 2px solid var(--accent); } .fnode.failed { border-left: 2px solid var(--down); } .fnode.skipped { opacity: 0.55; }
+.fnode.on, .fnode:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
+.chart { position: relative; padding: 6px 12px 6px 48px; }
+.chart svg { display: block; width: 100%; }
+.chart-y { position: absolute; left: 12px; top: 6px; bottom: 22px; display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--ink-mute); }
+.chart-x { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-mute); margin-top: 2px; }
+.chart-k { display: flex; gap: 12px; font-size: 10px; margin-top: 2px; }
