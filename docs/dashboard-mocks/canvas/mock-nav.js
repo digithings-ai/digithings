@@ -435,6 +435,44 @@
     }
   }
 
+
+  function nearestPageScroller(from) {
+    var el = from && from.parentElement;
+    while (el && el !== document.documentElement) {
+      if (el.matches && el.matches(".main > .col")) return el;
+      var st = window.getComputedStyle(el);
+      var oy = st.overflowY;
+      if ((oy === "auto" || oy === "scroll" || oy === "overlay") && el.scrollHeight > el.clientHeight + 1) {
+        if (!el.classList.contains("atom-chart") && !(el.matches && el.matches('.sec[data-atom="chart"] > .body'))) {
+          return el;
+        }
+      }
+      el = el.parentElement;
+    }
+    return document.querySelector(".main > .col") || document.scrollingElement || document.documentElement;
+  }
+
+  function wireChartWheel() {
+    var roots = document.querySelectorAll('.atom-chart, .sec[data-atom="chart"], .pane.tall');
+    roots.forEach(function (root) {
+      root.addEventListener("wheel", function (ev) {
+        // Horizontal (or mostly horizontal): leave chart pan/zoom alone
+        if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return;
+        if (!ev.deltaY) return;
+        var scroller = nearestPageScroller(root);
+        if (!scroller) return;
+        var before = scroller.scrollTop;
+        scroller.scrollTop = before + ev.deltaY;
+        if (scroller.scrollTop !== before) {
+          ev.preventDefault();
+        } else {
+          // Still block chart from eating the gesture when parent is at edge
+          ev.preventDefault();
+        }
+      }, { passive: false });
+    });
+  }
+
   function boot() {
     var saved = DEFAULT_W;
     try {
@@ -449,6 +487,7 @@
     wireDeskExpand();
     wirePaneFullscreen();
     wirePaneRearrange();
+    wireChartWheel();
 
     var chatPage = fileName() === "chat.html";
     var wantOpen = chatPage;

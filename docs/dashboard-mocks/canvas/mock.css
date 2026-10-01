@@ -788,7 +788,8 @@ body.index-page .catalog { overflow: visible; max-height: none; }
 .main > .col {
   align-content: stretch;
   grid-auto-rows: minmax(0, 1fr);
-  overflow: hidden; /* one viewport; panes scroll inside */
+  overflow-x: hidden;
+  overflow-y: auto; /* page/parent scroll; chart vertical wheel redirects here */
 }
 .main > .col > .band,
 .main > .col > .foot,
@@ -828,6 +829,16 @@ body.index-page .catalog { overflow: visible; max-height: none; }
   height: 100%;
   display: flex;
   flex-direction: column;
+  /* Vertical wheel scrolls page/parent; horizontal pan/zoom stays on chart */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-y: none;
+  touch-action: pan-x pinch-zoom;
+}
+.sec[data-atom="chart"] > .body {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-y: none;
 }
 .atom-feed {
   display: flex;
