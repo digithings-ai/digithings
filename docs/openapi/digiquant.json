@@ -242,6 +242,140 @@
         "title": "BacktestResult",
         "type": "object"
       },
+      "BarsBar": {
+        "description": "One OHLCV bar for dashboard charts (display only \u2014 never a backtest input).",
+        "properties": {
+          "close": {
+            "description": "Closing price",
+            "title": "Close",
+            "type": "number"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "High price",
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Low price",
+            "title": "Low"
+          },
+          "open": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opening price",
+            "title": "Open"
+          },
+          "timestamp": {
+            "description": "Bar timestamp (ISO date or datetime from upstream)",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Volume (if reported upstream)",
+            "title": "Volume"
+          }
+        },
+        "required": [
+          "timestamp",
+          "close"
+        ],
+        "title": "BarsBar",
+        "type": "object"
+      },
+      "BarsResponse": {
+        "description": "Keyless OHLCV bars for dashboard charts (GET /bars).\n\nDisplay-only read over the anonymous Gloomberb price-history path:\nfree-tier data may be delayed (see ``delay_note``) and must never feed\nthe validate \u2192 backtest \u2192 optimize \u2192 export pipeline. Carries no Sharpe,\nPnL, or drawdown \u2014 no performance claims originate here.",
+        "properties": {
+          "bars": {
+            "description": "Newest-last OHLCV bars",
+            "items": {
+              "$ref": "#/components/schemas/BarsBar"
+            },
+            "title": "Bars",
+            "type": "array"
+          },
+          "count": {
+            "description": "Bars actually returned (<= limit)",
+            "title": "Count",
+            "type": "integer"
+          },
+          "delay_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free-tier delay notice (up to 15 minutes on equities)",
+            "title": "Delay Note"
+          },
+          "limit": {
+            "description": "Requested max bars",
+            "title": "Limit",
+            "type": "integer"
+          },
+          "source": {
+            "default": "gloomberb",
+            "description": "Upstream family (Sourced from Gloomberb)",
+            "title": "Source",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "description": "Upstream cache-stale signal",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "symbol": {
+            "description": "Requested symbol (as normalized upstream)",
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "description": "Requested timeframe (Gloomberb resolution)",
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "timeframe",
+          "limit",
+          "count"
+        ],
+        "title": "BarsResponse",
+        "type": "object"
+      },
       "ExportRequest": {
         "additionalProperties": false,
         "description": "Request body for /run_export.",
@@ -1009,6 +1143,75 @@
           }
         },
         "summary": "Api Backtest Result"
+      }
+    },
+    "/bars": {
+      "get": {
+        "description": "Keyless OHLCV bars for dashboard charts (#4880; feeds #4879 Vela wiring).\n\nAuth-exempt and read-only: served from the anonymous Gloomberb\nprice-history path (no keys, no session cookie, no order paths).\nDisplay-only \u2014 free-tier data may be delayed (see ``delay_note``) and\nmust never feed backtests.",
+        "operationId": "api_get_bars_bars_get",
+        "parameters": [
+          {
+            "description": "Listing symbol (e.g. AAPL, BTC-USD)",
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "description": "Listing symbol (e.g. AAPL, BTC-USD)",
+              "minLength": 1,
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1m | 5m | 15m | 30m | 1h | 1d | 1wk | 1mo",
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "default": "1d",
+              "description": "1m | 5m | 15m | 30m | 1h | 1d | 1wk | 1mo",
+              "title": "Timeframe",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Max bars returned (newest last)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 120,
+              "description": "Max bars returned (newest last)",
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BarsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Get Bars"
       }
     },
     "/check_drift": {
