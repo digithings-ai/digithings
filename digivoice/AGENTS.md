@@ -4,7 +4,7 @@
 
 digivoice is a local CLI for dictation and speech on macOS. It shells out to whisper.cpp (`whisper-cli`) and Piper. The default dictation model is `ggml-base.en` (`ggml-base.en.bin`). Session history is an append-only JSONL file under the data directory. The package lives at `digivoice/` and is a uv workspace member, sibling to digiclaw and digigraph.
 
-`doctor`, `dict`, `speak`, and `history` are live. Sample Hammerspoon hotkeys live under `digivoice/hammerspoon/` (outside the Python package import path). Do not add cloud STT/TTS or put Hammerspoon inside the installable package as a hard dependency.
+`doctor`, `dict`, `speak`, `history`, and `settings`/`setup` are live. Optional local post-STT rewrite is off by default. Sample Hammerspoon hotkeys live under `digivoice/hammerspoon/` (outside the Python package import path). Do not add cloud STT/TTS or put Hammerspoon inside the installable package as a hard dependency.
 
 ## Read first
 
@@ -26,7 +26,7 @@ Before editing `digivoice/`:
 ## Rules
 
 - Product name is lowercase `digivoice` in prose, docs, and the package name.
-- Speech stays local: `whisper-cli` and Piper only. No cloud STT/TTS client, API key, or SaaS SDK.
+- Speech stays local: `whisper-cli` and Piper only. Optional post-STT rewrite uses a local runner (ollama / llama.cpp) only — never a cloud LLM. Rewrite is disabled by default.
 - Super Whisper is not a dependency. Do not shell out to it or read its config.
 - OpenCode `@renjfk/opencode-voice` is optional for people who want a TUI binding. digivoice must keep working when that plugin is absent.
 - The default model id is `ggml-base.en`. The file doctor requires is `ggml-base.en.bin` inside the models directory.
@@ -39,6 +39,7 @@ Before editing `digivoice/`:
 - Public results are Pydantic v2 models in `models.py`. Do not return bare dicts from `doctor`, `run`, or the pipeline stages.
 - Tests inject `FakeProbe` and `FakeRunner` from `tests/dvo/fakes.py`. No test may need a real microphone, sound card, model, or clipboard.
 - Hotkeys belong in `digivoice/hammerspoon/` (sample adapter), not in the installable Python package. Locked sample binds: Right Option = dict toggle; double-tap Left Option = speak `--selection` (soft-fail if empty; no clipboard/history fallback). Not hold-to-talk; not Ctrl+Shift+Option; not Ctrl+Shift+S.
+- On stop/interrupt, keep the wav and paste what was captured (default). Resume-same-take is not supported — paste + new take.
 - Toggle early-stop uses a stop-file (default `{data_dir}/dict.stop`) and/or SIGINT/SIGTERM — not only the length cap.
 
 ## Tests
