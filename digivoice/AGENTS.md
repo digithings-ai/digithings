@@ -6,7 +6,7 @@ digivoice is a local CLI for dictation and speech on macOS. It shells out to whi
 
 `doctor`, `dict`, `speak`, `history`, `settings`, and `setup` are live. Optional local post-STT rewrite is off by default. Sample Hammerspoon hotkeys live under `digivoice/hammerspoon/` (outside the Python package import path). Do not add cloud STT/TTS or put Hammerspoon inside the installable package as a hard dependency.
 
-Agents drive setup without a TTY: `digivoice setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`), `digivoice setup --json`, or `digivoice settings set <key> <value>`. `digivoice update` / `uninstall` are documented not-wired stubs.
+Agents drive setup without a TTY: `digivoice setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`), `digivoice setup --json`, or `digivoice settings set <key> <value>`. `digivoice update` / `uninstall` are documented not-wired stubs. Bare `digivoice` with no TTY prints the home overview (exit 0, never hangs); on a TTY it opens the home shell. `digivoice reload` refreshes local control (bounded `hs` reload, clears stale status on failure). Shared TUI primitives live in `tui.py`.
 
 ## Read first
 
