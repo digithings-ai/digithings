@@ -26,4 +26,6 @@ this Worker. Path A traps (`agent-pr-finalizer`, `agent-backlog-snapshot`,
 `refresh-repo-activity`, `project-enforce-assignment`) were restored after
 #4967 with matching YAML (`workflow_dispatch` only; no GHA `schedule:`).
 Operator full refresh remains manual `workflow_dispatch` / `POST /kick` only.
-GHA `schedule:` stays off.
+GHA `schedule:` stays off. Leftover sweep after #4970: develop YAML has
+zero `on.schedule` keys (`tests/scripts/test_no_gha_schedules.py`).
+`digisearch_parity` is not a digithings workflow.

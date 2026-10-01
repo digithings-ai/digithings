@@ -285,6 +285,8 @@ export const JOBS: readonly Job[] = [
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
+  // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
+  // Add a twelve-x wd() row only with a known cron from that repo.
   wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.

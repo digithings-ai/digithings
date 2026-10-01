@@ -12,6 +12,8 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copilot automation — see §0). Every file has a row in the inventory below.
 
+**GHA leftover sweep (2026-10-01, develop after #4970):** `.github/workflows` on `develop` has **zero** `on.schedule` keys (pinned by `tests/scripts/test_no_gha_schedules.py`). Production clocks fire from `apps/digithings-cron`. Keep `workflow_dispatch` / `repository_dispatch`. `digisearch_parity` is not a workflow in this repo. Trigger cells below that still say `schedule` are historical GHA clocks now owned by Cloudflare, or files that exist only on `main`.
+
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
 | `agent-backlog-snapshot.yml` | Agent: backlog snapshot | dispatch (CF clock Mon 06:13 UTC) | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
