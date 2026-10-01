@@ -127,9 +127,11 @@ def _clear_stop_file(stop_file: Path) -> None:
         pass
 
 
-def _discard(wav: Path) -> None:
+def discard_wav(wav: str | Path | None) -> None:
+    if not wav:
+        return
     try:
-        wav.unlink(missing_ok=True)
+        Path(wav).unlink(missing_ok=True)
     except OSError:
         pass
 
@@ -232,7 +234,7 @@ def _record_early_stop(
                 break
             if cancel is not None and cancel.requested():
                 _terminate_recorder(proc)
-                _discard(wav)
+                discard_wav(wav)
                 raise CancelledError("cancelled")
             if _stop_requested(stop_file, stop_flag):
                 stopped_early = True
@@ -314,7 +316,7 @@ def record(
     argv = capture_argv(tool, binary, wav, limit, platform, unbounded=False)
     result = runner(argv, timeout=limit + _TIMEOUT_SLACK)
     if cancel is not None and cancel.requested():
-        _discard(wav)
+        discard_wav(wav)
         raise CancelledError("cancelled")
     if result.code != 0:
         reason = error_tail(result.stderr) or f"exit {result.code}"

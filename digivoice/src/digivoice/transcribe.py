@@ -25,8 +25,9 @@ _SEGMENT_PREFIX = re.compile(r"\[\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d
 
 # whisper.cpp prints these markers for silence instead of an empty string. They are
 # not speech, so a take that only contains them is an empty take.
+_MARKER_WORDS = r"blank[_ ]audio|silence|no speech|inaudible"
 _NON_SPEECH_MARKER = re.compile(
-    r"[\[(]\s*(?:blank[_ ]audio|silence|no speech|inaudible)\s*[\])]", re.IGNORECASE
+    rf"\[\s*(?:{_MARKER_WORDS})\s*\]|\(\s*(?:{_MARKER_WORDS})\s*\)", re.IGNORECASE
 )
 
 

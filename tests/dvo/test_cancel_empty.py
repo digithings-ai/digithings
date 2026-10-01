@@ -13,7 +13,7 @@ from digivoice.paths import resolve_paths
 from digivoice.probe import real_probe
 from digivoice.runner import CANCELLED_CODE, cancellable_runner, run_command
 from digivoice.settings import VoiceSettings, save_settings
-from digivoice.status import CANCELLED_EXIT, read_status
+from digivoice.status import CANCELLED_EXIT, StatusReporter, read_status
 
 from tests.dvo.fakes import FakeCall, FakeProbe, FakeReply, FakeRunner, writes_wav
 
@@ -169,6 +169,30 @@ def test_cancel_during_rewrite_discards_the_take(tmp_path: Path) -> None:
     result = run(["dict", "--hold"], runtime)
     assert result.code == CANCELLED_EXIT
     assert result.stdout == ""
+    _assert_nothing_left(tmp_path, runner)
+
+
+def test_cancel_arriving_just_before_the_history_append_still_discards(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_update = StatusReporter.update
+
+    def update(self: StatusReporter, state: str, **kwargs: str) -> None:
+        real_update(self, state, **kwargs)  # type: ignore[arg-type]
+        if state == "pasting":
+            (tmp_path / "dict.cancel").write_text("cancel\n", encoding="utf-8")
+
+    monkeypatch.setattr(StatusReporter, "update", update)
+    runner = FakeRunner(
+        {
+            "sox": writes_wav(),
+            "whisper-cli": FakeReply(stdout=TRANSCRIPT),
+            "pbcopy": FakeReply(),
+            "osascript": FakeReply(),
+        }
+    )
+    result = run(["dict", "--hold"], _runtime(tmp_path, runner))
+    assert result.code == CANCELLED_EXIT
     _assert_nothing_left(tmp_path, runner)
 
 

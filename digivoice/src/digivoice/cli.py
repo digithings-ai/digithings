@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from digivoice import history as history_log
-from digivoice.capture import default_stop_file, record
+from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
 from digivoice.models import CliResult, PasteResult, VoicePaths
@@ -211,18 +211,9 @@ def _banner_reporter(
     return StatusReporter(status_path(paths) if settings.live_banner else None, kind)
 
 
-def _discard_wav(wav_path: str | None) -> None:
-    if not wav_path:
-        return
-    try:
-        Path(wav_path).unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
 def _cancelled(reporter: StatusReporter, wav_path: str | None = None) -> CliResult:
     """A cancelled take leaves nothing behind: no wav, no history line, no paste."""
-    _discard_wav(wav_path)
+    discard_wav(wav_path)
     reporter.update("cancelled", detail="take discarded")
     return CliResult(
         code=CANCELLED_EXIT,
@@ -300,7 +291,7 @@ def _dict_take(
             return _cancelled(reporter, recording.wav_path)
         if isinstance(exc, EmptyTranscriptError):
             # Silence is not a take: drop the wav, never paste or log a blank.
-            _discard_wav(recording.wav_path)
+            discard_wav(recording.wav_path)
             reporter.update("empty", detail="nothing recognized")
             return CliResult(
                 code=1,
@@ -336,10 +327,8 @@ def _dict_take(
         )
         text_out = rewritten.text
         notes.append(rewritten.detail)
-    if cancel.requested():
-        return _cancelled(reporter, recording.wav_path)
     if not text_out.strip():
-        _discard_wav(recording.wav_path)
+        discard_wav(recording.wav_path)
         reporter.update("empty", detail="nothing recognized")
         return CliResult(
             code=1,
@@ -352,6 +341,9 @@ def _dict_take(
         text=text_out,
         detail="rewritten" if text_out != transcript.text else "",
     )
+    # Last chance to cancel: once the history line is written the take is committed.
+    if cancel.requested():
+        return _cancelled(reporter, recording.wav_path)
     history_file = paths.history_file
     try:
         history_log.append_entry(history_file, history_log.dict_entry(text_out, recording.wav_path))

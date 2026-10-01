@@ -390,14 +390,14 @@ function M.cancel_dict()
   if not core.cancellable(s.kind, current_view(s).state) then
     return false
   end
+  -- The CLI polls the cancel-file; it kills the recorder / whisper and deletes the wav.
+  -- Never kill the CLI instead: its recorder runs in its own session and would be orphaned.
+  if not write_file(CANCEL_FILE, "cancel\n") then
+    print("digivoice: could not write " .. CANCEL_FILE .. "; take continues (Right Option stops it)")
+    return false
+  end
   s.local_state = "cancelling"
   stop_esc_tap()
-  -- The CLI polls the cancel-file; it kills the recorder / whisper and deletes the wav.
-  if not write_file(CANCEL_FILE, "cancel\n") then
-    pcall(function()
-      s.task:kill9()
-    end)
-  end
   show_menubar(" …")
   render(s)
   return true
