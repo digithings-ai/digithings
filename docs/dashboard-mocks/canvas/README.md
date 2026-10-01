@@ -1,6 +1,6 @@
 # digiquant canvas
 
-This folder is the review tree for the digiquant operator desk. Static HTML, one stylesheet (`mock.css`), no React, no build, no JavaScript. `apps/dashboard` is unchanged. House Corpus, Book, and Profile pages are removed on purpose. house is a desk name only.
+This folder is the review tree for the digiquant operator desk. Static HTML, one stylesheet (`mock.css`), and a small `mock-nav.js` for rail resize, digichat right rail, desk expand, and pane fullscreen. No React, no build. `apps/dashboard` is unchanged. House Corpus, Book, and Profile pages are removed on purpose. house is a desk name only.
 
 ## Serve
 
@@ -43,7 +43,7 @@ Choosing a desk replaces the whole sidebar. The picker lists three desks:
 - **Strategies.** Every strategy lives in the dashboard. A subscribed user deploys to a paper account or a portfolio and connects a paper broker from Settings. The deploy flow is drawn but disabled.
 - **Tools.** Terminal (Bloomberg Terminal / gloomberg embed), LuxAlgo charting, own Charts, and digichat. `chat-fullscreen.html` is the full-screen digichat with a sessions sidebar and history for a logged-in user; `chat.html` stays the docked transcript.
 
-Portfolio is one spine item. Sticky tabs are Holdings, Theses, Tearsheet, Ledger, Attribution. The ticker dossier is a deep link from a Holdings row, not a spine item.
+Portfolio is one spine item. Holdings, Theses, Tearsheet, Ledger, and Attribution nest under Portfolio in the left spine (no horizontal section tabs). The ticker dossier is a deep link from a Holdings row, not a spine item.
 
 Pipeline is one screen: run health, node document, call trace, and artifact ledger.
 
@@ -57,10 +57,21 @@ The layout is full-bleed. No site column guides. No max-width marketing containe
 
 Figures are layout mocks, not book data. Chips say paper or research. There is no live-trading claim, no order ticket, and no live broker control.
 
-Intended production behavior this canvas is drawing: a desk swap remounts the spine; portfolio stays one item with those sticky tabs; pipeline is the glass box for a run; FX Hub is a desk of its own; rates watch stays a separate desk; tearsheet stays a report; digichat docks as a transcript.
+Intended production behavior this canvas is drawing: a desk swap remounts the spine; portfolio stays one item with nested spine children; pipeline is the glass box for a run; FX Hub is a desk of its own; rates watch stays a separate desk; tearsheet stays a report; digichat docks as a transcript.
 
 Gloomberg and LuxAlgo panes are labeled placeholders beside tables. They are not a chart library and not a live feed.
 
 ## Production care
 
 digiquant has a live paying user. This canvas is a design source, not a live book. No private-client names. Do not treat the placeholder figures as positions, NAV, or fills.
+
+
+## Craft locks (#4911 remock)
+
+1. **Desk picker** — compact popover (wider than the left rail); `full` expands to a fullscreen overlay; choosing a desk swaps the sidebar spine.
+2. **One viewport** — each frame is one viewport tall; panes scroll inside; no document scroll.
+3. **No horizontal section tabs** — subsections nest under the active left-spine item.
+4. **Top chrome path only** — breadcrumb like `house / portfolio / holdings`.
+5. **Narrow panes** — column-priority when narrow; pane `full` + Esc to exit.
+6. **Rails** — DigiQuant left; DigiChat right rail (never replaces the left spine).
+7. **Headers** — lighter-gray section headers preserved from the `051f13ec` visual baseline.
