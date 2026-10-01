@@ -28,7 +28,7 @@ INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 RUNNER_COMMANDS = REPO_ROOT / "apps" / "digiquant-runner" / "commands.json"
-# Phase 2 (#4761): these clocks are cj() container jobs. House-run stays rd().
+# Phase 2 (#4761): these clocks are cj() container jobs. Phase 3 moves house-run to cj().
 PHASE2_CONTAINER_JOBS = ("onchain", "tearsheets", "research-metrics", "execution-cron-check")
 NOTIFY_FRAGMENT = (
     REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "pipeline-olympus-notify.env.yml"
@@ -106,7 +106,10 @@ class TestExecutionCronSpecIsProbeOnly:
         for job_id in PHASE2_CONTAINER_JOBS:
             assert re.search(rf'cj\(\s*"{job_id}"\s*,', text), job_id
             assert not re.search(rf'wd\(\s*"{job_id}"\s*,', text), job_id
-        assert re.search(r'rd\(\s*"house-run-09"\s*,', text)
+        for hour in (9, 10, 11, 12):
+            job_id = f"house-run-{hour:02d}"
+            assert re.search(rf'cj\(\s*"{job_id}"\s*,', text), job_id
+            assert not re.search(rf'rd\(\s*"{job_id}"\s*,', text), job_id
         jobs = _worker_jobs()
         assert jobs["onchain"] == "40 22 * * *"
         assert jobs["tearsheets"] == "12 0 * * *"
