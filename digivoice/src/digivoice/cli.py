@@ -1,4 +1,4 @@
-"""digivoice command line. doctor, dict, speak, history, and settings are live."""
+"""digivoice command line. doctor, dict, speak, history, settings, cancel, and status are live."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ from typing import NoReturn
 from digivoice import history as history_log
 from digivoice.capture import default_stop_file, record
 from digivoice.doctor import doctor_checks, render_doctor
-from digivoice.errors import VoiceError
-from digivoice.models import CliResult, PasteResult
+from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
+from digivoice.models import CliResult, PasteResult, VoicePaths
 from digivoice.paste import copy_to_clipboard, paste
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 from digivoice.probe import CommandProbe, real_probe
 from digivoice.rewrite import rewrite_transcript
-from digivoice.runner import CommandRunner, run_command
+from digivoice.runner import CommandRunner, cancellable_runner, run_command
 from digivoice.settings import (
     VoiceSettings,
     format_settings_text,
@@ -30,6 +30,16 @@ from digivoice.settings import (
     settings_public_dict,
 )
 from digivoice.speak import read_clipboard, read_selection, speak
+from digivoice.status import (
+    CANCELLED_EXIT,
+    CancelToken,
+    StatusKind,
+    StatusReporter,
+    default_cancel_file,
+    read_status,
+    request_cancel,
+    status_path,
+)
 from digivoice.transcribe import transcribe
 
 
@@ -90,6 +100,14 @@ def build_parser() -> _Parser:
         ),
     )
     dictate.add_argument(
+        "--cancel-file",
+        default=None,
+        help=(
+            "Path created to cancel the take: discard it, no paste, no history entry "
+            "(default: dict.cancel under the data dir; `digivoice cancel` creates it)"
+        ),
+    )
+    dictate.add_argument(
         "--no-paste",
         action="store_true",
         help="Skip pasting into the focused app",
@@ -128,6 +146,14 @@ def build_parser() -> _Parser:
         dest="as_json",
         help="Print matching entries as JSON (agent-readable)",
     )
+
+    cancel_cmd = sub.add_parser(
+        "cancel", help="Cancel the running dict take: discard it, no paste, no history entry"
+    )
+    cancel_cmd.add_argument(
+        "--cancel-file", default=None, help="Cancel-file path (default under the data dir)"
+    )
+    sub.add_parser("status", help="Print the live status.json the banner reads")
 
     settings_cmd = sub.add_parser(
         "settings",
@@ -178,6 +204,33 @@ def _runner(runtime: Runtime) -> CommandRunner:
     return runtime.runner or run_command
 
 
+def _banner_reporter(
+    paths: VoicePaths, settings: VoiceSettings, kind: StatusKind
+) -> StatusReporter:
+    """Status feed for the banner. Off (a no-op reporter) when live_banner is false."""
+    return StatusReporter(status_path(paths) if settings.live_banner else None, kind)
+
+
+def _discard_wav(wav_path: str | None) -> None:
+    if not wav_path:
+        return
+    try:
+        Path(wav_path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _cancelled(reporter: StatusReporter, wav_path: str | None = None) -> CliResult:
+    """A cancelled take leaves nothing behind: no wav, no history line, no paste."""
+    _discard_wav(wav_path)
+    reporter.update("cancelled", detail="take discarded")
+    return CliResult(
+        code=CANCELLED_EXIT,
+        stdout="",
+        stderr="digivoice dict: cancelled; nothing saved, pasted, or added to history\n",
+    )
+
+
 def _dict(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     if args.hold:
         mode = "hold"
@@ -189,12 +242,33 @@ def _dict(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         return _usage("--seconds expects a positive integer")
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
     settings = load_settings(paths)
+    reporter = _banner_reporter(paths, settings, "dict")
+    cancel = CancelToken(args.cancel_file or default_cancel_file(paths))
+    # A cancel left over from an earlier take must not kill this one.
+    cancel.clear()
+    try:
+        return _dict_take(args, runtime, mode, paths, settings, reporter, cancel)
+    finally:
+        cancel.clear()
+
+
+def _dict_take(
+    args: argparse.Namespace,
+    runtime: Runtime,
+    mode: str,
+    paths: VoicePaths,
+    settings: VoiceSettings,
+    reporter: StatusReporter,
+    cancel: CancelToken,
+) -> CliResult:
     runner = _runner(runtime)
+    stage_runner = cancellable_runner(runner, cancel.requested)
     notes: list[str] = []
     stop_file = args.stop_file
     if mode == "toggle" and not stop_file:
         stop_file = str(default_stop_file(paths))
     early_stop = mode == "toggle"
+    reporter.update("recording")
     try:
         recording = record(
             paths,
@@ -205,34 +279,79 @@ def _dict(args: argparse.Namespace, runtime: Runtime) -> CliResult:
             platform=runtime.platform,
             stop_file=stop_file,
             early_stop=early_stop,
+            cancel=cancel,
         )
+    except CancelledError:
+        return _cancelled(reporter)
     except VoiceError as exc:
+        reporter.update("error", detail=str(exc))
         return CliResult(code=1, stdout="", stderr=f"digivoice dict: {exc}\n")
+    if cancel.requested():
+        return _cancelled(reporter, recording.wav_path)
     note = f"recorded {recording.seconds}s with {recording.tool}"
     if recording.stopped_early:
         note += " (stopped early — wav kept; pasting what was captured)"
     notes.append(note)
+    reporter.update("transcribing")
     try:
-        transcript = transcribe(paths, runtime.probe, runner, recording.wav_path)
+        transcript = transcribe(paths, runtime.probe, stage_runner, recording.wav_path)
     except VoiceError as exc:
+        if cancel.requested():
+            return _cancelled(reporter, recording.wav_path)
+        if isinstance(exc, EmptyTranscriptError):
+            # Silence is not a take: drop the wav, never paste or log a blank.
+            _discard_wav(recording.wav_path)
+            reporter.update("empty", detail="nothing recognized")
+            return CliResult(
+                code=1,
+                stdout="",
+                stderr=_notes(notes)
+                + f"digivoice dict: {exc}; take discarded (no paste, no history entry)\n",
+            )
         notes.append(f"audio kept at {recording.wav_path}")
+        reporter.update("error", detail=str(exc))
         return CliResult(code=1, stdout="", stderr=_notes(notes) + f"digivoice dict: {exc}\n")
+    if cancel.requested():
+        return _cancelled(reporter, recording.wav_path)
     notes.append(f"transcribed with {transcript.model}")
     text_out = transcript.text
+    will_paste = not args.no_paste and settings.paste_on_stop
     if args.no_rewrite:
         notes.append("rewrite skipped (--no-rewrite)")
     else:
+        if settings.rewrite_enabled:
+            reporter.update(
+                "rewriting",
+                text=transcript.text,
+                detail=f"preset {settings.rewrite_preset}",
+            )
         rewritten = rewrite_transcript(
             transcript.text,
             paths=paths,
             settings=settings,
             probe=runtime.probe,
-            runner=runner,
+            runner=stage_runner,
             platform=runtime.platform,
             rewrite_runner=runtime.rewrite_runner,  # type: ignore[arg-type]
         )
         text_out = rewritten.text
         notes.append(rewritten.detail)
+    if cancel.requested():
+        return _cancelled(reporter, recording.wav_path)
+    if not text_out.strip():
+        _discard_wav(recording.wav_path)
+        reporter.update("empty", detail="nothing recognized")
+        return CliResult(
+            code=1,
+            stdout="",
+            stderr=_notes(notes) + "digivoice dict: empty text; take discarded "
+            "(no paste, no history entry)\n",
+        )
+    reporter.update(
+        "pasting" if will_paste else "transcribing",
+        text=text_out,
+        detail="rewritten" if text_out != transcript.text else "",
+    )
     history_file = paths.history_file
     try:
         history_log.append_entry(history_file, history_log.dict_entry(text_out, recording.wav_path))
@@ -252,6 +371,7 @@ def _dict(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     else:
         pasted = paste(runtime.platform, runtime.probe, runner, text_out)
     notes.append(f"paste {pasted.detail}")
+    reporter.update("done", text=text_out, detail=pasted.detail)
     return CliResult(code=0, stdout=f"{text_out}\n", stderr=_notes(notes))
 
 
@@ -278,13 +398,17 @@ def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime) -> str:
 
 
 def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    reporter = _banner_reporter(paths, load_settings(paths), "speak")
+    reporter.update("loading")
     try:
         text = _resolve_speak_text(args, runtime)
     except UsageError as exc:
         return _usage(exc.message)
     except VoiceError as exc:
+        reporter.update("error", detail=str(exc))
         return CliResult(code=1, stdout="", stderr=f"digivoice speak: {exc}\n")
-    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    reporter.update("speaking", text=text)
     runner = _runner(runtime)
     notes: list[str] = []
     try:
@@ -298,6 +422,7 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
             env=runtime.env,
         )
     except VoiceError as exc:
+        reporter.update("error", detail=str(exc))
         return CliResult(code=1, stdout="", stderr=f"digivoice speak: {exc}\n")
     notes.append(f"voice {spoken.voice_path}")
     notes.append(f"played with {spoken.player}")
@@ -308,7 +433,34 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         notes.append(f"history append failed ({exc})")
     else:
         notes.append(f"history {history_file}")
+    reporter.update("done", text=spoken.text)
     return CliResult(code=0, stdout=f"{spoken.text}\n", stderr=_notes(notes))
+
+
+def _cancel(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    target = args.cancel_file or default_cancel_file(paths)
+    try:
+        request_cancel(target)
+    except OSError as exc:
+        return CliResult(code=1, stdout="", stderr=f"digivoice cancel: {exc}\n")
+    return CliResult(
+        code=0,
+        stdout=f"{target}\n",
+        stderr="digivoice: cancel requested; a running dict take discards itself\n",
+    )
+
+
+def _status(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    snapshot = read_status(status_path(paths))
+    if snapshot is None:
+        return CliResult(
+            code=1,
+            stdout="",
+            stderr=f"digivoice status: no status yet ({status_path(paths)})\n",
+        )
+    return CliResult(code=0, stdout=snapshot.model_dump_json(indent=2) + "\n", stderr="")
 
 
 def _history(args: argparse.Namespace, runtime: Runtime) -> CliResult:
@@ -442,6 +594,10 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         return _dict(args, runtime)
     if command == "speak":
         return _speak(args, runtime)
+    if command == "cancel":
+        return _cancel(args, runtime)
+    if command == "status":
+        return _status(runtime)
     if command == "history":
         return _history(args, runtime)
     if command in {"settings", "setup"}:

@@ -16,9 +16,12 @@ from digivoice.runner import CommandRunner, error_tail
 KEYSTROKE_SCRIPT = 'tell application "System Events" to keystroke "v" using command down'
 ACCESSIBILITY_HINT = "grant Accessibility in System Settings > Privacy & Security > Accessibility"
 PASTE_TIMEOUT = 5.0
+EMPTY_TEXT_DETAIL = "nothing to paste (empty text)"
 
 
 def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) -> PasteResult:
+    if not text.strip():
+        return PasteResult(attempted=False, pasted=False, detail=EMPTY_TEXT_DETAIL)
     if platform != "darwin":
         return PasteResult(
             attempted=False,
@@ -56,6 +59,8 @@ def copy_to_clipboard(
     text: str,
 ) -> PasteResult:
     """Copy text to the system clipboard without pasting. Fail soft."""
+    if not text.strip():
+        return PasteResult(attempted=False, pasted=False, detail=EMPTY_TEXT_DETAIL)
     if platform == "darwin":
         pbcopy = probe.lookup("pbcopy")
         if not pbcopy:

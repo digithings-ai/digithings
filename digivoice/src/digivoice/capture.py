@@ -16,10 +16,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from digivoice.errors import CaptureError
+from digivoice.errors import CancelledError, CaptureError
 from digivoice.models import CaptureResult, VoicePaths
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail, run_command
+from digivoice.status import CancelToken
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
@@ -126,6 +127,13 @@ def _clear_stop_file(stop_file: Path) -> None:
         pass
 
 
+def _discard(wav: Path) -> None:
+    try:
+        wav.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _stop_requested(stop_file: Path | None, flag: list[bool]) -> bool:
     if flag and flag[0]:
         return True
@@ -178,8 +186,13 @@ def _record_early_stop(
     limit: int,
     platform: str,
     stop_file: Path | None,
+    cancel: CancelToken | None = None,
 ) -> CaptureResult:
-    """Record until stop-file / SIGINT / SIGTERM, or the safety cap."""
+    """Record until stop-file / SIGINT / SIGTERM, or the safety cap.
+
+    A cancel request ends the recorder and deletes the wav (CancelledError): the
+    take was discarded, so nothing is kept for transcribe, paste, or history.
+    """
     argv = capture_argv(tool, binary, wav, limit, platform, unbounded=True)
     if stop_file is not None:
         stop_file.parent.mkdir(parents=True, exist_ok=True)
@@ -217,6 +230,10 @@ def _record_early_stop(
             code = proc.poll()
             if code is not None:
                 break
+            if cancel is not None and cancel.requested():
+                _terminate_recorder(proc)
+                _discard(wav)
+                raise CancelledError("cancelled")
             if _stop_requested(stop_file, stop_flag):
                 stopped_early = True
                 _terminate_recorder(proc)
@@ -273,6 +290,7 @@ def record(
     platform: str = "darwin",
     stop_file: str | Path | None = None,
     early_stop: bool = False,
+    cancel: CancelToken | None = None,
 ) -> CaptureResult:
     """Record microphone audio to a wav under the data directory.
 
@@ -291,10 +309,13 @@ def record(
     use_early = early_stop and runner is run_command
     if use_early:
         stop_path = Path(stop_file) if stop_file is not None else default_stop_file(paths)
-        return _record_early_stop(tool, binary, wav, limit, platform, stop_path)
+        return _record_early_stop(tool, binary, wav, limit, platform, stop_path, cancel)
 
     argv = capture_argv(tool, binary, wav, limit, platform, unbounded=False)
     result = runner(argv, timeout=limit + _TIMEOUT_SLACK)
+    if cancel is not None and cancel.requested():
+        _discard(wav)
+        raise CancelledError("cancelled")
     if result.code != 0:
         reason = error_tail(result.stderr) or f"exit {result.code}"
         raise CaptureError(f"{tool} could not record the microphone ({reason})")
