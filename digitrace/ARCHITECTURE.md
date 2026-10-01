@@ -14,6 +14,18 @@ digitrace occupies the observability role in the digithings stack. It has two di
 
 **As an HTTP microservice** (port 8003), it exposes two read-only endpoints that tell orchestrators and dashboards whether tracing is active, which LangSmith host is configured, and whether the SDK is installed — all without ever surfacing a secret.
 
+### Phase 1 hosting target (self-hosted Langfuse)
+
+Phase 1 (#4930) stands up **self-hosted Langfuse** on Cloudflare Containers
+(Web + Worker) with house Postgres, R2 event uploads, and **external**
+ClickHouse + Redis. Operator runbook:
+[`docs/ops/digitrace-langfuse.md`](../docs/ops/digitrace-langfuse.md). App:
+[`apps/digitrace-langfuse/`](../apps/digitrace-langfuse/).
+
+**Phase 0 still uses the LangSmith SDK** via `digitrace.trace.traceable` until
+Phase 2 dual-export. Do not claim dual-export or Langfuse-backed `traceable`
+works yet. Do not point `LANGSMITH_ENDPOINT` at Langfuse.
+
 ### Current scope vs. intended platform
 
 The current implementation is deliberately minimal. What exists today is a tracing shim, a health surface, and a Prometheus `/metrics` endpoint backed by the shared `digibase.metrics.install_metrics` helper. The wider roadmap — PII redaction middleware, span schema validation, custom samplers, centralized trace dashboards — is described in the gap analysis in Section 11. The current code is correct and production-safe for its narrow scope; the risks are in what it does not yet do.

@@ -5,10 +5,11 @@
 ---   Double-tap Left Option (58) → speak --selection (fail soft; banner says why)
 ---
 --- Status: a custom overlay banner (banner_core.lua) draws what the digivoice CLI
---- writes to status.json. It is display only; the one control is Esc. The only
---- Hammerspoon notification is the launch toast listing the commands above.
---- Banner enable/position/animations live in digivoice's settings.json
---- (`digivoice settings set banner_position top-right`) and are re-read per take.
+--- writes to status.json. It is display only: no title chrome, no hints, no
+--- settings UI — a click cycles density mini → peek → full, Esc cancels a take.
+--- The only Hammerspoon notification is the launch toast listing the commands.
+--- Banner enable/position/density/animations live in digivoice's settings.json
+--- (`digivoice settings set banner_density full`) and are re-read per take.
 --- Install: see README.md in this directory.
 --- This file is a sample outside the Python package import path.
 
@@ -144,7 +145,7 @@ end
 -- banner canvas
 --------------------------------------------------------------------------------
 
-local DOT_FIRST = 5 -- canvas element index of dot 0
+local CELL_FIRST = 3 -- canvas element index of grid cell 0 (1 = background, 2 = body)
 
 local function delete_canvas()
   if canvas then
@@ -160,7 +161,7 @@ local function cancel_timer(timer)
   return nil
 end
 
-local function dot_color(state, i, t, animate)
+local function cell_color(state, i, t, animate)
   local cfg = core.matrix_for(state)
   return {
     red = cfg.color.red,
@@ -179,19 +180,11 @@ local function build_canvas(s, view, box)
   local origin = core.resolve_position(s.config.banner_position, screen:frame(), box, core.MARGIN)
   canvas = hs.canvas.new({ x = origin.x, y = origin.y, w = box.w, h = box.h })
   canvas:level(hs.canvas.windowLevels.overlay)
-  -- A click only expands the text; it must never steal focus from the app being typed into.
+  -- A click only cycles density; it must never steal focus from the app being typed into.
   canvas:clickActivating(false)
   canvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
 
-  local hint_parts = {}
-  if box.hint then
-    hint_parts[#hint_parts + 1] = box.hint
-  end
-  if box.expandable then
-    hint_parts[#hint_parts + 1] = s.expanded and "click: collapse" or "click: expand"
-  end
-
-  local cfg = core.matrix_for(view.state)
+  -- No chrome: background + body text only. State reads from the grid alone.
   local text_color = { red = 0.92, green = 0.95, blue = 0.96, alpha = 1 }
   canvas:appendElements({
     {
@@ -201,22 +194,6 @@ local function build_canvas(s, view, box)
       fillColor = { red = 0.07, green = 0.10, blue = 0.12, alpha = 0.94 },
       trackMouseUp = true,
       id = "background",
-    },
-    {
-      type = "text",
-      text = box.title,
-      textColor = { red = cfg.color.red, green = cfg.color.green, blue = cfg.color.blue, alpha = 1 },
-      textSize = core.FONT_SIZE,
-      textAlignment = "left",
-      frame = { x = box.text_x, y = core.PAD + 2, w = box.text_w * 0.55, h = 20 },
-    },
-    {
-      type = "text",
-      text = table.concat(hint_parts, " · "),
-      textColor = { red = 0.62, green = 0.66, blue = 0.68, alpha = 1 },
-      textSize = core.FONT_SIZE - 2,
-      textAlignment = "right",
-      frame = { x = box.text_x + box.text_w * 0.45, y = core.PAD + 3, w = box.text_w * 0.55, h = 18 },
     },
     {
       type = "text",
@@ -233,41 +210,36 @@ local function build_canvas(s, view, box)
     },
   })
 
-  local pitch = core.ICON / core.GRID
-  local radius = pitch * 0.33
+  -- DigiChat-style square status grid, top-left.
   local t = hs.timer.secondsSinceEpoch()
-  local dots = {}
+  local cells = {}
   for i = 0, core.GRID * core.GRID - 1 do
-    local row, col = i // core.GRID, i % core.GRID
-    dots[#dots + 1] = {
-      type = "circle",
+    local frame = core.cell_box(i)
+    cells[#cells + 1] = {
+      type = "rectangle",
       action = "fill",
-      center = {
-        x = core.PAD + pitch * (col + 0.5),
-        y = core.PAD + pitch * (row + 0.5),
-      },
-      radius = radius,
-      fillColor = dot_color(view.state, i, t, s.config.banner_animations),
+      frame = frame,
+      fillColor = cell_color(view.state, i, t, s.config.banner_animations),
     }
   end
-  canvas:appendElements(dots)
+  canvas:appendElements(cells)
 
   canvas:mouseCallback(function(_, message)
     if message == "mouseUp" and session then
-      session.expanded = not session.expanded
+      session.density = core.next_density(session.density)
       session.signature = nil
     end
   end)
   canvas:show()
 end
 
-local function paint_dots(s, view)
+local function paint_cells(s, view)
   if not canvas then
     return
   end
   local t = hs.timer.secondsSinceEpoch()
   for i = 0, core.GRID * core.GRID - 1 do
-    canvas[DOT_FIRST + i].fillColor = dot_color(view.state, i, t, s.config.banner_animations)
+    canvas[CELL_FIRST + i].fillColor = cell_color(view.state, i, t, s.config.banner_animations)
   end
 end
 
@@ -283,13 +255,13 @@ local function render(s)
   if not s.config.live_banner then
     return
   end
-  local box = core.layout(view, s.kind, s.expanded)
-  local signature = table.concat({ view.state, box.body, tostring(s.expanded), tostring(box.hint) }, "\0")
+  local box = core.layout(view, s.kind, s.density)
+  local signature = table.concat({ view.state, box.body, s.density }, "\0")
   if signature ~= s.signature or not canvas then
     s.signature = signature
     build_canvas(s, view, box)
   else
-    paint_dots(s, view)
+    paint_cells(s, view)
   end
 end
 
@@ -319,12 +291,13 @@ local function begin_session(kind)
   if session then
     end_session(session)
   end
+  local config = core.parse_settings(read_json(SETTINGS_FILE))
   local s = {
     kind = kind,
     start_ms = now_ms(),
     local_state = "loading",
-    expanded = false,
-    config = core.parse_settings(read_json(SETTINGS_FILE)),
+    density = config.banner_density,
+    config = config,
     task = nil,
     final = nil,
     signature = nil,
@@ -360,9 +333,13 @@ local function finish_session(s, exit_code, stdout, stderr)
   if s.config.live_banner then
     s.signature = nil
     render(s)
-    hide_timer = hs.timer.doAfter(core.linger_seconds(s.final.state), function()
-      end_session(s)
-    end)
+    -- Full density stays until collapsed or removed; peek/mini auto-dismiss.
+    local wait = core.linger_seconds(s.final.state, s.density)
+    if wait ~= nil then
+      hide_timer = hs.timer.doAfter(wait, function()
+        end_session(s)
+      end)
+    end
   else
     end_session(s)
   end

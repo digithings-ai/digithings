@@ -16,13 +16,32 @@ end
 local d = core.parse_settings(nil)
 eq(d.live_banner, true, "default enabled")
 eq(d.banner_position, "top-center", "default position")
+eq(d.banner_density, "peek", "default density")
 eq(d.banner_animations, true, "default animations")
-local s = core.parse_settings({ live_banner = false, banner_position = "bottom-left", banner_animations = false })
+local s = core.parse_settings({ live_banner = false, banner_position = "bottom-left", banner_density = "full", banner_animations = false })
 eq(s.live_banner, false, "banner off")
 eq(s.banner_position, "bottom-left", "position kept")
+eq(s.banner_density, "full", "density kept")
 eq(s.banner_animations, false, "animations off")
 eq(core.parse_settings({ banner_position = "sideways" }).banner_position, "top-center", "bad position")
+eq(core.parse_settings({ banner_density = "huge" }).banner_density, "peek", "bad density")
 eq(core.parse_settings({ live_banner = "no" }).live_banner, true, "non-boolean ignored")
+
+-- density click cycle: mini → peek → full → mini
+eq(core.next_density("mini"), "peek", "mini expands")
+eq(core.next_density("peek"), "full", "peek expands")
+eq(core.next_density("full"), "mini", "full collapses")
+eq(core.next_density("bogus"), "mini", "bogus collapses to mini")
+
+-- square status-grid cells: 25 squares inside the icon box, top-left
+for i = 0, 24 do
+  local box = core.cell_box(i)
+  check(box.w == box.h and box.w > 0, "cell is a square")
+  check(box.x >= core.PAD and box.y >= core.PAD, "cell inside padding")
+  check(box.x + box.w <= core.PAD + core.ICON and box.y + box.h <= core.PAD + core.ICON, "cell inside icon")
+end
+local first, last = core.cell_box(0), core.cell_box(24)
+check(first.x < last.x and first.y < last.y, "cells span the grid")
 
 -- position
 local frame = { x = 0, y = 0, w = 1000, h = 800 }
@@ -115,20 +134,33 @@ eq(#clipped, 2, "clip count")
 eq(was, true, "clip flag")
 eq(clipped[2], "b…", "ellipsis")
 
-local short = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", false)
+local short = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "peek")
 eq(#short.lines, 1, "short text one line")
 eq(short.clipped, false, "not clipped")
-eq(short.hint, "Esc to cancel", "cancel hint while cancellable")
+eq(short.hint, nil, "no chrome hints")
+eq(short.title, nil, "no chrome title")
 local long_text = string.rep("word ", 200)
-local long = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", false)
-eq(#long.lines, core.LINES_COLLAPSED, "collapsed limit")
-check(long.clipped and long.expandable, "long text is expandable")
-local open = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", true)
-check(open.w > long.w and #open.lines > #long.lines and open.h > long.h, "expanded is bigger")
-local idle = core.layout({ state = "recording", text = "", detail = "" }, "dict", false)
+local long = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "peek")
+eq(#long.lines, core.LINES_COLLAPSED, "peek glimpse limit")
+check(long.clipped, "long text is clipped in peek")
+local open = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "full")
+check(open.w > long.w and #open.lines > #long.lines and open.h > long.h, "full is bigger")
+local mini = core.layout({ state = "recording", text = "ignored", detail = "" }, "dict", "mini")
+eq(#mini.lines, 0, "mini is grid only")
+eq(mini.body, "", "mini has no text")
+eq(mini.w, core.PAD * 2 + core.ICON, "mini hugs the grid")
+eq(mini.h, core.PAD * 2 + core.ICON, "mini hugs the grid")
+local idle = core.layout({ state = "recording", text = "", detail = "" }, "dict", "peek")
 eq(#idle.lines, 0, "recording has no body")
 eq(idle.h, core.PAD * 2 + core.ICON, "compact height")
-eq(core.layout({ state = "done", text = "x", detail = "" }, "dict", false).hint, nil, "no hint when done")
+eq(core.next_density("bogus"), "mini", "unknown density collapses")
+
+-- linger: full stays (nil = no auto-hide); peek/mini dismiss after a few seconds
+eq(core.linger_seconds("done", "full"), nil, "full stays")
+eq(core.linger_seconds("error", "full"), nil, "full stays on error")
+eq(core.linger_seconds("done", "peek"), 4.0, "peek dismisses after a few seconds")
+eq(core.linger_seconds("done", "mini"), 4.0, "mini dismisses too")
+eq(core.linger_seconds("cancelled", "peek"), 1.2, "cancelled clears fast")
 
 -- launch notice lists commands and the cli
 local notice = core.launch_notice("/x/digivoice")

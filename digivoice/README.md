@@ -133,14 +133,15 @@ Esc (Hammerspoon sample) or `digivoice cancel` discards an active take: the reco
 digivoice settings set live_banner false          # no overlay at all (menubar mic mark stays)
 digivoice settings set banner_position top-right  # top-center (default), top-left, top-right,
                                                   # bottom-center, bottom-left, bottom-right, center
-digivoice settings set banner_animations false    # still dot-matrix frame instead of animation
+digivoice settings set banner_density full        # mini (grid only) | peek (default, auto-hides) | full (stays)
+digivoice settings set banner_animations false    # still grid frame instead of animation
 ```
 
 Read per take — no Hammerspoon reload needed for settings. See [`hammerspoon/README.md`](hammerspoon/README.md).
 
 ### Interrupt safety
 
-Stopping a toggle capture (Right Option again / stop-file / SIGINT) **keeps the wav** and continues transcribe → optional rewrite → paste of what was captured. Resume-same-take is not supported — paste what you have and start a new take.
+Stopping a toggle capture (Right Option again / stop-file / SIGINT) **keeps the wav** and continues transcribe → optional rewrite → paste of what was captured. Resume-same-take is not supported — paste what you have and start a new take. There is no UX time limit on toggle (long dictation works); on the sox path ~10s of silence pauses the take instead of cutting mid-speech.
 
 ### Hotkeys (sample)
 
