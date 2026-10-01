@@ -12,7 +12,7 @@ const CARD =
 const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
   {
     id: "gloomberb",
-    name: "Gloomberb",
+    name: "Gloomberg",
     role: "market data",
     line: "Quotes, filings, macro and options for the research stages. Enrichment, never the record the backtests run on.",
     fact: `${toolCount("digifetch_")} MCP tools`,
@@ -54,7 +54,7 @@ export function IntegrationsBand() {
       id="integrations"
       status="showcase only"
       title="What the engine is built on"
-      takeaway="Three integrations drive digiquant: Gloomberb for data, LuxAlgo for indicators, NautilusTrader for the engine. digithings runs the agents and the chat around them."
+      takeaway="Three integrations drive digiquant: Gloomberg for data, LuxAlgo for indicators, NautilusTrader for the engine. digithings runs the agents and the chat around them."
     >
       <div className="flex flex-col gap-4">
         <ul aria-label="Architectural drivers" className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">

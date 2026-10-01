@@ -59,7 +59,7 @@
     "name": "digifetch_13f_holdings",
     "family": "digifetch",
     "scope": "read",
-    "summary": "13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).",
+    "summary": "13F filings / fund forms / one form's holdings (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "what",
@@ -129,7 +129,7 @@
     "name": "digifetch_cds",
     "family": "digifetch",
     "scope": "read",
-    "summary": "DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).",
+    "summary": "DTCC PPD CDS trade tape (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "issuer",
@@ -155,7 +155,7 @@
     "name": "digifetch_congress_trades",
     "family": "digifetch",
     "scope": "read",
-    "summary": "US House disclosure trades (Gloomberb Cloud; anonymous).",
+    "summary": "US House disclosure trades (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "year",
@@ -209,14 +209,14 @@
     "name": "digifetch_econ_calendar",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Structured economic calendar (Gloomberb Cloud; anonymous).",
+    "summary": "Structured economic calendar (Gloomberg Cloud; anonymous).",
     "params": []
   },
   {
     "name": "digifetch_econ_series",
     "family": "digifetch",
     "scope": "read",
-    "summary": "FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).",
+    "summary": "FRED-style macro series observations + metadata (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "series_id",
@@ -242,7 +242,7 @@
     "name": "digifetch_equity_diagnostic",
     "family": "digifetch",
     "scope": "read",
-    "summary": "AI evidence review for one listing (Gloomberb Cloud; session-gated).",
+    "summary": "AI evidence review for one listing (Gloomberg Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -268,7 +268,7 @@
     "name": "digifetch_exchange_rate",
     "family": "digifetch",
     "scope": "read",
-    "summary": "USD exchange rate for an ISO-4217 `from_currency` (Gloomberb Cloud).",
+    "summary": "USD exchange rate for an ISO-4217 `from_currency` (Gloomberg Cloud).",
     "params": [
       {
         "name": "from_currency",
@@ -288,7 +288,7 @@
     "name": "digifetch_filing_events",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).",
+    "summary": "Classified 8-K filing events for one ticker (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "ticker",
@@ -308,7 +308,7 @@
     "name": "digifetch_holders",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Holder records for one symbol (Gloomberb Cloud; session-gated).",
+    "summary": "Holder records for one symbol (Gloomberg Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -328,7 +328,7 @@
     "name": "digifetch_news",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Aggregated market news headlines (Gloomberb Cloud; anonymous).",
+    "summary": "Aggregated market news headlines (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "feed",
@@ -360,7 +360,7 @@
     "name": "digifetch_options_chain",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Options chain for one listing (Gloomberb Cloud; JSON envelope).",
+    "summary": "Options chain for one listing (Gloomberg Cloud; JSON envelope).",
     "params": [
       {
         "name": "symbol",
@@ -424,7 +424,7 @@
     "name": "digifetch_price_history",
     "family": "digifetch",
     "scope": "read",
-    "summary": "OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).",
+    "summary": "OHLCV bars for one listing (Gloomberg Cloud; JSON envelope).",
     "params": [
       {
         "name": "symbol",
@@ -468,7 +468,7 @@
     "name": "digifetch_proxy_statements",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Executive-compensation proxy statements (Gloomberb Cloud; anonymous).",
+    "summary": "Executive-compensation proxy statements (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "ticker",
@@ -494,7 +494,7 @@
     "name": "digifetch_quote",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).",
+    "summary": "Latest quote for one listing via Gloomberg Cloud (anonymous; JSON envelope).",
     "params": [
       {
         "name": "symbol",
@@ -514,7 +514,7 @@
     "name": "digifetch_quotes_batch",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Batch quotes for 1-20 listings via Gloomberb Cloud (anonymous).",
+    "summary": "Batch quotes for 1-20 listings via Gloomberg Cloud (anonymous).",
     "params": [
       {
         "name": "symbols",
@@ -554,7 +554,7 @@
     "name": "digifetch_risk_reports",
     "family": "digifetch",
     "scope": "read",
-    "summary": "10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).",
+    "summary": "10-K risk-factor reports, diffed year-over-year (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "ticker",
@@ -580,14 +580,14 @@
     "name": "digifetch_saved_searches",
     "family": "digifetch",
     "scope": "read",
-    "summary": "The signed-in session's saved searches (Gloomberb Cloud; session-gated).",
+    "summary": "The signed-in session's saved searches (Gloomberg Cloud; session-gated).",
     "params": []
   },
   {
     "name": "digifetch_screener",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Market screener for gainers/losers/most-active (Gloomberb Cloud; **requires Pro**).",
+    "summary": "Market screener for gainers/losers/most-active (Gloomberg Cloud; **requires Pro**).",
     "params": [
       {
         "name": "category",
@@ -613,7 +613,7 @@
     "name": "digifetch_search",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Search listings across venues (Gloomberb Cloud; anonymous).",
+    "summary": "Search listings across venues (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "query",
@@ -633,7 +633,7 @@
     "name": "digifetch_sec_filings",
     "family": "digifetch",
     "scope": "read",
-    "summary": "SEC filings, filing documents, or filing content (Gloomberb Cloud).",
+    "summary": "SEC filings, filing documents, or filing content (Gloomberg Cloud).",
     "params": [
       {
         "name": "ticker",
@@ -677,7 +677,7 @@
     "name": "digifetch_shiller",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).",
+    "summary": "Robert Shiller's monthly valuation series (Gloomberg Cloud; anonymous).",
     "params": [
       {
         "name": "limit",
@@ -691,7 +691,7 @@
     "name": "digifetch_short_interest",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Biweekly short-interest settlements (Gloomberb Cloud; session-gated).",
+    "summary": "Biweekly short-interest settlements (Gloomberg Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -711,7 +711,7 @@
     "name": "digifetch_statements",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Annual/quarterly financial statement rows (Gloomberb Cloud; session-gated).",
+    "summary": "Annual/quarterly financial statement rows (Gloomberg Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -737,7 +737,7 @@
     "name": "digifetch_ticker_financials",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Quote, profile, fundamentals, statements, and price history (Gloomberb Cloud).",
+    "summary": "Quote, profile, fundamentals, statements, and price history (Gloomberg Cloud).",
     "params": [
       {
         "name": "symbol",
@@ -763,7 +763,7 @@
     "name": "digifetch_ticker_tweets",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; session-gated).",
+    "summary": "Recent X/Twitter posts mentioning one ticker (Gloomberg Cloud; session-gated).",
     "params": [
       {
         "name": "ticker",
@@ -795,7 +795,7 @@
     "name": "digifetch_transcripts",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Earnings-call transcripts (Gloomberb Cloud; session-gated, requires Pro).",
+    "summary": "Earnings-call transcripts (Gloomberg Cloud; session-gated, requires Pro).",
     "params": [
       {
         "name": "ticker",
@@ -821,7 +821,7 @@
     "name": "digifetch_tweet_search",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Search X/Twitter posts by query (Gloomberb Cloud; session-gated).",
+    "summary": "Search X/Twitter posts by query (Gloomberg Cloud; session-gated).",
     "params": [
       {
         "name": "query",
@@ -853,14 +853,14 @@
     "name": "digifetch_venues",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Exchange venue metadata (Gloomberb Cloud; anonymous).",
+    "summary": "Exchange venue metadata (Gloomberg Cloud; anonymous).",
     "params": []
   },
   {
     "name": "digifetch_yield_curve",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Treasury yield-curve tenors (Gloomberb Cloud; anonymous).",
+    "summary": "Treasury yield-curve tenors (Gloomberg Cloud; anonymous).",
     "params": []
   },
   {

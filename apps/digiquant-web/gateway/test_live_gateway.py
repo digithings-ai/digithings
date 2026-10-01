@@ -45,7 +45,7 @@ QUOTE = {
     "data": {
         "quote": {"symbol": "AAPL", "price": 333.0, "change_percent": 1.1, "name": "Apple Inc."}
     },
-    "attribution": "Sourced from Gloomberb",
+    "attribution": "Sourced from Gloomberg",
     "delay_notice": "Data delayed up to 15 minutes",
 }
 
@@ -56,7 +56,7 @@ def test_quote_envelope_and_cache() -> None:
     body = r.json()
     assert r.status_code == 200 and body["ok"] and not body["cached"]
     assert body["args"] == {"symbol": "AAPL"} and body["tool"] == "digifetch_quote"
-    assert body["attribution"] == ["Sourced from Gloomberb"]
+    assert body["attribution"] == ["Sourced from Gloomberg"]
     assert body["delayNote"] == "Data delayed up to 15 minutes"
     assert body["data"]["price"] == 333.0 and body["data"]["changePct"] == 1.1
     assert c.get("/v1/probe/quote?symbol=AAPL").json()["cached"] is True
