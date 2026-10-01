@@ -4,15 +4,18 @@
   "_dq": "dashboard .dq-slab is the BLEND v0.1 tonal slab (surface + hairline, radius 0) that replaced the retired .glass-card family. MotionLayer reveals .dq-slab.",
   "_acct": "dashboard .acct-* is the digiweb account family (login, signup, session, settings) born in apps/reference/app/account/account.css. dashboard consumes the same prefix rather than forking a local one (PR #3264).",
   "_dboot": "digithings-web .dboot-* is the @digithings/ui digichat boot-loader family (packages/ui/src/styles/digichat-boot-loader.css); the site shell overrides one dock rule for the wide composer (ChatEmbedShell); same precedent as .tl-*.",
+  "_d1": "digithings-web's 'dqhero' entry was removed with the D1 rebuild (#4429): the .dqhero-* family was digiquant-origin art reused in this app, and the reused HeroMesh/HeroGraph media block was dropped in favour of a fresh composition on the canon. digiquant-web keeps its own 'dqhero' (it is that app's hero).",
   "digithings-web": [
     "brand",
     "dboot",
     "dc",
     "doc",
     "docs",
-    "dqhero",
     "faq",
     "glow",
+    "hero",
+    "pixel",
+    "section",
     "stack",
     "tl",
     "whyx"
@@ -57,6 +60,7 @@
     "dtc",
     "light"
   ],
+  "_landing": "digithings-web .pixel-* (PixelField/PixelWordmark), .hero-* (the staged hero entrance) and .section-* (the numbered section eyebrow + gutter rail) are the home landing's own composition (#4895 / #4424), owner-picked; app-local like .whyx-*. If the landing's pixel mark or section eyebrow is promoted into @digithings/ui, delete the matching entry with the app block.",
   "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only \u2014 if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block.",
   "_faq": "digithings-web .faq-morph* is the #faq band's scroll-driven zoom-morph (branch claude/home-variants): the chat container starts large over the frame and retracts into the right column as the FAQ list rises in on the left (#4429). Same shape and same status as the .stack-* family \u2014 the pinned track and sticky pin live in the app sheet because the geometry is this band's own two-column grid; if the owner picks the morph it promotes into @digithings/ui and this entry is deleted with the app block.",
   "_whyx": "whyx \u2014 the #why band's composition (#4429 round 15): `whyx*` (the rented/owned container diagrams, the guided walk, the capability table and the cost model). App-local because the composition is digithings.ai's own argument, folded in from the /variants/why exploration the owner picked."
