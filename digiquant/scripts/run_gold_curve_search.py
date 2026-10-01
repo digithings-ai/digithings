@@ -338,15 +338,40 @@ def run_causal_rolling_gate(
             worst_key = f"{key}:{rel:+g}%"
     frontier_total = len(frontier_params) if frontier_params else 0
     frontier_beats_both = 0
+    # Per-shape OOS persistence (record-keeping ONLY — values below reuse the
+    # already-computed f_oos; no scoring change). Enables trust-nothing
+    # recount + frozen-criterion re-selection (Plan 16 Ruling 1).
+    frontier_shapes: list[dict] = []
     for fparams in frontier_params or []:
         fw = composite_weights_from_params(fparams)
         if missing_extra_names(fw, extra_z):
+            frontier_shapes.append({"params": fparams, "scored": False})
             continue
         f_oos = _score_oos(fparams, fw)
         f_flat = sum(m.vs_flat_dca_pct for m in f_oos) / len(f_oos)
         f_lump = sum(m.vs_lump_pct for m in f_oos) / len(f_oos)
         if f_flat > 0.0 and f_lump > 0.0:
             frontier_beats_both += 1
+        frontier_shapes.append(
+            {
+                "params": fparams,
+                "scored": True,
+                "mean_oos_vs_flat_dca_pct": f_flat,
+                "mean_oos_vs_lump_dca_pct": f_lump,
+                "mean_abs_drawdown_pct": sum(abs(m.max_drawdown_pct) for m in f_oos) / len(f_oos),
+                "feasible_per_fold": [is_feasible(m, obj) for m in f_oos],
+                "per_fold": [
+                    {
+                        "fold": fold.fold,
+                        "oos_vs_flat_dca_pct": m.vs_flat_dca_pct,
+                        "oos_vs_lump_dca_pct": m.vs_lump_pct,
+                        "max_drawdown_pct": m.max_drawdown_pct,
+                        "feasible": is_feasible(m, obj),
+                    }
+                    for fold, m in zip(folds, f_oos, strict=True)
+                ],
+            }
+        )
     return {
         "mean_oos_vs_flat_dca_pct": mean_oos,
         "beats_flat_dca_oos": mean_oos > 0.0,
@@ -359,6 +384,7 @@ def run_causal_rolling_gate(
         "sensitivity_worst_neighbor_key": worst_key,
         "frontier_beats_both": frontier_beats_both,
         "frontier_total": frontier_total,
+        "frontier_shapes": frontier_shapes,
         "evaluation": "causal_rolling",
         "rolling_window": window,
         "rolling_z": z,
@@ -597,6 +623,7 @@ def main() -> None:
             "sensitivity_worst_neighbor_key": causal_gate["sensitivity_worst_neighbor_key"],
             "frontier_beats_both": causal_gate["frontier_beats_both"],
             "frontier_total": causal_gate["frontier_total"],
+            "frontier_shapes": causal_gate["frontier_shapes"],
             "evaluation": "causal_rolling",
             "rolling_window": causal_gate["rolling_window"],
             "rolling_z": causal_gate["rolling_z"],
