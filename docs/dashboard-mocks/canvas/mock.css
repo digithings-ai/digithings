@@ -15,10 +15,22 @@
   --hair-strong: rgba(255, 255, 255, 0.34);
   --wash: rgba(255, 255, 255, 0.055);
   --win: #070707;
-  --accent: #3dd6c4;
-  --up: #52d296;
-  --down: #f06a5e;
+  --accent: #3dd6c4; /* DigiQuant phosphor / teal */
+  /* Vela DigiQuant chart theme — not stock TradingView green/red */
+  --up: #3dd6c4;   /* DigiQuant teal (bull) — equals accent in dark */
+  --down: #e5533e; /* DigiQuant red (bear) */
   --warn: #e0b341;
+  --chart-up: var(--up);
+  --chart-down: var(--down);
+  --chart-up-fill: color-mix(in srgb, var(--up) 55%, transparent);
+  --chart-down-fill: color-mix(in srgb, var(--down) 55%, transparent);
+  --chart-up-wash: color-mix(in srgb, var(--up) 14%, transparent);
+  --chart-down-wash: color-mix(in srgb, var(--down) 14%, transparent);
+  --chart-grid: color-mix(in srgb, var(--ink) 18%, transparent);
+  --chart-crosshair: var(--accent);
+  --chart-wick: color-mix(in srgb, var(--ink) 55%, transparent);
+  --chart-volume-up: var(--chart-up-fill);
+  --chart-volume-down: var(--chart-down-fill);
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --top: 44px;
@@ -48,6 +60,36 @@ input, select, textarea { font-family: var(--mono); letter-spacing: 0; }
 .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .pos { color: var(--up); }
 .neg { color: var(--down); }
+/* Chart panes: Vela DigiQuant full color scale */
+.atom-chart,
+.sec[data-atom="chart"],
+[data-vela-theme="digiquant"] {
+  --vela-up: var(--chart-up);
+  --vela-down: var(--chart-down);
+  --vela-grid: var(--chart-grid);
+  --vela-crosshair: var(--chart-crosshair);
+}
+.atom-chart svg .pos,
+.atom-chart .pos,
+.sec[data-atom="chart"] svg .pos {
+  color: var(--chart-up);
+  fill: var(--chart-up);
+  stroke: var(--chart-up);
+}
+.atom-chart svg .neg,
+.atom-chart .neg,
+.sec[data-atom="chart"] svg .neg {
+  color: var(--chart-down);
+  fill: var(--chart-down);
+  stroke: var(--chart-down);
+}
+.atom-chart svg polyline:not(.neg):not(.pos),
+.atom-chart svg .line-price {
+  stroke: var(--chart-up);
+}
+.atom-chart svg polygon {
+  fill: var(--chart-up-wash);
+}
 .mute { color: var(--ink-mute); }
 .soft { color: var(--ink-soft); }
 
@@ -686,7 +728,8 @@ html.rail-mini .nav-group[open] .nav-children { display: none; }
 html.rail-mini .brand { padding-inline: 6px; justify-content: center; }
 html.rail-mini .brand svg.wm { width: 40px; height: auto; }
 
-/* DigiChat right rail — never replaces left DigiQuant spine */
+/* DigiChat right rail — never replaces left DigiQuant spine.
+   Full height covers sticky top navigator (markets / path); top sits behind chat. */
 .chat-rail, aside.dock.chat-rail {
   grid-column: 3; grid-row: 2;
   border-left: 1px solid var(--hair-strong);
@@ -695,6 +738,20 @@ html.rail-mini .brand svg.wm { width: 40px; height: auto; }
   height: auto;
   max-height: none;
   background: var(--win); min-width: 0; overflow: hidden;
+  position: relative;
+  z-index: 35; /* above .top (30) so chat covers top chrome in this column */
+}
+/* When open: span full app height so top navigator is behind DigiChat, not above it */
+html.chat-open .chat-rail, html.chat-open aside.dock.chat-rail {
+  grid-row: 1 / -1;
+  align-self: stretch;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+}
+/* Top chrome only spans rail + main when DigiChat is open (chat covers the right) */
+html.chat-open .app > .top {
+  grid-column: 1 / 3;
 }
 .chat-rail[hidden] { display: none !important; }
 html.chat-open .chat-rail[hidden] { display: flex !important; }
@@ -727,6 +784,9 @@ html.pane-fs .app > .side, html.pane-fs .chat-rail { display: none !important; }
   .chat-rail, aside.dock.chat-rail {
     position: fixed; top: var(--top); right: 0; bottom: 0; width: min(100vw, 340px);
     z-index: 50; grid-column: auto; grid-row: auto;
+  }
+  html.chat-open .chat-rail, html.chat-open aside.dock.chat-rail {
+    top: 0; /* cover sticky top navigator on narrow too */
   }
 }
 
@@ -871,6 +931,17 @@ body.index-page .catalog { overflow: visible; max-height: none; }
   flex-direction: column;
 }
 
+/* Section 01 / navigator: sticky inside main col only — appears once first .sec reaches top; behind DigiChat */
+.main > .col > .sec > h2.eyebrow {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+.main > .col > .band {
+  position: relative;
+  z-index: 3; /* band above resting eyebrows; sticky 01 takes over after band scrolls away */
+}
+
 /* Pane rearrange affordance */
 .sec > h2.eyebrow { display: flex; align-items: center; gap: 6px; cursor: default; }
 .sec .pane-drag {
@@ -937,3 +1008,9 @@ body.index-page .catalog { overflow: visible; max-height: none; }
 .main > .col > .sec.s6,
 .main > .col > .sec.s7,
 .main > .col > .sec.s8 { min-height: 0; }
+
+
+/* ─── Vela DigiQuant color theme (#4911) ───
+ * Bull = DigiQuant teal (#3dd6c4). Bear = DigiQuant red (#e5533e).
+ * Not TradingView stock green/red. Tokens: --chart-up / --chart-down (+ fill/wash/grid).
+ */
