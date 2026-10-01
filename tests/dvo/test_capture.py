@@ -147,10 +147,26 @@ def test_record_bounds_the_recorder_with_a_timeout(paths: VoicePaths) -> None:
     assert runner.calls[0].timeout is not None
 
 
-def test_unbounded_sox_argv_omits_trim() -> None:
-    argv = capture_argv("sox", "/usr/bin/sox", Path("/tmp/a.wav"), 60, "darwin", unbounded=True)
+def test_unbounded_sox_argv_omits_trim_but_pauses_on_silence() -> None:
+    argv = capture_argv("sox", "/usr/bin/sox", Path("/tmp/a.wav"), 1800, "darwin", unbounded=True)
     assert "trim" not in argv
     assert "rec" not in argv
+    assert "silence" in argv
+    assert argv[argv.index("silence") + 5] == "10.0"
+
+
+def test_unbounded_sox_argv_silence_pause_is_configurable() -> None:
+    argv = capture_argv(
+        "sox", "/usr/bin/sox", Path("/tmp/a.wav"), 1800, "darwin", unbounded=True, silence_pause=5
+    )
+    assert argv[argv.index("silence") + 5] == "5"
+
+
+def test_toggle_safety_cap_is_not_a_ux_limit() -> None:
+    from digivoice.capture import SILENCE_PAUSE_SECONDS
+
+    assert DEFAULT_TOGGLE_SECONDS >= 600
+    assert SILENCE_PAUSE_SECONDS == 10.0
 
 
 def test_unbounded_ffmpeg_argv_omits_duration() -> None:
