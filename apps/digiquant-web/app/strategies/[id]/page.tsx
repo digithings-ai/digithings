@@ -1,16 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Footer } from "@digithings/ui";
-import { DQ_FOOTER } from "../../_nav";
-import { SiteNav } from "@/components/landing/SiteNav";
-import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
+import { DocumentFrame, PageTitle } from "@digithings/ui";
 import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
 
 // Static export needs the route list (and per-route metadata) at build time,
-// while the tearsheet DATA is read live from Supabase inside <TearsheetView/>.
-// The published set is the three Slappers plus btc_sdca (DCA). Keep the
-// slug→label/symbol map here so the build never depends on the live store (#1069).
-// Route slugs stay code ids (`btc_sdca`, `*_slapper`); public names are asset-then-type.
+// while the tearsheet DATA is read live from Supabase (#1069). The published set
+// is the three Slappers plus btc_sdca (DCA). Slugs stay code ids; public names
+// are asset-then-type.
 const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   btc_slapper: { label: "BTC L/S", symbol: "BTC-USD" },
   eth_slapper: { label: "ETH L/S", symbol: "ETH-USD" },
@@ -41,16 +37,10 @@ export default async function TearsheetPage({ params }: { params: Promise<{ id: 
   if (!(id in PUBLISHED)) notFound();
 
   return (
-    <>
-      <SiteNav />
-      <main className="ts-page dq-subpage">
-        <div className="wrap">
-          <TearsheetView key={id} slug={id} />
-        </div>
-      </main>
-      {/* Shared links so the footer can't drift from the rest of the site;
-          tearsheet-specific meta is the one intentional per-page override. */}
-      <Footer links={DQ_FOOTER} meta="© 2026 digithings AI · backtest · illustrative, in-sample" />
-    </>
+    <main id="main" tabIndex={-1}>
+      <DocumentFrame>
+        <PageTitle title={strategyDisplayName(id, PUBLISHED[id].label)}>placeholder</PageTitle>
+      </DocumentFrame>
+    </main>
   );
 }

@@ -2,7 +2,18 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
-import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/ui";
+import {
+  FooterCells,
+  HashScrollManager,
+  MotionProvider,
+  NavShell,
+  ThemeProvider,
+  themeInitScript,
+} from "@digithings/ui";
+import { LayoutRails } from "./_chrome/LayoutRails";
+import { MarketBarShell } from "./_chrome/MarketBarShell";
+import { SectionRail } from "./_chrome/SectionRail";
+import { Brand,DQ_FOOTER_CELLS, DQ_FOOTER_META, DQ_NAV_PRIMARY } from "./_nav";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
@@ -55,7 +66,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: themeInitScript legitimately flips data-theme
   // pre-hydration for system-light visitors; scoped to this element only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${GeistMono.variable} accent-digiquant no-js`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
@@ -66,12 +77,24 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
-        <div className="grain" aria-hidden="true" />
-        <div className="glow" aria-hidden="true" />
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />
-            {children}
+            <NavShell
+              brand={<Brand />}
+              links={DQ_NAV_PRIMARY}
+              homeLabel="digiquant home"
+              skipTo="#main"
+            />
+            {/* NavShell is fixed: reserve its height (nav-shell.css knob, 62px fallback). */}
+            <LayoutRails />
+            <SectionRail />
+            <div className="pt-[var(--nav-shell-h,62px)]">
+              <MarketBarShell />
+              {children}
+            </div>
+            <FooterCells cells={DQ_FOOTER_CELLS} meta={DQ_FOOTER_META} />
+
           </ThemeProvider>
         </MotionProvider>
       </body>
