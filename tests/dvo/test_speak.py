@@ -289,3 +289,152 @@ def test_cli_speak_missing_piper_fails_soft(tmp_path: Path) -> None:
 def test_cli_speak_rejects_mixed_sources(tmp_path: Path) -> None:
     runtime = _speak_runtime(tmp_path)
     assert run(["speak", "--clipboard", "hello"], runtime).code == 2
+
+
+def _darwin_probe() -> FakeProbe:
+    return FakeProbe(commands={"pbpaste": "/usr/bin/pbpaste", "osascript": "/usr/bin/osascript"})
+
+
+def _ax_frontmost_dispatch(*, ax_stdout: str = "", ax_code: int = 0, frontmost: str = ""):
+    """Fake osascript keyed by script: AX query, frontmost query, else the Cmd+C keystroke."""
+
+    def _respond(call) -> FakeReply:
+        script = " ".join(call.argv)
+        if "AXSelectedText" in script:
+            return FakeReply(code=ax_code, stdout=ax_stdout)
+        if "frontmost" in script:
+            return FakeReply(stdout=frontmost)
+        return FakeReply()
+
+    return _respond
+
+
+def test_read_selection_darwin_ax_selected_text_wins_without_copy() -> None:
+    runner = FakeRunner(
+        {
+            "pbpaste": FakeReply(stdout="leftover dictation"),
+            "osascript": _ax_frontmost_dispatch(ax_stdout="ax picked reply"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "ax picked reply"
+    # AX hit reads nothing else and never sends the Cmd+C keystroke.
+    assert [call.program for call in runner.calls] == ["osascript"]
+
+
+def test_read_selection_darwin_ghostty_pasteboard_when_frontmost() -> None:
+    def pbpaste_reply(call) -> FakeReply:
+        if "-pboard" in call.argv:
+            return FakeReply(stdout="ghostty highlighted reply")
+        return FakeReply(stdout="leftover dictation")
+
+    runner = FakeRunner(
+        {
+            "pbpaste": pbpaste_reply,
+            "osascript": _ax_frontmost_dispatch(frontmost="Ghostty"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "ghostty highlighted reply"
+    assert [call.program for call in runner.calls] == ["osascript", "osascript", "pbpaste"]
+    assert not any("keystroke" in " ".join(call.argv) for call in runner.calls)
+
+
+def test_read_selection_darwin_ignores_stale_ghostty_pasteboard_elsewhere() -> None:
+    pastes = iter(["leftover dictation", "fresh textedit selection"])
+
+    def pbpaste_reply(call) -> FakeReply:
+        if "-pboard" in call.argv:
+            return FakeReply(stdout="stale ghost highlight")
+        return FakeReply(stdout=next(pastes))
+
+    runner = FakeRunner(
+        {
+            "pbpaste": pbpaste_reply,
+            "osascript": _ax_frontmost_dispatch(frontmost="TextEdit"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "fresh textedit selection"
+    assert not any("ghostty.selection" in " ".join(call.argv) for call in runner.calls)
+
+
+def test_read_selection_darwin_ghostty_empty_pasteboard_falls_back_to_copy() -> None:
+    pastes = iter(["leftover dictation", "ghostty copied reply"])
+
+    def pbpaste_reply(call) -> FakeReply:
+        if "-pboard" in call.argv:
+            return FakeReply(stdout="  ")
+        return FakeReply(stdout=next(pastes))
+
+    runner = FakeRunner(
+        {
+            "pbpaste": pbpaste_reply,
+            "osascript": _ax_frontmost_dispatch(frontmost="Ghostty"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "ghostty copied reply"
+
+
+def test_read_selection_darwin_ax_missing_value_falls_through() -> None:
+    runner = FakeRunner(
+        {
+            "pbpaste": _sequenced_pbpaste(["leftover dictation", "real copied text"]),
+            "osascript": _ax_frontmost_dispatch(ax_stdout="missing value\n"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "real copied text"
+
+
+def test_read_selection_darwin_ax_missing_value_then_ghostty_pasteboard() -> None:
+    def pbpaste_reply(call) -> FakeReply:
+        if "-pboard" in call.argv:
+            return FakeReply(stdout="ghost highlight")
+        return FakeReply(stdout="leftover dictation")
+
+    runner = FakeRunner(
+        {
+            "pbpaste": pbpaste_reply,
+            "osascript": _ax_frontmost_dispatch(ax_stdout="missing value", frontmost="Ghostty"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "ghost highlight"
+
+
+def test_read_selection_darwin_ax_error_falls_back_to_copy() -> None:
+    pastes = iter(["leftover dictation", "copied after ax error"])
+
+    def pbpaste_reply(call) -> FakeReply:
+        return FakeReply(stdout=next(pastes))
+
+    runner = FakeRunner(
+        {
+            "pbpaste": pbpaste_reply,
+            "osascript": _ax_frontmost_dispatch(ax_code=1, frontmost=""),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "copied after ax error"
+
+
+def test_read_selection_darwin_frontmost_error_still_copies() -> None:
+    def osascript_reply(call) -> FakeReply:
+        script = " ".join(call.argv)
+        if "AXSelectedText" in script:
+            return FakeReply(stdout="")
+        if "frontmost" in script:
+            return FakeReply(code=1, stderr="not allowed")
+        return FakeReply()
+
+    runner = FakeRunner(
+        {
+            "pbpaste": _sequenced_pbpaste(["leftover dictation", "copied without frontmost"]),
+            "osascript": osascript_reply,
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner) == "copied without frontmost"
+
+
+def _sequenced_pbpaste(outputs: list[str]):
+    remaining = list(outputs)
+
+    def _respond(call) -> FakeReply:
+        return FakeReply(stdout=remaining.pop(0) if remaining else "")
+
+    return _respond
