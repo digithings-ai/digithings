@@ -10,7 +10,9 @@
 
 **Addendum (2026-10-01 ~22:45 Rome):** DigiCon API = data SoT (view→API ground-up). Remock `051f13ec` / `:3920` = visual aid only — not SoT / be-all.
 
-**Out of scope:** digiquant.io (Coder A / separate cloud); digithings.ai home #4916; rewriting the static canvas into another cramped one-page remock.
+**Addendum (2026-10-01 ~23:04 Rome):** **NEVER** use the live DigiQuant dashboard / live website as a design or implement reference. Visual reference **ONLY** remock `:3920` / tip `051f13ec` canvas mocks + DigiCon API paths. Live app is **out of scope** as a design source.
+
+**Out of scope:** live DigiQuant dashboard / live website (any URL) as design/UX source; digiquant.io (Coder A / separate cloud); digithings.ai home #4916; rewriting the static canvas into another cramped one-page remock.
 
 ---
 
@@ -21,6 +23,8 @@ Implement the **DigiQuant dashboard** in the real app (`apps/dashboard` and rela
 **Ground-up rule:** every data-showing block (chart, table, feed, pipeline, tearsheet, …) is wired to an existing **DigiCon API** function path. Build **view → DigiCon API** first; the UI is a visualization of those paths. DigiCon already exists — discover and wire each view to a real path; do not invent a parallel fake data layer.
 
 **Remock role:** `:3920` tip **`051f13ec`** is a **visual aid only** (type, hairlines, section eyebrows, terminal density / look-feel). It is **not** the source of truth, not the be-all for IA or data, and not something to pixel-clone into another HTML remock.
+
+**Design sources (LOCKED):** visual = remock `:3920` / `051f13ec` canvas only; data/behavior = DigiCon API paths. **Do not** open, screenshot, or mirror the live DigiQuant dashboard / live website for layout, chrome, colors, IA, or component patterns.
 
 Do **not** copy the rejected dense remock lineage (`29463fbf2`…`47734f912`). Product behaviors below = app shell requirements via modular components + DigiCon wiring.
 
@@ -65,6 +69,7 @@ Every dashboard block that shows data (chart / table / etc.) maps to a **DigiCon
 ### 7. Process
 - Remock `:3920` / `051f13ec` = **visual aid only** (not SoT / be-all).  
 - Data + behavior SoT = **DigiCon API** + implement brief above.  
+- **NEVER** reference the live DigiQuant dashboard / live website as a design source — remock + DigiCon only.  
 - **HOLD hatch** on remock PR #4911.  
 - Chris runs implement in **his Claude Code session**.  
 - Prefer OpenCode / local Claude for implement; do not burn unrelated cloud lanes without One/Chris.
@@ -79,9 +84,11 @@ Every dashboard block that shows data (chart / table / etc.) maps to a **DigiCon
 | Role | Layout / look-feel reference only — **not** source of truth, not be-all |
 | Data SoT | Existing **DigiCon API** — wire every data block to a function path |
 | Look cues | Lighter-gray section headers, open mock windows, lifted type |
-| Rejected | Dense one-page remock after `29463fbf2`; treating the remock as product SoT |
+| Rejected | Dense one-page remock after `29463fbf2`; treating the remock as product SoT; using live DigiQuant / live website as design reference |
 
-Open `http://127.0.0.1:3920/brief.html` (hard-refresh) for craft cues while implementing against DigiCon.
+Open `http://127.0.0.1:3920/brief.html` (hard-refresh) for craft cues while implementing against DigiCon. Do **not** use the live DigiQuant app or any live digithings website as a visual/IA source.
+
+
 
 ---
 
