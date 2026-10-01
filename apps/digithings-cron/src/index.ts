@@ -17,13 +17,30 @@ export type StartedRun = {
 };
 
 type RunOptions = {
-  /** Skip etOpenGate for this kick only. Cron triggers never set this. */
+  /** Skip etOpenGate and preserve privileged house args for this kick only. */
   force?: boolean;
   /** Optional kick args (for example run_writers=true). Cron sends none. */
   args?: Record<string, string>;
   /** POST /kick awaits so the response can include run ids. */
   awaitDispatch?: boolean;
 };
+
+export function houseArgs(
+  force: boolean,
+  bodyArgs: Record<string, string>,
+  now: number,
+): Record<string, string> {
+  const runDate = new Date(now).toISOString().slice(0, 10);
+  if (!force) {
+    return { refresh_scope: "none", run_date: runDate };
+  }
+  return {
+    ...bodyArgs,
+    refresh_scope: bodyArgs.refresh_scope ?? "none",
+    run_date: bodyArgs.run_date ?? runDate,
+    force: "true",
+  };
+}
 
 function startedRun(job: Job, result: DispatchResult): StartedRun {
   const run: StartedRun = {
@@ -65,8 +82,12 @@ async function runJobsForCron(
       continue;
     }
     started.push(job.id);
+    const args =
+      job.command === "house-run"
+        ? houseArgs(opts.force === true, opts.args ?? {}, scheduledTime)
+        : opts.args;
     pending.push(
-      dispatch(env, job, cron, scheduledTime, { args: opts.args }).then((result) =>
+      dispatch(env, job, cron, scheduledTime, { args }).then((result) =>
         startedRun(job, result),
       ).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
