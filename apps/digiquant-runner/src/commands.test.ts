@@ -1,3 +1,8 @@
+// Workers tsconfig types are @cloudflare/workers-types only. This file reads
+// wrangler.toml the same way apps/digichat-cloudflare/src/embed-flag.test.ts does.
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import commandsJson from "../commands.json";
 import {
@@ -176,6 +181,18 @@ describe("phase 3 house-run", () => {
     expect(flat).toContain("validate-providers.py");
     expect(flat).toContain("house_chain_step.py");
     expect(spec).not.toHaveProperty("failure_issue");
+  });
+
+  it("keeps one standard-2 container class", () => {
+    const toml = readFileSync(join(__dirname, "../wrangler.toml"), "utf8");
+    const containers = toml.match(/^\[\[containers\]\]/gm) ?? [];
+    expect(containers).toHaveLength(1);
+    expect(toml).toContain('class_name = "DigiQuantRunnerContainer"');
+    expect(toml).toContain('instance_type = "standard-2"');
+    expect(toml).toContain("max_instances = 1");
+    expect(toml).not.toContain("standard-3");
+    expect(toml).not.toContain("standard-4");
+    expect(toml).not.toContain("DigiQuantHouseContainer");
   });
 
   it("allocation-shadow allowlist is empty and the checker is first", () => {

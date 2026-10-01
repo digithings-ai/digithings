@@ -3,11 +3,16 @@
 # Dockerfiles COPY the service source dirs, so exclude only what no image needs.
 .git
 .github
+# digiquant-runner house-run reads only these two files. The rest of .github stays out.
+!.github/digiquant-pipeline.yml
+!.github/workflows/pipeline-digiquant-allocation-shadow.yml
 .worktrees
 .claude
 .playwright-mcp
 node_modules
 **/node_modules
+# Host virtualenvs are not the image. uv sync builds /app/.venv.
+**/.venv
 **/.next
 **/out
 dist
