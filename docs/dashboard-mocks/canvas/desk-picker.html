@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Desk picker · digiquant</title>
 <link rel="stylesheet" href="mock.css">
+<style>
+  /* This frame leaves the menu open. Keep it in the rail so it does not cover the title. */
+  .app { overflow: visible; }
+  .side { height: auto; min-height: calc(100vh - var(--top)); overflow: visible; }
+  .deskpick .deskmenu { position: static; width: auto; margin-top: 8px; }
+</style>
 </head>
 <body>
 <div class="mock-note"><span><b>[mock]</b> desk picker open</span><span>desk <b>house</b> · spine 4 items</span><span>plan <b>studio</b></span><span>figures are layout placeholders, not book data</span><span>three desks · choosing one replaces the whole sidebar · no House page</span><a href="index.html">canvas frames</a></div>
@@ -22,7 +28,7 @@
 <main class="main">
 <div class="col">
 <header class="band"><div class="eyebrow"><i class="tick"></i><span>desk / picker</span></div><h1>Desk</h1><span class="lede">Choosing a desk replaces the whole sidebar.</span><div class="meta"><span>Book date <b>2026-09-30</b></span><span>Book <b>house ETF paper book</b></span><span>Posture <b>paper</b></span></div></header>
-<section class="sec"><h2 class="eyebrow"><i class="tick"></i><span class="no"></span><span class="lbl">Spines</span></h2><div class="body prose"><p class="lead">The menu lists three desks. Choosing one replaces the whole sidebar. house is a desk name. There is no House page.</p><p>The sidebar mounted now is the house spine: Brief, Portfolio, Pipeline, Settings. rates watch mounts Digest, Watchlist, Theses, Run, Config, Settings. FX Hub mounts Hub, Ideas, Watch, Settings.</p></div></section>
+<section class="sec"><h2 class="eyebrow"><i class="tick"></i><span class="no"></span><span class="lbl">Spines</span></h2><div class="body prose"><p class="lead">The menu lists three desks. Choosing one replaces the whole sidebar.</p><p class="lead">house is a desk name. There is no House page.</p><p>The sidebar mounted now is the house spine: Brief, Portfolio, Pipeline, Settings. rates watch mounts Digest, Watchlist, Theses, Run, Config, Settings. FX Hub mounts Hub, Ideas, Watch, Settings.</p></div></section>
 <footer class="foot"><span>[paper]</span><span>digiquant</span><span>layout mock, figures are placeholders</span></footer>
 </div>
 </main>
