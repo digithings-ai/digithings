@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { BookBlock } from '@/components/blocks';
 import { Gallery } from '@/components/Gallery';
+import { UiFixtures } from '@/components/UiFixtures';
 import { Window } from '@/components/Window';
 import { HOME, findPage } from '@/lib/nav';
 
@@ -10,6 +11,7 @@ export default async function Page({ params }: { params: Promise<{ path?: string
   if (path.length === 0) redirect(HOME);
   const full = '/' + path.join('/');
   if (full === '/blocks') return <Gallery />;
+  if (full === '/blocks/ui') return <UiFixtures />;
   const node = findPage(full);
   if (!node) notFound();
 
