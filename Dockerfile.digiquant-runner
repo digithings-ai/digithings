@@ -1,14 +1,18 @@
-# digiquant-runner — Phase 1 batch image (issue #4761).
+# digiquant-runner — one image on DigiQuantRunnerContainer (issue #4761).
 # Build context is the monorepo root. wrangler pins
 # image_build_context = "../.." from apps/digiquant-runner/wrangler.toml (#4046).
 #
 # The image code pin is the released main tree baked at build time.
 # The hot path inside commands.json is `uv run --frozen --no-sync`
 # except the tearsheet Coinbase step, which keeps `uv run --frozen --with ccxt`.
-# Sync installs digiquant with prices, research, and nautilus. Nautilus is
-# required by tearsheets and research-metrics. The 1.230.0 cp312 manylinux
-# x86_64 wheel is 182608916 bytes (uv.lock), so this stays one image class
-# on standard-2. No DigiQuantRunnerNautilusContainer. No house research chain.
+# Sync installs digiquant with prices, research, and nautilus, then an
+# inexact digigraph sync with checkpoint-postgres so the house chain can
+# import langgraph-checkpoint-postgres. The 1.230.0 cp312 manylinux x86_64
+# wheel is 182608916 bytes (uv.lock). One class, instance_type standard-2.
+# No DigiQuantRunnerNautilusContainer. No DigiQuantHouseContainer.
+#
+# Task 0 probe (not a guess): phase2 Size=1274551802 (~1.187 GiB);
+# house-candidate Size=1344917045 (~1.253 GiB). Hard stop: no.
 #
 # GIT_SHA defaults to unknown. wrangler does not pass build args here;
 # a non-wrangler build can set --build-arg GIT_SHA=<sha>. /healthz reports
@@ -32,13 +36,25 @@ COPY digibase ./digibase
 COPY digikey ./digikey
 COPY digifetch ./digifetch
 COPY digiquant ./digiquant
-COPY scripts/refresh_market_data_r2.py ./scripts/refresh_market_data_r2.py
-COPY apps/digiquant-runner/container/exec_job.py /opt/runner/exec_job.py
-COPY apps/digiquant-runner/commands.json /opt/runner/commands.json
+COPY digigraph ./digigraph
+COPY digillm ./digillm
+COPY digismith ./digismith
+COPY config/byok-providers.json ./config/byok-providers.json
 
-RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus
+RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus \
+    && uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres
+
+COPY scripts/refresh_market_data_r2.py ./scripts/refresh_market_data_r2.py
 COPY scripts/backfill_market_data_r2.py ./scripts/backfill_market_data_r2.py
 COPY scripts/execution_cron_check.py ./scripts/execution_cron_check.py
+COPY .github/digiquant-pipeline.yml ./.github/digiquant-pipeline.yml
+COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml \
+    ./.github/workflows/pipeline-digiquant-allocation-shadow.yml
+COPY apps/digiquant-runner/container/exec_job.py /opt/runner/exec_job.py
+COPY apps/digiquant-runner/container/house_chain_step.py /opt/runner/house_chain_step.py
+COPY apps/digiquant-runner/container/wake_stack.py /opt/runner/wake_stack.py
+COPY apps/digiquant-runner/container/web_search_preflight.py /opt/runner/web_search_preflight.py
+COPY apps/digiquant-runner/commands.json /opt/runner/commands.json
 
 ARG GIT_SHA=unknown
 ENV DIGIQUANT_RUNNER_GIT_SHA=${GIT_SHA}

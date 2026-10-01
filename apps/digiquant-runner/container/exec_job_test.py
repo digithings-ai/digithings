@@ -278,6 +278,26 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     sync = "uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus"
     if sync not in dockerfile or "scripts/execution_cron_check.py" not in dockerfile:
         raise SystemExit("image must install nautilus and copy the probe wrapper")
+    house_sync = "uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres"
+    if house_sync not in dockerfile:
+        raise SystemExit("house image must inexact-sync digigraph checkpoint-postgres")
+    for needle in (
+        "COPY digigraph ./digigraph",
+        "COPY digillm ./digillm",
+        "COPY digismith ./digismith",
+        "config/byok-providers.json",
+        ".github/digiquant-pipeline.yml",
+        "pipeline-digiquant-allocation-shadow.yml",
+        "/opt/runner/house_chain_step.py",
+        "/opt/runner/wake_stack.py",
+        "/opt/runner/web_search_preflight.py",
+    ):
+        if needle not in dockerfile:
+            raise SystemExit(f"house image missing {needle}")
+    if ignore.count("!.github/digiquant-pipeline.yml") != 1:
+        raise SystemExit("pipeline env file must be re-included")
+    if ignore.count("!.github/workflows/pipeline-digiquant-allocation-shadow.yml") != 1:
+        raise SystemExit("shadow workflow must be re-included")
     if "DigiQuantRunnerNautilusContainer" in wrangler:
         raise SystemExit("nautilus stays on the phase 1 class")
     if wrangler.count("[[containers]]") != 1:

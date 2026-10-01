@@ -1,3 +1,5 @@
+# Clock is digithings-cron → digiquant-runner. repository_dispatch type
+# digiquant-baseline remains for a manual override. Do not add schedule:.
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant research"
 

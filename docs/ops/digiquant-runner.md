@@ -5,9 +5,10 @@ Private Cloudflare Container Worker for the digiquant live cadence
 custom domain, no routes. digithings-cron is the only clock. It reaches this
 Worker over the `RUNNER` service binding.
 
-This Worker does not run the house research chain, broker credentials, Alpaca
-keys, or `--execute`. twelve-x stays `workflow_dispatch`. The execution probe
-is `--dry-run` only.
+The catalog includes `house-run` on this same class. digithings-cron still
+sends `repository_dispatch` until the clock flip. No broker credentials, no
+Alpaca keys, and no `--execute`. twelve-x stays `workflow_dispatch`. The
+execution probe is `--dry-run` only.
 
 ## Commands
 
@@ -201,9 +202,19 @@ The same shape covers `12 0 * * *` (tearsheets), `5 22 * * *`
 
 ## Phase 3 note
 
-Phases 1–2 do not run the house research chain and do not write the
-skip-if-done ledger. A same-day GitHub Actions manual house success does not
-write `pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
+The house-run image stays on `DigiQuantRunnerContainer` (`standard-2`,
+`max_instances = 1`). Task 0 probe: phase2 Size=1274551802 (~1.187 GiB),
+house-candidate Size=1344917045 (~1.253 GiB). The bake keeps the frozen
+digiquant extras `prices` / `research` / `nautilus` and adds
+`uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres`.
+Extra copies are `digigraph`, `digillm`, `digismith`, and
+`config/byok-providers.json`, plus `.github/digiquant-pipeline.yml`,
+`.github/workflows/pipeline-digiquant-allocation-shadow.yml`, and the
+`/opt/runner` scripts `house_chain_step.py`, `wake_stack.py`, and
+`web_search_preflight.py`.
+
+A same-day GitHub Actions manual house success does not write
+`pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
 
 The implementation plan is
 [docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md](../superpowers/plans/2026-09-30-digiquant-house-run-phase3.md).
