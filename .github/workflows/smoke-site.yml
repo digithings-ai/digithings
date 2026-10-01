@@ -1,3 +1,5 @@
+# Prod cadence is a digithings-cron probe (smoke-site, 17 6 * * *).
+# workflow_dispatch remains the manual override. Do not add schedule:.
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Smoke: site"
 

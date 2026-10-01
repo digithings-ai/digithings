@@ -5,7 +5,7 @@ import {
   workflowDispatchUrl,
 } from "./dispatch";
 import type { Env } from "./env";
-import type { Job } from "./jobs";
+import { JOBS, type Job } from "./jobs";
 
 const baseJob: Job = {
   id: "test-job",
@@ -313,6 +313,80 @@ describe("dispatch", () => {
     expect(result).toEqual({ ok: true, status: 204, dry_run: false });
     expect(runnerFetch).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledOnce();
+    const logged = errorSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain('"github_override":true');
+    expect(logged).toContain('"error":"github_override"');
+  });
+
+  it("probe smoke-stack fetches healthz and does not call the runner or GitHub", async () => {
+    const urls: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "smoke-stack");
+    expect(job?.kind).toBe("probe");
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job as Job, job?.cron ?? "", 1);
+    expect(result).toEqual({ ok: true, status: 200, dry_run: false });
+    expect(urls).toEqual([
+      "https://graph.digithings.ai/healthz",
+      "https://key.digithings.ai/healthz",
+      "https://search.digithings.ai/healthz",
+    ]);
+    expect(urls.some((url) => url.includes("api.github.com"))).toBe(false);
+    expect(runnerFetch).not.toHaveBeenCalled();
+  });
+
+  it("DRY_RUN probe logs the url list and does not fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "smoke-site") as Job;
+    const env: Env = {
+      DRY_RUN: "1",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron);
+    expect(result).toEqual({ ok: true, status: 0, dry_run: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
+    const logged = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("https://digithings.ai/");
+    expect(logged).toContain("https://digiquant.io/og.png");
+    expect(logged).toContain("https://digiquant.io/build-info.json");
+    expect(logged).not.toContain("api.github.com");
+  });
+
+  it("logs github_override and workflow_dispatch when a probe job id is listed", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "smoke-site") as Job;
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "smoke-site",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, 9);
+    expect(result).toEqual({ ok: true, status: 204, dry_run: false });
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("api.github.com");
+    expect(url).toContain("smoke-site.yml");
     const logged = errorSpy.mock.calls.map((call) => String(call[0])).join("\n");
     expect(logged).toContain('"github_override":true');
     expect(logged).toContain('"error":"github_override"');

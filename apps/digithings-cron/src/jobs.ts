@@ -2,7 +2,7 @@
  * Typed job map for digithings-cron.
  * Each enabled job.cron must appear in wrangler.toml [triggers] crons.
  */
-export type JobKind = "workflow_dispatch" | "repository_dispatch" | "container";
+export type JobKind = "workflow_dispatch" | "repository_dispatch" | "container" | "probe";
 
 export type Job = {
   id: string;
@@ -22,6 +22,8 @@ export type Job = {
   timeoutSeconds?: number;
   /** Image pin. Phase 1 jobs use "main". */
   codeRef?: "main";
+  /** Set when kind is "probe". Worker fetch; does not start the container. */
+  probe?: "site" | "stack";
 };
 
 const DIGITHINGS = "digithings-ai/digithings" as const;
@@ -49,6 +51,20 @@ function wd(
     ref: DEVELOP,
     etOpenGate: opts.etOpenGate,
     enabled: opts.enabled ?? true,
+  };
+}
+
+/** Probe job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+function pj(id: string, cron: string, workflow: string, probe: "site" | "stack"): Job {
+  return {
+    id,
+    cron,
+    repo: DIGITHINGS,
+    kind: "probe",
+    workflow,
+    ref: DEVELOP,
+    enabled: true,
+    probe,
   };
 }
 
@@ -240,13 +256,13 @@ export const JOBS: readonly Job[] = [
     DIGITHINGS,
     "project-enforce-assignment.yml",
   ),
-  wd("smoke-stack", "27 7 * * *", DIGITHINGS, "smoke-stack.yml"),
+  pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
   wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
   wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
-  wd("smoke-site", "17 6 * * *", DIGITHINGS, "smoke-site.yml"),
+  pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
 
   // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---
   wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),

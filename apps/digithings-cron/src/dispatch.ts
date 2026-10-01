@@ -3,9 +3,12 @@
  * workflow_dispatch / repository_dispatch stay on GitHub.
  * kind "container" POSTs the private digiquant-runner over the RUNNER binding
  * unless the job id is listed in GITHUB_OVERRIDE_JOBS (default empty).
+ * kind "probe" fetches public URLs inside this Worker. It does not call
+ * RUNNER or api.github.com unless that same override list names the job id.
  */
 import type { Env } from "./env";
 import type { Job } from "./jobs";
+import { probeUrls, runProbe } from "./probe";
 
 const GH_API = "https://api.github.com";
 const GH_API_VERSION = "2022-11-28";
@@ -69,8 +72,10 @@ export function githubOverrideIds(env: Env): string[] {
 }
 
 function usesGithub(job: Job, env: Env): boolean {
-  if (job.kind !== "container") return true;
-  return githubOverrideIds(env).includes(job.id);
+  if (job.kind === "container" || job.kind === "probe") {
+    return githubOverrideIds(env).includes(job.id);
+  }
+  return true;
 }
 
 type ContainerAccept = {
@@ -185,11 +190,42 @@ async function dispatchContainer(
   throw new Error(`digiquant-runner dispatch failed for ${job.id}: HTTP ${res.status}`);
 }
 
+async function dispatchProbe(env: Env, job: Job, cron: string): Promise<DispatchResult> {
+  if (job.probe !== "site" && job.probe !== "stack") {
+    throw new Error(`job ${job.id}: probe requires probe "site" or "stack"`);
+  }
+  const urls = probeUrls(job.probe);
+  if (env.DRY_RUN === "1") {
+    logLine({
+      cron,
+      repo: job.repo,
+      job: job.id,
+      probe: job.probe,
+      github_status: null,
+      dry_run: true,
+      urls,
+    });
+    return { ok: true, status: 0, dry_run: true };
+  }
+  await runProbe(job.probe, fetch, new Date());
+  logLine({
+    cron,
+    repo: job.repo,
+    job: job.id,
+    probe: job.probe,
+    github_status: null,
+    dry_run: false,
+    urls,
+  });
+  return { ok: true, status: 200, dry_run: false };
+}
+
 /**
  * Dispatch one job.
  * Container jobs POST digiquant-runner. Accepted, already-running, duplicate, and
- * skipped 202 responses are successful. DRY_RUN=1 logs and does not call. A job id
- * in GITHUB_OVERRIDE_JOBS uses workflow_dispatch and logs github_override.
+ * skipped 202 responses are successful. Probe jobs fetch public URLs in this
+ * Worker. DRY_RUN=1 logs and does not call. A job id in GITHUB_OVERRIDE_JOBS
+ * uses workflow_dispatch and logs github_override.
  */
 export async function dispatch(
   env: Env,
@@ -198,21 +234,24 @@ export async function dispatch(
   scheduledTime = 0,
   opts: { args?: Record<string, string> } = {},
 ): Promise<DispatchResult> {
-  if (!usesGithub(job, env)) {
-    return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
+  if (usesGithub(job, env)) {
+    if (job.kind === "container" || job.kind === "probe") {
+      console.error(
+        JSON.stringify({
+          cron,
+          repo: job.repo,
+          job: job.id,
+          github_override: true,
+          error: "github_override",
+        }),
+      );
+    }
+    return dispatchGithub(env, job, cron);
   }
-  if (job.kind === "container") {
-    console.error(
-      JSON.stringify({
-        cron,
-        repo: job.repo,
-        job: job.id,
-        github_override: true,
-        error: "github_override",
-      }),
-    );
+  if (job.kind === "probe") {
+    return dispatchProbe(env, job, cron);
   }
-  return dispatchGithub(env, job, cron);
+  return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
 
 async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
@@ -220,7 +259,7 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
   let url: string;
   let body: Record<string, unknown>;
 
-  if (job.kind === "workflow_dispatch" || job.kind === "container") {
+  if (job.kind === "workflow_dispatch" || job.kind === "container" || job.kind === "probe") {
     if (!job.workflow || !job.ref) {
       throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
     }
