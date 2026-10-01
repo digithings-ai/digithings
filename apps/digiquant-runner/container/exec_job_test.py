@@ -285,19 +285,20 @@ def _check_phase2(commands: dict[str, Any]) -> None:
         "COPY digigraph ./digigraph",
         "COPY digillm ./digillm",
         "COPY digismith ./digismith",
-        "config/byok-providers.json",
-        ".github/digiquant-pipeline.yml",
-        "pipeline-digiquant-allocation-shadow.yml",
+        "COPY config/byok-providers.json",
+        "COPY .github/digiquant-pipeline.yml",
+        "COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml",
         "/opt/runner/house_chain_step.py",
         "/opt/runner/wake_stack.py",
         "/opt/runner/web_search_preflight.py",
     ):
         if needle not in dockerfile:
             raise SystemExit(f"house image missing {needle}")
-    if ignore.count("!.github/digiquant-pipeline.yml") != 1:
-        raise SystemExit("pipeline env file must be re-included")
-    if ignore.count("!.github/workflows/pipeline-digiquant-allocation-shadow.yml") != 1:
-        raise SystemExit("shadow workflow must be re-included")
+    github_at = ignore.find("\n.github\n")
+    pipeline_at = ignore.find("!.github/digiquant-pipeline.yml")
+    shadow_at = ignore.find("!.github/workflows/pipeline-digiquant-allocation-shadow.yml")
+    if github_at < 0 or pipeline_at < github_at or shadow_at < pipeline_at:
+        raise SystemExit("pipeline and shadow re-includes must follow the .github exclude")
     if "DigiQuantRunnerNautilusContainer" in wrangler:
         raise SystemExit("nautilus stays on the phase 1 class")
     if wrangler.count("[[containers]]") != 1:

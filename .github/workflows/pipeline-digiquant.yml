@@ -1,5 +1,7 @@
-# Clock is digithings-cron → digiquant-runner. repository_dispatch type
-# digiquant-baseline remains for a manual override. Do not add schedule:.
+# Do not add schedule:. repository_dispatch type digiquant-baseline is still
+# the production house clock from digithings-cron until the container flip.
+# After that flip the clock is digithings-cron → digiquant-runner, and
+# repository_dispatch stays only as a manual override.
 # Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant research"
 

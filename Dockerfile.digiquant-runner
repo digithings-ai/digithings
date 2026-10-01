@@ -7,7 +7,9 @@
 # except the tearsheet Coinbase step, which keeps `uv run --frozen --with ccxt`.
 # Sync installs digiquant with prices, research, and nautilus, then an
 # inexact digigraph sync with checkpoint-postgres so the house chain can
-# import langgraph-checkpoint-postgres. The 1.230.0 cp312 manylinux x86_64
+# import langgraph-checkpoint-postgres. --inexact is required: the second
+# sync must not remove psycopg[binary] that the research extra installed.
+# The 1.230.0 cp312 manylinux x86_64
 # wheel is 182608916 bytes (uv.lock). One class, instance_type standard-2.
 # No DigiQuantRunnerNautilusContainer. No DigiQuantHouseContainer.
 #
