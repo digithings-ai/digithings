@@ -120,6 +120,7 @@ local scroll_tap = nil
 local idle_timer = nil
 local esc_tap = nil
 local hover_seq = 0
+local mono_font = nil
 
 -- Forward declarations: defined below their first use site.
 local current_view
@@ -137,6 +138,43 @@ local function read_json(path)
     return value
   end
   return nil
+end
+
+--- DigiChat mono is JetBrains Mono. Menlo keeps the wrap monospace when that
+--- face is not installed (a missing name falls back to a proportional font).
+local function banner_font()
+  if mono_font then
+    return mono_font
+  end
+  local override = os.getenv("DIGIVOICE_BANNER_FONT")
+  if override and override ~= "" then
+    mono_font = override
+    return mono_font
+  end
+  local home = os.getenv("HOME") or ""
+  local dirs = {
+    home .. "/Library/Fonts/",
+    "/Library/Fonts/",
+    "/System/Library/Fonts/Supplemental/",
+  }
+  local files = {
+    "JetBrainsMono-Regular.ttf",
+    "JetBrainsMonoNL-Regular.ttf",
+    "JetBrainsMono-Regular.otf",
+    "JetBrains Mono Regular.ttf",
+  }
+  for _, dir in ipairs(dirs) do
+    for _, name in ipairs(files) do
+      local f = io.open(dir .. name, "r")
+      if f then
+        f:close()
+        mono_font = "JetBrains Mono"
+        return mono_font
+      end
+    end
+  end
+  mono_font = "Menlo"
+  return mono_font
 end
 
 --- DigiChat light/dark flip. Tests pin DIGIVOICE_THEME; on a Mac we read the
@@ -321,7 +359,10 @@ local function build_canvas(s, view, box)
   local canvas_h = box.h + (hover and core.controls_height(s.density) or 0)
   local origin = s.origin or core.resolve_position(s.config.banner_position, screen:frame(), box, core.MARGIN)
   s.origin = { x = origin.x, y = origin.y }
+  -- Face is the banner box. Controls hang below it and must not move the pin.
+  s.face = { w = box.w, h = box.h }
   s.size = { w = box.w, h = canvas_h }
+  s.copy_text = box.raw or ""
   canvas = hs.canvas.new({ x = origin.x, y = origin.y, w = box.w, h = canvas_h })
   canvas:level(hs.canvas.windowLevels.overlay)
   -- A click only cycles density; it must never steal focus from the app being typed into.
@@ -358,7 +399,7 @@ local function build_canvas(s, view, box)
       text = visible_text(s, box),
       textColor = chrome.text,
       textSize = core.FONT_SIZE,
-      textFont = "Menlo",
+      textFont = banner_font(),
       textAlignment = "left",
       id = "body",
       frame = {
@@ -473,9 +514,13 @@ function rebuild(s)
   else
     s.caret = math.min(s.caret or 0, #s.tw_target)
   end
-  local prev = { x = s.origin.x, y = s.origin.y, w = s.size.w, h = s.size.h }
-  local extra = s.hover and core.controls_height(s.density) or 0
-  local next = core.reanchor(prev, { w = box.w, h = box.h + extra }, s.anchor)
+  local prev = {
+    x = s.origin.x,
+    y = s.origin.y,
+    w = (s.face and s.face.w) or s.size.w,
+    h = (s.face and s.face.h) or box.h,
+  }
+  local next = core.reanchor(prev, { w = box.w, h = box.h }, s.anchor)
   s.origin = next
   build_canvas(s, view, box)
   ensure_tw(s)
@@ -538,11 +583,15 @@ local function render(s)
         s.anchor = core.anchor_for_position(s.config.banner_position)
       end
     else
-      -- Keep the pin across takes/text updates so growth heads outward.
-      local extra = s.hover and core.controls_height(s.density) or 0
+      -- Pin the banner face. Hover controls hang below and do not shift it.
       s.origin = core.reanchor(
-        { x = s.origin.x, y = s.origin.y, w = s.size.w, h = s.size.h },
-        { w = box.w, h = box.h + extra },
+        {
+          x = s.origin.x,
+          y = s.origin.y,
+          w = (s.face and s.face.w) or s.size.w,
+          h = (s.face and s.face.h) or box.h,
+        },
+        { w = box.w, h = box.h },
         s.anchor
       )
     end
@@ -635,8 +684,9 @@ function start_drag(s)
     end
     local screen = hs.screen.mainScreen()
     if screen then
+      local face = s.face or s.size
       local clamped = core.clamp_position(
-        s.drag.ox + dx, s.drag.oy + dy, screen:frame(), s.size, core.MARGIN
+        s.drag.ox + dx, s.drag.oy + dy, screen:frame(), face, core.MARGIN
       )
       s.origin = { x = clamped.x, y = clamped.y }
       canvas:topLeft({ x = clamped.x, y = clamped.y })
@@ -658,8 +708,9 @@ function finish_drag(s)
   if was_moved and s.origin then
     local screen = hs.screen.mainScreen()
     if screen then
+      local face = s.face or s.size
       local snapped = core.snap_position(
-        s.origin.x, s.origin.y, screen:frame(), s.size, core.MARGIN
+        s.origin.x, s.origin.y, screen:frame(), face, core.MARGIN
       )
       s.origin = { x = snapped.x, y = snapped.y }
       s.anchor = snapped.anchor
@@ -740,7 +791,8 @@ function finish_click(s, id)
     id = hit_test(s)
   end
   if id == "copy" then
-    copy_body(s.tw_target or (s.box and s.box.body) or "")
+    -- Full transcript, not the padded glimpse or the typewriter prefix.
+    copy_body(s.copy_text or (s.box and s.box.raw) or "")
   elseif id == "close" then
     hide_banner(s)
   else
@@ -771,6 +823,27 @@ ensure_scroll_tap = function(s, box)
   end
   scroll_tap = hs.eventtap.new({ types.scrollWheel }, function(event)
     if session ~= s or not canvas or s.density ~= "full" or s.hidden then
+      return false
+    end
+    -- Only the banner scrolls. A wheel over the rest of the desktop passes through.
+    local mouse = hs.mouse
+    local pos
+    if mouse and mouse.getAbsolutePosition then
+      local ok_pos, found = pcall(mouse.getAbsolutePosition)
+      if ok_pos then
+        pos = found
+      end
+    end
+    local face = s.face or s.size
+    if not pos or not s.origin or not face then
+      return false
+    end
+    if
+      pos.x < s.origin.x
+      or pos.x >= s.origin.x + face.w
+      or pos.y < s.origin.y
+      or pos.y >= s.origin.y + face.h
+    then
       return false
     end
     local ok, delta = pcall(event.getProperty, event, props.scrollWheelEventDeltaAxis1)

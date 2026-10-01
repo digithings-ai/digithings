@@ -700,6 +700,32 @@ function scenarios.hover_controls_row()
   eq(#button_frames(live_canvas()), 0, "controls leave with the cursor")
 end
 
+function scenarios.hover_does_not_shift_center_pin()
+  write(DATA .. "/settings.json", '{"banner_position": "center"}')
+  press_right_option()
+  write_status("dict", "rewriting", "hover me", "")
+  advance(1)
+  local c = live_canvas()
+  local x, y = c.frame.x, c.frame.y
+  hover(true)
+  c = live_canvas()
+  eq(c.frame.x, x, "center face x stays when controls appear")
+  eq(c.frame.y, y, "center face y stays when controls hang below")
+  check(c.frame.h > c[1].frame.h, "canvas grew for the controls")
+end
+
+function scenarios.copy_is_the_full_transcript()
+  press_right_option()
+  local text = string.rep("word ", 40)
+  write_status("dict", "rewriting", text, "")
+  advance(0.05)
+  hover(true)
+  click("copy")
+  local clip = io.open(os.getenv("DIGIVOICE_PBCOPY_FILE"), "r")
+  eq(clip:read("*a"), text, "copy is the full transcript, not the caret prefix")
+  clip:close()
+end
+
 function scenarios.hover_controls_stack()
   write(DATA .. "/settings.json", '{"banner_density": "mini"}')
   press_right_option()
@@ -790,6 +816,10 @@ function scenarios.full_scroll_caps_and_wheels()
   local first = body_of(c)
   check(first:find("line 1", 1, true), "window starts at the top")
   check(find_scroll_tap(), "wheel armed while full overflows")
+  set_mouse(0, 0)
+  eq(scroll_wheel(-1), false, "wheel outside the banner passes through")
+  eq(body_of(live_canvas()), first, "outside wheel does not scroll")
+  set_mouse(c.frame.x + 8, c.frame.y + 8)
   eq(scroll_wheel(-1), true, "wheel down scrolls")
   local moved = body_of(live_canvas())
   check(moved ~= first, "the line window moves")
@@ -824,6 +854,8 @@ function scenarios.theme_chrome_dark()
   local ink = c[2].textColor
   check(math.abs(ink.red - 0xF2 / 255) < 0.002, "dark banner text")
   eq(c[3].fillColor.red, 0.94, "recording red stays across themes")
+  local font = c[2].textFont
+  check(font == "Menlo" or font == "JetBrains Mono", "transcript is the digichat mono")
 end
 
 local run = scenarios[scenario]
