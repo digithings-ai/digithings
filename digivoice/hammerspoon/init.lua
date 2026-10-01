@@ -508,6 +508,34 @@ local tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(e
   return false
 end)
 
+--- Home launch (`digivoice` with no args) calls this over `hs -c`.
+--- Shows the existing banner canvas. Does not arm a take and does not touch the menubar.
+function M.banner_visible()
+  return canvas ~= nil
+end
+
+function M.ensure_banner()
+  local config = core.parse_settings(read_json(SETTINGS_FILE))
+  if not config.live_banner then
+    return "disabled"
+  end
+  if canvas ~= nil then
+    return "visible"
+  end
+  if session and session.task and session.task.isRunning and session.task:isRunning() then
+    start_frames(session)
+    return canvas ~= nil and "shown" or "hidden"
+  end
+  local s = begin_session("dict")
+  s.local_state = "loading"
+  s.standby = true
+  start_frames(s)
+  if canvas ~= nil then
+    return "shown"
+  end
+  return "hidden"
+end
+
 function M.start()
   tap:start()
   -- The one allowed notification: what is armed, and which CLI it will run.

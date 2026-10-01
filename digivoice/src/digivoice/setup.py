@@ -24,6 +24,7 @@ from digivoice.settings import (
     RewritePreset,
     RewriteRunnerKind,
     VoiceSettings,
+    format_settings_text,
     load_settings,
     save_settings,
     settings_path,
@@ -36,6 +37,8 @@ from digivoice.tui import (
     _write_info_frame,
     choose,
     choose_many,
+    fullscreen_enter,
+    fullscreen_leave,
     pixel_wordmark,
     tui_header_lines,
 )
@@ -459,88 +462,103 @@ def run_interactive_setup(
     working: dict[str, Any] = current.model_dump(mode="json")
     dirty = False
     tty = _is_tty(stdin)
-    if not tty:
-        # Byte-stable banner for agents/pipes/tests; TTY frames draw their own
-        # pixel header on every redraw instead of scroll-appending this once.
-        stdout.write("┌─ digivoice setup ──────────────────────────────────────┐\n")
-        stdout.write("│  DigiVoice · local speech config                       │\n")
-        stdout.write("│  ↑↓ move · Enter select · Esc back · q quit            │\n")
-        stdout.write("└────────────────────────────────────────────────────────┘\n")
-        stdout.flush()
-    while True:
-        picked = choose("digivoice setup", list(SETUP_MENU), stdin, stdout)
-        if picked is None or SETUP_MENU[picked] == "Quit":
-            if dirty:
-                stdout.write("  Unsaved changes.\n")
-                save = choose("Save before quitting?", ["Save", "Discard"], stdin, stdout)
-                if save == 0:
-                    try:
-                        settings = VoiceSettings.model_validate(working)
-                    except Exception as exc:
-                        stdout.write(f"  invalid settings — not saved: {exc}\n")
-                        return 1
-                    save_settings(paths, settings)
-                    stdout.write(f"  saved {settings_path(paths)}\n")
+    note = ""
+    if tty:
+        fullscreen_enter(stdout)
+    try:
+        if not tty:
+            # Byte-stable banner for agents/pipes/tests. TTY frames redraw in place.
+            stdout.write("┌─ digivoice setup ──────────────────────────────────────┐\n")
+            stdout.write("│  DigiVoice · local speech config                       │\n")
+            stdout.write("│  ↑↓ move · Enter select · Esc back · q quit            │\n")
+            stdout.write("└────────────────────────────────────────────────────────┘\n")
+            stdout.flush()
+        while True:
+            picked = choose("digivoice setup", list(SETUP_MENU), stdin, stdout)
+            if picked is None or SETUP_MENU[picked] == "Quit":
+                if dirty:
+                    stdout.write("  Unsaved changes.\n")
+                    save = choose("Save before quitting?", ["Save", "Discard"], stdin, stdout)
+                    if save == 0:
+                        try:
+                            settings = VoiceSettings.model_validate(working)
+                        except Exception as exc:
+                            msg = f"  invalid settings — not saved: {exc}\n"
+                            if tty:
+                                note = msg
+                            else:
+                                stdout.write(msg)
+                            return 1
+                        save_settings(paths, settings)
+                        msg = f"  saved {settings_path(paths)}\n"
+                        if tty:
+                            note = msg
+                        else:
+                            stdout.write(msg)
+                        return 0
                     return 0
                 return 0
-            return 0
-        section = SETUP_MENU[picked]
-        if section.startswith("Models"):
-            before = json.dumps(working, sort_keys=True)
-            _edit_models(working, stdin, stdout)
-            dirty = dirty or json.dumps(working, sort_keys=True) != before
-        elif section.startswith("Features"):
-            before = json.dumps(working, sort_keys=True)
-            _edit_features(working, stdin, stdout)
-            dirty = dirty or json.dumps(working, sort_keys=True) != before
-        elif section.startswith("Hotkeys"):
-            _show_hotkeys(stdout, stdin)
-        elif section.startswith("Hardware"):
-            _show_hardware(stdout, stdin)
-        elif section.startswith("Review"):
-            try:
-                preview = VoiceSettings.model_validate(working)
-            except Exception as exc:
-                stdout.write(f"  invalid settings — fix before saving: {exc}\n")
-                continue
-            from digivoice.settings import format_settings_text as _fmt
-
-            if tty:
-                _write_info_frame(
-                    stdout,
-                    "— Review & save —",
-                    _fmt(preview, paths).splitlines(),
-                    footer="Enter to choose",
-                )
-            else:
-                stdout.write("\n" + _fmt(preview, paths) + "\n")
-                stdout.flush()
-            save = choose("Save these settings?", ["Save", "Keep editing"], stdin, stdout)
-            if save == 0:
-                save_settings(paths, preview)
-                stdout.write(f"  saved {settings_path(paths)}\n")
-                dirty = False
-        elif section.startswith("Doctor"):
-            if run_doctor is not None:
-                if tty:
-                    _write_info_frame(
-                        stdout, "— Doctor —", run_doctor().splitlines(), footer="Enter to go back"
-                    )
-                    _pause(stdin, stdout)
-                else:
-                    stdout.write("\n" + run_doctor() + "\n")
-                    stdout.flush()
-            else:
+            section = SETUP_MENU[picked]
+            if section.startswith("Models"):
+                before = json.dumps(working, sort_keys=True)
+                _edit_models(working, stdin, stdout)
+                dirty = dirty or json.dumps(working, sort_keys=True) != before
+            elif section.startswith("Features"):
+                before = json.dumps(working, sort_keys=True)
+                _edit_features(working, stdin, stdout)
+                dirty = dirty or json.dumps(working, sort_keys=True) != before
+            elif section.startswith("Hotkeys"):
+                _show_hotkeys(stdout, stdin)
+            elif section.startswith("Hardware"):
+                _show_hardware(stdout, stdin)
+            elif section.startswith("Review"):
+                try:
+                    preview = VoiceSettings.model_validate(working)
+                except Exception as exc:
+                    stdout.write(f"  invalid settings — fix before saving: {exc}\n")
+                    continue
                 if tty:
                     _write_info_frame(
                         stdout,
-                        "— Doctor —",
-                        ["  Run `digivoice doctor` to see health checks."],
+                        "Review & save",
+                        format_settings_text(preview, paths).splitlines(),
+                        footer="Enter to choose",
                     )
-                    _pause(stdin, stdout)
                 else:
-                    stdout.write("\n  Run `digivoice doctor` to see health checks.\n")
+                    stdout.write("\n" + format_settings_text(preview, paths) + "\n")
                     stdout.flush()
+                save = choose("Save these settings?", ["Save", "Keep editing"], stdin, stdout)
+                if save == 0:
+                    save_settings(paths, preview)
+                    stdout.write(f"  saved {settings_path(paths)}\n")
+                    dirty = False
+            elif section.startswith("Doctor"):
+                if run_doctor is not None:
+                    if tty:
+                        _write_info_frame(
+                            stdout, "Doctor", run_doctor().splitlines(), footer="Enter to go back"
+                        )
+                        _pause(stdin, stdout)
+                    else:
+                        stdout.write("\n" + run_doctor() + "\n")
+                        stdout.flush()
+                else:
+                    if tty:
+                        _write_info_frame(
+                            stdout,
+                            "Doctor",
+                            ["  Run `digivoice doctor` to see health checks."],
+                        )
+                        _pause(stdin, stdout)
+                    else:
+                        stdout.write("\n  Run `digivoice doctor` to see health checks.\n")
+                        stdout.flush()
+    finally:
+        if tty:
+            fullscreen_leave(stdout)
+        if note:
+            stdout.write(note)
+            stdout.flush()
 
 
 def _silence_unused() -> None:

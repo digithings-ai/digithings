@@ -265,22 +265,42 @@ def _reload(args: argparse.Namespace, runtime: Runtime) -> CliResult:
 
 
 def _home(runtime: Runtime) -> CliResult:
-    """Bare `digivoice`: TUI home on a TTY, printed overview otherwise."""
-    from digivoice.home import build_context_lines, render_home_overview, run_home
+    """Bare `digivoice`: TUI home on a TTY, printed overview otherwise.
 
+    Either way, try to bring Hammerspoon and the banner up on a short budget.
+    """
+    from digivoice.home import (
+        _context_with_control,
+        build_context_lines,
+        render_home_overview,
+        run_home,
+    )
+    from digivoice.reload import ensure_home_control
+    from digivoice.settings import format_settings_text, load_settings
+
+    report = ensure_home_control(
+        runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner
+    )
     if not sys.stdin.isatty():
         # Never hang an agent/pipe: print the overview instead of the shell.
-        from digivoice.settings import format_settings_text, load_settings
-
         paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
-        context = build_context_lines(
-            runtime.platform, runtime.home, dict(runtime.env), probe=runtime.probe
+        context = _context_with_control(
+            build_context_lines(
+                runtime.platform, runtime.home, dict(runtime.env), probe=runtime.probe
+            ),
+            report.summary,
         )
         text = render_home_overview(
             format_settings_text(load_settings(paths), paths), context_lines=context
         )
         return CliResult(code=0, stdout=text + "\n", stderr="")
-    code = run_home(runtime.platform, runtime.home, dict(runtime.env))
+    code = run_home(
+        runtime.platform,
+        runtime.home,
+        dict(runtime.env),
+        runner=runtime.runner,
+        launch=report,
+    )
     return CliResult(code=code, stdout="", stderr="")
 
 
