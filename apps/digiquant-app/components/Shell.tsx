@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as RKeyEvent, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { CommandLine, type CommandLineHandle } from './CommandLine';
+import { DeskPicker, PageGate } from './Access';
 import { Logo } from './Logo';
 import { NavTree } from './NavTree';
 
@@ -157,6 +158,7 @@ export function Shell({ children }: { children: ReactNode }) {
           )}
           <Logo />
         </div>
+        <DeskPicker />
         <CommandLine ref={cmd} pathname={pathname} />
         <button type="button" className="btn help-btn" onClick={() => setHelp((h) => !h)} aria-label="Keyboard shortcuts" aria-expanded={help} aria-controls="help">?</button>
       </header>
@@ -187,7 +189,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </>
       ) : null}
 
-      <main id="main" tabIndex={-1} className="main">{children}</main>
+      <main id="main" tabIndex={-1} className="main"><PageGate>{children}</PageGate></main>
 
       {help ? (
         <div id="help" ref={helpRef} tabIndex={-1} className="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">

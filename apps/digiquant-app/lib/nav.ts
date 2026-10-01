@@ -8,6 +8,8 @@ export type NavNode = {
   label: string;
   status?: 'wip' | 'soon';
   children?: NavNode[];
+  /** Set from the access manifest when the caller can see but not open the page: the tag to show ("pro", "12x"). */
+  lock?: string;
 };
 
 export type NavGroup = { title: string | null; items: NavNode[] };
@@ -90,9 +92,8 @@ export function findPage(path: string): NavNode | undefined {
 }
 
 /** Case-insensitive match on path or label, for the command line. */
-export function searchPages(q: string): NavNode[] {
+export function searchPages(q: string, all: NavNode[] = flatPages()): NavNode[] {
   const needle = q.trim().toLowerCase().replace(/^\//, '');
-  const all = flatPages();
   if (!needle) return all;
   return all.filter((p) => p.path.toLowerCase().includes(needle) || p.label.toLowerCase().includes(needle));
 }
