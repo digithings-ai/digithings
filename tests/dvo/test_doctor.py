@@ -96,3 +96,4 @@ def test_rewrite_and_interrupt_are_informational_when_disabled() -> None:
     assert "disabled" in _check(report, "rewrite")
     assert "interrupt" in report.text
     assert "paste + start a new take" in _check(report, "interrupt")
+    assert "digivoice cancel" in _check(report, "interrupt")

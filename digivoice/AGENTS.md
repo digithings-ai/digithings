@@ -38,14 +38,18 @@ Before editing `digivoice/`:
 - `dict` and `speak` keep stdout to the text alone so they can be piped. Progress goes to stderr.
 - Public results are Pydantic v2 models in `models.py`. Do not return bare dicts from `doctor`, `run`, or the pipeline stages.
 - Tests inject `FakeProbe` and `FakeRunner` from `tests/dvo/fakes.py`. No test may need a real microphone, sound card, model, or clipboard.
-- Hotkeys belong in `digivoice/hammerspoon/` (sample adapter), not in the installable Python package. Locked sample binds: Right Option = dict toggle; double-tap Left Option = speak `--selection` (soft-fail if empty; no clipboard/history fallback). Not hold-to-talk; not Ctrl+Shift+Option; not Ctrl+Shift+S.
+- Hotkeys belong in `digivoice/hammerspoon/` (sample adapter), not in the installable Python package. Locked sample binds: Right Option = dict toggle; Esc = cancel an active take; double-tap Left Option = speak `--selection` (soft-fail if empty; no clipboard/history fallback). Not hold-to-talk; not Ctrl+Shift+Option; not Ctrl+Shift+S.
 - On stop/interrupt, keep the wav and paste what was captured (default). Resume-same-take is not supported — paste + new take.
+- Status is shown by the custom banner in `hammerspoon/` (fed by `status.json`), never by Hammerspoon notifications. The only allowed toast is the launch notice listing the commands. The banner is display only: it never starts or stops anything (Esc is the single control, and it only cancels).
+- A cancelled, empty, or nothing-saved take must never paste, never append a history line, and never leave its wav behind. Keep `paste` blank-safe and re-check the cancel-file before the history append.
+- Status writes fail soft: an unwritable `status.json` must not change a take's exit code.
+- Pure banner logic lives in `hammerspoon/banner_core.lua` (no `hs.*` calls) so `tests/dvo/lua/` can exercise it without a Mac; `init.lua` only draws.
 - Toggle early-stop uses a stop-file (default `{data_dir}/dict.stop`) and/or SIGINT/SIGTERM — not only the length cap.
 
 ## Tests
 
 ```bash
-pytest tests/dvo/ -m unit -v --tb=short
+pytest tests/dvo/ -m unit -v --tb=short   # Lua adapter tests run when a `lua` (5.3+) is on PATH
 ruff check digivoice/src tests/dvo && ruff format --check digivoice/src tests/dvo
 PYTHONPATH=digivoice/src python -m digivoice doctor
 ```

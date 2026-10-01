@@ -117,7 +117,8 @@ def doctor_checks(
             detail=(
                 "On stop/early-stop, digivoice keeps the wav and pastes what was "
                 "captured (paste_on_stop default). Resume-same-take is not supported "
-                "— paste + start a new take."
+                "— paste + start a new take. Esc (or `digivoice cancel`) discards the "
+                "take instead: no paste, no history entry, wav deleted."
             ),
         ),
     ]

@@ -130,3 +130,40 @@ def test_help_lists_settings() -> None:
     result = run([], runtime)
     assert "settings" in result.stdout
     assert "setup" in result.stdout
+
+
+def test_banner_defaults_and_knobs(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    shown = json.loads(run(["settings", "--json"], runtime).stdout)
+    assert shown["live_banner"] is True
+    assert shown["banner_position"] == "top-center"
+    assert shown["banner_animations"] is True
+    assert run(["settings", "set", "banner_position", "bottom-right"], runtime).code == 0
+    assert run(["settings", "set", "banner_animations", "off"], runtime).code == 0
+    assert run(["settings", "set", "live_banner", "false"], runtime).code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    saved = load_settings(paths)
+    assert (saved.banner_position, saved.banner_animations, saved.live_banner) == (
+        "bottom-right",
+        False,
+        False,
+    )
+    on_disk = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert on_disk["banner_position"] == "bottom-right"
+
+
+def test_banner_position_rejects_unknown_values(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    bad = run(["settings", "set", "banner_position", "middle-ish"], runtime)
+    assert bad.code == 2
+    assert not (tmp_path / "settings.json").exists()

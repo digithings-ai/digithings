@@ -75,7 +75,9 @@ Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digi
 | `digivoice dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste]` | Records the microphone to `recordings/*.wav`, runs `whisper-cli`, prints the transcript on stdout, appends `{ts, kind:"dict", text, wav}` to the history file, and pastes into the focused app on macOS. `--toggle` stops early when the stop-file is touched or SIGINT/SIGTERM arrives. Exit 0 once a transcript exists. |
 | `digivoice speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | Piper synthesis + local playback. Appends `{kind:"speak", text}`. Exit 0 on success. |
 | `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
-| `digivoice settings` / `setup` | Show or change `settings.json` (models, rewrite on/off + preset + model + auto-route, paste_on_stop, live_banner). `--json` for agents. |
+| `digivoice settings` / `setup` | Show or change `settings.json` (models, rewrite on/off + preset + model + auto-route, paste_on_stop, live_banner, banner_position, banner_animations). `--json` for agents. |
+| `digivoice cancel` | Creates the cancel-file: a running `dict` discards its take (no paste, no history entry, wav deleted). Esc in the Hammerspoon sample does the same. |
+| `digivoice status` | Prints the `status.json` snapshot the banner reads. |
 
 ### dict
 
@@ -119,6 +121,23 @@ digivoice settings set rewrite_preset email
 digivoice settings set rewrite_auto_route true
 ```
 
+### Cancel and empty takes
+
+Esc (Hammerspoon sample) or `digivoice cancel` discards an active take: the recorder or `whisper-cli` is stopped, the wav is deleted, nothing is pasted, and no history line is written. `dict` exits 3. An empty recognition (silence, `[BLANK_AUDIO]`, a blank rewrite) is discarded the same way (exit 1, wav deleted) — a blank is never pasted or logged.
+
+### Status banner
+
+`dict` and `speak` write `status.json` for the Hammerspoon banner (display only). Settings:
+
+```bash
+digivoice settings set live_banner false          # no overlay at all (menubar mic mark stays)
+digivoice settings set banner_position top-right  # top-center (default), top-left, top-right,
+                                                  # bottom-center, bottom-left, bottom-right, center
+digivoice settings set banner_animations false    # still dot-matrix frame instead of animation
+```
+
+Read per take — no Hammerspoon reload needed for settings. See [`hammerspoon/README.md`](hammerspoon/README.md).
+
 ### Interrupt safety
 
 Stopping a toggle capture (Right Option again / stop-file / SIGINT) **keeps the wav** and continues transcribe → optional rewrite → paste of what was captured. Resume-same-take is not supported — paste what you have and start a new take.
@@ -127,8 +146,9 @@ Stopping a toggle capture (Right Option again / stop-file / SIGINT) **keeps the 
 
 See [`hammerspoon/README.md`](hammerspoon/README.md):
 
-- **Right Option** → dict toggle (stop-file) with persistent live banner/menubar for the whole capture
-- **Double-tap Left Option** → speak `--selection` (fail soft / notify if nothing selected; no clipboard or dict history)
+- **Right Option** → dict toggle (stop-file) with a status banner + menubar mark for the whole capture
+- **Esc** → cancel the active take (discard; no paste, no history)
+- **Double-tap Left Option** → speak `--selection` (fail soft; the banner says if nothing is selected; no clipboard or dict history)
 
 Mic + Accessibility TCC steps are documented there.
 
