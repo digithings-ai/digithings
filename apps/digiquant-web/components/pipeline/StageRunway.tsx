@@ -87,7 +87,7 @@ export function StageRunway({
         <ol
           ref={list}
           aria-label={label}
-          className="m-0 grid list-none auto-cols-[min(70vw,15rem)] grid-flow-col gap-2 overflow-x-auto p-0 snap-x lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-7 lg:overflow-visible"
+          className="m-0 grid list-none auto-cols-[min(70vw,15rem)] grid-flow-col gap-2 overflow-x-auto p-0 snap-x lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-[repeat(6,minmax(0,1fr))_minmax(0,0.6fr)] lg:overflow-visible"
         >
           {children}
         </ol>

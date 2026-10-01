@@ -5,13 +5,12 @@ import type { IndicatorHandle, Vela } from "@luxalgo/vela";
 import { BUILD_DONE_MS } from "@/lib/hero-build";
 import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
 
-/** Hero backdrop: a LuxAlgo Vela chart (the library, not a boxed highlight).
+/** Hero backdrop: a LuxAlgo Vela chart (the live backbone, not a demo).
  *
- *  A random BTC, ETH or SOL product loads from Vela's Coinbase provider. Candles
- *  use the bright up/down inks; volume and two moving averages stay on; one more
- *  native overlay (Bollinger, VWAP, SuperTrend) cycles. Reduced motion skips the
- *  intro sweep and the cycle. The wordmark still builds on its own clock; the
- *  chart's intro lasts the same span (`BUILD_DONE_MS`). */
+ *  One random BTC, ETH or SOL product + one overlay load per reload (no timed
+ *  cycling). Candles reveal progressively left→right on the wordmark clock.
+ *  Wheel never traps: page scroll always wins; hover crosshair + horizontal
+ *  drag still work. Axis stays auto. Reduced motion skips the sweep. */
 
 const UP = "#3DFF9A";
 const DOWN = "#FF5C6C";
@@ -20,7 +19,6 @@ const CYCLE = [
   { type: "vwap", label: "VWAP" },
   { type: "supertrend", label: "SuperTrend" },
 ] as const;
-const CYCLE_MS = 8000;
 
 const THEME = {
   background: "#000000",
@@ -41,11 +39,13 @@ export function QuantField() {
     if (!host) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const product = HERO_PRODUCTS[Math.floor(Math.random() * HERO_PRODUCTS.length)] ?? HERO_PRODUCTS[0];
+    const picked = CYCLE[Math.floor(Math.random() * CYCLE.length)] ?? CYCLE[0];
+    // Page scroll always wins: never hijack the wheel, keep vertical scroll
+    // native and let the chart take horizontal drags only.
+    host.style.touchAction = "pan-y";
     let dead = false;
     let chart: Vela | null = null;
-    let timer = 0;
     let overlay: IndicatorHandle | null = null;
-    let step = 0;
 
     const label = (name: string) =>
       `LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${name}`;
@@ -71,24 +71,22 @@ export function QuantField() {
       chart.data.registerProvider("coinbase", new CoinbaseProvider());
       chart.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
       chart.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
-      const first = CYCLE[0];
-      overlay = chart.addNativeIndicator(first.type);
-      setCaption(label(first.label));
-      if (reduced) return;
-      timer = window.setInterval(() => {
-        overlay?.remove();
-        step = (step + 1) % CYCLE.length;
-        const next = CYCLE[step] ?? first;
-        overlay = chart?.addNativeIndicator(next.type) ?? null;
-        setCaption(label(next.label));
-      }, CYCLE_MS);
+      overlay = chart.addNativeIndicator(picked.type);
+      setCaption(label(picked.label));
+      if (!reduced) {
+        // Progressive L→R reveal on the wordmark clock; hover + h-drag stay live.
+        host.animate(
+          [{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)" }],
+          { duration: BUILD_DONE_MS, easing: "ease-out" },
+        );
+      }
     })().catch(() => {
       if (!dead) setCaption("LuxAlgo Vela · chart unavailable");
     });
 
     return () => {
       dead = true;
-      window.clearInterval(timer);
+      overlay?.remove();
       chart?.destroy();
     };
   }, []);

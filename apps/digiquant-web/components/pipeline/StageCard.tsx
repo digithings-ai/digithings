@@ -26,20 +26,22 @@ export function StageCard({
         </span>
         <span>{hasRun ? (recorded?.status === "recorded" ? "recorded" : "not recorded") : "no recorded run"}</span>
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <h3 className="m-0 font-display text-[1.05rem] font-medium leading-tight tracking-[-0.02em] text-ink">{name}</h3>
-        <p className="m-0 text-[0.75rem] leading-[1.5] text-ink-soft">{copy.does}</p>
-        <ul className="m-0 flex list-none flex-col gap-1 p-0 font-mono text-[0.66rem] text-ink-soft">
-          {copy.steps.map((s) => (
-            <li key={s} className="flex gap-2 border-t border-hair pt-1">
-              <span aria-hidden="true" className="text-ink-mute">
-                ▸
-              </span>
-              {s}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-auto border-t border-hair pt-2 font-mono text-[0.64rem] text-ink-mute">
+      <div className="grid flex-1 flex-col gap-2 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-3">
+        <div className="flex min-w-0 flex-col gap-2">
+          <h3 className="m-0 font-display text-[1.05rem] font-medium leading-tight tracking-[-0.02em] text-ink">{name}</h3>
+          <p className="m-0 text-[0.75rem] leading-[1.5] text-ink-soft">{copy.does}</p>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0 font-mono text-[0.66rem] text-ink-soft">
+            {copy.steps.map((s) => (
+              <li key={s} className="flex gap-2 border-t border-hair pt-1">
+                <span aria-hidden="true" className="text-ink-mute">
+                  ▸
+                </span>
+                {s}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="mt-auto border-t border-hair pt-2 font-mono text-[0.64rem] text-ink-mute lg:mt-0 lg:border-s lg:border-t-0 lg:ps-3">
           {recorded ? (
             <>
               <p className="m-0 text-ink-soft">
