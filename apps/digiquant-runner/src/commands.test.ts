@@ -204,6 +204,8 @@ describe("phase 3 house-run", () => {
     expect(argv.join(" ")).toContain("check_allocation_shadow_isolation.py");
     expect(JSON.stringify(spec)).not.toContain("OPENROUTER");
     expect(JSON.stringify(spec)).not.toContain("CORE_SUPABASE");
+    expect(JSON.stringify(spec)).not.toContain("LANGFUSE");
+    expect(JSON.stringify(spec)).not.toContain("DIGI_OTEL");
   });
 });
 

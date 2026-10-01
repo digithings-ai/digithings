@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
 
-const PAUSED_PIPELINE_IDS = [
+const RESUMED_PIPELINE_IDS = [
   "prices-at-open-13",
   "prices-at-open-14",
   "prices-fx-refresh",
@@ -11,9 +11,6 @@ const PAUSED_PIPELINE_IDS = [
   "market-data-refresh-evening",
   "checkpoint-archive",
   "house-run-09",
-  "house-run-10",
-  "house-run-11",
-  "house-run-12",
   "research-metrics",
   "tearsheets",
   "onchain",
@@ -22,6 +19,8 @@ const PAUSED_PIPELINE_IDS = [
   "maintenance",
   "provider-review",
 ] as const;
+
+const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
 
 const PAUSED_TRAP_IDS = [
   "agent-pr-finalizer",
@@ -40,7 +39,7 @@ const PAUSED_TRAP_IDS = [
   "twelve-x-archive-maintenance",
 ] as const;
 
-const KEPT_ENABLED_IDS = [
+const PATH_A_ENABLED_IDS = [
   "ci-pr-hygiene",
   "smoke-stack",
   "security-pip-audit",
@@ -49,12 +48,34 @@ const KEPT_ENABLED_IDS = [
   "smoke-site",
 ] as const;
 
+const ENABLED_CRONS = [
+  "40 13 * * MON-FRI",
+  "40 14 * * MON-FRI",
+  "19 */2 * * MON-FRI",
+  "19 22 * * SUN",
+  "27 21 * * MON-FRI",
+  "0 13 * * *",
+  "30 13 * * *",
+  "30 21 * * *",
+  "17 9 * * MON",
+  "5 22 * * *",
+  "12 0 * * *",
+  "40 22 * * *",
+  "15 12 * * *",
+  "8 22 * * SUN",
+  "8 8 * * MON",
+  "9 0 * * SUN",
+  "21 6 * * *",
+  "27 7 * * *",
+  "33 6 * * MON",
+  "37 6 * * MON",
+  "41 6 * * *",
+  "17 6 * * *",
+] as const;
+
 describe("jobsForCron", () => {
   it("matches exact cron strings only", () => {
-    expect(jobsForCron("5 22 * * *")).toEqual([]);
-    expect(
-      jobsForCron("5 22 * * *", { includeDisabled: true }).map((j) => j.id),
-    ).toEqual(["research-metrics"]);
+    expect(jobsForCron("5 22 * * *").map((j) => j.id)).toEqual(["research-metrics"]);
   });
 
   it("keeps twelve-x new_york on weekday-only cron", () => {
@@ -70,12 +91,11 @@ describe("jobsForCron", () => {
 
   it("at-open jobs have etOpenGate and mode at-open", () => {
     for (const cron of ["40 13 * * MON-FRI", "40 14 * * MON-FRI"]) {
-      expect(jobsForCron(cron)).toEqual([]);
-      const jobs = jobsForCron(cron, { includeDisabled: true });
+      const jobs = jobsForCron(cron);
       expect(jobs).toHaveLength(1);
       expect(jobs[0].etOpenGate).toBe(true);
       expect(jobs[0].inputs?.mode).toBe("at-open");
-      expect(jobs[0].enabled).toBe(false);
+      expect(jobs[0].enabled).toBe(true);
     }
   });
 
@@ -111,7 +131,7 @@ describe("jobsForCron", () => {
       expect(job?.kind).toBe("container");
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
-      expect(job?.enabled).toBe(false);
+      expect(job?.enabled).toBe(true);
     }
   });
 
@@ -151,13 +171,25 @@ describe("jobsForCron", () => {
       expect(job?.codeRef).toBe("main");
       expect(job?.workflow).toBeTruthy();
       expect(job?.ref).toBe("develop");
-      expect(job?.enabled).toBe(false);
+      expect(job?.enabled).toBe(true);
     }
   });
 
-  it("sends house research/portfolio retries to digiquant-runner every day", () => {
+  it("collapses house-run to one Monday-morning clock", () => {
+    expect(JOBS.find((job) => job.id === "house-run-09")).toMatchObject({
+      id: "house-run-09",
+      cron: "17 9 * * MON",
+      kind: "container",
+      workflow: "pipeline-digiquant.yml",
+      command: "house-run",
+      concurrency: "digiquant-pipeline",
+      timeoutSeconds: 14400,
+      codeRef: "main",
+      enabled: true,
+    });
+    expect(jobsForCron("17 9 * * MON").map((job) => job.id)).toEqual(["house-run-09"]);
+    expect(jobsForCron("17 9 * * *")).toEqual([]);
     for (const [id, cron] of [
-      ["house-run-09", "17 9 * * *"],
       ["house-run-10", "17 10 * * *"],
       ["house-run-11", "17 11 * * *"],
       ["house-run-12", "17 12 * * *"],
@@ -201,7 +233,7 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("27 7 * * *");
   });
 
-  it("wires checkpoint-archive to digiquant-runner at 13:30 UTC (paused)", () => {
+  it("wires checkpoint-archive to digiquant-runner at 13:30 UTC", () => {
     expect(JOBS.find((job) => job.id === "checkpoint-archive")).toMatchObject({
       kind: "container",
       command: "checkpoint-archive",
@@ -211,39 +243,32 @@ describe("jobsForCron", () => {
       workflow: "pipeline-checkpoint-archive.yml",
       ref: "develop",
       codeRef: "main",
-      enabled: false,
+      enabled: true,
     });
-    expect(jobsForCron("30 13 * * *")).toEqual([]);
-    expect(
-      jobsForCron("30 13 * * *", { includeDisabled: true }).map((job) => job.id),
-    ).toEqual(["checkpoint-archive"]);
-    expect(uniqueEnabledCrons()).not.toContain("30 13 * * *");
+    expect(jobsForCron("30 13 * * *").map((job) => job.id)).toEqual(["checkpoint-archive"]);
+    expect(uniqueEnabledCrons()).toContain("30 13 * * *");
   });
 
-  it("pauses DigiQuant + CF→disabled traps; keeps Path A essentials enabled", () => {
+  it("resumes DigiQuant clocks; Path A traps stay paused; weekly Mon house-run only", () => {
     expect(
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...PAUSED_PIPELINE_IDS, ...PAUSED_TRAP_IDS].sort());
+    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...PAUSED_TRAP_IDS].sort());
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...KEPT_ENABLED_IDS].sort());
-    expect(uniqueEnabledCrons()).toHaveLength(6);
-    expect(uniqueEnabledCrons()).toEqual([
-      "21 6 * * *",
-      "27 7 * * *",
-      "33 6 * * MON",
-      "37 6 * * MON",
-      "41 6 * * *",
-      "17 6 * * *",
-    ]);
+    ).toEqual([...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS].sort());
+    expect(uniqueEnabledCrons()).toEqual([...ENABLED_CRONS]);
     expect(uniqueEnabledCrons()).not.toContain("17 12 * * MON-FRI");
     expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
-    expect(uniqueEnabledCrons()).not.toContain("40 13 * * MON-FRI");
-    expect(uniqueEnabledCrons()).not.toContain("8 22 * * SUN");
+    expect(uniqueEnabledCrons()).not.toContain("17 9 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("17 10 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("17 11 * * *");
+    expect(uniqueEnabledCrons()).toContain("17 9 * * MON");
+    expect(uniqueEnabledCrons()).toContain("40 13 * * MON-FRI");
+    expect(uniqueEnabledCrons()).toContain("8 22 * * SUN");
     expect(uniqueEnabledCrons()).not.toContain("11 7 * * *");
   });
 });

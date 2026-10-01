@@ -22,6 +22,11 @@ export interface Env {
   CHEAPERINFERENCE_API_KEY?: string;
   CHEAPERINFERENCE_API_BASE?: string;
   LANGSMITH_API_KEY?: string;
+  LANGFUSE_SECRET_KEY?: string;
+  LANGFUSE_PUBLIC_KEY?: string;
+  LANGFUSE_BASE_URL?: string;
+  DIGITRACE_LANGFUSE_OTLP_ENDPOINT?: string;
+  DIGI_OTEL_HEADERS?: string;
   /** Skip ledger on digithings-archive. Not forwarded into the container. */
   ARCHIVE?: HouseLedger;
 }
@@ -54,5 +59,10 @@ export function dataPlaneEnv(env: Env): Record<string, string> {
     CHEAPERINFERENCE_API_KEY: env.CHEAPERINFERENCE_API_KEY ?? "",
     CHEAPERINFERENCE_API_BASE: env.CHEAPERINFERENCE_API_BASE ?? "",
     LANGSMITH_API_KEY: env.LANGSMITH_API_KEY ?? "",
+    LANGFUSE_SECRET_KEY: env.LANGFUSE_SECRET_KEY ?? "",
+    LANGFUSE_PUBLIC_KEY: env.LANGFUSE_PUBLIC_KEY ?? "",
+    LANGFUSE_BASE_URL: env.LANGFUSE_BASE_URL ?? "",
+    DIGITRACE_LANGFUSE_OTLP_ENDPOINT: env.DIGITRACE_LANGFUSE_OTLP_ENDPOINT ?? "",
+    DIGI_OTEL_HEADERS: env.DIGI_OTEL_HEADERS ?? "",
   };
 }
