@@ -70,8 +70,8 @@
 
 /* Welcome body typewriter caret: same blink grammar as the composer block
    caret, tinted with the tenant accent. Typing is client-only and degrades
-   to the full copy under prefers-reduced-motion, so no reduced-motion rule
-   is needed here. */
+   to the full copy under prefers-reduced-motion; the infinite blink still
+   needs an explicit animation: none under reduce (contract test). */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-caret {
   display: inline-block;
   width: 0.55em;
@@ -83,6 +83,12 @@
   vertical-align: text-bottom;
   background: var(--tenant-accent, var(--accent, var(--ink)));
   animation: aui-caret-blink 1.06s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-caret {
+    animation: none;
+  }
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestions {
