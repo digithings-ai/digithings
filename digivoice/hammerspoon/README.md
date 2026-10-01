@@ -10,7 +10,7 @@ config.
 | --- | --- |
 | **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. |
 | **Esc** (plain, no modifiers) | Cancel the active dictation: creates the cancel-file; digivoice stops the recorder / whisper / rewrite, deletes the wav, and pastes nothing and logs nothing. Only live while a take is recording, transcribing, or rewriting; Esc is swallowed only when it cancels, otherwise it reaches the focused app. Not used for speech. |
-| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the banner says so). **No** clipboard or `kind:dict` history fallback. |
+| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the grid is the status; full density shows the selection). **No** clipboard or `kind:dict` history fallback. |
 
 Do not invent other default binds in this sample.
 
@@ -18,26 +18,25 @@ Do not invent other default binds in this sample.
 
 Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
-The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows icon-only copy + close below the banner (stacked when mini, right-aligned row when wider), using the digichat copy and close marks; close hides instantly and never discards. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. Center pins keep the center on expand, edge pins grow outward. Dictated text appears at once. The box hugs the text with equal padding, and the first line sits on the status-icon row. Full caps near half the screen height and wheel-scrolls with no scrollbar. Chrome follows the system appearance (remock dark ground, ivory light ground); RYG status colors stay. Status is the grid only — no discarded/empty/error sentence beside it. The banner is hidden by default: `digivoice banner show [--text T]` (or `hide` / `toggle`) spawns a preview with no dictation; Esc on a preview only hides it.
+The banner is **display only** (a click toggles density retract → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows icon-only copy + close below the banner (stacked when retracted, right-aligned row when full), using the digichat copy and close marks; close hides instantly and never discards. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. Center pins keep the center on expand, edge pins grow outward. Dictated text appears at once. The box hugs the text with equal padding, and the first line sits on the status-icon row. Full caps near half the screen height and wheel-scrolls with no scrollbar. Chrome follows the system appearance (remock dark ground, ivory light ground); RYG status colors stay. Status is the grid only — no discarded/empty/error sentence beside it. The banner is hidden by default: `digivoice banner show [--text T]` (or `hide` / `toggle`) spawns a preview with no dictation; Esc on a preview only hides it.
 
 | Phase | Animation (digichat 5x5 square grid) | Text shown |
 | --- | --- | --- |
 | recording | red equalizer wave | none (grid only) |
 | transcribing | teal diagonal sweep | none yet (no live streaming STT) |
-| rewriting | teal circular sweep | the raw transcript glimpse |
+| rewriting | teal circular sweep | the transcript, in full density |
 | pasting | teal downward sweep | the text being pasted |
 | speaking | teal equalizer | the selected text |
 | loading | teal grid twinkle | none |
 | done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final transcript, or nothing (the grid is the status) |
 
 No titles, no hints, no settings UI on the banner — state reads from the grid alone.
-Density comes from settings: **mini** is grid only, **peek** (default) is a short
-glimpse that auto-dismisses a few seconds after idle/done, **full** shows the whole
+Density comes from settings: **retract** (default) is the grid only and
+auto-dismisses a few seconds after idle/done, **full** shows the whole
 transcript and stays until collapsed or removed. The banner reads `status.json`
 that the CLI writes, so it shows exactly what digivoice is doing.
 
-Long text is clipped to a 3-line glimpse in peek; click the banner to cycle density
-(mini → peek → full → mini).
+Click the banner to toggle density (retract → full → retract).
 
 There is no digivoice menubar mark — the banner grid alone shows take state. Closing the Terminal leaves Hammerspoon running; **Quit** in the digivoice TUI stops the adapter and quits Hammerspoon.
 
@@ -50,7 +49,7 @@ digivoice settings set live_banner false          # disable the overlay entirely
 digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
                                                   # | middle-left | middle-right | bottom-center
                                                   # | bottom-left | bottom-right | center
-digivoice settings set banner_density full        # mini (grid only) | peek (default) | full (stays)
+digivoice settings set banner_density full        # retract (grid only, default) | full (stays)
 digivoice settings set banner_animations false    # still grid frame + instant text (default true)
 digivoice settings --json                         # show everything
 ```
@@ -62,7 +61,7 @@ digivoice banner show --text "sound check"
 digivoice banner hide   # or: toggle
 ```
 
-An unknown `banner_position` falls back to `top-center`; an unknown `banner_density` falls back to `peek`.
+An unknown `banner_position` falls back to `top-center`; an unknown `banner_density` falls back to `retract`.
 
 ## How stop works
 
@@ -169,7 +168,7 @@ macOS will not prompt until the tool first needs the grant. Expect two prompts:
 2. Grant Mic to Hammerspoon (+ terminal).
 3. Grant Accessibility to Hammerspoon (+ terminal).
 4. Reload Hammerspoon; press **Right Option** once, speak, press again → paste. Press **Esc** mid-take → discarded.
-5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (the banner says so if nothing is selected).
+5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (nothing selected stays on the grid).
 
 ## Piper voice on Chris's Mac
 

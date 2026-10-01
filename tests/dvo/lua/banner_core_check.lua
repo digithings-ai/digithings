@@ -16,7 +16,7 @@ end
 local d = core.parse_settings(nil)
 eq(d.live_banner, true, "default enabled")
 eq(d.banner_position, "top-center", "default position")
-eq(d.banner_density, "peek", "default density")
+eq(d.banner_density, "retract", "default density")
 eq(d.banner_animations, true, "default animations")
 local s = core.parse_settings({ live_banner = false, banner_position = "bottom-left", banner_density = "full", banner_animations = false })
 eq(s.live_banner, false, "banner off")
@@ -24,14 +24,15 @@ eq(s.banner_position, "bottom-left", "position kept")
 eq(s.banner_density, "full", "density kept")
 eq(s.banner_animations, false, "animations off")
 eq(core.parse_settings({ banner_position = "sideways" }).banner_position, "top-center", "bad position")
-eq(core.parse_settings({ banner_density = "huge" }).banner_density, "peek", "bad density")
+eq(core.parse_settings({ banner_density = "huge" }).banner_density, "retract", "bad density")
+eq(core.parse_settings({ banner_density = "mini" }).banner_density, "retract", "legacy mini rejected")
+eq(core.parse_settings({ banner_density = "peek" }).banner_density, "retract", "legacy peek rejected")
 eq(core.parse_settings({ live_banner = "no" }).live_banner, true, "non-boolean ignored")
 
--- density click cycle: mini → peek → full → mini
-eq(core.next_density("mini"), "peek", "mini expands")
-eq(core.next_density("peek"), "full", "peek expands")
-eq(core.next_density("full"), "mini", "full collapses")
-eq(core.next_density("bogus"), "mini", "bogus collapses to mini")
+-- density click toggle: retract → full → retract
+eq(core.next_density("retract"), "full", "retract expands")
+eq(core.next_density("full"), "retract", "full collapses")
+eq(core.next_density("bogus"), "retract", "bogus collapses to retract")
 
 -- square status-grid cells: 25 squares inside the icon box, top-left
 for i = 0, 24 do
@@ -123,49 +124,44 @@ check(not core.is_cancel_key(53, { cmd = true }), "cmd+Esc is not ours")
 check(not core.is_cancel_key(53, { shift = true }), "shift+Esc is not ours")
 check(not core.is_cancel_key(36, {}), "other key")
 
--- wrap / clip / layout
+-- wrap / layout
 local lines = core.wrap("one two three four five six seven", 12)
 eq(#lines, 4, "wrap count")
 eq(lines[1], "one two", "wrap line 1")
 eq(#core.wrap(string.rep("x", 30), 10), 3, "long word hard split")
 eq(#core.wrap("a\n\nb", 10), 2, "blank lines dropped")
-local clipped, was = core.clip_lines({ "a", "b", "c", "d" }, 2, 10)
-eq(#clipped, 2, "clip count")
-eq(was, true, "clip flag")
-eq(clipped[2], "b…", "ellipsis")
 
-local short = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "peek")
+local short = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "full")
 eq(#short.lines, 1, "short text one line")
 eq(short.clipped, false, "not clipped")
 eq(short.hint, nil, "no chrome hints")
 eq(short.title, nil, "no chrome title")
 local long_text = string.rep("word ", 200)
-local long = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "peek")
-eq(#long.lines, core.LINES_COLLAPSED, "peek glimpse limit")
-check(long.clipped, "long text is clipped in peek")
+local retracted = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "retract")
+eq(#retracted.lines, 0, "retract hides the transcript")
+eq(retracted.body, "", "retract has no text")
 local open = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "full")
-check(open.w > long.w and #open.lines > #long.lines and open.h > long.h, "full is bigger")
-local mini = core.layout({ state = "recording", text = "ignored", detail = "" }, "dict", "mini")
-eq(#mini.lines, 0, "mini is grid only")
-eq(mini.body, "", "mini has no text")
-eq(mini.w, core.PAD * 2 + core.ICON, "mini hugs the grid")
-eq(mini.h, core.PAD * 2 + core.ICON, "mini hugs the grid")
-local idle = core.layout({ state = "recording", text = "", detail = "" }, "dict", "peek")
+check(open.w > retracted.w and #open.lines > #retracted.lines and open.h > retracted.h, "full is bigger")
+local grid = core.layout({ state = "recording", text = "ignored", detail = "" }, "dict", "retract")
+eq(#grid.lines, 0, "retract is grid only")
+eq(grid.body, "", "retract has no text")
+eq(grid.w, core.PAD * 2 + core.ICON, "retract hugs the grid")
+eq(grid.h, core.PAD * 2 + core.ICON, "retract hugs the grid")
+local idle = core.layout({ state = "recording", text = "", detail = "" }, "dict", "full")
 eq(#idle.lines, 0, "recording has no body")
 eq(idle.h, core.PAD * 2 + core.ICON, "compact height")
-eq(core.next_density("bogus"), "mini", "unknown density collapses")
+eq(core.next_density("bogus"), "retract", "unknown density collapses")
 
--- linger: full stays (nil = no auto-hide); peek/mini dismiss after a few seconds
+-- linger: full stays (nil = no auto-hide); retract dismisses after a few seconds
 eq(core.linger_seconds("done", "full"), nil, "full stays")
 eq(core.linger_seconds("error", "full"), nil, "full stays on error")
-eq(core.linger_seconds("done", "peek"), 4.0, "peek dismisses after a few seconds")
-eq(core.linger_seconds("done", "mini"), 4.0, "mini dismisses too")
-eq(core.linger_seconds("cancelled", "peek"), 1.2, "cancelled clears fast")
+eq(core.linger_seconds("done", "retract"), 4.0, "retract dismisses after a few seconds")
+eq(core.linger_seconds("cancelled", "retract"), 1.2, "cancelled clears fast")
 
--- hug widths: short text stays far under the caps, empty hugs the grid
-local hug = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "peek")
-check(hug.w < core.WIDTH_COLLAPSED, "peek hugs short text")
-check(hug.w > core.PAD * 2 + core.ICON, "peek wider than grid-only")
+-- hug widths: short text stays far under the cap, empty hugs the grid
+local hug = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "full")
+check(hug.w < core.WIDTH_EXPANDED, "full hugs short text")
+check(hug.w > core.PAD * 2 + core.ICON, "full wider than grid-only")
 eq(hug.h, core.PAD * 2 + math.max(core.ICON, core.LINE_HEIGHT), "one line hugs the grid row")
 local icon_mid = core.PAD + core.ICON / 2
 local text_mid = hug.text_y + core.FONT_SIZE / 2
@@ -174,7 +170,7 @@ eq(core.body_for({ state = "cancelled", text = "", detail = "" }), "", "cancel i
 eq(core.body_for({ state = "empty", text = "", detail = "n" }), "", "empty is grid only")
 eq(core.body_for({ state = "error", text = "", detail = "boom" }), "", "error detail is not a label")
 eq(core.body_for({ state = "rewriting", text = "hi", detail = "preset" }), "hi", "transcript stays")
-local hug_empty = core.layout({ state = "recording", text = "", detail = "" }, "dict", "peek")
+local hug_empty = core.layout({ state = "recording", text = "", detail = "" }, "dict", "retract")
 eq(hug_empty.w, core.PAD * 2 + core.ICON, "empty hugs the grid")
 eq(hug_empty.h, core.PAD * 2 + core.ICON, "empty hugs the grid")
 -- equal padding all densities: grid cell origin sits at PAD
@@ -197,7 +193,7 @@ local tall = core.layout(
 check(tall.h <= 100, "short screen caps full height at 50vh")
 check(tall.clipped, "overflow is marked for the scroll window")
 check(#tall.all > #tall.lines, "scroll keeps lines past the window")
--- full skips the peek ellipsis: the window is a plain slice for scrolling
+-- full window is a plain slice for scrolling, with no ellipsis mid-list
 for _, line in ipairs(tall.lines) do
   check(not line:find("…", 1, true), "no mid-list ellipsis in full")
 end
@@ -243,18 +239,18 @@ local rf = core.reanchor({ x = 300, y = 300, w = 38, h = 38 }, { w = 200, h = 10
 eq(rf.x, 300, "free float keeps top-left")
 eq(rf.y, 300, "free float keeps top-left")
 
--- hover controls: mini stacks centered, wider rows right-aligned
-local mini_ctl = core.controls_layout(38, 38, "mini")
-eq(mini_ctl.dir, "stack", "mini stacks")
-eq(mini_ctl.buttons[1].x, mini_ctl.buttons[2].x, "stack shares x")
-check(mini_ctl.buttons[2].y > mini_ctl.buttons[1].y, "stack grows down")
-eq(mini_ctl.buttons[1].x, (38 - 18) / 2, "stack centered")
-local wide_ctl = core.controls_layout(280, 60, "peek")
-eq(wide_ctl.dir, "row", "wider rows")
+-- hover controls: retract stacks centered, full rows right-aligned
+local retract_ctl = core.controls_layout(38, 38, "retract")
+eq(retract_ctl.dir, "stack", "retract stacks")
+eq(retract_ctl.buttons[1].x, retract_ctl.buttons[2].x, "stack shares x")
+check(retract_ctl.buttons[2].y > retract_ctl.buttons[1].y, "stack grows down")
+eq(retract_ctl.buttons[1].x, (38 - 18) / 2, "stack centered")
+local wide_ctl = core.controls_layout(280, 60, "full")
+eq(wide_ctl.dir, "row", "full rows")
 eq(wide_ctl.buttons[1].y, wide_ctl.buttons[2].y, "row shares y")
 eq(wide_ctl.buttons[1].x + 18 + 4 + 18, 280, "row right-aligned")
-eq(core.controls_height("mini"), 4 + 18 * 2 + 4, "stack height")
-eq(core.controls_height("peek"), 4 + 18, "row height")
+eq(core.controls_height("retract"), 4 + 18 * 2 + 4, "stack height")
+eq(core.controls_height("full"), 4 + 18, "row height")
 
 -- launch notice lists commands and the cli
 local notice = core.launch_notice("/x/digivoice")
