@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { DashboardProvider } from '@/lib/dashboard-context';
 import { AppShellProvider } from '@/components/app-shell-context';
-import AppFrame from '@/components/app-frame';
+import AppShell from '@/components/shell/app-shell';
 import { LoginScreen } from '@/components/login-screen';
 import { useAuth } from '@/lib/auth-context';
 import { hasPendingInvite } from '@/lib/invite-stash';
@@ -60,7 +60,7 @@ function AppProviders({ children }: { children: ReactNode }) {
   return (
     <DashboardProvider>
       <AppShellProvider>
-        <AppFrame>{children}</AppFrame>
+        <AppShell>{children}</AppShell>
       </AppShellProvider>
     </DashboardProvider>
   );

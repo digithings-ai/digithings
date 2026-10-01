@@ -1,12 +1,15 @@
 'use client';
 
-import type { BookReconciliation } from '@/lib/book-reconciliation';
 import Link from 'next/link';
+import { Stat } from '@digithings/ui/ui';
+import type { BookReconciliation } from '@/lib/book-reconciliation';
+import { concentration } from '@/lib/book-view';
 import { ledgerHref } from '@/lib/portfolio-url-state';
 
 /**
- * Slim Holdings summary: invested / cash / count / as-of in one compact row so
- * the positions table owns the viewport on mobile and desktop.
+ * Book summary as kit Stat tiles: invested / cash / positions / concentration,
+ * plus the as-of stamp and the activity doorway. Exposure is not P&L, so no
+ * tile carries an up/down tone.
  */
 export default function BookReconciliationStrip({
   reconciliation,
@@ -18,45 +21,42 @@ export default function BookReconciliationStrip({
   positionCount: number;
 }) {
   const { investedPct, cashPct } = reconciliation;
+  const conc = concentration(reconciliation.rows);
 
   return (
-    <div
-      data-testid="command-band"
-      aria-label="Book exposure summary"
-      className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-y border-hair bg-surface/80 px-4 py-2.5 font-mono text-[0.68rem] md:px-6"
-    >
-      <div data-region="identity" className="inline-flex items-baseline gap-2">
-        <span className="uppercase tracking-wider text-ink-mute">Invested</span>
-        <strong className="text-base font-medium tabular-nums text-ink">
-          {investedPct.toFixed(1)}%
-        </strong>
+    <section data-testid="command-band" aria-label="Book exposure summary" className="space-y-2">
+      <div data-region="metrics" className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <Stat label="Invested" value={`${investedPct.toFixed(1)}%`} hint="of NAV" />
+        <Stat label="Cash" value={`${cashPct.toFixed(1)}%`} hint="of NAV" />
+        <Stat label="Positions" value={String(positionCount)} hint="held" />
+        <Stat
+          label="Top position"
+          value={conc.top1 ? `${conc.top1.weightPct.toFixed(1)}%` : null}
+          hint={conc.top1 ? conc.top1.ticker : 'none held'}
+        />
+        <Stat
+          label="Top 5"
+          value={conc.top1 ? `${conc.top5Pct.toFixed(1)}%` : null}
+          hint={conc.effectiveN ? `≈ ${conc.effectiveN.toFixed(1)} equal bets` : 'of NAV'}
+        />
       </div>
-      <div data-region="metrics" className="inline-flex flex-wrap items-baseline gap-x-5 gap-y-1 text-ink-soft">
-        <span>
-          <span className="uppercase tracking-wider text-ink-mute">Cash </span>
-          <span className="tabular-nums text-ink">{cashPct.toFixed(1)}%</span>
-        </span>
-        <span>
-          <span className="uppercase tracking-wider text-ink-mute">Positions </span>
-          <span className="tabular-nums text-ink">{positionCount}</span>
-        </span>
+      <div
+        data-region="identity"
+        className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 font-mono text-[0.68rem] uppercase tracking-wider"
+      >
         <Link
           href={ledgerHref()}
-          className="uppercase tracking-wider text-accent hover:underline"
+          className="text-accent hover:underline"
           data-testid="holdings-ledger-link"
         >
           Activity →
         </Link>
+        {asOfDate ? (
+          <span data-region="stamp" className="inline-flex items-baseline gap-1.5 text-ink-mute">
+            as of <strong className="font-medium text-accent">{asOfDate}</strong>
+          </span>
+        ) : null}
       </div>
-      {asOfDate ? (
-        <div
-          data-region="stamp"
-          className="ml-auto inline-flex items-baseline gap-1.5 uppercase tracking-wider text-ink-mute"
-        >
-          <span>as of</span>
-          <strong className="font-medium text-accent">{asOfDate}</strong>
-        </div>
-      ) : null}
-    </div>
+    </section>
   );
 }

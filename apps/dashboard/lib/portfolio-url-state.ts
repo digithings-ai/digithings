@@ -1,28 +1,42 @@
 const URL_PARSE_BASE = 'https://dashboard.local';
 
 /**
- * Portfolio ("the book") in-shell tabs after the redesign: Holdings · Theses.
- * Performance is now a dedicated route (/portfolio/performance).
- * Legacy values (allocations/activity/analysis/history/…) are remapped via
+ * Portfolio in-shell views after the rebuild: Book (`holdings`) · Decisions.
+ * Performance is a dedicated route (/portfolio/performance).
+ *
+ * Inside a view, `?pane=` picks a sub-pane:
+ *   Book       -> positions (default) | activity
+ *   Decisions  -> edge (default) | theses | audit
+ *
+ * Legacy `?tab=` values (theses/analysis/history/activity/...) are remapped via
  * {@link mapPortfolioTabFromUrl} and canonicalized by
  * {@link canonicalizeLegacyPortfolioSearch} so old links keep working.
  */
-export type PortfolioTabId = 'holdings' | 'theses';
+export type PortfolioTabId = 'holdings' | 'decisions';
 
-export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = ['holdings', 'theses'];
+export const VALID_PORTFOLIO_TABS: readonly PortfolioTabId[] = ['holdings', 'decisions'];
+
+export type BookPaneId = 'positions' | 'activity';
+export type DecisionsPaneId = 'edge' | 'theses' | 'audit';
+export type PortfolioPaneId = BookPaneId | DecisionsPaneId;
+
+export const BOOK_PANES: readonly BookPaneId[] = ['positions', 'activity'];
+export const DECISIONS_PANES: readonly DecisionsPaneId[] = ['edge', 'theses', 'audit'];
 
 /**
  * Legacy `?tab=` values that should be rewritten to a canonical tab.
- * - allocations/summary/positions/activity → holdings
- * - history/pm_process/analysis/pm_analysis/strategy → theses (PM intelligence
- *   now lives in Why; these legacy aliases land on Theses as a harmless fallback)
- * - thesis → thesis detail route
+ * - allocations/summary/positions -> Book (default pane)
+ * - activity -> Book, activity pane
+ * - theses/history/pm_process -> Decisions, theses pane
+ * - analysis/pm_analysis/strategy -> Decisions (edge pane)
+ * - thesis -> thesis detail route
  */
 export const LEGACY_PORTFOLIO_TAB_ALIASES = new Set([
   'summary',
   'allocations',
   'positions',
   'activity',
+  'theses',
   'history',
   'pm_process',
   'analysis',
@@ -39,6 +53,7 @@ export function mapPortfolioTabFromUrl(raw: string | null): PortfolioTabId {
   if (!raw) return 'holdings';
   const r = raw.toLowerCase();
   if (
+    r === 'decisions' ||
     r === 'theses' ||
     r === 'thesis' ||
     r === 'analysis' ||
@@ -47,10 +62,19 @@ export function mapPortfolioTabFromUrl(raw: string | null): PortfolioTabId {
     r === 'pm_analysis' ||
     r === 'strategy'
   ) {
-    return 'theses';
+    return 'decisions';
   }
-  // allocations / summary / positions / activity / performance / unknown → holdings
-  return VALID_PORTFOLIO_TABS.includes(r as PortfolioTabId) ? (r as PortfolioTabId) : 'holdings';
+  // holdings / allocations / summary / positions / activity / performance / unknown -> Book
+  return 'holdings';
+}
+
+/** Resolve `?pane=` for a tab; an unknown or cross-view pane falls back to that view's default. */
+export function mapPortfolioPaneFromUrl(tab: PortfolioTabId, raw: string | null): PortfolioPaneId {
+  const r = (raw ?? '').toLowerCase();
+  if (tab === 'decisions') {
+    return (DECISIONS_PANES as readonly string[]).includes(r) ? (r as DecisionsPaneId) : 'edge';
+  }
+  return (BOOK_PANES as readonly string[]).includes(r) ? (r as BookPaneId) : 'positions';
 }
 
 export function hrefWithQuery(pathname: string, params: URLSearchParams): string {
@@ -96,6 +120,13 @@ export function ledgerHref(opts?: { date?: string | null; ticker?: string | null
   return hrefWithQuery('/portfolio/ledger', params);
 }
 
+/** Decisions view href, optionally on a specific pane. */
+export function decisionsHref(pane?: DecisionsPaneId | null): string {
+  const params = new URLSearchParams({ tab: 'decisions' });
+  if (pane && pane !== 'edge') params.set('pane', pane);
+  return hrefWithQuery('/portfolio', params);
+}
+
 export function replaceBrowserUrl(href: string): void {
   if (typeof window === 'undefined') return;
   window.history.replaceState(window.history.state, '', href);
@@ -133,8 +164,8 @@ export function canonicalizeLegacyPortfolioSearch(
 
   const p = new URLSearchParams(params.toString());
 
-  // → Holdings (the default book view): drop the tab + ancillary params.
-  if (raw === 'summary' || raw === 'positions' || raw === 'allocations' || raw === 'activity') {
+  // -> Book (the default view): drop the tab + ancillary params.
+  if (raw === 'summary' || raw === 'positions' || raw === 'allocations') {
     p.delete('tab');
     p.delete('docKey');
     p.delete('date');
@@ -142,9 +173,19 @@ export function canonicalizeLegacyPortfolioSearch(
     return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  // Legacy thesis deep link → the thesis detail route. Still `kind: 'path'`:
+  // Legacy activity tab -> Book activity pane.
+  if (raw === 'activity') {
+    p.delete('tab');
+    p.delete('docKey');
+    p.delete('date');
+    p.delete('thesis');
+    p.set('pane', 'activity');
+    return { kind: 'query', href: hrefWithQuery(pathname, p) };
+  }
+
+  // Legacy thesis deep link -> the thesis detail route. Still `kind: 'path'`:
   // the discriminant selects the *mechanism* (router.replace, which applies
-  // basePath) rather than the href shape, and the detail view now lives at
+  // basePath) rather than the href shape, and the detail view lives at
   // `/portfolio/theses?thesis=<id>` on a different pathname, so it needs a real
   // navigation — an in-place `replaceBrowserUrl` would rewrite the address bar
   // while leaving the Portfolio shell mounted.
@@ -155,20 +196,27 @@ export function canonicalizeLegacyPortfolioSearch(
     p.delete('docKey');
     p.delete('thesis');
     if (thesis) return { kind: 'path', href: thesisDetailHref(thesis) };
-    p.set('tab', 'theses');
+    p.set('tab', 'decisions');
+    p.set('pane', 'theses');
     return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  // PM history / process docs → Theses tab, preserving/seeding the date.
-  if (raw === 'history' || raw === 'pm_process') {
-    p.set('tab', 'theses');
-    if (!p.get('date')) p.set('date', opts.docDate ?? opts.lastUpdated ?? opts.defaultHistoryDate ?? '');
-    if (!p.get('date')) p.delete('date');
+  // Theses / PM history / process docs -> Decisions, theses pane. history and
+  // pm_process also preserve/seed the date.
+  if (raw === 'theses' || raw === 'history' || raw === 'pm_process') {
+    p.set('tab', 'decisions');
+    p.set('pane', 'theses');
+    p.delete('docKey');
+    p.delete('thesis');
+    if (raw !== 'theses') {
+      if (!p.get('date')) p.set('date', opts.docDate ?? opts.lastUpdated ?? opts.defaultHistoryDate ?? '');
+      if (!p.get('date')) p.delete('date');
+    }
     return { kind: 'query', href: hrefWithQuery(pathname, p) };
   }
 
-  // analysis / pm_analysis / strategy → Theses tab.
-  p.set('tab', 'theses');
+  // analysis / pm_analysis / strategy -> Decisions (edge pane).
+  p.set('tab', 'decisions');
   p.delete('docKey');
   p.delete('thesis');
   return { kind: 'query', href: hrefWithQuery(pathname, p) };
@@ -187,7 +235,7 @@ export function canonicalizeLegacyThesesSearch(
   p.delete('thesis');
   const thesesPath = portfolioThesesPath(pathname);
 
-  // Deep link → the query-param detail view (#1760); bare tab → the hub route.
+  // Deep link -> the query-param detail view (#1760); bare tab -> the hub route.
   if (thesis) return { kind: 'path', href: thesisDetailHref(thesis) };
   return { kind: 'query', href: hrefWithQuery(thesesPath, p) };
 }

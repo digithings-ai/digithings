@@ -31,7 +31,7 @@ import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
-import { thesisDetailHref } from '@/lib/portfolio-url-state';
+import { decisionsHref, thesisDetailHref } from '@/lib/portfolio-url-state';
 import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 import { getBriefs, getTradeIdeaArchive } from '@/lib/twelve-x/fetch';
 import type { FxBriefRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
@@ -58,25 +58,32 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
   const base: CmdItem[] = [
     { id: 'go-today', title: 'Brief', hint: "Today's decision & performance", href: '/', icon: LayoutDashboard },
     {
-      id: 'go-holdings',
-      title: 'Portfolio — Holdings',
-      hint: 'Weights & positions',
-      href: '/portfolio?tab=holdings',
+      id: 'go-book',
+      title: 'Portfolio — Book',
+      hint: 'Weights, positions & activity',
+      href: '/portfolio',
       icon: PieChart,
+    },
+    {
+      id: 'go-perf',
+      title: 'Portfolio — Performance',
+      hint: 'Returns, open positions & book attribution',
+      href: '/portfolio/performance',
+      icon: LineChart,
+    },
+    {
+      id: 'go-decisions',
+      title: 'Portfolio — Decisions',
+      hint: 'Decision edge vs benchmark & audit',
+      href: decisionsHref(),
+      icon: Scale,
     },
     {
       id: 'go-theses',
       title: 'Portfolio — Theses',
       hint: 'Thesis tracker',
-      href: '/portfolio?tab=theses',
+      href: decisionsHref('theses'),
       icon: BookMarked,
-    },
-    {
-      id: 'go-perf',
-      title: 'Portfolio — Tearsheet',
-      hint: 'Returns & position performance',
-      href: '/portfolio/performance',
-      icon: LineChart,
     },
     {
       id: 'go-ledger',
@@ -84,13 +91,6 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       hint: 'Position-event activity',
       href: '/portfolio/ledger',
       icon: ScrollText,
-    },
-    {
-      id: 'go-attribution',
-      title: 'Portfolio — Attribution',
-      hint: 'Position decomposition & recommendation quality',
-      href: '/portfolio/attribution',
-      icon: Scale,
     },
     {
       id: 'go-house',

@@ -29,10 +29,6 @@ vi.mock('lucide-react', () => ({
   Lock: () => createElement('svg', { 'data-icon': 'lock' }),
 }));
 
-vi.mock('@/components/portfolio/PortfolioSectionNav', () => ({
-  default: () => createElement('nav', { 'data-testid': 'section-nav' }),
-}));
-
 vi.mock('@/components/page-skeleton', () => ({
   default: () => createElement('div', { 'data-testid': 'page-skeleton' }),
 }));

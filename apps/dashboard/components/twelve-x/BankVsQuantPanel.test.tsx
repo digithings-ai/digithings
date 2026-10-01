@@ -74,8 +74,8 @@ describe('BankVsQuantPanel', () => {
     expect(html).toContain('DIV');
     expect(html).toContain('+1.00');
     expect(html).toContain('-1.00');
-    // Two ConsensusScoreBar tracks per row → two dbar-track divs per currency row.
-    expect(html.match(/dbar-track/g)?.length).toBe(4);
+    // Two kit ScoreBars per row (street + quant) → four score bars for two rows.
+    expect(html.match(/data-slot="score-bar"/g)?.length).toBe(4);
   });
 
   it('renders an empty state when there are no reads', () => {

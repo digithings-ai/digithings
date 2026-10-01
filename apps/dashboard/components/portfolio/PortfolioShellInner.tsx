@@ -4,9 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import { Button, EmptyState } from '@digithings/ui/ui';
-import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
+import { Button, EmptyState, SegmentedControl, Skeleton, SkeletonGroup } from '@digithings/ui/ui';
+import DecisionsView from '@/components/portfolio/DecisionsView';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
 import { fetchObservabilityData } from '@/lib/observability-queries';
 import { fetchThesisVehicleMap } from '@/lib/queries';
@@ -24,16 +23,19 @@ import {
   currentPathname,
   currentSearchParams,
   hrefWithQuery,
+  mapPortfolioPaneFromUrl,
   mapPortfolioTabFromUrl,
   replaceBrowserUrl,
   searchParamsFromHref,
   VALID_PORTFOLIO_TABS,
+  type BookPaneId,
+  type DecisionsPaneId,
+  type PortfolioPaneId,
   type PortfolioTabId,
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
 import AllocationsTab from './tabs/AllocationsTab';
 import ThesesTab from './tabs/ThesesTab';
-import PageSkeleton from '@/components/page-skeleton';
 
 export default function PortfolioShellInner() {
   const { data, api, loading, error } = useDashboard();
@@ -42,6 +44,9 @@ export default function PortfolioShellInner() {
   const pathname = usePathname();
   const urlTab = searchParams.get('tab');
   const [tab, setTab] = useState<PortfolioTabId>(() => mapPortfolioTabFromUrl(urlTab));
+  const [pane, setPane] = useState<PortfolioPaneId>(() =>
+    mapPortfolioPaneFromUrl(mapPortfolioTabFromUrl(urlTab), searchParams.get('pane'))
+  );
   const [dateParam, setDateParam] = useState(() => searchParams.get('date'));
   const [sleeveStackMode, setSleeveStackMode] = useState<SleeveStackMode>('ticker');
 
@@ -129,6 +134,7 @@ export default function PortfolioShellInner() {
     if (urlTab && VALID_PORTFOLIO_TABS.includes(urlTab as PortfolioTabId)) {
       queueMicrotask(() => {
         setTab(urlTab as PortfolioTabId);
+        setPane(mapPortfolioPaneFromUrl(urlTab as PortfolioTabId, searchParams.get('pane')));
         setDateParam(searchParams.get('date'));
       });
       return;
@@ -141,7 +147,9 @@ export default function PortfolioShellInner() {
     });
     if (!target) {
       queueMicrotask(() => {
-        setTab(mapPortfolioTabFromUrl(urlTab));
+        const t = mapPortfolioTabFromUrl(urlTab);
+        setTab(t);
+        setPane(mapPortfolioPaneFromUrl(t, searchParams.get('pane')));
         setDateParam(searchParams.get('date'));
       });
       return;
@@ -153,7 +161,9 @@ export default function PortfolioShellInner() {
     replaceBrowserUrl(target.href);
     const nextParams = searchParamsFromHref(target.href);
     queueMicrotask(() => {
-      setTab(mapPortfolioTabFromUrl(nextParams.get('tab')));
+      const t = mapPortfolioTabFromUrl(nextParams.get('tab'));
+      setTab(t);
+      setPane(mapPortfolioPaneFromUrl(t, nextParams.get('pane')));
       setDateParam(nextParams.get('date'));
     });
   }, [urlTab, searchParams, pathname, router, lastUpdated, defaultHistoryDate]);
@@ -161,7 +171,9 @@ export default function PortfolioShellInner() {
   useEffect(() => {
     const onPopState = () => {
       const p = new URLSearchParams(window.location.search);
-      setTab(mapPortfolioTabFromUrl(p.get('tab')));
+      const t = mapPortfolioTabFromUrl(p.get('tab'));
+      setTab(t);
+      setPane(mapPortfolioPaneFromUrl(t, p.get('pane')));
       setDateParam(p.get('date'));
     };
     window.addEventListener('popstate', onPopState);
@@ -188,14 +200,43 @@ export default function PortfolioShellInner() {
     setDateParam(null);
   }, [pathname, searchParams, tab]);
 
-  const sectionActive: PortfolioSectionId = tab;
+  /** Switches the pane inside the current tab; the first pane of each tab is the URL default. */
+  const selectPane = useCallback(
+    (next: PortfolioPaneId) => {
+      const p = currentSearchParams(searchParams);
+      const isDefault = next === 'positions' || next === 'edge';
+      if (isDefault) p.delete('pane');
+      else p.set('pane', next);
+      replaceBrowserUrl(hrefWithQuery(currentPathname(pathname), p));
+      setPane(next);
+    },
+    [pathname, searchParams]
+  );
 
-  if (loading) return <PageSkeleton />;
+  const h1 = (
+    <h1 className="sr-only">{tab === 'decisions' ? 'Portfolio decisions' : 'Portfolio book'}</h1>
+  );
+
+  if (loading)
+    return (
+      <div className={`${SUBPAGE_MAX} py-4 md:py-5`} data-testid="portfolio-loading">
+        {h1}
+        <SkeletonGroup aria-label="Loading portfolio" className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            {Array.from({ length: 5 }, (_, i) => (
+              <Skeleton key={i} variant="block" className="h-16 w-full" />
+            ))}
+          </div>
+          <Skeleton variant="block" className="h-72 w-full" />
+          <Skeleton variant="block" className="h-64 w-full" />
+        </SkeletonGroup>
+      </div>
+    );
   if (error || !data || !api || !metrics)
     return (
       <div className="flex min-h-full flex-col">
-        <PortfolioSectionNav active={sectionActive} />
         <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
+          {h1}
           <EmptyState
             variant="error"
             className="mx-auto max-w-md"
@@ -221,11 +262,26 @@ export default function PortfolioShellInner() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active={sectionActive} />
-
-      <div className={`${SUBPAGE_MAX} flex min-h-0 flex-1 flex-col space-y-6 py-4 md:py-5`}>
+      <div className={`${SUBPAGE_MAX} flex min-h-0 flex-1 flex-col space-y-4 py-4 md:py-5`}>
+        {h1}
+        {tab === 'holdings' && (
+          <div className="flex justify-end">
+            <SegmentedControl
+              dress="accent"
+              aria-label="Book section"
+              options={[
+                { value: 'positions', label: 'Positions' },
+                { value: 'activity', label: 'Activity' },
+              ]}
+              value={pane === 'activity' ? 'activity' : 'positions'}
+              onChange={(v) => selectPane(v as BookPaneId)}
+            />
+          </div>
+        )}
         {tab === 'holdings' && (
           <AllocationsTab
+            pane={pane === 'activity' ? 'activity' : 'positions'}
+            events={data.position_events ?? []}
             lastUpdated={lastUpdated}
             positions={positions}
             investedPct={holdingsInvestedPct}
@@ -245,13 +301,20 @@ export default function PortfolioShellInner() {
           />
         )}
 
-        {tab === 'theses' && (
-          <ThesesTab
-            lastUpdated={lastUpdated}
-            positions={positions}
-            theses={theses}
+        {tab === 'decisions' && (
+          <DecisionsView
             decisions={decisions}
-            thesisVehicleRows={thesisVehicleRows}
+            pane={pane === 'theses' || pane === 'audit' ? pane : 'edge'}
+            onPaneChange={(v: DecisionsPaneId) => selectPane(v)}
+            thesesPane={
+              <ThesesTab
+                lastUpdated={lastUpdated}
+                positions={positions}
+                theses={theses}
+                decisions={decisions}
+                thesisVehicleRows={thesisVehicleRows}
+              />
+            }
           />
         )}
       </div>

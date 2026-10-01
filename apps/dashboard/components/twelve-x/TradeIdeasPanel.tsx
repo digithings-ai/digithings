@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Badge, Button, Card } from '@digithings/ui/ui';
+import { Badge, Button, Card, RangeTrack } from '@digithings/ui/ui';
 import type { FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
   continuityForBoard,
@@ -11,6 +11,7 @@ import {
   formatPublishAsOf,
   type IdeaContinuityMeta,
 } from '@/lib/twelve-x/idea-continuity';
+import { buildIdeaLadder } from '@/lib/twelve-x/idea-ladder';
 import { buildIdeaDetailModel, type IdeaDetailLevelRow } from '@/lib/twelve-x/trade-levels';
 import { useTwelveX } from './context';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
@@ -146,25 +147,19 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
                     <span className={row.className}>{row.summary}</span>
                     <span className="font-mono text-[10px] text-ink-mute">{row.stance}</span>
                     {row.detail ? (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="cursor-pointer font-mono text-[10px] text-ink-mute underline decoration-dotted hover:text-accent" // canon-allow: inline evidence toggle inside a sentence; the kit owns no inline-text button
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="xs"
+                        className="h-auto p-0 font-mono text-[10px] text-ink-mute underline decoration-dotted hover:text-accent"
                         onClick={(event) => {
                           event.stopPropagation();
                           toggleEvidenceDetail(index);
                         }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            toggleEvidenceDetail(index);
-                          }
-                        }}
                         aria-expanded={openEvidence.includes(index)}
                       >
                         {openEvidence.includes(index) ? 'hide detail' : 'detail'}
-                      </span>
+                      </Button>
                     ) : null}
                   </div>
                   {row.detail && openEvidence.includes(index) ? (
@@ -209,6 +204,20 @@ function ContinuityStamp({ meta }: { meta: IdeaContinuityMeta | undefined }) {
   );
 }
 
+/** Direction glyph + word; bullish/long reads accent, bearish/short warn (never P&L up/down). */
+function directionGlyph(direction: string): string {
+  const d = direction.toLowerCase();
+  if (d.includes('long') || d.includes('bull')) return '▲';
+  if (d.includes('short') || d.includes('bear')) return '▼';
+  return '•';
+}
+
+/**
+ * Today's ranked trade ideas as a ladder: one row per idea with its level
+ * range drawn as a RangeTrack (stop / entry / target positions on one axis).
+ * Every row is a button that opens the idea slide-over; disputed ideas get a
+ * warn ring when the dispute toggle is on.
+ */
 export default function TradeIdeasPanel({
   ideas,
   highlightRanks,
@@ -228,14 +237,9 @@ export default function TradeIdeasPanel({
       direction: i.direction,
       as_of: i.as_of,
     }));
-    let hist =
-      ideaHistory.length > 0 ? [...ideaHistory] : fromIdeas;
+    let hist = ideaHistory.length > 0 ? [...ideaHistory] : fromIdeas;
     // Prefer including the displayed board: if history omits boardDate, merge ideas in.
-    if (
-      boardDate &&
-      ideas.length > 0 &&
-      !hist.some((h) => h.run_date === boardDate)
-    ) {
+    if (boardDate && ideas.length > 0 && !hist.some((h) => h.run_date === boardDate)) {
       hist = [...hist, ...fromIdeas];
     }
     let map = continuityForBoard(boardDate, hist);
@@ -246,29 +250,12 @@ export default function TradeIdeasPanel({
     return map;
   }, [boardDate, ideaHistory, ideas]);
 
-  const metaFor = (idea: FxTradeIdeaRow) =>
-    continuity.get(continuityKey(idea.pair, idea.direction));
+  const metaFor = (idea: FxTradeIdeaRow) => continuity.get(continuityKey(idea.pair, idea.direction));
 
-  const highlightClass = (rank: number, base: string) =>
-    highlightRanks?.has(rank)
-      ? `${base} ring-2 ring-warn/50 ring-offset-1 ring-offset-surface`
-      : base;
-
-  if (ideas.length === 0) {
-    return (
-      <Card data-reveal className="gap-0 p-5">
-        <header className="mb-2 flex items-baseline gap-2">
-          <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
-        </header>
-        <p className="text-sm text-ink-mute">No curated trade idea for today yet.</p>
-      </Card>
-    );
-  }
-
-  const [top, ...rest] = ideas;
+  const ladders = useMemo(() => ideas.map((i) => buildIdeaLadder(i)), [ideas]);
 
   return (
-    <Card data-reveal className="flex flex-col gap-3 p-5">
+    <Card data-reveal className="flex flex-col gap-3 p-4">
       <header className="flex items-baseline gap-2">
         <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         <span className="font-mono text-[10px] text-ink-mute">· {ideas.length}</span>
@@ -283,58 +270,61 @@ export default function TradeIdeasPanel({
         </Button>
       </header>
 
-      {/* Focal #1 — accent chrome marks it as the top-ranked idea, NOT a P&L
-          direction. --up/--down are reserved for P&L sign (F5), so a SHORT #1
-          must not read as green. Direction lives in its own colored label. */}
-      <Button
-        type="button"
-        variant="ghost"
-        className={highlightClass(
-          top.rank,
-          'block h-auto w-full justify-start whitespace-normal rounded-none border border-accent/30 bg-accent/[0.06] p-4 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-accent/[0.06]',
-        )}
-        onClick={() => openIdea(top.run_date, top.rank)}
-      >
-        <div className="flex min-w-0 items-start gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="font-mono text-[11px] text-ink-mute">#1</span>
-            <span className="font-semibold text-ink">{top.pair}</span>
-            <span className={`text-xs font-semibold uppercase ${dirClass(top.direction)}`}>
-              {top.direction}
-            </span>
-          </div>
-          <ContinuityStamp meta={metaFor(top)} />
-        </div>
-        <p className="mt-1 text-sm text-ink">{top.title}</p>
-        {top.thesis ? <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{top.thesis}</p> : null}
-        {top.catalyst ? <p className="mt-1 text-[11px] text-ink-mute">Catalyst: {top.catalyst}</p> : null}
-      </Button>
-
-      {/* #2…N rows — clicking opens the idea sidebar */}
-      {rest.map((idea) => (
-        <Button
-          key={`${idea.run_date}-${idea.rank}`}
-          type="button"
-          variant="ghost"
-          className={highlightClass(
-            idea.rank,
-            'block h-auto w-full justify-start whitespace-normal rounded-none border border-hair px-3 py-2 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-transparent',
-          )}
-          onClick={() => openIdea(idea.run_date, idea.rank)}
-        >
-          <span className="flex min-w-0 items-start gap-2">
-            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="font-mono text-[10px] text-ink-mute">#{idea.rank}</span>
-              <span className="font-semibold text-ink">{idea.pair}</span>
-              <span className={`font-semibold uppercase ${dirClass(idea.direction)}`}>
-                {idea.direction}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-ink-mute">{idea.title}</span>
-            </span>
-            <ContinuityStamp meta={metaFor(idea)} />
-          </span>
-        </Button>
-      ))}
+      {ideas.length === 0 ? (
+        <p className="text-sm text-ink-mute">No curated trade idea for today yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2" aria-label="Ranked trade ideas">
+          {ideas.map((idea, index) => {
+            const ladder = ladders[index];
+            const disputed = highlightRanks?.has(idea.rank) ?? false;
+            return (
+              <li key={`${idea.run_date}-${idea.rank}`}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  data-idea-rank={idea.rank}
+                  data-disputed={disputed ? 'true' : undefined}
+                  className={`block h-auto w-full justify-start whitespace-normal rounded-none border px-3 py-2 text-left text-xs font-normal transition-colors hover:border-accent/50 hover:bg-transparent ${
+                    disputed
+                      ? 'border-warn/60 ring-2 ring-warn/40 ring-offset-1 ring-offset-surface'
+                      : index === 0
+                        ? 'border-accent/30 bg-accent/[0.06]'
+                        : 'border-hair'
+                  }`}
+                  onClick={() => openIdea(idea.run_date, idea.rank)}
+                >
+                  <span className="flex min-w-0 items-start gap-2">
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="font-mono text-[10px] text-ink-mute">#{idea.rank}</span>
+                      <span className="font-semibold text-ink">{idea.pair}</span>
+                      <span className={`font-semibold uppercase ${dirClass(idea.direction)}`}>
+                        <span aria-hidden>{directionGlyph(idea.direction)} </span>
+                        {idea.direction}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-ink-mute">{idea.title}</span>
+                    </span>
+                    <ContinuityStamp meta={metaFor(idea)} />
+                  </span>
+                  {ladder ? (
+                    <RangeTrack
+                      className="mt-1.5"
+                      low={ladder.low}
+                      high={ladder.high}
+                      label={`${idea.pair} ${idea.direction} level range`}
+                      markers={ladder.markers.map((m) => ({
+                        kind: m.kind,
+                        value: m.value,
+                        label: m.label,
+                      }))}
+                      format={(v) => String(Math.round(v * 1e5) / 1e5)}
+                    />
+                  ) : null}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Card>
   );
 }

@@ -5,7 +5,7 @@ import { DigiquantMark } from '@digithings/ui';
  * preserving the dashboard's shipped surface: 28px, ink by default (the mark
  * draws in currentColor), decorative (aria-hidden).
  */
-export function DashboardMark({ className }: { className?: string }) {
+export function DashboardMark({ className, size = 28 }: { className?: string; size?: number }) {
   const merged = ['text-ink', className].filter(Boolean).join(' ');
-  return <DigiquantMark size={28} className={merged} />;
+  return <DigiquantMark size={size} className={merged} />;
 }

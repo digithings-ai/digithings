@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { NAV, isDbExempt } from './nav';
+import { NAV, activeNavHref, isDbExempt } from './nav';
+
+describe('activeNavHref', () => {
+  it('maps routes (with/without basePath and trailing slash) to their spine entry', () => {
+    expect(activeNavHref('/')).toBe('/');
+    expect(activeNavHref('/dashboard/')).toBe('/');
+    expect(activeNavHref('/portfolio/theses/')).toBe('/portfolio');
+    expect(activeNavHref('/dashboard/portfolio')).toBe('/portfolio');
+    expect(activeNavHref('/twelve-x')).toBe('/twelve-x');
+  });
+
+  it('folds legacy routes into Portfolio / Pipeline', () => {
+    expect(activeNavHref('/performance')).toBe('/portfolio');
+    for (const p of ['/why', '/research', '/library', '/system', '/observability', '/architecture']) {
+      expect(activeNavHref(p)).toBe('/pipeline');
+    }
+  });
+
+  it('returns null off the spine and never matches lookalikes', () => {
+    expect(activeNavHref('/settings')).toBeNull();
+    expect(activeNavHref('/login')).toBeNull();
+    expect(activeNavHref('/portfolios')).toBeNull();
+    expect(activeNavHref(null)).toBeNull();
+  });
+});
 
 describe('NAV', () => {
   it('is the 4-destination owner spine + FX Hub (System removed)', () => {

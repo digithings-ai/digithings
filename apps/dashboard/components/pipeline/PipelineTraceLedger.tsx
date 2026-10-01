@@ -21,6 +21,7 @@ import {
   SegmentedControl,
 } from '@digithings/ui/ui';
 import { fetchPipelineTrace } from '@/lib/pipeline-trace';
+import type { PipelineScope } from '@/lib/pipelines';
 import type {
   PipelineRunEvent,
   PipelineTraceResult,
@@ -445,9 +446,12 @@ export function PipelineTraceView({
 
 export default function PipelineTraceLedger({
   date,
+  scope,
   onClose,
 }: {
   date: string;
+  /** Optional pipeline scope; defaults to baseline. */
+  scope?: PipelineScope;
   onClose: () => void;
 }) {
   const [loaded, setLoaded] = useState<{ date: string; result: PipelineTraceResult } | null>(null);
@@ -455,13 +459,13 @@ export default function PipelineTraceLedger({
 
   useEffect(() => {
     let cancelled = false;
-    void fetchPipelineTrace(date).then((nextResult) => {
+    void fetchPipelineTrace(date, scope).then((nextResult) => {
       if (!cancelled) setLoaded({ date, result: nextResult });
     });
     return () => {
       cancelled = true;
     };
-  }, [date]);
+  }, [date, scope?.pipelineId]); // eslint-disable-line react-hooks/exhaustive-deps -- scope keyed by id
 
   if (result === null) {
     return (

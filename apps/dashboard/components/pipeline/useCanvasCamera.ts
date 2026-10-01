@@ -28,13 +28,16 @@ export function exceedsDragSlop(startX: number, startY: number, x: number, y: nu
 // Idle window after the last wheel event before we treat the gesture as ended.
 const WHEEL_IDLE_MS = 120;
 
-/** Pure helper: compute a transform that fits `bbox` inside `viewport` (centered, scale ≤ 1). */
-export function computeFit(bbox: Bbox, viewport: Viewport): CameraTransform {
+/**
+ * Pure helper: compute a transform that fits `bbox` inside `viewport` (centered). Scale is capped
+ * at `maxScale` (default 1); callers that want the graph to use a wide viewport pass a larger cap.
+ */
+export function computeFit(bbox: Bbox, viewport: Viewport, maxScale = 1): CameraTransform {
   const availW = viewport.width - PADDING * 2;
   const availH = viewport.height - PADDING * 2;
   const scaleW = availW / bbox.width;
   const scaleH = availH / bbox.height;
-  const scale = Math.min(1, scaleW, scaleH);
+  const scale = Math.min(maxScale, scaleW, scaleH);
   const x = (viewport.width - bbox.width * scale) / 2;
   const y = (viewport.height - bbox.height * scale) / 2;
   return { x, y, scale };
@@ -125,7 +128,7 @@ export interface CanvasCameraResult {
   transform: CameraTransform;
   zoomIn: () => void;
   zoomOut: () => void;
-  fit: (bbox: Bbox, viewport: Viewport) => void;
+  fit: (bbox: Bbox, viewport: Viewport, maxScale?: number) => void;
   centerOn: (rect: NodeRect, viewport: Viewport) => void;
   focusOn: (rect: NodeRect, viewport: Viewport, options?: FocusOptions) => void;
   /** Attach to the scrolling/transformed layer — its DOM transform is written every frame. */
@@ -227,8 +230,8 @@ export function useCanvasCamera(initialTransform?: Partial<CameraTransform>): Ca
   );
 
   const fit = useCallback(
-    (bbox: Bbox, viewport: Viewport) => {
-      applyProgrammatic(computeFit(bbox, viewport));
+    (bbox: Bbox, viewport: Viewport, maxScale?: number) => {
+      applyProgrammatic(computeFit(bbox, viewport, maxScale));
     },
     [applyProgrammatic],
   );

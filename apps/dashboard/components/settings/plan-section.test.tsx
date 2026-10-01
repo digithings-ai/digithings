@@ -1,0 +1,184 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { createElement, act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PlanSection } from './plan-section';
+
+function clickInterval(el: HTMLElement, index: number) {
+  const buttons = el.querySelectorAll('[data-testid="billing-interval"] button');
+  (buttons[index] as HTMLButtonElement).click();
+}
+
+describe('PlanSection (static)', () => {
+  it('renders billing not configured when envs absent', () => {
+    const html = renderToStaticMarkup(
+      createElement(PlanSection, { api: null, configured: false }),
+    );
+    expect(html).toContain('billing-not-configured');
+    expect(html).toContain('Billing is not configured');
+  });
+
+  it('defaults to annual and shows annual prices with discount', () => {
+    const html = renderToStaticMarkup(
+      createElement(PlanSection, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn: vi.fn(),
+        portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
+      }),
+    );
+    expect(html).toContain('data-interval="annual"');
+    expect(html).toContain('$8/mo');
+    expect(html).toContain('$24/mo');
+    expect(html).toContain('$80/mo');
+    expect(html).toContain('billed $96/yr');
+    expect(html).toContain('billed $288/yr');
+    expect(html).toContain('billed $960/yr');
+    expect(html).toContain('20% off');
+    expect(html).toContain('<s data-testid="billing-price-list">$10/mo</s>');
+    expect(html).toContain('<s data-testid="billing-price-list">$30/mo</s>');
+    expect(html).toContain('<s data-testid="billing-price-list">$100/mo</s>');
+  });
+});
+
+describe('PlanSection (interval)', () => {
+  let root: Root | null = null;
+  let host: HTMLElement | null = null;
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    host?.remove();
+    root = null;
+    host = null;
+  });
+
+  async function mount(ui: React.ReactElement): Promise<HTMLElement> {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(ui);
+    });
+    return host;
+  }
+
+  it('switches to monthly list prices and checks out on the selected interval', async () => {
+    const checkoutFn = vi.fn(async () => ({ url: null }));
+    const el = await mount(
+      createElement(PlanSection, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
+      }),
+    );
+    expect(
+      el.querySelector('[data-testid="settings-plan-section"]')?.getAttribute('data-interval'),
+    ).toBe('annual');
+
+    await act(async () => {
+      clickInterval(el, 0);
+    });
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
+    expect(tab?.getAttribute('data-interval')).toBe('monthly');
+    expect(tab?.textContent).toContain('$10/mo');
+    expect(tab?.textContent).toContain('$30/mo');
+    expect(tab?.textContent).toContain('$100/mo');
+    expect(tab?.querySelector('[data-testid="billing-price-list"]')).toBeNull();
+    expect(tab?.querySelector('[data-testid="billing-price-caption"]')).toBeNull();
+    expect(tab?.textContent).not.toContain('billed $100/yr');
+
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-desk"]') as HTMLButtonElement).click();
+    });
+    expect(checkoutFn).toHaveBeenCalledWith(
+      { accessToken: 'tok' },
+      { tier: 'desk', interval: 'monthly' },
+    );
+
+    await act(async () => {
+      clickInterval(el, 1);
+    });
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-studio"]') as HTMLButtonElement).click();
+    });
+    expect(checkoutFn).toHaveBeenLastCalledWith(
+      { accessToken: 'tok' },
+      { tier: 'studio', interval: 'annual' },
+    );
+  });
+
+  it('falls back to monthly when PRICE_NOT_CONFIGURED error occurs', async () => {
+    const checkoutFn = vi.fn(async () => {
+      throw { code: 'PRICE_NOT_CONFIGURED', message: 'STRIPE_PRICE_BRIEF_ANNUAL is not set on Edge Function secrets' };
+    });
+    const el = await mount(
+      createElement(PlanSection, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
+      }),
+    );
+    expect(
+      el.querySelector('[data-testid="settings-plan-section"]')?.getAttribute('data-interval'),
+    ).toBe('annual');
+
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
+    });
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
+    expect(tab?.getAttribute('data-interval')).toBe('monthly');
+    expect(tab?.textContent).toContain('Annual pricing is not configured');
+    expect(tab?.textContent).toContain('$10/mo');
+    expect(tab?.textContent).not.toContain('billed $96/yr');
+  });
+
+  it('handles STRIPE_NOT_CONFIGURED error', async () => {
+    const checkoutFn = vi.fn(async () => {
+      throw { code: 'STRIPE_NOT_CONFIGURED', message: 'Stripe is not configured' };
+    });
+    const el = await mount(
+      createElement(PlanSection, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
+      }),
+    );
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
+    });
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
+    expect(tab?.textContent).toContain('Stripe is not configured');
+  });
+
+  it('handles NO_STRIPE_CUSTOMER error', async () => {
+    const checkoutFn = vi.fn(async () => {
+      throw { code: 'NO_STRIPE_CUSTOMER', message: 'No Stripe customer on workspace' };
+    });
+    const el = await mount(
+      createElement(PlanSection, {
+        api: { accessToken: 'tok' },
+        configured: true,
+        checkoutFn,
+        portalFn: vi.fn(),
+        profileFn: vi.fn(async () => ({}) as never),
+      }),
+    );
+    await act(async () => {
+      (el.querySelector('[data-testid="billing-checkout-brief"]') as HTMLButtonElement).click();
+    });
+    const tab = el.querySelector('[data-testid="settings-plan-section"]');
+    expect(tab?.textContent).toContain('No Stripe customer on workspace');
+  });
+});

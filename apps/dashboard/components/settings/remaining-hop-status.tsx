@@ -20,6 +20,8 @@ import {
   type RemainingHopEvidence,
   type RemainingHopProven,
 } from '@/lib/remaining-hops';
+import { hopsToStrip } from '@/lib/settings-runs';
+import { Skeleton, StatusDot, StatusStrip } from '@digithings/ui/ui';
 import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
@@ -120,9 +122,30 @@ export function RemainingHopStatus({
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [hydrate]);
 
+  const strip = proven
+    ? hopsToStrip(
+        REMAINING_LIVE_HOPS.map((hop) => ({
+          key: hop,
+          label: REMAINING_HOP_LABELS[hop],
+          proven: proven[hop],
+          blocker: blockers[hop] ? REMAINING_HOP_BLOCKER_LABELS[blockers[hop]!] : null,
+        })),
+      )
+    : null;
+
   return (
-    <div className="space-y-2" data-testid="remaining-hop-status">
-      <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink-mute">Remaining hops</p>
+    <div className="space-y-3" data-testid="remaining-hop-status">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
+          Remaining hops
+        </p>
+        {strip ? (
+          <p className="font-mono text-xs tabular-nums text-ink" data-testid="remaining-hop-count">
+            {strip.proven} / {strip.total} proven
+          </p>
+        ) : null}
+      </div>
+      {strip ? <StatusStrip cells={strip.cells} label={strip.summary} height={10} /> : null}
       <p className="text-xs text-ink-mute">
         Member-scoped Settings reads only. House <span className="font-mono">active</span> without
         a Stripe subscription boolean does not prove checkout. Brief or Desk Stripe does not prove
@@ -135,9 +158,11 @@ export function RemainingHopStatus({
         <p className="text-sm text-ink-mute">Sign in to load remaining hops.</p>
       ) : null}
       {loading ? (
-        <p className="text-sm text-ink-mute" data-testid="remaining-hop-loading">
-          Loading remaining hops…
-        </p>
+        <div data-testid="remaining-hop-loading" className="space-y-1.5">
+          <Skeleton variant="line" />
+          <Skeleton variant="line" />
+          <span className="sr-only">Loading remaining hops</span>
+        </div>
       ) : null}
       {loadError ? (
         <SettingsLoadError message={loadError} onRetry={() => void hydrate()} />
@@ -154,7 +179,10 @@ export function RemainingHopStatus({
                 data-proven={proven[hop] ? 'true' : 'false'}
                 data-blocker={blocker ?? ''}
               >
-                <span className="text-ink-soft">{REMAINING_HOP_LABELS[hop]}</span>
+                <span className="flex items-center gap-2 text-ink-soft">
+                  <StatusDot tone={proven[hop] ? 'ok' : blocker ? 'warn' : 'off'} />
+                  {REMAINING_HOP_LABELS[hop]}
+                </span>
                 <span className="text-right font-mono text-xs text-ink-mute">
                   {proven[hop]
                     ? 'proven'

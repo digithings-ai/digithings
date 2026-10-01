@@ -24,7 +24,7 @@ series and `performance-ssot` helpers as Brief — #3580), a base-zero portfolio
 current-book contribution, and
 open-position outcomes. Closed / trimmed fills live on **Ledger** (single source
 of truth) — the tearsheet links there instead of duplicating a Closed positions
-tab. Its command band uses the same compact as-of stamp as Holdings and shows one
+tab. Its command band uses the same compact as-of stamp as Book and shows one
 benchmark-relative headline (**Excess return** = Rp − Rb); Relative gain was a
 duplicate alias and was removed. Open-book **Unrealized** prefers stored `unrealized_pnl_pct` /
 `since_entry_return_pct`, else derives from `entry_price` vs `current_price`, and
@@ -100,11 +100,15 @@ compact digithings house ETF paper book banner linking to `/house` —
 **Corpus | Book | Profile** (read-only). Profile pins are declared chrome until
 Track B ProfileConfig DB lands; they are not editable Settings.
 
-**Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
-**Ledger** (position-event activity) · Attribution. Legacy `/portfolio/period`
-redirects to Tearsheet (#3060). Accounting tip views (`public_accounting_period_status`)
-remain available to Tearsheet/Ledger; raw `dashboard_accounting_*` bases stay
-service_role-only (#2652).
+**Portfolio sections** (`components/shell/nav-model.ts`): **Book** (`/portfolio`,
+Positions | Activity panes) · **Performance** (`/portfolio/performance`, the tearsheet
+plus current-book attribution) · **Decisions** (`/portfolio?tab=decisions`, Edge | Theses
+| Audit panes). `/portfolio/ledger`, `/portfolio/attribution` (Decisions without the
+Theses pane) and `/portfolio/tickers?ticker=` stay as direct routes. Legacy `?tab=` ids
+canonicalize through `lib/portfolio-url-state.ts` (`?tab=theses` →
+`?tab=decisions&pane=theses`), and `/portfolio/period` redirects to Performance (#3060).
+Accounting tip views (`public_accounting_period_status`) remain available to
+Performance/Ledger; raw `dashboard_accounting_*` bases stay service_role-only (#2652).
 
 Shared workspace gutters use `SUBPAGE_MAX` from
 `components/layout-constants.ts`. The constant intentionally lives outside
@@ -118,8 +122,9 @@ Time-series charts (NAV/equity curves, drawdown, rolling risk, price + position
 panes) render on **lightweight-charts** — #1420 migrated six such charts off
 recharts onto the shared `useLightweightChart` scaffold (`lib/lw-chart.tsx`).
 recharts stays for categorical/composition surfaces (bars keyed by
-ticker/bucket, 100%-stacked allocation, trivial sparklines), which
-lightweight-charts has no grammar for. The engine ruling and the full per-file
+ticker/bucket, 100%-stacked allocation), which lightweight-charts has no
+grammar for. Sparklines, score bars and small multiples use kit primitives
+(`Sparkline`, `ScoreBar`, `CompositionBar`, `DivergingBars`) and need neither engine. The engine ruling and the full per-file
 inventory live in [`lib/CHARTS.md`](lib/CHARTS.md).
 
 Global `.recharts-*` overrides in `globals.css` now reference the canon tokens
@@ -143,9 +148,9 @@ primitive instead of hand-rolling sort state.
 
 The Portfolio routes follow digiweb's canonical `PortfolioWorkspaceReference`:
 one flat command band establishes book or dossier state, then hairline-divided
-ledgers carry positions, activity, research, and decision history. Holdings owns
-an exposure command band plus switchable position/activity ledgers; Theses uses
-a conviction-ranked research spine. The ticker dossier follows one lifecycle:
+ledgers carry positions, activity, research, and decision history. Book owns
+an exposure command band plus switchable position/activity ledgers; the Decisions
+Theses pane uses a conviction-ranked research spine. The ticker dossier follows one lifecycle:
 current Pipeline view, current or historical portfolio position, material allocation
 actions, measured performance and attribution, then analysis history. It shows only
 the current stance and concise thesis summary; exact-date links open the Selection
@@ -154,21 +159,20 @@ Position history excludes routine HOLD observations and initially shows six mate
 actions. Latest ticker attribution is explicitly a stored book window, not since-entry
 performance. Thesis detail routes retain the editorial main/context composition.
 
-Attribution follows the dashboard-workspace variant: one command band carries the
-decision verdict, sample-size context, selected analysis period, as-of stamp, and the
-Decision effectiveness / Book attribution / Audit switch. The default view keeps
-four headline metrics, one decision-edge plot, stance/conviction diagnostics, and a
-five-item review queue in the primary scan path. Analysis defaults to all available
-history; 1W, 1M, 3M, YTD, and 1Y period controls rescope every decision metric,
-diagnostic, review item, Audit row, and trend point. The trend is cumulative across
-every independently scored decision in the selected time period; it has no separate
-call-count window. The visible consistency ratio is explicitly named for what it is
-(mean decision edge divided by its variability), rather than presented as an
-annualized information ratio. Book attribution remains the latest stored snapshot and
-says so explicitly because its persisted rows are not a historical return series.
+Decisions (`components/portfolio/DecisionsView.tsx`) asks whether the PM's judgement
+adds value. The Edge pane is chart-first on kit primitives (`Stat`, `Sparkline`,
+`DivergingBars`): cumulative edge, conviction calibration, stance and worst-call bars.
+Analysis defaults to all available history; 1W, 1M, 3M, YTD, and 1Y period controls
+rescope every decision metric, bar, Audit row, and trend point. The trend is cumulative
+across every independently scored decision in the selected period. Edge is alpha vs
+the recorded benchmark, so bars use the signed tone while the verdict stays in the
+health vocabulary (accent / warn / ink-mute). Book attribution moved to Performance
+(`components/portfolio/BookAttribution.tsx`), where it is labelled a current-book
+lookback diagnostic, not realized daily contribution, because its persisted rows are
+not a historical return series.
 
-Across the four Portfolio views, command bands and ledgers carry the context without
-introductory feature prose. Holdings and Performance normalize stored allocation keys
+Across the Portfolio views, command bands and ledgers carry the context without
+introductory feature prose. Book and Performance normalize stored allocation keys
 into reader-facing categories. Theses opens as a collapsed conviction-ranked register,
 leaving generated research detail behind an intentional disclosure. Performance states
 the exact inception-to-metrics period for its NAV, portfolio, benchmark, and active
@@ -179,8 +183,7 @@ Every book surface derives invested exposure and displayed weights from the same
 effective `positions` snapshot. An independently latest `portfolio_metrics` row
 must not rescale those positions: the tables already store percent-of-NAV weights,
 and an explicit CASH row is presentation-excluded by `reconcileBook`. This contract
-applies equally to the Brief book strip, its Holdings doorway, and Portfolio
-Holdings.
+applies equally to the Brief book strip, its Book doorway, and Portfolio Book.
 
 `/portfolio/performance` applies the same flat grammar to the shared
 finance-tearsheet primitives. Its command band, contribution chart, position
@@ -322,7 +325,17 @@ Cloudflare dashboard.
 
 ## Settings workspace (T3)
 
-`/settings` is a tabbed workspace — **Profile | Pipeline | Keys | Brokers | Notifications | Billing | About**.
+`/settings` is one scrolling page with a section rail — **Account · Pipeline ·
+Connections · Plan & billing · Notifications · Appearance · System**
+(`lib/settings-sections.ts`). Each section is fed by one or more of the legacy tab ids
+below (Pipeline ← Pipeline, Connections ← Keys + Brokers, Plan ← Billing,
+Notifications ← Notifications, System ← About). Account and Appearance are always
+shown; the Profile editor inside Account keeps its own Studio+ gate. Every legacy tab id and hash
+(`#brokers`, `#keys`, `?tab=billing`, `?checkout=`) still resolves through
+`SECTION_ALIASES`, so Stripe returns, the broker OAuth callback and bookmarks keep
+landing. Settings search (`lib/settings-index.ts`) only offers settings the viewer's
+tier can reach.
+
 The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** by the
 workspace tenancy program: authenticated users edit versioned investment overlays, connect
 paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
@@ -332,10 +345,11 @@ and [`SETTINGS-IA.md`](../../docs/agent-backlog/execution-tenancy/SETTINGS-IA.md
 (`free`) → **Brief** → **Desk** → **Studio** / Enterprise. Do not document Baseline/Custom
 as Stripe products.
 
-**Tab visibility by effective tier:** Observer and Brief see Notifications | Billing | About
-only. Desk adds Brokers. Studio / enterprise / creator floor see the full set (Profile |
-Pipeline | Keys | Brokers | Notifications | Billing | About). Tabs the current tier cannot
-use are **omitted**, not greyed.
+**Tab visibility by effective tier** (`settingsTabsVisible`, which gates the sections):
+Observer and Brief see Notifications | Billing | About only. Desk adds Brokers. Studio /
+enterprise / creator floor see the full set (Profile | Pipeline | Keys | Brokers |
+Notifications | Billing | About). A section shows when any of its source tabs is visible;
+tabs, anchors and search hits the current tier cannot use are **omitted**, not greyed.
 
 - **Profile** — client JSON-schema validation (bundled v1 schemas) plus Edge Function
   re-validation; saves append `olympus_profile_config` versions (never mutate; never the

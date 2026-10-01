@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Files, ListTree } from 'lucide-react';
+import { ChartGantt, Files, ListTree } from 'lucide-react';
 import { Button } from '@digithings/ui/ui';
 import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
@@ -21,6 +21,13 @@ import PipelineNodeDetail from './PipelineNodeDetail';
 import PipelineArtifactLedger from './PipelineArtifactLedger';
 import PipelineTraceLedger from './PipelineTraceLedger';
 import PipelineRunHealth from './PipelineRunHealth';
+import PipelineRunStrip from './PipelineRunStrip';
+import PipelineTimeline from './PipelineTimeline';
+import { useRunDiagnostics } from './use-run-diagnostics';
+import { usePipelineSelection } from '@/components/pipeline-selection';
+import { applyPipelineScope } from '@/lib/pipeline-scope';
+import { buildRunStrip } from '@/lib/pipeline-run-strip';
+import { groupRunEpisodes } from '@/lib/run-episodes';
 import { apiDb } from '@/lib/api-query';
 import { isApiConfigured } from '@/lib/api-client';
 
@@ -62,7 +69,20 @@ function buildInitialExpansion(
   return { expandedStages, expandedFanouts };
 }
 
+/**
+ * Pipeline surface. Keyed by the selected pipeline so switching pipelines resets
+ * every panel, ledger and expansion (baseline is the only option today).
+ */
 export default function PipelineClient() {
+  const { pipelineId } = usePipelineSelection();
+  return <PipelineSurface key={pipelineId} />;
+}
+
+type DayLoadState = 'loading' | 'ready' | 'unavailable' | 'not-configured';
+
+function PipelineSurface() {
+  const { scope } = usePipelineSelection();
+  const scopeId = scope.pipelineId;
   // Static export (`output: 'export'`) — there is no server to hand this page a
   // `searchParams` prop, so deep links (`?date=&stage=&node=`) must be read
   // client-side, same as `/why` (`components/why/why-client.tsx`). Must be
@@ -82,6 +102,8 @@ export default function PipelineClient() {
   // run instead. An explicit ?date= deep link or a selector click wins.
   const dateExplicit = useRef(Boolean(params.date));
   const [dayLoading, setDayLoading] = useState(true);
+  // 'unavailable' (read failed) is not 'no run': a DB outage must not look like an empty pipeline.
+  const [loadState, setLoadState] = useState<DayLoadState>('loading');
   const [dayData, setDayData] = useState<PipelineDayData>({
     runRecorded: false,
     fanoutCounts: {},
@@ -95,6 +117,10 @@ export default function PipelineClient() {
   const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(params.node ?? null);
   const [artifactLedgerOpen, setArtifactLedgerOpen] = useState(false);
   const [traceLedgerOpen, setTraceLedgerOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+
+  const diagnosticsState = useRunDiagnostics(scope);
+  const episodes = useMemo(() => groupRunEpisodes(diagnosticsState.diagnostics ?? []), [diagnosticsState.diagnostics]);
 
   const initialExpansion = useMemo(
     () => buildInitialExpansion(params.stage, params.node),
@@ -110,7 +136,10 @@ export default function PipelineClient() {
       setDayLoading(true);
 
       try {
-        if (!isApiConfigured()) return;
+        if (!isApiConfigured()) {
+          if (!cancelled) setLoadState('not-configured');
+          return;
+        }
 
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -120,18 +149,19 @@ export default function PipelineClient() {
           // Deriving them from `documents` selects EVERY row (~40-60/day), and
           // the PostgREST 1000-row default cap silently truncated the oldest
           // dates out of the 30-day window.
-          apiDb
-            .from('daily_snapshots')
-            .select('date')
+          applyPipelineScope(apiDb.from('daily_snapshots').select('date'), 'daily_snapshots', scope)
             .gte('date', thirtyDaysAgo)
             .order('date', { ascending: false }),
-          apiDb
-            .from('documents')
-            .select('document_key,title,doc_type,phase,category,segment,sector,run_type')
-            .eq('date', selectedDate),
+          applyPipelineScope(
+            apiDb.from('documents').select('document_key,title,doc_type,phase,category,segment,sector,run_type'),
+            'documents',
+            scope,
+          ).eq('date', selectedDate),
         ]);
 
         if (cancelled) return;
+
+        setLoadState(datesRes.error || docsRes.error ? 'unavailable' : 'ready');
 
         const uniqueDates = datesRes.data
           ? [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
@@ -157,14 +187,15 @@ export default function PipelineClient() {
         }
 
       } catch {
-        // Supabase not configured or no data — degrade gracefully
+        // Degrade gracefully, but say so: an outage is not an empty pipeline.
+        if (!cancelled) setLoadState('unavailable');
       } finally {
         if (!cancelled) setDayLoading(false);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [selectedDate]);
+  }, [selectedDate, scopeId]); // eslint-disable-line react-hooks/exhaustive-deps -- scope keyed by id
 
   // A '?node=digest' deep link (from Overview / the command palette, which don't
   // know today's baseline-vs-delta cadence) is a sentinel, not necessarily this
@@ -198,6 +229,13 @@ export default function PipelineClient() {
     setActiveDocumentKey(documentKey);
   }, []);
 
+  const handleTimelineSelect = useCallback((documentKey: string) => {
+    setArtifactLedgerOpen(false);
+    setTraceLedgerOpen(false);
+    setActiveNode(null);
+    setActiveDocumentKey(documentKey);
+  }, []);
+
   const handleArtifactLedgerOpen = useCallback(() => {
     setTraceLedgerOpen(false);
     setArtifactLedgerOpen(true);
@@ -210,7 +248,12 @@ export default function PipelineClient() {
     setTraceLedgerOpen(true);
   }, []);
 
-  const noRunForDate = !dayLoading && dayData.runRecorded === false;
+  const noRunForDate = !dayLoading && loadState === 'ready' && dayData.runRecorded === false;
+  const dataUnavailable = !dayLoading && (loadState === 'unavailable' || loadState === 'not-configured');
+  const stripCells = useMemo(
+    () => buildRunStrip({ runDates: availableDates, episodes, end: today() }),
+    [availableDates, episodes],
+  );
 
   return (
     <section
@@ -223,6 +266,13 @@ export default function PipelineClient() {
         className="flex min-h-12 flex-wrap items-center justify-end gap-y-2 border-y border-hair bg-surface px-3 py-2 md:flex-nowrap md:px-4"
       >
         <h1 className="sr-only">Pipeline</h1>
+        {dataUnavailable && (
+          <p className="mr-auto font-mono text-xs text-warn" role="status" data-testid="pipeline-data-unavailable">
+            {loadState === 'not-configured'
+              ? 'API not configured — showing the expected pipeline.'
+              : 'Run data unavailable — showing the expected pipeline.'}
+          </p>
+        )}
         {noRunForDate && (
           <p className="mr-auto font-mono text-xs text-ink-mute" role="status">
             No run recorded — showing the expected pipeline.
@@ -234,7 +284,7 @@ export default function PipelineClient() {
           aria-label="Open all pipeline artifacts"
           title="All artifacts"
           onClick={handleArtifactLedgerOpen}
-          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent dark:bg-term-bg dark:hover:bg-term-bg md:mr-2 md:w-auto md:px-3"
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
         >
           <Files size={15} aria-hidden />
           <span className="hidden md:inline">All artifacts</span>
@@ -246,10 +296,22 @@ export default function PipelineClient() {
           aria-label="Open pipeline call trace"
           title="Call trace"
           onClick={handleTraceLedgerOpen}
-          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent dark:bg-term-bg dark:hover:bg-term-bg md:mr-2 md:w-auto md:px-3"
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
         >
           <ListTree size={15} aria-hidden />
           <span className="hidden md:inline">Call trace</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          aria-label="Toggle run timeline"
+          aria-pressed={timelineOpen}
+          title="Run timeline"
+          onClick={() => setTimelineOpen((v) => !v)}
+          className="mr-1 h-9 w-9 gap-2 border-hair bg-term-bg font-mono text-xs text-ink hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+        >
+          <ChartGantt size={15} aria-hidden />
+          <span className="hidden md:inline">Timeline</span>
         </Button>
         <PipelineDaySelector
           dates={availableDates}
@@ -258,7 +320,19 @@ export default function PipelineClient() {
         />
       </header>
 
-      <PipelineRunHealth date={selectedDate} />
+      <PipelineRunStrip
+        cells={stripCells}
+        selectedDate={selectedDate}
+        onSelect={handleDateChange}
+        loading={diagnosticsState.loading && dayLoading}
+      />
+
+      <PipelineRunHealth
+        date={selectedDate}
+        scope={scope}
+        state={diagnosticsState}
+        artifactCount={dayData.artifacts.length}
+      />
 
       <div
         data-testid="pipeline-workflow"
@@ -284,6 +358,7 @@ export default function PipelineClient() {
         {traceLedgerOpen && (
           <PipelineTraceLedger
             date={selectedDate}
+            scope={scope}
             onClose={() => setTraceLedgerOpen(false)}
           />
         )}
@@ -293,10 +368,20 @@ export default function PipelineClient() {
             node={activeNode}
             documentKey={resolvedActiveDocumentKey}
             date={selectedDate}
+            scope={scope}
             onClose={handleDetailClose}
           />
         )}
       </div>
+
+      {timelineOpen && (
+        <PipelineTimeline
+          date={selectedDate}
+          scope={scope}
+          selectedKey={resolvedActiveDocumentKey}
+          onSelectKey={handleTimelineSelect}
+        />
+      )}
     </section>
   );
 }

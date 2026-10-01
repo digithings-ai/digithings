@@ -158,11 +158,30 @@ function weekdayOverlap(
   return out;
 }
 
-/** Read the rendered value of a `<Metric label=…>` tile from static markup. */
+/** Read the rendered value of a kit `<Stat label=…>` tile from static markup. */
 function metricValue(html: string, label: string): string | null {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = html.match(new RegExp(`>${escaped}</dt>\\s*<dd[^>]*>([\\s\\S]*?)</dd>`));
-  return match ? match[1].replace(/<[^>]+>/g, '').trim() : null;
+  const labelAt = html.indexOf(`data-slot="stat-label"`);
+  let from = -1;
+  let at = labelAt;
+  while (at !== -1) {
+    const close = html.indexOf('</span>', at);
+    const text = html.slice(html.indexOf('>', at) + 1, close);
+    if (text === label) {
+      from = close;
+      break;
+    }
+    at = html.indexOf(`data-slot="stat-label"`, at + 1);
+  }
+  if (from === -1) return null;
+  // The Stat column ends at its first closing div; value sits between the
+  // stat-value slot and the delta/hint spans (value may hold nested spans).
+  const column = html.slice(from, html.indexOf('</div>', from));
+  const valueAt = column.indexOf('data-slot="stat-value"');
+  if (valueAt === -1) return null;
+  let rest = column.slice(column.indexOf('>', valueAt) + 1);
+  const stop = rest.search(/<span data-slot="stat-delta"|<span class="text-xs/);
+  if (stop !== -1) rest = rest.slice(0, stop);
+  return rest.replace(/<[^>]+>/g, '').trim();
 }
 
 describe('Today (Overview) page', () => {
@@ -387,8 +406,11 @@ describe('Today (Overview) page', () => {
     expect(html).not.toContain('live marks');
     expect(html).not.toContain('99.9');
     expect(html).not.toContain('9.99');
-    expect(html).not.toMatch(/>Alpha<\/dt><dd[^>]*>—</);
-    expect(html).not.toMatch(/>Info ratio<\/dt><dd[^>]*>—</);
+    // Guard the reader itself so a markup change cannot make these vacuous.
+    expect(metricValue(html, 'Alpha')).not.toBeNull();
+    expect(metricValue(html, 'Info ratio')).not.toBeNull();
+    expect(metricValue(html, 'Alpha')).not.toBe('—');
+    expect(metricValue(html, 'Info ratio')).not.toBe('—');
   });
 
   it('rebases the vs-benchmark excess on the current run across a NAV seam (#3935)', () => {

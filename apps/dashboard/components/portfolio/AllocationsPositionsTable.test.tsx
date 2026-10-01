@@ -376,4 +376,19 @@ describe('AllocationsPositionsTable', () => {
       expect(badge).not.toContain('text-down');
     });
   });
+
+  describe('weight bar (kit ScoreBar)', () => {
+    it('draws each weight on one shared axis with a target tick, in accent (not P&L)', () => {
+      const html = renderToStaticMarkup(createElement(AllocationsPositionsTable, {
+        reconciliation: recon([
+          pos({ ticker: 'AAA', normalizedWeight: 40, weight_target: 30 }),
+          pos({ ticker: 'BBB', normalizedWeight: 10, weight_target: null }),
+        ]),
+      }));
+      expect(html).toContain('aria-label="AAA weight 40.0%, Target 30.0%"');
+      expect(html).toContain('aria-label="BBB weight 10.0%"');
+      expect(html).not.toContain('data-tone="up"');
+      expect(html).not.toContain('data-tone="down"');
+    });
+  });
 });

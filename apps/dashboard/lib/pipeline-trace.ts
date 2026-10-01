@@ -1,6 +1,8 @@
 import { apiDb } from './api-query';
 import { isApiConfigured } from './api-client';
 import type { ViewRow } from './database.types';
+import { applyPipelineScope } from './pipeline-scope';
+import type { PipelineScope } from './pipelines';
 
 // Canonical view name after the Phase B/C olympus rename (#4295). Migration 135 drops
 // the legacy `olympus_run_event_trace` compat view, so the dashboard must read `run_event_trace`.
@@ -24,7 +26,7 @@ export function classifyPipelineTrace(
 }
 
 /** Read every body-free call event for one run date from the curated public view. */
-export async function fetchPipelineTrace(runDate: string): Promise<PipelineTraceResult> {
+export async function fetchPipelineTrace(runDate: string, scope?: PipelineScope): Promise<PipelineTraceResult> {
   if (!isApiConfigured()) {
     return { state: 'unavailable', events: [] };
   }
@@ -32,9 +34,11 @@ export async function fetchPipelineTrace(runDate: string): Promise<PipelineTrace
   const events: PipelineRunEvent[] = [];
   try {
     for (let offset = 0; offset < TRACE_MAX_ROWS; offset += TRACE_PAGE_SIZE) {
-      const { data, error } = await apiDb
-        .from('run_event_trace')
-        .select('*')
+      const { data, error } = await applyPipelineScope(
+        apiDb.from('run_event_trace').select('*'),
+        'run_event_trace',
+        scope,
+      )
         .eq('run_date', runDate)
         .order('run_id', { ascending: true })
         .order('attempt', { ascending: true })

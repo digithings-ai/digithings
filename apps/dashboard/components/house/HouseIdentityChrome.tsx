@@ -1,39 +1,45 @@
 'use client';
 
 import Link from 'next/link';
-import { BookMarked, Library, UserRound } from 'lucide-react';
+import { StatusDot } from '@digithings/ui/ui';
 import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
-import {
-  HOUSE_BOOK_IDENTITY,
-  HOUSE_CHROME_TABS,
-  type HouseChromeTabId,
-} from '@/lib/house-identity';
+import { HOUSE_BOOK_IDENTITY, HOUSE_CHROME_TABS, type HouseChromeTabId } from '@/lib/house-identity';
+import type { RunFreshness } from '@/lib/house-view';
 
-const ICONS = {
-  corpus: Library,
-  book: BookMarked,
-  profile: UserRound,
-} as const;
-
-export default function HouseIdentityChrome({ active }: { active: HouseChromeTabId }) {
+/**
+ * Compact status bar for the always-on house run: identity, freshness dot and
+ * run type, then the Corpus | Book | Profile tabs. Health tones only.
+ */
+export default function HouseIdentityChrome({
+  active,
+  freshness,
+  runType,
+}: {
+  active: HouseChromeTabId;
+  freshness?: RunFreshness;
+  runType?: 'baseline' | 'delta' | null;
+}) {
   return (
     <div data-testid="house-identity-chrome">
-      <div className="border-b border-hair bg-surface/80 px-5 py-2.5 sm:px-7">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-ink-mute">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-hair bg-surface/80 px-5 py-2 font-mono text-[10px] uppercase tracking-widest text-ink-mute sm:px-7">
+        <span>
           {HOUSE_BOOK_IDENTITY.owner} · {HOUSE_BOOK_IDENTITY.label}
-        </p>
-        <p className="mt-0.5 text-xs text-ink-soft">{HOUSE_BOOK_IDENTITY.cadence}</p>
+        </span>
+        {freshness ? (
+          <span className="inline-flex items-center gap-1.5 text-ink-soft" data-testid="house-freshness">
+            <StatusDot tone={freshness.tone} label={freshness.label} />
+            {freshness.label}
+          </span>
+        ) : null}
+        {runType ? <span className="text-ink-soft">{runType}</span> : null}
+        <span className="normal-case tracking-normal">{HOUSE_BOOK_IDENTITY.cadence}</span>
       </div>
       <SubpageStickyTabBar aria-label="Corpus Book Profile">
-        {HOUSE_CHROME_TABS.map(({ id, label, href }) => {
-          const Icon = ICONS[id];
-          return (
-            <Link key={id} href={href} scroll={false} className={subpageTabButtonClass(active === id)}>
-              <Icon size={16} />
-              {label}
-            </Link>
-          );
-        })}
+        {HOUSE_CHROME_TABS.map(({ id, label, href }) => (
+          <Link key={id} href={href} scroll={false} className={subpageTabButtonClass(active === id)}>
+            {label}
+          </Link>
+        ))}
       </SubpageStickyTabBar>
     </div>
   );

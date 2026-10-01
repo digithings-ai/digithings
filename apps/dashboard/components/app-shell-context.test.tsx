@@ -4,86 +4,98 @@
 import { createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppShellProvider, useAppShell } from './app-shell-context';
 
-function Probe({ onReady }: { onReady: (collapsed: boolean, toggle: () => void) => void }) {
-  const { sidebarCollapsed, toggleSidebar } = useAppShell();
+type Shell = ReturnType<typeof useAppShell>;
+
+function Probe({ onReady }: { onReady: (shell: Shell) => void }) {
+  const shell = useAppShell();
   useEffect(() => {
-    onReady(sidebarCollapsed, toggleSidebar);
-  }, [onReady, sidebarCollapsed, toggleSidebar]);
+    onReady(shell);
+  }, [onReady, shell]);
   return null;
 }
 
-describe('AppShellProvider sidebar storage', () => {
+describe('AppShellProvider', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    localStorage.clear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     act(() => {
       root.unmount();
     });
     container.remove();
-    localStorage.clear();
   });
 
-  it('reads the dashboard key and does not write the retired research key', () => {
-    localStorage.setItem('dashboard-sidebar-collapsed', '1');
-    let collapsed = false;
-    let toggle = () => {};
+  function mount() {
+    let latest: Shell | null = null;
     act(() => {
       root.render(
         createElement(
           AppShellProvider,
           null,
           createElement(Probe, {
-            onReady: (value, next) => {
-              collapsed = value;
-              toggle = next;
+            onReady: (shell) => {
+              latest = shell;
             },
-          }),
-        ),
+          })
+        )
       );
     });
-    expect(collapsed).toBe(true);
-    act(() => {
-      toggle();
+    return () => latest!;
+  }
+
+  beforeEach(() => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
     });
-    expect(localStorage.getItem('dashboard-sidebar-collapsed')).toBe('0');
-    expect(localStorage.getItem('research-sidebar-collapsed')).toBeNull();
   });
 
-  it('falls back to the pre-rebrand research key, then migrates on toggle', () => {
+  it('opens and closes the command palette', () => {
+    const shell = mount();
+    expect(shell().commandPaletteOpen).toBe(false);
+    act(() => shell().openCommandPalette());
+    expect(shell().commandPaletteOpen).toBe(true);
+    act(() => shell().closeCommandPalette());
+    expect(shell().commandPaletteOpen).toBe(false);
+  });
+
+  it('persists sidebar collapse and drops the legacy key on first toggle', () => {
     localStorage.setItem('research-sidebar-collapsed', '1');
-    let collapsed = false;
-    let toggle = () => {};
-    act(() => {
-      root.render(
-        createElement(
-          AppShellProvider,
-          null,
-          createElement(Probe, {
-            onReady: (value, next) => {
-              collapsed = value;
-              toggle = next;
-            },
-          }),
-        ),
-      );
-    });
-    expect(collapsed).toBe(true);
-    act(() => {
-      toggle();
-    });
+    const shell = mount();
+    expect(shell().sidebarCollapsed).toBe(true);
+    act(() => shell().toggleSidebar());
+    expect(shell().sidebarCollapsed).toBe(false);
     expect(localStorage.getItem('dashboard-sidebar-collapsed')).toBe('0');
     expect(localStorage.getItem('research-sidebar-collapsed')).toBeNull();
+  });
+
+  it('applies the collapse default only when no explicit choice is stored', () => {
+    localStorage.setItem('dashboard-sidebar-default', 'collapsed');
+    expect(mount()().sidebarCollapsed).toBe(true);
+  });
+
+  it('persists density, status and group state', () => {
+    const shell = mount();
+    expect(shell().density).toBe('compact');
+    act(() => shell().setDensity('comfortable'));
+    act(() => shell().toggleStatus());
+    act(() => shell().toggleGroup('portfolio'));
+    expect(localStorage.getItem('dashboard-density')).toBe('comfortable');
+    expect(localStorage.getItem('dashboard-sidebar-status')).toBe('0');
+    expect(JSON.parse(localStorage.getItem('dashboard-sidebar-groups')!)).toEqual(['portfolio']);
   });
 });

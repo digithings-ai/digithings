@@ -11,6 +11,8 @@ import {
   DropdownMenuTrigger,
   SegmentedControl,
   Slider,
+  Stat,
+  CompositionBar,
   Table,
   TableBody,
   TableHead,
@@ -323,31 +325,34 @@ export default function TradesTab({
             </div>
           </div>
 
-          <div
-            className="flex flex-wrap gap-x-6 gap-y-2 border border-hair bg-surface/40 px-3 py-2.5"
-            data-testid="trades-summary"
-            aria-label="Filtered trade summary"
-          >
-            <Metric label="% right" value={formatPctRight(summary.pctRight)} hint={`${summary.rightCount}/${summary.resolvedCount}`} />
-            <Metric
-              label="Avg return (rights)"
-              value={formatHoldPct(summary.avgReturnRights)}
+          <div className="space-y-2" data-testid="trades-summary" aria-label="Filtered trade summary">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Stat
+                label="% right"
+                value={formatPctRight(summary.pctRight)}
+                hint={`${summary.rightCount}/${summary.resolvedCount} resolved`}
+              />
+              <Stat label="Avg return (rights)" value={formatHoldPct(summary.avgReturnRights)} />
+              <Stat label="Avg return (wrongs)" value={formatHoldPct(summary.avgReturnWrongs)} />
+              <Stat
+                label="Matching"
+                value={String(filtered.length)}
+                hint={`${visible.length < filtered.length ? `showing ${visible.length} · ` : ''}${summary.liveCount} live`}
+              />
+            </div>
+            <CompositionBar
+              height={8}
+              legend
+              label="How trades closed"
+              segments={[
+                { key: 'targets', label: `Target hits ${closeTally.targets}`, value: closeTally.targets, tone: 'accent' },
+                { key: 'stops', label: `Stops ${closeTally.stops}`, value: closeTally.stops, tone: 'warn' },
+                { key: 'both', label: `Both ${closeTally.both}`, value: closeTally.both, tone: 'ink' },
+                { key: 'superseded', label: `Superseded ${closeTally.superseded}`, value: closeTally.superseded, tone: 'soft' },
+                { key: 'dropped', label: `Dropped ${closeTally.dropped}`, value: closeTally.dropped, tone: 'mute' },
+                { key: 'nodata', label: `No data ${closeTally.noData}`, value: closeTally.noData, tone: 'weak' },
+              ]}
             />
-            <Metric
-              label="Avg return (wrongs)"
-              value={formatHoldPct(summary.avgReturnWrongs)}
-            />
-            <Metric label="Target hits" value={String(closeTally.targets)} />
-            <Metric label="Stops" value={String(closeTally.stops)} />
-            <Metric label="Superseded" value={String(closeTally.superseded)} />
-            <Metric label="Dropped" value={String(closeTally.dropped)} />
-            <Metric label="Both" value={String(closeTally.both)} />
-            <Metric label="No data" value={String(closeTally.noData)} />
-            <span className="self-end font-mono text-[10px] text-ink-mute">
-              {filtered.length} matching
-              {visible.length < filtered.length ? ` · showing ${visible.length}` : ''}
-              {summary.liveCount > 0 ? ` · ${summary.liveCount} live` : ''}
-            </span>
           </div>
 
           {filtered.length === 0 ? (
@@ -408,26 +413,6 @@ export default function TradesTab({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="min-w-[7rem]">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-ink-mute">{label}</p>
-      <p className="font-mono text-sm tabular-nums text-ink">
-        {value}
-        {hint ? <span className="ml-1.5 text-[10px] text-ink-mute">{hint}</span> : null}
-      </p>
     </div>
   );
 }

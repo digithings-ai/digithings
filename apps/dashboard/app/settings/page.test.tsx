@@ -11,9 +11,6 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/settings' }));
 vi.mock('@/lib/dashboard-context', () => ({
   useDashboard: () => ({ data: { portfolio: { meta: null } } }),
 }));
-vi.mock('@/components/app-shell-context', () => ({
-  useAppShell: () => ({ openCommandPalette: () => {} }),
-}));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({
     session: { access_token: 'tok' },
@@ -25,42 +22,45 @@ vi.mock('@/lib/use-entitlement', () => ({
   useCanAccessProduct: () => false,
   useAccessSnapshot: () => ({ effectivePlanTier: 'free' }),
 }));
+vi.mock('@/components/settings/account-section', () => ({
+  AccountIdentity: () => createElement('div', null, 'identity-body'),
+}));
 vi.mock('@/components/settings/profile-tab', () => ({
-  ProfileTab: () => createElement('div', { 'data-profile': '1' }, 'profile-body'),
+  ProfileTab: () => createElement('div', null, 'profile-body'),
 }));
 vi.mock('@/components/settings/pipeline-tab', () => ({
-  PipelineTab: () => createElement('div', { 'data-pipeline': '1' }, 'pipeline-body'),
+  PipelineTab: () => createElement('div', null, 'pipeline-body'),
 }));
-vi.mock('@/components/settings/keys-tab', () => ({
-  KeysTab: () => createElement('div', { 'data-keys': '1' }, 'keys-body'),
-}));
-vi.mock('@/components/settings/brokers-tab', () => ({
-  BrokersTab: () => createElement('div', { 'data-brokers': '1' }, 'brokers-body'),
+vi.mock('@/components/settings/connections-section', () => ({
+  ConnectionsSection: ({ visibleTabs }: { visibleTabs: string[] }) =>
+    createElement('div', null, `connections-body:${visibleTabs.join(',')}`),
 }));
 vi.mock('@/components/settings/notify-tab', () => ({
-  NotifyTab: () => createElement('div', { 'data-notify': '1' }, 'notify-body'),
+  NotifyTab: () => createElement('div', null, 'notify-body'),
 }));
-vi.mock('@/components/settings/billing-tab', () => ({
-  BillingTab: () => createElement('div', { 'data-billing': '1' }, 'billing-body'),
+vi.mock('@/components/settings/plan-section', () => ({
+  PlanSection: () => createElement('div', null, 'plan-body'),
 }));
-vi.mock('@/components/settings-content', () => ({
-  SettingsContent: () => createElement('div', { 'data-about': '1' }, 'about-body'),
+vi.mock('@/components/settings/appearance-section', () => ({
+  AppearanceSection: () => createElement('div', null, 'appearance-body'),
 }));
-vi.mock('@/components/settings/remaining-hop-status', () => ({
-  RemainingHopStatus: () =>
-    createElement('div', { 'data-testid': 'remaining-hop-status' }, 'remaining-hops'),
-}));
-vi.mock('@/components/subpage-tab-bar', () => ({
-  subpageTabButtonClass: (active: boolean) => (active ? 'tab-on' : 'tab-off'),
-  SubpageStickyTabBar: ({ children }: { children?: unknown }) =>
-    createElement('div', { 'data-tabs': '1' }, children as never),
+vi.mock('@/components/settings/system-section', () => ({
+  SystemSection: () => createElement('div', { 'data-testid': 'settings-about' }, 'system-body'),
 }));
 
 import SettingsPage from './page';
 
-describe('Settings page tab visibility', () => {
+const q = (c: HTMLElement, id: string) => c.querySelector(`[data-testid="${id}"]`);
+
+describe('Settings page sections', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  const render = async () => {
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+  };
 
   beforeEach(() => {
     entitlement.tier = 'free';
@@ -78,111 +78,144 @@ describe('Settings page tab visibility', () => {
     window.history.replaceState(null, '', '/settings');
   });
 
-  it('Observer sees Notifications / Billing / About only — no Profile or Brokers', async () => {
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.querySelector('[data-testid="settings-tab-notifications"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-billing"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-about"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-profile"]')).toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-pipeline"]')).toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-keys"]')).toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-brokers"]')).toBeNull();
-    expect(container.textContent).toContain('notify-body');
+  it('Observer sees Account, Plan, Notifications, Appearance, System only', async () => {
+    await render();
+    for (const id of ['account', 'plan', 'notifications', 'appearance', 'system']) {
+      expect(q(container, `settings-section-${id}`)).not.toBeNull();
+      expect(q(container, `settings-panel-${id}`)).not.toBeNull();
+    }
+    expect(q(container, 'settings-section-pipeline')).toBeNull();
+    expect(q(container, 'settings-section-connections')).toBeNull();
     expect(container.textContent).not.toContain('profile-body');
+    expect(container.textContent).not.toContain('pipeline-body');
+    expect(container.textContent).toContain('notify-body');
   });
 
-  it('Studio sees the full tab set including Profile', async () => {
+  it('Studio sees every section, with profile and pipeline bodies', async () => {
     entitlement.tier = 'studio';
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.querySelector('[data-testid="settings-tab-profile"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-brokers"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-keys"]')).not.toBeNull();
+    await render();
+    const rail = [...container.querySelectorAll('[data-testid^="settings-section-"]')].map((b) =>
+      b.getAttribute('data-testid'),
+    );
+    expect(rail).toEqual(
+      ['account', 'pipeline', 'connections', 'plan', 'notifications', 'appearance', 'system'].map(
+        (id) => `settings-section-${id}`,
+      ),
+    );
     expect(container.textContent).toContain('profile-body');
+    expect(container.textContent).toContain('pipeline-body');
+    expect(container.textContent).toContain('connections-body');
   });
 
-  it('Desk sees Brokers but not Profile / Pipeline / Keys', async () => {
+  it('Desk sees Connections (brokers only), no Pipeline or Profile', async () => {
     entitlement.tier = 'desk';
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.querySelector('[data-testid="settings-tab-brokers"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-profile"]')).toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-pipeline"]')).toBeNull();
-    expect(container.querySelector('[data-testid="settings-tab-keys"]')).toBeNull();
+    await render();
+    expect(q(container, 'settings-section-connections')).not.toBeNull();
+    expect(q(container, 'settings-section-pipeline')).toBeNull();
+    expect(container.textContent).not.toContain('profile-body');
+    expect(container.textContent).toContain('connections-body:brokers,');
+    expect(container.textContent).not.toContain('connections-body:keys');
+    expect(container.textContent).not.toMatch(/connections-body:[^A-Z]*\bkeys\b/);
   });
 
-  it('opens Billing when the URL hash is #billing', async () => {
+  it('marks the Account rail item current by default', async () => {
+    await render();
+    expect(q(container, 'settings-section-account')?.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('#billing and #about deep links light Plan and System', async () => {
     window.location.hash = 'billing';
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.textContent).toContain('billing-body');
-    expect(container.textContent).not.toContain('notify-body');
+    await render();
+    expect(q(container, 'settings-section-plan')?.getAttribute('aria-current')).toBe('true');
     expect(container.querySelector('#billing')).not.toBeNull();
   });
 
-  it('ignores a gated hash on Observer instead of showing Profile', async () => {
+  it('#about lights System', async () => {
+    window.location.hash = 'about';
+    await render();
+    expect(q(container, 'settings-section-system')?.getAttribute('aria-current')).toBe('true');
+    expect(container.querySelector('#about')).not.toBeNull();
+  });
+
+  it('a gated hash on Observer keeps the default section', async () => {
     window.location.hash = 'profile';
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.textContent).toContain('notify-body');
+    await render();
+    expect(q(container, 'settings-section-account')?.getAttribute('aria-current')).toBe('true');
     expect(container.textContent).not.toContain('profile-body');
   });
 
-  it('opens Billing from Stripe return ?tab=billing&checkout=success', async () => {
+  it('Stripe return shows a checkout notice and lands on Plan', async () => {
     window.history.replaceState(null, '', '/settings/?tab=billing&checkout=success');
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.textContent).toContain('billing-body');
-    expect(container.textContent).not.toContain('notify-body');
+    await render();
+    expect(q(container, 'settings-section-plan')?.getAttribute('aria-current')).toBe('true');
+    expect(q(container, 'settings-checkout-notice')?.textContent).toContain('Checkout complete');
   });
 
-  it('opens Billing from ?checkout=cancel when tab is omitted', async () => {
+  it('?checkout=cancel shows the cancelled notice', async () => {
     window.history.replaceState(null, '', '/settings/?checkout=cancel');
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.textContent).toContain('billing-body');
+    await render();
+    expect(q(container, 'settings-checkout-notice')?.textContent).toContain('cancelled');
   });
 
   it('query tab wins over a conflicting hash', async () => {
     window.history.replaceState(null, '', '/settings/?tab=billing#about');
-    await act(async () => {
-      root.render(createElement(SettingsPage));
-    });
-    expect(container.textContent).toContain('billing-body');
-    expect(container.textContent).not.toContain('about-body');
+    await render();
+    expect(q(container, 'settings-section-plan')?.getAttribute('aria-current')).toBe('true');
   });
 
-  it('Observer About mounts remaining hops next to the about body', async () => {
-    window.location.hash = 'about';
+  it('clicking a rail item writes its hash and marks it current', async () => {
+    await render();
     await act(async () => {
-      root.render(createElement(SettingsPage));
+      (q(container, 'settings-section-plan') as HTMLButtonElement).click();
     });
-    expect(container.querySelector('[data-testid="settings-about"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="remaining-hop-status"]')).not.toBeNull();
-    expect(container.textContent).toContain('remaining-hops');
-    expect(container.textContent).toContain('about-body');
-    expect(container.textContent).not.toContain('notify-body');
+    expect(window.location.hash).toBe('#plan');
+    expect(q(container, 'settings-section-plan')?.getAttribute('aria-current')).toBe('true');
   });
 
-  it('clicking Billing writes #billing and shows the billing body', async () => {
+  it('search lists matching settings; choosing one jumps to its section', async () => {
+    await render();
+    const input = container.querySelector('input') as HTMLInputElement;
     await act(async () => {
-      root.render(createElement(SettingsPage));
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(input, 'digest');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    const billing = container.querySelector('[data-testid="settings-tab-billing"]');
-    expect(billing).not.toBeNull();
+    const hits = container.querySelectorAll('[data-testid="settings-search-hit"]');
+    expect(hits.length).toBeGreaterThan(0);
     await act(async () => {
-      (billing as HTMLButtonElement).click();
+      (hits[0] as HTMLButtonElement).click();
     });
-    expect(window.location.hash).toBe('#billing');
-    expect(container.textContent).toContain('billing-body');
-    expect(container.textContent).not.toContain('notify-body');
+    expect(q(container, 'settings-section-notifications')?.getAttribute('aria-current')).toBe('true');
+    expect(q(container, 'settings-search-results')).toBeNull();
+  });
+
+  it('search with no match says so', async () => {
+    await render();
+    const input = container.querySelector('input') as HTMLInputElement;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(input, 'zzzzqq');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(q(container, 'settings-search-results')?.textContent).toContain('No matching settings');
+  });
+
+  it('search never offers a setting the tier cannot reach', async () => {
+    entitlement.tier = 'desk';
+    await render();
+    const input = container.querySelector('input') as HTMLInputElement;
+    const type = async (value: string) => {
+      await act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      return [...container.querySelectorAll('[data-testid="settings-search-hit"]')].map(
+        (h) => h.textContent,
+      );
+    };
+    expect(await type('openai')).toEqual([]);
+    expect(await type('risk tolerance')).toEqual([]);
+    expect((await type('alpaca')).join(' ')).toContain('Brokers');
   });
 });

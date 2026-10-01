@@ -253,3 +253,41 @@ export function buildLevelFixSeries(
     anchorsOnly,
   };
 }
+
+export interface LevelFixRange {
+  low: number;
+  high: number;
+  markers: Array<{ kind: 'entry' | 'stop' | 'target' | 'current'; value: number; label: string }>;
+}
+
+/**
+ * PURE — one shared axis for the published levels and the fix history: the
+ * range spans every level and every fix (padded 6%), with the latest fix as
+ * the `current` marker. `null` when fewer than two distinct values exist.
+ */
+export function levelFixRange(series: LevelFixSeries): LevelFixRange | null {
+  const markers: LevelFixRange['markers'] = [];
+  const add = (kind: LevelFixRange['markers'][number]['kind'], label: string, v: number | null) => {
+    if (v !== null && Number.isFinite(v)) markers.push({ kind, value: v, label });
+  };
+  if (series.entryLow !== null && series.entryHigh !== null && series.entryLow !== series.entryHigh) {
+    add('entry', 'Entry low', series.entryLow);
+    add('entry', 'Entry high', series.entryHigh);
+  } else {
+    add('entry', 'Entry', series.entryLow ?? series.entryHigh);
+  }
+  add('stop', 'Stop', series.stop);
+  series.targets.forEach((t, i) => add('target', `Target ${i + 1}`, t));
+  const last = series.points[series.points.length - 1];
+  if (last) add('current', 'Latest fix', last.fix);
+
+  const all = [...markers.map((m) => m.value), ...series.points.map((p) => p.fix)].filter(
+    (v): v is number => typeof v === 'number' && Number.isFinite(v),
+  );
+  if (all.length < 2) return null;
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  if (!(max > min)) return null;
+  const pad = (max - min) * 0.06;
+  return { low: min - pad, high: max + pad, markers };
+}

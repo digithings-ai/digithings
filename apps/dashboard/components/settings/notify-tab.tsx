@@ -14,7 +14,8 @@ import {
   SETTINGS_LOAD_ERROR_MESSAGE,
   SettingsLoadError,
 } from './settings-load-error';
-import { Button, Input, Label, Switch } from '@digithings/ui/ui';
+import { notificationStrip } from '@/lib/settings-runs';
+import { Button, Input, Label, Skeleton, StatusStrip, Switch } from '@digithings/ui/ui';
 
 export type NotifyTabProps = {
   api: SettingsApiOptions | null;
@@ -41,6 +42,8 @@ export function NotifyTab({
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<NotificationLogEvent[]>([]);
+  // Clock is read post-hydration so the prerendered strip never disagrees with the client.
+  const [now, setNow] = useState<number | null>(null);
 
   const applyPrefs = useCallback((prefs: NotificationPrefs) => {
     setEmail(typeof prefs.email === 'string' ? prefs.email : '');
@@ -83,6 +86,7 @@ export function NotifyTab({
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- hydrate prefs after mount */
+    setNow(Date.now());
     void hydrate();
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [hydrate]);
@@ -119,29 +123,32 @@ export function NotifyTab({
     }
   }
 
+  const strip = now === null ? null : notificationStrip(events, now, 30);
+
   return (
     <div className="space-y-5" data-testid="settings-notify-tab">
       <div>
-        <h2 className="font-display text-xl text-ink tracking-tight">Notifications</h2>
-        <p className="mt-1 text-sm text-ink-soft">
+        <p className="text-sm text-ink-soft">
           Digests and execution alerts use the email and toggles you save here. Digest hour is
           UTC.
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-ink-mute" data-testid="notify-loading">
-          Loading preferences…
-        </p>
+        <div data-testid="notify-loading" className="space-y-1.5">
+          <Skeleton variant="line" />
+          <Skeleton variant="line" />
+          <span className="sr-only">Loading preferences</span>
+        </div>
       ) : null}
 
       <Label className="block space-y-1">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Email
         </span>
         <Input
           type="email"
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm text-ink"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           data-testid="notify-email"
@@ -171,14 +178,14 @@ export function NotifyTab({
       />
 
       <Label className="block space-y-1 max-w-xs">
-        <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
           Digest hour (UTC)
         </span>
         <Input
           type="number"
           min={0}
           max={23}
-          className="h-auto w-full border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="h-auto w-full border-hair bg-surface px-3 py-2 text-sm font-mono text-ink"
           value={digestHour}
           onChange={(e) => setDigestHour(Number(e.target.value))}
           data-testid="notify-hour"
@@ -213,9 +220,15 @@ export function NotifyTab({
       </Button>
 
       <div className="space-y-2" data-testid="notify-log">
-        <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
-          Delivery log
+        <p className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
+          Delivery log, last 30 days
         </p>
+        {strip ? (
+          <div data-testid="notify-strip">
+            <StatusStrip cells={strip.cells} label={strip.summary} height={10} />
+            <p className="mt-1 font-mono text-xs text-ink-mute">{strip.summary}</p>
+          </div>
+        ) : null}
         {events.length === 0 ? (
           <div
             className="border border-hair px-3 py-2"
@@ -259,7 +272,7 @@ function Toggle({
   testId?: string;
 }) {
   return (
-    <div className="flex select-none items-start justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
+    <div className="flex select-none items-start justify-between gap-3 border border-hair bg-surface px-3 py-2">
       <div className="space-y-0.5">
         <span className="text-sm text-ink">{label}</span>
         <span className="text-xs text-ink-mute">{description}</span>

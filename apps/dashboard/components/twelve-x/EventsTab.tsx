@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, SegmentedControl } from '@digithings/ui/ui';
+import { Button, CalendarHeatmap, Card, SegmentedControl } from '@digithings/ui/ui';
 import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
 import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
@@ -9,6 +9,7 @@ import type {
   FxEventCitation,
   FxEventSnapshotRow,
 } from '@/lib/twelve-x/types';
+import { deriveEventDensity, densitySummary } from '@/lib/twelve-x/event-density';
 import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
 import EventDetailPanel from './EventDetailPanel';
 
@@ -446,6 +447,7 @@ export default function EventsTab({
 
   // Map the full upcoming window to the reusable timeline's event shape, shared
   // with the Today single-day timeline (same local-day/clock/impact rules).
+  const density = useMemo(() => deriveEventDensity(events), [events]);
   const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
 
   // Build a set of selectable event IDs (only events with evidence).
@@ -489,6 +491,23 @@ export default function EventsTab({
         could not convert. Open any event — in the list or on the timeline — to see which desks
         weighed in, what they expect, and the FX impact they flag.
       </p>
+
+      {density.days.length > 0 ? (
+        <Card data-reveal className="gap-2 p-4" data-testid="events-density">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              Event density
+            </h3>
+            <span className="ml-auto font-mono text-[10px] text-ink-mute">
+              weighted by impact · high 3, medium 2, low 1
+            </span>
+          </div>
+          <p className="sr-only">{densitySummary(density)}</p>
+          <div className="overflow-x-auto">
+            <CalendarHeatmap days={density.days} unit="impact points" showLegend />
+          </div>
+        </Card>
+      ) : null}
 
       {view === 'list' ? (
         grouped.length > 0 ? (

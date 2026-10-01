@@ -20,7 +20,6 @@ import type { TickerDossier } from '@/lib/types';
 import type { PlanTier } from '@/lib/entitlements';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import PageSkeleton from '@/components/page-skeleton';
 import { EntitledSurface } from '@/components/entitled-surface';
 import { formatPct, pnlColor } from '@/components/ui';
@@ -163,7 +162,6 @@ export default function TickerDossierView({
   if (!ticker) {
     return (
       <div className="flex min-h-full flex-col">
-        <PortfolioSectionNav active="holdings" />
         <div className={`${SUBPAGE_MAX} space-y-4 py-8`}>
           <Link
             href="/portfolio"
@@ -236,8 +234,7 @@ export default function TickerDossierView({
 
   return (
     <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active="holdings" />
-      <main className={`${SUBPAGE_MAX} flex-1 space-y-6 py-5 md:py-6`}>
+      <div className={`${SUBPAGE_MAX} flex-1 space-y-6 py-5 md:py-6`}>
         <Link
           href="/portfolio"
           className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
@@ -543,7 +540,7 @@ export default function TickerDossierView({
             <ConvictionHistory decisions={decisions} />
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }

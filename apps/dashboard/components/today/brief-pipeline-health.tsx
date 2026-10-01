@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
 import type { ResearchRunDiagnostics } from '@/lib/types';
 import { buildPipelineHref } from '@/lib/pipeline-links';
-import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
+import { groupRunEpisodes, type RunEpisode } from '@/lib/run-episodes';
 import { unpublishedBookNote } from '@/lib/dashboard-ssot';
 import {
   buildWeekDaySlots,
@@ -16,7 +16,18 @@ import {
   shiftWeekStart,
 } from '@/lib/run-health-week';
 import { formatDuration } from '@/components/system/run-economics-row';
-import { Button, IconButton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/ui/ui';
+import {
+  Button,
+  IconButton,
+  StatusStrip,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@digithings/ui/ui';
+import { runSegmentCells } from '@/lib/brief-visuals';
+import { describeRunStatus, runStatusView } from '@/lib/run-status';
+import { episodeKind, worstEpisode } from '@/lib/pipeline-run-strip';
 
 export interface BriefRunHealth {
   status: string | null;
@@ -31,21 +42,35 @@ export interface BriefRunHealth {
 
 type Tone = 'neutral' | 'positive' | 'negative' | 'warning';
 
-const SEGMENT_COLOR: Record<RunOutcome, string> = {
-  ok: 'bg-accent',
-  recovered: 'bg-warn/80',
-  degraded: 'bg-warn/60',
-  failed: 'bg-down',
+// Same classification as the Pipeline strip (lib/run-status), so a day never reads two ways.
+// Health, not P&L: failures read warn, never the down colour.
+const KIND_COLOR: Record<ReturnType<typeof runStatusView>['tone'], string> = {
+  accent: 'bg-accent',
+  warn: 'bg-warn',
+  mute: 'bg-ink-mute/40',
+  idle: 'bg-hair',
 };
 
+function episodeColor(ep: RunEpisode): string {
+  return KIND_COLOR[runStatusView(episodeKind(ep)).tone];
+}
+
+function episodeLabel(ep: RunEpisode): string {
+  return runStatusView(episodeKind(ep), ep.latest.status).label.toLowerCase();
+}
+
 function toneClass(tone: Tone): string {
-  if (tone === 'positive') return 'text-up';
-  if (tone === 'negative') return 'text-down';
+  // Health, not P&L: healthy reads accent, never the up colour.
+  if (tone === 'positive') return 'text-accent';
+  if (tone === 'negative') return 'text-warn';
   if (tone === 'warning') return 'text-warn';
   return 'text-ink';
 }
 
-function runStatus(runHealth: BriefRunHealth | null | undefined): {
+function runStatus(
+  runHealth: BriefRunHealth | null | undefined,
+  episode: RunEpisode | null = null
+): {
   label: string;
   detail: string;
   tone: Tone;
@@ -65,33 +90,26 @@ function runStatus(runHealth: BriefRunHealth | null | undefined): {
     };
   }
 
-  const status = (runHealth.status || '').toLowerCase();
-  const failed = runHealth.segmentsFailed ?? 0;
-  const carried = runHealth.segmentsCarried ?? 0;
   const segmentDetail =
     runHealth.segmentsOk != null && runHealth.segmentsTotal != null
       ? `${runHealth.segmentsOk} / ${runHealth.segmentsTotal} segments`
       : 'Segment coverage unavailable';
 
-  if (failed > 0 || ['failed', 'error'].includes(status)) {
-    return { label: 'Pipeline needs attention', detail: segmentDetail, tone: 'negative' };
-  }
-  if (carried > 0 || ['partial', 'degraded'].includes(status)) {
-    return { label: 'Pipeline completed with carry', detail: segmentDetail, tone: 'warning' };
-  }
-  if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)) {
-    return { label: 'Pipeline complete', detail: segmentDetail, tone: 'positive' };
-  }
-  return {
-    label: status ? `Pipeline ${status}` : 'Pipeline status unavailable',
-    detail: segmentDetail,
-    tone: 'neutral',
-  };
+  // Shared with the Pipeline page so the same day never reads two ways.
+  const view = describeRunStatus({
+    status: runHealth.status,
+    segmentsCarried: runHealth.segmentsCarried,
+    segmentsFailed: runHealth.segmentsFailed,
+    attempts: episode?.attempts,
+    outcome: episode?.outcome,
+  });
+  const tone: Tone = view.tone === 'accent' ? 'positive' : view.tone === 'warn' ? 'warning' : 'neutral';
+  return { label: view.headline, detail: segmentDetail, tone };
 }
 
 function buildTooltipContent(ep: RunEpisode): string {
   const lines: string[] = [];
-  lines.push(`${ep.runDate ?? '—'} · ${ep.runType ?? 'run'} · ${ep.outcome}`);
+  lines.push(`${ep.runDate ?? '—'} · ${ep.runType ?? 'run'} · ${episodeLabel(ep)}`);
   if (ep.attempts > 1) lines.push(`${ep.attempts} attempts`);
   if (ep.latest.status) lines.push(`Status: ${ep.latest.status}`);
   const { segments_total, segments_ok, segments_carried, segments_failed } = ep.latest;
@@ -106,7 +124,7 @@ function buildTooltipContent(ep: RunEpisode): string {
 }
 
 function buildAriaLabel(ep: RunEpisode): string {
-  const parts = [ep.runDate ?? 'Unknown date', ep.runType ?? 'run', ep.outcome];
+  const parts = [ep.runDate ?? 'Unknown date', ep.runType ?? 'run', episodeLabel(ep)];
   if (ep.attempts > 1) parts.push(`${ep.attempts} attempts`);
   if (ep.errorSummary) parts.push(`Error: ${ep.errorSummary}`);
   return parts.join(', ');
@@ -232,7 +250,7 @@ function WeekBar({
                         size="xs"
                         data-testid={`week-day-${slot.date}`}
                         aria-label={buildAriaLabel(ep)}
-                        className={`${DAY_PILL_BASE} border-transparent p-0 transition-opacity hover:bg-transparent hover:opacity-80 active:translate-y-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
+                        className={`${DAY_PILL_BASE} border-transparent p-0 transition-opacity hover:bg-transparent hover:opacity-80 active:translate-y-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${episodeColor(ep)}`}
                       />
                     }
                   />
@@ -269,7 +287,12 @@ export function BriefPipelineHealth({
   now = new Date(),
   initialWeekStart,
 }: BriefPipelineHealthProps) {
-  const pipeline = runStatus(runHealth);
+  const pipeline = runStatus(
+    runHealth,
+    runHealth?.runDate != null
+      ? worstEpisode(groupRunEpisodes(diagnostics).filter((e) => e.runDate === runHealth.runDate))
+      : null
+  );
   const [weekStart, setWeekStart] = useState(() =>
     clampWeekStart(initialWeekStart ?? mondayOfWeek(now), now)
   );
@@ -285,6 +308,7 @@ export function BriefPipelineHealth({
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
   const allowNextWeek = canGoToNextWeek(weekStart, now);
   const commitNote = unpublishedBookNote(snapshotDate, positionDates);
+  const segmentCells = runSegmentCells(runHealth);
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">
@@ -308,6 +332,15 @@ export function BriefPipelineHealth({
 
       <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>{pipeline.label}</p>
       <p className="mt-0.5 font-mono text-[10px] tabular-nums text-ink-mute">{pipeline.detail}</p>
+      {segmentCells.length > 0 ? (
+        <StatusStrip
+          data-testid="brief-run-segments"
+          className="mt-2"
+          height={10}
+          cells={segmentCells}
+          label={`Pipeline segments: ${pipeline.detail}`}
+        />
+      ) : null}
       {commitNote ? (
         <p data-testid="unpublished-book-note" className="mt-1 text-[11px] leading-snug text-ink-mute">
           {commitNote}

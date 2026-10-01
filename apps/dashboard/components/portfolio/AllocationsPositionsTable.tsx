@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { gloomberbTickerUrl } from '@digithings/ui';
 import {
+  ScoreBar,
   Table,
   TableBody,
   TableCell,
@@ -60,6 +61,12 @@ export default function AllocationsPositionsTable(props: {
   const sorted = useMemo(
     () => [...reconciliation.rows].sort((a, b) => b.normalizedWeight - a.normalizedWeight),
     [reconciliation.rows]
+  );
+
+  // One shared axis (0 .. largest weight or target) so every weight bar is comparable row to row.
+  const weightAxisMax = useMemo(
+    () => Math.max(1, ...sorted.map((r) => Math.max(r.normalizedWeight, r.weight_target ?? 0))),
+    [sorted]
   );
 
   // ONE subscription for the whole table — never per row. Coverage is not guaranteed per
@@ -165,6 +172,20 @@ export default function AllocationsPositionsTable(props: {
                         <TableCell numeric className="px-2 py-3 md:px-3">
                           <span className="block font-medium">{p.normalizedWeight.toFixed(1)}%</span>
                           <WeightChangeBadge deltaPp={p.weight_delta ?? null} />
+                          <ScoreBar
+                            className="ml-auto mt-1 max-w-24"
+                            value={p.normalizedWeight}
+                            min={0}
+                            max={weightAxisMax}
+                            tone="accent"
+                            target={
+                              p.weight_target != null
+                                ? { value: p.weight_target, label: 'Target' }
+                                : undefined
+                            }
+                            format={(v) => `${v.toFixed(1)}%`}
+                            label={`${p.ticker} weight`}
+                          />
                           <span className="mt-0.5 block text-[0.64rem] text-ink-mute">
                             {p.weight_target != null ? `${p.weight_target.toFixed(1)}% target` : 'no target'}
                           </span>

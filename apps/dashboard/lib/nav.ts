@@ -29,6 +29,35 @@ export const NAV: NavItem[] = [
 ];
 
 /**
+ * Legacy routes folded into a spine destination: while the visitor is on one
+ * of these the owning NAV entry reads as current. Pipeline replaced Why +
+ * System and absorbs the research/library/observability/architecture routes;
+ * Portfolio absorbs the old Performance route (now a tab).
+ */
+export const NAV_ALIASES: Record<string, readonly string[]> = {
+  '/portfolio': ['/portfolio', '/performance'],
+  '/pipeline': ['/pipeline', '/why', '/research', '/library', '/system', '/observability', '/architecture'],
+  '/twelve-x': ['/twelve-x'],
+};
+
+/**
+ * The NAV href a pathname belongs to, or null (e.g. /settings, auth routes).
+ * `pathname` may or may not carry the basePath and may carry a trailing slash.
+ */
+export function activeNavHref(pathname: string | null | undefined, basePath = '/dashboard'): string | null {
+  if (!pathname) return null;
+  let path = pathname.replace(/\/+$/, '') || '/';
+  if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
+    path = path.slice(basePath.length) || '/';
+  }
+  if (path === '/') return '/';
+  for (const [href, prefixes] of Object.entries(NAV_ALIASES)) {
+    if (prefixes.some((p) => path === p || path.startsWith(`${p}/`))) return href;
+  }
+  return null;
+}
+
+/**
  * Pathname prefixes that stay LIVE when the live data backend is down (the
  * DB-unavailable gate). Two kinds of routes are exempt:
  *   - operator surfaces that must stay reachable to diagnose / reconfigure:

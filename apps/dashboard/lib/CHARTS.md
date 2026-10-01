@@ -21,14 +21,16 @@ not package surface).
 ## Classification
 
 TIME-SERIES = the x-axis is trading time (NAV/equity curves, price charts,
-drawdown area, rolling metrics, comparable NAV). Everything else (bars keyed by
-ticker/bucket/leg, stacked composition, trivial sparklines) stays on recharts.
+drawdown area, rolling metrics, comparable NAV). Categorical and composition charts
+(bars keyed by ticker/bucket/leg, stacked composition) stay on recharts. Sparklines,
+score bars and small multiples use kit primitives and need neither engine.
 
 ### Migrated to lightweight-charts
 
-| File | Chart | Why it uses lightweight-charts |
-|---|---|---|
-| `components/portfolio/DecisionEdgeChart.tsx` | Cumulative directional alpha | True time series keyed by decision date; the workspace scopes it to 1W, 1M, 3M, YTD, 1Y, or all history and includes every independently scored decision in that period. |
+No component currently imports the engine. `components/portfolio/DecisionEdgeChart.tsx`
+(cumulative directional alpha) was the last one; the dashboard shell rebuild
+replaced it with kit `DivergingBars` / `Sparkline` / `Stat` in
+`components/portfolio/DecisionsView.tsx`, which need no chart engine.
 
 The three former migrated surfaces — `performance-chart-workspace.tsx`
 (`NavComparableChart` + `DailyReturnsComboChart` + the `<SyncedTearsheet/>`
@@ -62,7 +64,13 @@ priceFormat.
 | `components/portfolio/sleeve-stacked-chart.tsx` | 100%-stacked sleeve allocation area (+ click-to-select date) | Composition over time — lightweight-charts has no stacking grammar. |
 | `components/observability/AttributionTab.tsx` | Contribution by position bars | Categorical (x = ticker). |
 | `components/observability/DecisionScorecardTab.tsx` | Hit-rate by conviction bucket bars | Categorical (x = conviction bucket). |
-| `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + position-split stacked area | The stacked split is composition (no lw grammar) and both panes share one currency-selection/smoothing state; splitting one view across two engines costs more than canon buys. Honest note: the score-lines pane *is* time-indexed — if it is ever decoupled from the split pane it becomes a migrate candidate. |
+
+The list is exact: `lib/lw-chart-canon.test.ts` keeps `RECHARTS_SANCTIONED` in step
+with this table and fails if any file under `components/` imports recharts without
+being on it. `components/twelve-x/ConsensusTab.tsx` left the
+list in the dashboard shell rebuild — its score lines and position split are now
+per-currency kit `Sparkline` / `ScoreBar` / `CompositionBar` small multiples,
+with no chart engine.
 
 `components/tearsheet/DashboardTearsheetView.tsx` (`PerformanceTearsheetView`) renders the shared
 finance-tearsheet family's print-oriented SVG charts (`TimeSeries`,

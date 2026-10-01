@@ -1,74 +1,130 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Alert, AlertDescription, Button, SearchBar } from '@digithings/ui/ui';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import { SettingsContent } from '@/components/settings-content';
-import { ProfileTab } from '@/components/settings/profile-tab';
-import { PipelineTab } from '@/components/settings/pipeline-tab';
-import { KeysTab } from '@/components/settings/keys-tab';
-import { BrokersTab } from '@/components/settings/brokers-tab';
-import { NotifyTab } from '@/components/settings/notify-tab';
-import { BillingTab } from '@/components/settings/billing-tab';
-import { RemainingHopStatus } from '@/components/settings/remaining-hop-status';
-import { subpageTabButtonClass, SubpageStickyTabBar } from '@/components/subpage-tab-bar';
+import { usePageHeader } from '@/components/shell/page-header';
+import { AccountIdentity } from '@/components/settings/account-section';
+import { AppearanceSection } from '@/components/settings/appearance-section';
+import { ConnectionsSection } from '@/components/settings/connections-section';
 import { FxHubAccount } from '@/components/settings/fx-hub-account';
-import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
+import { NotifyTab } from '@/components/settings/notify-tab';
+import { PipelineTab } from '@/components/settings/pipeline-tab';
+import { PlanSection } from '@/components/settings/plan-section';
+import { ProfileTab } from '@/components/settings/profile-tab';
+import { SystemSection } from '@/components/settings/system-section';
 import { useDashboard } from '@/lib/dashboard-context';
-import { useAppShell } from '@/components/app-shell-context';
 import { dataSourceHost } from '@/lib/data-source-host';
 import { useAuth } from '@/lib/auth-context';
+import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 import { usePlanTier } from '@/lib/use-entitlement';
-import {
-  defaultSettingsTab,
-  resolveSettingsTab,
-  settingsTabsVisible,
-  type SettingsTabId,
-} from '@/lib/entitlements';
+import { settingsTabsVisible } from '@/lib/entitlements';
 import type { SettingsApiOptions } from '@/lib/settings-api';
+import { filterSettingsIndex } from '@/lib/settings-index';
+import {
+  defaultSection,
+  resolveSettingsTarget,
+  visibleSections,
+  type SettingsSectionId,
+} from '@/lib/settings-sections';
+
+function scrollToAnchor(anchor: string) {
+  if (typeof document === 'undefined') return;
+  const el = document.getElementById(anchor);
+  if (el && typeof el.scrollIntoView === 'function') {
+    el.scrollIntoView({ block: 'start' });
+  }
+}
 
 export default function SettingsPage() {
+  usePageHeader({ title: 'Settings' });
   const { data } = useDashboard();
-  const { openCommandPalette } = useAppShell();
   const { session } = useAuth();
   const tier = usePlanTier();
   const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
   const tabs = useMemo(() => settingsTabsVisible(tier), [tier]);
-  const visibleIds = useMemo(() => tabs.map((item) => item.id), [tabs]);
+  const visibleTabIds = useMemo(() => tabs.map((t) => t.id), [tabs]);
+  const sections = useMemo(() => visibleSections(visibleTabIds), [visibleTabIds]);
+  const sectionIds = useMemo(() => sections.map((s) => s.id), [sections]);
   const meta = data?.portfolio?.meta ?? null;
+
   // Start where the prerender started; the effect below adopts the URL on the
   // first post-hydration commit. Reading location here instead would hydrate a
-  // tab strip whose highlight React never writes out — see TwelveXClient.
-  const [tab, setTab] = useState<SettingsTabId>(() => defaultSettingsTab(tier));
+  // rail whose highlight React never writes out — see TwelveXClient.
+  const [active, setActive] = useState<SettingsSectionId>(() => defaultSection(visibleTabIds));
   const [lastVersionId, setLastVersionId] = useState<string | null>(null);
-  const activeTab = visibleIds.includes(tab) ? tab : defaultSettingsTab(tier);
+  const [query, setQuery] = useState('');
+  const [checkout, setCheckout] = useState<'success' | 'cancel' | null>(null);
+  const pending = useRef<string | null>(null);
 
+  const activeSection = sectionIds.includes(active) ? active : defaultSection(visibleTabIds);
+
+  // URL -> section (deep links, Stripe return, OAuth return, sidebar children).
   useEffect(() => {
-    const applyLocation = () => {
-      const next = resolveSettingsTab(
+    const apply = (scroll: boolean) => {
+      const target = resolveSettingsTarget(
         window.location.search,
         window.location.hash,
-        visibleIds,
-        defaultSettingsTab(tier),
+        visibleTabIds,
       );
-      setTab(next);
+      const params = new URLSearchParams(window.location.search);
+      const c = params.get('checkout');
+      setCheckout(c === 'success' || c === 'cancel' ? c : null);
+      if (!target) return;
+      setActive(target.section);
+      if (scroll) pending.current = target.anchor;
     };
-    applyLocation();
-    window.addEventListener('hashchange', applyLocation);
-    window.addEventListener('popstate', applyLocation);
+    apply(true);
+    const onHash = () => apply(true);
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener('popstate', onHash);
     return () => {
-      window.removeEventListener('hashchange', applyLocation);
-      window.removeEventListener('popstate', applyLocation);
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('popstate', onHash);
     };
-  }, [tier, visibleIds]);
+  }, [visibleTabIds]);
 
-  const selectTab = (id: SettingsTabId) => {
-    setTab(id);
-    if (typeof window === 'undefined') return;
-    const next = `#${id}`;
-    if (window.location.hash !== next) {
-      window.history.replaceState(null, '', next);
+  // Scroll once the section DOM exists (after the state commit above).
+  useEffect(() => {
+    if (!pending.current) return;
+    const anchor = pending.current;
+    pending.current = null;
+    scrollToAnchor(anchor);
+  });
+
+  // Scrollspy: highlight the rail item for the section nearest the top.
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const seen = new Set<string>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) seen.add(e.target.id);
+          else seen.delete(e.target.id);
+        }
+        const first = sectionIds.find((id) => seen.has(id));
+        if (first) setActive(first);
+      },
+      { rootMargin: '-15% 0px -70% 0px' },
+    );
+    for (const id of sectionIds) {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
     }
-  };
+    return () => io.disconnect();
+  }, [sectionIds]);
+
+  const jump = useCallback((id: string, section: SettingsSectionId) => {
+    setActive(section);
+    if (typeof window !== 'undefined') {
+      const next = `#${id}`;
+      if (window.location.hash !== next) window.history.replaceState(null, '', next);
+    }
+    scrollToAnchor(id);
+  }, []);
+
+  const hits = useMemo(() => filterSettingsIndex(query, visibleTabIds), [query, visibleTabIds]);
 
   const api: SettingsApiOptions | null = useMemo(() => {
     const token = session?.access_token;
@@ -99,66 +155,182 @@ export default function SettingsPage() {
     );
   }
 
-  return (
-    <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
-      <header className="space-y-2">
-        <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-          dashboard <span className="text-ink-mute">· settings</span>
-        </p>
-        <h1 className="font-display text-3xl tracking-tight text-ink">The desk, not the product.</h1>
-        <p className="max-w-[46ch] text-[0.88rem] leading-[1.45] text-ink-soft">
-          Notifications and billing on every plan. Pipeline, keys, and brokers only appear when this
-          workspace can use them.
-        </p>
-      </header>
+  const has = (id: (typeof visibleTabIds)[number]) => visibleTabIds.includes(id);
 
-      <SubpageStickyTabBar aria-label="Settings sections">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={subpageTabButtonClass(activeTab === item.id)}
-            onClick={() => selectTab(item.id)}
-            data-testid={`settings-tab-${item.id}`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </SubpageStickyTabBar>
-
-      <div className="max-w-2xl border border-hair bg-surface p-[1.1rem_1.2rem]" id={activeTab}>
-        {activeTab === 'profile' ? (
-          <ProfileTab
-            api={api}
-            lastVersionId={lastVersionId}
-            onVersionSaved={setLastVersionId}
-          />
-        ) : null}
-        {activeTab === 'pipeline' ? (
-          <PipelineTab
-            api={api}
-            lastVersionId={lastVersionId}
-            onVersionSaved={setLastVersionId}
-          />
-        ) : null}
-        {activeTab === 'keys' ? <KeysTab api={api} /> : null}
-        {activeTab === 'brokers' ? <BrokersTab api={api} /> : null}
-        {activeTab === 'notifications' ? <NotifyTab api={api} /> : null}
-        {activeTab === 'billing' ? <BillingTab api={api} /> : null}
-        {activeTab === 'about' ? (
-          <div className="space-y-5" data-testid="settings-about">
-            <RemainingHopStatus api={api} />
-            <SettingsContent
-              variant="popover"
+  function body(id: SettingsSectionId) {
+    switch (id) {
+      case 'account':
+        return (
+          <div className="space-y-5">
+            <AccountIdentity tier={tier} />
+            {has('profile') ? (
+              <div id="profile" className="scroll-mt-20">
+                <ProfileTab
+                  api={api}
+                  lastVersionId={lastVersionId}
+                  onVersionSaved={setLastVersionId}
+                />
+              </div>
+            ) : null}
+          </div>
+        );
+      case 'pipeline':
+        return (
+          <div className="space-y-5">
+            <Link
+              href="/pipeline"
+              className="inline-block font-mono text-xs text-accent underline-offset-2 hover:underline"
+              data-testid="settings-open-pipeline"
+            >
+              Open pipeline view
+            </Link>
+            <PipelineTab
+              api={api}
+              lastVersionId={lastVersionId}
+              onVersionSaved={setLastVersionId}
+            />
+          </div>
+        );
+      case 'connections':
+        return <ConnectionsSection api={api} visibleTabs={visibleTabIds} />;
+      case 'plan':
+        return (
+          <div className="space-y-4">
+            <span id="billing" className="block scroll-mt-20" aria-hidden />
+            {checkout ? (
+              <Alert data-testid="settings-checkout-notice">
+                <AlertDescription>
+                  {checkout === 'success'
+                    ? 'Checkout complete. Your plan updates once Stripe confirms.'
+                    : 'Checkout cancelled. Nothing was charged.'}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <PlanSection api={api} tier={tier} />
+          </div>
+        );
+      case 'notifications':
+        return <NotifyTab api={api} />;
+      case 'appearance':
+        return <AppearanceSection />;
+      case 'system':
+        return (
+          <div id="about" className="scroll-mt-20">
+            <SystemSection
+              api={api}
               lastRunDate={meta?.last_updated ?? null}
               lastRunAt={meta?.last_run_at ?? null}
               runType={meta?.latest_snapshot_run_type ?? null}
               version={process.env.NEXT_PUBLIC_DASHBOARD_VERSION ?? 'v0.1 · dev'}
               dataSourceHost={dataSourceHost()}
-              onOpenPalette={openCommandPalette}
             />
           </div>
-        ) : null}
+        );
+    }
+  }
+
+  return (
+    <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-5`} data-testid="settings-page">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
+          dashboard <span className="text-ink-mute">· settings</span>
+        </p>
+        <div className="relative w-full sm:w-72">
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder="Search settings"
+            aria-label="Search settings"
+            data-testid="settings-search"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && hits[0]) {
+                jump(hits[0].anchor, hits[0].section);
+                setQuery('');
+              }
+              if (e.key === 'Escape') setQuery('');
+            }}
+          />
+          {query.trim() ? (
+            <ul
+              className="absolute inset-x-0 top-full z-10 mt-1 border border-hair bg-surface"
+              data-testid="settings-search-results"
+              aria-label="Matching settings"
+            >
+              {hits.length === 0 ? (
+                <li className="px-3 py-2 text-xs text-ink-mute">No matching settings</li>
+              ) : (
+                hits.map((hit) => (
+                  <li key={hit.id}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto w-full justify-between gap-3 px-3 py-2 text-left text-sm font-normal text-ink-soft hover:bg-accent-weak hover:text-ink dark:hover:bg-accent-weak"
+                      onClick={() => {
+                        jump(hit.anchor, hit.section);
+                        setQuery('');
+                      }}
+                      data-testid="settings-search-hit"
+                    >
+                      <span>{hit.label}</span>
+                      <span className="font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute">
+                        {sections.find((s) => s.id === hit.section)?.label}
+                      </span>
+                    </Button>
+                  </li>
+                ))
+              )}
+            </ul>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="grid gap-5 md:grid-cols-[11rem_minmax(0,1fr)]">
+        <nav
+          aria-label="Settings sections"
+          className="sticky top-0 z-10 -mx-1 flex gap-1 overflow-x-auto bg-bg px-1 py-1 md:top-4 md:mx-0 md:flex-col md:self-start md:overflow-visible md:p-0"
+          data-testid="settings-rail"
+        >
+          {sections.map((s) => (
+            <Button
+              key={s.id}
+              type="button"
+              variant="ghost"
+              onClick={() => jump(s.id, s.id)}
+              aria-current={activeSection === s.id ? 'true' : undefined}
+              data-testid={`settings-section-${s.id}`}
+              className={`h-auto shrink-0 justify-start border-s-2 px-3 py-1.5 text-left font-mono text-xs font-normal ${
+                activeSection === s.id
+                  ? 'border-s-accent bg-accent-weak text-ink hover:bg-accent-weak dark:hover:bg-accent-weak'
+                  : 'border-s-transparent text-ink-mute hover:bg-transparent hover:text-ink-soft dark:hover:bg-transparent'
+              }`}
+            >
+              {s.label}
+            </Button>
+          ))}
+        </nav>
+
+        <div className="min-w-0 space-y-6">
+          {sections.map((s) => (
+            <section
+              key={s.id}
+              id={s.id}
+              aria-labelledby={`settings-h-${s.id}`}
+              data-testid={`settings-panel-${s.id}`}
+              className="scroll-mt-16 space-y-3 border border-hair bg-surface p-[1.1rem_1.2rem]"
+            >
+              <div>
+                <h2
+                  id={`settings-h-${s.id}`}
+                  className="font-mono text-xs uppercase tracking-wider text-ink"
+                >
+                  {s.label}
+                </h2>
+                <p className="mt-1 text-xs text-ink-mute">{s.blurb}</p>
+              </div>
+              {body(s.id)}
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

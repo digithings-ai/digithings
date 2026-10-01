@@ -67,11 +67,12 @@ vi.mock('@/lib/use-entitlement', () => ({
 let stateCall = 0;
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react');
-  // PerformancePage useState order: data → ssot → error.
+  // PerformancePage useState order: data → ssot → error → attribution.
   return {
     ...actual,
     useEffect: (fn: () => void) => fn(),
-    useState: <T,>(init: T) => {
+    useState: <T,>(rawInit: T | (() => T)) => {
+      const init = (typeof rawInit === 'function' ? (rawInit as () => T)() : rawInit) as T;
       stateCall += 1;
       if (stateCall === 1) return [sample as unknown as T, vi.fn()] as [T, (v: T) => void];
       if (stateCall === 2) return [sampleSsot as unknown as T, vi.fn()] as [T, (v: T) => void];

@@ -3,11 +3,14 @@
 import { AlertTriangle, ChevronDown, ChevronRight, CircleDashed, FileText, GitFork, Info } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
+import type { FanoutCompleteness } from '@/lib/pipeline-graph-data';
 import type { LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
 
 export interface PipelineNodeProps {
   node: LaidOutNode;
   count?: number;
+  /** Present vs expected branches for a recorded run (see `fanoutCompleteness`); omit to draw no bar. */
+  completeness?: FanoutCompleteness;
   expandable?: boolean;
   expanded?: boolean;
   selected?: boolean;
@@ -40,6 +43,7 @@ function StatusIcon({ status }: { status: PipelineNodeRunStatus }) {
 export default function PipelineNode({
   node,
   count,
+  completeness,
   expandable = false,
   expanded = false,
   selected = false,
@@ -131,6 +135,21 @@ export default function PipelineNode({
           </span>
         )}
       </div>
+
+      {/* fan-out completeness: present / expected branches (only when an expected size exists) */}
+      {completeness && (
+        <span
+          data-testid="pipeline-node-completeness"
+          title={`${completeness.present} of ${completeness.total} branches${completeness.present > completeness.total ? ' (more than expected)' : ''}`}
+          className="absolute inset-x-0 bottom-0 block h-0.5 bg-hair"
+          aria-hidden
+        >
+          <span
+            className={`block h-full ${completeness.complete ? 'bg-accent' : 'bg-warn'}`}
+            style={{ width: `${Math.min(100, (completeness.present / completeness.total) * 100)}%` }}
+          />
+        </span>
+      )}
     </div>
   );
 }

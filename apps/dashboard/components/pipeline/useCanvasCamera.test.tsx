@@ -24,6 +24,18 @@ describe('computeFit', () => {
     expect(result.scale).toBe(1);
   });
 
+  it('scales up past 1 only when the caller raises the cap, still fitting both axes', () => {
+    const capped = computeFit({ width: 400, height: 200 }, { width: 1600, height: 800 });
+    expect(capped.scale).toBe(1);
+    const up = computeFit({ width: 400, height: 200 }, { width: 1600, height: 800 }, 1.6);
+    expect(up.scale).toBe(1.6);
+    // Height-bound: 200 * s <= 400 - padding, so the cap is not reached.
+    const bound = computeFit({ width: 400, height: 200 }, { width: 1600, height: 300 }, 1.6);
+    expect(bound.scale).toBeLessThan(1.6);
+    expect(200 * bound.scale).toBeLessThanOrEqual(300);
+    expect(bound.x).toBeCloseTo((1600 - 400 * bound.scale) / 2);
+  });
+
   it('returns a centered translate', () => {
     const result = computeFit({ width: 1000, height: 400 }, { width: 800, height: 400 });
     // translate should be finite numbers

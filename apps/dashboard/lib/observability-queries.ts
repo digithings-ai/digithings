@@ -28,6 +28,8 @@
 
 import { apiDb, apiHouseBook, type ApiDb } from './api-query';
 import { isApiConfigured } from './api-client';
+import { applyPipelineScope } from './pipeline-scope';
+import type { PipelineScope } from './pipelines';
 import type { TableRow, ViewRow } from './database.types';
 import type { ResearchRunDiagnostics, BenchmarkHistoryMap } from './types';
 import type {
@@ -188,15 +190,24 @@ const RUN_DIAGNOSTICS_LIMIT = 90;
  * deliberately omits operator-internal spend telemetry. Fail-soft: empty array
  * on missing source / RLS deny.
  */
-export async function fetchResearchRunDiagnostics(): Promise<ResearchRunDiagnostics[]> {
+export async function fetchResearchRunDiagnostics(scope?: PipelineScope): Promise<ResearchRunDiagnostics[]> {
+  return (await fetchResearchRunDiagnosticsResult(scope)).rows;
+}
+
+/**
+ * Opt-in variant that also reports whether the read succeeded. `ok: false` means the
+ * source was unreachable / errored, which is NOT the same as "no runs" (rows: []).
+ * `fetchResearchRunDiagnostics` keeps its fail-soft contract for other callers.
+ */
+export async function fetchResearchRunDiagnosticsResult(
+  scope?: PipelineScope,
+): Promise<{ rows: ResearchRunDiagnostics[]; ok: boolean }> {
   const res = await safeSelect<ViewRow<'run_health'>>('run_health', (sb) =>
-    sb
-      .from('run_health')
-      .select('*')
+    applyPipelineScope(sb.from('run_health').select('*'), 'run_health', scope)
       .order('created_at', { ascending: false })
       .limit(RUN_DIAGNOSTICS_LIMIT)
   );
-  return res.rows.map((r) => ({
+  const rows = res.rows.map((r) => ({
     run_id: r.run_id,
     // `?? null` rather than `?? 1`: a row written before migration 065 carries 0, and a row
     // read from an un-migrated view carries undefined. Both mean "unknown", and defaulting
@@ -226,6 +237,7 @@ export async function fetchResearchRunDiagnostics(): Promise<ResearchRunDiagnost
     breakdown: null,
     created_at: r.created_at,
   }));
+  return { rows, ok: res.ok };
 }
 
 /* ── Performance tear sheet (Pillar 3C) ───────────────────────────────────────

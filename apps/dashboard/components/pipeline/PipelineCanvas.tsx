@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@digithings/ui/ui';
-import type { PipelineDayData } from '@/lib/pipeline-graph-data';
+import { fanoutCompleteness, type PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { ExpansionState, LaidOutNode, PipelineNodeRunStatus } from '@/lib/pipeline-layout';
 import { layoutPipeline, pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
@@ -36,6 +36,9 @@ export interface PipelineCanvasProps {
   selectedNodeId?: string;
   onNodeActivate: (node: LaidOutNode) => void;
 }
+
+/** Initial fit may scale the graph UP (to the kit camera's readable range) so a wide viewport is used. */
+const FIT_MAX_SCALE = 1.6;
 
 const DEFAULT_EXPANSION: ExpansionState = {
   expandedStages: new Set(),
@@ -338,6 +341,7 @@ export default function PipelineCanvas({
     fit(
       { width: layout.width, height: layout.height },
       { width: viewport.clientWidth, height: viewport.clientHeight },
+      FIT_MAX_SCALE,
     );
   }, [fit, layout.height, layout.width, viewportRef]);
 
@@ -785,6 +789,7 @@ export default function PipelineCanvas({
                 key={node.id}
                 node={node}
                 count={count}
+                completeness={fanout ? fanoutCompleteness(day, fanout) : undefined}
                 expandable={expandable}
                 expanded={expanded}
                 selected={selected}

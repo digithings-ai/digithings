@@ -1,28 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, SegmentedControl } from '@digithings/ui/ui';
+import { Button, Card, CompositionBar, ScoreBar, SegmentedControl, Sparkline } from '@digithings/ui/ui';
 import { LineChart as LineChartIcon } from 'lucide-react';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceArea,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import {
   LEAN_BAND,
   SCORE_MAX,
   STRONG_BAND,
-  currencyColor,
+  consensusScoreBarProps,
 } from '@/lib/twelve-x/consensus-bar';
-import { useChartColors, withAlpha } from '@/lib/chart-colors';
 import type {
   ConsensusDeltaSet,
+  CurrencyView,
   FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusDivergence,
@@ -33,7 +22,10 @@ import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/c
 import { ConsensusDataTable } from './ConsensusDataTable';
 import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';
 import DivergencePanel from './DivergencePanel';
-import { augmentWithStaleSeries } from '@/lib/twelve-x/consensus-chart';
+import { deriveBoardRows, stanceSegments } from '@/lib/twelve-x/board-view';
+import { fmtSigned } from '@/lib/twelve-x/format';
+import { directionStyle } from '@/lib/twelve-x/matrix-format';
+import DeltaChip from './DeltaChip';
 import { useTwelveX } from './context';
 
 const SCORE_MIN = -SCORE_MAX;
@@ -86,7 +78,6 @@ export default function ConsensusTab({
   confluence?: FxConfluenceSnapshotRow[];
   initialView?: ConsensusView;
 }) {
-  const chart = useChartColors();
   const { crossLink, openBrief } = useTwelveX();
   const [view, setView] = useState<ConsensusView>(initialView);
   const [drilldownCcy, setDrilldownCcy] = useState<string | null>(null);
@@ -102,12 +93,6 @@ export default function ConsensusTab({
     [consensusRows],
   );
 
-  const [hiddenCurrencies, setHiddenCurrencies] = useState<Set<string>>(() => new Set());
-  const visibleCurrencies = useMemo(
-    () => new Set(currencies.filter((currency) => !hiddenCurrencies.has(currency))),
-    [currencies, hiddenCurrencies],
-  );
-
   const lastFocusRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (focusCcy && focusCcy !== lastFocusRef.current) {
@@ -121,12 +106,8 @@ export default function ConsensusTab({
     [series, currencies],
   );
 
-  const scoreSeries = useMemo<ScoreSeriesRow[]>(
-    () => augmentWithStaleSeries(rawScoreSeries, currencies),
-    [rawScoreSeries, currencies],
-  );
-
-  const hasSeries = scoreSeries.length > 0 && currencies.length > 0;
+  const boardRows = useMemo(() => deriveBoardRows(series), [series]);
+  const hasSeries = rawScoreSeries.length > 0 && currencies.length > 0;
 
   const drilldownRow = consensusRows.find((r) => r.currency === drilldownCcy) ?? null;
   const drilldownIntelligence = intelligenceWhy.items.find((item) => item.currency === drilldownCcy) ?? null;
@@ -137,29 +118,12 @@ export default function ConsensusTab({
     return researchBriefs.filter((brief) => {
       if (!brief.currency_views) return false;
       const views = Array.isArray(brief.currency_views) ? brief.currency_views : [];
-      return views.some((view: any) => {
-        const ccyInView = view.currency || '';
-        const legs = ccyInView.split('/');
-        return legs.some((leg: string) => leg.trim().toUpperCase() === drilldownCcy);
+      return views.some((view: Partial<CurrencyView> | null) => {
+        const legs = (view?.currency ?? '').split('/');
+        return legs.some((leg) => leg.trim().toUpperCase() === drilldownCcy);
       });
     });
   }, [drilldownCcy, researchBriefs]);
-
-  const handleLegendClick = (ccy: string) => {
-    setHiddenCurrencies((previous) => {
-      const next = new Set(previous);
-      if (next.has(ccy)) {
-        next.delete(ccy);
-      } else {
-        next.add(ccy);
-      }
-      return next;
-    });
-  };
-
-  const handleLegendDoubleClick = (ccy: string) => {
-    setHiddenCurrencies(new Set(currencies.filter((currency) => currency !== ccy)));
-  };
 
   return (
     <div className="space-y-5">
@@ -197,127 +161,70 @@ export default function ConsensusTab({
       ) : null}
 
       {view === 'charts' ? (
-        <div className="space-y-5">
-          <Card data-reveal className="gap-0 space-y-3 p-4 md:p-5" data-chart="line">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">
-                Consensus score over time
-              </h3>
-              <span className="text-[10px] text-ink-mute flex items-center gap-2 w-full">
-                <span className="flex items-center gap-1">
-                  <span className="inline-block h-2.5 w-3 rounded-none bg-accent/15" />
-                  Strong ±{STRONG_BAND}
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-3 border-t border-dashed border-accent/60" />
-                  Lean ±{LEAN_BAND}
-                </span>
-                <span className="ml-auto">Raw per-run scores</span>
-              </span>
-            </div>
-
-            <div className="flex flex-wrap gap-2 py-2" role="group" aria-label="Currency legend">
-              {currencies.map((ccy) => {
-                const isVisible = visibleCurrencies.has(ccy);
+        <Card data-reveal className="gap-0 space-y-3 p-4 md:p-5" data-chart="small-multiples">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
+              Consensus score over time
+            </h3>
+            <span className="ml-auto font-mono text-[10px] text-ink-mute">
+              raw per-run scores · bar ±{STRONG_BAND} strong, ±{LEAN_BAND} lean
+            </span>
+          </div>
+          {hasSeries ? (
+            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Consensus by currency">
+              {boardRows.map((r) => {
+                const values = rawScoreSeries.map((row) => {
+                  const v = row[r.currency];
+                  return typeof v === 'number' ? v : null;
+                });
                 return (
-                  <Button
-                    key={ccy}
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => handleLegendClick(ccy)}
-                    onDoubleClick={() => handleLegendDoubleClick(ccy)}
-                    aria-pressed={isVisible}
-                    className={`bg-transparent ${isVisible ? 'border-current opacity-100' : 'border-hair opacity-40'}`}
-                    style={{ color: isVisible ? currencyColor(ccy) : undefined }}
-                    title={`Click to toggle, double-click to isolate ${ccy}`}
-                  >
-                    {ccy}
-                  </Button>
+                  <li key={r.currency} data-ccy={r.currency} className="border border-hair p-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className="mb-1 flex h-auto w-full justify-start gap-2 p-0 font-mono text-[13px] font-semibold text-ink hover:bg-transparent hover:text-accent dark:hover:bg-transparent"
+                      title={`${r.currency}: ${r.label} — open drilldown`}
+                      onClick={() => setDrilldownCcy(r.currency)}
+                    >
+                      {r.currency}
+                      <span className="font-normal tabular-nums text-ink-soft">{fmtSigned(r.actualNow)}</span>
+                      <span className="ml-auto font-normal"><DeltaChip delta={r.priorChange} /></span>
+                    </Button>
+                    {values.filter((v) => v !== null).length >= 2 ? (
+                      <Sparkline
+                        values={values}
+                        tone="accent"
+                        area
+                        height={44}
+                        preserveAspectRatio="none"
+                        className="block h-11 w-full"
+                        label={`${r.currency} score over ${values.length} runs`}
+                      />
+                    ) : (
+                      <p className="h-11 font-mono text-[10px] text-ink-mute">Not enough history</p>
+                    )}
+                    <ScoreBar
+                      className="mt-1"
+                      label={`${r.currency} latest score`}
+                      {...consensusScoreBarProps(r.actualNow)}
+                    />
+                    <CompositionBar
+                      className="mt-1"
+                      height={4}
+                      segments={stanceSegments(r.stance)}
+                      label={`${r.currency} stance mix`}
+                    />
+                  </li>
                 );
               })}
-            </div>
-
-            {hasSeries ? (
-              <div className="h-[min(420px,55vh)] min-h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={scoreSeries} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke={chart.hair} />
-                    <ReferenceArea y1={STRONG_BAND} y2={SCORE_MAX} fill={chart.accent} fillOpacity={0.06} />
-                    <ReferenceArea y1={SCORE_MIN} y2={-STRONG_BAND} fill={chart.warn} fillOpacity={0.06} />
-                    <ReferenceLine y={STRONG_BAND} stroke={chart.accent} strokeOpacity={0.5} strokeDasharray="4 4" />
-                    <ReferenceLine y={LEAN_BAND} stroke={chart.accent} strokeOpacity={0.3} strokeDasharray="2 4" />
-                    <ReferenceLine y={0} stroke={withAlpha(chart.ink, 0.25)} />
-                    <ReferenceLine y={-LEAN_BAND} stroke={chart.warn} strokeOpacity={0.3} strokeDasharray="2 4" />
-                    <ReferenceLine y={-STRONG_BAND} stroke={chart.warn} strokeOpacity={0.5} strokeDasharray="4 4" />
-                    <XAxis
-                      dataKey="run_date"
-                      tick={{ fill: chart.axis, fontSize: 11 }}
-                      tickFormatter={(d: string) => d?.slice(5)}
-                      label={{ value: 'Run date', position: 'insideBottom', offset: -4, fill: chart.axis, fontSize: 10 }}
-                    />
-                    <YAxis
-                      domain={[SCORE_MIN, SCORE_MAX]}
-                      ticks={[-2, -1.25, -0.35, 0, 0.35, 1.25, 2]}
-                      tick={{ fill: chart.axis, fontSize: 11 }}
-                      width={44}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'var(--term-bg)',
-                        border: '1px solid var(--hair)',
-                        color: 'var(--ink)',
-                        borderRadius: 0,
-                        fontSize: '0.8rem',
-                      }}
-                      formatter={(val, name) => {
-                        const n = val == null ? NaN : typeof val === 'number' ? val : Number(val);
-                        return [Number.isNaN(n) ? '—' : n.toFixed(2), String(name)];
-                      }}
-                    />
-                    {currencies.map((c) => {
-                      const isVisible = visibleCurrencies.has(c);
-                      if (!isVisible) return null;
-                      return (
-                        <Line
-                          key={c}
-                          type="monotone"
-                          dataKey={c}
-                          name={c}
-                          stroke={currencyColor(c)}
-                          strokeWidth={1.5}
-                          dot={false}
-                          connectNulls
-                        />
-                      );
-                    })}
-                    {currencies.map((c) => {
-                      const isVisible = visibleCurrencies.has(c);
-                      if (!isVisible) return null;
-                      return (
-                        <Line
-                          key={`${c}__stale`}
-                          type="monotone"
-                          dataKey={`${c}__stale`}
-                          stroke={currencyColor(c)}
-                          strokeWidth={1.5}
-                          strokeDasharray="3 3"
-                          dot={false}
-                          connectNulls
-                          legendType="none"
-                        />
-                      );
-                    })}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-[300px] flex items-center justify-center text-ink-mute text-sm">
-                Not enough consensus history to chart.
-              </div>
-            )}
-          </Card>
-        </div>
+            </ul>
+          ) : (
+            <p className="py-10 text-center text-sm text-ink-mute">
+              Not enough consensus history to chart.
+            </p>
+          )}
+        </Card>
       ) : null}
 
       {/* Confluence reads — where independent desks align on an axis. */}
@@ -330,20 +237,18 @@ export default function ConsensusTab({
             </span>
           </div>
           <ul className="grid gap-1">
-            {confluence.map((c) => (
+            {confluence.map((c) => {
+              const dir = directionStyle(c.direction);
+              return (
               <li
                 key={`${c.rank}-${c.currency}`}
+                data-direction={c.direction}
                 className="flex items-center gap-2 border-t border-hair pt-1 first:border-t-0 first:pt-0"
               >
                 <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
                 <span className="font-semibold text-ink">{c.currency}</span>
-                <span
-                  className={`text-xs font-semibold uppercase ${
-                    c.direction === 'bullish' || c.direction === 'long'
-                      ? 'text-accent'
-                      : 'text-warn'
-                  }`}
-                >
+                <span className={`text-xs font-semibold uppercase ${dir.text}`}>
+                  <span aria-hidden>{dir.glyph} </span>
                   {c.direction}
                 </span>
                 <Button
@@ -355,7 +260,8 @@ export default function ConsensusTab({
                   trend →
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Card>
       ) : null}

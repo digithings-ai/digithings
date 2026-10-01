@@ -1,14 +1,9 @@
 /**
  * Shared consensus-bar constants and pure helpers for the twelve-x dashboard.
  *
- * Extracted verbatim from the inline definitions in
- * `components/twelve-x/ConsensusTab.tsx` so the divergent-bar math (band
- * thresholds, fill width, tick position, per-currency colors) has a single,
- * testable source of truth. Behavior is identical to the previous inline
- * versions — ConsensusTab can import these unchanged.
+ * Band thresholds, the score-to-tone mapping and the prop builder for the kit
+ * `ScoreBar` (`consensusScoreBarProps`) — one testable source of truth.
  */
-
-import { CURRENCY_COLORS, CURRENCY_FALLBACK } from '../chart-colors';
 
 /** Max absolute consensus score; the bar half-track represents `[0, SCORE_MAX]`. */
 export const SCORE_MAX = 2;
@@ -16,12 +11,6 @@ export const SCORE_MAX = 2;
 export const STRONG_BAND = 1.25;
 /** |score| ≥ LEAN_BAND ⇒ directional lean (below ⇒ neutral). */
 export const LEAN_BAND = 0.35;
-
-/** Map a currency code to its stable chart color, falling back to slate.
- * Hues live in the sanctioned fixed allowlist (lib/chart-colors.ts, #1402). */
-export function currencyColor(ccy: string): string {
-  return CURRENCY_COLORS[ccy] ?? CURRENCY_FALLBACK;
-}
 
 /**
  * score → sentiment text color class (strong/lean bands). Consensus lean is
@@ -43,20 +32,22 @@ export function scoreLabel(score: number): string {
 }
 
 /**
- * Bar fill as a percentage of the full track width (each side spans 50%).
- * `min(1, |score| / SCORE_MAX) * 50` ⇒ 0 at a zero score, 50 at ±SCORE_MAX,
- * clamped for magnitudes beyond the max.
+ * Props for the kit `ScoreBar` on the consensus axis: zero-centred `-SCORE_MAX
+ * .. +SCORE_MAX`, accent for a bullish fill and warn for a bearish one (lean is
+ * view sentiment, not P&L, so never up/down). Optional `actual` adds one
+ * reference tick; a non-finite value draws the empty track.
  */
-export function barFillPct(score: number): number {
-  return Math.min(1, Math.abs(score) / SCORE_MAX) * 50;
-}
-
-/**
- * Tick (e.g. baseline/marker) position as a percentage from the left edge.
- * `50 + clamp(v, -SCORE_MAX, SCORE_MAX) / SCORE_MAX * 50` ⇒ 50 at 0,
- * 100 at +SCORE_MAX, 0 at -SCORE_MAX, clamped out of range.
- */
-export function tickPct(v: number): number {
-  const clamped = Math.max(-SCORE_MAX, Math.min(SCORE_MAX, v));
-  return 50 + (clamped / SCORE_MAX) * 50;
+export function consensusScoreBarProps(
+  value: number | null | undefined,
+  actual?: { value: number | null | undefined; label: string },
+) {
+  const v = typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return {
+    value: v,
+    min: -SCORE_MAX,
+    max: SCORE_MAX,
+    tone: (v !== null && v < 0 ? 'warn' : 'accent') as 'warn' | 'accent',
+    ticks: actual ? [{ value: actual.value, label: actual.label, tone: 'ink' as const }] : [],
+    format: (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`,
+  };
 }

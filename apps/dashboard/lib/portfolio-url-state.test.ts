@@ -3,7 +3,9 @@ import {
   VALID_PORTFOLIO_TABS,
   canonicalizeLegacyPortfolioSearch,
   canonicalizeLegacyThesesSearch,
+  decisionsHref,
   ledgerHref,
+  mapPortfolioPaneFromUrl,
   mapPortfolioTabFromUrl,
   searchParamsFromHref,
   thesisDetailHref,
@@ -11,8 +13,8 @@ import {
 } from './portfolio-url-state';
 
 describe('portfolio-url-state', () => {
-  it('exposes the two canonical in-shell tabs (performance is now a dedicated route)', () => {
-    expect([...VALID_PORTFOLIO_TABS]).toEqual(['holdings', 'theses']);
+  it('exposes the two canonical in-shell views (performance is a dedicated route)', () => {
+    expect([...VALID_PORTFOLIO_TABS]).toEqual(['holdings', 'decisions']);
   });
 
   it('resolves every legacy alias to a canonical tab', () => {
@@ -22,11 +24,12 @@ describe('portfolio-url-state', () => {
     expect(mapPortfolioTabFromUrl('summary')).toBe('holdings');
     expect(mapPortfolioTabFromUrl('positions')).toBe('holdings');
     expect(mapPortfolioTabFromUrl('activity')).toBe('holdings');
-    // → theses (theses + PM intelligence/history)
-    expect(mapPortfolioTabFromUrl('theses')).toBe('theses');
-    expect(mapPortfolioTabFromUrl('thesis')).toBe('theses');
-    expect(mapPortfolioTabFromUrl('analysis')).toBe('theses');
-    expect(mapPortfolioTabFromUrl('history')).toBe('theses');
+    // → decisions (decisions + theses + PM intelligence/history)
+    expect(mapPortfolioTabFromUrl('decisions')).toBe('decisions');
+    expect(mapPortfolioTabFromUrl('theses')).toBe('decisions');
+    expect(mapPortfolioTabFromUrl('thesis')).toBe('decisions');
+    expect(mapPortfolioTabFromUrl('analysis')).toBe('decisions');
+    expect(mapPortfolioTabFromUrl('history')).toBe('decisions');
     // performance is no longer an in-shell tab; it should map to holdings as unknown
     expect(mapPortfolioTabFromUrl('performance')).toBe('holdings');
   });
@@ -87,18 +90,59 @@ describe('portfolio-url-state', () => {
     expect(target).toEqual({ kind: 'path', href: '/portfolio/theses?thesis=MT1' });
   });
 
-  it('rewrites the historical alias to the Theses tab, seeding the date', () => {
+  it('rewrites the historical alias to the Decisions theses pane, seeding the date', () => {
     const target = canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=history'), {
       defaultHistoryDate: '2026-06-18',
     });
 
-    expect(target).toEqual({ kind: 'query', href: '/portfolio?tab=theses&date=2026-06-18' });
+    expect(target).toEqual({ kind: 'query', href: '/portfolio?tab=decisions&pane=theses&date=2026-06-18' });
   });
 
-  it('drops the tab for legacy allocations/activity (→ holdings default)', () => {
-    expect(canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=activity'))).toEqual({
+  it('rewrites the legacy ?tab=theses (still used by the hub redirect and Brief links) to Decisions', () => {
+    expect(
+      canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=theses'))
+    ).toEqual({ kind: 'query', href: '/portfolio?tab=decisions&pane=theses' });
+  });
+
+  it('sends analysis-style aliases to the Decisions edge pane', () => {
+    expect(
+      canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=analysis'))
+    ).toEqual({ kind: 'query', href: '/portfolio?tab=decisions' });
+  });
+
+  it('leaves canonical tabs alone', () => {
+    expect(
+      canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=decisions&pane=audit'))
+    ).toBeNull();
+    expect(canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=holdings'))).toBeNull();
+  });
+
+  it('resolves panes per view and falls back to that view default', () => {
+    expect(mapPortfolioPaneFromUrl('holdings', null)).toBe('positions');
+    expect(mapPortfolioPaneFromUrl('holdings', 'activity')).toBe('activity');
+    expect(mapPortfolioPaneFromUrl('holdings', 'theses')).toBe('positions');
+    expect(mapPortfolioPaneFromUrl('decisions', 'theses')).toBe('theses');
+    expect(mapPortfolioPaneFromUrl('decisions', 'AUDIT')).toBe('audit');
+    expect(mapPortfolioPaneFromUrl('decisions', 'activity')).toBe('edge');
+  });
+
+  it('builds decisions hrefs', () => {
+    expect(decisionsHref()).toBe('/portfolio?tab=decisions');
+    expect(decisionsHref('edge')).toBe('/portfolio?tab=decisions');
+    expect(decisionsHref('audit')).toBe('/portfolio?tab=decisions&pane=audit');
+  });
+
+  it('drops the tab for legacy allocations/positions (→ Book default)', () => {
+    expect(canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=allocations'))).toEqual({
       kind: 'query',
       href: '/portfolio',
+    });
+  });
+
+  it('routes the legacy activity tab to the Book activity pane', () => {
+    expect(canonicalizeLegacyPortfolioSearch('/portfolio', new URLSearchParams('tab=activity'))).toEqual({
+      kind: 'query',
+      href: '/portfolio?pane=activity',
     });
   });
 
