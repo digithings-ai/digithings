@@ -96,9 +96,9 @@ def doctor_checks(
             id="tcc",
             status="info",
             detail=(
-                "Mic and Accessibility prompts are not probed. dict records with a "
-                "bounded cap and degrades to stdout when a paste is denied; PR3 "
-                "documents the macOS grants."
+                "Mic and Accessibility prompts are not probed. dict degrades to "
+                "stdout when a paste is denied. See digivoice/hammerspoon/README.md "
+                "for Mic + Accessibility TCC on macOS."
             ),
         ),
     ]
