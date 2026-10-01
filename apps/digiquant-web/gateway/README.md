@@ -9,7 +9,7 @@ calls to the digiquant MCP server without any secret reaching the browser.
   Production exposure is a human decision per `digiquant/ARCHITECTURE.md` and the
   `HUMAN GATE` notes in `wrangler.toml` (digikey JWT at the edge). Do not deploy
   this file as-is.
-- **Gloomberb terms must be confirmed** before any public deployment. Responses
+- **Gloomberg terms must be confirmed** before any public deployment. Responses
   carry the upstream attribution and delay notice verbatim; keep them visible.
 - **The session cookie is intentionally never passed.** The MCP server runs as a
   stdio child (no network port) with a scrubbed env (`PATH`, `HOME`, `PYTHONPATH`,
@@ -69,7 +69,7 @@ Limits: 30 req/min per IP, 15 s tool timeout, 200 KB payload cap, per-probe TTL 
 
 - design and review digikey JWT enforcement at the edge;
 - replace the loopback bind and origin policy only as part of that reviewed design;
-- confirm Gloomberb public-use terms and required attribution;
+- confirm Gloomberg public-use terms and required attribution;
 - define hosted rate limits, abuse controls, observability and secret handling;
 - review deployment and network exposure with One/Chris.
 
