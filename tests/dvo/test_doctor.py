@@ -97,3 +97,32 @@ def test_rewrite_and_interrupt_are_informational_when_disabled() -> None:
     assert "interrupt" in report.text
     assert "paste + start a new take" in _check(report, "interrupt")
     assert "digivoice cancel" in _check(report, "interrupt")
+
+
+def test_detection_check_is_info_and_never_blocks_ok(tmp_path: Path) -> None:
+    from digivoice.paths import resolve_paths
+    from digivoice.settings import VoiceSettings, save_settings
+
+    report = _report(_ready())
+    assert report.ok is True
+    found = next(item for item in report.checks if item.id == "detection")
+    assert found.status == "info"
+    assert "word_detection=false" in found.detail
+
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    env = {"DIGIVOICE_DATA_DIR": str(tmp_path)}
+    save_settings(paths, VoiceSettings(word_detection=True))
+    probe = FakeProbe(
+        commands={
+            "whisper-cli": "/usr/bin/whisper-cli",
+            "piper": "/usr/bin/piper",
+            "sox": "/usr/bin/sox",
+        },
+        directories={paths.models_dir},
+        files={f"{paths.models_dir}/ggml-base.en.bin"},
+    )
+    enabled = render_doctor(doctor_checks("linux", tmp_path, env, probe))
+    assert enabled.ok is True
+    detail = next(item for item in enabled.checks if item.id == "detection").detail
+    assert "word_detection=true" in detail
+    assert "whisper" in detail

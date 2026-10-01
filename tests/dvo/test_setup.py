@@ -101,7 +101,7 @@ def test_interactive_review_save_round_trip(
     from digivoice.setup import run_interactive_setup
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
-    fake_in = io.StringIO("5\n1\n7\n")  # Review & save → Save → Quit
+    fake_in = io.StringIO("6\n1\n8\n")  # Review & save → Save → Quit
     fake_out = io.StringIO()
     code = run_interactive_setup(paths, stdin=fake_in, stdout=fake_out)
     assert code == 0
@@ -118,7 +118,7 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
     # Features → banner_density → full → Back → Review & save → Save → Quit
-    fake_in = io.StringIO("2\n4\n3\n6\n5\n1\n7\n")
+    fake_in = io.StringIO("3\n6\n3\n8\n6\n1\n8\n")
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
     assert load_settings(paths).banner_density == "full"
@@ -190,3 +190,25 @@ def test_doctor_hammerspoon_ok_when_adapter_present(tmp_path: Path) -> None:
     found = next(c for c in report.checks if c.id == "hammerspoon")
     assert found.status == "ok"
     assert str(adapter) in found.detail
+
+
+def test_setup_print_includes_detection_and_postprocess(tmp_path: Path) -> None:
+    result = run(["setup", "--print"], _runtime(tmp_path))
+    assert result.code == 0
+    assert "word_detection" in result.stdout
+    assert "spelling_detection" in result.stdout
+    assert "Post-process" in result.stdout
+    for key in (
+        "rewrite_enabled",
+        "rewrite_preset",
+        "rewrite_model",
+        "rewrite_runner",
+        "rewrite_auto_route",
+        "rewrite_timeout_seconds",
+    ):
+        assert key in result.stdout
+
+
+def test_setup_menu_contains_postprocess() -> None:
+    assert "Post-process (rewrite + auto-route)" in list(SETUP_MENU)
+    assert "Features (paste, banner, detection)" in list(SETUP_MENU)

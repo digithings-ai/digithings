@@ -44,8 +44,9 @@ from digivoice.tui import (
 )
 
 SETUP_MENU = (
-    "Models (STT / TTS / rewrite)",
-    "Features (paste, banner)",
+    "Models (STT / TTS)",
+    "Post-process (rewrite + auto-route)",
+    "Features (paste, banner, detection)",
     "Hotkeys (docs)",
     "Hardware recommendations (#4939 hook)",
     "Review & save",
@@ -71,6 +72,8 @@ _REWRITE_RUNNERS: tuple[str, ...] = ("auto", "ollama", "llama.cpp")
 MODEL_FIELDS = (
     "stt_model",
     "tts_voice",
+)
+POSTPROCESS_FIELDS = (
     "rewrite_enabled",
     "rewrite_preset",
     "rewrite_model",
@@ -79,8 +82,12 @@ MODEL_FIELDS = (
     "rewrite_app_routes",
     "rewrite_timeout_seconds",
 )
+# Legacy full Models list (STT/TTS + rewrite) for JSON-dump compatibility.
+LEGACY_MODEL_FIELDS = MODEL_FIELDS + POSTPROCESS_FIELDS
 FEATURE_FIELDS = (
     "paste_on_stop",
+    "word_detection",
+    "spelling_detection",
     "live_banner",
     "banner_position",
     "banner_density",
@@ -134,15 +141,20 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         "— Models —",
         f"  stt_model ............... {settings.stt_model}",
         f"  tts_voice ............... {settings.tts_voice or '(auto / DIGIVOICE_PIPER_VOICE)'}",
+        "",
+        "— Post-process —",
         f"  rewrite_enabled ......... {str(settings.rewrite_enabled).lower()}",
         f"  rewrite_preset .......... {settings.rewrite_preset}",
         f"  rewrite_model ........... {settings.rewrite_model or '(unset)'}",
         f"  rewrite_runner .......... {settings.rewrite_runner}",
         f"  rewrite_auto_route ...... {str(settings.rewrite_auto_route).lower()}",
         f"  rewrite_timeout_seconds . {settings.rewrite_timeout_seconds}",
+        f"  rewrite_app_routes ...... {len(settings.rewrite_app_routes)} fragment→preset entries",
         "",
         "— Features —",
         f"  paste_on_stop ...... {str(settings.paste_on_stop).lower()}",
+        f"  word_detection ..... {str(settings.word_detection).lower()}",
+        f"  spelling_detection . {str(settings.spelling_detection).lower()}",
         f"  live_banner ........ {str(settings.live_banner).lower()}",
         f"  banner_position .... {settings.banner_position}",
         f"  banner_density ..... {settings.banner_density}",
@@ -174,6 +186,8 @@ def setup_public_dict(settings: VoiceSettings, paths: VoicePaths) -> dict[str, A
     data = settings_public_dict(settings, paths)
     data["setup_menu"] = setup_menu_tree()
     data["model_fields"] = list(MODEL_FIELDS)
+    data["postprocess_fields"] = list(POSTPROCESS_FIELDS)
+    data["legacy_model_fields"] = list(LEGACY_MODEL_FIELDS)
     data["feature_fields"] = list(FEATURE_FIELDS)
     data["hardware_recommendations"] = recommend_models()
     return data
@@ -184,7 +198,9 @@ def setup_public_dict(settings: VoiceSettings, paths: VoicePaths) -> dict[str, A
 __all__ = [
     "FEATURE_FIELDS",
     "HARDWARE_EPIC_POINTER",
+    "LEGACY_MODEL_FIELDS",
     "MODEL_FIELDS",
+    "POSTPROCESS_FIELDS",
     "SETUP_MENU",
     "TUI_FOOTER_HINT",
     "choose",
@@ -259,16 +275,9 @@ def _edit_models(
         options = [
             f"stt_model [{working['stt_model']}]",
             f"tts_voice [{working['tts_voice'] or '(auto)'}]",
-            f"rewrite_enabled [{str(working['rewrite_enabled']).lower()}]",
-            f"rewrite_preset [{working['rewrite_preset']}]",
-            f"rewrite_model [{working['rewrite_model'] or '(unset)'}]",
-            f"rewrite_runner [{working['rewrite_runner']}]",
-            f"rewrite_auto_route [{str(working['rewrite_auto_route']).lower()}]",
-            f"rewrite_timeout_seconds [{working['rewrite_timeout_seconds']}]",
-            f"rewrite_app_routes [{len(working['rewrite_app_routes'])} entries]",
             "Back",
         ]
-        picked = choose("— Models —", options, stdin, stdout)
+        picked = choose("— Models (STT / TTS) —", options, stdin, stdout)
         if picked is None or picked == len(options) - 1:
             return
         if picked == 0:
@@ -279,11 +288,33 @@ def _edit_models(
             value = _prompt_text("tts_voice", working["tts_voice"], stdin, stdout)
             if value is not None:
                 working["tts_voice"] = value or None
-        elif picked == 2:
+
+
+def _edit_postprocess(
+    working: dict[str, Any],
+    stdin: TextIO | None = None,
+    stdout: TextIO | None = None,
+) -> None:
+    stdout = stdout or sys.stdout
+    while True:
+        options = [
+            f"Rewrite enabled [{str(working['rewrite_enabled']).lower()}]",
+            f"Preset / task mode [{working['rewrite_preset']}]",
+            f"Local rewrite model [{working['rewrite_model'] or '(unset)'}]",
+            f"Runner [{working['rewrite_runner']}]  (auto | ollama | llama.cpp)",
+            f"Auto-route from focused app [{str(working['rewrite_auto_route']).lower()}]",
+            f"Timeout seconds [{working['rewrite_timeout_seconds']}]",
+            f"App→preset routes [{len(working['rewrite_app_routes'])} entries]",
+            "Back",
+        ]
+        picked = choose("— Post-process (rewrite + auto-route) —", options, stdin, stdout)
+        if picked is None or picked == len(options) - 1:
+            return
+        if picked == 0:
             value = _prompt_bool("rewrite_enabled", working["rewrite_enabled"], stdin, stdout)
             if value is not None:
                 working["rewrite_enabled"] = value
-        elif picked == 3:
+        elif picked == 1:
             value = _prompt_literal(
                 "rewrite_preset",
                 working["rewrite_preset"],
@@ -293,11 +324,11 @@ def _edit_models(
             )
             if value is not None:
                 working["rewrite_preset"] = value
-        elif picked == 4:
+        elif picked == 2:
             value = _prompt_text("rewrite_model", working["rewrite_model"], stdin, stdout)
             if value is not None:
                 working["rewrite_model"] = value or None
-        elif picked == 5:
+        elif picked == 3:
             value = _prompt_literal(
                 "rewrite_runner",
                 working["rewrite_runner"],
@@ -307,12 +338,12 @@ def _edit_models(
             )
             if value is not None:
                 working["rewrite_runner"] = value
-        elif picked == 6:
+        elif picked == 4:
             value = _prompt_bool("rewrite_auto_route", working["rewrite_auto_route"], stdin, stdout)
             if value is not None:
                 working["rewrite_auto_route"] = value
-        elif picked == 7:
-            stdout.write("  rewrite_timeout_seconds (seconds, float)\n")
+        elif picked == 5:
+            stdout.write("  Timeout seconds (seconds, float)\n")
             stdout.flush()
             stdin = stdin or sys.stdin
             try:
@@ -327,7 +358,7 @@ def _edit_models(
                     working["rewrite_timeout_seconds"] = float(raw)
                 except ValueError:
                     stdout.write("  not a number — kept current value\n")
-        elif picked == 8:
+        elif picked == 6:
             stdout.write(
                 "  rewrite_app_routes is a JSON object of fragment→preset "
                 f"({len(working['rewrite_app_routes'])} entries). "
@@ -364,6 +395,8 @@ def _edit_features(
     while True:
         options = [
             f"paste_on_stop [{str(working['paste_on_stop']).lower()}]",
+            f"word_detection [{str(working['word_detection']).lower()}]",
+            f"spelling_detection [{str(working['spelling_detection']).lower()}]",
             f"live_banner [{str(working['live_banner']).lower()}]",
             f"banner_position [{working['banner_position']}]",
             f"banner_density [{working['banner_density']}]",
@@ -378,10 +411,18 @@ def _edit_features(
             if value is not None:
                 working["paste_on_stop"] = value
         elif picked == 1:
+            value = _prompt_bool("word_detection", working["word_detection"], stdin, stdout)
+            if value is not None:
+                working["word_detection"] = value
+        elif picked == 2:
+            value = _prompt_bool("spelling_detection", working["spelling_detection"], stdin, stdout)
+            if value is not None:
+                working["spelling_detection"] = value
+        elif picked == 3:
             value = _prompt_bool("live_banner", working["live_banner"], stdin, stdout)
             if value is not None:
                 working["live_banner"] = value
-        elif picked == 2:
+        elif picked == 4:
             value = _prompt_literal(
                 "banner_position",
                 working["banner_position"],
@@ -391,7 +432,7 @@ def _edit_features(
             )
             if value is not None:
                 working["banner_position"] = value
-        elif picked == 3:
+        elif picked == 5:
             value = _prompt_literal(
                 "banner_density",
                 working["banner_density"],
@@ -401,7 +442,7 @@ def _edit_features(
             )
             if value is not None:
                 working["banner_density"] = value
-        elif picked == 4:
+        elif picked == 6:
             value = _prompt_bool("banner_animations", working["banner_animations"], stdin, stdout)
             if value is not None:
                 working["banner_animations"] = value
@@ -502,6 +543,10 @@ def run_interactive_setup(
             if section.startswith("Models"):
                 before = json.dumps(working, sort_keys=True)
                 _edit_models(working, stdin, stdout)
+                dirty = dirty or json.dumps(working, sort_keys=True) != before
+            elif section.startswith("Post-process"):
+                before = json.dumps(working, sort_keys=True)
+                _edit_postprocess(working, stdin, stdout)
                 dirty = dirty or json.dumps(working, sort_keys=True) != before
             elif section.startswith("Features"):
                 before = json.dumps(working, sort_keys=True)

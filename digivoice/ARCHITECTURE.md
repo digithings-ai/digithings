@@ -80,7 +80,7 @@ commands write.
 | `cancel [--cancel-file PATH]` | 0 | Create the cancel-file; a running `dict` discards its take. |
 | `status` | 0 shown, 1 none yet | Print the `status.json` the banner reads. |
 | `banner show [--text T]` / `hide` / `toggle` | 0 | Write the `banner.show` spawn flag the adapter polls; shows a preview without dictation. |
-| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. |
+| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. Detection flags (`word_detection`, `spelling_detection`) default off; stubs only, not wired to STT yet. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
 | bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle glint), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit stops the adapter and quits Hammerspoon; closing the Terminal alone leaves HS running. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
@@ -212,6 +212,7 @@ Always informational:
 | `paths` | Active data directory, macOS models path, Linux models path, recordings directory |
 | `tcc` | Mic and Accessibility are not probed; see `hammerspoon/README.md` |
 | `rewrite` | Disabled by default (info). When enabled: ok if local runner+model ready, else missing (dict still uses raw transcript) |
+| `detection` | Always info (never required). `word_detection` / `spelling_detection` default off; stubs only, STT still uses whisper |
 | `interrupt` | Documents paste-on-stop + new-take behavior, and Esc / `digivoice cancel` discard |
 
 ## History records
