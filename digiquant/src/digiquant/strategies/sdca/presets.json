@@ -62,5 +62,21 @@
       "sell_mid_knee_risk": 85.0,
       "sell_mid_curvature": 1.0
     }
+  },
+  "gold_optimized": {
+    "description": "Gold honest-v3 candidate (tiered curve search on the generic_valuation gold index, 2026-10-01; gate mean-OOS +9.97% vs flat DCA, beats_flat true, sensitivity stable 0.45, worst-neighbor buy_knee_risk:-5%). Gate evaluated the single-knee projection (mid-tier keys dropped, buy_mid/sell_mid null). Feasibility floor is peak-deployed-capital based per the Plan 9 override record. Honest holdout re-measure: -21.16% vs flat DCA on 2022-05-12..2026-09-29 (feasible, peak-deployed ~100%, dd 8.65) — trails flat DCA out-of-sample; a candidate, not a proven beat. Depth work outstanding (hy/ig weights at zero). Promoted to candidate on owner accept <date TBD — DO NOT PUSH from agent env>. Detail: digiquant/.scratch/gold_curve_search_honest_v3.json. Do not --push-supabase from the agent environment.",
+    "long_only": false,
+    "shape": {
+      "buy_max_rate": 35.0,
+      "buy_knee_risk": 45.0,
+      "sell_knee_risk": 50.0,
+      "sell_max_rate": 30.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0,
+      "buy_mid_knee_risk": null,
+      "buy_mid_curvature": 1.0,
+      "sell_mid_knee_risk": null,
+      "sell_mid_curvature": 1.0
+    }
   }
 }

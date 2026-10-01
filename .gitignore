@@ -51,6 +51,9 @@ build/
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
 
+# Gold enrichment snapshots (research staging; README.md is committed docs) — #4804
+digiquant/data/enrichment/snapshots/
+
 # Repo-root runtime caches (research price-history, agent-cache paths) — JAN-004
 /data/
 

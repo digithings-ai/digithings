@@ -12,6 +12,7 @@ EXPECTED_PRESET_NAMES = {
     "aggressive_accumulate",
     "accumulate_and_distribute",
     "btc_optimized",
+    "gold_optimized",
 }
 
 
@@ -268,3 +269,88 @@ class TestBtcOptimizedPromotion:
         provenance = json.loads(provenance_path.read_text())
         assert "SUPERSEDED" in provenance["notes"]
         assert "periodic_cycle_4" in provenance["notes"]
+
+
+class TestGoldOptimizedPromotion:
+    """Pin the promoted gold candidate (honest-v3 gate, owner accept TBD, #4804).
+
+    Expected shape is hardcoded from `.scratch/gold_curve_search_honest_v3.json`'s
+    `gated_shape` (frozen sidecar, not read here -- .scratch is untracked and
+    must never be a test dependency). If the live preset is ever re-tuned,
+    update these expectations deliberately in the same commit.
+    """
+
+    EXPECTED_V3_SHAPE = {
+        "buy_max_rate": 35.0,
+        "buy_knee_risk": 45.0,
+        "sell_knee_risk": 50.0,
+        "sell_max_rate": 30.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "buy_mid_knee_risk": None,
+        "buy_mid_curvature": 1.0,
+        "sell_mid_knee_risk": None,
+        "sell_mid_curvature": 1.0,
+    }
+
+    def test_gold_optimized_shape_is_v3_candidate(self) -> None:
+        from digiquant.strategies.sdca.presets import load_preset
+
+        preset = load_preset("gold_optimized")
+        assert preset.shape is not None
+        assert preset.shape.model_dump() == self.EXPECTED_V3_SHAPE
+
+    def test_gold_optimized_nodes_match_promoted_shape(self) -> None:
+        from digiquant.strategies.sdca.curve import AccumDistCurve
+        from digiquant.strategies.sdca.presets import load_preset
+
+        preset = load_preset("gold_optimized")
+        assert preset.curve_nodes == preset.shape.to_nodes()
+        AccumDistCurve(preset.curve_nodes)
+
+    def test_gold_optimized_description_records_gate_outcome(self) -> None:
+        """The description must keep stating the gate numbers + honest holdout.
+
+        Guards against a silent sanitization that would make the preset look
+        like a proven out-of-sample beat.
+        """
+        from digiquant.strategies.sdca.presets import load_preset
+
+        description = load_preset("gold_optimized").description
+        assert "honest-v3" in description
+        assert "+9.97%" in description
+        assert "stable" in description
+        assert "buy_knee_risk:-5%" in description
+        assert "-21.16%" in description
+        assert "peak" in description
+        assert "owner accept" in description
+        assert "DO NOT PUSH" in description
+
+    def test_gold_optimized_provenance_records_override_and_holdout(self) -> None:
+        """The sidecar must keep the override record + the unsoftened holdout."""
+        import json
+        from pathlib import Path
+
+        import digiquant.strategies.sdca.presets as presets_module
+
+        provenance_path = Path(presets_module.__file__).parent / "gold_optimized_provenance.json"
+        provenance = json.loads(provenance_path.read_text())
+        assert provenance["preset"] == "gold_optimized"
+        assert provenance["evaluator"] == "curve_simulator"
+        assert "override" in provenance["notes"]
+        assert "peak" in provenance["notes"]
+        assert "-21.16%" in provenance["notes"]
+        assert "gold_curve_search_honest_v3" in provenance["notes"]
+
+    def test_gold_optimized_provenance_holdout_is_task1_number(self) -> None:
+        """The sidecar's holdout field must equal the Task-1 scored number."""
+        import json
+        from pathlib import Path
+
+        import digiquant.strategies.sdca.presets as presets_module
+
+        provenance_path = Path(presets_module.__file__).parent / "gold_optimized_provenance.json"
+        provenance = json.loads(provenance_path.read_text())
+        assert provenance["holdout_vs_flat_dca_pct"] == pytest.approx(-21.15507952929604)
+        assert provenance["beats_flat_dca_oos"] is True
+        assert provenance["sensitivity_stable"] is True

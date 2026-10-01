@@ -70,6 +70,23 @@ jobs:
       - name: Fetch Coinbase daily OHLCV
         run: uv run --frozen --with ccxt python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
+      - name: Stage gold/DXY siblings (GLD/UUP)
+        # GLD-USD/UUP-USD do not resolve on yfinance (delisted/404), so the
+        # suffixed stems the SDCA loader keys on cannot be fetched
+        # incrementally — that keying breaks here, not in the loader. Fetch
+        # plain GLD/UUP into a temp dir, then cp-overwrite into the price
+        # cache as GLD-USD.csv + UUP.csv (full overwrite each run; --period
+        # max because the temp dir is uncached). UUP stays plain-stem per
+        # Plan-2 (no UUP-USD on the panel). M2SL needs no step:
+        # export_sdca_macro.py already stages it (SERIES_FILES).
+        run: |
+          STAGING_TMP="$(mktemp -d)"
+          uv run --frozen --no-sync python -m digiquant prices fetch-quotes --tickers GLD,UUP --cache-dir "$STAGING_TMP" --period max
+          mkdir -p digiquant/data/price-history
+          cp -f "$STAGING_TMP/GLD.csv" digiquant/data/price-history/GLD-USD.csv
+          cp -f "$STAGING_TMP/UUP.csv" digiquant/data/price-history/UUP.csv
+          rm -rf "$STAGING_TMP"
+
       - name: Stage SDCA macro sibling (M2)
         # Workflow YAML comes from the default branch (develop); this job checks
         # out `main`. Skip until the script exists on main so a develop-only
