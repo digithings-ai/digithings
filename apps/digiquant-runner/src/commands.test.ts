@@ -206,3 +206,52 @@ describe("phase 3 house-run", () => {
     expect(JSON.stringify(spec)).not.toContain("CORE_SUPABASE");
   });
 });
+
+describe("phase 4 checkpoint-archive", () => {
+  it("checkpoint-archive matches the workflow and publishes optionally", () => {
+    const spec = assertKnownCommand("checkpoint-archive", raw);
+    expect(spec.timeout_seconds).toBe(3600);
+    expect(spec.concurrency).toBe("checkpoint-archive");
+    expect(spec.code_ref).toBe("main");
+    expect(spec.alias_supabase).toBe(true);
+    expect(spec.env).toEqual([
+      "CORE_SUPABASE_URL",
+      "CORE_SUPABASE_SERVICE_KEY",
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CORE_POSTGRES_URI",
+    ]);
+    const flat = JSON.stringify(spec.steps);
+    expect(flat).toContain("digiquant_checkpoint_size_gate.py");
+    expect(flat).toContain("--snapshot-out");
+    expect(flat).toContain("digiquant_archive_checkpoints.py");
+    expect(flat).toContain("--retain-days");
+    expect(flat).toContain("--manifest-out");
+    expect(spec.steps).toHaveLength(3);
+    const size = spec.steps[0];
+    const dry = spec.steps[1];
+    const live = spec.steps[2];
+    if (isArgvStep(size) || isArgvStep(dry) || isArgvStep(live)) {
+      throw new Error("checkpoint-archive steps must be gated objects");
+    }
+    expect(size.continue_on_error).toBe(true);
+    expect(size.argv).toContain("/tmp/checkpoint-size-pre.json");
+    expect(dry.when_arg).toBe("dry_run");
+    expect(dry.equals).toBe("true");
+    expect(dry.argv).toContain("--dry-run");
+    expect(live.when_arg_empty).toBe("dry_run");
+    expect(live.argv).not.toContain("--dry-run");
+    expect(spec.publish_if_present).toEqual([
+      "/tmp/checkpoint-archive-manifests.json",
+      "/tmp/checkpoint-size-pre.json",
+    ]);
+    expect(spec).not.toHaveProperty("publish");
+    expect(spec).not.toHaveProperty("failure_issue");
+    expect(JSON.stringify(spec)).not.toContain("GH_ISSUE_TOKEN");
+    expect(JSON.stringify(spec)).not.toContain("FRED_API_KEY");
+    expect(JSON.stringify(spec)).not.toContain("OPENROUTER_API_KEY");
+    expect(JSON.stringify(spec)).not.toContain("LANGSMITH_API_KEY");
+  });
+});
