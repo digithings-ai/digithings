@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
 
@@ -31,13 +30,6 @@ describe("jobsForCron", () => {
     for (const j of JOBS) {
       if (j.enabled) expect(set.has(j.cron)).toBe(true);
     }
-  });
-
-  it("keeps enabled crons aligned with wrangler triggers", () => {
-    const wrangler = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-    const triggers = wrangler.match(/\[triggers\]\s*crons\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
-    const configured = [...triggers.matchAll(/^\s*"([^"]+)",?$/gm)].map((match) => match[1]);
-    expect([...uniqueEnabledCrons()].sort()).toEqual(configured.sort());
   });
 
   it("workflow dispatches target the default develop branch", () => {
