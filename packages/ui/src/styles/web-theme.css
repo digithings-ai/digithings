@@ -472,14 +472,40 @@ button.dg-docker.is-copied { color: var(--accent); }
   visibility: hidden;
   transition: opacity 0.3s var(--ease), visibility 0s 0.3s;
 }
-/* The tiles whose content changes (gaining or losing focus) re-mount their
-   body (keyed in ModuleGrid) and fade in a beat into the rect morph, so the
-   new text lands in a box that has mostly grown instead of catching it
-   half-fitting. Resting tiles keep their body and never blink.
-   Transform/opacity only, per the kit's motion vocabulary. */
+/* The name stays put. Focus detail enters as the tile grows and leaves
+   ahead of the shrink, so a step never blanks the grid or squishes the copy.
+   Resting tiles take the detail out of flow (no gap, no extra height) and
+   fade it; the focused tile brings it back in flow once the box has started
+   to open. Transform/opacity only, per the kit's motion vocabulary. */
 .dg-cell-body { animation: dg-cell-in 0.3s var(--ease) 0.12s both; }
+.dg-mosaic--rows .dg-cell-body { animation: none; }
 @keyframes dg-cell-in {
   from { opacity: 0; transform: translateY(6px); }
+}
+.dg-mosaic--rows .dg-cell:not(.on) .dg-mosaic-enter {
+  position: absolute;
+  z-index: 1;
+  inset-inline: 0.95rem;
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 0.18s var(--ease),
+    transform 0.18s var(--ease),
+    visibility 0s linear 0.18s;
+}
+.dg-mosaic--rows .dg-cell.on .dg-mosaic-enter {
+  position: relative;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    opacity 0.34s var(--ease) 0.18s,
+    transform 0.42s var(--ease) 0.14s,
+    visibility 0s linear 0s;
 }
 /* Reduced motion: every mosaic transition above goes instant — dock,
    growth, tier fades, body crossfade. State changes still apply, with no animation. */
@@ -489,10 +515,13 @@ button.dg-docker.is-copied { color: var(--accent); }
   .dg-cell,
   .dg-cell .dg-mosaic-stack,
   .dg-cell .dg-mosaic-role,
-  .dg-cell .dg-mosaic-detail {
+  .dg-cell .dg-mosaic-detail,
+  .dg-mosaic--rows .dg-cell:not(.on) .dg-mosaic-enter,
+  .dg-mosaic--rows .dg-cell.on .dg-mosaic-enter {
     transition: none;
   }
   .dg-cell-body { animation: none; }
+  .dg-mosaic--rows .dg-cell:not(.on) .dg-mosaic-enter { transform: none; }
 }
 
 /* The stated figures. They are printed on the cell rather than implied by its
@@ -516,7 +545,11 @@ button.dg-docker.is-copied { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .dg-mosaic-row,
   .dg-cell,
-  .dg-mosaic--rows .dg-cell { transition: none; }
+  .dg-mosaic--rows .dg-cell,
+  .dg-mosaic--rows .dg-cell:not(.on) .dg-mosaic-enter,
+  .dg-mosaic--rows .dg-cell.on .dg-mosaic-enter {
+    transition: none;
+  }
 }
 
 
