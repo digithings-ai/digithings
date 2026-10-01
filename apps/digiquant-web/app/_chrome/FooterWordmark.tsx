@@ -30,7 +30,7 @@ export function FooterWordmark() {
   }, [safe]);
 
   return (
-    <div className="relative z-10 border-t border-hair">
+    <div className="relative z-10">
       <div
         ref={ref}
         className="mx-auto w-full max-w-[calc(var(--frame-w)+2*var(--page-pad))] overflow-x-clip px-[var(--page-pad)] pb-[clamp(1.5rem,4vw,3rem)] pt-[clamp(2.5rem,7vw,5rem)]"
