@@ -182,5 +182,39 @@
       ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/research/check_allocation_shadow_isolation.py", "--output", "/tmp/allocation-shadow-isolation-report.json"]
     ],
     "publish": ["/tmp/allocation-shadow-isolation-report.json"]
+  },
+  "checkpoint-archive": {
+    "timeout_seconds": 3600,
+    "concurrency": "checkpoint-archive",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "env": [
+      "CORE_SUPABASE_URL",
+      "CORE_SUPABASE_SERVICE_KEY",
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CORE_POSTGRES_URI"
+    ],
+    "steps": [
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "scripts/digiquant_checkpoint_size_gate.py", "--snapshot-out", "/tmp/checkpoint-size-pre.json"],
+        "continue_on_error": true
+      },
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "scripts/digiquant_archive_checkpoints.py", "--retain-days", "1", "--manifest-out", "/tmp/checkpoint-archive-manifests.json", "--dry-run"],
+        "when_arg": "dry_run",
+        "equals": "true"
+      },
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "scripts/digiquant_archive_checkpoints.py", "--retain-days", "1", "--manifest-out", "/tmp/checkpoint-archive-manifests.json"],
+        "when_arg_empty": "dry_run"
+      }
+    ],
+    "publish_if_present": [
+      "/tmp/checkpoint-archive-manifests.json",
+      "/tmp/checkpoint-size-pre.json"
+    ]
   }
 }
