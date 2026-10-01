@@ -2,7 +2,7 @@
 
 **Status:** Human Gate draft. §0.1 is Chris's corrected desk lock (2026-10-01). One file. No UI, no static HTML, no route code.
 
-**Date:** 2026-10-01. Correction same day: a desk is a full spine configuration, not a nav item. The trading-engine slot (Setups) stays off the nav until it is real.
+**Date:** 2026-10-01. Desk correction: a desk is a full spine configuration, not a nav item. Visual-language lock: phase B and phase C match current digiquant-web craft, not the legacy dashboard UI.
 
 **Issue:** [GitHub #4895](https://github.com/digithings-ai/digithings/issues/4895)
 
@@ -76,6 +76,23 @@ Item 1 is the house desk's spine, not a universal chrome. Items 4 and 5 apply to
 | 11 | Command line | **Out.** No Bloomberg / Koyfin command bar. The palette lists the active desk's items plus that desk's deep links. On the house desk those items are the five in item 1. |
 | 12 | House book vs a user-book switcher | **Never merge them into one switcher.** House stays the operator paper book. Studio+ profile is an overlay, not a second anonymous book and not a paper/live toggle. The desk switcher in §0.1 changes the whole spine. It is not this switcher. |
 
+### 0.3 Locked — visual language for phase B and phase C
+
+Chris locked this on 2026-10-01. Phase B mockups and phase C implementation of the digiquant dashboard use the visual language of **current digiquant-web** (`apps/digiquant-web`). They do not use the legacy dashboard UI (`apps/dashboard` as it looks today).
+
+Match these from digiquant-web:
+
+- **Lightness.** The page stays light in weight: flat surface, hairline structure, no heavy shell. This is not a light-theme mandate pasted over the operator app, and it is not a marketing hero inside the product.
+- **Type.** Inter and JetBrains Mono. The live dashboard's Geist Mono voice (section 3, "Geist Mono as the only voice") is the legacy UI. It is not the phase B or phase C type.
+- **Rails.** The structural rails digiquant-web uses to hold a page (hairline rails beside a sequence, a side rail, a rail that marks the active step). Those are layout. They are not the tearsheet "valuation rails" series, and they are not a second chart stack.
+
+What this does not change:
+
+- The dashboard remains the product. digiquant-web remains the showcase. Matching its craft does not move builder, journal, tools, or settings onto the marketing site.
+- Information architecture stays §0.1 and §0.2. Rails do not become extra nav items.
+- Section 5's craft table still says type and color were "not specified here," and it names a single-color black craft. That sentence is the lane record. This lock is the later decision: phase B and phase C follow digiquant-web's current lightness, type, and rails, not the legacy dashboard and not a restyle of that dashboard in place.
+- No CSS and no HTML in this plan. The next pictures are static HTML that already looks like digiquant-web. Phase C carries that same language into `apps/dashboard`.
+
 ---
 
 ## 1. Synergy review
@@ -110,7 +127,7 @@ These are the same lock in more than one lane. Section 0 does not reopen them ex
 
 **Fail-closed book.** One NAV series for Brief and Tearsheet. Live marks are an overlay badge, not a second set of books. Position fills are never derived from weight diffs. Unknown dashboard-api tables 404. A missing service-role key is `upstream_empty`, not an empty success. `/pipeline` empty means no runs. Inputs with no call telemetry are a typed gap.
 
-**Craft.** Instrument, not SaaS glass. Follow digiquant-web, not a fat shell and not a marketing clone inside the app. Literal sidebar labels, never icon-only. One sticky in-page tab row. No nested sticky bars. Hairline structure, tabular figures, flat panels. Blur only on sticky chrome and overlays. Type pair Inter and JetBrains Mono when craft is applied in phase B and phase C. One primary action per spine surface, listed in section 6's steal list. Density lives in the page, not in extra destinations. Parked #4885, #4892, and #4896 stay reference only.
+**Craft.** Instrument, not SaaS glass. Follow digiquant-web, not a fat shell and not a marketing clone inside the app. Literal sidebar labels, never icon-only. One sticky in-page tab row. No nested sticky bars. Hairline structure, tabular figures, flat panels. Blur only on sticky chrome and overlays. Type pair Inter and JetBrains Mono when craft is applied in phase B and phase C. One primary action per spine surface, listed in section 6's steal list. Density lives in the page, not in extra destinations. Parked #4885, #4892, and #4896 stay reference only. **§0.3 locks the phase B and phase C pictures to current digiquant-web craft: lightness, Inter and JetBrains Mono, and structural rails.** The legacy dashboard UI is not the reference. Section 3 records that legacy voice (Geist Mono, the current shell) so it is not copied forward.
 
 **Auth and human gates this plan does not touch.** No edits to `digikey/`, no live-trading path, no `digiquant/brokers/` behavior change, no new network exposure. `env = live` may exist as stored vocabulary. Showing it as connected-for-trading waits on a human. `digifetch_ibkr_execute_order` stays disabled.
 
@@ -187,13 +204,14 @@ These letters are this plan's order. They are not #4761 phases. Section 5 §9 is
 | Phase | Delivers | Does not deliver |
 |---|---|---|
 | A. Plan lock | This document, after section 0 is answered | UI, HTML, route edits, chart code |
-| B. Static HTML mockups | Spine only, after the section 0 answers: instrument craft, literal labels, sticky section tabs, honest empties, embed-pane placeholders labeled LuxAlgo or Gloomberb | App routes, greyed soon-nav, fake live P&L, a chart library, showcase pages, the coming-soon slots |
-| C. Implement `apps/dashboard` | Shell that reads the active desk config; ship the house desk (item 1) including auth, settings omit-by-tier, Brief, portfolio tabs, Pipeline (including the book-database exemption), House, ticker dossier when a deep link needs it, then the embed panes. The desk switcher shows House only. | Builder, journal, tools, calendars, integrations hub, live execute, embedded digichat, an FX Hub rebuild, `/why` as a second hub, a second desk, Setups, a nav item named Desks |
+| B. Static HTML mockups | House-desk spine only, in current digiquant-web craft (§0.3: lightness, Inter and JetBrains Mono, rails), literal labels, sticky section tabs, honest empties, embed-pane placeholders labeled LuxAlgo or Gloomberb | The legacy dashboard look, app routes, greyed soon-nav, fake live P&L, a chart library, showcase pages, the coming-soon slots |
+| C. Implement `apps/dashboard` | Same visual language as phase B (§0.3). Shell that reads the active desk config; ship the house desk (item 1) including auth, settings omit-by-tier, Brief, portfolio tabs, Pipeline (including the book-database exemption), House, ticker dossier when a deep link needs it, then the embed panes. The desk switcher shows House only. | The legacy dashboard look, builder, journal, tools, calendars, integrations hub, live execute, embedded digichat, an FX Hub rebuild, `/why` as a second hub, a second desk, Setups, a nav item named Desks |
 
 Phase C order inside the app, after the shell, is the numbered list in section 5 §9. A coming-soon route is not the next step after that list. It waits until the capability exists, then ships as the real surface.
 
-What phase B draws, using §0.1 and §0.2:
+What phase B draws, using §0.1, §0.2, and §0.3:
 
+- The look of current digiquant-web: lightness, Inter and JetBrains Mono, structural rails. Not the legacy dashboard UI.
 - Sign-in, outside the frame, no book chrome.
 - The house desk, named in a frame switcher that is not a spine item. The switcher shows House selected. "New desk" is disabled, with a `Not available` chip. No second layout is drawn.
 - That desk's sidebar: Brief, Portfolio, Pipeline, House, Settings. Not a Desks item.
@@ -205,7 +223,7 @@ What phase B draws, using §0.1 and §0.2:
 - Ticker dossier, one frame, per item 10. LuxAlgo and Gloomberb are labeled placeholders.
 - Redirect notes are not pages. `/strategy` and `/why` are not drawn as products.
 
-What phase B does not draw: a nav item or page named Desks, a custom desk's alternate spine, FX Hub, builder, journal, tools, calendars, integrations hub, Setups, `/why` as a hub, a Strategies library, a digichat panel, a command line, a paper/live switch, a house-book / user-book switch, grey nav rows, sample positions, a starter equity curve.
+What phase B does not draw: the legacy dashboard UI (Geist-only chrome, the current `apps/dashboard` shell), a nav item or page named Desks, a custom desk's alternate spine, FX Hub, builder, journal, tools, calendars, integrations hub, Setups, `/why` as a hub, a Strategies library, a digichat panel, a command line, a paper/live switch, a house-book / user-book switch, grey nav rows, sample positions, a starter equity curve.
 
 ### 1.5 Market patterns, applied
 
@@ -264,6 +282,8 @@ What this changes in the earlier synergy, and what it leaves:
 - Item 12 stays. The desk switcher replaces the spine. It does not replace the book.
 
 Sections 3–6 are untouched by this correction, including every route table, settings control, MCP count, and market note.
+
+§0.3 is the visual-language lock on top of those lanes. Section 5 still says type and color follow digiquant-web "later" and are "not specified here." Chris has specified them: lightness, Inter and JetBrains Mono, and rails, taken from current digiquant-web, not from the legacy dashboard.
 
 ---
 
