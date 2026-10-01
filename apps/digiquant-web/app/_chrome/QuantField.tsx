@@ -4,11 +4,11 @@ import { useEffect, useRef } from "react";
 import {
   applyTick,
   fetchHeroCandles,
-  HERO_GRANULARITY_S,
   HERO_PRODUCTS,
   openHeroTicker,
   type FeedCandle,
 } from "@/lib/live/hero-feed";
+import { BUILD_DONE_MS, buildProgress } from "@/lib/hero-build";
 import { formatPrice } from "@/lib/live/market-bar";
 
 /** Hero backdrop: a candlestick chart that fills the hero behind the wordmark.
@@ -21,6 +21,11 @@ import { formatPrice } from "@/lib/live/market-bar";
  *  Fallback path: until the feed answers, when it fails, and under reduced motion
  *  (a static snapshot, no socket), the chart is a seeded random walk labelled
  *  "simulated". Simulated candles use index points, never prices.
+ *
+ *  Build-in: on load the candles rise left to right on the same clock as the wordmark's
+ *  pixel columns (`lib/hero-build.ts`), anchored to the wordmark's own CSS animation start,
+ *  so chart and title build together. The build runs on the simulated series straight away;
+ *  live candles swap in without waiting for or restarting it.
  *
  *  Colours come from `color`, `--up`, `--down` and `--bg` on the canvas so it follows
  *  the theme. The draw loop only runs while the hero is on screen. */
@@ -49,12 +54,21 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 export function QuantField() {
   const ref = useRef<HTMLCanvasElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
     const host = canvas?.parentElement;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !host || !ctx) return;
+
+    const tip = tipRef.current;
+    const field = (key: string) => tip?.querySelector<HTMLElement>(`[data-f="${key}"]`) ?? null;
+    const [fName, fWhen, fO, fH, fL, fC, fChg] = ["name", "when", "O", "H", "L", "C", "chg"].map(field);
+    const tipFields =
+      fName && fWhen && fO && fH && fL && fC && fChg
+        ? { name: fName, when: fWhen, O: fO, H: fH, L: fL, C: fC, chg: fChg }
+        : null;
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const product = HERO_PRODUCTS[Math.floor(Math.random() * HERO_PRODUCTS.length)] ?? HERO_PRODUCTS[0];
@@ -90,6 +104,7 @@ export function QuantField() {
     let mono = "monospace";
     let lastStep = 0;
     let lastFrame = 0;
+    let buildStart = performance.now();
     let raf = 0;
     let visible = true;
     let disposed = false;
@@ -165,7 +180,9 @@ export function QuantField() {
       const valueAt = (py: number) => scale.lo + ((plotBottom - py) / (plotBottom - plotTop)) * (scale.hi - scale.lo);
 
       const slide = reduced ? 0 : PITCH * (1 - easeOut(Math.min(1, (now - slideStart) / SLIDE_MS)));
+      const elapsed = now - buildStart;
       const fade = reduced ? 1 : Math.min(1, (now - modeSince) / 500);
+      const frame = reduced ? 1 : buildProgress(elapsed, 1);
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
@@ -179,12 +196,12 @@ export function QuantField() {
       ctx.textAlign = "left";
       for (const f of [0.15, 0.35, 0.5, 0.65, 0.85]) {
         const gy = Math.round(plotBottom - f * (plotBottom - plotTop)) + 0.5;
-        ctx.globalAlpha = 0.1;
+        ctx.globalAlpha = 0.1 * frame;
         ctx.beginPath();
         ctx.moveTo(0, gy);
         ctx.lineTo(axisX, gy);
         ctx.stroke();
-        ctx.globalAlpha = 0.34 * fade;
+        ctx.globalAlpha = 0.34 * fade * frame;
         ctx.fillText(px(valueAt(gy)), axisX + 10, gy);
       }
       ctx.setLineDash([]);
@@ -197,13 +214,18 @@ export function QuantField() {
         const fresh = i === n - 1;
         const k = fresh ? shown : view[i];
         const x = Math.round(axisX - (n - i) * PITCH + slide);
+        const g = reduced ? 1 : buildProgress(elapsed, (x + BODY / 2) / w);
+        if (g <= 0) continue;
         const rising = k.c >= k.o;
         ctx.fillStyle = rising ? up : down;
-        ctx.globalAlpha = (fresh ? 0.95 : 0.4) * fade;
+        ctx.globalAlpha = (fresh ? 0.95 : 0.4) * fade * Math.min(1, g * 1.6);
+        const openY = y(k.o);
+        const grown = (v: number) => openY + (y(v) - openY) * g;
+        const wickTop = Math.round(grown(k.h));
         const wickX = x + Math.floor(BODY / 2);
-        ctx.fillRect(wickX, Math.round(y(k.h)), 1, Math.max(1, Math.round(y(k.l) - y(k.h))));
-        const bodyTop = Math.round(y(Math.max(k.o, k.c)));
-        ctx.fillRect(x, bodyTop, BODY, Math.max(2, Math.round(y(Math.min(k.o, k.c))) - bodyTop));
+        ctx.fillRect(wickX, wickTop, 1, Math.max(1, Math.round(grown(k.l)) - wickTop));
+        const bodyTop = Math.round(grown(Math.max(k.o, k.c)));
+        ctx.fillRect(x, bodyTop, BODY, Math.max(2, Math.round(grown(Math.min(k.o, k.c))) - bodyTop));
       }
       ctx.restore();
 
@@ -211,14 +233,14 @@ export function QuantField() {
       const rising = shown.c >= shown.o;
       ctx.strokeStyle = rising ? up : down;
       ctx.fillStyle = rising ? up : down;
-      ctx.globalAlpha = 0.55 * fade;
+      ctx.globalAlpha = 0.55 * fade * frame;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(0, lastY);
       ctx.lineTo(axisX, lastY);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.globalAlpha = 0.95 * fade;
+      ctx.globalAlpha = 0.95 * fade * frame;
       ctx.fillRect(axisX + 4, lastY - 8, AXIS_W - 8, 16);
       ctx.fillStyle = bg;
       ctx.fillText(px(shown.c), axisX + 10, lastY);
@@ -257,32 +279,32 @@ export function QuantField() {
         ctx.textAlign = "left";
         ctx.fillText(px(valueAt(pointer.y)), axisX + 10, pointer.y);
 
-        const change = k.o ? ((k.c - k.o) / k.o) * 100 : 0;
-        const head = `${name()} · ${mode === "live" ? `${HERO_GRANULARITY_S / 60}m ` : ""}${stamp(k)}`;
-        const body = `O ${px(k.o)}  H ${px(k.h)}  L ${px(k.l)}  C ${px(k.c)}  ${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
-        ctx.font = `11px ${mono}`;
-        const boxW = Math.ceil(Math.max(ctx.measureText(head).width, ctx.measureText(body).width)) + 20;
-        const boxH = 44;
-        const bx = Math.max(8, Math.min(axisX - boxW - 8, pointer.x + 18 > axisX - boxW - 8 ? pointer.x - boxW - 18 : pointer.x + 18));
-        const by = Math.max(8, Math.min(h - boxH - 8, pointer.y + 18 > h - boxH - 8 ? pointer.y - boxH - 18 : pointer.y + 18));
-        ctx.globalAlpha = 0.94;
-        ctx.fillStyle = bg;
-        ctx.fillRect(bx, by, boxW, boxH);
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = ink;
-        ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = ink;
-        ctx.textBaseline = "alphabetic";
-        ctx.fillText(head, bx + 10, by + 17);
-        ctx.fillStyle = k.c >= k.o ? up : down;
-        ctx.fillText(body, bx + 10, by + 34);
-        ctx.font = `10px ${mono}`;
-        ctx.textBaseline = "middle";
-
         ctx.globalAlpha = 0.9;
         ctx.strokeStyle = accent;
         ctx.strokeRect(cx - Math.floor(BODY / 2) - 2.5, y(k.h) - 2.5, BODY + 4, Math.max(6, y(k.l) - y(k.h)) + 5);
+
+        const change = k.o ? ((k.c - k.o) / k.o) * 100 : 0;
+        const tone = k.c >= k.o ? "var(--up)" : "var(--down)";
+        const f = tipFields;
+        if (tip && f) {
+          f.name.textContent = name();
+          f.when.textContent = `${mode === "live" ? "1m " : ""}${stamp(k)}`;
+          f.O.textContent = px(k.o);
+          f.H.textContent = px(k.h);
+          f.L.textContent = px(k.l);
+          f.C.textContent = px(k.c);
+          f.C.style.color = tone;
+          f.chg.textContent = `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
+          f.chg.style.color = tone;
+          const tw = tip.offsetWidth;
+          const th = tip.offsetHeight;
+          const tx = pointer.x + 18 + tw > w - 8 ? pointer.x - tw - 18 : pointer.x + 18;
+          const ty = pointer.y + 18 + th > h - 8 ? pointer.y - th - 18 : pointer.y + 18;
+          tip.style.transform = `translate(${Math.max(8, Math.round(tx))}px, ${Math.max(8, Math.round(ty))}px)`;
+          tip.style.display = "block";
+        }
+      } else if (tip) {
+        tip.style.display = "none";
       }
       ctx.globalAlpha = 1;
     };
@@ -319,6 +341,12 @@ export function QuantField() {
     resize();
     resetShown(false);
     modeSince = performance.now();
+    buildStart = modeSince;
+    if (!reduced) {
+      const cell = document.querySelector<SVGElement>("#top [data-dq-anim]");
+      const started = cell?.getAnimations()[0]?.startTime;
+      if (typeof started === "number") buildStart = Math.min(modeSince, started);
+    }
     if (reduced) draw(modeSince);
     else raf = requestAnimationFrame(tick);
 
@@ -329,12 +357,13 @@ export function QuantField() {
         if (disposed || history.length < 12) return;
         candles = history;
         mode = "live";
-        modeSince = performance.now();
+        const swapped = performance.now();
+        modeSince = swapped - buildStart < BUILD_DONE_MS ? 0 : swapped;
         scale = { ...scale, ready: false };
         resetShown(false);
-        slideStart = modeSince;
+        slideStart = swapped;
         if (reduced) {
-          draw(modeSince);
+          draw(swapped);
           return;
         }
         stopTicker = openHeroTicker(
@@ -386,10 +415,29 @@ export function QuantField() {
   }, []);
 
   return (
-    <canvas
-      ref={ref}
-      aria-hidden="true"
-      className="absolute inset-0 -z-10 h-full w-full font-mono text-ink [accent-color:var(--accent)]"
-    />
+    <>
+      <canvas
+        ref={ref}
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 h-full w-full font-mono text-ink [accent-color:var(--accent)]"
+      />
+      <div
+        ref={tipRef}
+        aria-hidden="true"
+        style={{ display: "none" }}
+        className="pointer-events-none absolute left-0 top-0 z-20 w-[9.5rem] border border-hair bg-[var(--bg)] px-[0.7rem] py-[0.55rem] font-mono text-[0.68rem] leading-[1.6] text-ink"
+      >
+        <div className="mb-[0.35rem] flex items-baseline justify-between gap-2 border-b border-hair pb-[0.35rem]">
+          <span data-f="name" />
+          <span data-f="when" className="text-ink-mute" />
+        </div>
+        {(["O", "H", "L", "C", "chg"] as const).map((key) => (
+          <div key={key} className="flex items-baseline justify-between gap-2">
+            <span className="text-ink-mute">{key}</span>
+            <span data-f={key} />
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

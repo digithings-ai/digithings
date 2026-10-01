@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { BUILD_COLUMNS, BUILD_WORD, columnDelayMs } from "@/lib/hero-build";
 
 /** Pixel lockup for the hero: DIGIQUANT drawn in square cells that grow up from
  *  the baseline, left to right, like bars of a bar chart building the word.
@@ -17,8 +18,8 @@ const GLYPHS: Record<string, string[]> = {
   T: ["#######", "#######", "...##..", "...##..", "...##..", "...##..", "...##..", "...##..", "...##..", "...##.."],
 };
 
-const WORD = "DIGIQUANT";
-const WIDTH = WORD.length * 9 - 2;
+const WORD = BUILD_WORD;
+const WIDTH = BUILD_COLUMNS;
 
 function mulberry32(seed: number): () => number {
   let state = seed;
@@ -45,7 +46,7 @@ function build(): { letters: Cell[]; strays: Cell[] } {
         const px = x + c;
         used.add(`${px},${y}`);
         const glint = rand() < 0.045;
-        const delay = 250 + px * 16 + (9 - y) * 9 + Math.floor(rand() * 140);
+        const delay = columnDelayMs(px) + (9 - y) * 9 + Math.floor(rand() * 140);
         const rise = `dq-rise ${260 + Math.floor(rand() * 220)}ms cubic-bezier(0.2,0.7,0.2,1) ${delay}ms backwards`;
         letters.push({
           x: px,
