@@ -33,11 +33,12 @@ Set secrets from this directory with wrangler secret put (never echo values).
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(20 expressions after the 2026-10-01 Human Gate pause: DigiQuant pipeline
-jobs stay in `src/jobs.ts` with `enabled: false` and are omitted from
-wrangler). twelve-x-new-york stays weekday-only on `17 12 * * MON-FRI`.
-Resume: set those jobs `enabled: true` and restore wrangler from
-`uniqueEnabledCrons()`.
+(6 expressions after the 2026-10-01 Human Gate pause + Path A: DigiQuant
+pipeline jobs — including checkpoint-archive `30 13 * * *` wired to
+digiquant-runner — stay in `src/jobs.ts` with `enabled: false` and are
+omitted from wrangler). twelve-x-new-york stays weekday-only on
+`17 12 * * MON-FRI` when resumed. Resume: set those jobs `enabled: true`
+and restore wrangler from `uniqueEnabledCrons()`.
 
 ## Local
 
