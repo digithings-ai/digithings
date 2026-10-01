@@ -23,6 +23,8 @@ export type GatedStep = {
   always?: boolean;
   /** Skip unless this path exists under the image workdir. */
   when_file?: string;
+  /** Cap this step at min(step_timeout_seconds, remaining job deadline). */
+  step_timeout_seconds?: number;
 };
 
 export type CommandStep = ArgvStep | GatedStep;
@@ -35,6 +37,18 @@ export type CommandSpec = {
   market_backend?: "r2";
   /** Non-secret literals baked into the child env. Never put tokens here. */
   extra_env?: Record<string, string>;
+  /** Relative path of the pipeline env file copied into the image. */
+  pipeline_env?: string;
+  /** Job args copied into the child as UPPER_SNAKE names. */
+  export_args?: string[];
+  /** Set GITHUB_RUN_ID to the runner run id so the chain checkpoint thread matches. */
+  checkpoint_run_id?: boolean;
+  /** Directory uploaded under pipeline-runs/<command>/<run_id>/. */
+  publish_dir?: string;
+  /** Publish that directory on success and on chain failure. */
+  publish_always?: boolean;
+  /** Arg whose value is an R2 prefix staged for the child as local paths. */
+  stage_r2_prefix_arg?: string;
   env: string[];
   steps: CommandStep[];
   publish?: string[];

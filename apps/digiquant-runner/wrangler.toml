@@ -17,10 +17,14 @@
 #                              — execution-cron-check only. Missing names fail
 #                                the probe closed. Not LLM or digikey keys.
 #
-# Not on this Worker: broker credentials, Alpaca keys, provider keys.
-# Phase 2 does not add OPENROUTER_API_KEY, DIGIQUANT_DIGIKEY_API_KEY, or
-# LANGSMITH_API_KEY. Those stay with the house run (Phase 3).
-# One container class. Nautilus stays on this image; it is not a second class.
+# Not on this Worker: broker credentials, Alpaca keys, FRED_API_KEY, GH_ISSUE_TOKEN.
+# Phase 3 forwards these into the container for house-run only. The
+# allocation-shadow command allowlist stays empty. Do not commit values.
+#   DIGIQUANT_DIGIKEY_API_KEY, OPENROUTER_API_KEY, CHEAPERINFERENCE_API_KEY,
+#   CHEAPERINFERENCE_API_BASE (optional), LANGSMITH_API_KEY
+# One container class. instance_type stays standard-2. max_instances stays 1.
+# Nautilus stays on this image; it is not a second class.
+# ARCHIVE is the house-run skip ledger on the existing digithings-archive bucket.
 name = "digiquant-runner"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -45,3 +49,7 @@ class_name = "DigiQuantRunnerContainer"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DigiQuantRunnerContainer"]
+
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "digithings-archive"

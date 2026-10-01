@@ -49,7 +49,12 @@ _BASELINE_ENV = (
 _FORBIDDEN_ENV = frozenset({"RUNNER_AUTH_TOKEN", "GH_ISSUE_TOKEN"})
 
 _lock = threading.Lock()
-_current: dict[str, str | int] = {"run_id": "", "pgid": 0}
+_current: dict[str, str | int] = {
+    "run_id": "",
+    "pgid": 0,
+    "command": "",
+    "run_date": "",
+}
 
 
 def commands_file() -> Path:
@@ -77,6 +82,7 @@ class StepPlan(NamedTuple):
     argv: list[str]
     continue_on_error: bool = False
     always: bool = False
+    step_timeout_seconds: int | None = None
 
 
 def _utc_today(today: str | None) -> str:
@@ -116,10 +122,13 @@ def _resolve_step(
         argv.append(_arg_value(provided, str(append)))
     if step.get("append_utc_date"):
         argv.append(today)
+    cap_raw = step.get("step_timeout_seconds")
+    cap = cap_raw if isinstance(cap_raw, int) and cap_raw > 0 else None
     return StepPlan(
         argv,
         continue_on_error=bool(step.get("continue_on_error")),
         always=bool(step.get("always")),
+        step_timeout_seconds=cap,
     )
 
 
@@ -178,14 +187,76 @@ def classify_step_exit(
     return True, code
 
 
+def _yaml_scalar(raw: str) -> str:
+    if not raw:
+        return ""
+    if raw[0] in {'"', "'"}:
+        quote = raw[0]
+        end = raw.find(quote, 1)
+        if end != -1:
+            return raw[1:end]
+        return raw.strip(quote)
+    if " #" in raw:
+        raw = raw.split(" #", 1)[0]
+    return raw.strip()
+
+
+def load_pipeline_env(text: str) -> dict[str, str]:
+    """Parse the `env:` map. Stdlib only — the unit test stays PyYAML-free."""
+    out: dict[str, str] = {}
+    in_env = False
+    for line in text.splitlines():
+        if not in_env:
+            if line.strip() == "env:":
+                in_env = True
+            continue
+        if not line.strip():
+            continue
+        if line[:1] not in (" ", "\t"):
+            break
+        stripped = line.strip()
+        if stripped.startswith("#") or ":" not in stripped:
+            continue
+        key, _, raw = stripped.partition(":")
+        key = key.strip()
+        if not key:
+            continue
+        out[key] = _yaml_scalar(raw.strip())
+    return out
+
+
+def _pipeline_env_for(spec: dict[str, Any], workdir: Path | None = None) -> dict[str, str]:
+    rel = spec.get("pipeline_env")
+    if not isinstance(rel, str) or not rel.strip():
+        return {}
+    roots = [workdir or WORKDIR, Path(__file__).resolve().parents[3]]
+    for root in roots:
+        path = root / rel
+        if path.is_file():
+            return load_pipeline_env(path.read_text(encoding="utf-8"))
+    return {}
+
+
+def step_wait_seconds(remaining: float, step_timeout_seconds: int | None) -> float:
+    """Cap one step at min(step timeout, remaining job deadline)."""
+    if step_timeout_seconds is None:
+        return remaining
+    return min(float(step_timeout_seconds), remaining)
+
+
 def build_child_env(
     command: str,
     *,
     run_id: str,
     commands: dict[str, Any] | None = None,
     environ: dict[str, str] | None = None,
+    args: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Env for one command. Never includes Worker auth tokens."""
+    """Env for one command. Never includes Worker auth tokens.
+
+    Literals (`extra_env`, pipeline file) fill first. A non-empty allowlisted
+    Worker value wins, so a secret API base overrides the catalog literal.
+    """
     catalog = commands if commands is not None else load_commands()
     spec = catalog.get(command)
     if spec is None:
@@ -196,6 +267,14 @@ def build_child_env(
         value = source.get(name, "")
         if value and name not in _FORBIDDEN_ENV:
             child[name] = value
+    for name, value in (spec.get("extra_env") or {}).items():
+        if name in _FORBIDDEN_ENV or not isinstance(value, str) or not value:
+            continue
+        child[str(name)] = value
+    for name, value in _pipeline_env_for(spec).items():
+        if name in _FORBIDDEN_ENV or not value:
+            continue
+        child[name] = value
     for name in spec.get("env", []):
         if name in _FORBIDDEN_ENV:
             continue
@@ -211,14 +290,220 @@ def build_child_env(
             child["SUPABASE_SERVICE_ROLE_KEY"] = core_key
     if spec.get("market_backend") == "r2":
         child["DIGIQUANT_MARKET_DATA_BACKEND"] = "r2"
-    for name, value in (spec.get("extra_env") or {}).items():
-        if name in _FORBIDDEN_ENV or not isinstance(value, str) or not value:
+    provided = args or {}
+    for arg_name in spec.get("export_args") or []:
+        exported = str(arg_name).upper()
+        if exported in _FORBIDDEN_ENV:
             continue
-        child[str(name)] = value
+        value = str(provided.get(str(arg_name), "")).strip()
+        if value:
+            child[exported] = value
+    if spec.get("checkpoint_run_id"):
+        child["GITHUB_RUN_ID"] = run_id
     child["RUN_ID"] = run_id
     child.pop("RUNNER_AUTH_TOKEN", None)
     child.pop("GH_ISSUE_TOKEN", None)
     return child
+
+
+def interrupted_body(run_id: str, run_date: str) -> dict[str, str]:
+    return {"resume_run_id": run_id, "run_date": run_date}
+
+
+def interrupted_key(run_date: str) -> str:
+    return f"pipeline-runs/house-run/{run_date}/interrupted.json"
+
+
+_PRODUCER_KEYS = ("source_workflow", "producer_workflow", "producer", "workflow")
+
+
+def producer_name(payload: dict[str, Any]) -> str | None:
+    """Workflow name carried on the artifact, when the JSON has one."""
+    for key in _PRODUCER_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def append_shadow_flags(
+    argv: list[str],
+    artifact_paths: list[Path],
+    *,
+    source_branch: str = "",
+) -> list[str]:
+    """Append local artifact paths. --source-workflow only if the JSON names one."""
+    out = list(argv)
+    producer: str | None = None
+    for path in artifact_paths:
+        out.extend(["--artifact", str(path)])
+        if producer is not None or not path.is_file():
+            continue
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(loaded, dict):
+            producer = producer_name(loaded)
+    if producer:
+        out.extend(["--source-workflow", producer])
+    branch = source_branch.strip()
+    if branch:
+        out.extend(["--source-branch", branch])
+    return out
+
+
+def _r2_client() -> tuple[Any, str] | None:
+    account = os.environ.get("R2_ACCOUNT_ID", "").strip()
+    bucket = os.environ.get("R2_BUCKET", "").strip()
+    access = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
+    secret = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
+    if not (account and bucket and access and secret):
+        return None
+    import boto3  # deferred — same pattern as digiquant.ops.checkpoint_archive
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
+        aws_access_key_id=access,
+        aws_secret_access_key=secret,
+    )
+    return client, bucket
+
+
+def _require_r2() -> tuple[Any, str]:
+    found = _r2_client()
+    if found is None:
+        raise RuntimeError("missing R2 credentials for publish")
+    return found
+
+
+def _put_r2_bytes(key: str, body: bytes) -> None:
+    client, bucket = _require_r2()
+    client.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/json")
+
+
+def upload_interrupted(run_id: str, run_date: str) -> None:
+    if not run_date:
+        return
+    payload = json.dumps(interrupted_body(run_id, run_date)).encode("utf-8")
+    _put_r2_bytes(interrupted_key(run_date), payload)
+
+
+def _upload_interrupted_best_effort(run_id: str, run_date: str) -> None:
+    if not run_id or not run_date:
+        return
+    errors: list[BaseException] = []
+
+    def _target() -> None:
+        try:
+            upload_interrupted(run_id, run_date)
+        except BaseException as exc:  # noqa: BLE001 — best-effort; still exit 143
+            errors.append(exc)
+
+    thread = threading.Thread(target=_target, name="interrupted-upload", daemon=True)
+    thread.start()
+    thread.join(10)
+    if errors:
+        sys.stderr.write(
+            "digiquant-runner interrupted upload failed: "
+            f"{type(errors[0]).__name__}\n"
+        )
+
+
+def _read_interrupted_resume(run_date: str) -> str | None:
+    if not run_date:
+        return None
+    found = _r2_client()
+    if found is None:
+        return None
+    client, bucket = found
+    try:
+        obj = client.get_object(Bucket=bucket, Key=interrupted_key(run_date))
+        raw = obj["Body"].read()
+    except Exception:
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    resume = payload.get("resume_run_id")
+    if isinstance(resume, str) and resume.strip():
+        return resume.strip()
+    return None
+
+
+def _list_prefix_keys(client: Any, bucket: str, prefix: str) -> list[str]:
+    keys: list[str] = []
+    token: str | None = None
+    while True:
+        kwargs: dict[str, Any] = {"Bucket": bucket, "Prefix": prefix}
+        if token:
+            kwargs["ContinuationToken"] = token
+        page = client.list_objects_v2(**kwargs)
+        for item in page.get("Contents") or []:
+            key = item.get("Key")
+            if isinstance(key, str):
+                keys.append(key)
+        if not page.get("IsTruncated"):
+            break
+        token = page.get("NextContinuationToken")
+        if not isinstance(token, str) or not token:
+            break
+    return keys
+
+
+def stage_shadow_prefix(prefix: str, dest: Path) -> list[Path]:
+    """Download shadow-allocation JSON into dest. Parent process only."""
+    client, bucket = _require_r2()
+    dest.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+    for key in _list_prefix_keys(client, bucket, prefix):
+        name = Path(key).name
+        if not (name.startswith("shadow-allocation-") and name.endswith(".json")):
+            continue
+        target = dest / name
+        client.download_file(bucket, key, str(target))
+        paths.append(target)
+    paths.sort()
+    return paths
+
+
+def _prepare_shadow_plans(
+    run_id: str,
+    args: dict[str, str],
+    spec: dict[str, Any],
+    plans: list[StepPlan],
+) -> list[StepPlan]:
+    prefix_arg = spec.get("stage_r2_prefix_arg")
+    if not isinstance(prefix_arg, str) or not prefix_arg or not plans:
+        return plans
+    prefix = str(args.get(prefix_arg, "")).strip()
+    if not prefix:
+        return plans
+    if "/" in run_id or run_id.startswith("."):
+        raise RuntimeError("invalid run_id")
+    staged = stage_shadow_prefix(prefix, Path("/tmp/shadow-in") / run_id)
+    first = plans[0]
+    flagged = append_shadow_flags(
+        first.argv,
+        staged,
+        source_branch=str(args.get("source_branch", "")),
+    )
+    updated = list(plans)
+    updated[0] = first._replace(argv=flagged)
+    return updated
+
+
+def _apply_resume(spec: dict[str, Any], args: dict[str, str], child_env: dict[str, str]) -> None:
+    export_args = spec.get("export_args") or []
+    if "resume_run_id" not in export_args or child_env.get("RESUME_RUN_ID"):
+        return
+    resumed = _read_interrupted_resume(str(args.get("run_date", "")).strip())
+    if resumed:
+        child_env["RESUME_RUN_ID"] = resumed
 
 
 def _now() -> str:
@@ -328,27 +613,36 @@ def _kill_group(proc: subprocess.Popen[bytes]) -> None:
         proc.kill()
 
 
-def _publish(command: str, run_id: str, paths: list[str]) -> None:
-    """Upload step outputs to R2. boto3 is imported here so the unit test stays stdlib-only."""
-    account = os.environ.get("R2_ACCOUNT_ID", "").strip()
-    bucket = os.environ.get("R2_BUCKET", "").strip()
-    access = os.environ.get("R2_ACCESS_KEY_ID", "").strip()
-    secret = os.environ.get("R2_SECRET_ACCESS_KEY", "").strip()
-    if not (account and bucket and access and secret):
-        raise RuntimeError("missing R2 credentials for publish")
-    import boto3  # deferred — same pattern as digiquant.ops.checkpoint_archive
+def _resolve_publish_path(raw_path: str) -> Path:
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    return WORKDIR / path
 
-    client = boto3.client(
-        "s3",
-        endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
-        aws_access_key_id=access,
-        aws_secret_access_key=secret,
-    )
+
+def _publish_entries(command: str, run_id: str, paths: list[str]) -> list[tuple[Path, str]]:
+    """File keys keep the basename. A directory uses paths relative to that root."""
+    entries: list[tuple[Path, str]] = []
     for raw_path in paths:
-        path = Path(raw_path)
+        path = _resolve_publish_path(raw_path)
+        if path.is_dir():
+            files = sorted(item for item in path.rglob("*") if item.is_file())
+            if not files:
+                raise RuntimeError(f"publish directory empty: {path}")
+            for file in files:
+                rel = file.relative_to(path).as_posix()
+                entries.append((file, f"pipeline-runs/{command}/{run_id}/{rel}"))
+            continue
+        entries.append((path, f"pipeline-runs/{command}/{run_id}/{path.name}"))
+    return entries
+
+
+def _publish(command: str, run_id: str, paths: list[str]) -> None:
+    """Upload step outputs to R2. boto3 stays inside _r2_client so unit tests are stdlib-only."""
+    client, bucket = _require_r2()
+    for path, key in _publish_entries(command, run_id, paths):
         if not path.is_file():
             raise RuntimeError(f"publish file missing: {path}")
-        key = f"pipeline-runs/{command}/{run_id}/{path.name}"
         client.upload_file(str(path), bucket, key)
 
 
@@ -387,8 +681,20 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
         "reason": None,
     }
     _write_status(run_id, status)
-    plans = plans_for(command, args)
-    child_env = build_child_env(command, run_id=run_id)
+    try:
+        plans = _prepare_shadow_plans(run_id, args, spec, plans_for(command, args))
+    except Exception as exc:  # stage failure fails the run; do not leak secrets
+        status["status"] = "failed"
+        status["exit_code"] = 1
+        status["finished_at"] = _now()
+        status["reason"] = type(exc).__name__
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write(f"\nstage failed: {type(exc).__name__}\n")
+        _write_status(run_id, status)
+        _clear_current(run_id)
+        return
+    child_env = build_child_env(command, run_id=run_id, args=args)
+    _apply_resume(spec, args, child_env)
     deadline = time.monotonic() + max(timeout_seconds, 0)
     exit_code = 0
     reason: str | None = None
@@ -404,7 +710,8 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
                 reason = "timeout"
                 exit_code = 124
                 break
-            code, timed_out = _wait_argv(plan.argv, child_env, log, remaining)
+            limit = step_wait_seconds(remaining, plan.step_timeout_seconds)
+            code, timed_out = _wait_argv(plan.argv, child_env, log, limit)
             if timed_out:
                 outcome = "timed_out"
                 reason = "timeout"
@@ -420,9 +727,20 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
             )
             if hard_failure:
                 outcome = "failed"
-    if outcome == "succeeded" and spec.get("publish"):
+    publish_paths = [str(path) for path in (spec.get("publish") or [])]
+    publish_dir = spec.get("publish_dir")
+    if isinstance(publish_dir, str) and publish_dir:
+        resolved = _resolve_publish_path(publish_dir)
+        if outcome == "succeeded" or resolved.exists():
+            publish_paths.append(publish_dir)
+    always_publish = bool(spec.get("publish_always"))
+    if always_publish:
+        should_publish = outcome in {"succeeded", "failed", "timed_out"} and bool(publish_paths)
+    else:
+        should_publish = outcome == "succeeded" and bool(publish_paths)
+    if should_publish:
         try:
-            _publish_bounded(command, run_id, [str(path) for path in spec["publish"]])
+            _publish_bounded(command, run_id, publish_paths)
         except Exception as exc:  # publish failure fails the run; do not leak secrets
             outcome = "failed"
             exit_code = 1
@@ -434,9 +752,15 @@ def _run_steps(run_id: str, command: str, args: dict[str, str], timeout_seconds:
     status["finished_at"] = _now()
     status["reason"] = reason
     _write_status(run_id, status)
+    _clear_current(run_id)
+
+
+def _clear_current(run_id: str) -> None:
     with _lock:
         if _current.get("run_id") == run_id:
             _current["run_id"] = ""
+            _current["command"] = ""
+            _current["run_date"] = ""
 
 
 def _on_sigterm(signum: int, _frame: object) -> None:
@@ -444,6 +768,8 @@ def _on_sigterm(signum: int, _frame: object) -> None:
     with _lock:
         run_id = str(_current.get("run_id") or "")
         pgid = int(_current.get("pgid") or 0)
+        command = str(_current.get("command") or "")
+        run_date = str(_current.get("run_date") or "")
     if run_id:
         existing = _read_status(run_id) or {
             "run_id": run_id,
@@ -457,6 +783,8 @@ def _on_sigterm(signum: int, _frame: object) -> None:
         existing["reason"] = "sigterm"
         existing["finished_at"] = _now()
         _write_status(run_id, existing)
+    if command == "house-run":
+        _upload_interrupted_best_effort(run_id, run_date)
     if pgid:
         try:
             os.killpg(pgid, signal.SIGTERM)
@@ -569,6 +897,8 @@ class _Handler(BaseHTTPRequestHandler):
                 },
             )
             _current["run_id"] = run_id
+            _current["command"] = command
+            _current["run_date"] = string_args.get("run_date", "")
         thread = threading.Thread(
             target=_run_steps,
             args=(run_id, command, string_args, timeout),

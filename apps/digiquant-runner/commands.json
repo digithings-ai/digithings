@@ -109,5 +109,78 @@
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/export_sdca_macro.py"], "when_file": "digiquant/scripts/export_sdca_macro.py"},
       ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/generate_tearsheets.py", "--from-supabase", "--push-supabase", "--signal-delay-days", "3", "--cache-dir", "digiquant/data/price-history"]
     ]
+  },
+  "house-run": {
+    "timeout_seconds": 14400,
+    "concurrency": "digiquant-pipeline",
+    "code_ref": "main",
+    "alias_supabase": true,
+    "pipeline_env": ".github/digiquant-pipeline.yml",
+    "checkpoint_run_id": true,
+    "export_args": ["refresh_scope", "run_date", "dry_run", "resume_run_id"],
+    "publish_dir": "artifacts",
+    "publish_always": true,
+    "extra_env": {
+      "DIGIKEY_URL": "https://key.digithings.ai",
+      "DIGISEARCH_URL": "https://search.digithings.ai",
+      "CHEAPERINFERENCE_API_BASE": "https://api.cheaperinference.com/v1",
+      "LANGSMITH_PROJECT": "digiquant-baseline",
+      "DIGILLM_PROVIDER_MAX_ATTEMPTS": "2",
+      "DIGILLM_EMPTY_RETRY_MAX": "1",
+      "DIGILLM_MAX_CONCURRENT_CALLS": "8",
+      "DIGIQUANT_SHADOW_ARTIFACT_MODE": "export",
+      "DIGIQUANT_SHADOW_ARTIFACT_DIR": "artifacts"
+    },
+    "env": [
+      "DIGIQUANT_DIGIKEY_API_KEY",
+      "OPENROUTER_API_KEY",
+      "CHEAPERINFERENCE_API_KEY",
+      "CHEAPERINFERENCE_API_BASE",
+      "CORE_POSTGRES_URI",
+      "LANGSMITH_API_KEY",
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CORE_SUPABASE_URL",
+      "CORE_SUPABASE_SERVICE_KEY"
+    ],
+    "steps": [
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-macro", "--sources", "fedprob", "--manifest", "digiquant/src/digiquant/research/config/macro_series.yaml", "--dry-run"],
+        "when_arg": "dry_run",
+        "equals": "true",
+        "continue_on_error": true
+      },
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "-m", "digiquant", "prices", "fetch-macro", "--sources", "fedprob", "--manifest", "digiquant/src/digiquant/research/config/macro_series.yaml", "--supabase"],
+        "when_arg_empty": "dry_run",
+        "continue_on_error": true
+      },
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/research/validate-providers.py", "--skip-dry-run"],
+        "step_timeout_seconds": 600
+      },
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "/opt/runner/wake_stack.py"],
+        "continue_on_error": true
+      },
+      ["uv", "run", "--frozen", "--no-sync", "python", "/opt/runner/web_search_preflight.py"],
+      {
+        "argv": ["uv", "run", "--frozen", "--no-sync", "python", "/opt/runner/house_chain_step.py"],
+        "step_timeout_seconds": 13800
+      }
+    ]
+  },
+  "allocation-shadow": {
+    "timeout_seconds": 600,
+    "concurrency": "digiquant-allocation-shadow",
+    "code_ref": "main",
+    "stage_r2_prefix_arg": "artifact_prefix",
+    "env": [],
+    "steps": [
+      ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/research/check_allocation_shadow_isolation.py", "--output", "/tmp/allocation-shadow-isolation-report.json"]
+    ],
+    "publish": ["/tmp/allocation-shadow-isolation-report.json"]
   }
 }

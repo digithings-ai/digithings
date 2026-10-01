@@ -59,6 +59,16 @@ def main() -> int:
 
     _check_phase2(commands)
     _check_busy_gate_and_publish_bound()
+    _check_house_run(commands)
+    for mod_name in (
+        "house_chain_step_test",
+        "wake_stack_test",
+        "web_search_preflight_test",
+    ):
+        mod = __import__(mod_name)
+        code = mod.main()
+        if code not in (0, None):
+            raise SystemExit(f"{mod_name} failed: {code}")
     print("ok")
     return 0
 
@@ -270,8 +280,184 @@ def _check_phase2(commands: dict[str, Any]) -> None:
         raise SystemExit("image must install nautilus and copy the probe wrapper")
     if "DigiQuantRunnerNautilusContainer" in wrangler:
         raise SystemExit("nautilus stays on the phase 1 class")
+    if wrangler.count("[[containers]]") != 1:
+        raise SystemExit("runner must keep a single container class")
+    if 'instance_type = "standard-2"' not in wrangler or "max_instances = 1" not in wrangler:
+        raise SystemExit("runner must stay on standard-2 with max_instances 1")
+    if "standard-3" in wrangler or "standard-4" in wrangler:
+        raise SystemExit("runner must not add a larger instance type")
+    if 'binding = "ARCHIVE"' not in wrangler or 'bucket_name = "digithings-archive"' not in wrangler:
+        raise SystemExit("house ledger binding ARCHIVE on digithings-archive is required")
+    runner_ts = (root / "apps/digiquant-runner/src/runner.ts").read_text(encoding="utf-8")
+    if 'sleepAfter = "2m"' not in runner_ts or '"30m"' not in runner_ts:
+        raise SystemExit("idle sleepAfter stays 2m and busy window stays 30m")
     if ignore.count("!scripts/execution_cron_check.py") != 1:
         raise SystemExit("probe wrapper must be re-included in .dockerignore")
+
+
+def _check_house_run(commands: dict[str, Any]) -> None:
+    text = 'env:\n  DIGIQUANT_MODEL_TIER: "cheap"\n  DIGI_CHECKPOINTER: postgres\n'
+    got = exec_job.load_pipeline_env(text)
+    if got["DIGIQUANT_MODEL_TIER"] != "cheap" or got["DIGI_CHECKPOINTER"] != "postgres":
+        raise SystemExit(f"pipeline env parse drifted: {got}")
+    commented = 'env:\n  DIGI_CHECKPOINTER: postgres          # resume\n  LANGSMITH_TRACING: "true"\n'
+    parsed = exec_job.load_pipeline_env(commented)
+    if parsed["DIGI_CHECKPOINTER"] != "postgres" or parsed["LANGSMITH_TRACING"] != "true":
+        raise SystemExit(f"pipeline comment parse drifted: {parsed}")
+
+    saved = {name: os.environ.get(name) for name in ("RUNNER_AUTH_TOKEN", "GH_ISSUE_TOKEN", "CHEAPERINFERENCE_API_BASE")}
+    os.environ["RUNNER_AUTH_TOKEN"] = "sekret"
+    os.environ["GH_ISSUE_TOKEN"] = "nope"
+    os.environ.pop("CHEAPERINFERENCE_API_BASE", None)
+    try:
+        env = exec_job.build_child_env(
+            "house-run",
+            run_id="run-abc",
+            commands=commands,
+            args={"run_date": "2026-09-30", "refresh_scope": "none"},
+        )
+    finally:
+        for name, previous in saved.items():
+            if previous is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = previous
+    if env.get("GITHUB_RUN_ID") != "run-abc":
+        raise SystemExit(f"missing GITHUB_RUN_ID: {env.get('GITHUB_RUN_ID')}")
+    if "RUNNER_AUTH_TOKEN" in env or "GH_ISSUE_TOKEN" in env:
+        raise SystemExit("worker token leaked into house child env")
+    if env.get("RUN_DATE") != "2026-09-30" or env.get("REFRESH_SCOPE") != "none":
+        raise SystemExit(f"export_args drifted: {env.get('RUN_DATE')} {env.get('REFRESH_SCOPE')}")
+    if env.get("DIGIQUANT_MODEL_TIER") != "cheap" or env.get("DIGI_CHECKPOINTER") != "postgres":
+        raise SystemExit(f"pipeline file not loaded: {env.get('DIGIQUANT_MODEL_TIER')}")
+    if env.get("CHEAPERINFERENCE_API_BASE") != "https://api.cheaperinference.com/v1":
+        raise SystemExit(f"literal API base missing: {env.get('CHEAPERINFERENCE_API_BASE')}")
+    if env.get("DIGILLM_MAX_CONCURRENT_CALLS") != "8":
+        raise SystemExit("house literal caps missing")
+
+    os.environ["CHEAPERINFERENCE_API_BASE"] = "https://override.example/v1"
+    try:
+        overridden = exec_job.build_child_env("house-run", run_id="run-abc", commands=commands)
+    finally:
+        if saved["CHEAPERINFERENCE_API_BASE"] is None:
+            os.environ.pop("CHEAPERINFERENCE_API_BASE", None)
+        else:
+            os.environ["CHEAPERINFERENCE_API_BASE"] = saved["CHEAPERINFERENCE_API_BASE"]
+    if overridden.get("CHEAPERINFERENCE_API_BASE") != "https://override.example/v1":
+        raise SystemExit("non-empty worker API base must win over the literal")
+
+    secret_names = (
+        "OPENROUTER_API_KEY",
+        "CHEAPERINFERENCE_API_KEY",
+        "DIGIQUANT_DIGIKEY_API_KEY",
+        "LANGSMITH_API_KEY",
+        "CORE_POSTGRES_URI",
+        "CORE_SUPABASE_URL",
+        "CORE_SUPABASE_SERVICE_KEY",
+        "R2_SECRET_ACCESS_KEY",
+    )
+    prior = {name: os.environ.get(name) for name in secret_names}
+    for name in secret_names:
+        os.environ[name] = "sekret"
+    try:
+        shadow = exec_job.build_child_env("allocation-shadow", run_id="s1", commands=commands)
+    finally:
+        for name, previous in prior.items():
+            if previous is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = previous
+    for name in (
+        "OPENROUTER_API_KEY",
+        "CORE_SUPABASE_URL",
+        "SUPABASE_URL",
+        "LANGSMITH_API_KEY",
+        "CORE_POSTGRES_URI",
+        "R2_SECRET_ACCESS_KEY",
+        "GITHUB_RUN_ID",
+    ):
+        if name in shadow:
+            raise SystemExit(f"shadow child leaked {name}")
+
+    if exec_job.interrupted_body("run-abc", "2026-09-30") != {
+        "resume_run_id": "run-abc",
+        "run_date": "2026-09-30",
+    }:
+        raise SystemExit("interrupted body drifted")
+    if exec_job.interrupted_key("2026-09-30") != "pipeline-runs/house-run/2026-09-30/interrupted.json":
+        raise SystemExit("interrupted key drifted")
+
+    dry = exec_job.steps_for(
+        "house-run",
+        {"dry_run": "true", "run_date": "2026-09-30", "refresh_scope": "none"},
+        commands,
+    )
+    live = exec_job.steps_for(
+        "house-run",
+        {"run_date": "2026-09-30", "refresh_scope": "none"},
+        commands,
+    )
+    fed_dry = next(step for step in dry if "fedprob" in step)
+    fed_live = next(step for step in live if "fedprob" in step)
+    if "--dry-run" not in fed_dry or "--supabase" in fed_dry:
+        raise SystemExit(f"dry_run must select fedprob --dry-run, got {fed_dry}")
+    if "--supabase" not in fed_live or "--dry-run" in fed_live:
+        raise SystemExit(f"empty dry_run must select fedprob --supabase, got {fed_live}")
+
+    plans = exec_job.plans_for(
+        "house-run",
+        {"run_date": "2026-09-30", "refresh_scope": "none"},
+        commands,
+    )
+    validate = next(plan for plan in plans if any(part.endswith("validate-providers.py") for part in plan.argv))
+    chain = next(plan for plan in plans if any(part.endswith("house_chain_step.py") for part in plan.argv))
+    if validate.step_timeout_seconds != 600 or chain.step_timeout_seconds != 13800:
+        raise SystemExit(
+            f"step caps drifted: validate={validate.step_timeout_seconds} chain={chain.step_timeout_seconds}"
+        )
+    if exec_job.step_wait_seconds(10000, 600) != 600:
+        raise SystemExit("step cap must win when the job deadline is longer")
+    if exec_job.step_wait_seconds(30, 600) != 30:
+        raise SystemExit("remaining job deadline must win when it is shorter")
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        nested = root / "sub"
+        nested.mkdir()
+        (root / "run.log").write_text("hi", encoding="utf-8")
+        artifact = nested / "shadow-allocation-x.json"
+        artifact.write_text(
+            '{"source_workflow": "Pipeline: dashboard research"}\n',
+            encoding="utf-8",
+        )
+        entries = exec_job._publish_entries("house-run", "run-1", [str(root)])
+        keys = [key for _path, key in entries]
+        if "pipeline-runs/house-run/run-1/run.log" not in keys:
+            raise SystemExit(f"directory publish missed run.log: {keys}")
+        if "pipeline-runs/house-run/run-1/sub/shadow-allocation-x.json" not in keys:
+            raise SystemExit(f"directory publish missed nested artifact: {keys}")
+        flagged = exec_job.append_shadow_flags(
+            ["python", "check.py"],
+            [artifact],
+            source_branch="main",
+        )
+        if flagged[flagged.index("--artifact") + 1] != str(artifact):
+            raise SystemExit(f"artifact flag drifted: {flagged}")
+        if flagged[flagged.index("--source-workflow") + 1] != "Pipeline: dashboard research":
+            raise SystemExit(f"producer flag drifted: {flagged}")
+        if flagged[flagged.index("--source-branch") + 1] != "main":
+            raise SystemExit(f"source branch flag drifted: {flagged}")
+        bare = root / "shadow-allocation-bare.json"
+        bare.write_text('{"schema_version": "1.0"}\n', encoding="utf-8")
+        no_producer = exec_job.append_shadow_flags(["python", "check.py"], [bare])
+        if "--source-workflow" in no_producer:
+            raise SystemExit("missing producer must not invent a workflow name")
+
+    source = Path(exec_job.__file__).read_text(encoding="utf-8")
+    if "Pipeline: digiquant research" in source:
+        raise SystemExit("exec_job must not hardcode the house workflow name")
 
 
 if __name__ == "__main__":
