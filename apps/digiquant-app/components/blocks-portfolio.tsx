@@ -9,7 +9,11 @@ import { Badge, BulletList, Prose, StateBlock, type BadgeTone } from './ui';
 
 const num = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(d));
 const usd = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-const bp = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(0)} bp`);
+const bp = (v: number | null | undefined) => {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const r = Math.round(v);
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r)} bp`;
+};
 const withheld = (what: string) => <StateBlock kind="empty" title="Withheld." why={`${what} is not in the response yet; nothing is estimated.`} />;
 
 /* ---- Holdings: grouped by sleeve, bar weights, cash and total rows ---- */
@@ -21,11 +25,11 @@ function holdingsRows(d: Book): HRow[] {
   for (const r of pos) groups.set(r.sleeve ?? 'Unassigned', [...(groups.get(r.sleeve ?? 'Unassigned') ?? []), r]);
   const out: HRow[] = [];
   for (const [sleeve, rs] of groups) {
-    out.push({ kind: 'grp', key: `g:${sleeve}`, label: `${sleeve} · ${rs.length} ${rs.length === 1 ? 'name' : 'names'}`, w: rs.reduce((a, r) => a + r.scaled_weight_pct, 0) });
+    out.push({ kind: 'grp', key: `g:${sleeve}`, label: `${sleeve} · ${rs.length} ${rs.length === 1 ? 'name' : 'names'}`, w: rs.every((r) => Number.isFinite(r.scaled_weight_pct)) ? rs.reduce((a, r) => a + r.scaled_weight_pct, 0) : null });
     rs.forEach((r) => out.push({ kind: 'pos', key: r.ticker, r }));
   }
   if (d.cash_value != null) out.push({ kind: 'cash', key: 'cash', label: 'Cash', v: d.cash_value });
-  if (d.book_value != null) out.push({ kind: 'total', key: 'total', label: 'Book total', v: d.book_value, w: 100 });
+  if (d.book_value != null) out.push({ kind: 'total', key: 'total', label: 'Book total', v: d.book_value });
   return out;
 }
 
@@ -73,7 +77,7 @@ export function MoversBlock() {
   return (
     <Block<Book> no="11" label="Book · movers" route="/allocations" asOf={(d) => d.book_as_of}>
       {(d) => {
-        const rows = d.rows.filter((r) => r.day_return_pct != null).sort((a, b) => (b.day_return_pct as number) - (a.day_return_pct as number));
+        const rows = d.rows.filter((r) => !r.is_cash && Number.isFinite(r.day_return_pct)).sort((a, b) => (b.day_return_pct as number) - (a.day_return_pct as number));
         return rows.length ? (
           <DataTable
             rows={rows}
@@ -116,7 +120,7 @@ export function ThesesBlock() {
     <Block<Theses> no="14" label="Theses" route="/theses">
       {(d) => (
         <>
-          <p className="meta pad">Active <b>{d.counts.active}</b> Watch <b>{d.counts.watch}</b> Exited <b>{d.counts.exited}</b></p>
+          <p className="meta pad">Active <b>{d.counts?.active ?? '—'}</b> Watch <b>{d.counts?.watch ?? '—'}</b> Exited <b>{d.counts?.exited ?? '—'}</b></p>
           <DataTable
             rows={d.theses}
             rowKey={(t) => t.id}
@@ -124,7 +128,7 @@ export function ThesesBlock() {
               { key: 'i', label: 'Id', cell: (t) => t.id },
               { key: 'n', label: 'Thesis', wrap: true, cell: (t) => t.name },
               { key: 's', label: 'State', cell: (t) => <Badge tone={stateTone[t.state] ?? 'plain'}>{t.state}</Badge> },
-              { key: 'v', label: 'Vehicles', cell: (t) => (t.vehicles.length ? t.vehicles.join(' ') : '—') },
+              { key: 'v', label: 'Vehicles', cell: (t) => (t.vehicles?.length ? t.vehicles.join(' ') : '—') },
               { key: 'e', label: 'Evidence', wrap: true, cell: (t) => t.evidence ?? '—' },
               { key: 'k', label: 'Kill condition', wrap: true, cell: (t) => t.kill_condition ?? '—' },
             ]}
@@ -199,14 +203,14 @@ export function DrawdownBlock() {
   );
 }
 
-/** GET /nav-series — most recent NAV points, newest first. */
+/** GET /nav-series — most recent NAV points (date-sorted, last 60), newest first. */
 export function NavTableBlock() {
   return (
     <Block<NavSeries> no="18" label="NAV · by date" route="/nav-series" asOf={(d) => d.tip.date}>
       {(d) => (
         <DataTable
-          rows={[...d.points].reverse()}
-          rowKey={(p) => p.date}
+          rows={[...d.points].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 60)}
+          rowKey={(p, i) => `${p.date}:${i}`}
           cols={[
             { key: 'd', label: 'Date', cell: (p) => p.date },
             { key: 'n', label: 'NAV', num: true, cell: (p) => num(p.nav, 3) },
@@ -226,7 +230,7 @@ export function CashLedgerBlock() {
       {(d) => (
         <DataTable
           rows={d.entries}
-          rowKey={(e) => `${e.date}${e.kind}${e.amount}`}
+          rowKey={(e, i) => `${e.date}:${e.kind}:${i}`}
           empty="no cash movements"
           cols={[
             { key: 'd', label: 'Date', cell: (e) => e.date },

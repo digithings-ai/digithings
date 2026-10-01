@@ -85,7 +85,7 @@ export function PerformanceBlock() {
           <KpiGrid items={[
             { label: 'Since inception', value: signed(d.metrics.since_inception_pct), tone: tone(d.metrics.since_inception_pct) },
             { label: `Excess vs ${d.benchmark.ticker}`, value: signed(d.metrics.excess_return_pct), tone: tone(d.metrics.excess_return_pct) },
-            { label: 'Alpha', value: signed(d.metrics.alpha_pct), note: d.metrics.alpha_pct == null ? `needs ≥20 pairs (${d.metrics.overlap_days})` : undefined },
+            { label: 'Alpha', value: signed(d.metrics.alpha_pct), note: d.metrics.alpha_pct == null && d.metrics.overlap_days != null && d.metrics.overlap_days < 20 ? `${d.metrics.overlap_days} overlapping days (needs 20)` : undefined },
             { label: 'Info ratio', value: num(d.metrics.information_ratio) },
             { label: 'Beta', value: num(d.metrics.beta) },
           ]} />
@@ -136,7 +136,7 @@ export function NavSeriesBlock() {
 /** GET /benchmarks */
 export function BenchmarksBlock() {
   return (
-    <Block<Benchmarks> no="07" label="Benchmarks · aligned" route="/benchmarks" asOf={(d) => d.aligned_start}>
+    <Block<Benchmarks> no="07" label="Benchmarks · aligned" route="/benchmarks">
       {(d) => (
         <DataTable
           rows={d.universe}
@@ -167,7 +167,12 @@ const evCols: Col<Ev>[] = [
 export function LedgerBlock() {
   return (
     <Block<Ledger> no="08" label="Ledger · position events" route="/ledger?limit=50">
-      {(d) => (d.events.length ? <DataTable rows={d.events} cols={evCols} rowKey={(r) => `${r.date}${r.ticker}${r.type}`} /> : <p className="note mute">no events in range</p>)}
+      {(d) => (
+        <>
+          <DataTable rows={d.events} cols={evCols} rowKey={(r, i) => `${r.date}:${r.ticker}:${r.type}:${i}`} empty="no events in range" />
+          {d.next_cursor ? <p className="note mute">more events not shown — latest 50 only</p> : null}
+        </>
+      )}
     </Block>
   );
 }
