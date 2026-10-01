@@ -52,6 +52,8 @@ export type CommandSpec = {
   env: string[];
   steps: CommandStep[];
   publish?: string[];
+  /** Uploaded when the file exists. A missing path does not fail the job. */
+  publish_if_present?: string[];
 };
 
 export function loadCommands(json: unknown): Record<string, CommandSpec> {
