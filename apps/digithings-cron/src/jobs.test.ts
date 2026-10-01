@@ -53,6 +53,7 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-primemarket-heartbeat",
   "twelve-x-session-catchup",
   "twelve-x-archive-maintenance",
+  "twelve-x-digisearch-parity",
 ] as const;
 
 const ENABLED_CRONS = [
@@ -92,6 +93,7 @@ const ENABLED_CRONS = [
   "3 6,18 * * *",
   "52 * * * MON-FRI",
   "30 2 * * *",
+  "8 9 * * MON",
 ] as const;
 
 describe("jobsForCron", () => {
@@ -313,5 +315,25 @@ describe("jobsForCron", () => {
       expect(job?.kind).toBe("workflow_dispatch");
       expect(job?.repo).toBe("digithings-ai/twelve-x");
     }
+  });
+
+  it("dispatches weekly twelve-x digisearch parity near Monday 09:00 UTC", () => {
+    const job = JOBS.find((row) => row.id === "twelve-x-digisearch-parity");
+    expect(job).toMatchObject({
+      id: "twelve-x-digisearch-parity",
+      cron: "8 9 * * MON",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "digisearch_parity_check.yml",
+      ref: "develop",
+      enabled: true,
+    });
+    expect(job?.inputs).toBeUndefined();
+    expect(jobsForCron("8 9 * * MON").map((row) => row.id)).toEqual([
+      "twelve-x-digisearch-parity",
+    ]);
+    // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
+    expect(jobsForCron("0 9 * * MON")).toEqual([]);
+    expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
   });
 });

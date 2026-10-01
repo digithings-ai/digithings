@@ -312,6 +312,11 @@ export const JOBS: readonly Job[] = [
   wd("twelve-x-archive-maintenance", "30 2 * * *", TWELVE_X, "archive_maintenance.yml", {
     inputs: { dry_run: "false", dump_before_prune: "true" },
   }),
+  // Prior GHA was `0 9 * * 1` (Mon 09:00 UTC). Minute :08 is the house off-grid
+  // offset (same as twelve-x-market-context-weekly) and does not collide with
+  // house-run-09 at 09:17 (`17 9 * * MON`) or project-enforce-assignment at 09:23.
+  // days input omitted — workflow default 14.
+  wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml"),
 ];
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */

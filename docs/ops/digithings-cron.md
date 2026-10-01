@@ -22,8 +22,10 @@ retries stay disabled. Research + dashboard/portfolio stay fed by the other
 enabled DigiQuant clocks (prices, market-data, metrics, tearsheets, onchain).
 At-open price clocks stay weekday/holiday-sensitive (`MON-FRI` + ET open gate).
 twelve-x FX Hub clocks (`twelve-x-*`) are live `workflow_dispatch` jobs on
-this Worker. Path A traps (`agent-pr-finalizer`, `agent-backlog-snapshot`,
-`refresh-repo-activity`, `project-enforce-assignment`) were restored after
-#4967 with matching YAML (`workflow_dispatch` only; no GHA `schedule:`).
+this Worker, including weekly `twelve-x-digisearch-parity` at `8 9 * * MON`
+(Mon 09:08 UTC; prior GHA `0 9 * * 1`). Path A traps (`agent-pr-finalizer`,
+`agent-backlog-snapshot`, `refresh-repo-activity`, `project-enforce-assignment`)
+were restored after #4967 with matching YAML (`workflow_dispatch` only; no
+GHA `schedule:`).
 Operator full refresh remains manual `workflow_dispatch` / `POST /kick` only.
 GHA `schedule:` stays off.
