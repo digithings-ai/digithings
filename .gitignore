@@ -68,6 +68,9 @@ apps/dashboard/public/dashboard-data.json
 # docs/openapi/ + swagger-ui-dist — never commit the vendored copies).
 apps/digithings-web/public/openapi/
 apps/digithings-web/public/swagger-ui/
+# openwiki visualizer export (scripts/build-digithings.sh writes dist/openwiki
+# on deploy; local preview generates the same tree under public/ so /openwiki works).
+apps/digithings-web/public/openwiki/
 
 
 # Secrets and credentials

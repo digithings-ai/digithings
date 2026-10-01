@@ -109,6 +109,10 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ts-tab-pane { animation: none; }
+  /* The live dot pulses forever, which is precisely the kind of unbounded
+     motion this query exists to stop. The dot itself stays — it still reads as
+     the status mark next to "example" / "live" — only the pulse is dropped. */
+  .ts-live-dot { animation: none; }
 }
 .ts-metrics-table th[scope="row"] { font-weight: 500; color: var(--ink-soft); white-space: nowrap; }
 .ts-metrics-table th[scope="col"] { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute); }
@@ -549,7 +553,7 @@
   .ts-lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.85rem; margin-bottom: 0.5rem; }
   .ts-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 1rem; margin-bottom: 1rem; }
   .ts-card-kind { font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
-  .ts-card { display: flex; flex-direction: column; gap: 0.7rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1rem 1.05rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
+  .ts-card { display: flex; flex-direction: column; gap: 0.7rem; border: 1px solid var(--hair); border-radius: var(--r-md); background: transparent; padding: 1rem 1.05rem; transition: transform 0.25s var(--ease), border-color 0.25s var(--ease); }
   .ts-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.65rem; }
   .ts-card-title { display: flex; align-items: center; gap: 0.65rem; min-width: 0; flex: 1; }
   .ts-card-title-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
@@ -580,7 +584,10 @@
     font-size: 0.68rem;
     letter-spacing: 0.08em;
     text-transform: lowercase;
-    color: var(--accent);
+    /* The shared accent-as-small-text recipe, not the raw accent: at 0.68rem
+       the raw module accent fails AA on paper in light theme (4.14 for
+       accent-digiquant on white). See contrast.contract.test.ts. */
+    color: color-mix(in srgb, var(--accent) 70%, var(--ink));
     user-select: none;
     flex-shrink: 0;
   }

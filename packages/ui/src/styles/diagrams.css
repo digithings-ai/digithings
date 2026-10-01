@@ -1,0 +1,976 @@
+/*
+ * diagrams.css — the architecture-diagram family.
+ *
+ * The mermaid SVG brings its own inline stylesheet, so this file does two jobs
+ * only:
+ *   1. FRAME the figure (border, surface, caption, source fallback) in the same
+ *      hairline grammar as every other figure on the site.
+ *   2. RE-ASSERT the tokens mermaid cannot know about. Its architecture
+ *      stylesheet hardcodes `#fff` for service label text, which is correct on
+ *      the dark canon palette by luck and wrong on the light one, and it draws
+ *      group borders dashed by default — the boundary is a solid box in this
+ *      system.
+ *
+ * Import once in an app's globals.css, after web-theme.css:
+ *   @import "@digithings/ui/styles/diagrams.css";
+ * and add the source path so Tailwind sees the family:
+ *   @source "<path-to>/packages/ui/src/components/diagrams";
+ */
+
+.arch-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.arch-figure__body {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  padding: 1.1rem;
+}
+
+.arch-figure[data-state="pending"] .arch-figure__body {
+  min-height: 14rem;
+}
+
+.arch-figure__body > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+.arch-figure__source {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  overflow-x: auto;
+}
+
+.arch-figure__caption {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.55;
+  color: var(--ink-mute);
+}
+
+/* mermaid's own chrome, brought back onto the palette. */
+.arch-figure__body svg text,
+.arch-figure__body svg .node-icon-text > div {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.arch-figure__body svg .node-icon-text > div {
+  fill: var(--ink);
+}
+
+.arch-figure__body svg .node-bkg {
+  stroke-dasharray: none;
+}
+
+/*
+ * mermaid's architecture chrome, forced back onto the palette.
+ *
+ * These need `!important` and that is not sloppiness: mermaid injects its own
+ * stylesheet from inside the rendered SVG, so it lands later in the document
+ * than this file and out-ranks it in source order. The icon plates are worse —
+ * they are drawn by mermaid's bundled icon set as an inline `style="fill:#087ebf"`
+ * on the plate rect, which nothing short of `!important` can reach.
+ *
+ * The icon plate is the only place a vendor-blue can appear, and it appears on
+ * every service, so leaving it is the difference between a canon diagram and a
+ * screenshot of one. If mermaid ever changes the built-in icon palette these
+ * overrides stop matching and the diagram reverts to mermaid's own colour —
+ * degraded, never broken.
+ */
+.arch-figure__body svg svg rect[width="80"],
+.arch-figure__body svg svg rect[width="60"] {
+  fill: color-mix(in srgb, var(--ink) 9%, var(--surface)) !important;
+}
+
+.arch-figure__body svg svg circle,
+.arch-figure__body svg svg path,
+.arch-figure__body svg svg line,
+.arch-figure__body svg svg polyline,
+.arch-figure__body svg svg polygon {
+  stroke: var(--ink) !important;
+}
+
+/* the boundary is a rule in this system, not a dashed sketch. */
+.arch-figure__body svg .node-bkg {
+  stroke-dasharray: none !important;
+}
+
+/*
+ * Terminal polish. The owner: "make it more still terminal look simplicity but
+ * still modern polish". mermaid's default chrome is a soft floating glyph on an
+ * unfilled plate; the house grammar is a stamped chip on a hairline, square, in
+ * the mono ramp — so the plate gets a border, and the type goes on the ramp
+ * rather than mermaid's own family.
+ */
+.arch-figure__body svg svg rect[width="80"],
+.arch-figure__body svg svg rect[width="60"] {
+  stroke: var(--hair) !important;
+  stroke-width: 1 !important;
+}
+
+/*
+ * The icon is a fixed 80px plate in an 80px cell and mermaid draws the label on
+ * its bottom edge, so at full size each node reads as a wall of squares with the
+ * text sitting on top of the glyph. Scaling the plate back to half its cell
+ * gives the label clear air beneath it and turns the icon into what it should be
+ * here — a small monogram beside the words, not the whole node.
+ */
+.arch-figure__body svg [viewBox="0 0 80 80"] {
+  transform: scale(0.5);
+  transform-origin: 50% 50%;
+}
+
+.arch-figure__body svg .architecture-service text {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  fill: var(--ink) !important;
+}
+
+/*
+ * mermaid leaves the edge labels at the browser default — nearly half again the
+ * size of a node label — which pulls the eye off the boxes and reads as clutter.
+ * Everything in the drawing sits on the same mono step.
+ */
+.arch-figure__body svg text {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/*
+ * mermaid sizes an edge label's box to the raw string and lets it wrap, which
+ * splits a word when the box is narrow ("heartbea / t"). The label is one line
+ * of mono here, so it is allowed to be wider than the box mermaid guessed.
+ */
+.arch-figure__body svg foreignObject {
+  overflow: visible !important;
+}
+
+.arch-figure__body svg foreignObject > div {
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+/*
+ * ── the tour ────────────────────────────────────────────────────────────────
+ * Three treatments of one diagram. Static is the frame plus the steps; the two
+ * pinned treatments park the frame and let scroll drive it. The camera element
+ * gets its transform inline from JS (measured against the rendered SVG), so the
+ * only thing CSS owns here is the frame, the rail and the easing.
+ */
+
+.arch-tour {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  min-width: 0;
+}
+
+.arch-tour__frame {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  padding: 1.1rem;
+  min-width: 0;
+}
+
+/*
+ * One diagram per side. The stage clips, which is what lets a leaving group
+ * travel past the frame edge and disappear instead of widening the page.
+ */
+.arch-tour__stage {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+}
+
+.arch-tour__pane {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+/*
+ * The swap. Each side is one group — its diagram and its own step list — so the
+ * rented group leaves to the left as a unit (list travelling with its diagram)
+ * and the owned group arrives from the right. No opacity anywhere: the two never
+ * share the frame, so nothing has to be faded in. `--arch-out` runs over the
+ * first half of the window and `--arch-in` over the second, so they pass each
+ * other off-screen rather than crossing in view.
+ */
+.arch-tour__side {
+  display: grid;
+  /* Two tracks: the side tag on its own row at the top, then the diagram + its
+   * step list below. Without the explicit row the tag auto-placed into the
+   * diagram's cell and landed bottom-left. */
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1.8rem;
+  min-width: 0;
+  transition: transform 1.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Each rail's progress bar reads that side's own walk, not the whole walk. */
+.arch-tour__side:nth-child(1) .arch-tour__rail {
+  --arch-rail-p: var(--arch-r0, 0);
+}
+
+.arch-tour__side:nth-child(2) .arch-tour__rail {
+  --arch-rail-p: var(--arch-r1, 0);
+}
+
+.arch-tour__side--leaving {
+  transform: translateX(calc(var(--arch-out, 0) * -112%));
+}
+
+.arch-tour__side--entering {
+  transform: translateX(calc((1 - var(--arch-in, 1)) * 112%));
+}
+
+.arch-tour__camera {
+  position: relative;
+  transform-origin: 0 0;
+  /* Short follow, not a 1.6s tween: the scroll pose writes the target every
+     frame, and a long transition would lag the narration. */
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* Until the tour has painted its first pose (`data-settled`, set by the
+   scroll binding), sides and camera jump straight to it rather than tweening
+   in from the CSS defaults. */
+.arch-tour:not([data-settled]) .arch-tour__side,
+.arch-tour:not([data-settled]) .arch-tour__camera {
+  transition: none;
+}
+
+/* the frame already draws the box; the diagram inside must not draw a second. */
+.arch-tour__camera .arch-figure__body {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.arch-tour__camera .arch-figure__caption {
+  display: none;
+}
+
+/* The selected box glows and everything outside it drops back a step. The huge
+ * flat shadow is the spotlight: it dims the whole pane except the rectangle it
+ * is cast from, and the stage's own overflow clips it, so there is no second
+ * layer to keep in step with the camera. There is exactly ONE such rectangle per
+ * step (the union of the lit boxes) — with one per box the dim stacked once per
+ * lit box and the last rented steps, which light most of the diagram, went to
+ * near-black. The dim stays light for the same reason: the architecture outside
+ * the glow has to remain readable. */
+.arch-tour__spot {
+  position: absolute;
+  inset-block-start: 0;
+  left: 0; /* physical: the spot's translate is the camera frame's physical x */
+  pointer-events: none;
+  opacity: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 22%, transparent);
+  /* Geometry is written from the scroll pose, placed by translate so a frame
+     of travel is not a layout shift. Opacity is the only fade, so a
+     whole-graph beat can drop the spotlight without sliding a box. */
+  transition: opacity 0.35s var(--ease);
+}
+
+/* The glow itself breathes on its own layer so only opacity is animated — an
+ * animated 9999px spread would repaint the whole frame every tick. */
+.arch-tour__spot::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  box-shadow:
+    0 0 18px 2px color-mix(in srgb, var(--accent) 30%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: arch-glow 2.6s ease-in-out infinite;
+}
+
+@keyframes arch-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The no-motion treatment renders both sides stacked, so it owns its own gap. */
+.arch-tour__static {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.arch-tour__tag,
+.arch-tour__side-tag {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.arch-tour__side-tag {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--accent);
+}
+
+/* Side emphasis is brightness, not hue (#4429 v16): the side being walked
+   reads bright white, the other subdued gray. The hooks are data attributes
+   the tour sets from its scroll state (`data-active` per side,
+   `data-active-side` on the root); the static fallback sets neither, so both
+   sides read full bright there. */
+.arch-tour__tag[data-tag="their stack"],
+.arch-tour__side-tag[data-tag="their stack"],
+.arch-tour__tag[data-tag="digithings stack"],
+.arch-tour__side-tag[data-tag="digithings stack"] {
+  color: var(--ink-mute);
+  border: 1px solid var(--hair);
+  padding: 0.1rem 0.45rem;
+  transition: color 0.35s var(--ease), border-color 0.35s var(--ease);
+}
+.arch-tour__side[data-active="true"] .arch-tour__tag,
+.arch-tour__side[data-active="true"] > .arch-tour__side-tag,
+.arch-tour[data-variant="static"] .arch-tour__tag {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+/* The walked rail fills bright; the other rests on the hairline. The step
+   being walked keys off the same hook, both rail orientations. */
+.arch-tour__side[data-active="true"] .arch-tour__rail::before {
+  background: var(--ink);
+}
+.arch-tour__side[data-active="true"] .arch-tour__step.on {
+  border-inline-start-color: var(--ink);
+}
+.arch-tour__side[data-active="true"][data-rail="end"] .arch-tour__step.on {
+  border-inline-end-color: var(--ink);
+}
+/* The why headline follows the walk: the side being walked reads bright
+   white, the other subdued gray, cross-fading on the swap. No attribute
+   (static fallback) leaves both halves bright. Kit-level hooks — the canon
+   guard refuses color literals in app files. */
+.why-rent,
+.why-own {
+  color: var(--ink);
+  transition: color 0.35s var(--ease);
+}
+.arch-tour[data-active-side="0"] .why-own,
+.arch-tour[data-active-side="1"] .why-rent {
+  color: var(--ink-mute);
+}
+
+/* App-first dimming: configured boxes rest dimmed unless the walk lights
+   them. One rule per dimmable box — the walk's `on` always wins, so a step
+   about a dimmed box still spotlights it. */
+.arch-tour-dim-vault #arch-service-vault:not(.is-on) {
+  opacity: 0.32;
+}
+.arch-tour-dim-memory #arch-service-memory:not(.is-on) {
+  opacity: 0.32;
+}
+
+/* The side tag prints ONCE per side, on its own row at the TOP, right-aligned
+ * above the step column — never on every step and never bottom-left. */
+.arch-tour__side > .arch-tour__side-tag {
+  grid-row: 1;
+  grid-column: -2 / -1;
+  justify-self: end;
+  align-self: start;
+  margin-bottom: 0;
+  text-align: end;
+}
+
+.arch-tour__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.8rem;
+  align-items: start;
+}
+
+.arch-tour__pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h, 4.5rem) + 1rem);
+  /* Fill the space left under the nav, then centre the held block inside it.
+   * `justify-content: center` needs free space to distribute: without a
+   * min-height the pin is only as tall as its content and the block sits at
+   * the top of the viewport, which is what read as top-aligned. The min-height
+   * makes the pin symmetric about the viewport centre (it fills the box it is
+   * stuck into), and the cap keeps it shorter than the viewport so the sticky
+   * can still hold. */
+  min-height: min(calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem), 46rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.arch-tour__head {
+  max-width: var(--frame-w, 1180px);
+  margin-inline: auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.arch-tour__head p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.arch-tour__rail {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+  min-width: 0;
+  /* The rail owns the side it draws its rule on: the step column is text-start
+   * by default, and a right-side rail flips both the rule and the alignment
+   * (see [data-rail="end"]). */
+  --rail-rule: start;
+}
+
+.arch-tour__rail::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  /* Neutral at rest — only the walked side's rail lights (ink), so no color
+     lingers on the subdued side after the swap. */
+  background: var(--hair-2);
+  transform-origin: 0 0;
+  /* The side-local walk progress, not the whole-walk value: on the rented rail
+   * the global value filled only its share and on the owned rail it was already
+   * full before that side began. Each side sets --arch-r<si> for its own rail. */
+  transform: scaleY(var(--arch-rail-p, 0));
+  transition: transform 0.35s linear;
+}
+
+.arch-tour__step {
+  display: grid;
+  gap: 0.15rem;
+  border-inline-start: 1px solid var(--hair);
+  padding-inline-start: 0.9rem;
+  opacity: 0.42;
+  transition:
+    opacity 0.6s var(--ease),
+    border-color 0.6s var(--ease);
+}
+
+.arch-tour__step.on {
+  opacity: 1;
+  border-inline-start-color: var(--accent);
+}
+
+/* Right-side rail: the vertical progress rule moves to the rail's right edge
+ * and the step text aligns to it. Set per side through `rail="end"`, so the
+ * rented column can sit right while the owned one keeps the left. */
+.arch-tour__side[data-rail="end"] .arch-tour__rail {
+  --rail-rule: end;
+}
+
+.arch-tour__side[data-rail="end"] .arch-tour__rail::before {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  transform-origin: 100% 0;
+}
+
+.arch-tour__side[data-rail="end"] .arch-tour__step {
+  border-inline-start: 0;
+  border-inline-end: 1px solid var(--hair);
+  padding-inline-start: 0;
+  padding-inline-end: 0.9rem;
+  text-align: end;
+}
+
+.arch-tour__side[data-rail="end"] .arch-tour__step.on {
+  border-inline-end-color: var(--accent);
+}
+
+.arch-tour__side[data-rail="end"] > .arch-tour__side-tag {
+  text-align: end;
+}
+
+.arch-tour__index {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+
+.arch-tour__label {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.arch-tour__line {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/*
+ * The rail is an index, not a transcript: only the step being walked prints its
+ * line. Eleven full entries made the rail 1423px tall — taller than the viewport
+ * — and a sticky element taller than the viewport cannot hold, so the whole
+ * pinned treatment slid away instead of parking.
+ */
+.arch-tour__line {
+  display: none;
+}
+
+.arch-tour__step.on .arch-tour__line {
+  display: block;
+}
+
+/*
+ * The two-column row, and with it the swap. Each side lays out as one row —
+ * diagram wide, its own step list narrow beside it — and the two sides are
+ * stacked in the same grid cell so each can slide as a unit. The owned side
+ * mirrors its tracks so its list lands in the bottom-left corner and its diagram
+ * to the right. The grid clips, which is what keeps a group parked off-screen
+ * from widening the page.
+ */
+@media (min-width: 1024px) {
+  .arch-tour:not([data-variant="static"]) .arch-tour__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side {
+    grid-area: 1 / 1;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.6rem 2.4rem;
+    align-items: start;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering {
+    grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr);
+  }
+
+  /* The tag sits above the RAIL column, so it must follow the rail as the
+   * tracks mirror: right column on the leaving side, left column on the
+   * entering side. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side > .arch-tour__side-tag {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering > .arch-tour__side-tag {
+    grid-column: 1;
+    /* The owned column sits left, so its tag sits top-LEFT with it. */
+    justify-self: start;
+    text-align: start;
+  }
+
+  /* Both runtime children are pinned to row 2: the tag owns row 1, and the
+   * owned side lists its columns in the opposite order, so grid auto-placement
+   * would otherwise drop the rail onto a third row below the diagram (which also
+   * made the pin taller than the viewport, so it could not hold). */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__frame,
+  .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
+    grid-row: 2;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__frame {
+    grid-column: 2;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__rail {
+    grid-column: 1;
+  }
+
+  /* An aside takes a third row under the rail and sinks to the frame's
+   * bottom edge; the frame spans all three rows so the pin height holds. */
+  .arch-tour:not([data-variant="static"]) .arch-tour__side:has(> .arch-tour__aside) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side:where(:has(> .arch-tour__aside)) .arch-tour__frame {
+    grid-row: 2 / 4;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side > .arch-tour__aside {
+    grid-row: 3;
+    grid-column: 2;
+    align-self: end;
+    min-width: 0;
+  }
+
+  .arch-tour:not([data-variant="static"]) .arch-tour__side--entering > .arch-tour__aside {
+    grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-tour__camera,
+  .arch-tour__frame,
+  .arch-tour__rail,
+  .arch-tour__side,
+  .arch-tour__pane,
+  .arch-tour__spot,
+  .arch-tour__step,
+  .arch-tour__rail::before {
+    transition: none;
+  }
+
+  .arch-tour__spot::after {
+    animation: none;
+    opacity: 1;
+  }
+
+  /* The component renders the static treatment under reduced motion, so the
+   * animated markup is not on the page — this is belt-and-braces for the case
+   * where the media query flips after mount. */
+  .arch-tour__pane,
+  .arch-tour__frame,
+  .arch-tour__rail,
+  .arch-tour__side {
+    transform: none;
+  }
+
+  .arch-tour__rail::before {
+    transform: none;
+    display: none;
+  }
+}
+
+/*
+ * mermaid parks a boundary's title on the boundary's own top edge, so it lands
+ * on top of whatever the force layout put nearest. A surface-coloured halo
+ * behind the glyphs (paint-order: stroke) makes it legible without moving it.
+ */
+.arch-figure__body svg .architecture-groups text {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * The kit's own architecture SVG (architecture-svg.tsx)
+ *
+ * Drawn, not solved: a box with the label inside it, a 22px kind glyph on the
+ * left, orthogonal hairline connectors, and the boundary title ABOVE its rule
+ * instead of painted onto it. Mono, squared, one accent — the terminal look.
+ * The tour's glow rides the same .is-on hook the mermaid path used, so nothing
+ * in the tour changed when the renderer did.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+.arch-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  overflow: visible;
+  font-family: var(--font-mono);
+}
+
+.arch-svg text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* ── boundaries ─────────────────────────────────────────────────────────── */
+
+.arch-svg .arch-group__box {
+  fill: color-mix(in srgb, var(--ink) 3%, transparent);
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  transition: stroke 0.25s var(--ease), fill 0.25s var(--ease);
+}
+
+.arch-svg .arch-group.is-on .arch-group__box {
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair-2));
+  fill: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.arch-svg .arch-group__label {
+  fill: var(--ink-mute);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.arch-svg .arch-group.is-on .arch-group__label {
+  fill: var(--ink-soft);
+}
+
+/* ── connectors ─────────────────────────────────────────────────────────── */
+
+.arch-svg .arch-edge__line {
+  fill: none;
+  stroke: var(--hair-2);
+  stroke-width: 1;
+  opacity: 0.5;
+  transition: stroke 0.25s var(--ease), opacity 0.25s var(--ease);
+}
+
+.arch-svg .arch-edge.is-on .arch-edge__line {
+  stroke: color-mix(in srgb, var(--accent) 60%, var(--hair-2));
+  opacity: 1;
+}
+
+.arch-svg .arch-arrow {
+  fill: var(--hair-2);
+  stroke: none;
+}
+
+.arch-svg .arch-edge.is-on .arch-arrow {
+  fill: color-mix(in srgb, var(--accent) 60%, var(--hair-2));
+}
+
+.arch-svg .arch-edge__label {
+  fill: var(--ink-soft);
+  font-size: 10px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* ── services ───────────────────────────────────────────────────────────── */
+
+.arch-svg .arch-node__box {
+  fill: var(--surface);
+  stroke: var(--hair);
+  stroke-width: 1;
+  transition: stroke 0.25s var(--ease), fill 0.25s var(--ease);
+}
+
+.arch-svg .arch-node.is-on .arch-node__box {
+  fill: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  stroke: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+.arch-svg .arch-node__glyph {
+  color: var(--ink-mute);
+  transition: color 0.25s var(--ease);
+}
+
+.arch-svg .arch-node.is-on .arch-node__glyph {
+  color: var(--accent);
+}
+
+.arch-svg .arch-node__label {
+  fill: var(--ink-soft);
+  font-size: 11.5px;
+  transition: fill 0.25s var(--ease);
+}
+
+.arch-svg .arch-node.is-on .arch-node__label {
+  fill: var(--ink);
+}
+
+.arch-svg .arch-node__glyph svg {
+  overflow: visible;
+}
+
+/* ── morph variant (app-first why band) ────────────────────────────────────
+ * Two diagrams share the frame: the provider stack rests full-lit on one
+ * side while the other redraws box by box. No swipe — both transforms are
+ * neutralised and the grid runs two columns. Boxes that have not swapped
+ * yet rest dimmed (the walk's `on` always wins); boxes that never swap
+ * (your product, sources, review) stay bright.
+ */
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 2.4rem;
+  overflow: visible;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side {
+  grid-area: auto;
+  grid-template-columns: minmax(0, 1fr);
+  transform: none;
+}
+.arch-tour.arch-tour-morph .arch-tour__side--leaving,
+.arch-tour.arch-tour-morph .arch-tour__side--entering {
+  transform: none;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side--entering {
+  grid-template-columns: minmax(0, 1fr);
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side > .arch-tour__side-tag {
+  grid-column: 1;
+  justify-self: start;
+  text-align: start;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side .arch-tour__frame,
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side .arch-tour__rail {
+  grid-row: auto;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__frame,
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__side--entering .arch-tour__rail {
+  grid-column: auto;
+}
+.arch-tour.arch-tour-morph .arch-tour__side--entering [id^="arch-service-"]:not(.is-on):not(#arch-service-app):not(#arch-service-review):not(#arch-service-feeds):not(#arch-service-filings):not(#arch-service-sources) {
+  opacity: 0.32;
+}
+@media (max-width: 1023px) {
+  .arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The why band narrates from its own column, so the tour's step lists would
+   be a second copy and would push the pin taller than the viewport. The
+   diagrams sit under the nav and above the sticky invoice. */
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__pin {
+  min-height: 0;
+  justify-content: flex-start;
+  top: calc(var(--dq-nav-h, 4.5rem) + 0.35rem);
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__rail {
+  display: none;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-tour__frame {
+  padding: 0.55rem 0.7rem;
+}
+.arch-tour.arch-tour-morph:not([data-variant="static"]) .arch-svg {
+  width: 100%;
+  height: auto;
+  max-height: min(26rem, calc(100svh - var(--dq-nav-h, 4.5rem) - 19rem));
+}
+
+/* Walk-through text rail (AppFirstSection): remounts per step (key), so a
+ * short rise-and-fade marks each beat of the scroll journey. */
+@keyframes why-rail-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.why-rail-step {
+  animation: why-rail-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── build entrance ─────────────────────────────────────────────────────────
+ * An ancestor carrying `.arch-build` makes every `.arch-svg` inside draw
+ * itself: boundaries fade up, each box traces its outline in reading order and
+ * then fills, and each connector draws once both of its ends exist
+ * (`--arch-i`, set per element by the renderer). `.arch-build-pending` holds
+ * the drawing blank until the caller starts the build. The end state is the
+ * resting style, so the caller drops the class when the build is done and
+ * nothing moves. */
+.arch-build-pending .arch-svg .arch-group,
+.arch-build-pending .arch-svg .arch-node,
+.arch-build-pending .arch-svg .arch-edge {
+  opacity: 0;
+}
+
+.arch-build .arch-svg .arch-group {
+  animation: arch-build-fade 0.6s var(--ease) both;
+  animation-delay: calc(var(--arch-i, 0) * 110ms);
+}
+
+/* Opacity only on the box group: the tour measures box rects for its camera,
+   and a scale here would read a few pixels short mid-build. */
+.arch-build .arch-svg .arch-node {
+  animation: arch-build-fade 0.4s var(--ease) both;
+  animation-delay: calc(180ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-node__box {
+  stroke-dasharray: 1;
+  animation:
+    arch-build-draw 0.55s var(--ease) both,
+    arch-build-fill 0.35s var(--ease) both;
+  animation-delay:
+    calc(180ms + var(--arch-i, 0) * 75ms),
+    calc(480ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-node__glyph,
+.arch-build .arch-svg .arch-node__label {
+  animation: arch-build-fade 0.35s var(--ease) both;
+  animation-delay: calc(420ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-edge {
+  animation: arch-build-fade 0.2s linear both;
+  animation-delay: calc(560ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-edge__line {
+  stroke-dasharray: 1;
+  animation: arch-build-draw 0.5s var(--ease) both;
+  animation-delay: calc(560ms + var(--arch-i, 0) * 75ms);
+}
+
+.arch-build .arch-svg .arch-edge__label {
+  animation: arch-build-fade 0.3s var(--ease) both;
+  animation-delay: calc(900ms + var(--arch-i, 0) * 75ms);
+}
+
+@keyframes arch-build-fade {
+  from { opacity: 0; }
+}
+
+@keyframes arch-build-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes arch-build-fill {
+  from { fill-opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-svg .arch-group__box,
+  .arch-svg .arch-edge__line,
+  .arch-svg .arch-node__box,
+  .arch-svg .arch-node__glyph,
+  .arch-svg .arch-node__label {
+    transition: none;
+  }
+  .why-rail-step {
+    animation: none;
+  }
+  .arch-build-pending .arch-svg .arch-group,
+  .arch-build-pending .arch-svg .arch-node,
+  .arch-build-pending .arch-svg .arch-edge {
+    opacity: 1;
+  }
+  .arch-build .arch-svg * {
+    animation: none !important;
+  }
+}

@@ -15,7 +15,8 @@
 
 @layer components {
   .ra-compact,
-  .ra-detailed {
+  .ra-detailed,
+  .ra-activity {
     border: 1px solid var(--hair);
     background: var(--surface);
     padding: 1.15rem 1.25rem;
@@ -369,6 +370,35 @@
   padding: 0;
 }
 
+/* Fit mode: the squares scale to the column instead of the body scrolling.
+   The count still picks how many weeks are drawn (RepoActivity's `weeksThatFit`,
+   which sizes for the 10px floor); this only spends the leftover width, so the
+   grid is never wider than its column and never scrolls. Cells keep a 1:1
+   aspect ratio at every width — they are squares, just larger or smaller ones. */
+.ra-heat--fit .ra-heat-body {
+  overflow-x: visible;
+}
+.ra-heat--fit .ra-heat-frame,
+.ra-heat--fit .ra-heat-grid {
+  width: 100%;
+}
+.ra-heat--fit .ra-heat-cell {
+  width: auto;
+  height: auto;
+  aspect-ratio: 1;
+}
+.ra-heat--fit .ra-heat-row {
+  align-items: stretch;
+}
+.ra-heat--fit .ra-heat-days {
+  grid-template-rows: repeat(7, 1fr);
+  line-height: 1;
+}
+.ra-heat--fit .ra-heat-legend .ra-heat-cell {
+  width: 10px;
+  height: 10px;
+}
+
 @media (forced-colors: active) {
   .ra-heat-cell {
     forced-color-adjust: none;
@@ -377,5 +407,105 @@
 @media (max-width: 720px) {
   .ra-cols {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── activity variant ─────────────────────────────────────────────────────
+   Counts left, graph right, then the version ledger and the maintainer. The
+   graph column is the wide one and the metrics column is sized to its content,
+   so the empty right-hand half of the first rows is spent on the graph rather
+   than left as ground. */
+.ra-activity-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.4rem;
+}
+
+.ra-activity-metrics .ra-group + .ra-group {
+  margin-top: 1.15rem;
+  padding-top: 1.05rem;
+  border-top: 1px solid var(--hair);
+}
+
+.ra-activity-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.4rem 2rem;
+  margin-top: 1.4rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--hair);
+}
+
+/* "Browse the repo" belongs in the bottom-right corner (owner, round 6).
+   `margin-left: auto` pins it there even when the maintainer is absent. */
+.ra-activity-foot .ra-meta {
+  margin-left: auto;
+  margin-top: 0;
+}
+
+.ra-contributor-body {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+.ra-contributor-body a {
+  color: var(--ink);
+}
+
+.ra-contributor-body a:hover {
+  color: var(--accent);
+}
+
+.ra-contributor-role {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--ink-mute);
+}
+
+.ra-avatar {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 0;
+  object-fit: cover;
+  border: 1px solid var(--hair);
+  background: var(--surface-2, var(--surface));
+}
+
+.ra-avatar--mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+@media (min-width: 900px) {
+  .ra-activity-top {
+    grid-template-columns: minmax(13rem, 0.62fr) minmax(0, 1.38fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Stacking the foot turns its main axis vertical, and a wrapping column flex
+     container sizes each line to its *content* — so `align-items: stretch` alone
+     left the version rail at its max-content (11 cards, ~2350px) and blew the
+     page sideways instead of letting the rail scroll inside its own track. An
+     explicit width pins every row to the column's width. */
+  .ra-activity-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ra-activity-foot > * {
+    width: 100%;
   }
 }

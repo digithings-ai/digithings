@@ -23,8 +23,37 @@
    family (repo-activity.css). digiquant-web still imports marquee.css. */
 @import "@digithings/ui/styles/stages.css";
 @import "@digithings/ui/styles/data-layout.css";
+@import "@digithings/ui/styles/card-rail.css";
 @import "@digithings/ui/styles/repo-activity.css";
 @import "@digithings/ui/styles/word-reveal.css";
+/* effects-chrome.css owns the effects/primitive chrome that is not token-backed
+   Tailwind utilities: the Pipeline grammar (.pl-node, .pl-detail, .pl-io,
+   .pl-diag-*), the Glow/Emblem dress and the marquee. The digiquant band on the
+   landing page renders <Pipeline>, so without this sheet its labels and values
+   concatenate with no separation — the section is unreadable (#4429). */
+@import "@digithings/ui/styles/effects-chrome.css";
+/* Finance + metrics families (#4429): the digiquant band renders <StockTicker>,
+   <PriceChart>, <PerfMetrics> and <LiveBadge>. Their structural CSS is not
+   token-backed Tailwind — finance-composites.css declares the .tk seamless-tape
+   track (.tk { overflow: hidden } + .tk-track { width: max-content;
+   animation: tk-scroll }), and without it the market tape wraps onto three
+   rows instead of scrolling on one. metrics.css carries the .perf-metric
+   grid, finance-tearsheet.css the .ts-* card dress and LiveBadge. */
+@import "@digithings/ui/styles/finance-composites.css";
+@import "@digithings/ui/styles/metrics.css";
+@import "@digithings/ui/styles/finance-tearsheet.css";
+/* … and its overlay extensions, which is where the second-series strokes live.
+   Without this sheet `tone: "mute"` and `dashed: true` generate class names that
+   nothing styles, so the benchmark line in the digiquant band computes
+   `stroke: none` and renders invisible — a comparison chart with one series. */
+@import "@digithings/ui/styles/finance-tearsheet-overlay.css";
+/* The architecture-diagram family (#4429 round 10). Its `.arch-figure` rules are
+   plain CSS; the only utilities it needs are the frame's own, so the @source two
+   blocks down is what keeps Tailwind from tree-shaking them. */
+@import "@digithings/ui/styles/diagrams.css";
+/* Pricing matrix featured column (#4429 ship list) — the reference treatment
+   is the kit-native tint + accent top rule; no custom gradient. */
+@import "@digithings/ui/styles/pricing.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
@@ -36,6 +65,16 @@
    deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/ui/styles/chat-math.css";
 @import "@digithings/ui/styles/chat-widgets.css";
+/* The first-party digichat Thread (#4429 Stage 8). The FAQ band mounts the real
+   product Thread module (`@digithings/ui/chat/thread`) against a local fixture
+   runtime, so the app needs the two sheets that dress it:
+   - chat-aui.css maps the assistant-ui/shadcn vars onto digiweb tokens and owns
+     the `.aui-theme-stage` frame the Thread is mounted inside;
+   - chat-digichat.css is the product import of the gallery grammar sheet and owns the
+     welcome slot, example rows, composer and tool rows.
+   chat-aui.css must come first: the gallery sheet wins same-specificity ties. */
+@import "@digithings/ui/styles/chat-aui.css";
+@import "@digithings/ui/styles/chat-digichat.css";
 /* Terminal loaders sheet (legacy DigiChatSession Searching… chrome). Kept for
    any residual .tl-* usage on the marketing shell; the live chat UI lives in
    the iframe. AFTER chat-core.css. */
@@ -52,6 +91,14 @@
    through node_modules/@digithings/ui: Tailwind's scanner does not traverse
    the workspace symlink and silently generates nothing. */
 @source "../../../packages/ui/src/components/NavShell.tsx";
+/* Shared chrome atoms — Footer/Colophon/ModuleCard live in nav-shell.css, but
+   SkipLink/CtaLink/IconLink carry token utilities (the skip link's off-screen
+   hide, the CTA dress). Without this line the skip link renders permanently
+   visible: its `-translate-y-[200%]` is never generated. */
+@source "../../../packages/ui/src/components/chrome.tsx";
+/* FooterCells is utility-only (the hairline box row). Without this line the
+   cells render as an unpadded two-column list. */
+@source "../../../packages/ui/src/components/footer";
 @source "../../../packages/ui/src/components/TerminalManifest.tsx";
 @source "../../../packages/ui/src/components/docs";
 @source "../../../packages/ui/src/components/chat";
@@ -64,6 +111,40 @@
 @source "../../../packages/ui/src/components/terminal";
 /* … and the shared ContactMailto's pending dim. */
 @source "../../../packages/ui/src/components/contact";
+/* … and the promoted prose atoms (PageHead/RuledList/RuledRow/Mono) and the
+   `Fig N` Figure, which carry the long-form page grammar as utilities. */
+@source "../../../packages/ui/src/components/prose";
+/* … and the document family every subpage is built from. Without it the glyph
+   row's label gap and the section numbering are never generated. */
+@source "../../../packages/ui/src/components/document";
+@source "../../../packages/ui/src/components/figure";
+/* … and the finance primitives the digiquant band composes: <PriceChart>
+   (finance-charts), <StockTicker>/.srt leaderboard (finance-composites),
+   <PerfMetrics> (metrics) and the <LiveBadge>/<TearsheetCard> family
+   (finance-tearsheet). Each carries token utilities. */
+@source "../../../packages/ui/src/components/finance-charts";
+@source "../../../packages/ui/src/components/finance-composites";
+@source "../../../packages/ui/src/components/finance-tearsheet";
+@source "../../../packages/ui/src/components/metrics";
+/* … and the architecture-diagram family (<ArchitectureDiagram>), which emits
+   mermaid source and frames the returned SVG. */
+@source "../../../packages/ui/src/components/diagrams";
+/* … and the pricing comparison matrix (PricingMatrix). Its table is built from
+   arbitrary utilities (`min-w-[640px]`, `pe-[0.9rem]`, `bg-accent/6`), so without
+   this line the matrix renders as an unstyled table. */
+@source "../../../packages/ui/src/components/pricing";
+/* … and the effects-chrome family, for the <Pipeline> the digiquant band uses to
+   draw the research → portfolio → execution flow. Its nodes and detail panel are
+   built from arbitrary token utilities; only the state/structure rules live in
+   effects-chrome.css, so without this line the flow renders unstyled. */
+@source "../../../packages/ui/src/components/effects-chrome";
+/* … and the page-geometry parts (LayoutLines/Mockup/MockupFrame/Glow). Those
+   components carry the ported `line-*` and `fade-*` utility classes, and
+   Tailwind only emits a utility it has SEEN in scanned content — so without
+   this line `line-y`/`line-dashed` on LayoutLines generate nothing and the
+   page's framing rules render at 0px while the ones written inline in
+   app/page.tsx still work. Silent, and only visible in the rendered page. */
+@source "../../../packages/ui/src/components/page-geometry.tsx";
 /* … and the vendored shadcn kit primitives (@digithings/ui/ui) — the Sheet,
    Input/Label/Button/Alert/Badge family carries token-backed utilities. The
    controls-layer Select/Table carry none (plain .ctl-* classes in
@@ -99,16 +180,8 @@
 :root[data-theme="light"] {
   --accent: var(--ink);
   --on-accent: var(--surface);
-  /* stronger than dark-mode 12% so the fixed .glow wash reads on --bg */
   --accent-weak: color-mix(in srgb, var(--ink) 20%, transparent);
 }
-
-/* The shared `.glow` (site.css) drifts vertically (keyframe `translate(…, 2%)`),
-   which leaves a faint un-tinted strip at the very top edge — most visible on
-   subpages and when the auto-hiding nav uncovers the top. Anchor it here so the
-   page shading always reaches the top border. (The shared file also feeds
-   digiquant.io, so we don't touch it.) */
-.glow { animation: none; transform: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
@@ -150,98 +223,44 @@
   .dc-chat-main { padding-top: var(--nav-shell-h); }
 }
 
-/* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
+/* anchor-scroll: the `#architecture` and `#contact` targets are ordinary document
+   sections now (D1, #4429), so they need the nav offset and nothing else. The old
+   viewport-centring rule (`min-height: calc(100svh - …)` + flex) went with the
+   bands it was built to fill — a document section is its content's height. */
 html {
   scroll-behavior: auto;
   scroll-padding-top: var(--dq-nav-h);
 }
-#architecture {
-  scroll-margin-top: var(--dq-nav-h);
-  min-height: calc(100svh - var(--dq-nav-h));
-  display: flex;
-  align-items: center;
-  padding-block: clamp(1.5rem, 4vh, 2.5rem);
-}
-#architecture .section-head {
-  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
-}
-#contact { scroll-margin-top: calc(var(--dq-nav-h) + 1.5rem); }
 
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-
-/* DtNav's "ask digichat" desktop tail entry (#1450 round 3+): plain icon +
-   label in the theme's own ink tone, not a `.btn-primary` pill — a filled
-   button read as a bright, standoffish box sitting next to the quiet GitHub
-   glyph and the plain inline links either side of it. */
-.dc-nav-cta { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 0; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
-.dc-nav-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
-
-/* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
-.dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
-.dqhero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; filter: blur(48px) saturate(1.15); }
-.dqhero-veil { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 115% at 50% 34%, color-mix(in srgb, var(--bg) 32%, transparent) 0%, color-mix(in srgb, var(--bg) 12%, transparent) 22%, color-mix(in srgb, var(--bg) 60%, transparent) 60%, var(--bg) 92%); }
-/* reactive intelligence graph: above the veil, below the headline; never blocks
-   clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
-.dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
-.dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
-.dqhero-h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
-.dqhero-h1 em { font-style: italic; color: var(--accent); }
-/* padding-bottom gives descenders/italic overhang room inside the overflow mask
-   (the reveal still hides the line — the hidden state is pushed past the padding);
-   the negative margin keeps line spacing unchanged. */
-.dqhero-h1 .ln { display: block; overflow: hidden; padding-bottom: 0.22em; margin-bottom: -0.22em; }
-.dqhero-h1 .ln > span { display: block; transform: translateY(calc(108% + 0.24em)); transition: transform 1s var(--ease); }
-.dqhero-h1 .ln:nth-child(2) > span { transition-delay: 0.09s; }
-.dqhero.loaded .dqhero-h1 .ln > span { transform: none; }
-.dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px color-mix(in srgb, var(--bg) 45%, transparent); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
-.dqhero-lede b { color: var(--ink); font-weight: 500; }
-.dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
-.dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
-.dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
-
-/* no-JS (law 06): the entrance never gates content — html.no-js renders the
-   hero at rest. Keep in sync with the .loaded rules above. */
-html.no-js .dqhero-h1 .ln > span { transform: none; }
-html.no-js .dqhero-lede,
-html.no-js .dqhero-cta { opacity: 1; transform: none; }
-/* Now a real <a href="#metrics">, not a static <p> (full-UI-suite critique,
-   P3) -- text-decoration reset since this wasn't a link before and had no
-   underline in its original design. */
-.dqhero-scroll-label { display: inline-block; margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
-/* scroll-down cue: accent hairline with a pulse travelling down it */
-.dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }
-.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 32px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); animation: dq-scrollcue 1.55s var(--ease) infinite; }
-@keyframes dq-scrollcue { 0% { transform: translateY(-32px); opacity: 0; } 18% { opacity: 1; } 82% { opacity: 0.35; } 100% { transform: translateY(88px); opacity: 0; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .dqhero-h1 .ln > span, .dqhero-lede, .dqhero-cta { opacity: 1 !important; transform: none !important; transition: none !important; }
-  .dqhero-scroll::after { animation: none; opacity: 0.6; transform: none; }
-}
-
-/* Short-viewport nav clearance (#1434): the hero centres its content in
-   100svh, but the NavShell is position:fixed (--dq-nav-h). On short viewports
-   (mobile landscape, split-screen — ~414px tall) a centred, taller-than-
-   viewport headline rides up UNDER the fixed nav. Below this height threshold,
-   top-align the hero and pad past the nav so content always clears it; the
-   section still grows (min-height) so nothing is clipped. Desktop keeps its
-   centred composition — the query never fires above 640px tall. The abspos
-   canvas/veil/graph (inset:0) fill the padding box, so only .dqhero-inner
-   shifts down; the mesh art still covers the full hero. */
-@media (max-height: 640px) {
-  .dqhero {
-    align-items: flex-start;
-    padding-top: calc(var(--dq-nav-h) + 1.25rem);
-    padding-bottom: 2rem;
+/* The landing bands settle with their top rule on the nav's bottom hairline.
+   scroll-padding-top already reserves the bar, so a band adds no margin of
+   its own (a margin would stack and park the rule a bar-height lower).
+   Proximity only: a band taller than the viewport still scrolls freely, and
+   the footer carries an end snap so the page bottom stays reachable. Fine
+   pointers only: under a touch fling, a snap near a band edge yanks the
+   momentum, so touch scrolling stays native. */
+@media (pointer: fine) {
+  html:has(main #why) {
+    scroll-snap-type: y proximity;
+  }
+  html:has(main #why) main > section[id] {
+    scroll-snap-align: start;
+  }
+  html:has(main #why) footer {
+    scroll-snap-align: end;
   }
 }
 
-/* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
-   fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's
-   shared .tl-boot class fills var(--bg) by default (right for its usual mode:
-   pinned over an app that has not rendered, with nothing behind it) -- scoped
-   override for this usage only, so .grain/.glow stay visible through the
-   loading phase instead of disappearing behind a flat rectangle that then pops
-   away once digichat itself loads. */
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* DtNav's "ask digichat" tail entry is now the kit's <CtaLink variant="outline">
+   (buttonVariants), so the `.dc-nav-cta` family is gone — one CTA treatment in
+   the canon, not one per site (R1). */
+
+/* digichat embed boot loader (ChatEmbedShell.tsx) sits on the page ground.
+   ContainerBootLoader's shared .tl-boot class fills var(--bg) by default, which
+   paints a second rectangle over the same ground and pops when the embed
+   loads. Keep this one transparent so the boot and the page are one surface. */
 .tl-boot.dc-embed-boot { background: transparent; }
 
 /* The boot dock mirrors the real composer: the loader's dboot default caps at
@@ -290,8 +309,14 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
 .doc-inline-link:hover { text-decoration: underline; }
 
-/* Wide shell for OpenAPI explorer (Swagger needs horizontal room). */
-.docs-shell--wide { max-width: 1180px; }
+/* Docs and the API explorer fill the column between the site rails.
+   The shell's outer edge meets the lines; --page-pad is the air inside
+   them, the same inset the home page uses. */
+.docs-shell.docs-shell {
+  width: 100%;
+  max-width: calc(var(--frame-w) + 2 * var(--page-pad));
+  padding-inline: var(--page-pad);
+}
 
 /* ---- Swagger UI (vendored CSS) — re-tint toward site tokens; hide try-it chrome ---- */
 .docs-swagger .swagger-ui { font-family: var(--font-sans); color: var(--ink); }
@@ -351,4 +376,700 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-chat-frame {
   background: var(--chat-frame-canvas);
   color-scheme: var(--chat-frame-scheme);
+}
+
+/* ==========================================================================
+   VARIANT EXPLORATION ONLY (2026-09-21, branch claude/home-variants).
+
+   The stack showcase on /variants/mixed: the bento grid acts as a map and one
+   cell at a time takes focus as you scroll, with a detail card beside it. The
+   index is read from scroll progress in the component; everything below is the
+   part CSS has to own — sticky pinning, the grid, and the focus/dim states.
+
+   This lives in the app sheet, not in @digithings/ui, because it is not a
+   promoted part yet. If the showcase survives the picking it moves into
+   data-layout (styles + component + tests) and this block is deleted.
+   ========================================================================== */
+.stack-pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h) + 1.6rem);
+}
+
+.stack-grid {
+  display: grid;
+  grid-auto-rows: minmax(7rem, auto);
+  gap: 0.75rem;
+}
+
+/* The focus ring: the active cell fills its livery hairline and lifts, every
+   other cell recedes. `--accent-<module>` is already set on the cell by
+   BentoCell's livery scope, so this needs no per-module rule. */
+.stack-cell {
+  transition:
+    border-color 0.22s var(--ease),
+    background-color 0.22s var(--ease),
+    transform 0.22s var(--ease),
+    opacity 0.22s var(--ease);
+}
+
+.stack-grid .stack-cell {
+  border-color: var(--hair);
+  opacity: 0.6;
+}
+
+.stack-grid .stack-cell.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.stack-grid .stack-cell.is-active::before {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-cell {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   FAQ BAND ZOOM-MORPH (2026-09-23, branch claude/home-variants, #4429).
+
+   The owner's ask: "show the chat container large and then it retracts and it
+   shows some of the frequently asked questions or you could ask in the live
+   chat". The reference gallery's zoom-morph section transition
+   (apps/reference/components/effects/section-morph.tsx) gives the mechanic;
+   `components/landing/FaqMorph.tsx` carries the scroll handler and the measured
+   geometry. This sheet owns only what must stay CSS: the taller-than-content
+   track, the sticky pin under the nav, and the collapse back to the plain
+   two-column grid — the same shape as the `/variants/mixed` stack showcase
+   below, kept app-local for the same reason (an exploration, not a promoted
+   part; if it is picked it moves into @digithings/ui and this block goes with
+   the component's family entry in scripts/frontend_class_families.json).
+
+   The morph itself is inline transforms written per frame by the component, so
+   nothing here animates on its own. The track height is written inline (it
+   depends on the pinned content's measured height), which is why the fallback
+   below is JS-free: with the media query off, `FaqMorph` never writes a height
+   or a transform, so the band is the natural layout again.
+   ========================================================================== */
+.faq-morph {
+  position: relative;
+}
+
+.faq-morph__pin {
+  position: sticky;
+  top: calc(var(--dq-nav-h) + 1rem);
+}
+
+.faq-morph__chat-inner {
+  will-change: transform;
+}
+
+.faq-morph__faq {
+  will-change: opacity, transform;
+}
+
+/* Below the grid's two-column breakpoint and under reduced motion the morph is
+   off. Questions come first and the chat sits under them, both in the flow
+   and both clickable. The !important rules beat a transform the scroll
+   handler may have written before the viewport narrowed. */
+@media (max-width: 959.98px), (prefers-reduced-motion: reduce) {
+  .faq-morph {
+    height: auto !important;
+  }
+
+  .faq-morph__pin {
+    position: static;
+  }
+
+  .faq-morph__faq {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
+    will-change: auto;
+  }
+
+  .faq-morph__chat-inner {
+    transform: none !important;
+    will-change: auto;
+  }
+}
+
+/*
+ * #why — the composition (2026-09-23, branch claude/home-variants, #4429 round 15)
+ *
+ * The live band is now the `/variants/why` "guided, rented then owned"
+ * composition: two C4 container diagrams, the guided walk with the camera, the
+ * capability comparison and the cost model. The classes were app-local on the
+ * throwaway variants page; they are still app-local here because the
+ * composition is this page's own argument. Everything is square-cornered and
+ * hairline-ruled to match the terminal look ("utilitarian, terminal-like ...
+ * squared edges and simplicity").
+ *
+ * The band supplies the padding and the band rule (`#why` carries `line-b`),
+ * so the blocks inside only separate themselves with a hairline.
+ */
+
+.whyx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-step);
+  width: 100%;
+  min-width: 0;
+  /* The frame width, so the band sits a gutter inside the vertical rails. */
+  max-width: var(--frame-w);
+  margin-inline: auto;
+}
+
+/* An app switch fades only the graph. The tour stays mounted, so the header
+   never repaints through the static fallback, and the grid keeps its box
+   while the next app's drawing is swapped in underneath. */
+.whyx .arch-tour__grid {
+  opacity: 1;
+  transition: opacity 0.22s var(--ease);
+}
+.whyx.whyx--leaving .arch-tour__grid {
+  opacity: 0;
+}
+
+/* The pinned walk fills the viewport under the nav, and the diagram
+   takes the height the header does not, so the band is not a short
+   graph over an empty page. */
+.whyx .arch-tour__pin {
+  min-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
+  max-height: calc(100svh - var(--dq-nav-h, 4.5rem) - 2rem);
+  justify-content: flex-start;
+  overflow: clip;
+}
+
+.whyx .arch-tour__head {
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.whyx .arch-tour__grid {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__side {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__frame {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__stage,
+.whyx .arch-tour__pane,
+.whyx .arch-tour__camera,
+.whyx .arch-tour__camera .arch-figure {
+  height: 100%;
+}
+
+/* Unlayered on purpose: these override the kit's per-side tour geometry in
+   diagrams.css, which is itself unlayered (MIGRATION.md cascade contract).
+   The app tabs and description are the graph box's own header: the same width
+   as the frame (its 1.35fr share of the side, less the rail gap), and they
+   slide with it to the right edge when the digithings side takes the walk. */
+@media (min-width: 1024px) {
+  .whyx .arch-tour:not([data-variant="static"]) .whyx__apps {
+    width: calc((100% - 2.4rem) * 1.35 / 2);
+    margin-inline-start: 0;
+    transition: margin-inline-start 1.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .whyx .arch-tour:not([data-variant="static"])[data-active-side="1"] .whyx__apps {
+    margin-inline-start: calc(100% - (100% - 2.4rem) * 1.35 / 2);
+  }
+  /* The box sits flush under its tabs: no pin gap, and the frame spans the
+     side-tag row (the tag only ever sits over the rail column).
+     The walk is held between two rules: the nav's edge above and the pin's
+     own bottom rule, which bleeds past the rails like every section divider.
+     A border-image outset is ink overflow, so the bleed adds no scroll width. */
+  /* The pin holds exactly where the section snap parks the band — top on the
+     nav's edge — and fills to the viewport's foot, so both section rules are on
+     screen for the whole walk and the graph compresses to fit between them. */
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__pin {
+    top: var(--dq-nav-h, 4.5rem);
+    min-height: calc(100svh - var(--dq-nav-h, 4.5rem));
+    max-height: calc(100svh - var(--dq-nav-h, 4.5rem));
+    row-gap: 0;
+    padding-block: 1.2rem;
+    border-block-end: 1px solid var(--hair);
+    border-image: linear-gradient(var(--hair), var(--hair)) 0 0 1 0 / 0 0 1px 0 / 0 100vw;
+  }
+  /* The pin's rule is the band's bottom divider and the pin carries its own
+     top padding, so the section drops both: the track starts on the band's top
+     rule and the next band starts on the pin's rule when it lets go. */
+  #why:has(> .whyx .arch-tour:not([data-variant="static"])) {
+    padding-block: 0;
+    border-block-end-width: 0;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side .arch-tour__frame {
+    grid-row: 1 / -1;
+  }
+  /* Resting steps fold to one line so the price table fits under the rail;
+     the walked step still opens in full. */
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__rail {
+    gap: 0.55rem;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__step:not(.on) {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.6rem;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side[data-rail="end"] .arch-tour__step:not(.on) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__side[data-rail="end"] .arch-tour__step:not(.on) .arch-tour__index {
+    order: 2;
+  }
+  .whyx .arch-tour:not([data-variant="static"]) .arch-tour__step:not(.on) .arch-tour__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* A short screen gives the graph the lede's rows; the walk shows the same thing. */
+@media (max-height: 820px) {
+  .whyx .whyx__how {
+    display: none;
+  }
+}
+
+.whyx .arch-tour__camera .arch-figure__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.whyx .arch-tour__camera .arch-figure__body > svg {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.whyx__diagrams,
+.whyx__block {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+}
+
+
+/* ── the two diagrams ───────────────────────────────────────────────── */
+
+.whyx__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.4rem;
+  margin-top: 0.4rem;
+}
+
+.whyx__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.whyx__tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.whyx__side--owned .whyx__tag {
+  color: var(--accent);
+}
+
+.whyx__foot {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* ── the capability table ───────────────────────────────────────────── */
+
+.whyx-cap {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hair);
+  margin-top: 0.4rem;
+}
+
+.whyx-cap__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.2rem 1.6rem;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.85rem 0;
+}
+
+.whyx-cap__row--head {
+  border-bottom-color: var(--hair-2);
+}
+
+.whyx-cap__key {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.whyx-cap__row--head .whyx-cap__key,
+.whyx-cap__row--head .whyx-cap__cell {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.whyx-cap__cell {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ink-mute);
+}
+
+.whyx-cap__cell--owned {
+  color: var(--ink);
+}
+
+@media (min-width: 900px) {
+  .whyx-cap__row {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.15fr) minmax(0, 1.15fr);
+  }
+}
+
+/* ── the cost model ─────────────────────────────────────────────────── */
+
+.whyx-assume,
+.whyx-caveat {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.whyx-assume {
+  border-inline-start: 2px solid var(--accent);
+  padding-inline-start: 0.9rem;
+}
+
+.whyx-caveat {
+  border-inline-start: 2px solid var(--hair);
+  padding-inline-start: 0.9rem;
+}
+
+.whyx-assume__item,
+.whyx-caveat__item {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.65;
+}
+
+.whyx-assume__item {
+  color: var(--ink-soft);
+}
+
+.whyx-caveat__item {
+  color: var(--ink-mute);
+}
+
+.whyx-cost {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hair);
+}
+
+.whyx-cost__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.25rem 1.4rem;
+  border-bottom: 1px solid var(--hair);
+  padding: 0.95rem 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.whyx-cost__row--head {
+  border-bottom-color: var(--hair-2);
+}
+
+.whyx-cost__row--head > span {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.whyx-cost__layer {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.whyx-cost__source {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--ink-mute);
+}
+
+.whyx-cost__body {
+  border-top: 1px solid var(--hair);
+  padding-top: 1.4rem;
+}
+
+@media (min-width: 900px) {
+  .whyx-cost__row {
+    grid-template-columns: minmax(0, 0.55fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+}
+
+@media (min-width: 1100px) {
+  .whyx__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whyx *,
+  .whyx *::before,
+  .whyx *::after {
+    animation-duration: 0.001ms;
+    transition-duration: 0.001ms;
+  }
+}
+
+/* Round 10 — the guided walk. The three treatments live in the kit
+   (ArchitectureTour); these are only the app's stacking of them. */
+.whyx__tours {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  margin-top: 0.4rem;
+}
+
+.whyx__tour {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.whyx__tourtag {
+  margin: 0;
+  max-width: var(--measure-prose);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* Welcome hero. The canvas samples `color` and `accent-color` each frame
+   so the land mask and open markets follow the active theme. */
+.pixel-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 27rem;
+}
+
+.pixel-field {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--ink);
+  accent-color: var(--accent);
+}
+
+.pixel-word {
+  display: block;
+  width: 264px;
+  height: auto;
+  margin-top: 2.25rem;
+  color: var(--ink);
+  shape-rendering: crispEdges;
+  --glint: var(--accent);
+}
+
+@media (min-width: 380px) {
+  .pixel-word { width: 352px; }
+}
+
+@media (min-width: 640px) {
+  .pixel-word { width: 528px; }
+}
+
+@media (min-width: 768px) {
+  .pixel-word { width: 616px; }
+}
+
+.pixel-word .c { opacity: var(--f); }
+.pixel-word .n { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pixel-word .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word .g {
+    animation:
+      pixel-build var(--t) linear var(--d) both,
+      pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  .pixel-word .n { animation: pixel-stray var(--t) linear var(--d) both; }
+}
+
+@keyframes pixel-build {
+  0% { opacity: 0; }
+  0.1%, 33% { opacity: var(--a); }
+  33.1%, 66% { opacity: var(--b); }
+  66.1%, 99.9% { opacity: var(--c); }
+  100% { opacity: var(--f); }
+}
+
+@keyframes pixel-stray {
+  0% { opacity: 0; }
+  0.1%, 99.9% { opacity: 0.25; }
+  100% { opacity: 0; }
+}
+
+@keyframes pixel-glint {
+  0% { fill: var(--glint); opacity: 1; }
+  5%, 100% { fill: currentColor; opacity: var(--f); }
+}
+
+/* Hero craft — the text settles in after the wordmark has built (its cells run
+   out by ~1.1s), the field dissolves into the page ground at the band's floor,
+   and a thin cue points at the modules. All of it is transform/opacity only and
+   sits behind no-preference; reduced motion gets the final state. */
+.pixel-hero::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 6rem;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 0.7s var(--ease) calc(0.7s + var(--rise, 0) * 0.09s) both;
+  }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.hero-action {
+  transition:
+    background-color var(--duration-hover) var(--ease),
+    border-color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover { border-color: var(--ink-mute); }
+
+.hero-action:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.hero-action__arrow {
+  display: inline-block;
+  margin-inline-start: 0.6em;
+  color: var(--ink-mute);
+  transition:
+    transform var(--duration-hover) var(--ease),
+    color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover .hero-action__arrow {
+  color: var(--ink);
+  transform: translateY(2px);
+}
+
+.hero-cue {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  height: 3.25rem;
+  outline-offset: -2px;
+}
+
+.hero-cue__line {
+  position: relative;
+  width: 1px;
+  height: 100%;
+  overflow: hidden;
+  background: var(--hair);
+}
+
+.hero-cue__line::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 40%;
+  background: var(--ink-soft);
+  transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-cue__line::after { animation: hero-cue 2.4s var(--ease) 2s infinite; }
+}
+
+@keyframes hero-cue {
+  0% { transform: translateY(-100%); }
+  70%, 100% { transform: translateY(260%); }
+}
+
+.hero-cue:hover .hero-cue__line { background: var(--ink-mute); }
+
+/* Band eyebrow — `NN / label`, numbered like the gutter rail. The tick
+   matches the rail's own stroke so the two read as one system. */
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.section-eyebrow__tick {
+  display: block;
+  width: 1.1rem;
+  height: 1px;
+  background: var(--ink-mute);
+}
+
+@media (min-width: 640px) {
+  .section-eyebrow__tick { width: 1.6rem; }
 }
