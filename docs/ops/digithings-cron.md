@@ -16,6 +16,10 @@ The dispatched pipelines' shared Postgres secret is documented in
 
 Issue #3579. Default branch stays `develop`; this Worker is the production clock, not a branch flip.
 
-House research/portfolio retries (`house-run-09`…`12`) fire every day (`DOW=*`) with
-`refresh_scope=none`. At-open price clocks stay weekday/holiday-sensitive (`MON-FRI` +
-ET open gate). Operator full refresh remains manual `workflow_dispatch` only.
+House research/portfolio runs once a week (`house-run-09` at `17 9 * * MON`,
+cost lock 2026-10-01) with `refresh_scope=none`. Daily `house-run-10/11/12`
+retries stay disabled. Research + dashboard/portfolio stay fed by the other
+enabled DigiQuant clocks (prices, market-data, metrics, tearsheets, onchain).
+At-open price clocks stay weekday/holiday-sensitive (`MON-FRI` + ET open gate).
+Operator full refresh remains manual `workflow_dispatch` / `POST /kick` only.
+GHA `schedule:` stays off.

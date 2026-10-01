@@ -33,12 +33,13 @@ Set secrets from this directory with wrangler secret put (never echo values).
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(6 expressions after the 2026-10-01 Human Gate pause + Path A: DigiQuant
-pipeline jobs — including checkpoint-archive `30 13 * * *` wired to
-digiquant-runner — stay in `src/jobs.ts` with `enabled: false` and are
-omitted from wrangler). twelve-x-new-york stays weekday-only on
-`17 12 * * MON-FRI` when resumed. Resume: set those jobs `enabled: true`
-and restore wrangler from `uniqueEnabledCrons()`.
+(22 expressions after the 2026-10-01 DigiQuant resume). House-run is
+weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
+`house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
+`checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.
+GHA `schedule:` stays off — this Worker is the SSOT. Path A traps
+(agent/project/refresh + twelve-x) stay omitted. twelve-x-new-york stays
+weekday-only on `17 12 * * MON-FRI` when that repo's clocks resume.
 
 ## Local
 
@@ -68,10 +69,11 @@ session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
 ## Jobs
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
-intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type digiquant-baseline (Phase 3).
-Price jobs, market-data-refresh, onchain, tearsheets, research-metrics, and
-execution-cron-check use `kind: container`. Those four Phase 2 workflows have
-no `schedule:` of their own. The runner command catalog is
+intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false
+when that Path A trap is re-enabled. House-run is `kind: container`
+(`house-run-09` Monday 09:17 UTC). Price jobs, market-data-refresh,
+checkpoint-archive, onchain, tearsheets, research-metrics, and
+execution-cron-check use `kind: container`. Those workflows have no
+`schedule:` of their own. The runner command catalog is
 `apps/digiquant-runner/commands.json`. Operator notes:
 `docs/ops/digiquant-runner.md`.
