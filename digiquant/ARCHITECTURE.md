@@ -289,18 +289,6 @@ repo-wide code-reference scan. Guard halves: `tests/dq/test_luxalgo_license_guar
 `/v1/orchestrator_invoke` until a dispatch row exists. No Pine vendoring, no
 procurement (owner-side).
 
-**digiquant-web local gateway.** `apps/digiquant-web/gateway/live_gateway.py`
-is a development-only, read-scope adapter from the static browser app to one
-scrubbed stdio MCP child. It binds only `127.0.0.1`, accepts only exact loopback
-HTTP origins, exposes a fixed probe table (no tool passthrough), and never passes
-cookies or service keys to the child. The browser opts in with
-`NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL`; `lib/gateway/gateway-client.ts` independently
-requires both the page and configured gateway to be loopback before it fetches.
-The LuxAlgo surface is Library metadata search plus attribution only. Charting
-and journaling hand off to LuxAlgo; digiquant-web does not render a competing
-chart. Any non-local binding, edge auth, or deployment remains a human-gated
-network-exposure change.
-
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |

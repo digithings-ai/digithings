@@ -2,11 +2,7 @@ import type { ReactNode } from "react";
 import { CopyCommand } from "@digithings/ui";
 import { PricingStrip } from "../../components/start/pricing-strip";
 import { Band } from "../_chrome/Band";
-
-const REPO = "https://github.com/digithings-ai/digithings";
-// Exact command from app/_mcp-transcript.json; flags verified against
-// digiquant/src/digiquant/mcp_server.py (--stdio, --scope full|read).
-const MCP_COMMAND = "python -m digiquant.mcp_server --stdio --scope read";
+import { MCP_COMMAND, MCP_INSTALL_COMMAND } from "../_mcp";
 
 function Step({ n, label, children }: { n: string; label: string; children: ReactNode }) {
   return (
@@ -24,14 +20,14 @@ export function StartBand() {
     <Band id="start" title="Run it yourself" takeaway="digiquant is open core. Self-host it free, or have it run for you." status="open core">
       <>
         <div className="grid grid-cols-[minmax(0,1fr)] border border-hair lg:grid-cols-2">
-          <Step n="01" label="clone">
+          <Step n="01" label="install digiquant">
             <CopyCommand
-              samples={[{ label: "clone", protocol: "git clone", code: `git clone ${REPO}.git` }]}
-              ariaLabel="Clone command"
+              samples={[{ label: "install", protocol: "pip", code: MCP_INSTALL_COMMAND }]}
+              ariaLabel="Install command"
               className="max-w-none"
             />
           </Step>
-          <Step n="02" label="run the local MCP server (read scope)">
+          <Step n="02" label="then run the local MCP server">
             <CopyCommand
               samples={[{ label: "stdio", protocol: "python -m", code: MCP_COMMAND }]}
               ariaLabel="Local MCP run command"
