@@ -18,6 +18,7 @@ export function PipelineBand() {
   return (
     <Band
       id="pipeline"
+      fill
       status={snap ? "recorded" : "no recorded run"}
       title="Six stages, one record per run"
       takeaway="A run moves from inputs to learning, and each stage writes down what it did. What you see is a recorded run, not a live one."

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import tools from "../app/_mcp-tools.json";
-import { exampleArgs, runDemo, validateArgs, type McpTool } from "./mcp-demo";
+import { cycleName, exampleArgs, runDemo, validateArgs, type McpTool } from "./mcp-demo";
 
 const TOOLS = tools as McpTool[];
 const byName = (name: string) => {
@@ -56,5 +56,21 @@ describe("demo execution", () => {
     const t = byName("digiquant_list_strategies");
     expect(runDemo(t, "[1]", "full").at(-1)?.text).toContain("JSON object");
     expect(runDemo(t, "{", "full").at(-1)?.text).toContain("not valid JSON");
+  });
+});
+
+describe("cycleName", () => {
+  const names = ["a", "b", "c"];
+
+  it("wraps arrow movement through the visible tools", () => {
+    expect(cycleName(names, "a", 1)).toBe("b");
+    expect(cycleName(names, "c", 1)).toBe("a");
+    expect(cycleName(names, "a", -1)).toBe("c");
+  });
+
+  it("lands on an end when the current name is filtered out", () => {
+    expect(cycleName(names, "missing", 1)).toBe("a");
+    expect(cycleName(names, "missing", -1)).toBe("c");
+    expect(cycleName([], "a", 1)).toBe("a");
   });
 });
