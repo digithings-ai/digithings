@@ -4,7 +4,9 @@
 
 digivoice is a local CLI for dictation and speech on macOS. It shells out to whisper.cpp (`whisper-cli`) and Piper. The default dictation model is `ggml-base.en` (`ggml-base.en.bin`). Session history is an append-only JSONL file under the data directory. The package lives at `digivoice/` and is a uv workspace member, sibling to digiclaw and digigraph.
 
-`doctor`, `dict`, `speak`, `history`, and `settings`/`setup` are live. Optional local post-STT rewrite is off by default. Sample Hammerspoon hotkeys live under `digivoice/hammerspoon/` (outside the Python package import path). Do not add cloud STT/TTS or put Hammerspoon inside the installable package as a hard dependency.
+`doctor`, `dict`, `speak`, `history`, `settings`, and `setup` are live. Optional local post-STT rewrite is off by default. Sample Hammerspoon hotkeys live under `digivoice/hammerspoon/` (outside the Python package import path). Do not add cloud STT/TTS or put Hammerspoon inside the installable package as a hard dependency.
+
+Agents drive setup without a TTY: `digivoice setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`), `digivoice setup --json`, or `digivoice settings set <key> <value>`. `digivoice update` / `uninstall` are documented not-wired stubs.
 
 ## Read first
 
