@@ -1,7 +1,8 @@
 'use client';
 
 import { BlockGrid } from './BlockGrid';
-import type { Layout } from '@/lib/grid';
+import { GROUP_PAGES } from '@/lib/group-pages';
+import type { Layout, Placement } from '@/lib/grid';
 
 const DEFAULT: Layout = [
   { id: 'book', x: 1, y: 1, w: 4, h: 6 },
@@ -34,4 +35,19 @@ export function Gallery() {
 /** Dev page: the portfolio group on the editable grid. */
 export function PortfolioGallery() {
   return <BlockGrid pageId="blocks-portfolio" initial={PORTFOLIO} />;
+}
+
+/** Auto-tile up to 9 blocks: 2×2 of 6×6 for ≤4, else 3×3 of 4×4. The rest are one `+ id` away in edit mode. */
+function tile(ids: string[]): Layout {
+  const shown = ids.slice(0, 9);
+  const per = shown.length <= 4 ? 2 : 3;
+  const w = 12 / per, h = Math.floor(12 / Math.ceil(shown.length / per));
+  return shown.map((id, i): Placement => ({ id, x: (i % per) * w + 1, y: Math.floor(i / per) * h + 1, w, h }));
+}
+
+
+/** Dev page: one block group on the editable grid. */
+export function GroupGallery({ group }: { group: string }) {
+  const ids = GROUP_PAGES[group] ?? [];
+  return <BlockGrid pageId={`blocks-${group}`} initial={tile(ids)} />;
 }
