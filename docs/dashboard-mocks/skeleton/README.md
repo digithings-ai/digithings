@@ -9,7 +9,7 @@ Plan: the [dashboard skeleton plan in PR #4908](https://github.com/digithings-ai
 A **desk** is a swappable research configuration. Choosing a desk replaces the **entire sidebar**, not a page inside a fixed one.
 
 - The **desk picker** sits at the top of the sidebar, under the wordmark. It is the only control that changes the desk. It is not a paper/live switch and not a book switcher. Each option previews its own spine, so the remount is obvious before you click.
-- **house** (baseline, always-on, read-only) defines: Brief, Portfolio, Pipeline, House, Settings. Settings is pinned at the foot.
+- **house** (baseline, always-on, read-only) defines: Brief, Portfolio, Pipeline, Settings. Settings is pinned at the foot.
 - **rates watch** (custom, research only) defines: Digest, Watchlist, Theses, Run, Config, Settings. Different items, labels, order and surfaces. Same chrome shell, so it reads as one product.
 - There is no "Desks" destination. Desks are the picker.
 
@@ -22,7 +22,7 @@ Start at `index.html`. Frames are grouped there the same way.
 | Group | Frames |
 |---|---|
 | Auth | `00-sign-in` |
-| house desk | `01` Brief, `02` Holdings, `03` Theses, `04` thesis detail, `05` Tearsheet, `06` Ledger, `07` Ledger empty, `08` Attribution, `09` ticker dossier, `10` Pipeline, `11` House Corpus, `12` House Book, `13` House Profile |
+| house desk | `01` Brief, `02` Holdings, `03` Theses, `04` thesis detail, `05` Tearsheet, `06` Ledger, `07` Ledger empty, `08` Attribution, `09` ticker dossier, `10` Pipeline (frames `11` to `13` are retired) |
 | house desk, Settings by plan | `14` Profile, `15` Keys, `16` Brokers, `17` Notifications, `18` Billing (not configured), `19` About, `20` Desk plan, `21` Brief plan |
 | desk picker | `30` open on house, `31` open on rates watch, `32` both spines side by side (review aid) |
 | rates watch desk | `40` Digest, `41` Watchlist, `42` Theses, `43` Run, `44` Config, `45` to `50` Settings tabs |
@@ -33,7 +33,7 @@ Omission by plan is shown, not greyed. Frame `20` (Desk plan) has four Settings 
 
 All twelve Human Gate defaults, with the desk correction on top.
 
-- One Portfolio item with sticky tabs Holdings, Theses, Tearsheet, Ledger, Attribution. House tabs Corpus, Book, Profile.
+- One Portfolio item with sticky tabs Holdings, Theses, Tearsheet, Ledger, Attribution. There is no House item: the former House surfaces (Corpus, Book, Profile) are removed because their purpose was unclear.
 - FX Hub, journal, builder, tools, calendars, integrations hub, embedded digichat, command line: not drawn, no chips.
 - Paper brokers live in Settings, Brokers. Live execution is one disabled control with a `Paper` chip. No header paper/live switch.
 - `/why` and `/pipeline` are redirects in the plan; `/why` is not drawn. In the house desk `/pipeline` is a real item again, because "Desks" is now the picker and not a page.
