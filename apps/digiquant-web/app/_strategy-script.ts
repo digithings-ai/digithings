@@ -65,11 +65,3 @@ export const STRATEGY_STEPS: { tool: string; label: string; scope: ToolScope }[]
   { tool: "digiquant_run_optimize", label: "optimize", scope: "full" },
   { tool: "digiquant_export", label: "hand off", scope: "full" },
 ];
-
-/** Honest status ledger shown beside the story. */
-export const STRATEGY_LEDGER: { key: string; value: string }[] = [
-  { key: "where it is built", value: "In the dashboard. This page tells the story and builds nothing." },
-  { key: "what it is for", value: "Iterating on an idea and trying to break it. Optimized results are in-sample, so they are never presented as proof." },
-  { key: "backtest, optimize, export", value: "Run locally with the full-scope MCP server." },
-  { key: "hand-off", value: "Export writes a local file for you to review. Nothing is deployed and nothing trades." },
-];

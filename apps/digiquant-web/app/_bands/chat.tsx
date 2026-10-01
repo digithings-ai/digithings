@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ChatPlayback } from "@digithings/ui";
 import { Band } from "../_chrome/Band";
-import { DashboardFlowPlaceholder } from "../_placeholders";
 import {
   STRATEGY_BADGE,
   STRATEGY_HEADER,
-  STRATEGY_LEDGER,
   STRATEGY_SCRIPT,
   STRATEGY_STEPS,
 } from "../_strategy-script";
@@ -78,19 +76,6 @@ function StepLedger({ states }: { states: StepState[] }) {
   );
 }
 
-function StatusLedger() {
-  return (
-    <dl className="m-0 border border-hair font-mono text-[0.72rem] leading-[1.55]">
-      {STRATEGY_LEDGER.map((row) => (
-        <div key={row.key} className="border-b border-hair px-3 py-2 last:border-b-0">
-          <dt className="text-ink-mute">[ {row.key} ]</dt>
-          <dd className="m-0 mt-1 font-sans text-[0.8125rem] text-ink-soft">{row.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 export function ChatBand() {
   const ref = useRef<HTMLDivElement>(null);
   const states = useStepStates(ref);
@@ -99,23 +84,17 @@ export function ChatBand() {
       id="chat"
       status="story · in development"
       title="From a chat to a tested strategy"
-      takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. The builder lives in the dashboard; this is the story of it, and it is not live yet."
+      takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. Scripted, not live: the builder lives in the dashboard."
     >
-      <div ref={ref} className="flex flex-col gap-4">
-        <DashboardFlowPlaceholder />
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-          <StatusLedger />
-          <div className="flex min-w-0 flex-col gap-4">
-            <StepLedger states={states} />
-            <ChatPlayback
-              script={STRATEGY_SCRIPT}
-              badge={STRATEGY_BADGE}
-              header={STRATEGY_HEADER}
-              ariaLabel="Scripted strategy-building story"
-              className="[&>div.overflow-y-auto]:h-[12rem]"
-            />
-          </div>
-        </div>
+      <div ref={ref} className="mx-auto flex w-full max-w-[52rem] flex-col gap-3">
+        <ChatPlayback
+          script={STRATEGY_SCRIPT}
+          badge={STRATEGY_BADGE}
+          header={STRATEGY_HEADER}
+          ariaLabel="Scripted strategy-building story"
+          className="[&>div.overflow-y-auto]:h-[19rem]"
+        />
+        <StepLedger states={states} />
       </div>
     </Band>
   );
