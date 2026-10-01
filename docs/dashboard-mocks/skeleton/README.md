@@ -60,15 +60,20 @@ A future surface that suggests trade setups (paper-first, never live by default)
 
 ## Craft
 
-Matches the current digiquant-web language (PR #4900), not the earlier operator-dashboard chrome:
+A dense operator desk, not a site. The digiquant design system (tokens, type, rails) is the only thing carried over from digiquant-web. Its landing patterns (hero bands, one-viewport sections, big lede copy, closing wordmark) are not used.
 
-- One solid black canvas (`#000`). Panels share it, so structure is hairlines only, radius 0, no second paint, no blur, no glass.
-- Inter for prose (letter-spacing -0.011em) and JetBrains Mono for chrome, labels and figures, tabular figures throughout.
-- Dashed vertical page rails around the frame, as on the site.
-- `NN / label` eyebrows with a 1px tick on the page band and on every section (numbered by a CSS counter).
-- The sidebar is a numbered rail: tick, index, label. The active row grows its tick and takes the accent. The desk picker sits above it, and choosing a desk replaces the whole rail.
-- The pixel-cell digiquant wordmark (same glyph maps as the site's `QuantWordmark`, static, a few accent glint cells) in the sidebar, on sign in, and as the closing mark above each footer, dimmed inside the app.
-- Bracketed micro-labels (`[paper]`, `[close]`, `[live]`), dashed cards for honest empties and placeholders, hairline-square buttons with an arrow, ink-filled primary.
-- One accent (phosphor teal) per view, used for the active rail tick, glints and `[live]`. Green and red are only for signed P&L.
-- No icons, no chart library, no JS. One sticky tab row per page, no nested sticky bars. At most one primary action per page.
-- The dashed strip above every frame is annotation, not product chrome.
+- **Shell.** A 40px top bar (pixel wordmark, dated close marks for a handful of names, posture and run status), a 192px numbered rail (desk picker above the spine), a one-line page band (path, title, job, posture), one sticky tab row, and a thin footer line.
+- **Content.** Panels tile on a 12-column grid and share hairlines. Brief is a scoreboard strip of eight figures, then Decision and Signals, then allocation, movers and break conditions, then run health. Holdings is grouped by sleeve with weight bars, thesis links and mark source, beside a symbol pane and sleeve exposure. Pipeline is the run canvas, node document, call trace and artifact ledger on one screen.
+- **Tokens.** One solid black canvas, hairlines only, radius 0, Inter for prose and JetBrains Mono for chrome and figures at 10.5 to 15px, tabular figures, dashed page rails, `NN / label` eyebrows, bracketed micro-labels (`[paper]`, `[close]`), one accent (teal) used for the active rail tick and `[live]` only. Green and red only on signed P&L and mark change.
+- **Charts.** The locked plan (decisions 9, section 7) allows no drawn curves in these mocks, no chart library, and LuxAlgo as the only chart backbone. So charts appear as labeled, display-only LuxAlgo and Gloomberb panes beside tables (Holdings, dossier, Watchlist), not as drawn series. Tearsheet stays a report. Weight bars inside table cells are the only drawn data marks.
+- No icons, no JS. At most one primary action per page. The dashed strip above every frame is annotation, not product chrome.
+
+## Reviewing locally
+
+The frames are plain files. Serve this folder and open `index.html`:
+
+```bash
+cd docs/dashboard-mocks/skeleton && python3 -m http.server 3920
+```
+
+After pulling the branch tip, hard refresh (Cmd+Shift+R). Each page links `mock.css?v=...`, so a normal refresh also picks up a restyle.
