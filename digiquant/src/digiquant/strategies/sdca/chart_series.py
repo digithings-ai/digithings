@@ -126,6 +126,7 @@ def indicator_curve_from_z(
     dates: Sequence[str],
     z_values: Sequence[float | None],
     weight: float,
+    model: str | None = None,
 ) -> SdcaIndicatorCurve:
     """Map a z-score series onto the 0–100 risk scale used by the composite index."""
     points: list[dict[str, float | str]] = []
@@ -138,7 +139,7 @@ def indicator_curve_from_z(
         points.append({"t": day, "v": z_to_risk(zf)})
     return SdcaIndicatorCurve(
         name=name,
-        display_name=indicator_display_name(name),
+        display_name=indicator_display_name(name, model=model),
         weight=float(weight),
         in_index=float(weight) > 0.0,
         points=points,
@@ -150,6 +151,7 @@ def catalog_indicator_curves(
     dates: Sequence[str],
     z_by_name: Mapping[str, Sequence[float | None]],
     weights: SdcaCompositeWeights,
+    model: str | None = None,
 ) -> list[SdcaIndicatorCurve]:
     """Power-law first, then extras. Zero-weight extras stay in the layout."""
     payload = weights.model_dump()
@@ -162,14 +164,18 @@ def catalog_indicator_curves(
             out.append(
                 SdcaIndicatorCurve(
                     name=name,
-                    display_name=indicator_display_name(name),
+                    display_name=indicator_display_name(name, model=model),
                     weight=weight,
                     in_index=weight > 0.0,
                     points=[],
                 )
             )
             continue
-        out.append(indicator_curve_from_z(name=name, dates=dates, z_values=z_vals, weight=weight))
+        out.append(
+            indicator_curve_from_z(
+                name=name, dates=dates, z_values=z_vals, weight=weight, model=model
+            )
+        )
     return out
 
 

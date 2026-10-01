@@ -112,8 +112,17 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
-def indicator_display_name(name: str) -> str:
-    """Chart/UI label for an indicator code id (``valuation`` → ``power law``)."""
+_VALUATION_DISPLAY_BY_MODEL: dict[str, str] = {
+    "btc_power_law": "power law",
+    "generic_valuation": "valuation trend",
+    "rolling_z": "mean reversion",
+}
+
+
+def indicator_display_name(name: str, *, model: str | None = None) -> str:
+    """Chart/UI label for an indicator code id. `model` selects the valuation-leg label; default preserves BTC wording."""
+    if name == "valuation" and model in _VALUATION_DISPLAY_BY_MODEL:
+        return _VALUATION_DISPLAY_BY_MODEL[model]
     return INDICATOR_DISPLAY_NAMES.get(name, name.replace("_", " "))
 
 

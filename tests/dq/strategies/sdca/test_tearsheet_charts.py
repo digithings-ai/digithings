@@ -41,6 +41,38 @@ def test_indicator_display_name_renames_valuation_to_power_law() -> None:
     assert indicator_display_name("weekly_rsi") == "weekly RSI"
 
 
+def test_indicator_display_name_asset_aware_valuation_labels() -> None:
+    # BTC default preserved byte-identically (existing pin above stays green).
+    assert indicator_display_name("valuation") == "power law"
+    assert indicator_display_name("valuation", model="btc_power_law") == "power law"
+    assert indicator_display_name("valuation", model="rolling_z") == "mean reversion"
+    assert indicator_display_name("valuation", model="generic_valuation") == "valuation trend"
+    # Unknown model falls back to the default map (no KeyError).
+    assert indicator_display_name("valuation", model="no_such_model") == "power law"
+    assert indicator_display_name("valuation", model=None) == "power law"
+    # Non-valuation names ignore `model`.
+    assert indicator_display_name("m2", model="rolling_z") == "M2 liquidity"
+    assert indicator_display_name("weekly_rsi", model="generic_valuation") == "weekly RSI"
+
+
+def test_catalog_threads_model_to_valuation_label() -> None:
+    weights = SdcaCompositeWeights(valuation=1.0)
+    curves = catalog_indicator_curves(
+        dates=["2020-01-01"],
+        z_by_name={"valuation": [0.0]},
+        weights=weights,
+        model="rolling_z",
+    )
+    by_name = {c.name: c for c in curves}
+    assert by_name["valuation"].display_name == "mean reversion"
+    btc_curves = catalog_indicator_curves(
+        dates=["2020-01-01"],
+        z_by_name={"valuation": [0.0]},
+        weights=weights,
+    )
+    assert {c.name: c for c in btc_curves}["valuation"].display_name == "power law"
+
+
 def test_allocated_pct_is_mark_to_market_not_capital_deployed() -> None:
     # 500 cash, 0.5 BTC @ 1000 → 50% allocated.
     assert allocated_pct(500.0, 0.5, 1000.0) == pytest.approx(50.0)
