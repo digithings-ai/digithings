@@ -31,7 +31,7 @@ Before editing `digivoice/`:
 - Speech stays local: `whisper-cli` and Piper only. Optional post-STT rewrite uses a local runner (ollama / llama.cpp) only — never a cloud LLM. Rewrite is disabled by default.
 - Super Whisper is not a dependency. Do not shell out to it or read its config.
 - OpenCode `@renjfk/opencode-voice` is optional for people who want a TUI binding. digivoice must keep working when that plugin is absent.
-- The default model id is `ggml-base.en`. The file doctor requires is `ggml-base.en.bin` inside the models directory.
+- The default model id is `ggml-base.en`. `dict` and `doctor` honor `settings.stt_model`; the file for the default is `ggml-base.en.bin` inside the models directory.
 - Piper voices: set `DIGIVOICE_PIPER_VOICE` to a `.onnx` path, or place `*.onnx` (+ matching `.onnx.json`) under the models directory.
 - Model files, recorded wavs, and history JSONL stay under the data directory in the README. Do not commit them.
 - `doctor` looks up executables with filesystem checks. Do not pass `shell=True` and do not interpolate argv into a shell string.

@@ -346,7 +346,13 @@ def _dict_take(
     notes.append(note)
     reporter.update("transcribing")
     try:
-        transcript = transcribe(paths, runtime.probe, stage_runner, recording.wav_path)
+        transcript = transcribe(
+            paths,
+            runtime.probe,
+            stage_runner,
+            recording.wav_path,
+            model_id=settings.stt_model,
+        )
     except VoiceError as exc:
         if cancel.requested():
             return _cancelled(reporter, recording.wav_path)

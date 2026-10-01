@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.models import DoctorReport
+from digivoice.paths import resolve_paths
+from digivoice.settings import VoiceSettings, save_settings
 
 from tests.dvo.fakes import FakeProbe
 
@@ -87,6 +89,30 @@ def test_empty_models_dir_still_wants_ggml_base_en() -> None:
     assert detail.startswith("missing ")
     assert "ggml-base.en" in detail
     assert MODEL in detail
+
+
+def test_doctor_models_uses_configured_stt_model(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(stt_model="ggml-small.en"))
+    small = str(Path(paths.models_dir) / "ggml-small.en.bin")
+    default = str(Path(paths.models_dir) / "ggml-base.en.bin")
+    probe = FakeProbe(
+        commands={
+            "whisper-cli": "/usr/bin/whisper-cli",
+            "piper": "/usr/bin/piper",
+            "sox": "/usr/bin/sox",
+        },
+        directories={paths.models_dir},
+        files={small},
+    )
+    report = render_doctor(
+        doctor_checks("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)}, probe)
+    )
+    models = next(item for item in report.checks if item.id == "models")
+    assert models.status == "ok"
+    assert "ggml-small.en" in models.detail
+    assert small in models.detail
+    assert default not in models.detail
 
 
 def test_rewrite_and_interrupt_are_informational_when_disabled() -> None:
