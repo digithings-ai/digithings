@@ -16,7 +16,8 @@
 This file synthesizes external north stars — [Graphite](references/graphite.com.md),
 [Cursor](references/cursor.com.md), [x.ai](references/x.ai.md), plus the 2026-08
 utilitarian set [Herdr](references/herdr.dev.md), [AgentMail](references/agentmail.to.md),
-[Omarchy](references/omarchy.org.md) — with our current implementation and sets
+[Omarchy](references/omarchy.org.md), plus [Langfuse](references/langfuse.com.md)
+(2026-10 light-surface marketing-clarity reference for the next polish pass) — with our current implementation and sets
 **evolution paths** per surface. Active blend lock + preference ledger:
 [`BLEND.md`](BLEND.md). Live picker: design-reference `/iterate`.
 
