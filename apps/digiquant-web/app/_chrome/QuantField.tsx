@@ -2,16 +2,20 @@
 
 import { useEffect, useRef } from "react";
 
-/** Hero backdrop: a boxy, abstract price panel on canvas. Volume-style columns
- *  of square cells grow in left to right, a stepped line in the accent streams
- *  leftward as new points arrive, and a crosshair follows the pointer. It is
- *  decoration: no axes, no labels, no numbers, and the series is a seeded random
- *  walk, not market data. Colours come from `color` / `accent-color` on the
- *  canvas so it follows the theme. Static frame under reduced motion; the loop
- *  only runs while the hero is on screen. */
+/** Hero backdrop: a plain volume-style bar chart along the bottom of the hero.
+ *  Flat-topped bars on a baseline, hairline gridlines and a label that says what
+ *  it is. The bars grow in left to right, then a new bar arrives from the right
+ *  every few seconds. The series is a seeded random walk, not market data, and
+ *  the chart says so. Hovering a bar highlights it. Colours come from `color` /
+ *  `accent-color` on the canvas so it follows the theme. Static frame under
+ *  reduced motion; the loop only runs while the hero is on screen. */
 
-const PITCH = 16;
-const STEP_MS = 850;
+const BAR = 10;
+const GAP = 4;
+const PITCH = BAR + GAP;
+const STEP_MS = 1400;
+const CHART_H = 132;
+const LABEL_PAD = 22;
 
 function mulberry32(seed: number): () => number {
   let state = seed;
@@ -34,21 +38,19 @@ export function QuantField() {
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const rand = mulberry32(0x51ad);
-    let price = 0.5;
-    const nextPrice = () => {
-      price = Math.min(0.95, Math.max(0.05, price + (rand() - 0.47) * 0.2));
-      return price;
+    let level = 0.5;
+    const nextBar = () => {
+      level = Math.min(0.96, Math.max(0.12, level + (rand() - 0.5) * 0.4));
+      return level;
     };
-    const nextVolume = () => 0.12 + rand() * rand() * 0.88;
 
+    const values: number[] = [];
     let cols = 0;
-    let rows = 0;
     let dpr = 1;
-    const prices: number[] = [];
-    const volumes: number[] = [];
     let ink = "";
     let accent = "";
-    let pointer: { x: number; y: number } | null = null;
+    let mono = "monospace";
+    let hover = -1;
     let start = 0;
     let lastStep = 0;
     let raf = 0;
@@ -59,15 +61,13 @@ export function QuantField() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
       canvas.height = Math.max(1, Math.round(rect.height * dpr));
-      cols = Math.ceil(rect.width / PITCH) + 2;
-      rows = Math.ceil(rect.height / PITCH);
-      while (prices.length < cols) prices.push(nextPrice());
-      while (volumes.length < cols) volumes.push(nextVolume());
-      prices.length = cols;
-      volumes.length = cols;
+      cols = Math.ceil(rect.width / PITCH) + 1;
+      while (values.length < cols) values.push(nextBar());
+      values.length = cols;
       const style = getComputedStyle(canvas);
       ink = style.color;
       accent = style.accentColor && style.accentColor !== "auto" ? style.accentColor : style.color;
+      mono = style.fontFamily || mono;
     };
 
     const draw = (now: number) => {
@@ -77,63 +77,54 @@ export function QuantField() {
       const h = canvas.height / dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      const cell = PITCH - 3;
-      const half = PITCH / 2;
-      // The chart lives in a strip along the bottom of the hero (9 cells tall) so
-      // it never runs behind the wordmark or copy.
-      const strip = Math.min(rows, 9);
-      const lineRows = strip * 0.6;
-      const lineTop = rows - strip + 1;
+
+      const base = h - 1;
+      const top = base - CHART_H;
+      const plot = CHART_H - LABEL_PAD;
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = ink;
+      ctx.globalAlpha = 0.12;
+      ctx.setLineDash([2, 4]);
+      for (const f of [0.5, 1]) {
+        const y = Math.round(base - plot * f) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.moveTo(0, base + 0.5);
+      ctx.lineTo(w, base + 0.5);
+      ctx.stroke();
 
       for (let c = 0; c < cols; c++) {
-        const grown = reduced ? 1 : Math.min(1, Math.max(0, (elapsed - c * 18) / 700));
+        const grown = reduced ? 1 : Math.min(1, Math.max(0, (elapsed - c * 14) / 600));
         const eased = 1 - Math.pow(1 - grown, 3);
-        const x = c * PITCH - shift;
-        const stack = Math.round(volumes[c] * strip * 0.4 * eased);
-        ctx.fillStyle = ink;
-        ctx.globalAlpha = 0.09;
-        for (let r = 0; r < stack; r++) ctx.fillRect(x, h - (r + 1) * PITCH, cell, cell);
-        const py = Math.round(lineTop + (1 - prices[c]) * lineRows) * PITCH;
-        ctx.fillStyle = accent;
-        ctx.globalAlpha = 0.85 * eased;
-        ctx.fillRect(x, py, cell, cell);
-        if (c > 0) {
-          const prev = Math.round(lineTop + (1 - prices[c - 1]) * lineRows) * PITCH;
-          const top = Math.min(py, prev) + cell;
-          const gap = Math.abs(py - prev) - cell;
-          if (gap > 0) {
-            ctx.globalAlpha = 0.35 * eased;
-            ctx.fillRect(x - 3 + half - 1, top, 2, gap + 3);
-          }
-        }
+        const barH = Math.max(2, Math.round(values[c] * plot * eased));
+        const x = Math.round(c * PITCH - shift);
+        const latest = c >= cols - 2;
+        ctx.fillStyle = latest || c === hover ? accent : ink;
+        ctx.globalAlpha = latest || c === hover ? 0.85 : 0.26;
+        ctx.fillRect(x, base - barH, BAR, barH);
       }
 
-      if (pointer) {
-        ctx.globalAlpha = 0.28;
-        ctx.strokeStyle = ink;
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(pointer.x + 0.5, 0);
-        ctx.lineTo(pointer.x + 0.5, h);
-        ctx.moveTo(0, pointer.y + 0.5);
-        ctx.lineTo(w, pointer.y + 0.5);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 0.9;
-        ctx.strokeStyle = accent;
-        ctx.strokeRect(Math.floor(pointer.x / PITCH) * PITCH - 1, Math.floor(pointer.y / PITCH) * PITCH - 1, cell + 2, cell + 2);
-      }
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = ink;
+      ctx.font = `10px ${mono}`;
+      ctx.textBaseline = "top";
+      ctx.textAlign = "left";
+      ctx.fillText("volume · illustrative bars, not market data", 0, top);
       ctx.globalAlpha = 1;
     };
 
     const tick = (now: number) => {
       if (!lastStep) lastStep = now;
       if (now - lastStep >= STEP_MS) {
-        prices.shift();
-        volumes.shift();
-        prices.push(nextPrice());
-        volumes.push(nextVolume());
+        values.shift();
+        values.push(nextBar());
         lastStep = now;
       }
       draw(now);
@@ -142,11 +133,13 @@ export function QuantField() {
 
     const onMove = (e: PointerEvent) => {
       const rect = host.getBoundingClientRect();
-      pointer = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      hover = y > rect.height - CHART_H ? Math.floor(x / PITCH) : -1;
       if (reduced) draw(performance.now());
     };
     const onLeave = () => {
-      pointer = null;
+      hover = -1;
       if (reduced) draw(performance.now());
     };
 
@@ -181,5 +174,11 @@ export function QuantField() {
     };
   }, []);
 
-  return <canvas ref={ref} aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full text-ink [accent-color:var(--accent)]" />;
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden="true"
+      className="absolute inset-0 -z-10 h-full w-full font-mono text-ink [accent-color:var(--accent)]"
+    />
+  );
 }

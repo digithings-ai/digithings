@@ -92,10 +92,10 @@ export function LocalLuxalgoWorkflow() {
   }
 
   return (
-    <section aria-labelledby="luxalgo-workflow-h" className="mt-3 border border-hair bg-surface">
+    <section aria-labelledby="luxalgo-workflow-h" className="border border-hair bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-3 py-2 font-mono">
         <h3 id="luxalgo-workflow-h" className="m-0 text-[0.78rem] font-normal text-ink">
-          LuxAlgo, as a capability demo
+          LuxAlgo, as a demo
         </h3>
         <Badge variant={status === "ready" ? "accent" : "neutral"}>{STATUS_COPY[status]}</Badge>
       </div>
@@ -103,20 +103,20 @@ export function LocalLuxalgoWorkflow() {
       <ol className="m-0 grid list-none p-0 min-[760px]:grid-cols-3">
         <li className="border-b border-hair p-3 min-[760px]:border-b-0 min-[760px]:border-e">
           <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 01 ] discover</p>
-          <p className="mb-0 mt-2 text-[0.78rem] leading-[1.55] text-ink-soft">
-            The gateway can look up LuxAlgo Library concepts and indicator metadata. Try it below.
+          <p className="mb-0 mt-2 text-[0.8125rem] leading-[1.55] text-ink-soft">
+            The local gateway can look up LuxAlgo Library concepts and indicator metadata. Try it below.
           </p>
         </li>
         <li className="border-b border-hair p-3 min-[760px]:border-b-0 min-[760px]:border-e">
           <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 02 ] chart + journal</p>
-          <p className="mb-0 mt-2 text-[0.78rem] leading-[1.55] text-ink-soft">
-            Visual analysis and the decision journal stay in LuxAlgo. This site shows the hand-off and renders no competing chart.
+          <p className="mb-0 mt-2 text-[0.8125rem] leading-[1.55] text-ink-soft">
+            Charts and the trade journal stay in LuxAlgo. This site renders no competing chart.
           </p>
         </li>
         <li className="p-3">
           <p className="m-0 font-mono text-[0.65rem] text-ink-mute">[ 03 ] validate</p>
-          <p className="mb-0 mt-2 text-[0.78rem] leading-[1.55] text-ink-soft">
-            The written thesis goes to digiquant for a Nautilus backtest before any export.
+          <p className="mb-0 mt-2 text-[0.8125rem] leading-[1.55] text-ink-soft">
+            The written idea goes to digiquant for a Nautilus backtest before anything is exported.
           </p>
         </li>
       </ol>

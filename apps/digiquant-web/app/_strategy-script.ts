@@ -68,11 +68,11 @@ export const STRATEGY_STEPS: { tool: string; label: string; scope: ToolScope }[]
 
 /** Honest status ledger shown under the story. */
 export const STRATEGY_LEDGER: { key: string; value: string }[] = [
-  { key: "where it is built", value: "the dashboard is the builder; this page tells the story and builds nothing" },
-  { key: "strategy development", value: "in development, not live" },
-  { key: "backtest · optimize · export", value: "run locally over stdio, full-scope MCP" },
-  { key: "hosted MCP", value: "none: no public server, no connect button, no URL" },
-  { key: "hand-off", value: "export writes a local JSON config only: no Pine or TradingView output, no broker or QuantConnect deployment" },
-  { key: "nautilus_bundle", value: "a local zip, and for ema_cross only" },
-  { key: "dashboard chat", value: "read scope: list_strategies only, from these four" },
+  { key: "where it is built", value: "In the dashboard. This page tells the story and builds nothing." },
+  { key: "status", value: "In development, not live." },
+  { key: "backtest, optimize, export", value: "Run locally over stdio with the full-scope MCP server." },
+  { key: "hosted MCP", value: "None. No public server, no connect button, no URL." },
+  { key: "hand-off", value: "Export writes a local JSON config. No Pine or TradingView output, no broker or QuantConnect deployment." },
+  { key: "nautilus_bundle", value: "A local zip, for ema_cross only." },
+  { key: "dashboard chat", value: "Read scope: list_strategies only." },
 ];

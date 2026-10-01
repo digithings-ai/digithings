@@ -11,7 +11,7 @@ const MCP_COMMAND = "python -m digiquant.mcp_server --stdio --scope read";
 
 function Step({ n, label, children }: { n: string; label: string; children: ReactNode }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-end gap-x-[1.3rem] gap-y-[0.7rem] border-b border-hair p-[1.3rem] text-left last:border-b-0 min-[860px]:grid-cols-[13rem_minmax(0,1fr)]">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-end gap-x-[1.3rem] gap-y-[0.7rem] border-b border-hair p-[1.3rem] text-left last:border-b-0 min-[860px]:grid-cols-[12rem_minmax(0,1fr)]">
       <p className="m-0 pb-[1rem] font-mono text-[0.68rem] leading-[1.5] text-ink-mute">
         [ {n} ] {label}
       </p>
@@ -22,8 +22,8 @@ function Step({ n, label, children }: { n: string; label: string; children: Reac
 
 export function StartBand() {
   return (
-    <Band id="start" layout="center" title="Run it yourself" takeaway="The dashboard is open core. Self-host it free, or have it run for you." status="open core">
-      <div className="mx-auto max-w-[60rem]">
+    <Band id="start" title="Run it yourself" takeaway="digiquant is open core. Self-host it free, or have it run for you." status="open core">
+      <>
         <div className="grid grid-cols-[minmax(0,1fr)] border border-hair">
           <Step n="01" label="clone">
             <CopyCommand
@@ -40,17 +40,17 @@ export function StartBand() {
             />
           </Step>
         </div>
-        <div className="mt-[1.6rem]">
+        <div className="mt-4">
           <PricingStrip />
         </div>
-        <div className="mt-[4.5rem] border-t border-hair pt-[2rem]">
+        <div className="mt-[3rem] border-t border-hair pt-[2rem]">
           <ClosingWordmark className="block h-auto w-full fill-current text-ink" />
           <p className="m-0 mt-[1rem] flex flex-wrap justify-between gap-2 font-mono text-[0.65rem] text-ink-mute">
             <span>[ digiquant ]</span>
             <span>[ self-hosted is free, MIT ]</span>
           </p>
         </div>
-      </div>
+      </>
     </Band>
   );
 }

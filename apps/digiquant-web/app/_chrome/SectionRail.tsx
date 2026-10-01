@@ -60,10 +60,7 @@ export function SectionRail() {
         ))}
       </ol>
       <span aria-hidden="true" className="rotate-180 whitespace-nowrap tracking-[0.04em] [writing-mode:vertical-rl]">
-        ~/digiquant<span className="text-ink">/{BANDS[active].label}</span>
-        <span className="ms-[0.8em] text-ink-soft">
-          {pad2(active + 1)}/{pad2(BANDS.length)}
-        </span>
+        <span className="text-ink-soft">{pad2(active + 1)}</span> / <span className="text-ink">{BANDS[active].label}</span>
       </span>
     </nav>
   );

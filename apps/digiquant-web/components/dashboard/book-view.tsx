@@ -120,7 +120,7 @@ export function BookView(p: BookViewProps) {
   return (
     <div className="border border-hair bg-surface font-mono text-left" data-state={p.state}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hair px-3 py-2 text-[0.68rem] tracking-[0.04em] text-ink-mute">
-        <span>~/digiquant/book</span>
+        <span>paper book</span>
         <Badge variant="neutral">paper, not money</Badge>
         {live ? <LiveBadge label="research book" ariaLabel="Live research book, paper portfolio" /> : null}
         {live ? <span>{fmtNum(p.positions ?? 0)} positions</span> : null}
