@@ -25,6 +25,8 @@ BannerPosition = Literal[
     "top-center",
     "top-left",
     "top-right",
+    "middle-left",
+    "middle-right",
     "bottom-center",
     "bottom-left",
     "bottom-right",
