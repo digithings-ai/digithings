@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import { Footer, Reveal } from "@digithings/ui";
-import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
-import { SiteNav } from "@/components/landing/SiteNav";
-import { AmbientMesh } from "@/components/landing/AmbientMesh";
-import releases from "@digithings/design/releases.json";
+import { CtaLink, DocumentFrame, PageTitle } from "@digithings/ui";
+import { TAGGED_RELEASES } from "@/lib/releases";
 
 export const metadata: Metadata = {
   title: "changelog — tagged stack releases",
@@ -11,67 +8,33 @@ export const metadata: Metadata = {
     "Tagged digichat and digiskills releases from the repository this desk is built on. The quant engine ships on develop without a product tag.",
 };
 
-type Release = {
-  date: string;
-  version: string;
-  title: string;
-  href: string;
-  tag: string;
-  product: string;
-};
-
-const ENTRIES = releases as Release[];
-
 export default function ChangelogPage() {
   return (
-    <>
-      <SiteNav />
-      <main className="dq-subpage" id="main" tabIndex={-1}>
-        <AmbientMesh />
-        <section className="section">
-          <div className="wrap">
-            <Reveal>
-              <div>
-                <span className="kicker">{"// changelog"}</span>
-                <h1 className="dq-title">Tagged releases.</h1>
-                <p className="dq-sub">
-                  Versioned packages from the digithings stack this desk is built on. The quant
-                  engine and dashboard ship on{" "}
-                  <code className="font-mono text-[0.92em] text-ink">develop</code> without a
-                  product tag.
-                </p>
-              </div>
-            </Reveal>
-            <Reveal>
-              <div className="changelog-band mt-[2.2rem]">
-                {ENTRIES.map((e) => (
-                  <div className="changelog-row" key={`${e.product}-${e.version}`}>
-                    <div className="changelog-row__date">
-                      {e.date} · {e.version}
-                    </div>
-                    <div className="changelog-row__title">
-                      <a href={e.href} target="_blank" rel="noopener noreferrer">
-                        {e.title}
-                      </a>
-                      <span className="changelog-row__tag">{e.tag}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="changelog-band__footer">
-                <a
-                  href="https://github.com/digithings-ai/digithings/releases"
-                  target="_blank"
-                  rel="noopener noreferrer"
+    <main id="main" tabIndex={-1}>
+      <DocumentFrame>
+        <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+          <PageTitle title="Changelog">
+            Tagged digichat and digiskills releases from the repository. digiquant ships on develop and has no product tag on this page.
+          </PageTitle>
+          <ul className="m-0 mt-8 list-none border border-hair p-0">
+            {TAGGED_RELEASES.map((release) => (
+              <li key={`${release.product}-${release.version}`} className="border-b border-hair last:border-b-0">
+                <CtaLink
+                  href={release.href}
+                  external
+                  variant="ghost"
+                  className="h-auto w-full items-baseline justify-between gap-3 px-4 py-3 text-start no-underline hover:bg-surface-2"
                 >
-                  All GitHub releases →
-                </a>
-              </p>
-            </Reveal>
-          </div>
-        </section>
-      </main>
-      <Footer links={DQ_FOOTER} meta={DQ_FOOTER_META} />
-    </>
+                  <span className="font-mono text-[0.85rem] text-ink">
+                    {release.product} {release.version}
+                  </span>
+                  <span className="font-mono text-[0.72rem] font-normal text-ink-mute">{release.date}</span>
+                </CtaLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </DocumentFrame>
+    </main>
   );
 }

@@ -140,21 +140,30 @@ function TearsheetUnavailable({ slug, message }: { slug: string; message: string
             <AssetLogoFor strategy={slug} symbol={symbol} size={36} className="ts-header-logo" />
             <span>{title}</span>
           </h1>
-          {dca ? (
-            <div className="ts-meta">
-              <Badge variant="outline" className="border-accent-weak bg-accent-weak">
-                {symbol}
-              </Badge>
-              <StrategyTypeChip strategy={slug} />
-              <SignalDelayChip days={3} detail="full" />
-              <BacktestOnlyChip />
-            </div>
-          ) : null}
+          <div className="ts-meta">
+            <Badge variant="outline" className="border-accent-weak bg-accent-weak">
+              {symbol}
+            </Badge>
+            <StrategyTypeChip strategy={slug} />
+            {dca ? <SignalDelayChip days={3} detail="full" /> : null}
+            <BacktestOnlyChip />
+          </div>
         </div>
       </header>
+      <dl className="m-0 grid grid-cols-2 gap-3 border border-hair p-4 sm:grid-cols-3">
+        {(dca
+          ? [TOTAL_RETURN_KPI_LABEL, "Max DD", VS_LUMP_KPI_LABEL, ALLOCATED_KPI_LABEL]
+          : ["CAGR", "Max DD", "Profit factor", "Win rate", "Avg trade", "Trades"]
+        ).map((label) => (
+          <div key={label}>
+            <dt className="font-mono text-[0.65rem] uppercase tracking-wide text-ink-mute">{label}</dt>
+            <dd className="m-0 font-mono text-ink">—</dd>
+          </div>
+        ))}
+      </dl>
       <p className="ts-status ts-status-error" role="status">
         {message} Charts and KPIs appear after the operator publishes this backtest
-        to the live store — they are not omitted to hide a result.
+        to the live store. They are not omitted to hide a result.
       </p>
       {dca ? <RemainingBookNotes strategy={slug} asset={asset} /> : null}
     </div>
@@ -169,7 +178,9 @@ function PrintHeading({ children }: { children: string }) {
 
 export function TearsheetView({ slug }: { slug: string }) {
   const [data, setData] = useState<TearsheetData | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(
+    "The official API has not published this tearsheet.",
+  );
   const [scaleOverride, setScaleOverride] = useState<ChartScale | null>(null);
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
@@ -188,8 +199,10 @@ export function TearsheetView({ slug }: { slug: string }) {
     fetchTearsheet(slug)
       .then((d) => {
         if (!alive) return;
-        if (d) setData(d);
-        else setErr("Could not load tearsheet data — the live store returned nothing.");
+        if (d) {
+          setErr(null);
+          setData(d);
+        } else setErr("The official API has not published this tearsheet.");
       })
       .catch((e: unknown) => {
         if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);
