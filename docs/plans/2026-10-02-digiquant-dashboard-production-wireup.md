@@ -513,7 +513,11 @@ Each dashboard seat branches from current `develop` as `task/<N>-<slug>` when an
 **Goal.** Production craft for the digiquant-web landing hero on PR #4900. Two parts, already named by Chris:
 
 1. **Scroll behavior is approved** at remock tip `1b2c9002d8552efa127943ea3f24e1577f3f4a47` on `task/4895-dqweb-3910-message`. Keep it. Do not redesign the wheel.
-2. **Loading sequence** must feel like one motion. Logo, all hero text, and both buttons appear first. Then the real Vela chart behind constructs itself: candles draw on, then indicators appear across the build. Not a pieced stack of unrelated fades.
+2. **Loading sequence** (Chris, refined): about **5 seconds**, hard cap **10 seconds**, from first paint to the last indicator finishing. Four beats, one motion, no long pause:
+   1. Chrome — logo, text, and buttons — with a short handoff into the chart.
+   2. X-axis draws left to right, the right-hand Y-axis draws bottom to top, then the grid.
+   3. Candles and volume sweep left to right together. Each volume bar arrives with its candle, not as a histogram that pops in after the candles.
+   4. Indicators sweep left to right. They may stream on one pass together.
 
 This slice does not touch `apps/dashboard`, DigiCon, or the desk shell.
 
@@ -523,9 +527,9 @@ This slice does not touch `apps/dashboard`, DigiCon, or the desk shell.
 |---|---|
 | `550235c12` | Wheel: Vela may zoom-out while the gesture is live. After settle (`WHEEL_IDLE_MS` 140) or after `ZOOM_OUT_BUDGET` 720 of downward `deltaY`, the next wheel scrolls the page. Horizontal / shift stays on the chart. At the top, scrolling up re-arms zoom. `touch-action: pan-y`. |
 | `1b2c9002d` | **Approved tip for scroll.** Section rail stays hidden on the hero (band 0) and fades in once section 2 owns the viewport midpoint (`active >= 1`). |
-| `bf6730256` | Unverified attempt at the sequence: chart mount waits for `COPY_DONE_MS`, Vela `intro.grow` for `CHART_INTRO_MS` (2400), SMA → EMA → overlay staggered by 520ms, clip-path sweep removed. |
+| `bf6730256` | Earlier attempt. It waits on `COPY_DONE_MS`, grows candles with Vela `intro`, and pops SMA, then EMA, then an overlay. That is not this sequence. Keep the wheel code. Replace the build. |
 
-The seat starts from the current #4900 head (which includes `bf6730256`) and makes that sequence pass the acceptance criteria. It does not open a second hero off `develop`.
+The seat starts from the current #4900 head and makes the hero pass the acceptance criteria below. It does not open a second hero off `develop`.
 
 **Files.** Only under `apps/digiquant-web`:
 
@@ -538,13 +542,16 @@ The seat starts from the current #4900 head (which includes `bf6730256`) and mak
 
 **Do not edit.** Other bands, `apps/dashboard`, `packages/design` demos, dashboard Vela spike, Coinbase provider wiring beyond what #4900 already uses (`@luxalgo/vela/providers/coinbase`). Hero candle colors stay the #4900 remock (`#3DFF9A` / `#FF5C6C`). Dashboard lock 8 (teal `#3dd6c4` / red `#e5533e`) does not retint this page.
 
-**Feasible staged reveal (real Vela).** Vela will not animate “add indicator” as a designed storyboard. Stage it in three beats on one clock, with no second mask on top:
+**Feasible staged reveal (real Vela).** Vela’s `animations.intro` (`style: "grow"`) grows a series. It does not draw the x-axis, then the right price axis, then the grid, then per-bar volume. Do not fake that with a clip-path over a finished chart, and do not keep the `bf6730256` schedule (full wordmark clock, then a 520ms host fade, then three indicator pops).
 
-1. **Foreground first.** Wordmark, headline, lede, and both buttons are visible and still before any candle moves. One entrance for that group (the existing `.hero-rise` steps may stay if they finish together). The chart host stays at opacity 0 and does not run a clip-path. Do not tie candle progress to `sweepDelayMs` / the wordmark column clock — that sync is what made the hero feel pieced.
-2. **Candles construct.** On the foreground’s `animationend` (or `COPY_DONE_MS` if that constant equals the moment the last button has settled — not a long gap after it), mount Vela with volume and `animations.intro = { style: "grow", duration: CHART_INTRO_MS }`. The grow *is* the drawing. Do not also fade a fully drawn chart in over the same interval. A short opacity ramp (the 520ms in `bf6730256`) is allowed only if it finishes before candles are halfway grown; otherwise drop it.
-3. **Indicators over the build.** Volume is part of the candle mount. Then `addNativeIndicator` in order: SMA 20, EMA 50, then one overlay chosen once per reload (Bollinger, VWAP, or SuperTrend — already the cycle in `QuantField`). Space them across the intro (the 28% / +520ms / +1040ms schedule is the right shape). Update the caption when each layer actually mounts, so the label does not name SMA and EMA while only candles are on screen. If an `addNativeIndicator` call rescales or flashes the series, add SMA and EMA in one turn after the grow and bring the overlay in on the next beat — still two visible stages, not four pops.
+Clock, from first paint. Target about 5s. Stop by 10s even if a beat wants to run long. Suggested split when the feed is healthy: chrome ~0.7s, handoff under 0.3s, axes and grid ~0.8s, candles and volume ~2s, indicators ~1.2s. Do not insert silence to pad a short beat up to 5s.
 
-`prefers-reduced-motion: reduce`: skip grow and stagger, show the finished chart after the foreground is visible, keep page scroll (no zoom trap). If Coinbase fails, the foreground still completes and the caption reads chart unavailable. The feed must not block the logo.
+1. **Chrome, short handoff.** Wordmark, headline, lede, and both buttons enter together and stay readable. The handoff is the moment axes start, under 300ms after that group is on screen. The wordmark’s last cells may still be rising. Waiting for `BUILD_DONE_MS` (~1.9s plus cell jitter) before any axis is the long pause this beat forbids.
+2. **Axes, then grid.** Mount Vela immediately so its plot rect is real, with series and volume hidden and `gridColor` transparent. Animate two strokes in that rect: the time axis left to right, then the right price axis bottom to top, then the grid lines. When the grid beat ends, turn Vela’s own grid and axes on (or leave the strokes if they match) and remove the overlay. This is construction, not a mask over candles.
+3. **Candles and volume, one left-to-right sweep.** Reveal bar `i`’s candle and bar `i`’s volume rect on the same x. If `volume: true` paints the whole histogram at once, leave it off for the sweep and drive volume from the loaded bars in the same progress loop as the candles (Vela data update or a series that appends). A grow intro is acceptable only when a recording shows volume locked to each candle. No second fade of the plot.
+4. **Indicators, one left-to-right sweep.** SMA 20, EMA 50, and the one overlay (Bollinger, VWAP, or SuperTrend, chosen once per reload) may draw on the same pass. Stream points from the left. `addNativeIndicator` of a complete line is a pop; use it only if that call itself draws left to right. Caption text names a layer when that layer is actually visible.
+
+`prefers-reduced-motion: reduce`: skip the sweeps, show the finished chart once the chrome is visible, keep page scroll. If Coinbase fails, chrome still completes, the axis beat may run on an empty plot, and the caption reads chart unavailable. The feed must not block the logo. A slow feed does not add a second pause: axes and grid still run, candles start when bars arrive, and the 10s cap still applies.
 
 **Scroll acceptance (do not regress `1b2c9002d`).**
 
@@ -555,15 +562,15 @@ The seat starts from the current #4900 head (which includes `bf6730256`) and mak
 - The left section rail is not visible and not tabbable while the hero owns the midpoint. It is visible from the dashboard band downward.
 - Dashboard lock 1 does not apply: the marketing page scrolls.
 
-**Sequence acceptance.**
+**Sequence acceptance.** Record a cold load with motion allowed, `scrollY` forced to 0 (no restored scroll, no hash).
 
-- On a cold load with motion allowed, a screen recording shows this order with no overlap between phases: (1) the wordmark’s last cell has finished rising, and the headline, lede, and both buttons are already on screen; (2) only then candles grow across the hero; (3) SMA, then EMA, then the overlay appear during that grow, each as its own arrival.
-- Headline and buttons may finish before the wordmark. They are phase 1. Candles must not move while wordmark cells are still rising.
-- The gap between the last wordmark cell finishing and the first candle moving is under 300ms. `bf6730256` sets `COPY_DONE_MS` to `BUILD_DONE_MS + 280`, and `BUILD_DONE_MS` is `sweepDelayMs(1) + BUILD_RISE_MS` (360). Cell animations also add `(9 - y) * 9`, up to 140ms of jitter, and a rise of 260–480ms, so late cells can still be moving when the chart mounts. Retie `COPY_DONE_MS` to that real last-cell end.
-- There is no clip-path wipe of the chart host, and no second full-chart fade that hides the grow.
-- Reduced motion shows the settled foreground and a complete chart without the grow.
-- Feed failure still shows the foreground and an honest caption.
-- `npm run test --workspace digiquant-web -- lib/hero-build.test.ts` passes, and the new assertion lives inside the `describe`, not after it.
+- The four beats happen in order. Chrome is on screen before the x-axis starts. The x-axis completes left to right before the right Y-axis completes bottom to top. The grid starts after that Y-axis. No candle is visible during the axis beat. Volume for bar `i` is visible only once candle `i` is, and not before. Indicators start after the candle and volume sweep has begun, and they travel left to right. SMA, EMA, and the overlay may share that sweep.
+- From first paint to the last indicator finishing is about 5s and under 10s on a healthy feed. The gap between chrome settling and the x-axis starting is under 300ms. A hold on the wordmark pixel clock fails.
+- There is no clip-path wipe of a finished chart, and no opacity fade of the whole plot that hides the sweep.
+- **Frame.** On that raw load the chart fills the viewport. `window.scrollY` is 0. The plot is not clipped by the top bar (candles and the price axis remain visible below or above the bar; the bar does not cut them). The time axis sits on the bottom of the visual viewport. No empty band under the chart. Tolerance is 1px. Check at a desktop height (900px) and a short laptop height (700px).
+- Reduced motion shows the settled chrome and a complete chart, still full-viewport, with no sweep.
+- Feed failure still shows the chrome and an honest caption.
+- `npm run test --workspace digiquant-web -- lib/hero-build.test.ts` passes. Durations in `lib/hero-build.ts` sum to the 5s target and stay under the 10s cap. The assertion sits inside the `describe`.
 
 **Depends on.** Nothing in slices A–H. Depends on PR #4900 still being the showcase branch. HOLD hatch on #4900 stays; this slice pushes to that branch or a child stacked on it. It does not merge #4900.
 
@@ -588,7 +595,7 @@ npm run test --workspace digiquant-web -- lib/hero-build.test.ts
 
 Browser check for any dashboard slice that changes chrome or panes: load the local dashboard, walk the changed route, confirm one viewport, empty and error (shut the API URL or mock a 502), and `Esc` on fullscreen. Screenshot the pane, not only the first paint.
 
-Slice I browser check is the marketing hero on the #4900 dev server: record the load sequence, then wheel from the hero into the dashboard band and back to the top.
+Slice I browser check is the marketing hero on the #4900 dev server. Record the load at `scrollY` 0 and confirm the four beats, the 5s target, the 10s cap, and the full-viewport frame (no top-bar clip, no bottom gap) at 900px and 700px heights. Then wheel from the hero into the dashboard band and back to the top.
 
 ---
 
@@ -614,7 +621,7 @@ Slice I browser check is the marketing hero on the #4900 dev server: record the 
 | Mock green P&amp;L copied from `mock.css` | Lock 8. Tokens win. |
 | One-viewport implemented as `overflow: hidden` that clips with no inner scroll | Acceptance fails. Inner pane scroll or a sub-route. |
 | Chart wheel handler calls `preventDefault` on all wheels | Horizontal zoom dies. Only steal dominant `deltaY`. Dashboard panes and the marketing hero use different handlers. Do not share them. |
-| Slice I starts the chart on `BUILD_DONE_MS` while wordmark cells are still rising | Retie `COPY_DONE_MS` to the last cell’s delay plus its rise. Keep the approved wheel and section-rail code. |
+| Slice I waits out the wordmark clock, or pops volume and indicators as whole layers | Chrome hands off in under 300ms. Axes, then grid, then per-bar candle and volume, then one indicator sweep. Keep the approved wheel and section-rail code. |
 | A dashboard seat “fixes” the marketing hero to teal/red or one-viewport | Lock 8 and lock 1 are `apps/dashboard`. Slice I keeps `#3DFF9A` / `#FF5C6C` and page scroll. |
 | Font swap fights BLEND / CSP | `layout.tsx` comment: Geist is self-hosted for CSP. A font change needs the same treatment. Ask §9 first. |
 | House book UUID treated as a secret | It is a public selector (`CONTRACT.md` §3). Still do not log service-role keys. |
@@ -648,4 +655,4 @@ No Human Gate box in the PR template applies to this docs PR. Implement slices t
 
 After those three, spawn D, E, F, G together. H last.
 
-**Slice I** (digiquant.io hero) is not one of those three. Spawn it in the same wave as A. It branches from PR #4900, keeps scroll tip `1b2c9002d`, and finishes the loading sequence already sketched in `bf6730256`.
+**Slice I** (digiquant.io hero) is not one of those three. Spawn it in the same wave as A. It branches from PR #4900, keeps scroll tip `1b2c9002d`, and replaces the `bf6730256` build with the four-beat sequence (chrome, axes and grid, candles with per-bar volume, indicators) inside a full-viewport chart. About 5 seconds, under 10.
