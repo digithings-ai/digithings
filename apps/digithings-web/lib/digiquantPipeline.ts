@@ -2,9 +2,10 @@
  * digiquant's pipeline stages, for any digithings.ai surface that lists them.
  *
  * These are a *copy* of `apps/digiquant-web/app/_stages.ts` and
- * `apps/digiquant-web/components/pipeline/stage-copy.ts`. The band that renders
- * them is `apps/digiquant-web/app/_bands/pipeline.tsx`. The two apps are
- * separate Next roots, so this file cannot import the original.
+ * `apps/digiquant-web/components/pipeline/stage-copy.ts`. The homepage banner
+ * (`apps/digiquant-web/app/_bands/pipeline.tsx`) is a separate four-workflow
+ * section and does not render this catalog. The two apps are separate Next
+ * roots, so this file cannot import the original.
  *
  * `digiquantPipeline.test.ts` reads those files from disk and fails if the
  * copy drifts. The fix is to copy the change across. Do not invent a stage,
