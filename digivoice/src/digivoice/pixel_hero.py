@@ -1,9 +1,8 @@
-"""Simple DIGIVOICE block-pixel wordmark for the digivoice TUI.
+"""7×10 DIGIVOICE glyph map.
 
-Ports ``PixelWordmark.tsx`` into terminal cells: 7×10 ``#`` glyphs,
-mulberry32 seed ``0xd161``, STEPS alphas, 13 glint cells. Letter pixels
-use a grayscale shimmer (no full-terminal particle field). The TUI paints
-the 10-row lockup only; leftover rows stay empty.
+The home header in ``tui.py`` paints these glyphs as five half-block rows
+in the terminal foreground. This module keeps the glyph table and the
+cell sampler.
 """
 
 from __future__ import annotations
@@ -453,26 +452,6 @@ def render_pixel_hero(
     return lines
 
 
-def render_wordmark_lines(
-    word: str = "DIGIVOICE",
-    *,
-    cols: int = 100,
-    phase: int = 0,
-    frac: float = 1.0,
-    ansi: bool = False,
-) -> list[str]:
-    """Ten full-block rows — one terminal cell per landing ``#`` pixel."""
-    return render_pixel_hero(
-        word,
-        cols=cols,
-        rows=10,
-        t_ms=phase * 160,
-        frac=frac,
-        ansi=ansi,
-        field=False,
-    )
-
-
 __all__ = [
     "GLINT_COUNT",
     "PIXEL_GLYPHS",
@@ -486,6 +465,5 @@ __all__ = [
     "letter_gap",
     "mulberry32",
     "render_pixel_hero",
-    "render_wordmark_lines",
     "word_cells",
 ]

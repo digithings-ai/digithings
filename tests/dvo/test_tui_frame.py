@@ -31,12 +31,13 @@ def _frame(**overrides: object) -> str:
     return render_screen("Actions", list(HOME_MENU), 0, **params)  # type: ignore[arg-type]
 
 
-def test_wordmark_is_ten_full_block_rows() -> None:
+def test_wordmark_is_five_half_block_rows() -> None:
+    """Version 3: five centered half-block rows, one terminal foreground."""
     rows = render_wordmark_lines("DIGIVOICE", cols=120, ansi=False)
-    assert len(rows) == 10
+    assert len(rows) == 5
+    assert len(rows[0]) == 79
     assert all(len(row) == len(rows[0]) for row in rows)
-    assert "█" in "\n".join(rows)
-    assert "▀" not in "\n".join(rows) and "▄" not in "\n".join(rows)
+    assert any(ch in "\n".join(rows) for ch in "▀▄█")
 
 
 def test_wordmark_glint_changes_with_phase() -> None:
@@ -46,20 +47,14 @@ def test_wordmark_glint_changes_with_phase() -> None:
     assert "\x1b[" in first[0]
 
 
-def test_wordmark_uses_grayscale_shimmer_not_rainbow() -> None:
-    """Simple lockup: glyph pixels in gray, not a rainbow or teal field."""
+def test_wordmark_is_one_foreground_color() -> None:
+    """Dim, bold, and inverse only. No teal and no per-letter hues."""
     joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True))
-    assert "38;2;" in joined
-    for rgb in ("229;183;101", "226;112;138", "217;122;90", "90;163;196"):
-        assert f"38;2;{rgb}" not in joined, rgb
-    assert "38;2;61;214;196" not in joined
+    assert "38;2;" not in joined
+    assert "\x1b[" in joined
 
 
-def test_idle_wordmark_shimmers_on_glyphs_only() -> None:
-    """Letter pixels move in gray; leftover rows are empty, not a particle field."""
-    still = render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True)
-    later = render_wordmark_lines("DIGIVOICE", cols=120, phase=3, ansi=True)
-    assert still != later
+def test_wordmark_has_no_particle_field() -> None:
     plain = render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=False)
     assert not any("·" in row for row in plain)
 
@@ -71,11 +66,10 @@ def test_wordmark_builds_in() -> None:
     assert "█" in "\n".join(full)
 
 
-def test_home_frame_is_a_simple_centered_wordmark() -> None:
+def test_home_frame_is_centered_half_block() -> None:
     frame = _frame()
     assert "▶" not in frame
-    assert "█" in frame
-    assert "▀" not in frame and "▄" not in frame
+    assert any(ch in frame for ch in "▀▄█")
     assert "STATUS" in frame
     assert "local speech control" in frame
     assert "▦" in frame and "▥" in frame and ("■" in frame or "□" in frame)
@@ -89,12 +83,15 @@ def test_home_frame_is_a_simple_centered_wordmark() -> None:
     assert "□" in settings
     assert "■" not in settings
     lines = frame.replace("\r\n", "\n").splitlines()
-    letter_rows = [i for i, line in enumerate(lines) if "█" in line]
+    letter_rows = [i for i, line in enumerate(lines) if any(ch in line for ch in "▀▄█")]
     assert letter_rows
-    assert letter_rows[-1] - letter_rows[0] == 9
-    above = [lines[i] for i in range(letter_rows[0])]
-    assert not any("·" in line for line in above)
-    assert frame.count("█") >= 300
+    assert letter_rows[-1] - letter_rows[0] == 4
+    blanks = 0
+    for line in lines:
+        if line.strip():
+            break
+        blanks += 1
+    assert blanks >= 2
 
 
 def test_home_frame_keeps_every_action_on_a_short_terminal() -> None:

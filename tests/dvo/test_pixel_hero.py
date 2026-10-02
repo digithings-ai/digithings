@@ -121,16 +121,13 @@ def test_word_cells_spell_digivoice_from_glyphs() -> None:
         x += 9
 
 
-def test_wordmark_is_ten_full_block_rows_not_half_blocks() -> None:
-    """Landing cells are squares of `#`; the TUI keeps one █ per cell, 10 rows."""
+def test_tui_wordmark_is_the_centered_half_block() -> None:
+    """Home header is the five-row half-block, not the 10-row field lockup."""
     rows = render_wordmark_lines("DIGIVOICE", cols=120, ansi=False)
-    assert len(rows) == 10
+    assert len(rows) == 5
     joined = "\n".join(rows)
-    assert "█" in joined
-    assert "▀" not in joined
-    assert "▄" not in joined
-    assert all(len(row) == len(rows[0]) for row in rows)
-    assert len(rows[0]) >= 79
+    assert any(ch in joined for ch in "▀▄█")
+    assert "38;2;" not in "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, ansi=True))
 
 
 def test_pixel_hero_fills_the_header_not_a_thin_title() -> None:
@@ -203,21 +200,19 @@ def test_home_hero_is_a_simple_wordmark() -> None:
     )
     body = frame.replace("\r\n", "\n")
     lines = body.splitlines()
-    assert "▀" not in body and "▄" not in body
-    assert body.count("█") >= 300
+    assert any(ch in body for ch in "▀▄█")
     assert "STATUS" in body
     assert "local speech control" in body
     for item in HOME_MENU:
         assert item.split(" (")[0] in body
-    letter_rows = [i for i, line in enumerate(lines) if "█" in line]
+    letter_rows = [i for i, line in enumerate(lines) if any(ch in line for ch in "▀▄█")]
     assert letter_rows
-    assert letter_rows[-1] - letter_rows[0] == 9
-    above = [lines[i] for i in range(letter_rows[0])]
-    assert not any("·" in line for line in above)
+    assert letter_rows[-1] - letter_rows[0] == 4
+    assert not any("·" in lines[i] for i in letter_rows)
 
 
 def test_mid_height_terminal_keeps_the_simple_wordmark_and_menu() -> None:
-    """36-row Terminal.app: 10-row DIGIVOICE lockup, no particle field, menu intact."""
+    """36-row Terminal.app: five-row half-block DIGIVOICE, menu intact."""
     frame = render_screen(
         "Actions",
         list(HOME_MENU),
@@ -233,9 +228,9 @@ def test_mid_height_terminal_keeps_the_simple_wordmark_and_menu() -> None:
     )
     body = frame.replace("\r\n", "\n")
     lines = body.splitlines()
-    letter_rows = [i for i, line in enumerate(lines) if "█" in line]
+    letter_rows = [i for i, line in enumerate(lines) if any(ch in line for ch in "▀▄█")]
     assert letter_rows
-    assert letter_rows[-1] - letter_rows[0] == 9
+    assert letter_rows[-1] - letter_rows[0] == 4
     above = [lines[i] for i in range(letter_rows[0])]
     assert not any("·" in line for line in above)
     assert "STATUS" in body

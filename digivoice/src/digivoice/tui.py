@@ -1,9 +1,9 @@
 """Shared stdlib TUI primitives: fullscreen frames, pixel wordmark, menus.
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
-viewport: alternate screen, one repaint per key. The home hero is a simple
-centered DIGIVOICE 7×10 block-pixel wordmark with grayscale shimmer on the
-glyphs only — not a full-terminal particle field. Menus use a step rail.
+viewport: alternate screen, one repaint per key. The home hero is the
+centered five-row DIGIVOICE half-block wordmark in the terminal's own
+foreground (dim, bold, and a quiet inverse glint). Menus use a step rail.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -23,7 +23,7 @@ import tty
 from collections.abc import Sequence
 from typing import TextIO
 
-from digivoice.pixel_hero import PIXEL_GLYPHS, render_wordmark_lines
+from digivoice.pixel_hero import PIXEL_GLYPHS
 
 # TTY contract:
 # - Full viewport: alternate screen while a shell is open, CSI clear + home
@@ -192,6 +192,140 @@ def fullscreen_leave(stdout: TextIO) -> None:
             pass
 
 
+def _letter_gap(cols: int, letters: int) -> int:
+    for gap in (2, 1, 0):
+        width = letters * 7 + max(0, letters - 1) * gap
+        if width <= max(1, cols - 2):
+            return gap
+    return 0
+
+
+def _pixel_grid(word: str, gap: int) -> list[list[bool]]:
+    rows: list[list[bool]] = [[] for _ in range(10)]
+    for index, ch in enumerate(word.upper()):
+        if index:
+            for row in rows:
+                row.extend([False] * gap)
+        glyph = PIXEL_GLYPHS.get(ch)
+        for y in range(10):
+            if glyph is None:
+                rows[y].extend([False] * 7)
+            else:
+                rows[y].extend(cell == "#" for cell in glyph[y])
+    return rows
+
+
+def _filled_cells(grid: list[list[bool]]) -> list[tuple[int, int]]:
+    cells: list[tuple[int, int]] = []
+    for y, row in enumerate(grid):
+        for x, on in enumerate(row):
+            if on:
+                cells.append((x, y))
+    return cells
+
+
+def _glint_index(cells: list[tuple[int, int]]) -> dict[tuple[int, int], int]:
+    if not cells:
+        return {}
+    step = max(1, len(cells) // 12)
+    chosen = cells[::step][:12]
+    return {cell: index for index, cell in enumerate(chosen)}
+
+
+def _lit_set(cells: list[tuple[int, int]], frac: float) -> set[tuple[int, int]]:
+    if frac >= 1:
+        return set(cells)
+    ordered = sorted(cells, key=lambda point: (point[0] * 13 + point[1] * 7) % 97)
+    count = int(len(ordered) * frac)
+    if frac > 0 and count == 0 and ordered:
+        count = 1
+    return set(ordered[:count])
+
+
+def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tuple[int, int]]:
+    if frac <= 0 or frac >= 1 or width <= 0:
+        return set()
+    found: set[tuple[int, int]] = set()
+    n = 0
+    while len(found) < 12 and n < 80:
+        point = ((n * 17 + 5) % width, (n * 5 + 2) % 10)
+        n += 1
+        if point in blocked:
+            continue
+        found.add(point)
+    return found
+
+
+def _cell_sgr(x: int, y: int, phase: int, glints: dict[tuple[int, int], int], hot_ok: bool) -> str:
+    """One foreground: dim, bold, or inverse. No extra hue."""
+    gi = glints.get((x, y))
+    if hot_ok and gi is not None and (gi + phase) % 8 == 0:
+        return "\x1b[1;7m"
+    if (x * 3 + y * 5) % 4 == 0:
+        return "\x1b[2m"
+    if (x * 3 + y * 5) % 4 == 3:
+        return "\x1b[1m"
+    return ""
+
+
+def render_wordmark_lines(
+    word: str = "DIGIVOICE",
+    *,
+    cols: int = 100,
+    phase: int = 0,
+    frac: float = 1.0,
+    ansi: bool = False,
+) -> list[str]:
+    """Five half-block rows. `frac` reveals cells for the build-in; `phase` glints."""
+    letters = word.upper()
+    gap = _letter_gap(cols, max(1, len(letters)))
+    grid = _pixel_grid(letters, gap)
+    if not grid or not grid[0]:
+        return []
+    cells = _filled_cells(grid)
+    lit = _lit_set(cells, frac)
+    glints = _glint_index(cells)
+    strays = _stray_set(len(grid[0]), set(cells), frac)
+    hot_ok = ansi and frac >= 1
+    lines: list[str] = []
+    width = len(grid[0])
+    for y in range(0, 10, 2):
+        parts: list[str] = []
+        dirty = False
+        for x in range(width):
+            top_on = (x, y) in lit or (x, y) in strays
+            bot_on = (x, y + 1) in lit or (x, y + 1) in strays
+            if not top_on and not bot_on:
+                if dirty and ansi:
+                    parts.append(_ANSI_RESET)
+                    dirty = False
+                parts.append(" ")
+                continue
+            if top_on and bot_on:
+                ch = "█"
+                sx, sy = x, y
+            elif top_on:
+                ch = "▀"
+                sx, sy = x, y
+            else:
+                ch = "▄"
+                sx, sy = x, y + 1
+            if ansi:
+                stray_only = (sx, sy) in strays and (sx, sy) not in lit
+                sgr = "\x1b[2m" if stray_only else _cell_sgr(sx, sy, phase, glints, hot_ok)
+                if sgr:
+                    parts.append(sgr)
+                    dirty = True
+                elif dirty:
+                    parts.append(_ANSI_RESET)
+                    dirty = False
+            parts.append(ch)
+        if dirty and ansi:
+            parts.append(_ANSI_RESET)
+        lines.append("".join(parts))
+    return lines
+
+
 def pixel_wordmark(word: str = "DIGIVOICE", fill: str = "█", empty: str = " ") -> str:
     """Render WORD in the PixelWordmark block language (10 text rows)."""
     rows: list[str] = []
@@ -209,7 +343,7 @@ def pixel_wordmark(word: str = "DIGIVOICE", fill: str = "█", empty: str = " ")
 
 
 def tui_header_lines(subtitle: str | None = None) -> list[str]:
-    """Ten-row pixel wordmark + subtitle. Frames compose their own panel."""
+    """Half-block wordmark + subtitle. Frames compose their own centered panel."""
     return [
         *render_wordmark_lines("DIGIVOICE", cols=100, ansi=False),
         "",
@@ -482,7 +616,7 @@ def render_screen(
     t_ms: int | None = None,
     pointer: tuple[int, int] | None = None,
 ) -> str:
-    """One frame. `hero` paints the DIGIVOICE pixel wordmark above the step rail."""
+    """One centered frame. `hero` paints the half-block DIGIVOICE wordmark."""
     term_cols, term_rows = _term_size()
     cols = term_cols if cols is None else cols
     rows = term_rows if rows is None else rows
@@ -508,7 +642,7 @@ def render_screen(
             ansi=use_ansi,
         )
         header_h = rows - len(panel)
-        needed = 12 if hero and density in {"roomy", "comfy"} else (10 if hero else 0)
+        needed = 6 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
         if header_h >= needed or density == "tight":
             chosen_panel = panel
             break
@@ -674,7 +808,7 @@ def choose(
 
     TTY mode paints a step-rail frame and redraws on every key. Space confirms
     like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel wordmark and,
-    when `pulse` is set, shimmers the glyphs (grayscale noise on letter pixels).
+    when `pulse` is set, lets a few half-block cells glint while idle.
     Returns None on back.
     """
     stdin = stdin or sys.stdin
