@@ -18,6 +18,9 @@ const nextConfig = {
       // Dev-only: .env.local points the band here so the benchmark leg is the
       // same series production draws. Static export ignores this rewrite.
       { source: "/market-data/:path*", destination: "https://graph.digithings.ai/:path*" },
+      // Dev-only proxy for the digiquant band. Static export ignores rewrites;
+      // production calls graph.digithings.ai/dashboard-api directly.
+      { source: "/official-api/:path*", destination: "http://127.0.0.1:8788/:path*" },
     ];
   },
 };
