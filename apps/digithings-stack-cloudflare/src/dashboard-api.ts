@@ -28,7 +28,7 @@
 import dashboardApi, {
   type Env as DashboardApiEnv,
 } from "../../dashboard-api/src/index";
-import { MCP_TOOLS } from "../../dashboard-api/src/mcp";
+import { STANDALONE_MCP_TOOLS } from "../../dashboard-api/src/mcp";
 
 /** Canonical module path for the folded dashboard-api routes. */
 export const DASHBOARD_API_PREFIX = "/dashboard-api";
@@ -38,7 +38,7 @@ export const DASHBOARD_API_PREFIX = "/dashboard-api";
  * tool defs, one shared dispatch via `POST /dashboard-api/mcp`). Re-exported
  * here so the merge is importable and pinnable without reimplementation.
  */
-export { MCP_TOOLS as DASHBOARD_MCP_TOOLS };
+export { STANDALONE_MCP_TOOLS as DASHBOARD_MCP_TOOLS };
 
 export function isDashboardApiPath(pathname: string): boolean {
   return (
