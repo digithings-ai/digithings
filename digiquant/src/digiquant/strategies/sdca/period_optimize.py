@@ -107,6 +107,12 @@ DEFAULT_INITIAL_CASH = 1000.0
 # is cycle-scale (60-180d); both require at least 2 peaks and 2 troughs.
 MEDIUM_HALF_WIDTHS = (15, 20, 30, 45, 60)
 LONG_HALF_WIDTHS = (60, 90, 120, 150, 180)
+
+# Frozen hit-test thresholds (Plan 21): what a window must have caught inside its own
+# bars to be worth trading. They are constants, not parameters of the call — a window
+# may not pick its own bar, so these are the only values either regime may use.
+LONG_MIN_MOVE_PCT = 15.0
+MEDIUM_MIN_MOVE_PCT = 10.0
 MIN_PEAKS = 2
 MIN_TROUGHS = 2
 
@@ -1024,6 +1030,334 @@ def _prominence_pct(
     return max(0.0, 100.0 * (max(later) - here) / here)
 
 
+class OverlayStep(BaseModel):
+    """One rung of the graded medium overlay: what was added, and what came of it.
+
+    Every rung reports **both** outcomes — kept or abandoned — and an abandoned rung
+    keeps its measured metrics too, so "the ladder stopped here" is a readable claim
+    rather than an absence. The exception is a rung abandoned by the **hit test**,
+    which is decided *before* any oracle call: its metric fields are ``None`` because
+    nothing was measured, and never zero, which would read as a measurement of 0.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    index: int = Field(..., ge=1, description="1-based rung number in the ladder")
+    half_width_days: int = Field(
+        ..., ge=1, description="Candidate half-width of the windows this rung added"
+    )
+    added: tuple[CycleWindow, ...] = Field(
+        ...,
+        description=(
+            "Medium windows this rung actually added to the book, chronological. Empty "
+            "when the candidate's windows were all already present, so the rung could "
+            "not change anything"
+        ),
+    )
+    kept_windows: tuple[CycleWindow, ...] = Field(
+        ...,
+        description=(
+            "Every window in play at this rung — the long set plus every earlier kept "
+            "addition plus this rung's own — which is the exact set that was scored"
+        ),
+    )
+    hit: tuple[HitTest, ...] = Field(
+        ...,
+        description="One hit verdict per added window, measured before any scoring call",
+    )
+    sharpe: float | None = Field(..., description="Oracle Sharpe of kept_windows; None if ungraded")
+    calmar: float | None = Field(..., description="Oracle Calmar of kept_windows; None if ungraded")
+    cagr_pct: float | None = Field(
+        ..., description="Oracle CAGR % of kept_windows; None if ungraded"
+    )
+    exposure_pct: float | None = Field(
+        ...,
+        description=(
+            "Time in market % of kept_windows against the frozen exposure floor; "
+            "None if the rung was abandoned before scoring"
+        ),
+    )
+    max_drawdown_pct: float | None = Field(
+        ..., description="Oracle max drawdown % of kept_windows; None if ungraded"
+    )
+    degenerate: bool | None = Field(
+        ...,
+        description=(
+            "Zero-return-stdev path (sharpe == 0.0): no period-quality information. "
+            "None if the rung was abandoned before scoring"
+        ),
+    )
+    kept: bool = Field(
+        ...,
+        description=(
+            "True when the rung was added to the book — hit, strictly improving, and "
+            "at or above the exposure floor"
+        ),
+    )
+    reason: str | None = Field(
+        ...,
+        description="Why the rung was abandoned ('unhit', 'sharpe', 'exposure' …), else None",
+    )
+
+
+class OverlayGrade(BaseModel):
+    """The graded long-first period model: the long regime, plus the medium ladder.
+
+    ``base_windows`` is the long set as given — this function never re-selects it and
+    never rewrites it, so a caller keeps one place that decides the regime. ``steps``
+    is the full ladder (kept and abandoned alike, in the order they were tried), while
+    ``ladder`` is only the rungs that were kept, so "what ended up in the book" and
+    "everything that was tried" are both readable without walking the list.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    exposure_floor_pct: float = Field(
+        ..., description="Frozen time-in-market floor applied at every rung, never relaxed"
+    )
+    min_move_pct: float = Field(
+        ..., description="Frozen move threshold each added window had to catch to be graded"
+    )
+    base_windows: tuple[CycleWindow, ...] = Field(
+        ..., min_length=1, description="The long (secular) window set the overlay builds on"
+    )
+    baseline: PeriodScore = Field(
+        ...,
+        description="The long set scored alone — rung zero, before anything was added",
+    )
+    steps: tuple[OverlayStep, ...] = Field(
+        ..., description="Every rung that was tried, in ladder order"
+    )
+    ladder: tuple[OverlayStep, ...] = Field(
+        ..., description="Only the rungs that were kept, in the order they were kept"
+    )
+    kept_windows: tuple[CycleWindow, ...] = Field(
+        ...,
+        description=(
+            "The final window set — the long set plus every kept addition, chronological. "
+            "Equal to base_windows when no rung was kept"
+        ),
+    )
+    stop_reason: str | None = Field(
+        ...,
+        description=(
+            "Why the ladder stopped — the abandoning rung's reason. None when every rung "
+            "was kept, or when there was nothing to grade"
+        ),
+    )
+
+
+def _medium_rung_order_key(candidate: PeriodCandidate) -> tuple[int, date, str]:
+    """Frozen contribution order: shorter window first, then the earlier date.
+
+    A wider window encloses more days, so it is the bigger intervention and is tried
+    last; at equal width the earlier window goes first. The candidate's own horizon
+    name is the final tie-break so the order is *total* — two candidates sharing a
+    width and a date can never be graded in either order.
+    """
+    return (candidate.half_width_days, candidate.windows[0].start, candidate.horizon)
+
+
+def _validate_overlay_inputs(
+    dates: Sequence[date],
+    prices: Sequence[float],
+    long_windows: Collection[CycleWindow],
+    medium_candidates: Collection[PeriodCandidate],
+    *,
+    exposure_floor_pct: float,
+    min_move_pct: float,
+) -> None:
+    """Refuse nonsense before any oracle call, with a message naming the cause."""
+    if len(dates) != len(prices):
+        raise ValueError("grade_medium_overlay requires dates and prices of the same length")
+    if len(dates) < 2:
+        raise ValueError(f"grade_medium_overlay requires at least two days, got {len(dates)}")
+    if not long_windows:
+        raise ValueError("grade_medium_overlay requires at least one long-term window")
+    if not 0.0 <= exposure_floor_pct <= 100.0:
+        raise ValueError(f"exposure_floor_pct must be within [0, 100], got {exposure_floor_pct}")
+    if min_move_pct < 0.0:
+        raise ValueError(f"grade_medium_overlay requires min_move_pct >= 0, got {min_move_pct}")
+    for candidate in medium_candidates:
+        if not isinstance(candidate, PeriodCandidate):
+            raise ValueError(
+                "grade_medium_overlay requires PeriodCandidate entries, got "
+                f"{type(candidate).__name__}"
+            )
+        if not candidate.windows:
+            raise ValueError(
+                "grade_medium_overlay received a PeriodCandidate with no windows "
+                f"(half_width_days={candidate.half_width_days})"
+            )
+
+
+def grade_medium_overlay(
+    dates: Sequence[date],
+    prices: Sequence[float],
+    long_windows: Collection[CycleWindow],
+    medium_candidates: Collection[PeriodCandidate],
+    *,
+    exposure_floor_pct: float = EXPOSURE_FLOOR_PCT,
+    min_move_pct: float = MEDIUM_MIN_MOVE_PCT,
+) -> OverlayGrade:
+    """Layer medium windows onto a long set ONE AT A TIME, keeping only what earns it.
+
+    **The three frozen conditions.** A rung is kept only when all three hold:
+
+    - **hit** — every window it adds actually caught a move of at least
+      ``min_move_pct`` (``window_is_hit``). Tested **before** any scoring, so a
+      decorative window costs nothing and the abandonment quotes the move it did
+      contain rather than merely failing;
+    - **strict improvement** — oracle Sharpe of the whole set must *strictly* beat
+      the set before this rung (never merely tie);
+    - **the floor** — exposure at or above ``exposure_floor_pct``, which is **never
+      relaxed** to rescue a rung. A floor lowered after seeing the data is exactly the
+      backward-fitting this model exists to avoid.
+
+    **One at a time, and no skipping ahead.** Rungs are tried shortest-window-first,
+    earlier date breaking ties, and the **first** rung that fails any condition stops
+    the ladder. Continuing past a failure would grade a book that was never built, so
+    "the next one might have been better" is not a reason to keep going — it is the
+    reason the model reports ``stop_reason`` instead.
+
+    **What it does not do.** It does not re-select the long set, relax a threshold, or
+    hand-place a date: the base comes from ``select_long_term_periods`` and the
+    candidates from ``discover_candidate_periods``, and both are taken as given. As
+    with every function in this module the numbers are an **in-sample ceiling** on the
+    same history the windows were derived from — a description of that history, never
+    a forecast. Deterministic: same inputs, same ladder, every time.
+    """
+    _validate_overlay_inputs(
+        dates,
+        prices,
+        long_windows,
+        medium_candidates,
+        exposure_floor_pct=exposure_floor_pct,
+        min_move_pct=min_move_pct,
+    )
+    base = tuple(sorted(long_windows, key=_window_order))
+    baseline = score_periods(dates, prices, base, exposure_floor_pct=exposure_floor_pct)
+
+    current = base
+    best_sharpe = baseline.sharpe
+    steps: list[OverlayStep] = []
+    ladder: list[OverlayStep] = []
+    stop_reason: str | None = None
+
+    ordered = sorted(medium_candidates, key=_medium_rung_order_key)
+    for index, candidate in enumerate(ordered, start=1):
+        # A window already in the book is not added twice: re-offering the same set
+        # cannot improve anything, and scoring the same set as if it were new would
+        # report a gain nobody could act on. Such a rung is recorded and abandoned,
+        # so the ladder's history still says the candidate was seen and refused.
+        in_book = {window.name for window in current}
+        added = tuple(w for w in candidate.windows if w.name not in in_book)
+        if not added:
+            stop_reason = (
+                f"duplicate: the {candidate.half_width_days}d medium windows are already in the "
+                "book, so this rung could add nothing"
+            )
+            steps.append(
+                OverlayStep(
+                    index=index,
+                    half_width_days=candidate.half_width_days,
+                    added=(),
+                    kept_windows=current,
+                    hit=(),
+                    sharpe=None,
+                    calmar=None,
+                    cagr_pct=None,
+                    exposure_pct=None,
+                    max_drawdown_pct=None,
+                    degenerate=None,
+                    kept=False,
+                    reason=stop_reason,
+                )
+            )
+            break
+
+        hits = tuple(
+            window_is_hit(dates, prices, window, min_move_pct=min_move_pct) for window in added
+        )
+        unhit = next((verdict for verdict in hits if not verdict.hit), None)
+        if unhit is not None:
+            # Decided before any oracle call, so this rung carries no metrics.
+            stop_reason = (
+                f"unhit: {unhit.window} caught a {unhit.max_move_pct:.2f}% move over "
+                f"{unhit.bars} bars, below the {min_move_pct:.1f}% medium threshold; the "
+                f"{candidate.half_width_days}d windows were abandoned before scoring"
+            )
+            steps.append(
+                OverlayStep(
+                    index=index,
+                    half_width_days=candidate.half_width_days,
+                    added=added,
+                    kept_windows=current,
+                    hit=hits,
+                    sharpe=None,
+                    calmar=None,
+                    cagr_pct=None,
+                    exposure_pct=None,
+                    max_drawdown_pct=None,
+                    degenerate=None,
+                    kept=False,
+                    reason=stop_reason,
+                )
+            )
+            break
+
+        trial = current + added
+        score = score_periods(dates, prices, trial, exposure_floor_pct=exposure_floor_pct)
+        improves = score.sharpe > best_sharpe
+        meets_floor = score.exposure_pct >= exposure_floor_pct
+        if not improves:
+            reason: str | None = (
+                f"sharpe: adding the {candidate.half_width_days}d windows moved oracle Sharpe "
+                f"{score.sharpe:.4f} against {best_sharpe:.4f} — no strict improvement"
+            )
+        elif not meets_floor:
+            reason = (
+                f"exposure: {score.exposure_pct:.2f}% time in market is below the frozen "
+                f"{exposure_floor_pct:.1f}% floor, which is never relaxed"
+            )
+        else:
+            reason = None
+
+        step = OverlayStep(
+            index=index,
+            half_width_days=candidate.half_width_days,
+            added=added,
+            kept_windows=trial,
+            hit=hits,
+            sharpe=score.sharpe,
+            calmar=score.calmar,
+            cagr_pct=score.cagr_pct,
+            exposure_pct=score.exposure_pct,
+            max_drawdown_pct=score.max_drawdown_pct,
+            degenerate=score.degenerate,
+            kept=reason is None,
+            reason=reason,
+        )
+        steps.append(step)
+        if reason is not None:
+            stop_reason = reason
+            break
+        ladder.append(step)
+        current = trial
+        best_sharpe = score.sharpe
+
+    return OverlayGrade(
+        exposure_floor_pct=exposure_floor_pct,
+        min_move_pct=min_move_pct,
+        base_windows=base,
+        baseline=baseline,
+        steps=tuple(steps),
+        ladder=tuple(ladder),
+        kept_windows=tuple(sorted(current, key=_window_order)),
+        stop_reason=stop_reason,
+    )
+
+
 def _ranked_pivots(
     dates: Sequence[date],
     prices: Sequence[float],
@@ -1255,11 +1589,15 @@ __all__ = [
     "DEFAULT_INITIAL_CASH",
     "EXPOSURE_FLOOR_PCT",
     "LONG_HALF_WIDTHS",
+    "LONG_MIN_MOVE_PCT",
     "MEDIUM_HALF_WIDTHS",
+    "MEDIUM_MIN_MOVE_PCT",
     "MIN_PEAKS",
     "MIN_TROUGHS",
     "HitTest",
     "LongTermSelection",
+    "OverlayGrade",
+    "OverlayStep",
     "PeriodCandidate",
     "PeriodEdge",
     "PeriodEdges",
@@ -1271,6 +1609,7 @@ __all__ = [
     "confirmation_days",
     "detect_pivots",
     "discover_candidate_periods",
+    "grade_medium_overlay",
     "optimize_periods",
     "rank_period_scores",
     "score_periods",

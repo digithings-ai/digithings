@@ -42,6 +42,8 @@ from digiquant.strategies.sdca.period_optimize import (
     MIN_TROUGHS,
     HitTest,
     LongTermSelection,
+    OverlayGrade,
+    OverlayStep,
     PeriodCandidate,
     PeriodHorizon,
     PeriodOptimizationResult,
@@ -51,6 +53,7 @@ from digiquant.strategies.sdca.period_optimize import (
     confirmation_days,
     detect_pivots,
     discover_candidate_periods,
+    grade_medium_overlay,
     optimize_periods,
     rank_period_scores,
     score_periods,
@@ -1161,3 +1164,367 @@ def test_a_calendar_too_short_to_index_fails_cleanly_never_with_indexerror() -> 
     # reported by the detector's own message.
     with pytest.raises(ValueError, match="at least"):
         select_long_term_periods(_calendar(2), [_LOW, _HIGH])
+
+
+# ==================================== Plan 21 Task 2: the graded medium overlay
+#
+# The long set is the primary regime; medium windows are layered on GRADUALLY, one
+# rung at a time, and a rung is kept only if all three frozen conditions hold:
+#
+# - **(a) hit** — every offered window actually caught a move of at least
+#   ``min_move_pct``, tested BEFORE scoring, so a decorative window costs nothing;
+# - **(b) strict improvement** — oracle Sharpe must *strictly* beat the current set;
+# - **(c) the exposure floor** — and the floor is never relaxed to let a rung through.
+#
+# The first rung that fails stops the ladder. Skipping ahead would grade a book that
+# was never built, so "the next one looked good" is not a reason to continue.
+#
+# Fixtures are read off real oracle numbers, so each pin asserts the DECISION rather
+# than a shape: the up-heavy series has a long set that is *worse than flat* on its
+# own (Sharpe -0.037) and a 15d medium set that fixes it (2.085), while the 20d set
+# then gives it back (0.654) — keep, abandon, stop, in two rungs.
+
+
+def _candidate_at(candidates: tuple[PeriodCandidate, ...], half_width_days: int) -> PeriodCandidate:
+    """The one candidate at a given half-width, asserted unique so a pin cannot drift."""
+    matches = [c for c in candidates if c.half_width_days == half_width_days]
+    assert len(matches) == 1, f"expected one candidate at {half_width_days}d, got {matches}"
+    return matches[0]
+
+
+def _medium_candidates(dates: list[date], prices: list[float]) -> tuple[PeriodCandidate, ...]:
+    """Every medium candidate discovery offers, in the order the module grades them."""
+    return discover_candidate_periods(dates, prices, PeriodHorizon.medium())
+
+
+def _hand_candidate(name: str, half_width_days: int, centre: date) -> PeriodCandidate:
+    """A candidate built by hand, for pinning behaviour discovery cannot produce.
+
+    Ordering is a property of the *input*, so a fixture that only exists to test
+    ordering is written directly rather than bent out of a price series. The pins
+    always neutralize the metrics (an unreachable move threshold), so what is under
+    test is which rung was offered first, never whether it was a good idea.
+    """
+    offset = timedelta(days=half_width_days)
+    return PeriodCandidate(
+        horizon="medium",
+        half_width_days=half_width_days,
+        peaks=(
+            CycleWindow(
+                name=f"{name}_peak", kind=CycleKind.PEAK, start=centre - offset, end=centre + offset
+            ),
+        ),
+        troughs=(
+            CycleWindow(
+                name=f"{name}_trough",
+                kind=CycleKind.TROUGH,
+                start=centre - offset,
+                end=centre + offset,
+            ),
+        ),
+    )
+
+
+def _long_base(dates: list[date], prices: list[float]) -> tuple[CycleWindow, ...]:
+    selection = select_long_term_periods(dates, prices)
+    assert selection.selected is True, selection.reason
+    return selection.windows
+
+
+def _unhit_never(*_: object) -> float:
+    """A move threshold no window can clear, so a rung always stops at the hit test."""
+    return 1.0e9
+
+
+def test_an_improving_overlay_is_kept_and_the_ladder_shows_the_rung() -> None:
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    grade = grade_medium_overlay(dates, prices, base, candidates)
+    assert isinstance(grade, OverlayGrade)
+    assert grade.exposure_floor_pct == EXPOSURE_FLOOR_PCT == 70.0
+    assert grade.min_move_pct == 10.0
+    assert grade.base_windows == base
+    # Rung 0 is the long set ALONE, reported whatever it scores — the floor gates
+    # what gets added onto it, never whether the base is even read.
+    assert grade.baseline.sharpe == pytest.approx(-0.03680572090431364, rel=1e-9)
+    assert grade.baseline.exposure_pct == pytest.approx(91.87425860023724, rel=1e-9)
+
+    first = grade.steps[0]
+    assert first.index == 1
+    assert first.half_width_days == 15
+    assert first.added == _candidate_at(candidates, 15).windows
+    assert first.kept_windows == base + first.added
+    assert first.kept is True
+    assert first.reason is None
+    assert first.degenerate is False
+    assert first.sharpe == pytest.approx(2.084666040985284, rel=1e-9)
+    assert first.sharpe > grade.baseline.sharpe
+    assert first.exposure_pct == pytest.approx(71.23368920521945, rel=1e-9)
+    assert first.exposure_pct >= EXPOSURE_FLOOR_PCT
+    assert first.calmar == pytest.approx(1.1893985667672913, rel=1e-9)
+    assert first.cagr_pct == pytest.approx(40.54767841252129, rel=1e-9)
+    assert first.max_drawdown_pct == pytest.approx(34.09090909090909, rel=1e-9)
+    # The rung is on the ladder, and it is on the book.
+    assert grade.ladder == (first,)
+    # The book is the base plus the rung, reported in one chronological order.
+    assert set(grade.kept_windows) == set(base) | set(first.added)
+    assert grade.kept_windows == tuple(
+        sorted((*base, *first.added), key=lambda w: (w.start, w.end, str(w.kind)))
+    )
+
+
+def test_a_non_improving_addition_is_abandoned_and_the_ladder_stops_there() -> None:
+    """No skipping ahead: the 30d / 45d / 60d sets are never even offered."""
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    grade = grade_medium_overlay(dates, prices, base, candidates)
+    assert [candidate.half_width_days for candidate in candidates] == [15, 20, 30, 45, 60]
+
+    kept, stalled = grade.steps
+    assert kept.kept is True
+    assert stalled.index == 2
+    assert stalled.half_width_days == 20
+    assert stalled.kept is False
+    assert stalled.reason is not None
+    assert stalled.reason.startswith("sharpe:")
+    # The reason quotes both sides, so "no improvement" is readable, not asserted.
+    assert f"{stalled.sharpe:.4f}" in stalled.reason
+    assert f"{grade.ladder[0].sharpe:.4f}" in stalled.reason
+    assert stalled.sharpe < grade.ladder[0].sharpe
+    # Stopped here: two rungs graded out of five offered, and no later rung appears.
+    assert len(grade.steps) == 2
+    assert grade.stop_reason == stalled.reason
+    assert grade.ladder == (kept,)
+    # Nothing from the abandoned rung or from the untried ones reached the book: the
+    # 15d set is in it, and no other medium width is.
+    assert set(stalled.added).isdisjoint(grade.kept_windows)
+    medium_widths = {
+        int(window.name.rsplit("_pm", 1)[1])
+        for window in grade.kept_windows
+        if window.name.startswith("medium_")
+    }
+    assert medium_widths == {15}
+
+
+def test_an_unhit_window_is_abandoned_before_scoring_with_the_move_it_contained() -> None:
+    """Pin: reason ``unhit``, the observed move quoted, and nothing measured."""
+    dates, prices = _secular_three_cycles()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    grade = grade_medium_overlay(dates, prices, base, candidates)
+
+    assert len(grade.steps) == 1, "the unhit rung stops the ladder before any scoring"
+    step = grade.steps[0]
+    assert step.half_width_days == 15
+    assert step.kept is False
+    assert step.reason is not None
+    assert step.reason.startswith("unhit:")
+    unhit = next(verdict for verdict in step.hit if not verdict.hit)
+    assert unhit.window in step.reason
+    assert f"{unhit.max_move_pct:.2f}" in step.reason
+    assert f"{grade.min_move_pct:.1f}" in step.reason
+    # Abandoned BEFORE scoring: no metric was measured, so none is invented.
+    assert step.sharpe is None
+    assert step.exposure_pct is None
+    assert step.calmar is None
+    assert step.cagr_pct is None
+    assert step.max_drawdown_pct is None
+    assert step.degenerate is None
+    # But the hit verdicts are all there, one per offered window, so the
+    # abandonment can be read rather than trusted.
+    assert step.hit == tuple(
+        window_is_hit(dates, prices, window, min_move_pct=10.0)
+        for window in _candidate_at(candidates, 15).windows
+    )
+    assert all(not verdict.hit for verdict in step.hit)
+    assert all(verdict.max_move_pct < 10.0 for verdict in step.hit)
+    # And the long set is untouched: nothing was added, so nothing is claimed.
+    assert grade.ladder == ()
+    assert grade.kept_windows == base
+    assert grade.stop_reason == step.reason
+    # The 15d set really would have raised exposure if it had been graded — the
+    # hit test, not a convenient floor, is what refused it.
+    trial = score_periods(dates, prices, base + _candidate_at(candidates, 15).windows)
+    assert trial.exposure_pct == pytest.approx(53.16789862724393, rel=1e-9)
+
+
+def test_a_rung_that_breaches_the_exposure_floor_is_abandoned_naming_the_floor() -> None:
+    """Pin: it improved (b) and still died on (c), with reason ``exposure``."""
+    dates, prices = _zigzag(200, 100, 6, tail_up=100)
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    # A lower move threshold so the rung reaches scoring at all: what must bite here
+    # is the floor, not the hit test.
+    grade = grade_medium_overlay(dates, prices, base, candidates, min_move_pct=5.0)
+    assert len(grade.steps) == 1
+    step = grade.steps[0]
+    assert step.kept is False
+    assert step.reason is not None
+    assert step.reason.startswith("exposure:")
+    assert f"{step.exposure_pct:.2f}" in step.reason
+    assert f"{EXPOSURE_FLOOR_PCT:.1f}" in step.reason
+    # It DID improve — so the floor is what stopped it, not the improvement test.
+    assert step.sharpe == pytest.approx(4.00516691370638, rel=1e-9)
+    assert step.sharpe > grade.baseline.sharpe == pytest.approx(0.6225142675136313, rel=1e-9)
+    assert step.exposure_pct == pytest.approx(61.1228813559322, rel=1e-9)
+    assert step.exposure_pct < EXPOSURE_FLOOR_PCT
+    # Unlike an unhit rung, an exposure rung IS measured — the numbers are there.
+    assert step.calmar is not None and step.cagr_pct is not None
+    assert step.max_drawdown_pct is not None and step.degenerate is False
+    assert grade.ladder == ()
+    assert grade.kept_windows == base
+    assert grade.stop_reason == step.reason
+
+
+def test_the_exposure_floor_is_never_relaxed_to_let_a_rung_through() -> None:
+    """The same rung that clears 70% is abandoned at 80%, and the floor is reported."""
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    allowed = grade_medium_overlay(dates, prices, base, candidates)
+    assert allowed.steps[0].kept is True
+
+    stricter = grade_medium_overlay(dates, prices, base, candidates, exposure_floor_pct=80.0)
+    assert stricter.exposure_floor_pct == 80.0
+    assert stricter.steps[0].kept is False
+    assert stricter.steps[0].reason is not None
+    assert stricter.steps[0].reason.startswith("exposure:")
+    assert stricter.steps[0].sharpe == allowed.steps[0].sharpe, "the score did not move"
+    assert stricter.ladder == ()
+    assert stricter.kept_windows == base
+    assert stricter.baseline.sharpe == allowed.baseline.sharpe
+
+
+def test_rungs_are_graded_shortest_window_first_then_earlier_date() -> None:
+    """The frozen tie-break, pinned where it is unambiguous: the first rung.
+
+    ``min_move_pct`` no window can clear stops every ladder at rung one, so the
+    first rung graded IS the ordering decision — no metric noise can hide it.
+    """
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    narrow_early = _hand_candidate("narrow_early", 15, date(2020, 3, 1))
+    narrow_late = _hand_candidate("narrow_late", 15, date(2020, 9, 1))
+    wide_early = _hand_candidate("wide_early", 45, date(2020, 2, 1))
+    assert wide_early.windows[0].start < narrow_early.windows[0].start, "fixture: date order"
+
+    grade = grade_medium_overlay(
+        dates,
+        prices,
+        base,
+        [wide_early, narrow_late, narrow_early],
+        min_move_pct=_unhit_never(),
+    )
+    assert len(grade.steps) == 1
+    assert grade.steps[0].half_width_days == 15
+    assert grade.steps[0].added == narrow_early.windows
+    # Width dominates date, and the input order is irrelevant.
+    for order in ([narrow_late, wide_early, narrow_early], [narrow_early, narrow_late, wide_early]):
+        assert (
+            grade_medium_overlay(dates, prices, base, order, min_move_pct=_unhit_never()) == grade
+        )
+
+
+def test_the_real_ladder_climbs_widths_in_order_and_is_repeatable() -> None:
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    first = grade_medium_overlay(dates, prices, base, candidates)
+    second = grade_medium_overlay(dates, prices, base, tuple(reversed(candidates)))
+    assert first == second
+    widths = [step.half_width_days for step in first.steps]
+    assert widths == sorted(widths)
+    assert widths == [step.half_width_days for step in first.ladder] + [widths[-1]]
+    assert [step.index for step in first.steps] == list(range(1, len(first.steps) + 1))
+
+
+def test_a_candidate_the_book_already_carries_is_not_scored_twice() -> None:
+    """Re-offering an identical set cannot improve anything, so it is abandoned."""
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    duplicate = _candidate_at(candidates, 15)
+    grade = grade_medium_overlay(dates, prices, base, [duplicate, duplicate])
+    assert len(grade.steps) == 2
+    kept, duplicate_rung = grade.steps
+    assert kept.kept is True
+    assert duplicate_rung.index == 2
+    assert duplicate_rung.kept is False
+    assert duplicate_rung.reason is not None
+    assert duplicate_rung.reason.startswith("duplicate:")
+    # Nothing was added, so nothing was hit-tested or scored: reporting a score for
+    # the set that was already there would be a phantom rung.
+    assert duplicate_rung.added == ()
+    assert duplicate_rung.hit == ()
+    assert duplicate_rung.sharpe is None
+    assert duplicate_rung.exposure_pct is None
+    assert duplicate_rung.kept_windows == kept.kept_windows  # the set itself is unchanged
+    # The book is unchanged and un-duplicated.
+    assert grade.kept_windows == tuple(
+        sorted(kept.kept_windows, key=lambda w: (w.start, w.end, str(w.kind)))
+    )
+    assert len(grade.kept_windows) == len(base) + len(duplicate.windows)
+    assert len(set(grade.kept_windows)) == len(grade.kept_windows)
+    assert grade.stop_reason == duplicate_rung.reason
+
+
+def test_the_overlay_models_are_frozen_strict_and_described() -> None:
+    dates, prices = _up_heavy()
+    grade = grade_medium_overlay(
+        dates, prices, _long_base(dates, prices), _medium_candidates(dates, prices)
+    )
+    with pytest.raises(Exception, match="frozen|immutable"):
+        grade.steps = ()  # type: ignore[misc]
+    with pytest.raises(Exception, match="frozen|immutable"):
+        grade.kept_windows = ()  # type: ignore[misc]
+    with pytest.raises(Exception, match="frozen|immutable"):
+        grade.steps[0].kept = False  # type: ignore[misc]
+    for model in (OverlayGrade, OverlayStep):
+        for name, field in model.model_fields.items():
+            assert field.description, f"{model.__name__}.{name} has no description"
+
+
+def test_the_overlay_validates_its_inputs() -> None:
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    candidates = _medium_candidates(dates, prices)
+    with pytest.raises(ValueError, match="at least one long-term window"):
+        grade_medium_overlay(dates, prices, (), candidates)
+    with pytest.raises(ValueError, match="same length"):
+        grade_medium_overlay(dates[:10], prices, base, candidates)
+    with pytest.raises(ValueError, match="at least"):
+        grade_medium_overlay(_calendar(1), [_LOW], base, candidates)
+    with pytest.raises(ValueError, match="exposure_floor_pct"):
+        grade_medium_overlay(dates, prices, base, candidates, exposure_floor_pct=101.0)
+    with pytest.raises(ValueError, match="min_move_pct"):
+        grade_medium_overlay(dates, prices, base, candidates, min_move_pct=-1.0)
+    with pytest.raises(ValueError, match="PeriodCandidate"):
+        grade_medium_overlay(dates, prices, base, [candidates[0].windows[0]])
+    with pytest.raises(ValueError, match="no windows"):
+        grade_medium_overlay(
+            dates,
+            prices,
+            base,
+            [PeriodCandidate(horizon="medium", half_width_days=15, peaks=(), troughs=())],
+        )
+
+
+def test_an_empty_candidate_list_grades_nothing_and_leaves_the_long_set_alone() -> None:
+    dates, prices = _up_heavy()
+    base = _long_base(dates, prices)
+    grade = grade_medium_overlay(dates, prices, base, ())
+    assert grade.steps == ()
+    assert grade.ladder == ()
+    assert grade.kept_windows == base
+    assert grade.stop_reason is None
+    assert grade.baseline.sharpe == pytest.approx(-0.03680572090431364, rel=1e-9)
+
+
+def test_the_overlay_surface_is_exported() -> None:
+    from digiquant.strategies.sdca import period_optimize
+
+    for name in ("OverlayGrade", "OverlayStep", "grade_medium_overlay"):
+        assert name in period_optimize.__all__, f"{name} is missing from __all__"
+        assert hasattr(period_optimize, name)
