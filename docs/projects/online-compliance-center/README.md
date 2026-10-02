@@ -17,7 +17,7 @@ Digi product names are always lowercase in prose.
 | Tenant slug | `occ` (digichat / digikey); manifest `client: online-compliance-center` |
 | Crawl host | `help.online-compliance-center.com` only (no demo/portal) |
 | Sinks | Dual-sink: digivault + digisearch |
-| digisearch index | `occ_help` |
+| digisearch index | `occ_help` docs + `occ_tickets` fan-out |
 | Vault / Supabase | Same `architecture_notes` table; path prefix `clients/online-compliance-center/…` |
 | Auth | Ungated embed; operator may set `llmAccess: free_then_byok` (on develop via #2048) |
 | digiproject | `llm_mode: free`; research prompt for OCC help corpus |
@@ -49,7 +49,7 @@ docs/projects/online-compliance-center/
 
 ```text
 digithings.ai/chat      → embed host digithings.ai     → tenant digithings → digithings_docs
-digithings.ai/chat/occ  → embed host occ.digithings.ai → tenant occ       → occ_help
+digithings.ai/chat/occ  → embed host occ.digithings.ai → tenant occ       → occ_help,occ_tickets
 ```
 
 ## Embed (operator env)
