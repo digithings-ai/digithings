@@ -13,7 +13,7 @@ import { EXECUTION, PIPELINE_STAGES } from "./digiquantPipeline";
  * and not to invent a stage. Source of truth:
  * `apps/digiquant-web/app/_stages.ts` (names) and
  * `apps/digiquant-web/components/pipeline/stage-copy.ts` (does + steps).
- * The homepage banner is not this catalog.
+ * The homepage card deck is not this catalog.
  */
 
 const WEB = resolve(__dirname, "..", "..", "digiquant-web");
