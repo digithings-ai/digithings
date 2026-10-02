@@ -1,5 +1,6 @@
 import { CtaLink } from "@digithings/ui";
 import { IntegrationMark, integrationHref, type IntegrationId } from "@/components/integrations/marks";
+import { LocalLuxalgoWorkflow } from "@/components/luxalgo/local-luxalgo-workflow";
 import { Band } from "../_chrome/Band";
 import { MCP_TOOLS } from "../_mcp";
 
@@ -8,22 +9,20 @@ const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(
 const CARD =
   "flex h-auto min-h-full w-full flex-col items-stretch gap-3 border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal no-underline hover:bg-surface-2";
 
-const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string; visual: string }[] = [
+const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
   {
     id: "gloomberb",
     name: "Gloomberg",
     role: "market data",
     line: "Quotes, filings, macro and options for the research stages. Enrichment, never the record the backtests run on.",
     fact: `${toolCount("digifetch_")} MCP tools`,
-    visual: "Terminal-style quote strip with sparkline — live market context feed.",
   },
   {
     id: "luxalgo",
     name: "LuxAlgo",
     role: "Vela backbone · live signals",
-    line: "Real Vela engine behind the hero chart and every signal overlay. Price engine + indicator backbone digiquant research runs on — not a demo card.",
+    line: "The live chart is the hero. Library lookup runs through the local gateway below when that gateway is up.",
     fact: `${toolCount("luxalgo_")} MCP tools · live on hero`,
-    visual: "Live Vela candlestick preview — same engine as the hero chart.",
   },
   {
     id: "nautilus",
@@ -31,7 +30,6 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
     role: "engine",
     line: "The event-driven engine every backtest and optimize run goes through. One engine, no second code path.",
     fact: "validate → backtest → optimize → export",
-    visual: "Backtest run timeline — validate, backtest, optimize, export.",
   },
 ];
 
@@ -50,7 +48,8 @@ const SECONDARY: { id: IntegrationId; name: string; role: string }[] = [
 /** Integrations: the only band that names partners. The three architectural drivers lead,
  *  digithings follows as the platform under the agents and chat, brokers and feeds sit
  *  last and quiet. Showcase only: nothing here places an order. LuxAlgo Vela is the live
- *  price backbone (see the hero), not a demo widget. */
+ *  price backbone on the hero. The panel under the cards is the local library lookup,
+ *  which stays honest when the loopback gateway is down. */
 export function IntegrationsBand() {
   return (
     <Band
@@ -71,18 +70,14 @@ export function IntegrationsBand() {
                     <span className="block font-mono text-[0.68rem] font-normal text-ink-mute">{d.role}</span>
                   </span>
                 </span>
-                <span
-                  aria-hidden="true"
-                  className="block overflow-hidden border border-hair bg-term-bg px-3 py-2 font-mono text-[0.66rem] leading-[1.5] text-ink-mute"
-                >
-                  {d.visual}
-                </span>
                 <span className="text-[0.8125rem] font-normal leading-[1.55] text-ink-soft">{d.line}</span>
                 <span className="mt-auto border-t border-hair pt-2 font-mono text-[0.68rem] font-normal text-ink-mute">{d.fact}</span>
               </CtaLink>
             </li>
           ))}
         </ul>
+
+        <LocalLuxalgoWorkflow />
 
         <div className="grid gap-4 border border-hair p-[1.3rem] md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <CtaLink href={integrationHref("digithings")} external variant="ghost" className="h-auto items-center justify-start gap-3 p-0 text-start no-underline">
