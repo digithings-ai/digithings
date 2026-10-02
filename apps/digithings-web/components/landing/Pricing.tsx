@@ -78,7 +78,7 @@ const GROUPS: PricingMatrixGroup[] = [
       },
       {
         label: "what it covers",
-        cells: ["everything, no ceiling", "the deployment itself", "the engagement, end to end"],
+        cells: ["the repository, MIT, no license fee", "the deployment itself", "the engagement, end to end"],
       },
       {
         label: "what is quoted",
@@ -131,7 +131,7 @@ const GROUPS: PricingMatrixGroup[] = [
         cells: [
           "you — it stays yours",
           "you — the deployment stays yours",
-          "you, and the custom work is handed over",
+          "you, under the written scope — custom work is handed over as that scope says",
         ],
       },
       {

@@ -2,7 +2,7 @@
 title: "digiquant — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - core
@@ -21,10 +21,10 @@ Scheduled research turns into a sized book; backtests run on a real NautilusTrad
 Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.
 
 ## Authentication
-Backtest/optimize/pipeline routes accept a digikey JWT (optional in passthrough mode). Async jobs stream progress over SSE.
+Protected routes require a digikey JWT. If neither `DIGIKEY_JWKS_URL` nor `DIGIKEY_PUBLIC_KEY_PEM` is set, they return 503 `auth_not_configured`. There is no anonymous passthrough. `GET /bars` is the read-only chart exemption. Async jobs stream progress over SSE.
 
-- `digiquant:backtest` — /run_backtest, /backtest/*, /v1/jobs/*, /v1/orchestrator_tools
-- `digiquant:optimize` — /run_optimize, /run_pipeline, /v1/workflow
+- `digiquant:backtest` — /strategies, /run_backtest, /backtest/*, /v1/jobs/*, /v1/orchestrator_tools
+- `digiquant:optimize` — /run_optimize. /run_pipeline and /v1/workflow also require digiquant:backtest
 
 ## Run locally
 ```bash
@@ -47,7 +47,7 @@ Base URL: `$DIGIQUANT_URL` (the service URL from docker-compose.yml).
 ### GET /strategies
 List registered NautilusTrader strategies.
 
-auth: none · rate: 30/min/IP
+auth: digiquant:backtest · rate: 30/min/IP
 
 Response example:
 ```json
@@ -55,13 +55,13 @@ Response example:
 ```
 
 ```bash
-curl $DIGIQUANT_URL/strategies
+curl $DIGIQUANT_URL/strategies -H "Authorization: Bearer $JWT"
 ```
 
 ### POST /run_backtest
 Synchronous backtest. Returns a BacktestResult.
 
-auth: digiquant:backtest (optional) · rate: 10/min/IP
+auth: digiquant:backtest · rate: 10/min/IP
 
 Request:
 - `strategy_name` (string) — required: Registered strategy id.
@@ -84,6 +84,8 @@ curl -X POST $DIGIQUANT_URL/run_backtest \
 ```
 
 ```python
+import os, httpx
+
 r = httpx.post(
     f"{os.environ['DIGIQUANT_URL']}/run_backtest",
     headers={"Authorization": f"Bearer {os.environ['DIGI_JWT']}"},
@@ -96,7 +98,7 @@ print(r.json()["sharpe_ratio"])
 ### POST /backtest/start
 Submit an async backtest job; returns {job_id}. Poll progress over SSE.
 
-auth: none · rate: 10/min/IP
+auth: digiquant:backtest · rate: 10/min/IP
 
 Response example:
 ```json
@@ -106,16 +108,16 @@ Response example:
 ### GET /backtest/{job_id}/progress
 SSE stream of backtest progress events (JSON frames).
 
-auth: none
+auth: digiquant:backtest
 
 ```bash
-curl -N $DIGIQUANT_URL/backtest/$JOB_ID/progress
+curl -N $DIGIQUANT_URL/backtest/$JOB_ID/progress -H "Authorization: Bearer $JWT"
 ```
 
 ### POST /run_optimize
 Parameter optimization (grid / bayesian / random). Returns best params.
 
-auth: digiquant:optimize (optional) · rate: 10/min/IP
+auth: digiquant:optimize · rate: 10/min/IP
 
 Request:
 - `strategy_name` (string) — required: Registered strategy id.
@@ -132,7 +134,7 @@ Response:
 ### POST /run_pipeline
 Full pipeline: backtest → optimize → export.
 
-auth: digiquant:optimize (optional) · rate: 10/min/IP
+auth: digiquant:backtest and digiquant:optimize · rate: 10/min/IP
 
 ## Stack
 NautilusTrader, Optuna, LangGraph, Polars, yfinance, Supabase

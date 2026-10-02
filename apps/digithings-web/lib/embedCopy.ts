@@ -47,7 +47,7 @@ export const EMBED_SHELL_COPY: Record<
     suggestions: [
       "How do I file a support ticket?",
       "Search the help articles for onboarding",
-      "Show my open Zammad tickets",
+      "Show open Zammad tickets",
       "What is our data retention policy?",
     ],
   },

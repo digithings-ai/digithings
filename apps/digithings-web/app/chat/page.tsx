@@ -5,8 +5,8 @@ import { embedOriginForChat } from "@/lib/security-headers.mjs";
 export const metadata: Metadata = {
   title: "digichat — the digithings assistant",
   description:
-    "Ask digichat anything about the digithings architecture — grounded via digigraph " +
-    "and digivault, running on digillm. No sign-up.",
+    "Ask digichat about the digithings architecture. Retrieval through digigraph and " +
+    "digivault is a tool the assistant can call, not a guarantee on every reply. No sign-up.",
 };
 
 /** Same origin as CSP frame-src (default https://digithings.ai for Containers). */

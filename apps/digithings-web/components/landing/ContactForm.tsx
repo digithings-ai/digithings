@@ -63,10 +63,10 @@ export function ContactForm({ className }: { className?: string }) {
     return (
       <div className={className}>
         <p className="m-0 text-[0.9rem] leading-[1.7] text-ink">
-          Sent. We will reply to the address you gave.
+          Sent. We kept your message and the address so we can reply.
         </p>
         <p className="mt-[0.6rem] mb-0 text-[0.8rem] text-ink-mute">
-          Nothing else was stored beyond the message itself.
+          We did not ask for anything else.
         </p>
       </div>
     );
