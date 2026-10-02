@@ -363,11 +363,14 @@ export function QuantField() {
         theme(THEME);
         overlay.dataset.phase = "done";
         lockFrame(frozen);
-        const started = performance.now();
+        let elapsed = 0;
+        let lastTick = performance.now();
         const tick = (now: number) => {
           if (dead || finished) return;
+          elapsed += Math.min(48, Math.max(0, now - lastTick));
+          lastTick = now;
           lockFrame(frozen);
-          if (paintCover(now - started, frozen.length)) {
+          if (paintCover(elapsed, frozen.length)) {
             raf = requestAnimationFrame(tick);
             return;
           }
