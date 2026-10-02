@@ -194,8 +194,22 @@ export function QuantField() {
       lockFrame(rows);
       chart?.resize();
       lockFrame(loadedSeries());
-      host.style.opacity = "1";
-      beat("done");
+      if (reduced) {
+        host.style.opacity = "1";
+        beat("done");
+        return;
+      }
+      // Opacity must be painted at 0 or the transition is skipped and the
+      // chart pops in. Two frames let Vela draw the finished canvas first.
+      host.style.opacity = "0";
+      requestAnimationFrame(() => {
+        if (dead) return;
+        requestAnimationFrame(() => {
+          if (dead) return;
+          host.style.opacity = "1";
+          beat("done");
+        });
+      });
     };
 
     let pageUnlocked = false;
