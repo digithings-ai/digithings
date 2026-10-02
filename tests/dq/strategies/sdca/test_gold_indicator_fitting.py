@@ -39,6 +39,16 @@ leaves the ±0.06 dead zone is flagged ``degenerate``; an indicator whose every
 scored row is degenerate AND whose best separation is strictly positive is a
 ``degenerate_pass`` — listed separately, never a keep without an owner look.
 
+And the EQUAL-WEIGHT GREEDY SELECTION (Task 2), on synthetic z-vectors: the
+anchor is the shipped rolling90/z1.0 no-trend ``valuation_z``, the aggregate is
+the SHIPPED equal-weight blend (``compute_composite_risk``, weight 1.0 — mean and
+clip, never a hand-rolled mean), the candidate pool is ``verdict == "keep"`` in a
+FROZEN order (individual separation DESC, ties to the shorter window then the
+name), and a candidate is kept iff its addition STRICTLY improves the aggregate —
+a delta of exactly 0.0 is a drop. Every candidate's delta is recorded, together
+with the scored-day count before and after, because the shipped blend sums with
+``ignore_nulls=False`` and a warm-up null shrinks the scored sample mid-run.
+
 Not vacuous: the one-sided case fails the scoring tests, the abs-guard fails on
 any ``abs()`` of the metric, and the dispatch test compares against the shipped
 function's own output rather than a restated copy.
@@ -47,6 +57,7 @@ function's own output rather than a restated copy.
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 from datetime import date, timedelta
 from pathlib import Path
@@ -753,3 +764,588 @@ def test_band_selection_breaks_ties_on_the_shorter_window() -> None:
     assert fitter.best_row_in_band(rows, max_window_days=90) is None
     assert fitter.best_row_in_band([_row(fitter, window_days=756, separation=None)]) is None
     assert fitter.best_row([_row(fitter, window_days=756, separation=None)]) is None
+
+
+# --------------------------------------------------------------------------- #
+# 5. Equal-weight greedy selection (Plan-19 Task 2 — the frozen rule, verbatim)
+# --------------------------------------------------------------------------- #
+
+
+def _greedy_inputs(fitter: Any) -> dict[str, Any]:
+    """Synthetic z-vectors covering the three roles the rule must separate.
+
+    Anchor (``valuation``, peak -1.0 / trough +1.0) scores +2.0 alone.
+
+    * ``improver`` (peak -3.0 / trough +3.0, individual +6.0) lifts the aggregate.
+    * ``diluter`` (peak -1.0 / trough +1.0, individual +2.0) drags the aggregate
+      back toward its own weaker separation -> strict improvement fails.
+    * ``hurter`` (peak +3.0 / trough -3.0, individual -6.0) votes backwards.
+    * ``neutral`` is built in its own test: a candidate whose individual
+      separation EXACTLY equals the current aggregate (delta == 0.0).
+    """
+    dates, windows = _calendar(), _windows()
+    z_vectors = {
+        "improver": _two_level_z(dates, windows, peak=-3.0, trough=3.0),
+        "diluter": _two_level_z(dates, windows, peak=-1.0, trough=1.0),
+        "hurter": _two_level_z(dates, windows, peak=3.0, trough=-3.0),
+    }
+    candidates = (
+        fitter.Candidate(
+            name="improver",
+            params={"window": 180},
+            window_days=180,
+            individual_separation=6.0,
+        ),
+        fitter.Candidate(
+            name="diluter",
+            params={"window": 378},
+            window_days=378,
+            individual_separation=2.0,
+        ),
+        fitter.Candidate(
+            name="hurter",
+            params={"window": 90},
+            window_days=90,
+            individual_separation=-6.0,
+        ),
+    )
+    return {
+        "dates": dates,
+        "windows": windows,
+        "anchor": _two_level_z(dates, windows, peak=-1.0, trough=1.0),
+        "candidates": candidates,
+        "z_vectors": z_vectors,
+    }
+
+
+def test_greedy_select_keeps_the_improver_and_drops_the_rest_with_recorded_deltas() -> None:
+    """The owner's rule: aggregate improves -> keep, does not -> drop (delta recorded).
+
+    Anchored on the anchor alone (aggregate +2.0), in the FROZEN order
+    (individual separation DESC):
+
+    * ``improver`` -> aggregate +4.0, delta +2.0 -> KEPT.
+    * ``diluter``  -> aggregate +10/3, delta -2/3 -> dropped.
+    * ``hurter``   -> aggregate +2/3, delta -10/3 -> dropped.
+
+    ``step 3``'s ``aggregate_before`` is the KEPT aggregate (+4.0), not the
+    diluter's trial (+10/3): a dropped candidate is never carried forward.
+    """
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+
+    run = fitter.greedy_select(
+        dates=inputs["dates"],
+        windows=inputs["windows"],
+        anchor_name=fitter.ANCHOR_NAME,
+        anchor=inputs["anchor"],
+        candidates=inputs["candidates"],
+        z_vectors=inputs["z_vectors"],
+    )
+
+    assert run.kept == ("improver",)
+    assert run.dropped == ("diluter", "hurter")
+    # steps come out in the frozen candidate order, one row per candidate
+    assert [s.name for s in run.steps] == ["improver", "diluter", "hurter"]
+    assert [s.step for s in run.steps] == [1, 2, 3]
+    assert run.anchor_separation == pytest.approx(2.0)
+    assert run.final_separation == pytest.approx(4.0)
+
+    by_name = {s.name: s for s in run.steps}
+    assert by_name["improver"].kept is True
+    assert by_name["improver"].aggregate_before == pytest.approx(2.0)
+    assert by_name["improver"].aggregate_after == pytest.approx(4.0)
+    assert by_name["improver"].delta == pytest.approx(2.0)
+    assert by_name["improver"].individual_separation == pytest.approx(6.0)
+    assert by_name["improver"].params == {"window": 180}
+    assert by_name["improver"].window_days == 180
+
+    assert by_name["diluter"].kept is False
+    assert by_name["diluter"].aggregate_after == pytest.approx(10.0 / 3.0)
+    assert by_name["diluter"].delta == pytest.approx(-2.0 / 3.0)
+
+    assert by_name["hurter"].kept is False
+    assert by_name["hurter"].aggregate_before == pytest.approx(4.0)  # not the diluter's 2.0
+    assert by_name["hurter"].aggregate_after == pytest.approx(2.0 / 3.0)
+    assert by_name["hurter"].delta == pytest.approx(-10.0 / 3.0)
+
+
+def test_greedy_select_drops_a_candidate_that_only_equals_the_aggregate() -> None:
+    """STRICT improvement: a delta of exactly 0.0 is a DROP, not a keep.
+
+    The candidate's own separation equals the anchor's aggregate (+2.0), so the
+    equal-weight blend of the two is exactly +2.0 again — no improvement.
+    """
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+    neutral = fitter.Candidate(
+        name="neutral",
+        params={"window": 180},
+        window_days=180,
+        individual_separation=2.0,
+    )
+
+    run = fitter.greedy_select(
+        dates=inputs["dates"],
+        windows=inputs["windows"],
+        anchor_name=fitter.ANCHOR_NAME,
+        anchor=inputs["anchor"],
+        candidates=(neutral,),
+        z_vectors={"neutral": inputs["z_vectors"]["diluter"]},
+    )
+
+    assert len(run.steps) == 1
+    step = run.steps[0]
+    assert step.aggregate_before == pytest.approx(2.0)
+    assert step.aggregate_after == pytest.approx(2.0)
+    assert step.delta == pytest.approx(0.0, abs=1e-12)
+    assert step.delta == 0.0  # exactly, not approximately
+    assert step.kept is False
+    assert run.kept == ()
+    assert run.dropped == ("neutral",)
+    assert run.final_separation == pytest.approx(2.0)  # unchanged by the drop
+
+
+def test_greedy_select_records_the_scored_day_shrink_from_a_warm_up_null() -> None:
+    """The null-propagation hazard, made visible: days-delta rides with the delta.
+
+    ``compute_composite_risk`` sums with ``ignore_nulls=False``, so a candidate
+    whose warm-up leaves a few PINNED-window days null removes those days from the
+    scored sample. The delta table must therefore carry ``scored_days`` before /
+    after and the days-delta, or a shrinking sample reads like a vote change.
+    """
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+    dates, windows = inputs["dates"], inputs["windows"]
+    scored = _window_days(windows, dates)
+    total_window_days = len(scored[CycleKind.PEAK]) + len(scored[CycleKind.TROUGH])
+    gap = scored[CycleKind.PEAK][:20]
+    warm = list(_two_level_z(dates, windows, peak=-3.0, trough=3.0))
+    for i in gap:
+        warm[i] = None
+
+    run = fitter.greedy_select(
+        dates=dates,
+        windows=windows,
+        anchor_name=fitter.ANCHOR_NAME,
+        anchor=inputs["anchor"],
+        candidates=(
+            fitter.Candidate(
+                name="warmup",
+                params={"window": 180},
+                window_days=180,
+                individual_separation=6.0,
+            ),
+        ),
+        z_vectors={"warmup": warm},
+    )
+
+    step = run.steps[0]
+    assert step.scored_days_before == total_window_days
+    assert step.scored_days_after == total_window_days - len(gap)
+    assert step.days_delta == -len(gap)
+    assert step.days_delta < 0  # the sample really did shrink
+    assert step.kept is True
+    assert step.delta == pytest.approx(2.0)
+    assert step.coverage_before == pytest.approx(1.0)
+    assert step.coverage_after == pytest.approx((total_window_days - len(gap)) / total_window_days)
+
+
+def test_greedy_select_rejects_a_candidate_order_that_is_not_frozen() -> None:
+    """The frozen order is the rule, not an accident: separation DESC is enforced."""
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+    reversed_candidates = tuple(reversed(inputs["candidates"]))
+
+    with pytest.raises(ValueError, match="frozen order"):
+        fitter.greedy_select(
+            dates=inputs["dates"],
+            windows=inputs["windows"],
+            anchor_name=fitter.ANCHOR_NAME,
+            anchor=inputs["anchor"],
+            candidates=reversed_candidates,
+            z_vectors=inputs["z_vectors"],
+        )
+
+
+def test_greedy_select_requires_a_z_vector_for_every_candidate() -> None:
+    """A missing vector is a loud failure, never a silently skipped candidate."""
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+
+    with pytest.raises(ValueError, match="no z vector"):
+        fitter.greedy_select(
+            dates=inputs["dates"],
+            windows=inputs["windows"],
+            anchor_name=fitter.ANCHOR_NAME,
+            anchor=inputs["anchor"],
+            candidates=inputs["candidates"],
+            z_vectors={"improver": inputs["z_vectors"]["improver"]},
+        )
+
+
+def test_aggregate_z_is_the_shipped_equal_weight_blend_with_its_clip() -> None:
+    """Reuse, not reimplementation: equal weight 1.0 -> the shipped mean-and-clip.
+
+    ``compute_composite_risk`` is the shipped blend: with every member at
+    ``weight=EQUAL_WEIGHT`` it IS ``(sum(z)/n).clip(-3, 3)``. ``aggregate_z`` must
+    return exactly that (including the clip and the null-day rule), and must
+    refuse the duplicate member name the shipped blend refuses.
+    """
+    from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
+
+    fitter = _load_fitter()
+    assert fitter.EQUAL_WEIGHT == 1.0
+    a = [1.0, -2.0, None, 0.5]
+    b = [0.0, 0.0, 4.0, -1.0]
+
+    got = fitter.aggregate_z([("a", a), ("b", b)])
+
+    shipped = compute_composite_risk(
+        [
+            IndicatorWeight(name="a", z=pl.Series(a, dtype=pl.Float64), weight=fitter.EQUAL_WEIGHT),
+            IndicatorWeight(name="b", z=pl.Series(b, dtype=pl.Float64), weight=fitter.EQUAL_WEIGHT),
+        ]
+    )["composite_z"].to_list()
+    assert got == shipped
+    # a null in ANY member nulls that day (ignore_nulls=False), never partial
+    assert got[2] is None
+    # a loud leg is clipped, exactly as shipped (5.0 + 4.0)/2 -> 3.0
+    assert fitter.aggregate_z([("a", [5.0]), ("b", [4.0])]) == [3.0]
+    assert fitter.aggregate_z([("a", [-5.0]), ("b", [-4.0])]) == [-3.0]
+    # duplicate member names are refused by the shipped blend, not merged away
+    with pytest.raises(ValueError, match="duplicate"):
+        fitter.aggregate_z([("a", [1.0]), ("a", [2.0])])
+
+
+def test_equal_weight_separation_scores_the_aggregate_with_the_frozen_metric() -> None:
+    """The aggregate is scored by the SAME Ruling-1 metric as a single leg."""
+    fitter = _load_fitter()
+    dates, windows = _calendar(), _windows()
+
+    score = fitter.equal_weight_separation(
+        dates,
+        windows,
+        [("valuation", _two_level_z(dates, windows, peak=-1.0, trough=1.0))],
+    )
+
+    assert score.separation == pytest.approx(2.0)
+    assert score.reason is None
+
+
+def test_anchor_z_is_the_shipped_rolling90_z10_no_trend_anchor() -> None:
+    """The anchor is built with SHIPPED code, zero production edits (the v4 seed)."""
+    from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
+    from digiquant.strategies.sdca.risk_index import build_risk_index
+
+    fitter = _load_fitter()
+    assert (fitter.ANCHOR_FORM, fitter.ANCHOR_ROLLING_WINDOW, fitter.ANCHOR_ROLLING_Z) == (
+        "rolling_z",
+        90,
+        1.0,
+    )
+    dates = _calendar(DISPATCH_DAYS)
+    price_s = pl.Series(
+        "price",
+        [100.0 + 0.02 * i for i in range(len(dates))],
+        dtype=pl.Float64,
+    )
+    date_s = pl.Series("date", dates, dtype=pl.Date)
+
+    anchor = fitter.anchor_z(date_s, price_s)
+
+    model = resolve_sdca_risk_model(
+        "rolling_z",
+        dates=date_s,
+        price=price_s,
+        rolling_window=fitter.ANCHOR_ROLLING_WINDOW,
+        rolling_z=fitter.ANCHOR_ROLLING_Z,
+    )
+    expected = build_risk_index(
+        date_s, price_s, model, extra_indicators=None, valuation_weight=fitter.EQUAL_WEIGHT
+    )["valuation_z"].to_list()
+    assert anchor == expected
+    assert len(anchor) == len(dates)
+    assert any(v is not None for v in anchor)
+    # the rails are null only at the very start of the calendar, never inside it
+    assert anchor[0] is None
+    assert all(v is not None for v in anchor[100:])
+
+
+def _indicator_fits(
+    fitter: Any,
+    name: str,
+    *,
+    verdict: str,
+    separation: float | None,
+    window_days: int,
+    params: dict[str, int] | None = None,
+    reason: str | None = None,
+    degenerate_pass: bool = False,
+) -> Any:
+    """A minimal VALIDATED IndicatorFits for the candidate-pool helpers."""
+    row = _row(
+        fitter,
+        window_days=window_days,
+        separation=separation,
+        mean_peak_z=None if separation is None else -1.0,
+        mean_trough_z=None if separation is None else 1.0,
+    ).model_copy(update={"params": params or {"window": window_days}})
+    return fitter.IndicatorFits(
+        name=name,
+        family="level_z",
+        grid_rows=1,
+        status="unscoreable" if separation is None else "scored",
+        reason=reason,
+        rows=() if separation is None else (row,),
+        best_overall=row if separation is not None else None,
+        best_medium=row if separation is not None else None,
+        best_long=row if separation is not None else None,
+        degenerate=degenerate_pass,
+        degenerate_pass=degenerate_pass,
+        verdict=verdict,
+    )
+
+
+def test_candidate_pool_takes_verdict_keep_only_and_freezes_the_order() -> None:
+    """`verdict == "keep"` is the filter — `separation > 0` would admit the
+    degenerate oscillators, which Ruling 1 keeps out of every keep list."""
+    fitter = _load_fitter()
+    fits = {
+        "real_rate": _indicator_fits(
+            fitter, "real_rate", verdict="keep", separation=3.40, window_days=504
+        ),
+        "sma_band": _indicator_fits(
+            fitter,
+            "sma_band",
+            verdict="keep",
+            separation=3.12,
+            window_days=378,
+            params={"sma_band_window": 378, "sma_band_min_samples": 30},
+        ),
+        "gld_slv": _indicator_fits(
+            fitter, "gld_slv", verdict="keep", separation=2.39, window_days=504
+        ),
+        "nfci": _indicator_fits(fitter, "nfci", verdict="keep", separation=1.60, window_days=756),
+        "walcl": _indicator_fits(
+            fitter,
+            "walcl",
+            verdict="keep",
+            separation=1.02,
+            window_days=180,
+            params={"roc_days": 90, "window": 180},
+        ),
+        # positive separation, but a dead-side pass -> owner review, NOT a candidate
+        "weekly_rsi": _indicator_fits(
+            fitter, "weekly_rsi", verdict="degenerate_pass", separation=0.4420, window_days=105
+        ),
+        "weekly_macd": _indicator_fits(
+            fitter, "weekly_macd", verdict="degenerate_pass", separation=0.3477, window_days=90
+        ),
+        "uup": _indicator_fits(fitter, "uup", verdict="drop", separation=-1.88, window_days=90),
+        "hy_oas": _indicator_fits(
+            fitter, "hy_oas", verdict="unscoreable", separation=None, window_days=90, reason="late"
+        ),
+    }
+
+    pool = fitter.candidate_pool(fits)
+
+    assert [c.name for c in pool] == ["real_rate", "sma_band", "gld_slv", "nfci", "walcl"]
+    assert [c.individual_separation for c in pool] == [3.40, 3.12, 2.39, 1.60, 1.02]
+    assert [c.window_days for c in pool] == [504, 378, 504, 756, 180]
+    assert pool[1].params == {"sma_band_window": 378, "sma_band_min_samples": 30}
+    # a degenerate pass is never a candidate, whatever its individual separation
+    assert "weekly_rsi" not in {c.name for c in pool}
+    assert "weekly_macd" not in {c.name for c in pool}
+    assert "uup" not in {c.name for c in pool}
+    assert "hy_oas" not in {c.name for c in pool}
+
+
+def test_candidate_pool_ties_break_on_shorter_window_then_name() -> None:
+    fitter = _load_fitter()
+    fits = {
+        "long_leg": _indicator_fits(
+            fitter, "long_leg", verdict="keep", separation=2.0, window_days=756
+        ),
+        "short_leg": _indicator_fits(
+            fitter, "short_leg", verdict="keep", separation=2.0, window_days=90
+        ),
+        "b_leg": _indicator_fits(fitter, "b_leg", verdict="keep", separation=2.0, window_days=90),
+        "a_leg": _indicator_fits(fitter, "a_leg", verdict="keep", separation=2.0, window_days=90),
+    }
+
+    assert [c.name for c in fitter.candidate_pool(fits)] == [
+        "a_leg",
+        "b_leg",
+        "short_leg",
+        "long_leg",
+    ]
+
+
+def test_two_member_equal_weight_blend_is_the_mean_of_the_two_separations() -> None:
+    """Why a single weak candidate cannot help a strong anchor (clip aside).
+
+    With two members at equal weight and no clip binding, the aggregate
+    separation is the MEAN of the two members' separations, so a two-member step
+    can only improve on the anchor when the candidate's own separation is HIGHER
+    than the anchor's. This is the arithmetic behind the real run's verdict, and
+    it is pinned here on synthetic vectors with no clip in play (both legs stay
+    inside +/-1 so the mean can never reach the +/-3 bound).
+    """
+    fitter = _load_fitter()
+    dates, windows = _calendar(), _windows()
+    anchor = _two_level_z(dates, windows, peak=-1.0, trough=1.0)  # sep +2.0
+    weaker = _two_level_z(dates, windows, peak=-0.5, trough=0.5)  # sep +1.0
+    stronger = _two_level_z(dates, windows, peak=-1.5, trough=1.5)  # sep +3.0
+
+    anchor_sep = fitter.separation(dates, anchor, windows).separation
+    assert anchor_sep == pytest.approx(2.0)
+    down = fitter.equal_weight_separation(dates, windows, [("a", anchor), ("b", weaker)])
+    up = fitter.equal_weight_separation(dates, windows, [("a", anchor), ("b", stronger)])
+    assert down.separation == pytest.approx(1.5)  # (2.0 + 1.0) / 2
+    assert up.separation == pytest.approx(2.5)  # (2.0 + 3.0) / 2
+    # delta = half the gap between the candidate and the anchor, either direction
+    assert down.separation - anchor_sep == pytest.approx(-0.5)
+    assert up.separation - anchor_sep == pytest.approx(+0.5)
+
+
+def test_trajectory_walks_the_live_member_set_not_the_final_one() -> None:
+    """Trajectory rows must show the set kept SO FAR, not the final set."""
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+    run = fitter.greedy_select(
+        dates=inputs["dates"],
+        windows=inputs["windows"],
+        anchor_name=fitter.ANCHOR_NAME,
+        anchor=inputs["anchor"],
+        candidates=inputs["candidates"],
+        z_vectors=inputs["z_vectors"],
+    )
+
+    rows = fitter._trajectory(run)
+
+    assert rows[0] == {
+        "step": 0,
+        "added": None,
+        "kept": None,
+        "members": ["valuation"],
+        "separation": pytest.approx(2.0),
+        "scored_days": 273,
+    }
+    # kept -> joins the live set; dropped -> does NOT, and its trial value is
+    # carried only as `separation_if_kept`.
+    assert rows[1]["members"] == ["valuation", "improver"]
+    assert rows[1]["separation"] == pytest.approx(4.0)
+    assert rows[2]["members"] == ["valuation", "improver"]
+    assert rows[2]["separation"] == pytest.approx(4.0)
+    assert rows[2]["separation_if_kept"] == pytest.approx(10.0 / 3.0)
+    assert rows[3]["members"] == ["valuation", "improver"]
+    assert rows[-1]["members"] == list(run.final_members)
+
+
+def test_selection_payload_carries_the_deliverable_tables() -> None:
+    """The artifact must carry the delta table, pool order, cross-check and review."""
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+    dates, windows = inputs["dates"], inputs["windows"]
+    run = fitter.greedy_select(
+        dates=dates,
+        windows=windows,
+        anchor_name=fitter.ANCHOR_NAME,
+        anchor=inputs["anchor"],
+        candidates=inputs["candidates"],
+        z_vectors=inputs["z_vectors"],
+    )
+    cross, members = fitter.cross_check_aggregate(
+        dates=dates,
+        windows=windows,
+        anchor=inputs["anchor"],
+        candidates=inputs["candidates"],
+        z_vectors=inputs["z_vectors"],
+    )
+    outcome = fitter.SelectionOutcome(
+        pool=tuple(inputs["candidates"]),
+        run=run,
+        cross_check=cross,
+        cross_check_members=members,
+    )
+    fits = {
+        "improver": _indicator_fits(
+            fitter, "improver", verdict="keep", separation=6.0, window_days=180
+        ),
+        "weekly_rsi": _indicator_fits(
+            fitter,
+            "weekly_rsi",
+            verdict="degenerate_pass",
+            separation=0.44,
+            window_days=105,
+            degenerate_pass=True,
+        ),
+    }
+
+    payload = fitter.selection_payload(dates, fits, outcome, windows_label="synthetic ±45d")
+
+    assert payload["kept"] == ["improver"]
+    assert payload["kept_params"] == {"improver": {"window": 180}}
+    assert payload["dropped"] == ["diluter", "hurter"]
+    assert payload["dropped_deltas"]["hurter"]["delta"] == pytest.approx(-10.0 / 3.0)
+    assert payload["dropped_deltas"]["hurter"]["days_delta"] == 0
+    assert [row["name"] for row in payload["candidate_pool"]] == [
+        "improver",
+        "diluter",
+        "hurter",
+    ]
+    assert [row["order"] for row in payload["candidate_pool"]] == [1, 2, 3]
+    assert len(payload["delta_table"]) == 3
+    assert payload["final"]["members"] == ["valuation", "improver"]
+    assert payload["cross_check"]["used_for_selection"] is False
+    assert payload["cross_check"]["members"] == [
+        "valuation",
+        "improver",
+        "diluter",
+        "hurter",
+    ]
+    # the degenerate pass is listed for owner review, never inside `kept`
+    assert [row["name"] for row in payload["degenerate_owner_review"]] == ["weekly_rsi"]
+    assert "weekly_rsi" not in payload["kept"]
+    assert payload["in_sample"] is True
+    assert "IN-SAMPLE" in payload["in_sample_label"]
+    assert "STRICTLY improves" in payload["rule"]
+    # json-serializable end to end
+    json.dumps(payload)
+
+
+def test_print_selection_prints_the_plain_keep_drop_list_with_deltas(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The owner deliverable is the console table — every keep/drop and its delta."""
+    fitter = _load_fitter()
+    inputs = _greedy_inputs(fitter)
+
+    run = fitter.greedy_select(
+        dates=inputs["dates"],
+        windows=inputs["windows"],
+        anchor_name=fitter.ANCHOR_NAME,
+        anchor=inputs["anchor"],
+        candidates=inputs["candidates"],
+        z_vectors=inputs["z_vectors"],
+    )
+    fitter.print_selection(run, anchor_label="rolling_z 90d/z1.0 (no time trend)")
+
+    out = capsys.readouterr().out
+    assert "improver" in out and "KEEP" in out
+    assert "diluter" in out and "DROP" in out
+    assert "hurter" in out
+    assert "+2.0000" in out  # the improver's recorded delta
+    assert "-10.0000/3" not in out  # formatted, not a bare fraction
+    assert "-3.3333" in out  # the hurter's recorded delta
+    assert "IN-SAMPLE" in out
+
+
+def test_cli_requires_exactly_one_mode() -> None:
+    """No mode -> usage error; `--fit` and `--select` are the only two modes."""
+    fitter = _load_fitter()
+    with pytest.raises(SystemExit):
+        fitter.main([])
+    with pytest.raises(SystemExit):
+        fitter.main(["--fit", "--select"])

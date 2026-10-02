@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Gold (GLD) per-indicator z-window fitting — Plan-19 Task 1 harness (#4804).
+"""Gold (GLD) per-indicator z-window fitting + equal-weight selection — Plan-19 (#4804).
 
 Research-only. ZERO production edits: every z-series below comes from a SHIPPED
-function in ``indicator_catalog`` / ``price_oscillators``, called with a
-parameter. This harness never restates indicator math — it only sweeps the
-frozen grids and scores them.
+function in ``indicator_catalog`` / ``price_oscillators`` / ``providers`` /
+``risk_index``, called with a parameter. This harness never restates indicator
+math — it only sweeps the frozen grids, scores them, and selects.
 
 **Frozen fit metric (Plan-19 Ruling 1 — the pre-registration sign was a
 CORRECTNESS BUG, corrected here):**
@@ -80,12 +80,31 @@ architecture line enumerates the z-functions to fit and names ``uup_z``, not
 ``dxy_z`` (``uup_z``'s own docstring calls the leg "a refreshability swap for
 the unstageable DTWEXBGS file, not a new independent vote").
 
+**Selection (Task 2, ``--select``)** reads the fits file and runs the plan's
+frozen rule verbatim: start from the no-trend anchor (equal weight
+``valuation: 1.0`` on ``rolling_z`` 90d / z 1.0 rails, built with the SHIPPED
+``resolve_sdca_risk_model`` + ``build_risk_index``, the same construction the v4
+seed uses), walk the candidate pool in FROZEN order, and for each candidate add
+it at equal weight alongside everything kept so far. Keep iff the aggregate
+separation STRICTLY improves, else drop; every candidate's delta is recorded.
+The aggregate is the SHIPPED blend (``compute_composite_risk`` at
+``weight=1.0``, which is ``mean(z).clip(-3, 3)``) — never a hand-rolled mean —
+and it is scored with the SAME ``separation`` metric. The candidate pool is
+``verdict == "keep"``, which is ``separation > 0`` MINUS the degenerate
+oscillator passes Ruling 1 keeps out of every keep list. Because the shipped
+blend sums with ``ignore_nulls=False``, a candidate's warm-up nulls shrink the
+scored sample mid-run, so every step records ``scored_days`` before and after
+(next to the delta) and a shrinking sample can never read as a vote change.
+
 Usage (research venv + src on PYTHONPATH):
     PYTHONPATH=digiquant/src .venv/bin/python \\
         digiquant/scripts/fit_gold_indicators.py --fit
+    PYTHONPATH=digiquant/src .venv/bin/python \\
+        digiquant/scripts/fit_gold_indicators.py --select
 
-Writes ``digiquant/.scratch/gold_indicator_fits.json`` (UNTRACKED). Touches
-nothing outside ``.scratch/``.
+``--fit`` writes ``digiquant/.scratch/gold_indicator_fits.json`` and ``--select``
+reads it and writes ``digiquant/.scratch/gold_indicator_selection.json`` (both
+UNTRACKED). Touches nothing outside ``.scratch/``.
 """
 
 from __future__ import annotations
@@ -101,6 +120,7 @@ from typing import Any, Callable
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
 from digiquant.strategies.sdca.cycle_windows import CycleKind, SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import (
     ExtraIndicatorSources,
@@ -122,10 +142,13 @@ from digiquant.strategies.sdca.price_oscillators import (
     documented_warmup_calendar_days,
     price_oscillator_z_vectors,
 )
+from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
+from digiquant.strategies.sdca.risk_index import build_risk_index
 
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = DIGIQUANT_ROOT / "data" / "price-history" / "GLD-USD.csv"
 OUT_PATH = DIGIQUANT_ROOT / ".scratch" / "gold_indicator_fits.json"
+SELECTION_OUT_PATH = DIGIQUANT_ROOT / ".scratch" / "gold_indicator_selection.json"
 
 SYMBOL = "GLD-USD"
 
@@ -172,6 +195,62 @@ IN_SAMPLE_LABEL = (
     "measured on (every bar with a valid z) — it calibrates indicator windows to "
     "pinned history and is NOT out-of-sample predictive skill; the holdout stays "
     "spent and untouched."
+)
+
+# --------------------------------------------------------------------------- #
+# Frozen selection constants (Task 2 — plan "Selection rule (frozen)")
+# --------------------------------------------------------------------------- #
+
+# The anchor is the plan's own base: equal-weight `{valuation: 1.0}` on the
+# rolling90/z1.0 rails, i.e. the no-trend anchor the v4 seed already ships.
+ANCHOR_NAME = "valuation"
+ANCHOR_FORM = "rolling_z"
+ANCHOR_ROLLING_WINDOW = 90
+ANCHOR_ROLLING_Z = 1.0
+EQUAL_WEIGHT = 1.0
+# `compute_composite_risk` clips the blend to this range (composite_risk.py:55).
+AGGREGATE_CLIP = (-3.0, 3.0)
+ANCHOR_LABEL = (
+    f"{ANCHOR_NAME} = shipped {ANCHOR_FORM} rails, rolling {ANCHOR_ROLLING_WINDOW}d / "
+    f"z {ANCHOR_ROLLING_Z} (no time trend), equal weight {EQUAL_WEIGHT}"
+)
+
+SELECTION_RULE_VERBATIM = (
+    "base = equal-weight {valuation: 1.0} on rolling90/z1.0 rails (the no-trend "
+    "anchor). Candidates = every indicator whose individual best-fit separation > 0, "
+    "ordered by separation descending (frozen order). For each candidate: add at "
+    "equal weight alongside all kept-so-far, recompute equal-weight aggregate "
+    "separation; keep if aggregate separation STRICTLY improves, else drop (record "
+    "the delta for every candidate — that table IS the deliverable). Report also the "
+    "pure equal-weight-of-individual-passers aggregate as a cross-check (never used "
+    "for selection)."
+)
+
+SELECTION_RULE_NOTES: tuple[str, ...] = (
+    "Candidate pool = `verdict == 'keep'` from the fits file, which is the rule's "
+    "'individual separation > 0' MINUS Ruling 1's degenerate oscillator passes. "
+    "Filtering on `separation > 0` alone would admit weekly_rsi / weekly_macd, whose "
+    "passes rest on a dead side — the very legs Ruling 1 holds out of every keep list.",
+    "Frozen order = individual separation DESC, ties to the SHORTER window, then the "
+    "name (the same parsimony tie-break Task 1 uses). The kept list is therefore a "
+    "function of this order, not of a global optimum; greedy_select() refuses a pool "
+    "whose separations are not non-increasing.",
+    "Kept iff the aggregate separation STRICTLY improves: a delta of exactly 0.0 is a "
+    "DROP. The aggregate is the SHIPPED equal-weight blend "
+    "(compute_composite_risk at weight 1.0 == mean(z).clip(-3, 3)), scored with the "
+    "same frozen separation metric — no separate aggregate metric exists.",
+    "NULL HAZARD: compute_composite_risk sums with ignore_nulls=False, so a "
+    "candidate whose warm-up leaves PINNED-window days null removes those days from "
+    "the scored sample. Every step therefore records scored_days/coverage before and "
+    "after next to the delta: a shrinking sample is visible and is never silently "
+    "credited (or blamed) as a vote change.",
+    "The cross-check aggregate (equal weight over anchor + every non-degenerate "
+    "passer, no greedy pruning) is reported for the owner and NEVER used to select.",
+)
+
+CROSS_CHECK_LABEL = (
+    "cross-check: equal weight over the anchor + EVERY non-degenerate passer at once "
+    "(no greedy pruning). Reported only — it never feeds a keep/drop decision."
 )
 
 # --------------------------------------------------------------------------- #
@@ -740,6 +819,343 @@ def run_fit(
 
 
 # --------------------------------------------------------------------------- #
+# Task 2: equal-weight greedy selection (frozen rule, verbatim)
+# --------------------------------------------------------------------------- #
+
+
+class Candidate(BaseModel):
+    """One greedy candidate: the indicator, its BEST fitted params, its own score.
+
+    ``individual_separation`` is the corrected best-fit separation from Task 1
+    (positive only — the pool is ``verdict == "keep"``, so the degenerate passes
+    never reach here). It drives the frozen ORDER only; the keep/drop decision is
+    made on the AGGREGATE delta, never on this number.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    name: str
+    params: dict[str, int]
+    window_days: int = Field(ge=2)
+    individual_separation: float
+
+
+class SelectionStep(BaseModel):
+    """One candidate's row of the delta table — THE owner's deliverable.
+
+    ``aggregate_before`` is the separation of the set kept SO FAR and
+    ``aggregate_after`` the separation with this candidate added at equal weight;
+    ``delta = after - before``. A candidate is ``kept`` iff ``delta > 0``
+    (STRICT improvement — an exact 0.0 is a drop).
+
+    ``scored_days`` / ``days_delta`` / ``coverage`` ride along because the shipped
+    blend sums with ``ignore_nulls=False``: a candidate's warm-up nulls shrink the
+    scored sample, and a delta taken over a different sample is not the same vote.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    step: int = Field(ge=1)
+    name: str
+    params: dict[str, int]
+    window_days: int = Field(ge=2)
+    individual_separation: float
+    aggregate_before: float | None
+    aggregate_after: float | None
+    delta: float | None
+    scored_days_before: int = Field(ge=0)
+    scored_days_after: int = Field(ge=0)
+    days_delta: int
+    coverage_before: float = Field(ge=0.0, le=1.0)
+    coverage_after: float = Field(ge=0.0, le=1.0)
+    kept: bool
+
+
+class SelectionRun(BaseModel):
+    """The greedy result: the kept list, the dropped list, and every step."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    anchor_name: str
+    anchor_separation: float | None
+    anchor_scored_days: int = Field(ge=0)
+    final_separation: float | None
+    final_members: tuple[str, ...]
+    kept: tuple[str, ...]
+    dropped: tuple[str, ...]
+    steps: tuple[SelectionStep, ...]
+
+
+class SelectionOutcome(BaseModel):
+    """The greedy run plus the pure equal-weight cross-check (never used to select)."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    pool: tuple[Candidate, ...]
+    run: SelectionRun
+    cross_check: SeparationScore
+    cross_check_members: tuple[str, ...]
+
+
+# Loaded by file path in tests (importlib, no sys.modules entry), where pydantic
+# cannot resolve sibling annotations at class-creation time. Rebuild once the
+# module namespace holds the referenced models.
+SelectionRun.model_rebuild()
+SelectionOutcome.model_rebuild()
+
+
+def anchor_z(date_s: pl.Series, price_s: pl.Series) -> list[float | None]:
+    """The no-trend anchor z: SHIPPED ``rolling_z`` rails, zero production edits.
+
+    Byte-for-byte the v4 seed's construction
+    (``digiquant/scripts/run_gold_technical_index_v4.py:73-86``):
+    ``resolve_sdca_risk_model("rolling_z", ..., rolling_window=90, rolling_z=1.0)``
+    then ``build_risk_index(..., extra_indicators=None, valuation_weight=1.0)``
+    and take the ``valuation_z`` column. The kwargs are ``rolling_window`` /
+    ``rolling_z`` (NOT ``window`` / ``z``) — read off the shipped signature.
+    """
+    model = resolve_sdca_risk_model(
+        ANCHOR_FORM,
+        dates=date_s,
+        price=price_s,
+        rolling_window=ANCHOR_ROLLING_WINDOW,
+        rolling_z=ANCHOR_ROLLING_Z,
+    )
+    index = build_risk_index(
+        date_s, price_s, model, extra_indicators=None, valuation_weight=EQUAL_WEIGHT
+    )
+    return index["valuation_z"].to_list()
+
+
+def aggregate_z(members: Sequence[tuple[str, Sequence[float | None]]]) -> list[float | None]:
+    """Equal-weight aggregate via the SHIPPED blend — never a hand-rolled mean.
+
+    ``compute_composite_risk`` is the shipped blend: with every member at
+    ``weight=EQUAL_WEIGHT`` (1.0) it is literally ``mean(z).clip(-3, 3)``, and it
+    sums with ``ignore_nulls=False`` (a null in ANY member nulls that day). Both
+    properties, the clip and the duplicate-name guard come from the shipped code,
+    so the selection cannot drift away from what production would compute.
+    """
+    weights = [
+        IndicatorWeight(name=name, z=pl.Series(values, dtype=pl.Float64), weight=EQUAL_WEIGHT)
+        for name, values in members
+    ]
+    return compute_composite_risk(weights)["composite_z"].to_list()
+
+
+def equal_weight_separation(
+    dates: Sequence[date],
+    windows: SdcaCycleWindows,
+    members: Sequence[tuple[str, Sequence[float | None]]],
+) -> SeparationScore:
+    """Score the equal-weight aggregate with the SAME frozen metric as one leg."""
+    return separation(dates, aggregate_z(members), windows)
+
+
+def candidate_pool(fits: Mapping[str, IndicatorFits]) -> tuple[Candidate, ...]:
+    """The greedy pool, in the FROZEN order: ``verdict == "keep"``, separation DESC.
+
+    ``verdict == "keep"`` is the filter, NOT ``separation > 0``: Task 1's verdict
+    already excludes the degenerate oscillator passes (weekly_rsi, weekly_macd),
+    whose positive separation rests on a dead side. Order ties break to the
+    SHORTER window (the Task-1 parsimony tie-break) and then the name, so the
+    walk is reproducible.
+    """
+    pool: list[Candidate] = []
+    for fit in fits.values():
+        row = fit.best_overall
+        if fit.verdict != "keep" or row is None or row.separation is None:
+            continue
+        pool.append(
+            Candidate(
+                name=fit.name,
+                params=dict(row.params),
+                window_days=row.window_days,
+                individual_separation=float(row.separation),
+            )
+        )
+    return tuple(sorted(pool, key=lambda c: (-c.individual_separation, c.window_days, c.name)))
+
+
+def _require_vectors(
+    candidates: Sequence[Candidate],
+    z_vectors: Mapping[str, Sequence[float | None]],
+) -> list[Sequence[float | None]]:
+    """Resolve every candidate's z-vector, loudly if one is missing."""
+    vectors: list[Sequence[float | None]] = []
+    for candidate in candidates:
+        vector = z_vectors.get(candidate.name)
+        if vector is None:
+            raise ValueError(
+                f"no z vector for candidate {candidate.name!r} — build it with "
+                f"build_z({candidate.name!r}, {candidate.params}) before selecting"
+            )
+        vectors.append(vector)
+    return vectors
+
+
+def greedy_select(
+    *,
+    dates: Sequence[date],
+    windows: SdcaCycleWindows,
+    anchor: Sequence[float | None],
+    candidates: Sequence[Candidate],
+    z_vectors: Mapping[str, Sequence[float | None]],
+    anchor_name: str = ANCHOR_NAME,
+) -> SelectionRun:
+    """The frozen rule, verbatim: walk the pool, keep only STRICT improvements.
+
+    Start from the anchor alone. For each candidate IN THE FROZEN ORDER: add it at
+    equal weight alongside everything kept so far, recompute the aggregate
+    separation, and keep it iff the aggregate separation strictly improves —
+    otherwise drop it and leave the member set untouched (a dropped candidate is
+    never carried forward). Every candidate's delta is recorded either way.
+
+    The candidate order is part of the rule, so a pool whose individual
+    separations are not non-increasing is rejected rather than silently re-sorted.
+    """
+    separations = [c.individual_separation for c in candidates]
+    if any(later > earlier for earlier, later in zip(separations, separations[1:], strict=False)):
+        raise ValueError(
+            "candidates must be in the frozen order (individual separation DESC); got "
+            f"{[round(s, 6) for s in separations]} — build the pool with candidate_pool()"
+        )
+    member_vectors = _require_vectors(candidates, z_vectors)
+    members: list[tuple[str, Sequence[float | None]]] = [(anchor_name, anchor)]
+    before = equal_weight_separation(dates, windows, members)
+    anchor_separation = before.separation
+    anchor_scored_days = before.scored_days
+    kept: list[str] = []
+    dropped: list[str] = []
+    steps: list[SelectionStep] = []
+    for step_index, (candidate, vector) in enumerate(
+        zip(candidates, member_vectors, strict=True), start=1
+    ):
+        trial = [*members, (candidate.name, vector)]
+        after = equal_weight_separation(dates, windows, trial)
+        delta = (
+            None
+            if before.separation is None or after.separation is None
+            else after.separation - before.separation
+        )
+        improved = delta is not None and delta > 0.0
+        steps.append(
+            SelectionStep(
+                step=step_index,
+                name=candidate.name,
+                params=dict(candidate.params),
+                window_days=candidate.window_days,
+                individual_separation=candidate.individual_separation,
+                aggregate_before=before.separation,
+                aggregate_after=after.separation,
+                delta=delta,
+                scored_days_before=before.scored_days,
+                scored_days_after=after.scored_days,
+                days_delta=after.scored_days - before.scored_days,
+                coverage_before=before.coverage,
+                coverage_after=after.coverage,
+                kept=improved,
+            )
+        )
+        if improved:
+            kept.append(candidate.name)
+            members = trial
+            before = after
+        else:
+            dropped.append(candidate.name)
+    return SelectionRun(
+        anchor_name=anchor_name,
+        anchor_separation=anchor_separation,
+        anchor_scored_days=anchor_scored_days,
+        final_separation=before.separation,
+        final_members=tuple(name for name, _ in members),
+        kept=tuple(kept),
+        dropped=tuple(dropped),
+        steps=tuple(steps),
+    )
+
+
+def cross_check_aggregate(
+    *,
+    dates: Sequence[date],
+    windows: SdcaCycleWindows,
+    anchor: Sequence[float | None],
+    candidates: Sequence[Candidate],
+    z_vectors: Mapping[str, Sequence[float | None]],
+    anchor_name: str = ANCHOR_NAME,
+) -> tuple[SeparationScore, tuple[str, ...]]:
+    """The pure equal-weight-of-passers aggregate — a CROSS-CHECK, never a selector.
+
+    Anchor plus EVERY candidate at equal weight in one blend, with no greedy
+    pruning. Reported so the owner can see what the un-pruned blend scores; it is
+    not an input to any keep/drop decision.
+    """
+    members = [
+        (candidate.name, vector)
+        for candidate, vector in zip(
+            candidates, _require_vectors(candidates, z_vectors), strict=True
+        )
+    ]
+    members.insert(0, (anchor_name, anchor))
+    score = equal_weight_separation(dates, windows, members)
+    return score, tuple(name for name, _ in members)
+
+
+def load_fits(path: Path | None = None) -> dict[str, IndicatorFits]:
+    """Read the Task-1 fits file back into validated models."""
+    target = path or OUT_PATH
+    if not target.exists():
+        raise FileNotFoundError(
+            f"fits file missing: {target} — run this harness with --fit before --select"
+        )
+    payload = json.loads(target.read_text())
+    # JSON has no tuples; these models are strict, so restore them before validating.
+    return {
+        name: IndicatorFits.model_validate({**fits, "rows": tuple(fits["rows"])})
+        for name, fits in payload["indicators"].items()
+    }
+
+
+def run_selection(
+    dates: Sequence[date],
+    date_s: pl.Series,
+    price_s: pl.Series,
+    sources: ExtraIndicatorSources,
+    windows: SdcaCycleWindows,
+    fits: Mapping[str, IndicatorFits],
+) -> SelectionOutcome:
+    """Build the anchor, rebuild each candidate's fitted z, run the greedy rule."""
+    pool = candidate_pool(fits)
+    z_vectors = {
+        candidate.name: build_z(candidate.name, candidate.params, date_s, price_s, sources)
+        for candidate in pool
+    }
+    anchor = anchor_z(date_s, price_s)
+    run = greedy_select(
+        dates=dates,
+        windows=windows,
+        anchor=anchor,
+        candidates=pool,
+        z_vectors=z_vectors,
+        anchor_name=ANCHOR_NAME,
+    )
+    cross_check, cross_check_members = cross_check_aggregate(
+        dates=dates,
+        windows=windows,
+        anchor=anchor,
+        candidates=pool,
+        z_vectors=z_vectors,
+        anchor_name=ANCHOR_NAME,
+    )
+    return SelectionOutcome(
+        pool=pool,
+        run=run,
+        cross_check=cross_check,
+        cross_check_members=cross_check_members,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Report + CLI
 # --------------------------------------------------------------------------- #
 
@@ -881,23 +1297,297 @@ def print_fits_table(fits: Mapping[str, IndicatorFits]) -> None:
     print(IN_SAMPLE_LABEL)
 
 
+def _params_text(params: Mapping[str, int]) -> str:
+    return ",".join(f"{key}={value}" for key, value in sorted(params.items()))
+
+
+def _signed(value: float | None) -> str:
+    return "—" if value is None else f"{value:+.4f}"
+
+
+def print_selection(run: SelectionRun, *, anchor_label: str = ANCHOR_LABEL) -> None:
+    """Print the owner's deliverable: the plain keep/drop list with every delta."""
+    print("")
+    print("PLAN 19 TASK 2 — equal-weight greedy selection (frozen rule)")
+    print(f"anchor: {anchor_label}")
+    print(
+        "aggregate: shipped compute_composite_risk at weight "
+        f"{EQUAL_WEIGHT} == mean(z).clip({AGGREGATE_CLIP[0]:g}, {AGGREGATE_CLIP[1]:g}); "
+        "scored with the same separation metric as a single leg"
+    )
+    print(f"aggregate separation, anchor alone: {_signed(run.anchor_separation)}")
+    print("")
+    print(
+        f"{'#':>2} {'candidate':<13} {'params':<34} {'w':>5} {'own_sep':>9} "
+        f"{'before':>9} {'after':>9} {'delta':>9} {'days':>11} {'verdict':<5}"
+    )
+    for step in run.steps:
+        print(
+            f"{step.step:>2} {step.name:<13} {_params_text(step.params):<34} "
+            f"{step.window_days:>5} {step.individual_separation:>+9.4f} "
+            f"{_signed(step.aggregate_before):>9} {_signed(step.aggregate_after):>9} "
+            f"{_signed(step.delta):>9} "
+            f"{step.scored_days_before:>5}/{step.scored_days_after:<5} "
+            f"{'KEEP' if step.kept else 'DROP':<5}"
+        )
+    print("")
+    print("THE LIST (what the owner asked for):")
+    for step in run.steps:
+        params = _params_text(step.params)
+        print(
+            f"  {'KEEP' if step.kept else 'DROP'} {step.name:<13} ({params}) "
+            f"delta {_signed(step.delta)} | aggregate "
+            f"{_signed(step.aggregate_before)} -> {_signed(step.aggregate_after)} | "
+            f"scored_days {step.scored_days_before} -> {step.scored_days_after} "
+            f"({step.days_delta:+d})"
+        )
+    print("")
+    print(f"kept: {list(run.kept)}")
+    print(f"dropped: {list(run.dropped)}")
+    print(f"final members: {list(run.final_members)}")
+    print(f"final aggregate separation: {_signed(run.final_separation)}")
+    print("")
+    print(IN_SAMPLE_LABEL)
+    print("")
+
+
+def degenerate_review(fits: Mapping[str, IndicatorFits]) -> list[dict[str, Any]]:
+    """The owner-review list: positive passes resting on a dead side (Ruling 1).
+
+    These are deliberately NOT in the greedy pool and NOT in any keep list — an
+    explicit owner look is required first.
+    """
+    return [
+        {
+            "name": name,
+            "params": fit.best_overall.params if fit.best_overall else None,
+            "window_days": fit.best_overall.window_days if fit.best_overall else None,
+            "separation": fit.best_overall.separation if fit.best_overall else None,
+            "note": (
+                "positive separation resting on a dead side — EXCLUDED from the "
+                "greedy pool; an explicit owner look is required before any "
+                "keep list includes it"
+            ),
+        }
+        for name, fit in fits.items()
+        if fit.degenerate_pass
+    ]
+
+
+def _trajectory(run: SelectionRun) -> list[dict[str, Any]]:
+    """Aggregate separation after each greedy step, with the LIVE member set.
+
+    The member set is walked forward step by step rather than read off
+    ``final_members``: a step's members are whatever was kept SO FAR, which is
+    not the final set when later steps drop something.
+    """
+    members = [run.anchor_name]
+    accepted: float | None = run.anchor_separation
+    rows: list[dict[str, Any]] = [
+        {
+            "step": 0,
+            "added": None,
+            "kept": None,
+            "members": list(members),
+            "separation": accepted,
+            "scored_days": run.anchor_scored_days,
+        }
+    ]
+    for step in run.steps:
+        if step.kept:
+            members.append(step.name)
+            accepted = step.aggregate_after
+        rows.append(
+            {
+                "step": step.step,
+                "added": step.name,
+                "kept": step.kept,
+                "members": list(members),
+                # the aggregate IF this candidate were kept — the accepted value
+                # when kept, the rejected trial value when dropped.
+                "separation_if_kept": step.aggregate_after,
+                "separation": accepted,
+                "scored_days": step.scored_days_after if step.kept else step.scored_days_before,
+            }
+        )
+    return rows
+
+
+def selection_payload(
+    dates: Sequence[date],
+    fits: Mapping[str, IndicatorFits],
+    outcome: SelectionOutcome,
+    *,
+    windows_label: str,
+) -> dict[str, Any]:
+    """The full selection artifact: pool, order, the delta table, cross-check."""
+    run = outcome.run
+    steps = {step.name: step for step in run.steps}
+    return {
+        "symbol": SYMBOL,
+        "calendar": f"{dates[0]}..{dates[-1]} ({len(dates)} daily bars)",
+        "windows": windows_label,
+        "metric": METRIC_DEFINITION,
+        "metric_read": METRIC_READ,
+        "in_sample": True,
+        "in_sample_label": IN_SAMPLE_LABEL,
+        "rule": SELECTION_RULE_VERBATIM,
+        "rule_notes": list(SELECTION_RULE_NOTES),
+        "order": (
+            "frozen: individual best-fit separation DESC, ties to the shorter "
+            "window then the name; the kept list is a function of this order, "
+            "not of a global optimum"
+        ),
+        "anchor": {
+            "name": ANCHOR_NAME,
+            "form": ANCHOR_FORM,
+            "rolling_window": ANCHOR_ROLLING_WINDOW,
+            "rolling_z": ANCHOR_ROLLING_Z,
+            "trend_rails": "none (no time trend)",
+            "weight": EQUAL_WEIGHT,
+            "built_by": (
+                "resolve_sdca_risk_model('rolling_z', dates=, price=, "
+                "rolling_window=90, rolling_z=1.0) + build_risk_index(..., "
+                "extra_indicators=None, valuation_weight=1.0)['valuation_z'] — "
+                "shipped code, zero production edits"
+            ),
+            "aggregate_separation": run.anchor_separation,
+            "scored_days": run.anchor_scored_days,
+        },
+        "aggregate": {
+            "function": "digiquant.strategies.sdca.composite_risk.compute_composite_risk",
+            "weights": {name: EQUAL_WEIGHT for name in run.final_members},
+            "clip": list(AGGREGATE_CLIP),
+            "null_rule": (
+                "ignore_nulls=False — a null in any member nulls that day, so a "
+                "candidate's warm-up shrinks the scored sample (see scored_days)"
+            ),
+        },
+        "candidate_pool": [
+            {
+                "order": index + 1,
+                "name": candidate.name,
+                "params": candidate.params,
+                "window_days": candidate.window_days,
+                "individual_separation": candidate.individual_separation,
+            }
+            for index, candidate in enumerate(outcome.pool)
+        ],
+        "kept": list(run.kept),
+        "kept_params": {name: steps[name].params for name in run.kept},
+        "dropped": list(run.dropped),
+        "dropped_deltas": {
+            name: {
+                "individual_separation": steps[name].individual_separation,
+                "aggregate_before": steps[name].aggregate_before,
+                "aggregate_after": steps[name].aggregate_after,
+                "delta": steps[name].delta,
+                "scored_days_before": steps[name].scored_days_before,
+                "scored_days_after": steps[name].scored_days_after,
+                "days_delta": steps[name].days_delta,
+                "kept": steps[name].kept,
+            }
+            for name in run.dropped
+        },
+        "delta_table": [step.model_dump(mode="json") for step in run.steps],
+        "aggregate_trajectory": _trajectory(run),
+        "final": {
+            "members": list(run.final_members),
+            "separation": run.final_separation,
+        },
+        "cross_check": {
+            "label": CROSS_CHECK_LABEL,
+            "members": list(outcome.cross_check_members),
+            "separation": outcome.cross_check.separation,
+            "mean_peak_z": outcome.cross_check.mean_peak_z,
+            "mean_trough_z": outcome.cross_check.mean_trough_z,
+            "scored_days": outcome.cross_check.scored_days,
+            "coverage": outcome.cross_check.coverage,
+            "used_for_selection": False,
+        },
+        "degenerate_owner_review": degenerate_review(fits),
+        "not_in_pool": {
+            "drop": [
+                {
+                    "name": name,
+                    "separation": fit.best_overall.separation if fit.best_overall else None,
+                }
+                for name, fit in fits.items()
+                if fit.verdict == "drop"
+            ],
+            "unscoreable": [
+                {"name": name, "reason": fit.reason}
+                for name, fit in fits.items()
+                if fit.status != "scored"
+            ],
+        },
+    }
+
+
+def print_selection_outcome(outcome: SelectionOutcome) -> None:
+    """Print the delta table, then the cross-check and the excluded owner-review list."""
+    print_selection(outcome.run)
+    cross = outcome.cross_check
+    print(CROSS_CHECK_LABEL)
+    print(
+        f"cross-check separation: {_signed(cross.separation)} | "
+        f"mean trough z {_signed(cross.mean_trough_z)} | mean peak z "
+        f"{_signed(cross.mean_peak_z)} | scored_days {cross.scored_days} "
+        f"| coverage {cross.coverage:.3f}"
+    )
+    print(f"cross-check members: {list(outcome.cross_check_members)}")
+    print("")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--fit",
         action="store_true",
-        help="sweep every frozen grid and write the fits file (the only mode)",
+        help="sweep every frozen grid and write the fits file",
+    )
+    parser.add_argument(
+        "--select",
+        action="store_true",
+        help="run the frozen equal-weight greedy selection over the fits file",
     )
     args = parser.parse_args(argv)
-    if not args.fit:
-        parser.error("this harness has one mode: pass --fit")
+    if args.fit == args.select:
+        parser.error("this harness has two modes: pass exactly one of --fit / --select")
 
     dates, prices = load_sdca_ohlcv(symbols=[SYMBOL], data_path=DATA_PATH, data_dir=None)
     date_s = pl.Series("date", dates, dtype=pl.Date)
     price_s = pl.Series("price", prices, dtype=pl.Float64)
     print(f"{SYMBOL} {dates[0]}..{dates[-1]} ({len(dates)} daily bars)")
-
+    windows = SdcaCycleWindows.gold_v1()
+    windows_label = "SdcaCycleWindows.gold_v1() ±45d"
+    print(f"pins: {len(windows.peaks())} peaks / {len(windows.troughs())} troughs, ±45d")
     sources = load_sdca_extra_sources(DATA_PATH.parent)
+
+    if args.select:
+        fits = load_fits()
+        outcome = run_selection(dates, date_s, price_s, sources, windows, fits)
+        print(f"anchor: {ANCHOR_LABEL}")
+        print(
+            "candidate pool (verdict == 'keep', frozen order): "
+            f"{[candidate.name for candidate in outcome.pool]}"
+        )
+        print_selection_outcome(outcome)
+        review = degenerate_review(fits)
+        for entry in review:
+            print(
+                f"OWNER REVIEW (degenerate, excluded): {entry['name']} "
+                f"({_params_text(entry['params'] or {})}) "
+                f"separation {_signed(entry['separation'])}"
+            )
+        print("")
+        print(IN_SAMPLE_LABEL)
+        payload = selection_payload(dates, fits, outcome, windows_label=windows_label)
+        SELECTION_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SELECTION_OUT_PATH.write_text(json.dumps(payload, indent=2) + "\n")
+        print(f"wrote {SELECTION_OUT_PATH}")
+        return 0
+
     present: list[str] = []
     absent: list[str] = []
     for name in FITTED_INDICATORS:
@@ -911,13 +1601,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if absent:
         print(f"staged sources ABSENT (unscoreable, listed): {absent}")
 
-    windows = SdcaCycleWindows.gold_v1()
-    print(f"pins: {len(windows.peaks())} peaks / {len(windows.troughs())} troughs, ±45d")
-
     fits = run_fit(dates, date_s, price_s, sources, windows)
     print_fits_table(fits)
 
-    payload = fits_payload(dates, fits, windows_label="SdcaCycleWindows.gold_v1() ±45d")
+    payload = fits_payload(dates, fits, windows_label=windows_label)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(payload, indent=2) + "\n")
     print(f"wrote {OUT_PATH}")
