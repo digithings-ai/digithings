@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DESK_PATH_ALIASES,
   DESK_PATHS,
-  DIGICON_ENDPOINTS,
+  DESK_ENDPOINTS,
   resolveDeskPath,
   tableEndpoint,
 } from './paths';
@@ -10,25 +10,25 @@ import {
 describe('resolveDeskPath', () => {
   it('maps brief, portfolio, allocations, ledger, and performance onto the real routes', () => {
     expect(resolveDeskPath('/house/brief')).toMatchObject({
-      endpoint: DIGICON_ENDPOINTS.brief,
+      endpoint: DESK_ENDPOINTS.brief,
       client: 'getBrief',
     });
     expect(resolveDeskPath('/house/brief/book')).toMatchObject({
-      endpoint: DIGICON_ENDPOINTS.portfolio,
+      endpoint: DESK_ENDPOINTS.portfolio,
       client: 'getPortfolio',
     });
     expect(resolveDeskPath('/house/portfolio/holdings')).toMatchObject({
-      endpoint: DIGICON_ENDPOINTS.allocations,
+      endpoint: DESK_ENDPOINTS.allocations,
       client: 'getAllocations',
     });
     expect(resolveDeskPath('/house/portfolio/ledger')).toMatchObject({
-      endpoint: DIGICON_ENDPOINTS.ledger,
+      endpoint: DESK_ENDPOINTS.ledger,
       client: 'getLedger',
     });
     expect(resolveDeskPath('/house/portfolio/tearsheet')).toMatchObject({
-      endpoint: DIGICON_ENDPOINTS.performance,
+      endpoint: DESK_ENDPOINTS.performance,
       client: 'getPerformance',
-      also: [DIGICON_ENDPOINTS.navSeries],
+      also: [DESK_ENDPOINTS.navSeries],
     });
   });
 

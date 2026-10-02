@@ -6,16 +6,17 @@ export {
   visibleHoldingsColumns,
 } from './column-priority';
 export {
-  DIGICON_ENDPOINTS,
-  DIGICON_TABLES,
+  DESK_ENDPOINTS,
+  DESK_TABLES,
   DESK_PATHS,
   DESK_PATH_ALIASES,
   resolveDeskPath,
   tableEndpoint,
 } from './paths';
+export type { DeskEndpoint, DeskTableName } from './paths';
 export {
   KPIS_LIVE_BADGE,
-  digiconFailure,
+  deskFailure,
   getAllocations,
   getBenchmarks,
   getBrief,
@@ -25,22 +26,22 @@ export {
   getPerformance,
   getPortfolio,
   getTable,
-  isDigiconTable,
+  isDeskTable,
   readEnvelope,
-} from './digicon';
+} from './client';
 export type {
   AllocationRow,
   AllocationsApiData,
   BenchmarksApiData,
+  DeskQuery,
+  DigiCon,
   DigiConProvenance,
-  DigiConQuery,
-  DigiConRead,
   KpisLiveApiData,
   KpisLiveRead,
   LedgerApiData,
   LedgerEvent,
   NavSeriesApiData,
-} from './digicon';
+} from './client';
 export { MISSING_MARK, deriveMovers, loadMovers } from './movers';
 export { formatOverlapGatedMetric } from './tearsheet-metrics';
 export type { DeskPaneModel, PaneState } from './types';
