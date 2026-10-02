@@ -323,6 +323,46 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
 
 
+def _query_fanout_leg(
+    query: Query, name: str
+) -> tuple[SearchResponse | None, BaseException | None]:
+    """Query one fan-out leg, returning ``(response, None)`` or ``(None, error)``.
+
+    Fan-out exists so one tenant can be served by several indexes; a single
+    broken index must not deny it the others. This catches *every* exception,
+    not just the ones a backend lists in its own ``_BACKEND_ERRORS`` set, so
+    Chroma's ``EmbeddingModelMismatchError`` (raised when an index was written
+    under a different embedder than the one now configured) degrades one leg
+    instead of aborting the whole query.
+
+    ``SearchBackendError`` / ``VectorizeBackendError`` are the deliberate
+    exception: they assert that *this* index is authoritative and its failure
+    must reach the caller rather than be answered from somewhere else (see
+    ``_vectorize_backend``). Dropping such a leg would quietly return the other
+    index's hits, so they propagate and abort the fan-out as before.
+
+    The error is logged with the index name and returned rather than raised, so
+    a dropped leg is visible in the service log instead of surfacing only as an
+    opaque tool failure at the caller.
+    """
+    try:
+        return _query_single_index(query, name), None
+    except (SearchBackendError, VectorizeBackendError):
+        # Authoritative-index failure: never silently answered from another leg.
+        raise
+    except Exception as exc:
+        logger.exception(
+            "fan-out leg failed; index dropped from this query",
+            extra={
+                "operation": "query_index",
+                "outcome": "degraded",
+                "index_name": name,
+                "error_type": type(exc).__name__,
+            },
+        )
+        return None, exc
+
+
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     """Route a query through registered backends; optional in-memory stub when explicitly enabled.
 
@@ -330,13 +370,19 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     out to each index and merges with RRF, so one tenant can serve docs plus
     tickets without routing changes upstream.
 
-    Errors handled by a backend's own ``_BACKEND_ERRORS`` set degrade that
-    index to an empty leg. Anything outside that set — notably Chroma's
-    ``EmbeddingModelMismatchError``, raised when an index was written under a
-    different embedder than the one now configured — propagates and aborts the
-    whole comprehension, so a broken ``occ_tickets`` takes ``occ_help`` down
-    with it. Fan-out is not per-index fault isolation; keep every index on a
-    shared ``DIGISEARCH_EMBEDDING_PROVIDER``.
+    Each leg is isolated (see :func:`_query_fanout_leg`): an index that fails
+    is dropped from *that* query and the surviving legs still answer. If every
+    leg fails the first exception is re-raised, because an empty response from
+    a fan-out would otherwise read downstream as "this index has no matching
+    rows" — a confident wrong answer rather than a visible failure.
+
+    ``SearchBackendError`` / ``VectorizeBackendError`` are exempt: they mark an
+    authoritative index whose failure must reach the caller, so they abort the
+    fan-out instead of degrading to the surviving legs.
+
+    Every index on a fan-out should still share one ``DIGISEARCH_EMBEDDING_PROVIDER``;
+    isolation contains the damage of a mismatch, it does not make the mismatched
+    index searchable.
     """
     names = [name.strip() for name in str(index_name or "default").split(",")]
     names = [name for name in names if name] or ["default"]
@@ -351,7 +397,17 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    responses = [_query_single_index(query, name) for name in names]
+    responses: list[SearchResponse] = []
+    errors: list[BaseException] = []
+    for name in names:
+        response, error = _query_fanout_leg(query, name)
+        if response is not None:
+            responses.append(response)
+        if error is not None:
+            errors.append(error)
+    if not responses:
+        # Every leg failed: raise a real error rather than return nothing.
+        raise errors[0]
     merged = _rrf_merge_results([response.results for response in responses], top_k=query.top_k)
     return _maybe_rerank(query, SearchResponse(results=merged, facets=None, backend="multi"))
 
