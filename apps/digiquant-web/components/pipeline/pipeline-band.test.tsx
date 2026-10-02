@@ -7,8 +7,8 @@ describe("PipelineBand", () => {
 
   it("states the capture reason and does not invent a run", () => {
     expect(html).toContain("no recorded run");
-    expect(html).toContain("No run source reachable");
-    expect(html).toContain("supabase:documents");
+    expect(html).toContain("Reading the latest run from the official API.");
+    expect(html).toContain("dashboard-api GET /v1/tables/documents");
     expect(html).not.toContain("sample run A");
     expect(html).not.toContain("sample timeline");
   });

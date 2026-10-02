@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CardRail } from "@digithings/ui";
 import { Badge } from "@digithings/ui/ui";
-import { isSupabaseConfigured } from "@/lib/live/supabaseClient";
 import { fetchStrategyIndex } from "@/lib/live/strategies";
 import { BacktestOnlyChip } from "../honesty";
 import { PUBLISHED_STRATEGIES } from "../published";
@@ -16,9 +15,7 @@ import { UnpublishedStrategyCard } from "../unpublished-strategy";
 export function StrategyRailLive() {
   // Unconfigured builds render the dash cards immediately, so server HTML and
   // the first client paint agree. A configured read starts empty of numbers.
-  const [strategies, setStrategies] = useState<StrategyIndexEntry[] | null>(
-    isSupabaseConfigured() ? null : [],
-  );
+  const [strategies, setStrategies] = useState<StrategyIndexEntry[] | null>([]);
 
   useEffect(() => {
     let alive = true;
@@ -57,7 +54,7 @@ export function StrategyRailLive() {
     const message =
       strategies === null
         ? "Reading published tearsheets. Statistics stay an em dash until that read returns."
-        : "No tearsheet is published in this build. Statistics stay an em dash.";
+        : "The official API has not published strategy statistics. They stay an em dash.";
     return (
       <div className="grid gap-4">
         {chips}
