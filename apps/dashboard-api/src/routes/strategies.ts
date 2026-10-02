@@ -86,6 +86,28 @@ function parametersOf(config: unknown): { name: string; value: string | number |
   });
 }
 
+/** Stored tearsheet fields the landing card can print. Missing numbers stay null. */
+export function tearsheetCard(row: Row | null, metrics: unknown): Record<string, unknown> | null {
+  if (!row) return null;
+  const m = metrics != null && typeof metrics === "object" && !Array.isArray(metrics) ? (metrics as Row) : {};
+  const dca = m.dca != null && typeof m.dca === "object" && !Array.isArray(m.dca) ? (m.dca as Row) : {};
+  return {
+    id: str(row.id),
+    name: str(m.label) ?? str(row.label) ?? str(row.id),
+    symbol: str(m.symbol) ?? str(row.symbol),
+    kind: str(m.kind) ?? str(row.engine),
+    net_profit_pct: num(m.net_profit_pct),
+    max_drawdown_pct: num(m.max_drawdown_pct),
+    profit_factor: num(m.profit_factor),
+    win_rate_pct: num(m.win_rate_pct),
+    total_trades: num(m.total_trades),
+    period_start: str(m.period_start),
+    period_end: str(m.period_end),
+    vs_lump_pct: num(dca.vs_lump_pct) ?? num(m.vs_lump_pct),
+    allocated_pct: num(dca.allocated_pct) ?? num(m.allocated_pct),
+  };
+}
+
 /** Dated points only. A bare number series is refused — dates are not invented. */
 export function curvePoints(raw: unknown): { date: string; value: number | null }[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -209,21 +231,22 @@ async function performance(req: Request, ctx: RouteCtx<Env>): Promise<Response> 
   const sheets = await read(
     ctx.env,
     "strategy_tearsheets",
-    `select=strategy_id,as_of,equity_curve&strategy_id=eq.${encodeURIComponent(id)}&limit=1`,
+    `select=strategy_id,as_of,equity_curve,metrics&strategy_id=eq.${encodeURIComponent(id)}&limit=1`,
   );
   if ("error" in sheets) return sheets.error;
+  const card = tearsheetCard(got.row, sheets.rows[0]?.metrics);
   const curve = curvePoints(sheets.rows[0]?.equity_curve);
   if (!curve) {
     return ok(
-      { available: false, reason: "tearsheet has no dated curve", points: [] },
+      { available: false, reason: "tearsheet has no dated curve", points: [], card },
       "core:strategy_tearsheets",
       got.pin,
       null,
-      "unavailable",
+      card ? "stored" : "unavailable",
     );
   }
   const asOf = str(sheets.rows[0]?.as_of)?.slice(0, 10) ?? curve.at(-1)?.date ?? null;
-  return ok({ available: true, reason: null, points: curve }, "core:strategy_tearsheets", got.pin, asOf);
+  return ok({ available: true, reason: null, points: curve, card }, "core:strategy_tearsheets", got.pin, asOf);
 }
 
 function runs(req: Request): Response {
