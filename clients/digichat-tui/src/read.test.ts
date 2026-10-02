@@ -67,9 +67,9 @@ test("sessions, the current thread, and messages come from the payload", () => {
       ],
     }),
   ).toEqual([
-    { id: "m1", role: "user", text: "what is flat" },
-    { id: "m2", role: "assistant", text: "the book is flat" },
-    { id: "row-2", role: "assistant", text: "book" },
+    { id: "m1", role: "user", text: "what is flat", tool: null, reasoning: "", at: "" },
+    { id: "m2", role: "assistant", text: "the book is flat", tool: null, reasoning: "", at: "" },
+    { id: "row-2", role: "assistant", text: "book", tool: { name: "book", status: "", detail: "" }, reasoning: "", at: "" },
   ]);
 
   const screen = assembleScreen(

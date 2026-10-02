@@ -16,7 +16,16 @@ export type ChatRole = "user" | "assistant";
 
 export type ChatSession = { id: string; title: string };
 
-export type ChatMessage = { id: string; role: ChatRole; text: string };
+export type ChatTool = { name: string; status: string; detail: string };
+
+export type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  text: string;
+  tool: ChatTool | null;
+  reasoning: string;
+  at: string;
+};
 
 export type Interpreted = {
   kind: "data" | "empty" | "error";
@@ -32,6 +41,8 @@ export type ChatScreen = {
   note: string;
   /** Welcome copy only when the reads settled and the thread is empty. */
   welcome: boolean;
+  /** False only when the current session says can_send is false. */
+  canSend: boolean;
 };
 
 function row(value: unknown): Record<string, unknown> | null {
@@ -78,12 +89,24 @@ export function sessionId(data: unknown): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
-function messageText(rec: Record<string, unknown>): string {
+function toolOf(rec: Record<string, unknown>): ChatTool | null {
+  const tool = row(rec.tool);
+  if (!tool) return null;
+  const name = tool.name;
+  if (typeof name !== "string" || !name.trim()) return null;
+  const status = tool.status;
+  const detail = tool.detail;
+  return {
+    name: name.trim(),
+    status: typeof status === "string" ? status.trim() : "",
+    detail: typeof detail === "string" ? detail.trim() : "",
+  };
+}
+
+function messageText(rec: Record<string, unknown>, tool: ChatTool | null): string {
   const text = rec.text;
   if (typeof text === "string" && text.trim()) return text;
-  const tool = row(rec.tool);
-  const name = tool?.name;
-  if (typeof name === "string" && name.trim()) return name;
+  if (tool?.name) return tool.name;
   return DASH;
 }
 
@@ -96,10 +119,16 @@ export function messageRows(data: unknown): ChatMessage[] {
     if (!rec) return;
     const id = rec.id;
     const role = rec.role === "user" ? "user" : "assistant";
+    const tool = toolOf(rec);
+    const reasoning = rec.reasoning;
+    const at = rec.at;
     out.push({
       id: typeof id === "string" && id.length > 0 ? id : `row-${index}`,
       role,
-      text: messageText(rec),
+      text: messageText(rec, tool),
+      tool,
+      reasoning: typeof reasoning === "string" ? reasoning.trim() : "",
+      at: typeof at === "string" ? at.trim() : "",
     });
   });
   return out;
@@ -110,11 +139,27 @@ export function assembleScreen(sessions: Interpreted, current: Interpreted, mess
   const parts = [sessions, current, messages];
   const error = parts.find((part) => part.kind === "error");
   if (error) {
-    return { status: "error", sessions: [], currentId: null, messages: [], note: error.note, welcome: false };
+    return {
+      status: "error",
+      sessions: [],
+      currentId: null,
+      messages: [],
+      note: error.note,
+      welcome: false,
+      canSend: true,
+    };
   }
   const closed = parts.find((part) => part.kind === "empty");
   if (closed) {
-    return { status: "empty", sessions: [], currentId: null, messages: [], note: closed.note, welcome: false };
+    return {
+      status: "empty",
+      sessions: [],
+      currentId: null,
+      messages: [],
+      note: closed.note,
+      welcome: false,
+      canSend: true,
+    };
   }
   const list = sessionRows(sessions.data);
   const transcript = messageRows(messages.data);
@@ -126,6 +171,7 @@ export function assembleScreen(sessions: Interpreted, current: Interpreted, mess
     messages: transcript,
     note: "",
     welcome: transcript.length === 0,
+    canSend: row(current.data)?.can_send !== false,
   };
 }
 

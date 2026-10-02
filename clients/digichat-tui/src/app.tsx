@@ -1,11 +1,26 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
 import {
-  CREDIT,
+  attachmentLine,
+  exportMarkdown,
+  historySkeleton,
+  loadingStatus,
+  renderMessages,
+  sessionTitle,
+  spinnerFrame,
+  suggestionLines,
+  welcomeLines,
+  clip,
+  type ThreadLine,
+  type Tone,
+} from "./chrome";
+import { INITIAL_UI, reduceKey, type KeyEffect, type UiState } from "./keys";
+import { choiceOptions, mentionRows, paletteRows, paneRows } from "./palette";
+import {
   DASH,
   PLACEHOLDER,
   ROUTES,
-  UNREACHABLE,
+  CREDIT,
   WELCOME,
   assembleScreen,
   messageRoute,
@@ -17,11 +32,11 @@ import {
   type ChatMessage,
   type ChatScreen,
 } from "./read";
-import { ATTACH, BG, FILL, HAIR, INK, MUTE, NEW_CHAT, SEND, SOFT, USER_MARK } from "./theme";
+import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
-type Key = { name?: string; ctrl?: boolean; sequence?: string };
+const TONE: Record<Tone, string> = { ink: INK, soft: SOFT, mute: MUTE, danger: DANGER };
 
 const blank = (note: string, status: ChatScreen["status"]): ChatScreen => ({
   status,
@@ -30,33 +45,8 @@ const blank = (note: string, status: ChatScreen["status"]): ChatScreen => ({
   messages: [],
   note,
   welcome: false,
+  canSend: true,
 });
-
-function wrap(text: string, width: number): string[] {
-  const limit = Math.max(8, width);
-  const lines: string[] = [];
-  for (const raw of text.split("\n")) {
-    let rest = raw;
-    if (rest.length === 0) {
-      lines.push("");
-      continue;
-    }
-    while (rest.length > limit) {
-      let cut = rest.lastIndexOf(" ", limit);
-      if (cut < 8) cut = limit;
-      lines.push(rest.slice(0, cut));
-      rest = rest.slice(cut).trimStart();
-    }
-    lines.push(rest);
-  }
-  return lines;
-}
-
-function clip(text: string, width: number): string {
-  if (text.length <= width) return text;
-  if (width <= 1) return "…";
-  return `${text.slice(0, width - 1)}…`;
-}
 
 function center(text: string, width: number): string {
   if (text.length >= width) return text;
@@ -64,30 +54,65 @@ function center(text: string, width: number): string {
   return `${" ".repeat(pad)}${text}`;
 }
 
-function messageLines(message: ChatMessage, width: number): string {
-  const lines = wrap(message.text, Math.max(8, width - 2));
-  if (message.role === "user") {
-    return lines.map((line, i) => (i === 0 ? `${USER_MARK} ${line}` : `  ${line}`)).join("\n");
+function lastText(messages: readonly ChatMessage[], role: ChatMessage["role"]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== role || message.tool) continue;
+    if (message.text.trim() && message.text !== DASH) return message.text;
   }
-  return lines.map((line) => `  ${line}`).join("\n");
+  return "";
+}
+
+function lastFoldable(messages: readonly ChatMessage[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message) continue;
+    if (message.tool) return message.id;
+    if (message.reasoning) return `${message.id}:reasoning`;
+  }
+  return null;
+}
+
+function toolNames(messages: readonly ChatMessage[]): string[] {
+  const names: string[] = [];
+  for (const message of messages) {
+    if (message.tool?.name && !names.includes(message.tool.name)) names.push(message.tool.name);
+  }
+  return names;
+}
+
+function writeClipboard(text: string) {
+  const payload = Buffer.from(text, "utf8").toString("base64");
+  try {
+    process.stdout.write(`\u001b]52;c;${payload}\u0007`);
+  } catch {
+    return;
+  }
+}
+
+function windowStart(index: number, length: number, size: number): number {
+  if (length <= size) return 0;
+  const start = Math.min(index, Math.max(0, length - size));
+  return Math.max(0, Math.min(start, index));
 }
 
 export function App() {
   const renderer = useRenderer();
-  const { width } = useTerminalDimensions();
+  const { width, height } = useTerminalDimensions();
   const [screen, setScreen] = useState<ChatScreen | null>(null);
-  const [draft, setDraft] = useState("");
-  const [focused, setFocused] = useState(true);
+  const [ui, setUi] = useState<UiState>(INITIAL_UI);
+  const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
   const [caretOn, setCaretOn] = useState(true);
   const [reveal, setReveal] = useState(0);
   const gen = useRef(0);
   const screenRef = useRef(screen);
-  const draftRef = useRef(draft);
-  const focusedRef = useRef(focused);
-  const busyRef = useRef(false);
+  const uiRef = useRef(ui);
+  const busyRef = useRef(busy);
+  const abortRef = useRef<AbortController | null>(null);
   screenRef.current = screen;
-  draftRef.current = draft;
-  focusedRef.current = focused;
+  uiRef.current = ui;
+  busyRef.current = busy;
 
   const load = async (id?: string) => {
     const ticket = ++gen.current;
@@ -107,6 +132,11 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const timer = setInterval(() => setTick((value) => value + 1), 80);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     let timer = 0;
     const start = setTimeout(() => {
       timer = setInterval(() => setCaretOn((on) => !on), 530);
@@ -117,7 +147,7 @@ export function App() {
     };
   }, []);
 
-  const welcome = screen?.welcome === true;
+  const welcome = screen?.welcome === true && !ui.pane;
   useEffect(() => {
     if (!welcome) {
       setReveal(0);
@@ -135,20 +165,25 @@ export function App() {
   }, [welcome]);
 
   const applyClosed = (kind: "empty" | "error", note: string) => {
+    if (!note) return;
     setScreen((prev) => {
       if (!prev || prev.messages.length === 0) return blank(note, kind === "error" ? "error" : "empty");
       return { ...prev, note, welcome: false };
     });
   };
 
-  const submit = async () => {
-    const text = draftRef.current.trim();
-    if (!text || busyRef.current) return;
+  const submitText = async (text: string) => {
+    const body = text.trim();
+    if (!body || busyRef.current) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     busyRef.current = true;
+    setBusy(true);
     try {
       let id = screenRef.current?.currentId ?? null;
       if (!id) {
-        const created = await postRoute(API, "/chat/sessions", {});
+        const created = await postRoute(API, "/chat/sessions", {}, controller.signal);
+        if (controller.signal.aborted) return;
         if (created.kind !== "data") {
           applyClosed(created.kind, created.note);
           return;
@@ -159,12 +194,12 @@ export function App() {
           return;
         }
       }
-      const sent = await postRoute(API, messageRoute(id), { text });
+      const sent = await postRoute(API, messageRoute(id), { text: body }, controller.signal);
+      if (controller.signal.aborted) return;
       if (sent.kind !== "data") {
         applyClosed(sent.kind, sent.note);
         return;
       }
-      setDraft("");
       const next = await load(id);
       const reply = replyText(sent.data);
       if (!next || !reply || next.messages.some((message) => message.text === reply)) return;
@@ -173,20 +208,24 @@ export function App() {
         ...next,
         status: "ok",
         welcome: false,
-        messages: [...next.messages, { id: `reply-${id}`, role: "assistant", text: reply }],
+        messages: [...next.messages, { id: `reply-${id}`, role: "assistant", text: reply, tool: null, reasoning: "", at: "" }],
       });
     } finally {
+      if (abortRef.current === controller) abortRef.current = null;
       busyRef.current = false;
+      setBusy(false);
     }
   };
 
   const createSession = async () => {
     if (busyRef.current) return;
     busyRef.current = true;
+    setBusy(true);
     try {
       const created = await postRoute(API, "/chat/sessions", {});
       if (created.kind !== "data") {
-        setScreen((prev) => (prev ? { ...prev, note: created.note } : blank(created.note, created.kind)));
+        const kind = created.kind === "error" ? "error" : "empty";
+        setScreen((prev) => (prev ? { ...prev, note: created.note } : blank(created.note, kind)));
         return;
       }
       const id = sessionId(created.data);
@@ -194,6 +233,7 @@ export function App() {
       await load(id);
     } finally {
       busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -203,104 +243,212 @@ export function App() {
     const current = sessions.findIndex((session) => session.id === screenRef.current?.currentId);
     const from = current < 0 ? 0 : current;
     const next = Math.max(0, Math.min(sessions.length - 1, from + delta));
-    if (sessions[next].id === screenRef.current?.currentId) return;
-    void load(sessions[next].id);
+    if (sessions[next]?.id === screenRef.current?.currentId) return;
+    const id = sessions[next]?.id;
+    if (id) void load(id);
   };
 
-  const onKey = useRef<(key: Key) => void>(() => {});
-  onKey.current = (key) => {
-    const name = key.name ?? "";
-    if (key.ctrl) return;
-    if (focusedRef.current) {
-      if (name === "escape" || name === "up") {
-        setFocused(false);
-        return;
-      }
-      if (name === "return" || name === "enter") {
-        void submit();
-        return;
-      }
-      if (name === "backspace") {
-        setDraft((value) => value.slice(0, -1));
-        return;
-      }
-      const ch = key.sequence ?? "";
-      if (ch.length === 1 && ch >= " ") setDraft((value) => value + ch);
-      return;
-    }
-    if (name === "q") {
+  const runEffect = (effect: KeyEffect | null) => {
+    if (!effect) return;
+    if (effect.type === "quit") {
       renderer.destroy();
       return;
     }
-    if (name === "i" || name === "return" || name === "enter") {
-      setFocused(true);
+    if (effect.type === "abort") {
+      abortRef.current?.abort();
       return;
     }
-    if (name === "n") {
+    if (effect.type === "new-session") {
       void createSession();
       return;
     }
-    if (name === "down" || name === "j") move(1);
-    if (name === "up" || name === "k") move(-1);
+    if (effect.type === "move-session") {
+      move(effect.delta);
+      return;
+    }
+    if (effect.type === "submit") {
+      void submitText(effect.text);
+      return;
+    }
+    if (effect.type === "copy") {
+      const text = lastText(screenRef.current?.messages ?? [], "assistant");
+      if (text) writeClipboard(text);
+      return;
+    }
+    if (effect.type === "redo") {
+      const text = lastText(screenRef.current?.messages ?? [], "user");
+      if (text) void submitText(text);
+      else void load();
+    }
+  };
+
+  const onKey = useRef<(key: { name?: string; ctrl?: boolean; sequence?: string }) => void>(() => {});
+  onKey.current = (key) => {
+    const messages = screenRef.current?.messages ?? [];
+    const result = reduceKey(uiRef.current, key, {
+      busy: busyRef.current,
+      canSend: screenRef.current?.canSend !== false,
+      sessionCount: screenRef.current?.sessions.length ?? 0,
+      canCopy: Boolean(lastText(messages, "assistant")),
+      canRetry: screenRef.current?.status === "error",
+      lastUserText: lastText(messages, "user"),
+      lastFoldable: lastFoldable(messages),
+      toolNames: toolNames(messages),
+    });
+    uiRef.current = result.state;
+    setUi(result.state);
+    runEffect(result.effect);
   };
   useKeyboard((key) => onKey.current(key));
 
-  const threadWidth = Math.max(24, width - 24);
-  const sessions = screen?.sessions ?? [];
-  const caret = focused ? (caretOn ? "█" : " ") : "";
-  const noteColor = screen?.status === "error" ? SOFT : MUTE;
+  const rail = Math.min(28, Math.max(18, Math.floor(width * 0.28)));
+  const threadWidth = Math.max(24, width - rail - 4);
+  const spinner = spinnerFrame(tick);
+  const messages = screen?.messages ?? [];
+  const slash = paletteRows(ui.draft, ui.prefs);
+  const mentions = mentionRows(ui.draft, toolNames(messages));
+  const composing = ui.focus === "composer" && !ui.choice && !ui.pathing;
+  const showPalette = composing && ui.draft.startsWith("/") && !ui.draft.endsWith(" ");
+  const showMentions = composing && !showPalette && /(?:^|\s)@[^\s]*$/.test(ui.draft);
+  const choiceList = ui.choice ? choiceOptions(ui.choice.id, ui.prefs) : [];
+  const rows = ui.choice
+    ? choiceList.map((row) => ({ id: row.value, label: row.label, description: "" }))
+    : showPalette
+      ? slash
+      : showMentions
+        ? mentions
+        : [];
+  const listIndex = ui.choice ? ui.choice.index : ui.paletteIndex;
+  const listSize = Math.min(8, Math.max(rows.length, showPalette && rows.length === 0 ? 1 : rows.length));
+  const listStart = windowStart(listIndex, rows.length, listSize);
+  const visibleRows = rows.slice(listStart, listStart + listSize);
+
+  const body: ThreadLine[] = [];
+  if (!screen) {
+    body.push({ text: loadingStatus(spinner), tone: "mute" });
+    body.push(...historySkeleton(threadWidth));
+  } else if (!ui.pane) {
+    body.push(
+      ...renderMessages({
+        messages,
+        width: threadWidth,
+        open: ui.open,
+        busy,
+        spinner,
+        actions: true,
+      }),
+    );
+    body.push(...suggestionLines([], threadWidth));
+    if (screen.welcome) body.push(...welcomeLines(WELCOME.slice(0, reveal), reveal >= WELCOME.length));
+    if (screen.note) {
+      body.push({ text: screen.status === "error" ? `! ${screen.note}` : screen.note, tone: screen.status === "error" ? "danger" : "mute" });
+      if (screen.status === "error") body.push({ text: "retry", tone: "mute" });
+    }
+  }
+
+  const pane = ui.pane;
+  const paneBody: ThreadLine[] =
+    pane === "export"
+      ? exportMarkdown(messages).split("\n").map((text) => ({ text: text || " ", tone: "soft" as const }))
+      : pane
+        ? paneRows(pane, ui.prefs).map((row, index) => ({
+            text: `${index === ui.paneIndex ? ">" : " "} ${row.label}${row.description ? `  ${row.description}` : ""}`,
+            tone: index === ui.paneIndex ? "ink" : "soft",
+          }))
+        : [];
+  if (pane === "export" && paneBody.length === 0) paneBody.push({ text: "nothing to export", tone: "mute" });
+
+  const maxLines = Math.max(4, height - 8 - (rows.length > 0 || (showPalette && slash.length === 0) ? listSize + 2 : 0) - ui.attachments.length);
+  const scroll = Math.max(0, Math.min(ui.scroll, Math.max(0, body.length - 1)));
+  const shown = body.slice(Math.max(0, body.length - maxLines - scroll), Math.max(0, body.length - scroll));
+  const caret = ui.focus === "composer" && ui.tray === "input" && !ui.pathing ? (caretOn ? "█" : " ") : "";
+  const sendGlyph = busy ? STOP : SEND;
+  const sendOn = busy || (ui.draft.trim().length > 0 && screen?.canSend !== false);
+  const draftText = ui.pathing ? (ui.path || "path") : ui.draft;
+  const status = !screen ? "" : ui.note;
 
   return (
     <box width="100%" height="100%" flexDirection="row" backgroundColor={BG}>
-      <box width={24} flexDirection="column" backgroundColor={BG} border={["right"]} borderColor={HAIR}>
-        <box height={1} paddingLeft={1} backgroundColor={BG}>
+      <box width={rail} flexDirection="column" backgroundColor={BG} border={["right"]} borderColor={HAIR}>
+        <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" backgroundColor={BG}>
           <text fg={MUTE}>digichat</text>
-        </box>
-        <box height={1} backgroundColor={BG}>
-          <text fg={HAIR}>{"─".repeat(23)}</text>
-        </box>
-        <box height={1} paddingLeft={1} backgroundColor={BG}>
+          <box flexGrow={1} backgroundColor={BG} />
           <text fg={MUTE}>{NEW_CHAT}</text>
         </box>
-        {sessions.map((session) => {
+        {(screen?.sessions ?? []).map((session) => {
           const active = session.id === screen?.currentId;
           return (
             <box key={session.id} height={1} paddingLeft={1} backgroundColor={active ? FILL : BG}>
-              <text fg={active ? INK : SOFT}>{clip(session.title, 20)}</text>
+              <text fg={active ? INK : SOFT}>{clip(sessionTitle(session.title), rail - 3)}</text>
             </box>
           );
         })}
       </box>
       <box flexGrow={1} flexDirection="column" backgroundColor={BG} paddingLeft={2} paddingRight={2} paddingTop={1}>
         <box flexGrow={1} flexDirection="column" backgroundColor={BG} overflow="hidden">
-          {screen?.messages.map((message) => (
-            <text key={message.id} fg={message.role === "user" ? INK : SOFT}>
-              {messageLines(message, threadWidth - 4)}
-            </text>
-          ))}
-          <box flexGrow={1} backgroundColor={BG} />
-          {welcome ? (
-            <text fg={INK}>
-              {WELCOME.slice(0, reveal)}
-              {reveal < WELCOME.length ? "█" : ""}
-            </text>
-          ) : null}
-          {screen?.note ? <text fg={noteColor}>{screen.note}</text> : null}
+          {pane
+            ? paneBody.map((line, index) => (
+                <text key={`pane-${index}`} fg={TONE[line.tone]}>
+                  {clip(line.text, threadWidth)}
+                </text>
+              ))
+            : shown.map((line, index) => (
+                <text key={`line-${index}`} fg={TONE[line.tone]}>
+                  {clip(line.text, threadWidth)}
+                </text>
+              ))}
         </box>
+        {scroll > 0 ? (
+          <box height={1} backgroundColor={BG}>
+            <text fg={MUTE}>{center(`${SCROLL} Scroll to bottom`, threadWidth)}</text>
+          </box>
+        ) : null}
+        {ui.choice || showPalette || showMentions ? (
+          <box border borderColor={HAIR} backgroundColor={BG} flexDirection="column">
+            {rows.length === 0 ? (
+              <box height={1} paddingLeft={1} backgroundColor={BG}>
+                <text fg={MUTE}>{showMentions ? "No matching tools" : "No matching commands"}</text>
+              </box>
+            ) : (
+              visibleRows.map((row, index) => {
+                const active = listStart + index === listIndex;
+                return (
+                  <box key={row.id} height={1} paddingLeft={1} paddingRight={1} flexDirection="row" backgroundColor={active ? FILL : BG}>
+                    <text fg={INK}>{clip(row.label, 22)}</text>
+                    <box flexGrow={1} backgroundColor={active ? FILL : BG} />
+                    <text fg={MUTE}>{clip(row.description, Math.max(8, threadWidth - 26))}</text>
+                  </box>
+                );
+              })
+            )}
+          </box>
+        ) : null}
+        {ui.attachments.map((name) => (
+          <box key={name} height={1} backgroundColor={BG}>
+            <text fg={SOFT}>{attachmentLine(name)}</text>
+          </box>
+        ))}
         <box border borderColor={HAIR} backgroundColor={BG} flexDirection="column" paddingLeft={1} paddingRight={1}>
           <box height={1} flexDirection="row" backgroundColor={BG}>
-            {draft ? <text fg={INK}>{draft}</text> : null}
+            {draftText ? <text fg={ui.pathing && !ui.path ? MUTE : INK}>{clip(draftText, threadWidth - 2)}</text> : null}
             {caret ? <text fg={INK}>{caret}</text> : null}
-            {draft ? null : <text fg={MUTE}>{PLACEHOLDER}</text>}
+            {draftText ? null : <text fg={MUTE}>{PLACEHOLDER}</text>}
           </box>
           <box height={1} flexDirection="row" backgroundColor={BG}>
-            <text fg={MUTE}>{ATTACH}</text>
+            <text fg={ui.tray === "attach" || ui.pathing ? INK : MUTE}>{ATTACH}</text>
             <box flexGrow={1} backgroundColor={BG} />
-            <text fg={draft.trim() ? SOFT : MUTE}>{SEND}</text>
+            <text fg={ui.tray === "voice" ? INK : MUTE}>{VOICE}</text>
+            <text fg={MUTE}>  </text>
+            <text fg={sendOn || ui.tray === "send" ? SOFT : MUTE}>{sendGlyph}</text>
           </box>
         </box>
+        {status ? (
+          <box height={1} backgroundColor={BG}>
+            <text fg={MUTE}>{clip(status, threadWidth)}</text>
+          </box>
+        ) : null}
         <box height={1} backgroundColor={BG}>
-          <text fg={MUTE}>{center(CREDIT, Math.max(10, threadWidth - 4))}</text>
+          <text fg={MUTE}>{center(CREDIT, threadWidth)}</text>
         </box>
       </box>
     </box>
