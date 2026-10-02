@@ -1,10 +1,11 @@
 """Bare-`digivoice` app home: status strip plus actions over the commands.
 
-A TTY takes the whole viewport: alternate screen, DIGIVOICE pixel-hero
-field (7×10 block letters plus ambient shimmer filling leftover rows),
-status strip, and a step-rail menu. Pipes, CI, and agents get a printed overview and exit 0 —
-never a hang. Setup is a submenu entry that returns to home; it is not the
-home screen. Every entry routes to the handlers the subcommands use.
+A TTY takes the whole viewport: alternate screen, a simple centered
+DIGIVOICE pixel wordmark (7×10 block letters with grayscale shimmer on
+the glyphs), status strip, and a step-rail menu. Pipes, CI, and agents
+get a printed overview and exit 0 — never a hang. Setup is a submenu
+entry that returns to home; it is not the home screen. Every entry
+routes to the handlers the subcommands use.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ from digivoice.reload import LaunchReport, ensure_home_control, stop_home_contro
 from digivoice.runner import CommandRunner
 from digivoice.tui import (
     _is_tty,
-    _pause,
     _write_info_frame,
     choose,
     fullscreen_enter,
@@ -247,11 +247,9 @@ def run_home(
                     result.stdout.splitlines() or [result.stderr],
                     subtitle=HOME_SUBTITLE,
                 )
-                _pause(stdin, stdout)
             elif entry.startswith("Settings"):
                 text = format_settings_compact(load_settings(paths), paths)
                 _write_info_frame(stdout, "Settings", text.splitlines(), subtitle=HOME_SUBTITLE)
-                _pause(stdin, stdout)
             elif entry.startswith("History"):
                 args = argparse.Namespace(last=5, grep=None, copy_last=False, as_json=False)
                 result = _cli._history(args, runtime)
@@ -261,13 +259,11 @@ def run_home(
                     result.stdout.splitlines(),
                     subtitle=HOME_SUBTITLE,
                 )
-                _pause(stdin, stdout)
             elif entry.startswith("Reload"):
                 args = argparse.Namespace(as_json=False)
                 result = _cli._reload(args, runtime)
                 body = result.stdout.splitlines() or [result.stderr.strip()]
                 _write_info_frame(stdout, "Reload", body, subtitle=HOME_SUBTITLE)
-                _pause(stdin, stdout)
             elif entry.startswith("Setup"):
                 # Submenu: run the wizard, then return to home (never exit).
                 _cli._setup(argparse.Namespace(print_only=False, as_json=False), runtime)

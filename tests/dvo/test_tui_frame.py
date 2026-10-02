@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 from digivoice.home import HOME_GROUPS, HOME_MENU, render_home_overview
-from digivoice.pixel_hero import render_pixel_hero
-from digivoice.tui import parse_sgr_mouse, render_screen, render_wordmark_lines
+from digivoice.settings import default_settings
+from digivoice.setup import postprocess_menu_options
+from digivoice.tui import parse_sgr_mouse, render_screen, render_wordmark_lines, wrap_text
 
 pytestmark = pytest.mark.unit
 
@@ -45,21 +46,22 @@ def test_wordmark_glint_changes_with_phase() -> None:
     assert "\x1b[" in first[0]
 
 
-def test_wordmark_uses_teal_not_rainbow() -> None:
-    """Landing chrome: one teal accent, not a multicolored DIGIVOICE title."""
+def test_wordmark_uses_grayscale_shimmer_not_rainbow() -> None:
+    """Simple lockup: glyph pixels in gray, not a rainbow or teal field."""
     joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True))
-    assert "38;2;61;214;196" in joined
+    assert "38;2;" in joined
     for rgb in ("229;183;101", "226;112;138", "217;122;90", "90;163;196"):
         assert f"38;2;{rgb}" not in joined, rgb
+    assert "38;2;61;214;196" not in joined
 
 
-def test_idle_header_has_moving_teal_particles() -> None:
-    """Landing field shimmers after the build-in; letters stay teal."""
-    still = "\n".join(render_pixel_hero("DIGIVOICE", cols=120, rows=18, t_ms=0, ansi=True))
-    later = "\n".join(render_pixel_hero("DIGIVOICE", cols=120, rows=18, t_ms=2400, ansi=True))
-    assert "·" in still
-    assert "38;2;61;214;196" in still
+def test_idle_wordmark_shimmers_on_glyphs_only() -> None:
+    """Letter pixels move in gray; leftover rows are empty, not a particle field."""
+    still = render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True)
+    later = render_wordmark_lines("DIGIVOICE", cols=120, phase=3, ansi=True)
     assert still != later
+    plain = render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=False)
+    assert not any("·" in row for row in plain)
 
 
 def test_wordmark_builds_in() -> None:
@@ -69,12 +71,13 @@ def test_wordmark_builds_in() -> None:
     assert "█" in "\n".join(full)
 
 
-def test_home_frame_is_a_full_bleed_pixel_hero() -> None:
+def test_home_frame_is_a_simple_centered_wordmark() -> None:
     frame = _frame()
     assert "▶" not in frame
     assert "█" in frame
     assert "▀" not in frame and "▄" not in frame
     assert "STATUS" in frame
+    assert "local speech control" in frame
     assert "▦" in frame and "▥" in frame and ("■" in frame or "□" in frame)
     for name in ("OPERATE", "MAINTAIN", "CONFIGURE", "LEAVE"):
         assert name in frame
@@ -85,11 +88,12 @@ def test_home_frame_is_a_full_bleed_pixel_hero() -> None:
     assert "■" in doctor
     assert "□" in settings
     assert "■" not in settings
-    # Header is the field, not a vertically-centered island of blank rows.
     lines = frame.replace("\r\n", "\n").splitlines()
-    stripped = [i for i, line in enumerate(lines) if line.strip()]
-    assert stripped
-    assert stripped[0] <= 2
+    letter_rows = [i for i, line in enumerate(lines) if "█" in line]
+    assert letter_rows
+    assert letter_rows[-1] - letter_rows[0] == 9
+    above = [lines[i] for i in range(letter_rows[0])]
+    assert not any("·" in line for line in above)
     assert frame.count("█") >= 300
 
 
@@ -209,8 +213,62 @@ def test_menu_raw_keeps_opost_for_newline_translation() -> None:
         os.close(master)
 
 
+def test_wrap_text_keeps_words_readable() -> None:
+    lines = wrap_text(
+        "off: paste the words as spoken; on: rewrite them with a local model first",
+        40,
+    )
+    assert len(lines) >= 2
+    assert all(len(line) <= 40 for line in lines)
+    assert "paste the words as spoken" in " ".join(lines)
+    assert "local model first" in " ".join(lines)
+
+
+def test_postprocess_menu_wraps_on_typical_terminal() -> None:
+    options = postprocess_menu_options(default_settings().model_dump(mode="json"))
+    frame = render_screen(
+        "Post-process",
+        options,
+        0,
+        subtitle="After dictation, optionally rewrite the words with a local model.",
+        cols=80,
+        rows=28,
+        use_ansi=False,
+        clear=False,
+    )
+    body = frame.replace("\r\n", "\n")
+    assert "…" not in body
+    assert "as spoken" in body
+    assert "local model" in body.casefold() or "rewrite" in body.casefold()
+    assert "Give up after" in body
+    assert "15" in body or "off" in body
+
+
+def test_catalog_labels_wrap_without_ellipsis_at_80_cols() -> None:
+    from digivoice.catalog import STT_CATALOG
+    from digivoice.setup import _catalog_labels
+
+    labels = _catalog_labels(STT_CATALOG, None)
+    frame = render_screen(
+        "Dictation model",
+        labels,
+        0,
+        subtitle="Suggested local whisper.cpp files. Select to download and wire.",
+        cols=80,
+        rows=32,
+        use_ansi=False,
+        clear=False,
+    )
+    body = frame.replace("\r\n", "\n")
+    assert "…" not in body
+    assert "ggml-tiny.en" in body
+    assert "ggml-base" in body
+    assert "multilingual" in body or "many languages" in body
+    assert "download + wire" in body
+
+
 def test_sgr_mouse_motion_is_not_esc() -> None:
-    """Landing field may follow the pointer; CSI <32;x;yM must not quit home."""
+    """CSI <32;x;yM must not quit home even if a terminal reports motion."""
     assert parse_sgr_mouse("32;10;5") == (9, 4)
     assert parse_sgr_mouse("0;1;1") == (0, 0)
     assert parse_sgr_mouse("nope") is None
