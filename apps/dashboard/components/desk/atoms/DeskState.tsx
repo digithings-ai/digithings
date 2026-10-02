@@ -1,11 +1,17 @@
 import type { ReactNode } from 'react';
 import type { PaneState } from '@/lib/desk/types';
 
+export type { PaneState };
+
 export interface DeskStateProps {
   state: PaneState;
   errorMessage?: string;
   emptyMessage?: string;
+  /** Brief panes pass this name. Same text as `emptyMessage`. */
+  emptyLabel?: string;
   loadingMessage?: string;
+  /** Brief panes pass this name. Same text as `loadingMessage`. */
+  loadingLabel?: string;
   children?: ReactNode;
 }
 
@@ -16,10 +22,14 @@ export interface DeskStateProps {
 export function DeskState({
   state,
   errorMessage,
-  emptyMessage = 'Nothing here yet',
-  loadingMessage = 'Loading',
+  emptyMessage,
+  emptyLabel,
+  loadingMessage,
+  loadingLabel,
   children,
 }: DeskStateProps) {
+  const emptyText = emptyMessage ?? emptyLabel ?? 'Nothing here yet';
+  const loadingText = loadingMessage ?? loadingLabel ?? 'Loading';
   if (state === 'ready') return <>{children}</>;
 
   if (state === 'loading') {
@@ -30,7 +40,7 @@ export function DeskState({
         role="status"
         aria-busy="true"
       >
-        {loadingMessage}
+        {loadingText}
       </div>
     );
   }
@@ -38,7 +48,7 @@ export function DeskState({
   if (state === 'empty') {
     return (
       <div className="px-3 py-6 font-mono text-[11px] text-ink-mute" data-testid="desk-state-empty">
-        {emptyMessage}
+        {emptyText}
       </div>
     );
   }

@@ -8,6 +8,8 @@ import { DeskState } from './DeskState';
 
 export interface DeskChartProps {
   bars: readonly VelaSpikeBar[];
+  /** Shown as data on the host. Brief panes pass the book symbol. */
+  symbol?: string;
   timeframe?: string;
   hostTestId?: string;
   hostClassName?: string;
@@ -29,6 +31,7 @@ function paneScroller(host: HTMLElement): HTMLElement | null {
  */
 export function DeskChart({
   bars,
+  symbol,
   timeframe = '1D',
   hostTestId = 'desk-chart-host',
   hostClassName = 'h-full min-h-[240px] w-full',
@@ -84,14 +87,14 @@ export function DeskChart({
 
   if (bars.length === 0) {
     return (
-      <div data-testid="desk-chart">
+      <div data-testid="desk-chart" data-symbol={symbol ?? ''}>
         <DeskState state="empty" emptyMessage={emptyMessage} />
       </div>
     );
   }
 
   return (
-    <div data-testid="desk-chart">
+    <div data-testid="desk-chart" data-symbol={symbol ?? ''}>
       <div ref={hostRef} data-testid={hostTestId} className={hostClassName} />
       {mountError ? (
         <p className="px-3 py-1 font-mono text-[10px] text-warn" data-testid="desk-chart-mount-error">
