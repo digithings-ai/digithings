@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { Vela } from "@luxalgo/vela";
 import { Button } from "@digithings/ui/ui";
+import type { HeroBar } from "@/lib/hero-build";
+import { chartBars, coinbaseBars, lockPriceFrame, mountPriceStudies } from "./vela-scale";
 import {
   VELA_FEED_MAX_MS,
   VELA_PRODUCTS,
   VELA_UNAVAILABLE,
   velaChartOptions,
   velaHostStyle,
+  velaReadyCaption,
   type VelaProduct,
 } from "./vela-options";
 
@@ -41,11 +45,31 @@ function VelaChart({ product }: { product: VelaProduct }) {
     setReduced(prefersReduced);
     let dead = false;
     let shown = false;
+    let studies = false;
+    let book: HeroBar[] = [];
+    let chart: Vela | null = null;
     let destroy = () => {};
 
     const fail = () => {
       if (dead || shown) return;
       setCaption(VELA_UNAVAILABLE);
+    };
+
+    const show = (chart: Vela) => {
+      if (dead || shown) return;
+      const rows = chartBars(chart, book);
+      if (rows.length < 2) return;
+      if (!studies) {
+        studies = true;
+        mountPriceStudies(chart);
+      }
+      lockPriceFrame(chart, rows);
+      chart.resize();
+      const again = chartBars(chart, book);
+      lockPriceFrame(chart, again.length >= 2 ? again : rows);
+      shown = true;
+      setCaption(velaReadyCaption(product));
+      setPainted(true);
     };
 
     const mount = async () => {
@@ -54,45 +78,39 @@ function VelaChart({ product }: { product: VelaProduct }) {
         import("@luxalgo/vela/providers/coinbase"),
       ]);
       if (dead) return;
-      const chart = new VelaChartCtor(host, {
+      const live = new VelaChartCtor(host, {
         ...velaChartOptions(product, prefersReduced),
         theme: THEME,
         upColor: UP,
         downColor: DOWN,
       });
-      destroy = () => chart.destroy();
-      const lockScale = () => {
-        try {
-          chart.renderer.set({ animAutoscale: 0, autoScale: false });
-        } catch {
-          /* renderer without a scale lock */
-        }
-      };
-      const fadeIn = () => {
-        if (dead || shown) return;
-        shown = true;
-        lockScale();
-        chart.resize();
-        lockScale();
-        setPainted(true);
-      };
-      chart.data.registerProvider("coinbase", new CoinbaseProvider());
-      const source = chart.data.providerInstance("coinbase") as BarSource | undefined;
+      chart = live;
+      destroy = () => live.destroy();
+      live.data.registerProvider("coinbase", new CoinbaseProvider());
+      const source = live.data.providerInstance("coinbase") as BarSource | undefined;
       if (source?.getBars) {
-        void source.getBars(product, "1", { limit: 300 }).catch(() => undefined);
+        void source
+          .getBars(product, "1", { limit: 300 })
+          .then((rows) => {
+            if (dead) return;
+            book = coinbaseBars(rows);
+            show(live);
+          })
+          .catch(() => undefined);
       }
-      chart.on("load:end", (ev) => {
+      live.on("load:end", (ev) => {
         if (dead) return;
-        if ((ev?.bars ?? 0) > 0) fadeIn();
+        if ((ev?.bars ?? 0) > 0) show(live);
         else fail();
       });
-      await chart.ready().catch(() => undefined);
+      await live.ready().catch(() => undefined);
       if (dead) return;
-      if (chart.replay.bounds) fadeIn();
+      if (live.replay.bounds) show(live);
       else if (prefersReduced) fail();
     };
 
     const timer = window.setTimeout(() => {
+      if (chart) show(chart);
       if (!shown) fail();
     }, VELA_FEED_MAX_MS);
     void mount().catch(() => fail());
