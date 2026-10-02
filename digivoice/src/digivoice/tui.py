@@ -463,7 +463,10 @@ def render_screen(
             ansi=use_ansi,
         )
         header_h = rows - len(panel)
-        if header_h >= 10 or density == "tight":
+        # Roomy rails starve the landing field on mid-height terminals; keep
+        # at least 16 header rows so DIGIVOICE sits in particles, not a strip.
+        needed = 16 if density in {"roomy", "comfy"} else 10
+        if header_h >= needed or density == "tight":
             chosen_panel = panel
             break
         chosen_panel = panel
