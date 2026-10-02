@@ -16,6 +16,8 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
 from digisearch.core.models import Query
+from digisearch.grokipedia.tools import grokipedia_get_page as _grokipedia_get_page
+from digisearch.grokipedia.tools import grokipedia_search as _grokipedia_search
 from digisearch.logging import configure_logging
 from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
@@ -603,6 +605,38 @@ def websets_export(webset_id: str, format: str = "json") -> str:
     except WebsetServiceError as e:
         return _websets_error("export", e)
     return export_csv(webset, items) if fmt == "csv" else export_json(webset, items)
+
+
+# --- grokipedia unofficial JSON spike -----------------------------------------
+#
+# Read-only tools over grokipedia.com JSON APIs the public site JS already
+# calls. ``/api/page`` 404s; ``get_page`` uses ``/api/page-preview``. robots.txt
+# currently Disallow: /api/ — HOLD hatch (legal/product). No HTML scrape.
+
+
+@mcp.tool()
+def grokipedia_search(query: str, limit: int = 10) -> str:
+    """Search grokipedia.com (unofficial JSON spike; HOLD hatch).
+
+    Calls ``GET /api/full-text-search?query=&limit=``. Returns JSON
+    ``{ok, query, results:[{slug,title,snippet,...}], total_count}`` or
+    ``{ok:false, error, status_code, retryable}``. Polite rate limits apply.
+    Not an official xAI API. robots.txt currently Disallow: /api/.
+    """
+    return _grokipedia_search(query=query, limit=limit)
+
+
+@mcp.tool()
+def grokipedia_get_page(slug: str, include_content: bool = True) -> str:
+    """Fetch one grokipedia page via page-preview (unofficial JSON spike).
+
+    Calls ``GET /api/page-preview?slug=`` (``/api/page`` is dead / 404).
+    ``include_content=True`` sends ``includeContent=true``; ``False`` sends
+    the site's short-preview flag ``content=0``. Long content is truncated.
+    Returns JSON ``{ok, found, page:{slug,title,content,truncated}}`` or
+    ``{ok:false, error, status_code, retryable}``. No HTML scrape.
+    """
+    return _grokipedia_get_page(slug=slug, include_content=include_content)
 
 
 def run_mcp(

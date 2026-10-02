@@ -139,3 +139,5 @@ DIGISEARCH_ALLOW_STUB=1 digisearch query --index test --text "revenue growth"
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.
+
+**Grokopedia spike (HOLD):** `digisearch/grokipedia/` is an unofficial read-only JSON client (`grokipedia_search`, `grokipedia_get_page`) over grokipedia.com. Do not scrape `/page/{slug}` HTML. `robots.txt` currently `Disallow: /api/` — legal/product call sits with One/Chris; do not treat this as a production attach. Unit tests stay offline (`tests/ds/test_grokipedia.py`).
