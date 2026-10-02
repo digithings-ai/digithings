@@ -27,6 +27,7 @@ from digivoice.catalog import (
     rewrite_catalog,
     stt_catalog,
 )
+from digivoice.menu_tree import browse_settings
 from digivoice.models import VoicePaths
 from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE
 from digivoice.settings import (
@@ -638,9 +639,16 @@ def run_interactive_setup(
     stdout: TextIO | None = None,
     run_doctor=None,
 ) -> int:
-    """Run the arrow/enter wizard. Returns a process exit code."""
+    """TTY walks /settings. Pipes keep the numbered wizard. Returns an exit code."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
+    if _is_tty(stdin):
+        fullscreen_enter(stdout)
+        try:
+            browse_settings(paths, stdin, stdout, install=_install_with_progress)
+        finally:
+            fullscreen_leave(stdout)
+        return 0
     current = load_settings(paths)
     working: dict[str, Any] = current.model_dump(mode="json")
     dirty = False
