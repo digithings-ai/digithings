@@ -114,6 +114,11 @@ def reload_hammerspoon(
         return "hammerspoon .. reloaded", True
     if result.code == 124:
         return f"hammerspoon .. reload timed out after {timeout:g}s (config left running)", False
+    # hs.reload() tears the IPC down, so a live reload often exits non-zero
+    # with this Mach reply. The config did reload.
+    dropped = f"{result.stderr}\n{result.stdout}"
+    if "CFMessagePort: dropping corrupt reply Mach message" in dropped:
+        return "hammerspoon .. reloaded", True
     detail = (result.stderr or result.stdout or f"exit {result.code}").strip().splitlines()
     return f"hammerspoon .. reload failed ({detail[0] if detail else 'unknown'})", False
 
