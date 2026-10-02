@@ -2,17 +2,21 @@
 
 What the next Cursor session on Chris’s MacBook runs. Branch `cursor/ui-surfaces-d8c5`, draft PR 4986. Checked against this tree: Makefile, package scripts, `apps/dashboard-api/.dev.vars.example`, `apps/dashboard-api/wrangler.toml`, `apps/digiquant-web` dev scripts, `clients/digiquant-tui`, and digichat dev.
 
-Stay on `cursor/ui-surfaces-d8c5`. Do not merge PR 4986. Do not push `main`. Do not force-push. If `git pull --rebase` conflicts, stop.
+Work in `~/Code/digithings-ui-surfaces` on `cursor/ui-surfaces-d8c5`. Do not merge PR 4986. Do not push `main`. Do not force-push. If the fast-forward below does not apply, stop.
 
 ## Checkout
 
+On this Mac, `origin` is `https://origin.cursor.com/chrizefan/digithings.git` and `github` is `https://github.com/digithings-ai/digithings.git`. Fetch the desk branch from `github`.
+
+`~/Code/digithings` is dirty and stays on `task/4761-phase3-image-bake`. Do not check out `cursor/ui-surfaces-d8c5` there.
+
+The desk worktree is `~/Code/digithings-ui-surfaces`. `git -C ~/Code/digithings-ui-surfaces pull` is wrong if that worktree is detached. Fast-forward it instead:
+
 ```bash
-git fetch origin cursor/ui-surfaces-d8c5
-git checkout cursor/ui-surfaces-d8c5
-git pull --rebase origin cursor/ui-surfaces-d8c5
+git -C ~/Code/digithings-ui-surfaces fetch github cursor/ui-surfaces-d8c5 && git -C ~/Code/digithings-ui-surfaces merge --ff-only github/cursor/ui-surfaces-d8c5
 ```
 
-Pull again before launching digichat clients. Other passes may still be landing `clients/digichat-tui` and `clients/digichat-devkit`.
+Run the rest of this handoff from `~/Code/digithings-ui-surfaces`. Repeat that fetch and fast-forward before launching digichat clients. Other passes may still be landing `clients/digichat-tui` and `clients/digichat-devkit`.
 
 ## Dashboard API (port 8788)
 
@@ -112,7 +116,15 @@ DQ_API_URL=http://127.0.0.1:8788 bun src/index.tsx
 
 It reads `/chat/sessions`, `/chat/sessions/current`, and `/chat/sessions/current/messages`. A 502 or 503 stays an empty screen. It does not invent a thread.
 
-`clients/digichat-devkit` is not on this branch yet. The cloud pass is still landing. Pull again. If the directory appears, follow its README. Do not invent a launch command.
+`clients/digichat-devkit` is on this branch. From that directory (its README), after the fast-forward above:
+
+```bash
+bun install
+bun test
+DIGICHAT_DEVKIT_URL=http://127.0.0.1:3000 bun src/index.tsx
+```
+
+The only read is `GET /api/devkit/configs` (`DIGICHAT_DEVKIT_URL`, default `http://127.0.0.1:3000`). A refused or unreachable service stays empty. It does not invent sessions or sample deployments, and it does not print secrets. If the directory is missing after the fast-forward, the cloud pass is still landing: run the fetch and fast-forward again, then follow the README. Do not invent a launch command.
 
 Web digichat, from the repo root:
 
@@ -132,7 +144,7 @@ Desk chat GETs stay 502 until digichat is configured. `GET /chat/sessions` (and 
 4. The other desk pages: portfolio, pipeline, strategies, FX.
 5. Charts (`/app/tools/charts/`), then the terminal link (`/app/tools/terminal/`).
 6. Homepage. Look only. Do not retune the hero.
-7. Digichat: desk `/app/tools/chat/` (expect the 502 empty state), then `clients/digichat-tui` if it is still on the branch after the pull, then `make digichat-dev`.
+7. Digichat: desk `/app/tools/chat/` (expect the 502 empty state), then `clients/digichat-tui`, then `clients/digichat-devkit` if that directory is present after the fast-forward, then `make digichat-dev`.
 
 ## Do not
 
