@@ -30,11 +30,16 @@ def _days(n: int) -> list[date]:
 
 
 def test_all_buy_path_equals_lump_mark_to_market() -> None:
-    """PARITY PIN: an always-buy period set is lump-sum, not a softer DCA."""
+    """PARITY PIN: an always-buy period set is lump-sum, not a softer DCA.
+
+    EXACT equality, not ``pytest.approx``: both paths reach the same floats
+    through the same ``units * price`` arithmetic, so any drift is a real
+    divergence and a tolerance would only hide it (#4804 review, LOW).
+    """
     dates = _days(len(_PRICES))
     values, exposure = perfect_strategy_path(dates, _PRICES, dates, [], 1000.0)
     lump = lump_mark_to_market(_PRICES, 1000.0)
-    assert values == pytest.approx(lump)
+    assert values == lump
     assert all(exposure)
 
 
@@ -160,6 +165,20 @@ def test_invalid_inputs_raise(
 def test_length_mismatch_between_dates_and_prices_raises() -> None:
     with pytest.raises(ValueError, match="same length"):
         perfect_strategy_path(_days(3), [100.0, 101.0], [], [], 1000.0)
+
+
+def test_a_one_day_calendar_fails_at_the_metrics_wrapper() -> None:
+    """#4804 review, LOW: the wrapper raises the same guard ``equity_metrics`` does.
+
+    A 1-day calendar has no return at all, so it must fail with a message that
+    names the wrapper and the reason rather than surfacing a bare risk_metrics
+    error from two frames down.
+    """
+    dates = _days(1)
+    with pytest.raises(ValueError, match="perfect_strategy_metrics requires at least two days"):
+        perfect_strategy_metrics(dates, [100.0], dates, [], 1000.0)
+    with pytest.raises(ValueError, match="perfect_strategy_metrics requires at least two days"):
+        perfect_strategy_metrics([], [], [], [], 1000.0)
 
 
 def test_out_of_window_dates_are_ignored() -> None:

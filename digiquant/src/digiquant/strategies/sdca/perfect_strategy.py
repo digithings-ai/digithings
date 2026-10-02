@@ -132,7 +132,18 @@ def perfect_strategy_metrics(
 
     ``annualization`` is forwarded unchanged to ``risk_metrics.equity_metrics``
     (252 daily periods per year by default).
+
+    Raises ``ValueError`` when the calendar holds fewer than two days — a risk
+    adjustment needs at least one return, so the wrapper raises the same
+    minimum-length guard ``risk_metrics.equity_metrics`` raises rather than
+    surfacing it from two frames down (#4804 review). A longer calendar still
+    fails on the same guard for non-finite / non-positive input.
     """
+    if len(dates) < 2:
+        raise ValueError(
+            "perfect_strategy_metrics requires at least two days, got "
+            f"{len(dates)} (a risk-adjusted metric needs at least one return)"
+        )
     values, exposure = perfect_strategy_path(dates, prices, buy_dates, sell_dates, initial_cash)
     exposed_days = sum(1 for invested in exposure if invested)
     return PerfectStrategyMetrics(
