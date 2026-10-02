@@ -1,0 +1,104 @@
+"""Suggested local STT + rewrite catalog: list, download, wire. No cloud endpoints."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from digivoice.catalog import (
+    REWRITE_CATALOG,
+    STT_CATALOG,
+    find_rewrite,
+    find_stt,
+    install_catalog_model,
+    stt_filename,
+    stt_language,
+)
+from digivoice.paths import resolve_paths
+from digivoice.settings import LOCAL_REWRITE_MODEL_FILE
+
+pytestmark = pytest.mark.unit
+
+
+def _paths(tmp_path: Path):
+    return resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+
+
+def test_stt_catalog_has_english_and_multilingual() -> None:
+    ids = [item.id for item in STT_CATALOG]
+    assert "ggml-base.en" in ids
+    assert "ggml-tiny.en" in ids
+    assert "ggml-base" in ids
+    assert "ggml-tiny" in ids
+    assert any(item.languages == "en" for item in STT_CATALOG)
+    assert any(item.languages == "multilingual" for item in STT_CATALOG)
+    assert all(item.kind == "stt" for item in STT_CATALOG)
+    assert all(item.filename.endswith(".bin") for item in STT_CATALOG)
+    assert all("huggingface" in item.url for item in STT_CATALOG)
+    assert all("://" in item.url for item in STT_CATALOG)
+
+
+def test_rewrite_catalog_offers_more_than_one_local_gguf() -> None:
+    assert len(REWRITE_CATALOG) >= 2
+    files = [item.filename for item in REWRITE_CATALOG]
+    assert LOCAL_REWRITE_MODEL_FILE in files
+    assert all(item.filename.endswith(".gguf") for item in REWRITE_CATALOG)
+    assert all(item.kind == "rewrite" for item in REWRITE_CATALOG)
+    assert all(item.languages == "multilingual" for item in REWRITE_CATALOG)
+    assert all("huggingface" in item.url for item in REWRITE_CATALOG)
+    assert not any("openrouter" in item.url or "openai.com" in item.url for item in REWRITE_CATALOG)
+
+
+def test_stt_filename_and_language() -> None:
+    assert stt_filename("ggml-base.en") == "ggml-base.en.bin"
+    assert stt_filename("ggml-tiny") == "ggml-tiny.bin"
+    assert stt_filename(None) == "ggml-base.en.bin"
+    assert stt_language("ggml-base.en") == "en"
+    assert stt_language("ggml-tiny.en") == "en"
+    assert stt_language("ggml-base") == "auto"
+    assert stt_language("ggml-small") == "auto"
+
+
+def test_find_helpers_match_id_or_filename() -> None:
+    assert find_stt("ggml-base.en") is not None
+    assert find_stt("ggml-base.en.bin") is not None
+    assert find_stt("nope") is None
+    assert find_rewrite(LOCAL_REWRITE_MODEL_FILE) is not None
+    assert find_rewrite("https://example.com/x.gguf") is None
+
+
+def test_install_catalog_model_downloads_and_is_idempotent(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    entry = STT_CATALOG[0]
+    seen: list[str] = []
+
+    def fetch(url: str, dest: Path, progress=None) -> None:
+        seen.append(url)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"weights")
+        if progress is not None:
+            progress(len(b"weights"), len(b"weights"))
+
+    installed = install_catalog_model(paths, entry, fetch=fetch)
+    target = Path(paths.models_dir) / entry.filename
+    assert installed == str(target)
+    assert target.read_bytes() == b"weights"
+    assert seen == [entry.url]
+
+    def boom(url: str, dest: Path) -> None:
+        raise AssertionError("should not fetch when present")
+
+    again = install_catalog_model(paths, entry, fetch=boom)
+    assert again == str(target)
+
+
+def test_install_catalog_accepts_legacy_two_arg_fetch(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    entry = REWRITE_CATALOG[0]
+
+    def fetch(url: str, dest: Path) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"gguf")
+
+    installed = install_catalog_model(paths, entry, fetch=fetch)
+    assert Path(installed).read_bytes() == b"gguf"

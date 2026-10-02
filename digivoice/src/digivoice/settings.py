@@ -288,8 +288,9 @@ def settings_public_dict(settings: VoiceSettings, paths: VoicePaths) -> dict[str
     data["hotkeys"] = dict(HOTKEYS_DOCS)
     data["presets"] = dict(PRESET_LABELS)
     data["rewrite_model_hint"] = (
-        f"Post-process uses the local {LOCAL_REWRITE_MODEL_FILE} under {paths.models_dir}/ "
-        "(installed with digivoice; no cloud, URL, or ollama-tag models)."
+        f"Post-process uses a local GGUF under {paths.models_dir}/ "
+        f"(suggested list in setup; default {LOCAL_REWRITE_MODEL_FILE}; "
+        "no cloud, URL, or ollama-tag models)."
     )
     return data
 

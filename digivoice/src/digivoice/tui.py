@@ -1,9 +1,9 @@
-"""Shared stdlib TUI primitives: fullscreen frames, pixel hero, menus.
+"""Shared stdlib TUI primitives: fullscreen frames, pixel wordmark, menus.
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
-viewport: alternate screen, one repaint per key. The home hero is the
-landing pixel field — 7×10 DIGIVOICE block letters plus ambient shimmer
-filling leftover rows — not a thin teal title line. Menus use a step rail.
+viewport: alternate screen, one repaint per key. The home hero is a simple
+centered DIGIVOICE 7×10 block-pixel wordmark with grayscale shimmer on the
+glyphs only — not a full-terminal particle field. Menus use a step rail.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -23,7 +23,7 @@ import tty
 from collections.abc import Sequence
 from typing import TextIO
 
-from digivoice.pixel_hero import PIXEL_GLYPHS, render_pixel_hero, render_wordmark_lines
+from digivoice.pixel_hero import PIXEL_GLYPHS, render_wordmark_lines
 
 # TTY contract:
 # - Full viewport: alternate screen while a shell is open, CSI clear + home
@@ -46,8 +46,6 @@ _ANSI_CLEAR_DOWN = "\x1b[J"
 _ANSI_ALT_ON = "\x1b[?1049h"
 _ANSI_ALT_OFF = "\x1b[?1049l"
 _ANSI_RESET = "\x1b[0m"
-_ANSI_MOUSE_ON = "\x1b[?1003h\x1b[?1006h"
-_ANSI_MOUSE_OFF = "\x1b[?1003l\x1b[?1006l"
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 # digithings landing accent (teal). Header chrome stays one hue — no rainbow title.
@@ -121,6 +119,34 @@ def _fit(text: str, width: int, *, truncate: bool = True) -> str:
             return text
         return text[: width - 1] + "…"
     return text.ljust(width)
+
+
+def wrap_text(text: str, width: int) -> list[str]:
+    """Word-wrap `text` to `width` columns. Long tokens are sliced."""
+    width = max(8, width)
+    stripped = text.strip()
+    if not stripped:
+        return [""]
+    words = stripped.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        pieces = [word]
+        if len(word) > width:
+            pieces = [word[i : i + width] for i in range(0, len(word), width)]
+        for piece in pieces:
+            if not current:
+                current = piece
+                continue
+            trial = f"{current} {piece}"
+            if len(trial) <= width:
+                current = trial
+                continue
+            lines.append(current)
+            current = piece
+    if current:
+        lines.append(current)
+    return lines or [""]
 
 
 def _paint(plain: str, style: str, ansi: bool) -> str:
@@ -273,15 +299,25 @@ def _emit_items(
     density: str,
     ansi: bool,
 ) -> None:
+    _ = label_w
+    inner_w = max(12, panel_w - 1)
     for index in range(start, end):
         label, hint = _option_parts(options[index])
-        if len(label) > label_w:
-            label = label[: max(1, label_w - 1)] + "…"
-        body = f"  {_mark(index, selected, checked)}{label.ljust(label_w)}"
-        if hint:
-            body += f"  {hint}"
+        mark = _mark(index, selected, checked)
+        prefix = f"  {mark}"
+        body_w = max(8, inner_w - len(prefix))
+        label_lines = wrap_text(label, body_w)
         style = "bar" if index == selected else "item"
-        lines.append(_paint(_fit("│" + body, panel_w), style, ansi))
+        first = prefix + label_lines[0]
+        remainder_indent = " " * len(prefix)
+        extra: list[str] = [remainder_indent + part for part in label_lines[1:]]
+        if hint:
+            if len(first) + 2 + len(hint) <= inner_w:
+                first = f"{first}  {hint}"
+            else:
+                extra.extend(remainder_indent + part for part in wrap_text(hint, body_w))
+        for row in [first, *extra]:
+            lines.append(_paint(_fit("│" + row, panel_w), style, ansi))
         if density == "roomy" and index + 1 < end:
             lines.append(_paint(_fit("│", panel_w), "rail", ansi))
 
@@ -315,7 +351,8 @@ def _panel_lines(
 
     lines.append(_paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi))
     if subtitle and spaced:
-        lines.append(_paint(_fit(f"│  {subtitle}", panel_w), "kv", ansi))
+        for row in wrap_text(subtitle, max(12, panel_w - 3)):
+            lines.append(_paint(_fit(f"│  {row}", panel_w), "kv", ansi))
 
     pairs = _context_pairs(context) if hero else []
     if pairs:
@@ -324,10 +361,11 @@ def _panel_lines(
         lines.append(_paint(_fit("■  STATUS", panel_w), "step-off", ansi))
         for symbol, val in pairs:
             lead = symbol if symbol in _STATUS_SYMBOLS else "□"
-            if lead:
-                lines.append(_paint(_fit(f"│  {lead}  {val}", panel_w), "kv", ansi))
-            else:
-                lines.append(_paint(_fit(f"│  {val}", panel_w), "kv", ansi))
+            prefix = f"│  {lead}  " if lead else "│  "
+            wrapped = wrap_text(val, max(8, panel_w - len(prefix)))
+            for i, row in enumerate(wrapped):
+                lead_out = prefix if i == 0 else "│     "
+                lines.append(_paint(_fit(lead_out + row, panel_w), "kv", ansi))
 
     usable = [group for group in groups or [] if 0 <= group[1] < group[2] <= count]
     if usable:
@@ -369,7 +407,13 @@ def _panel_lines(
     full = f"└  {current}  ·  {footer_hint}"
     short = f"└  {footer_hint}"
     footer = full if len(full) <= panel_w else short
-    lines.append(_paint(_fit(footer, panel_w), "rule", ansi))
+    if len(footer) <= panel_w:
+        lines.append(_paint(_fit(footer, panel_w), "rule", ansi))
+        return lines
+    wrapped = wrap_text(footer_hint, max(8, panel_w - 3))
+    lines.append(_paint(_fit(f"└  {wrapped[0]}", panel_w), "rule", ansi))
+    for row in wrapped[1:]:
+        lines.append(_paint(_fit(f"   {row}", panel_w), "rule", ansi))
     return lines
 
 
@@ -438,14 +482,15 @@ def render_screen(
     t_ms: int | None = None,
     pointer: tuple[int, int] | None = None,
 ) -> str:
-    """One frame. `hero` paints the DIGIVOICE pixel field above the step rail."""
+    """One frame. `hero` paints the DIGIVOICE pixel wordmark above the step rail."""
     term_cols, term_rows = _term_size()
     cols = term_cols if cols is None else cols
     rows = term_rows if rows is None else rows
-    panel_w = max(36, min(64, cols - 4))
+    panel_w = max(36, min(88, cols - 6))
     if hero and not subtitle:
         subtitle = "local speech control"
     elapsed = phase * 160 if t_ms is None else t_ms
+    _ = pointer
     chosen_panel: list[str] = []
     for density in ("roomy", "comfy", "compact", "tight"):
         panel = _panel_lines(
@@ -463,29 +508,21 @@ def render_screen(
             ansi=use_ansi,
         )
         header_h = rows - len(panel)
-        # Roomy rails starve the landing field on mid-height terminals; keep
-        # at least 16 header rows so DIGIVOICE sits in particles, not a strip.
-        needed = 16 if density in {"roomy", "comfy"} else 10
+        needed = 12 if hero and density in {"roomy", "comfy"} else (10 if hero else 0)
         if header_h >= needed or density == "tight":
             chosen_panel = panel
             break
         chosen_panel = panel
-    header_h = max(0, rows - len(chosen_panel))
     word_lines = (
-        render_pixel_hero(
+        render_wordmark_lines(
             "DIGIVOICE",
             cols=cols,
-            rows=max(header_h, 10) if header_h < 10 else header_h,
-            t_ms=elapsed,
+            phase=max(0, elapsed // 160),
             ansi=use_ansi,
-            pointer=pointer,
-            field=True,
         )
         if hero
         else []
     )
-    if hero and header_h < 10:
-        word_lines = word_lines[:header_h]
     return _compose(
         word_lines,
         chosen_panel,
@@ -496,7 +533,7 @@ def render_screen(
         redraw=redraw,
         ansi=use_ansi,
         screen=use_screen,
-        fill=hero,
+        fill=False,
     )
 
 
@@ -636,9 +673,9 @@ def choose(
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
     TTY mode paints a step-rail frame and redraws on every key. Space confirms
-    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel field and,
-    when `pulse` is set, shimmers the field (SGR mouse trail when the terminal
-    reports motion; otherwise ambient only). Returns None on back.
+    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel wordmark and,
+    when `pulse` is set, shimmers the glyphs (grayscale noise on letter pixels).
+    Returns None on back.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -658,9 +695,6 @@ def choose(
         try:
             _set_menu_raw(fd)
             _cursor(stdout, False)
-            if live:
-                stdout.write(_ANSI_MOUSE_ON)
-                stdout.flush()
             while True:
                 stdout.write(
                     render_screen(
@@ -678,7 +712,6 @@ def choose(
                         clear=first,
                         redraw=not first,
                         t_ms=int((time.monotonic() - born) * 1000),
-                        pointer=_pointer if live else None,
                     )
                 )
                 stdout.flush()
@@ -698,12 +731,6 @@ def choose(
         except (OSError, ValueError):
             pass
         finally:
-            if live:
-                try:
-                    stdout.write(_ANSI_MOUSE_OFF)
-                    stdout.flush()
-                except (OSError, ValueError):
-                    pass
             _note_pointer(None)
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
@@ -845,27 +872,61 @@ def _write_info_frame(
     body: list[str],
     footer: str = "Enter to go back",
     subtitle: str | None = None,
+    *,
+    wait: bool = True,
 ) -> None:
-    """Centered read-only panel. Long reports top-align and may scroll."""
-    _ = subtitle
+    """Centered read-only panel. Long reports wrap; overflow scrolls with ↑↓."""
     cols, rows = _term_size()
     tty_out = _is_tty(stdout)
     ansi = _use_ansi() and tty_out
     screen = _use_screen() and tty_out
-    longest = max((len(line) for line in body), default=20)
-    panel_w = max(36, min(cols - 2, max(62, min(longest + 4, cols - 2))))
-    lines = [
-        _paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi),
-        _paint(_fit(f"■  {title}", panel_w), "step-on", ansi),
-    ]
+    inner_w = max(20, min(cols - 6, 88) - 3)
+    wrapped: list[str] = []
     for entry in body or ["(empty)"]:
-        lines.append(_paint(_fit("│  " + entry.rstrip(), panel_w, truncate=False), "kv", ansi))
-    lines.append(_paint(_fit(f"└  {footer} · esc back · q quit", panel_w), "rule", ansi))
-    stdout.write(
-        _compose([], lines, cols, rows, panel_w, clear=True, redraw=False, ansi=ansi, screen=screen)
-    )
-    _cursor(stdout, False)
-    stdout.flush()
+        wrapped.extend(wrap_text(entry.rstrip() or " ", inner_w))
+    panel_w = max(36, min(cols - 2, max(62, min(inner_w + 4, cols - 2))))
+    chrome = 3  # rule, title, footer
+    window = max(4, rows - chrome - 2)
+    offset = 0
+    stdin = sys.stdin
+    while True:
+        view = wrapped[offset : offset + window]
+        more = offset + window < len(wrapped)
+        less = offset > 0
+        footer_bits = [footer]
+        if less or more:
+            footer_bits.append("↑↓ scroll")
+        footer_bits.append("esc back · q quit")
+        lines = [
+            _paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi),
+            _paint(_fit(f"■  {title}", panel_w), "step-on", ansi),
+        ]
+        if subtitle:
+            for row in wrap_text(subtitle, inner_w):
+                lines.append(_paint(_fit(f"│  {row}", panel_w), "kv", ansi))
+        for entry in view or ["(empty)"]:
+            lines.append(_paint(_fit("│  " + entry, panel_w), "kv", ansi))
+        lines.append(_paint(_fit("└  " + " · ".join(footer_bits), panel_w), "rule", ansi))
+        stdout.write(
+            _compose(
+                [], lines, cols, rows, panel_w, clear=True, redraw=False, ansi=ansi, screen=screen
+            )
+        )
+        _cursor(stdout, False)
+        stdout.flush()
+        if not tty_out or not wait:
+            return
+        try:
+            key = _read_key(stdin)
+        except (OSError, ValueError):
+            return
+        if key in {"down", "j", "J", " "} and more:
+            offset = min(len(wrapped) - window, offset + 1)
+            continue
+        if key in {"up", "k", "K"} and less:
+            offset = max(0, offset - 1)
+            continue
+        return
 
 
 def _render_menu_frame(
@@ -912,15 +973,12 @@ def play_intro(
                 _paint(_fit(f"│  {tag}", panel_w), "kv", ansi),
                 _paint(_fit("└", panel_w), "rule", ansi),
             ]
-            header_h = max(10, rows - len(panel))
-            word = render_pixel_hero(
+            word = render_wordmark_lines(
                 "DIGIVOICE",
                 cols=cols,
-                rows=header_h,
-                t_ms=index * 180,
+                phase=index,
                 frac=frac,
                 ansi=ansi,
-                field=True,
             )
             stdout.write(
                 _compose(
@@ -933,7 +991,7 @@ def play_intro(
                     redraw=index != 0,
                     ansi=ansi,
                     screen=screen,
-                    fill=True,
+                    fill=False,
                 )
             )
             stdout.flush()
@@ -968,4 +1026,5 @@ __all__ = [
     "render_screen",
     "render_wordmark_lines",
     "tui_header_lines",
+    "wrap_text",
 ]

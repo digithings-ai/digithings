@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.request import urlopen
 
+from digivoice.catalog import find_rewrite, install_catalog_model
 from digivoice.models import CheckStatus, RewriteResult, VoicePaths
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
@@ -191,14 +192,15 @@ def install_local_rewrite_model(
     paths: VoicePaths,
     fetch: Callable[[str, Path], None] | None = None,
 ) -> str:
-    """Place the shipped multilingual GGUF under models_dir. Idempotent."""
-    dest = Path(paths.models_dir) / LOCAL_REWRITE_MODEL_FILE
-    if dest.is_file():
+    """Place the default multilingual GGUF under models_dir. Idempotent."""
+    entry = find_rewrite(LOCAL_REWRITE_MODEL_FILE)
+    if entry is None:
+        dest = Path(paths.models_dir) / LOCAL_REWRITE_MODEL_FILE
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        worker = fetch or _fetch_url
+        worker(LOCAL_REWRITE_MODEL_URL, dest)
         return str(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    worker = fetch or _fetch_url
-    worker(LOCAL_REWRITE_MODEL_URL, dest)
-    return str(dest)
+    return install_catalog_model(paths, entry, fetch=fetch)
 
 
 def pick_runner(
@@ -357,19 +359,20 @@ def rewrite_doctor_detail(
     """
     model = resolve_rewrite_model_path(paths, settings)
     local = pick_runner(paths, settings, probe, runner)
-    expected = Path(paths.models_dir) / LOCAL_REWRITE_MODEL_FILE
+    raw = (settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE).strip()
+    expected = Path(paths.models_dir) / Path(raw).name
     present = expected.is_file()
     missing_note = (
         f" local rewrite model not installed: {expected} "
-        f"(copy {LOCAL_REWRITE_MODEL_FILE} into models/ or run setup → "
-        "Post-process → On-device rewrite model)."
+        f"(setup → Post-process → Local model to download and wire a suggested GGUF)."
     )
     if not settings.rewrite_enabled:
         hint = model or str(expected)
         extra = missing_note if not present else ""
         return (
             "info",
-            f"disabled (default). model={hint}.{extra} enable with: "
+            f"disabled (default). model={hint}.{extra} pick a suggested local GGUF "
+            "in setup → Post-process → Local model (download + wire). enable with: "
             "digivoice settings set rewrite_enabled true",
         )
     if not present or local is None or not local.available():
@@ -378,7 +381,7 @@ def rewrite_doctor_detail(
             (
                 "enabled but local rewrite model/runner not ready. "
                 f"{LOCAL_REWRITE_MODEL_FILE} should live at {expected}. "
-                "Install llama-cli and the shipped GGUF (setup → Post-process). "
+                "Install llama-cli and a suggested local GGUF (setup → Post-process → Local model). "
                 "dict still pastes the raw transcript."
             ),
         )

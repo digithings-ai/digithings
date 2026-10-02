@@ -6,18 +6,29 @@ Hotkeys (docs) / Review & save / Doctor / Quit, per
 without a TTY via `digivoice setup --print` (or
 `DIGIVOICE_SETUP_NONINTERACTIVE=1`).
 
-Speech stays local: nothing here calls cloud STT/TTS. Post-process install
-fetches the shipped local GGUF into the models dir when the user asks.
+Speech stays local: nothing here calls cloud STT/TTS. Model menus list
+suggested local files (STT ggml + rewrite GGUF). Select downloads the
+file into the models dir and wires settings. No cloud / user-hosted
+endpoints.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Any, TextIO
 
+from digivoice.catalog import (
+    REWRITE_CATALOG,
+    STT_CATALOG,
+    CatalogModel,
+    install_catalog_model,
+    rewrite_catalog,
+    stt_catalog,
+)
 from digivoice.models import VoicePaths
-from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE, install_local_rewrite_model
+from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE
 from digivoice.settings import (
     HOTKEYS_DOCS,
     PRESET_LABELS,
@@ -99,39 +110,21 @@ FEATURE_FIELDS = (
 
 
 def recommend_models(chip: str | None = None, ram_gb: float | None = None) -> dict[str, Any]:
-    """Tiered local STT model list with human-readable best-for roles.
-
-    Static data (no weight downloads); the full hardware-aware catalog lives
-    in epic #4939 / CHR-853.
-    """
+    """Suggested local STT + rewrite catalog. Static data (no weight downloads)."""
     _ = (chip, ram_gb)
     return {
         "tiers": [
             {
-                "tier": "fastest",
-                "model": "ggml-tiny.en",
-                "note": "Smallest footprint; snappiest on low-power machines.",
-                "best_for": "lowest latency / low-power",
-            },
-            {
-                "tier": "default",
-                "model": "ggml-base.en",
-                "note": "Snappy push-to-talk default; ships as ggml-base.en.bin.",
-                "best_for": "everyday dictation (default)",
-            },
-            {
-                "tier": "larger",
-                "model": "ggml-small.en",
-                "note": "More accurate, slower; place ggml-small.en.bin under models/.",
-                "best_for": "higher accuracy when you can wait",
-            },
-            {
-                "tier": "careful",
-                "model": "ggml-medium.en",
-                "note": "Heaviest local tier; only when accuracy matters most.",
-                "best_for": "careful / tougher audio",
-            },
+                "tier": item.id,
+                "model": item.id,
+                "note": item.title,
+                "best_for": item.best_for,
+                "languages": item.languages,
+                "size_hint": item.size_hint,
+            }
+            for item in STT_CATALOG
         ],
+        "rewrite": [item.as_dict() for item in REWRITE_CATALOG],
         "pointer": HARDWARE_EPIC_POINTER,
     }
 
@@ -161,6 +154,7 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         "",
         "— Post-process —",
         "  Clean up after dictation rewrites the words when on; off pastes them as spoken.",
+        "  Select a suggested local model to download and wire it. Never a cloud URL.",
         f"  rewrite_enabled ......... {str(settings.rewrite_enabled).lower()}",
         f"  rewrite_preset .......... {settings.rewrite_preset}",
         f"  rewrite_model ........... {settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE}",
@@ -184,11 +178,21 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         lines.append(f"  {name}: {doc}")
     lines += [
         "",
-        "— Models (best for) —",
+        "— Models (suggested local list) —",
         f"  {HARDWARE_EPIC_POINTER}",
+        "  STT:",
     ]
     for tier in recommend_models()["tiers"]:
-        lines.append(f"  {tier['model']} — best for: {tier.get('best_for', tier['note'])}")
+        lines.append(
+            f"  {tier['model']} — best for: {tier.get('best_for', tier['note'])} "
+            f"({tier.get('languages', '')}, {tier.get('size_hint', '')})"
+        )
+    lines.append("  Post-process rewrite:")
+    for item in recommend_models()["rewrite"]:
+        lines.append(
+            f"  {item['filename']} — best for: {item['best_for']} "
+            f"({item['languages']}, {item['size_hint']})"
+        )
     lines += [
         "",
         "Drive without a TTY: `digivoice setup --print` (or "
@@ -284,10 +288,54 @@ def _prompt_literal(
     return choices[picked]
 
 
+def _catalog_labels(entries: tuple[CatalogModel, ...], paths: VoicePaths | None) -> list[str]:
+    labels: list[str] = []
+    root = Path(paths.models_dir) if paths is not None else None
+    for item in entries:
+        present = root is not None and (root / item.filename).is_file()
+        mark = "installed" if present else "download + wire"
+        labels.append(f"{item.id} — {item.best_for} ({item.languages}, {item.size_hint}) [{mark}]")
+    return labels
+
+
+def _install_with_progress(
+    paths: VoicePaths,
+    entry: CatalogModel,
+    stdout: TextIO | None,
+) -> str:
+    stdout = stdout or sys.stdout
+
+    def progress(got: int, total: int | None) -> None:
+        if total:
+            pct = min(100, int(got * 100 / total))
+            msg = f"Downloading {entry.filename} — {pct}%"
+        else:
+            msg = f"Downloading {entry.filename} — {got} bytes"
+        if _is_tty(stdout):
+            _write_info_frame(stdout, "Download", [msg], footer="working…", wait=False)
+        else:
+            stdout.write(f"  {msg}\n")
+            stdout.flush()
+
+    dest = install_catalog_model(paths, entry, progress=progress)
+    if _is_tty(stdout):
+        _write_info_frame(
+            stdout,
+            "Download",
+            [f"Ready: {dest}", "Wired into settings."],
+            footer="Enter to continue",
+        )
+    else:
+        stdout.write(f"  ready {dest}\n")
+        stdout.flush()
+    return dest
+
+
 def _edit_models(
     working: dict[str, Any],
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
+    paths: VoicePaths | None = None,
 ) -> None:
     stdout = stdout or sys.stdout
     while True:
@@ -296,19 +344,36 @@ def _edit_models(
             f"tts_voice [{working['tts_voice'] or '(auto)'}]",
             "Back",
         ]
-        picked = choose("— Models (STT / TTS) —", options, stdin, stdout)
+        picked = choose(
+            "— Models (STT / TTS) —",
+            options,
+            stdin,
+            stdout,
+            subtitle="Speech-to-text and Piper voice. STT picks from a suggested local list.",
+        )
         if picked is None or picked == len(options) - 1:
             return
         if picked == 0:
-            tiers = recommend_models()["tiers"]
-            labels = [f"{t['model']} — best for: {t.get('best_for', t['note'])}" for t in tiers] + [
-                "Other… (free text)"
-            ]
-            sel = choose("stt_model — pick a tier", labels, stdin, stdout)
+            entries = stt_catalog()
+            labels = _catalog_labels(entries, paths) + ["Other… (local filename only)"]
+            sel = choose(
+                "Dictation model",
+                labels,
+                stdin,
+                stdout,
+                subtitle="Suggested local whisper.cpp files. Select to download and wire.",
+            )
             if sel is None:
                 continue
-            if sel < len(tiers):
-                working["stt_model"] = tiers[sel]["model"]
+            if sel < len(entries):
+                entry = entries[sel]
+                if paths is not None:
+                    try:
+                        _install_with_progress(paths, entry, stdout)
+                    except (OSError, ValueError) as exc:
+                        stdout.write(f"  could not install {entry.filename}: {exc}\n")
+                        continue
+                working["stt_model"] = entry.id
                 continue
             value = _prompt_text("stt_model", working["stt_model"], stdin, stdout)
             if value:
@@ -328,19 +393,19 @@ def postprocess_menu_options(working: dict[str, Any]) -> list[str]:
     return [
         (
             f"Clean up after dictation [{enabled}] "
-            "(on: rewrite the words after whisper; off: paste them as spoken)"
+            "(off = paste as spoken; on = rewrite with the local model first)"
         ),
-        f"Rewrite style [{working['rewrite_preset']}] (how the rewrite should read)",
-        f"On-device rewrite model [{model}] (local file installed with digivoice)",
+        f"Rewrite style [{working['rewrite_preset']}] (how the cleaned-up text should read)",
         (
-            f"Run on this machine [{working['rewrite_runner']}] "
-            "(llama.cpp GGUF or local ollama — never a cloud URL)"
+            f"Local model [{model}] "
+            "(suggested on-device list; select downloads and wires it — never a cloud URL)"
         ),
+        (f"Run with [{working['rewrite_runner']}] (llama.cpp or local ollama on this machine)"),
         (
-            f"Match style to the front app [{auto}] "
+            f"Match the front app [{auto}] "
             "(on: Mail→email, Messages→SMS; off: always use Rewrite style)"
         ),
-        f"Give up after [{timeout}] (off: no extra time cap; on: 15, 30, or 60 seconds)",
+        f"Give up after [{timeout}] (off by default; when on: 15, 30, or 60 seconds only)",
         (
             f"App → style list [{len(working['rewrite_app_routes'])} apps] "
             "(which apps pick which rewrite style)"
@@ -355,28 +420,26 @@ def _pick_local_rewrite_model(
     stdin: TextIO | None,
     stdout: TextIO | None,
 ) -> None:
-    labels = [
-        f"{LOCAL_REWRITE_MODEL_FILE} (shipped local, multilingual)",
-        "Install shipped model now",
-        "Back",
-    ]
-    sel = choose("On-device rewrite model", labels, stdin, stdout)
-    if sel is None or sel == 2:
+    entries = rewrite_catalog()
+    labels = _catalog_labels(entries, paths)
+    sel = choose(
+        "Local rewrite model",
+        labels,
+        stdin,
+        stdout,
+        subtitle="Suggested on-device GGUFs. Select to download and wire. Local only.",
+    )
+    if sel is None:
         return
-    if sel == 0:
-        working["rewrite_model"] = LOCAL_REWRITE_MODEL_FILE
-        working["rewrite_runner"] = "llama.cpp"
-        return
-    if paths is None:
-        working["rewrite_model"] = LOCAL_REWRITE_MODEL_FILE
-        return
-    try:
-        install_local_rewrite_model(paths)
-    except (OSError, ValueError) as exc:
-        out = stdout or sys.stdout
-        out.write(f"  could not install local model: {exc}\n")
-        return
-    working["rewrite_model"] = LOCAL_REWRITE_MODEL_FILE
+    entry = entries[sel]
+    if paths is not None:
+        try:
+            _install_with_progress(paths, entry, stdout)
+        except (OSError, ValueError) as exc:
+            out = stdout or sys.stdout
+            out.write(f"  could not install local model: {exc}\n")
+            return
+    working["rewrite_model"] = entry.filename
     working["rewrite_runner"] = "llama.cpp"
 
 
@@ -389,7 +452,16 @@ def _edit_postprocess(
     stdout = stdout or sys.stdout
     while True:
         options = postprocess_menu_options(working)
-        picked = choose("— Post-process (rewrite + auto-route) —", options, stdin, stdout)
+        picked = choose(
+            "— Post-process —",
+            options,
+            stdin,
+            stdout,
+            subtitle=(
+                "After dictation, optionally rewrite the words with a local model. "
+                "Off pastes them as spoken."
+            ),
+        )
         if picked is None or picked == len(options) - 1:
             return
         if picked == 0:
@@ -487,7 +559,13 @@ def _edit_features(
             f"banner_animations [{str(working['banner_animations']).lower()}]",
             "Back",
         ]
-        picked = choose("— Features —", options, stdin, stdout)
+        picked = choose(
+            "— Features —",
+            options,
+            stdin,
+            stdout,
+            subtitle="Paste, live banner, and dictation helpers. Banner density is retract or full.",
+        )
         if picked is None or picked == len(options) - 1:
             return
         if picked == 0:
@@ -546,8 +624,6 @@ def _show_hotkeys(stdout: TextIO | None = None, stdin: TextIO | None = None) -> 
     body += ["", "  See digivoice/hammerspoon/README.md for Mic + Accessibility TCC."]
     if _is_tty(stdin):
         _write_info_frame(stdout, "— Hotkeys (read-only docs) —", body)
-        stdout.flush()
-        _pause(stdin, stdout)
         return
     stdout.write("\n— Hotkeys (read-only docs) —\n")
     for line in body:
@@ -581,7 +657,13 @@ def run_interactive_setup(
             stdout.write("└────────────────────────────────────────────────────────┘\n")
             stdout.flush()
         while True:
-            picked = choose("digivoice setup", list(SETUP_MENU), stdin, stdout)
+            picked = choose(
+                "digivoice setup",
+                list(SETUP_MENU),
+                stdin,
+                stdout,
+                subtitle="local speech config",
+            )
             if picked is None or SETUP_MENU[picked] == "Quit":
                 if dirty:
                     stdout.write("  Unsaved changes.\n")
@@ -608,7 +690,7 @@ def run_interactive_setup(
             section = SETUP_MENU[picked]
             if section.startswith("Models"):
                 before = json.dumps(working, sort_keys=True)
-                _edit_models(working, stdin, stdout)
+                _edit_models(working, stdin, stdout, paths)
                 dirty = dirty or json.dumps(working, sort_keys=True) != before
             elif section.startswith("Post-process"):
                 before = json.dumps(working, sort_keys=True)
@@ -632,6 +714,7 @@ def run_interactive_setup(
                         "Review & save",
                         format_settings_text(preview, paths).splitlines(),
                         footer="Enter to choose",
+                        wait=False,
                     )
                 else:
                     stdout.write("\n" + format_settings_text(preview, paths) + "\n")
@@ -647,7 +730,6 @@ def run_interactive_setup(
                         _write_info_frame(
                             stdout, "Doctor", run_doctor().splitlines(), footer="Enter to go back"
                         )
-                        _pause(stdin, stdout)
                     else:
                         stdout.write("\n" + run_doctor() + "\n")
                         stdout.flush()
@@ -658,7 +740,6 @@ def run_interactive_setup(
                             "Doctor",
                             ["  Run `digivoice doctor` to see health checks."],
                         )
-                        _pause(stdin, stdout)
                     else:
                         stdout.write("\n  Run `digivoice doctor` to see health checks.\n")
                         stdout.flush()

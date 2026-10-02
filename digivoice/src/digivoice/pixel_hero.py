@@ -1,17 +1,9 @@
-"""Landing pixel-hero math for the digivoice TUI.
+"""Simple DIGIVOICE block-pixel wordmark for the digivoice TUI.
 
-Ports the digithings.ai welcome lockup into terminal cells:
-
-- ``PixelWordmark.tsx`` — 7×10 ``#`` glyphs, mulberry32 seed ``0xd161``,
-  STEPS alphas, 13 glint cells, 70 stray particles.
-- ``pixel-field.ts`` — sparse ambient squares that shimmer over time.
-  Optional pointer trail stays teal (gloom accent), never a rainbow title
-  and never a fake web cursor glyph.
-
-The hero is a full header/background: leftover rows above the step-rail
-are the particle field, with DIGIVOICE lettered in the same blocky pixel
-font as DIGITHINGS. Motion is ambient; a terminal that reports SGR mouse
-motion can light a local teal trail.
+Ports ``PixelWordmark.tsx`` into terminal cells: 7×10 ``#`` glyphs,
+mulberry32 seed ``0xd161``, STEPS alphas, 13 glint cells. Letter pixels
+use a grayscale shimmer (no full-terminal particle field). The TUI paints
+the 10-row lockup only; leftover rows stay empty.
 """
 
 from __future__ import annotations
@@ -19,9 +11,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-# Landing accent (teal). Letters and the pointer trail stay this hue.
+# Letters stay grayscale (DIGITHINGS lockup). Menu chrome may still use teal.
 TEAL_RGB = (61, 214, 196)
-_TEAL = "38;2;61;214;196"
 _RESET = "\x1b[0m"
 
 # PixelWordmark.tsx
@@ -312,28 +303,24 @@ def word_cells(
     return tuple(painted), tuple(stray)
 
 
+def _gray_sgr(alpha: float, glint: bool, x: int, y: int, t_ms: int) -> str:
+    """Per-glyph grayscale. Glints flash brighter; idle noise is a small wobble."""
+    if glint:
+        return "\x1b[1;38;2;255;255;255m"
+    base = int(96 + max(0.0, min(1.0, alpha)) * 144)
+    wobble = int(cell_hash(x + (t_ms // 160), y) * 28) - 14
+    gray = max(72, min(235, base + wobble))
+    return f"\x1b[38;2;{gray};{gray};{gray}m"
+
+
 def _sgr(kind: str) -> str:
-    if kind == "glint":
-        return f"\x1b[1;7;{_TEAL}m"
-    if kind == "bold":
-        return f"\x1b[1;{_TEAL}m"
-    if kind == "dim-teal":
-        return f"\x1b[2;{_TEAL}m"
-    if kind == "teal":
-        return f"\x1b[{_TEAL}m"
     if kind == "dim":
         return "\x1b[2m"
+    if kind == "gray":
+        return "\x1b[38;2;168;168;168m"
+    if kind == "gray-dim":
+        return "\x1b[2;38;2;140;140;140m"
     return ""
-
-
-def _alpha_kind(alpha: float, glint: bool) -> str:
-    if glint:
-        return "glint"
-    if alpha >= 0.82:
-        return "bold"
-    if alpha >= 0.5:
-        return "teal"
-    return "dim-teal"
 
 
 def _glinting(cell: PixelCell, t_ms: int) -> bool:
@@ -435,24 +422,24 @@ def render_pixel_hero(
             kind = ""
             if cell is not None and (x, y) in letter_cells:
                 ch = "█"
-                kind = _alpha_kind(cell.f, _glinting(cell, t_ms))
+                kind = _gray_sgr(cell.f, _glinting(cell, t_ms), cell.x, cell.y, t_ms)
             elif (x, y) in stray_cells:
                 ch = "░"
-                kind = "dim-teal"
+                kind = "gray-dim"
             else:
                 trail = _trail_alpha(x, y, pointer) if field else 0.0
                 ambient = field and _field_on(x, y, out_w, out_h, t_ms)
                 if trail > 0.5:
                     ch = "█"
-                    kind = "teal"
+                    kind = "gray"
                 elif trail > 0:
                     ch = "░"
-                    kind = "dim-teal"
+                    kind = "gray-dim"
                 elif ambient and (x, y) not in letter_cells:
                     ch = "·"
                     kind = "dim"
             if ansi:
-                want = _sgr(kind) if kind else ""
+                want = kind if kind.startswith("\x1b") else _sgr(kind)
                 if want != dirty:
                     if dirty:
                         parts.append(_RESET)

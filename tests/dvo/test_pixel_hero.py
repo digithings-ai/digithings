@@ -1,9 +1,8 @@
-"""Landing pixel-hero port: 7×10 DIGIVOICE field, not a thin title line.
+"""7×10 DIGIVOICE pixel wordmark: glyphs, glints, no full-terminal field.
 
 Visual SoT: apps/digithings-web PixelWordmark (7×10 `#` glyphs, mulberry32
-seed 0xd161, STEPS alphas, 13 glints, 70 strays) plus PixelField ambient
-shimmer behind the letters. The TUI spells DIGIVOICE in that same block
-language and fills leftover header rows with the field.
+seed 0xd161, STEPS alphas, 13 glints). The TUI spells DIGIVOICE in that
+block language with grayscale shimmer on letter pixels only.
 """
 
 from __future__ import annotations
@@ -155,7 +154,7 @@ def test_pixel_hero_ambient_shimmer_moves_without_a_pointer() -> None:
     assert still != later
 
 
-def test_pixel_hero_pointer_trail_is_teal_not_rainbow() -> None:
+def test_pixel_hero_pointer_trail_is_not_rainbow() -> None:
     bare = "\n".join(render_pixel_hero("DIGIVOICE", cols=80, rows=14, t_ms=400, ansi=True))
     trailed = "\n".join(
         render_pixel_hero(
@@ -168,14 +167,14 @@ def test_pixel_hero_pointer_trail_is_teal_not_rainbow() -> None:
         )
     )
     assert trailed != bare
-    assert "38;2;61;214;196" in trailed
     for rgb in ("229;183;101", "226;112;138", "217;122;90", "90;163;196"):
         assert f"38;2;{rgb}" not in trailed, rgb
 
 
-def test_pixel_hero_is_teal_gloom_not_a_rainbow_title() -> None:
+def test_pixel_hero_letters_are_grayscale_not_rainbow() -> None:
     joined = "\n".join(render_pixel_hero("DIGIVOICE", cols=120, rows=16, t_ms=800, ansi=True))
-    assert "38;2;61;214;196" in joined
+    assert "38;2;" in joined
+    assert "38;2;61;214;196" not in joined
     for rgb in ("229;183;101", "226;112;138", "217;122;90", "90;163;196"):
         assert f"38;2;{rgb}" not in joined, rgb
 
@@ -187,7 +186,7 @@ def test_pixel_hero_builds_in_letter_cells() -> None:
     assert full.count("█") >= 300
 
 
-def test_home_hero_uses_the_full_pixel_field() -> None:
+def test_home_hero_is_a_simple_wordmark() -> None:
     frame = render_screen(
         "Actions",
         list(HOME_MENU),
@@ -207,16 +206,18 @@ def test_home_hero_uses_the_full_pixel_field() -> None:
     assert "▀" not in body and "▄" not in body
     assert body.count("█") >= 300
     assert "STATUS" in body
+    assert "local speech control" in body
     for item in HOME_MENU:
         assert item.split(" (")[0] in body
-    # Full-bleed header: leftover rows are field, not a vertically-centered island.
-    stripped = [i for i, line in enumerate(lines) if line.strip()]
-    assert stripped
-    assert stripped[0] <= 2
+    letter_rows = [i for i, line in enumerate(lines) if "█" in line]
+    assert letter_rows
+    assert letter_rows[-1] - letter_rows[0] == 9
+    above = [lines[i] for i in range(letter_rows[0])]
+    assert not any("·" in line for line in above)
 
 
-def test_mid_height_terminal_keeps_field_around_the_letters() -> None:
-    """36-row Ghostty/Terminal must not collapse the hero to a 10-row title strip."""
+def test_mid_height_terminal_keeps_the_simple_wordmark_and_menu() -> None:
+    """36-row Terminal.app: 10-row DIGIVOICE lockup, no particle field, menu intact."""
     frame = render_screen(
         "Actions",
         list(HOME_MENU),
@@ -234,9 +235,9 @@ def test_mid_height_terminal_keeps_field_around_the_letters() -> None:
     lines = body.splitlines()
     letter_rows = [i for i, line in enumerate(lines) if "█" in line]
     assert letter_rows
-    assert letter_rows[-1] - letter_rows[0] >= 9
-    outside = [lines[i] for i in range(len(lines)) if i < letter_rows[0] or i > letter_rows[-1]]
-    assert any("·" in line for line in outside)
+    assert letter_rows[-1] - letter_rows[0] == 9
+    above = [lines[i] for i in range(letter_rows[0])]
+    assert not any("·" in line for line in above)
     assert "STATUS" in body
     for item in HOME_MENU:
         assert item.split(" (")[0] in body

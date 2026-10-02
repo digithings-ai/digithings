@@ -6,10 +6,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from digivoice.catalog import stt_filename
 from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
     DEFAULT_MODEL,
-    DEFAULT_MODEL_FILE,
     linux_data_dir,
     mac_data_dir,
     piper_fallback,
@@ -31,23 +31,29 @@ def _tool(check_id: str, found: str | None, missing: str) -> DoctorCheck:
 
 def _models(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
     models_dir = paths.models_dir
-    model_path = str(Path(models_dir) / DEFAULT_MODEL_FILE)
+    try:
+        settings = load_settings(paths)
+        model_id = settings.stt_model
+    except Exception:
+        model_id = DEFAULT_MODEL
+    filename = stt_filename(model_id)
+    model_path = str(Path(models_dir) / filename)
     if not probe.is_dir(models_dir):
         return DoctorCheck(
             id="models",
             status="missing",
-            detail=f"default model {DEFAULT_MODEL}: directory missing: {models_dir}",
+            detail=f"model {model_id}: directory missing: {models_dir}",
         )
     if not probe.is_file(model_path):
         return DoctorCheck(
             id="models",
             status="missing",
-            detail=f"default model {DEFAULT_MODEL} missing: {model_path}",
+            detail=f"model {model_id} missing: {model_path}",
         )
     return DoctorCheck(
         id="models",
         status="ok",
-        detail=f"{DEFAULT_MODEL} at {model_path}",
+        detail=f"{model_id} at {model_path}",
     )
 
 

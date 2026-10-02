@@ -6,7 +6,7 @@ digivoice is a local CLI for dictation and speech on macOS. It shells out to whi
 
 `doctor`, `dict`, `speak`, `history`, `settings`, and `setup` are live. Optional local post-STT rewrite is off by default. Sample Hammerspoon hotkeys live under `digivoice/hammerspoon/` (outside the Python package import path). Do not add cloud STT/TTS or put Hammerspoon inside the installable package as a hard dependency.
 
-Agents drive setup without a TTY: `digivoice setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`), `digivoice setup --json`, or `digivoice settings set <key> <value>`. `digivoice update` / `uninstall` are documented not-wired stubs. Bare `digivoice` with no TTY prints the home overview (exit 0, never hangs); on a TTY it opens a fullscreen home shell (DIGIVOICE landing pixel field, status strip, step-rail menu). The same launch, on macOS, opens Hammerspoon if it is down and shows the banner (4s budget; background-only: no Dock icon, no digivoice menubar, no toast). TUI Quit tears HS down; closing the Terminal alone leaves it running. `digivoice reload` refreshes local control (bounded `hs` reload, clears stale status on failure). Shared TUI primitives live in `tui.py` / `pixel_hero.py`.
+Agents drive setup without a TTY: `digivoice setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`), `digivoice setup --json`, or `digivoice settings set <key> <value>`. `digivoice update` / `uninstall` are documented not-wired stubs. Bare `digivoice` with no TTY prints the home overview (exit 0, never hangs); on a TTY it opens a fullscreen home shell (simple DIGIVOICE pixel wordmark, status strip, step-rail menu). The same launch, on macOS, opens Hammerspoon if it is down and shows the banner (4s budget; background-only: no Dock icon, no digivoice menubar, no toast). TUI Quit tears HS down; closing the Terminal alone leaves it running. `digivoice reload` refreshes local control (bounded `hs` reload, clears stale status on failure). Shared TUI primitives live in `tui.py` / `pixel_hero.py`. Suggested local STT and rewrite models live in `catalog.py`.
 
 ## Read first
 
@@ -28,7 +28,7 @@ Before editing `digivoice/`:
 ## Rules
 
 - Product name is lowercase `digivoice` in prose, docs, and the package name.
-- Speech stays local: `whisper-cli` and Piper only. Optional post-STT rewrite uses a local GGUF shipped with digivoice (`qwen2.5-1.5b-instruct-q4_k_m.gguf` via llama.cpp / local ollama) — never a cloud LLM, URL, or ollama registry tag. Rewrite is disabled by default. Timeout is off by default; when on, 15 / 30 / 60 seconds only.
+- Speech stays local: `whisper-cli` and Piper only. Optional post-STT rewrite uses a local GGUF from the suggested catalog (`catalog.py`; default `qwen2.5-1.5b-instruct-q4_k_m.gguf` via llama.cpp / local ollama) — never a cloud LLM, URL, or ollama registry tag. Rewrite is disabled by default. Timeout is off by default; when on, 15 / 30 / 60 seconds only.
 - Word / spelling detection settings (`word_detection`, `spelling_detection`) default off; stubs only in this slice (doctor `detection` info, not wired to STT).
 - Super Whisper is not a dependency. Do not shell out to it or read its config.
 - OpenCode `@renjfk/opencode-voice` is optional for people who want a TUI binding. digivoice must keep working when that plugin is absent.

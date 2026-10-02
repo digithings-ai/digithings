@@ -125,3 +125,20 @@ def test_silence_markers_are_an_empty_take(paths: VoicePaths, raw: str) -> None:
 
 def test_silence_marker_next_to_speech_is_dropped() -> None:
     assert clean_transcript("[BLANK_AUDIO] ship it. [ Silence ]") == "ship it."
+
+
+def test_transcribe_uses_configured_stt_model(paths: VoicePaths) -> None:
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True, exist_ok=True)
+    tiny = models / "ggml-tiny.bin"
+    tiny.write_bytes(b"fake weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="hola mundo\n")})
+    result = transcribe(paths, WHISPER, runner, "/tmp/a.wav", model_id="ggml-tiny")
+    assert result.text == "hola mundo"
+    assert result.model == "ggml-tiny"
+    assert result.model_path == str(tiny)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    argv = call.argv
+    assert argv[argv.index("-m") + 1] == str(tiny)
+    assert argv[argv.index("-l") + 1] == "auto"
