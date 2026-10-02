@@ -22,9 +22,10 @@ describe("PipelineBand", () => {
   });
 
   it("keeps the facts and does not finish the last two workflows", () => {
-    expect(html).toContain("done");
-    expect(html).toContain("in development");
-    expect(html).toContain("Still to come");
+    expect(html).not.toContain("two done");
+    expect(html).not.toContain("Still to come");
+    expect(html).not.toContain("still to come");
+    expect(html.match(/in development/g)).toHaveLength(2);
     expect(html).toContain("digiquant baseline research");
     expect(html).toContain("custom knowledge base");
     expect(html).toContain("12x terminal");
