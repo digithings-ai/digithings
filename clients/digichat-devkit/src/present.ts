@@ -1,7 +1,14 @@
 import { DASH, selectedEntry, type KitEntry, type KitRead } from "./read";
 
-export type FieldLine = { kind: "field"; label: string; value: string };
-export type MarkLine = { kind: "mark"; text: string; on: boolean };
+export type FieldLine = {
+  kind: "field";
+  label: string;
+  value: string;
+  secret?: boolean;
+  id?: string;
+  toggle?: "flag" | "tool" | "mcp";
+};
+export type MarkLine = { kind: "mark"; text: string; on: boolean; id?: string; toggle?: "entry" };
 export type HeadLine = { kind: "head"; text: string };
 export type Line = FieldLine | MarkLine | HeadLine;
 
@@ -14,8 +21,23 @@ export type PaneModel = {
 };
 
 const NONE = "none";
-const NO_SESSION = "no session";
 const NOTHING = "nothing to export";
+
+/** Local edits. Secret fields ignore `values` and stay redacted. */
+export type Overlay = {
+  entryId: string | null;
+  values: Record<string, string>;
+  toolOn: Record<string, boolean>;
+  mcpOn: Record<string, boolean>;
+};
+
+export function fieldKey(paneId: string, label: string): string {
+  return `${paneId}:${label}`;
+}
+
+export function isSecretLabel(label: string): boolean {
+  return label.includes("API key") || label.includes("consume URL");
+}
 
 function at(root: Record<string, unknown> | null, path: string[]): unknown {
   let cur: unknown = root;
@@ -53,6 +75,10 @@ function flag(root: Record<string, unknown> | null, path: string[]): string {
 
 function field(label: string, value: string): FieldLine {
   return { kind: "field", label, value };
+}
+
+function flagField(label: string, value: string): FieldLine {
+  return { kind: "field", label, value, toggle: "flag" };
 }
 
 /** Env-var names only. A raw credential stays "set" and is not printed. */
@@ -114,7 +140,7 @@ function backendLines(dep: Record<string, unknown> | null): Line[] {
   ];
   for (const spec of BACKEND_FIELDS[type] ?? []) {
     const value = spec.secret ? envName(at(dep, ["backend", spec.key])) : text(at(dep, ["backend", spec.key]));
-    lines.push(field(spec.label, value));
+    lines.push({ kind: "field", label: spec.label, value, secret: spec.secret === true });
   }
   return lines;
 }
@@ -149,23 +175,24 @@ function linesOf(dep: Record<string, unknown> | null): Record<string, Line[]> {
       : available.filter((line): line is string => typeof line === "string").join(" / ")
     : DASH;
 
-  const toolLines: Line[] = [field("allow user toggle", flag(dep, ["tools", "allowUserToggle"]))];
+  const toolLines: Line[] = [flagField("allow user toggle", flag(dep, ["tools", "allowUserToggle"]))];
   if (!Array.isArray(catalog) || catalog.length === 0) {
     toolLines.push({ kind: "mark", text: NONE, on: false });
   } else {
     for (const tool of catalog) {
       if (typeof tool !== "object" || tool === null) continue;
       const row = tool as Record<string, unknown>;
-      const id = typeof row.id === "string" ? row.id : DASH;
+      const id = typeof row.id === "string" && row.id.length > 0 ? row.id : "";
+      if (!id) continue;
       const label = typeof row.label === "string" && row.label.length > 0 ? row.label : id;
       const on = row.default === true ? "default on" : row.default === false ? "default off" : DASH;
-      toolLines.push(field(label, on));
+      toolLines.push({ kind: "field", label, value: on, id, toggle: "tool" });
     }
   }
 
   const mcpLines: Line[] = [
-    field("allow user servers", flag(dep, ["mcp", "allowUserServers"])),
-    field("show add-server form", flag(dep, ["mcp", "allowAddForm"])),
+    flagField("allow user servers", flag(dep, ["mcp", "allowUserServers"])),
+    flagField("show add-server form", flag(dep, ["mcp", "allowAddForm"])),
   ];
   if (!Array.isArray(servers) || servers.length === 0) {
     mcpLines.push({ kind: "mark", text: NONE, on: false });
@@ -173,9 +200,10 @@ function linesOf(dep: Record<string, unknown> | null): Record<string, Line[]> {
     for (const server of servers) {
       if (typeof server !== "object" || server === null) continue;
       const row = server as Record<string, unknown>;
-      const id = typeof row.id === "string" ? row.id : DASH;
+      const id = typeof row.id === "string" && row.id.length > 0 ? row.id : "";
+      if (!id) continue;
       const url = typeof row.url === "string" && row.url.length > 0 ? row.url : DASH;
-      mcpLines.push(field(id, url));
+      mcpLines.push({ kind: "field", label: id, value: url, id, toggle: "mcp" });
     }
   }
 
@@ -197,12 +225,12 @@ function linesOf(dep: Record<string, unknown> | null): Record<string, Line[]> {
       ),
     ],
     features: [
-      field("attachments", flag(dep, ["features", "attachments"])),
-      field("dictation", flag(dep, ["features", "dictation"])),
-      field("speech", flag(dep, ["features", "speech"])),
-      field("sources", flag(dep, ["features", "sources"])),
-      field("model picker", flag(dep, ["features", "modelPicker"])),
-      field("branch picker", flag(dep, ["features", "branchPicker"])),
+      flagField("attachments", flag(dep, ["features", "attachments"])),
+      flagField("dictation", flag(dep, ["features", "dictation"])),
+      flagField("speech", flag(dep, ["features", "speech"])),
+      flagField("sources", flag(dep, ["features", "sources"])),
+      flagField("model picker", flag(dep, ["features", "modelPicker"])),
+      flagField("branch picker", flag(dep, ["features", "branchPicker"])),
       field("chain-of-thought view", text(at(dep, ["features", "view"]))),
       field("reasoning override", text(at(dep, ["features", "thinking"]))),
       field("page context", text(at(dep, ["features", "pageContext"]))),
@@ -210,7 +238,7 @@ function linesOf(dep: Record<string, unknown> | null): Record<string, Line[]> {
     models: [
       field("default model", text(at(dep, ["models", "default"]))),
       field("available models", modelValue),
-      field("picker", flag(dep, ["models", "allowPicker"])),
+      flagField("picker", flag(dep, ["models", "allowPicker"])),
     ],
     appearance: [
       field("skin", text(chromeRec ? chromeRec.skin : undefined)),
@@ -223,7 +251,7 @@ function linesOf(dep: Record<string, unknown> | null): Record<string, Line[]> {
       field("starter suggestions", has(dep, ["chrome", "suggestions"]) ? suggestionValue : DASH),
       field("accent color", text(at(dep, ["chrome", "accent", "color"]))),
       field("accent foreground", text(at(dep, ["chrome", "accent", "foreground"]))),
-      field("attribution credit", flag(dep, ["chrome", "attribution"])),
+      flagField("attribution credit", flag(dep, ["chrome", "attribution"])),
       field("launcher mode", text(at(dep, ["chrome", "launcher", "mode"]))),
       field("launcher hotkey", text(at(dep, ["chrome", "launcher", "hotkey"]))),
       field("launcher label", text(at(dep, ["chrome", "launcher", "label"]))),
@@ -237,11 +265,11 @@ function linesOf(dep: Record<string, unknown> | null): Record<string, Line[]> {
       field("mode", text(at(dep, ["gate", "mode"]))),
       field("activity detail", text(at(dep, ["gate", "activityDetail"]))),
       field("LLM access", text(at(dep, ["gate", "llmAccess"]))),
-      field("quota consume URL (server-side)", consume),
+      { kind: "field", label: "quota consume URL (server-side)", value: consume, secret: true },
       field("locked contact", text(at(dep, ["gate", "lockedContact"]))),
-      field("show BYOK", flag(dep, ["gate", "showByok"])),
-      field("show language selector", flag(dep, ["gate", "showLanguageSelector"])),
-      field("web search (legacy)", flag(dep, ["gate", "webSearch"])),
+      flagField("show BYOK", flag(dep, ["gate", "showByok"])),
+      flagField("show language selector", flag(dep, ["gate", "showLanguageSelector"])),
+      flagField("web search (legacy)", flag(dep, ["gate", "webSearch"])),
       field("minimum plan tier", text(at(dep, ["gate", "requiredPlanTier"]))),
     ],
   };
@@ -259,21 +287,44 @@ function deploymentLines(title: string, entries: KitEntry[], selected: KitEntry 
       kind: "mark",
       text: `${entry.label}${invalid}`,
       on: selected?.id === entry.id,
+      id: entry.id,
+      toggle: "entry",
     });
   }
   return lines;
 }
 
-function slugSkinTheme(dep: Record<string, unknown> | null): string {
-  const slug = text(at(dep, ["slug"]));
-  const skin = text(at(dep, ["chrome", "skin"]));
-  const theme = text(at(dep, ["chrome", "theme"]));
-  return `${slug} · ${skin} · ${theme}`;
+export function activeEntry(read: KitRead, overlay?: Overlay): KitEntry | null {
+  if (overlay?.entryId) {
+    const hit = [...read.files, ...read.envs].find((entry) => entry.id === overlay.entryId);
+    if (hit) return hit;
+  }
+  return selectedEntry(read);
 }
 
-/** One screen of the workbench. Values come only from the configs read. */
-export function panesFor(read: KitRead): PaneModel[] {
-  const selected = selectedEntry(read);
+function applyOverlay(paneId: string, lines: Line[], overlay?: Overlay): Line[] {
+  if (!overlay) return lines;
+  return lines.map((line) => {
+    if (line.kind !== "field") return line;
+    if (line.secret || isSecretLabel(line.label)) return line;
+    const key = fieldKey(paneId, line.label);
+    if (Object.prototype.hasOwnProperty.call(overlay.values, key)) {
+      return { ...line, value: overlay.values[key] };
+    }
+    if (line.toggle === "tool" && line.id && Object.prototype.hasOwnProperty.call(overlay.toolOn, line.id)) {
+      return { ...line, value: overlay.toolOn[line.id] ? "on" : "off" };
+    }
+    if (line.toggle === "mcp" && line.id && Object.prototype.hasOwnProperty.call(overlay.mcpOn, line.id)) {
+      const suffix = overlay.mcpOn[line.id] ? "on" : "off";
+      return { ...line, value: `${line.value} · ${suffix}` };
+    }
+    return line;
+  });
+}
+
+/** Settings for one deployment. Values come from the configs read plus local edits. */
+export function panesFor(read: KitRead, overlay?: Overlay): PaneModel[] {
+  const selected = activeEntry(read, overlay);
   const dep = selected?.deployment ?? null;
   const sections = linesOf(dep);
   const issues = selected?.issues ?? [];
@@ -298,63 +349,56 @@ export function panesFor(read: KitRead): PaneModel[] {
       title: "Identity",
       group: "Basics",
       footer: "Basics",
-      lines: sections.identity,
+      lines: applyOverlay("identity", sections.identity, overlay),
     },
     {
       id: "features",
       title: "Features",
       group: "Basics",
       footer: "Basics",
-      lines: sections.features,
+      lines: applyOverlay("features", sections.features, overlay),
     },
     {
       id: "models",
       title: "Models",
       group: "Basics",
       footer: "Basics",
-      lines: sections.models,
+      lines: applyOverlay("models", sections.models, overlay),
     },
     {
       id: "appearance",
       title: "Appearance",
       group: "Appearance",
       footer: "Appearance",
-      lines: sections.appearance,
+      lines: applyOverlay("appearance", sections.appearance, overlay),
     },
     {
       id: "backend",
       title: "Backend",
       group: "Advanced",
       footer: "Advanced",
-      lines: sections.backend,
+      lines: applyOverlay("backend", sections.backend, overlay),
     },
     {
       id: "tools",
       title: "Tools",
       group: "Advanced",
       footer: "Advanced",
-      lines: sections.tools,
+      lines: applyOverlay("tools", sections.tools, overlay),
     },
     {
       id: "mcp",
       title: "MCP servers",
       group: "Advanced",
       footer: "Advanced",
-      lines: sections.mcp,
+      lines: applyOverlay("mcp", sections.mcp, overlay),
     },
     {
       id: "gate",
       title: "Gate",
       group: "Advanced",
       footer: "Advanced",
-      lines: sections.gate,
-    },
-    {
-      id: "preview",
-      title: "Preview",
-      group: "Preview",
-      footer: slugSkinTheme(dep),
-      lines: [field("session", NO_SESSION)],
+      lines: applyOverlay("gate", sections.gate, overlay),
     },
     {
       id: "export",
@@ -377,4 +421,4 @@ export function panesFor(read: KitRead): PaneModel[] {
   ];
 }
 
-export const EMPTY_PHRASES = [NONE, NO_SESSION, NOTHING, DASH] as const;
+export const EMPTY_PHRASES = [NONE, NOTHING, DASH] as const;
