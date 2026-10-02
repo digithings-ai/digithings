@@ -58,10 +58,13 @@ function errorCode(body: unknown): string | null {
   return typeof body.error.code === "string" ? body.error.code : null;
 }
 
-/** Secretless worker doubles. These figures must not render as the house book. */
+/**
+ * Secretless worker doubles. These figures must not render as the house book.
+ * Withhold the worker double only: NAV tip 99.909 and series tip 204.04.
+ * `legacy_estimate` on an older point is a house label, not that fixture.
+ */
 export function isStubPayload(body: unknown): boolean {
   const text = JSON.stringify(body ?? null);
-  if (text.includes('"legacy_estimate"')) return true;
   if (text.includes("99.909") || text.includes("204.04") || text.includes("204.040")) return true;
   if (text.includes("103.040192") || text.includes("104.44808") || text.includes("3.040191838399986")) return true;
   if (text.includes('"close":500') && text.includes("2026-08-20") && text.includes('"close":515')) return true;
