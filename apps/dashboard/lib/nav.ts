@@ -10,6 +10,10 @@ export interface NavItem {
 }
 
 /**
+ * Flag-off spine stays the flat NAV below. The desk shell
+ * (`NEXT_PUBLIC_DESK_SHELL=1`) reads the nested spines from `lib/desk/spine.ts`,
+ * re-exported here so nav stays the module both shells share.
+ *
  * The portfolio-owner spine: glance → why → full, plus FX Hub.
  * Single source of truth consumed by both the desktop sidebar and the mobile
  * app bar so they can never drift.
@@ -21,6 +25,17 @@ export interface NavItem {
  * #1664 dashboard integration (previously env-gated behind
  * NEXT_PUBLIC_TWELVEX_ENABLED and rendered standalone).
  */
+export {
+  DESK_OPTIONS,
+  DESK_PATH_JUMPS,
+  HOUSE_SPINE,
+  formatChromePath,
+  locationChrome,
+  railForDesk,
+  railLabels,
+} from './desk/spine';
+export type { DeskId, LocationChrome, RailNode } from './desk/spine';
+
 export const NAV: NavItem[] = [
   { href: '/', label: 'Brief', icon: LayoutDashboard },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },

@@ -9,7 +9,6 @@ import {
   GitBranch,
   Globe,
   LayoutDashboard,
-  Library,
   LineChart,
   Newspaper,
   PieChart,
@@ -32,6 +31,7 @@ import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
+import { DESK_PATH_JUMPS } from '@/lib/desk/spine';
 import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 import { getBriefs, getTradeIdeaArchive } from '@/lib/twelve-x/fetch';
 import type { FxBriefRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
@@ -93,13 +93,6 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       icon: Scale,
     },
     {
-      id: 'go-house',
-      title: 'Corpus · Book · Profile',
-      hint: 'House identity chrome (read-only)',
-      href: '/house?tab=corpus',
-      icon: Library,
-    },
-    {
       id: 'go-pipeline',
       title: 'Pipeline — the daily graph',
       hint: 'Graph, artifacts & run health',
@@ -143,6 +136,11 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     },
   ];
 
+  const pathJumps: CmdItem[] = DESK_PATH_JUMPS.map((item) => ({
+    ...item,
+    icon: LayoutDashboard,
+  }));
+
   const thesisItems: CmdItem[] = theses.map((t) => ({
     id: `thesis-${t.id}`,
     title: `Thesis — ${t.name}`,
@@ -173,7 +171,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     icon: Newspaper,
   }));
 
-  return [...base, ...thesisItems, ...recentDateItems];
+  return [...base, ...pathJumps, ...thesisItems, ...recentDateItems];
 }
 
 /**

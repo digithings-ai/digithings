@@ -6,9 +6,11 @@ import Sidebar from '@/components/sidebar';
 import MobileAppBar from '@/components/mobile-app-bar';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
+import DeskShell from '@/components/desk/shell/DeskShell';
 import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
 import DbUnavailable from '@/components/db-unavailable';
 import { useDashboard } from '@/lib/dashboard-context';
+import { isDeskShellEnabled } from '@/lib/desk/flag';
 import { isDbExempt } from '@/lib/nav';
 
 /**
@@ -28,6 +30,22 @@ export default function AppFrame({ children }: { children: ReactNode }) {
   // (Sidebar, MobileAppBar, CommandPalette) stays mounted in every case, so the
   // app still opens and the owner can navigate to System/Settings.
   const gated = dbStatus !== 'ok' && !isDbExempt(pathname);
+  const body = gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>;
+
+  // Default off. A shell-only deploy keeps the current brief instead of an
+  // empty terminal. NEXT_PUBLIC_DESK_SHELL is build-time (static export).
+  if (isDeskShellEnabled()) {
+    return (
+      <Suspense
+        fallback={
+          <div data-desk-shell="" data-document-scroll="locked" className="h-dvh overflow-hidden" />
+        }
+      >
+        <DeskShell>{body}</DeskShell>
+        <CommandPalette />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -37,9 +55,7 @@ export default function AppFrame({ children }: { children: ReactNode }) {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
         <MobileAppBar />
         <CommandPalette />
-        <div className="flex min-h-0 flex-1 flex-col">
-          {gated ? <DbUnavailable /> : <FxHubOnlyGuard>{children}</FxHubOnlyGuard>}
-        </div>
+        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </main>
       {/* Desk+ research/portfolio digichat popup (#3422); no-ops when env off. */}
       <DigichatPopup />
