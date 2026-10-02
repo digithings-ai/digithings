@@ -380,13 +380,17 @@ export function FxLevelsBlock() {
 export function FxFlagsBlock({ pair = FX_DEFAULT_PAIR }: { pair?: string }) {
   return (
     <Block<FxFlag> no="47" label={`Flag · ${pair}`} route={`/fx/flags/${q(pair)}`}>
-      {(d) => (d.flagged ? (
+      {(d) => (
         <>
-          <KvList rows={[{ k: 'Pair', v: txt(d.pair) }, { k: 'Level', v: raw(d.level), mono: true }]} />
-          <Prose>{d.text ? <p>{d.text}</p> : null}</Prose>
+          {d.flagged ? (
+            <>
+              <KvList rows={[{ k: 'Pair', v: txt(d.pair) }, { k: 'Level', v: raw(d.level), mono: true }]} />
+              <Prose>{d.text ? <p>{d.text}</p> : null}</Prose>
+            </>
+          ) : <p className="note mute">no research flag on {d.pair || pair}</p>}
           {d.scope_note ? <p className="mk-note">{d.scope_note}</p> : null}
         </>
-      ) : <p className="note mute">no research flag on {d.pair || pair}</p>)}
+      )}
     </Block>
   );
 }
@@ -506,7 +510,7 @@ export function RtSummaryBlock() {
     <Block<RtSummary> no="51" label="Rates · digest" route="/rates/summary" asOf={(d) => d.run_date}>
       {(d) => {
         const w = d.watchlist;
-        const marks = fin(w?.marks_available) && fin(w?.names) ? `${w.marks_available} of ${w.names}` : '—';
+        const marks = fin(w?.marks_available) && fin(w?.names) ? `${w.marks_available} of ${w.names}` : fin(w?.marks_available) ? String(w.marks_available) : '—';
         const signals = arr(d.signals);
         return (
           <>
@@ -603,10 +607,10 @@ export function RtCurveBlock() {
 
 const thesisTone: Record<string, BadgeTone> = { active: 'ok', watch: 'wip', exited: 'plain' };
 
-/** GET /theses?desk=rates — rates desk theses. */
+/** GET /rates/theses — rates desk theses. */
 export function RtThesesBlock() {
   return (
-    <Block<Theses> no="54" label="Rates · theses" route="/theses?desk=rates">
+    <Block<Theses> no="54" label="Rates · theses" route="/rates/theses">
       {(d) => (
         <>
           <p className="meta pad">Active <b>{d.counts?.active ?? '—'}</b> Watch <b>{d.counts?.watch ?? '—'}</b> Exited <b>{d.counts?.exited ?? '—'}</b></p>
@@ -654,5 +658,5 @@ export const MARKETS_BLOCKS: MarketsBlockDef[] = [
   { id: 'rt-summary', title: 'Rates · digest', route: '/rates/summary', Component: RtSummaryBlock },
   { id: 'rt-watchlist', title: 'Rates · watchlist', route: '/rates/watchlist', Component: RtWatchlistBlock },
   { id: 'rt-curve', title: 'Rates · curve', route: '/rates/curve', Component: RtCurveBlock },
-  { id: 'rt-theses', title: 'Rates · theses', route: '/theses?desk=rates', Component: RtThesesBlock },
+  { id: 'rt-theses', title: 'Rates · theses', route: '/rates/theses', Component: RtThesesBlock },
 ];

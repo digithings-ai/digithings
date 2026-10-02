@@ -1,6 +1,7 @@
 'use client';
 
-import type { ComponentType, ReactNode } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { dqGet, type Envelope } from '@/lib/dq-api';
 import type {
   ArtifactLedger, CallTrace, DeployDraft, DeployFlow, NodeDocument, PipelineGraph, PipelineHealth, RunNarrative,
   StrategiesSummary, StrategyCatalog, StrategyDeployments, StrategyOverview, StrategyParameters, StrategyPerformance, StrategyRuns, StrategyTargets,
@@ -9,7 +10,9 @@ import { Block } from './Block';
 import { KpiGrid } from './atoms';
 import { LineChart } from './charts';
 import { DataTable } from './DataTable';
+import { Drawer } from './Drawer';
 import { Badge, KvList, MetaStrip, Prose, SoonBar, StateBlock, type BadgeTone } from './ui';
+import { Field } from './ui-form';
 import { FlowGraph, Stepper, type FlowNodeData } from './ui-flow';
 
 const dash = '—';
@@ -44,12 +47,16 @@ const soon = (n: { tag: 'soon' | 'wip'; text: string } | null | undefined): Reac
 
 /* ---------------- Pipeline ---------------- */
 
-/** GET /pipeline/runs/latest/health — run header + run health strip. */
+/** GET /pipeline/runs/latest/health — run header + run health strip. A full YYYY-MM-DD selects that run. */
 export function PlRunHealthBlock() {
+  const [date, setDate] = useState('');
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const route = valid ? `/pipeline/runs/latest/health?date=${date}` : '/pipeline/runs/latest/health';
   return (
-    <Block<PipelineHealth> no="20" label="Run health" route="/pipeline/runs/latest/health" asOf={(d) => d.run_date}>
+    <Block<PipelineHealth> no="20" label="Run health" route={route} asOf={(d) => d.run_date}>
       {(d) => (
         <>
+          <Field label="Run date" value={date} placeholder="YYYY-MM-DD" hint={date && !valid ? 'use YYYY-MM-DD, or leave blank for the latest run' : 'blank is the latest run'} onChange={(e) => setDate(e.target.value)} />
           <MetaStrip items={[
             { label: 'Run', value: text(d.run_date) },
             { label: 'Type', value: text(d.run_type) },
@@ -66,8 +73,8 @@ export function PlRunHealthBlock() {
             { label: 'Tokens out', value: compact(d.tokens_out) },
             { label: 'Cost', value: usd(d.cost_usd) },
           ]} />
-          {d.inputs_calls?.persisted === false ? (
-            <StateBlock kind="empty" title="Inputs calls are not persisted." why={d.inputs_calls.note ?? 'Typed gap, not a failure.'} />
+          {d.inputs_calls && d.inputs_calls.persisted !== true && d.inputs_calls.note ? (
+            <StateBlock kind="empty" title="Inputs calls are not persisted." why={d.inputs_calls.note} />
           ) : null}
         </>
       )}
@@ -128,11 +135,13 @@ export function PlNarrativeBlock() {
   );
 }
 
-/** GET /pipeline/runs/latest/trace — calls and duration per node. */
+/** GET /pipeline/runs/latest/trace — calls and duration per node. The bar is this row against the longest duration in the response. */
 export function PlCallTraceBlock() {
   return (
     <Block<CallTrace> no="24" label="Call trace" route="/pipeline/runs/latest/trace">
-      {(d) => (
+      {(d) => {
+        const max = d.rows.reduce((m, r) => (r.duration_s != null && r.duration_s > m ? r.duration_s : m), 0);
+        return (
         <DataTable
           rows={d.rows}
           rowKey={(r, i) => `${r.node}:${i}`}
@@ -140,24 +149,59 @@ export function PlCallTraceBlock() {
           cols={[
             { key: 'n', label: 'Node', wrap: true, cell: (r) => r.node },
             { key: 'c', label: 'Calls', num: true, cell: (r) => count(r.calls) },
-            { key: 'd', label: 'Duration', num: true, cell: (r) => duration(r.duration_s) },
+            { key: 'd', label: 'Duration', num: true, bar: (r) => (r.duration_s == null || max === 0 ? null : (r.duration_s / max) * 100), cell: (r) => duration(r.duration_s) },
             { key: 's', label: 'State', cell: (r) => statusBadge(r.state) },
           ]}
         />
-      )}
+        );
+      }}
     </Block>
   );
 }
 
-/** GET /pipeline/runs/latest/artifacts — documents each node wrote. */
-export function PlArtifactLedgerBlock() {
+function NodeDocDrawer({ node, onClose }: { node: string | null; onClose: () => void }) {
+  const [env, setEnv] = useState<Envelope<NodeDocument> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!node) return;
+    let cancel = false;
+    setEnv(null);
+    setErr(null);
+    dqGet<NodeDocument>(`/pipeline/runs/latest/nodes/selected/document?node=${encodeURIComponent(node)}`).then(
+      (e) => { if (!cancel) setEnv(e); },
+      (e: unknown) => { if (!cancel) setErr(e instanceof Error ? e.message : 'failed'); },
+    );
+    return () => { cancel = true; };
+  }, [node]);
+  const d = env?.data;
+  const ps = paras(d?.paragraphs);
   return (
+    <Drawer open={node !== null} onClose={onClose} no="22" label={node ? `Document · ${node}` : 'Document'}>
+      {err ? <StateBlock kind="error" title="Withheld." why={err} />
+        : !d ? <p className="note mute">loading…</p>
+        : (
+          <Prose lead={d.title ?? undefined}>
+            {ps.map((p, i) => <p key={i}>{p}</p>)}
+            {d.note ? <p className="pl-note">{d.note}</p> : null}
+            {!d.title && !ps.length && !d.note ? <p>no document for this node</p> : null}
+          </Prose>
+        )}
+    </Drawer>
+  );
+}
+
+/** GET /pipeline/runs/latest/artifacts — documents each node wrote. A row opens that node's document. */
+export function PlArtifactLedgerBlock() {
+  const [node, setNode] = useState<string | null>(null);
+  return (
+    <>
     <Block<ArtifactLedger> no="25" label="Artifact ledger" route="/pipeline/runs/latest/artifacts">
       {(d) => (
         <DataTable
           rows={d.rows}
           rowKey={(r, i) => `${r.node}:${i}`}
           empty="no artifacts"
+          onRowClick={(r) => { if (r.node) setNode(r.node); }}
           cols={[
             { key: 's', label: 'Stage', cell: (r) => text(r.stage) },
             { key: 'n', label: 'Node', wrap: true, cell: (r) => r.node },
@@ -167,6 +211,8 @@ export function PlArtifactLedgerBlock() {
         />
       )}
     </Block>
+    <NodeDocDrawer node={node} onClose={() => setNode(null)} />
+    </>
   );
 }
 
