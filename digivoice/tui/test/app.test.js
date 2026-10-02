@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { createTestRenderer } from "@opentui/core/testing"
 
-import { FOOTER, mountDigivoice, onHangup, optionBinding } from "../src/app.js"
+import { FOOTER, heroOffset, mountDigivoice, onHangup, optionBinding, statusParts } from "../src/app.js"
 import { BUILD_MS, SHADES, letterGap, wordmarkLines } from "../src/hero.js"
 
 const HOME_ROWS = [
@@ -98,6 +98,21 @@ async function untilFrame(setup, predicate, ms = 1500) {
   throw new Error(`frame timeout\n${frame}`)
 }
 
+test("the wordmark offset shrinks when the terminal is short", () => {
+  const tall = heroOffset(60)
+  const mid = heroOffset(18)
+  const small = heroOffset(12)
+  assert.ok(tall >= Math.floor(60 / 4) && tall <= Math.floor(60 / 3))
+  assert.ok(mid < Math.floor(18 / 4))
+  assert.ok(mid < tall)
+  assert.equal(small, 0)
+  assert.equal(statusParts("ggml-base.en · paste · ok").kind, "ok")
+  assert.equal(statusParts("model · not ready — missing: piper").kind, "missing")
+  assert.equal(statusParts("model · unknown").kind, "info")
+  assert.equal(statusParts(STATUS).mark, "─")
+  assert.equal(statusParts(STATUS).head.includes("/"), false)
+})
+
 test("a physical option press fills a binding the adapter can arm", () => {
   assert.equal(optionBinding({ name: "option" }), "Right Option")
   assert.equal(optionBinding({ name: "alt" }), "Right Option")
@@ -140,9 +155,13 @@ test("home pins the hero and esc does not quit", async () => {
       (value) => value.includes("│ /history") && value.includes(FOOTER) && value.includes(STATUS),
     )
     const lines = frame.split("\n")
-    assert.equal(lines.findIndex((line) => /[█▀▄]/.test(line)), 0)
+    const heroAt = lines.findIndex((line) => /[█▀▄]/.test(line))
+    assert.equal(heroAt, heroOffset(56))
     const statusAt = lines.findIndex((line) => line.includes("ggml-base.en"))
-    assert.equal(statusAt, 6)
+    assert.equal(statusAt, heroAt + 8)
+    const statusRow = lines[statusAt]
+    assert.match(statusRow, /─/)
+    assert.doesNotMatch(statusRow, /\//)
     assert.match(frame, /\/digivoice/)
     assert.match(frame, /\/settings/)
     assert.match(frame, /\/system/)
@@ -169,6 +188,72 @@ test("home pins the hero and esc does not quit", async () => {
     assert.equal(app.exitCode, 0)
     assert.ok(!api.calls.some((call) => call.op === "quit"))
     assert.ok(api.calls.some((call) => call.op === "close"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a short window lifts the wordmark less than a tall one", async () => {
+  const tallSetup = await createTestRenderer({ width: 100, height: 60 })
+  const shortSetup = await createTestRenderer({ width: 100, height: 12 })
+  try {
+    const tallApp = mount(tallSetup, session())
+    const shortApp = mount(shortSetup, session())
+    const tallFrame = await tallSetup.waitForFrame((value) => value.includes("│ /history"))
+    const shortFrame = await shortSetup.waitForFrame((value) => value.includes(FOOTER))
+    const tallHero = tallFrame.split("\n").findIndex((line) => /[█▀▄]/.test(line))
+    const shortHero = shortFrame.split("\n").findIndex((line) => /[█▀▄]/.test(line))
+    assert.equal(tallHero, heroOffset(60))
+    assert.equal(shortHero, 0)
+    assert.ok(shortHero < tallHero)
+    tallApp.destroy()
+    shortApp.destroy()
+  } finally {
+    tallSetup.renderer.destroy()
+    shortSetup.renderer.destroy()
+  }
+})
+
+test("the menu scrolls while the wordmark and status stay", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 20 })
+  const rows = Array.from({ length: 14 }, (_, index) => ({
+    action: `Item ${index}`,
+    path: `/item-${index}`,
+    meta: "",
+    kind: "dir",
+    name: `Item ${index}`,
+  }))
+  const api = session({
+    boot() {
+      return {
+        footer: FOOTER,
+        context: [],
+        status: STATUS,
+        start: "/",
+        home: rows,
+        screen: { title: "Actions", path: "/", rows },
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    const before = await setup.waitForFrame((value) => value.includes("│ /item-0"))
+    const beforeLines = before.split("\n")
+    const heroAt = beforeLines.findIndex((line) => /[█▀▄]/.test(line))
+    const statusAt = beforeLines.findIndex((line) => line.includes("ggml-base.en"))
+    assert.equal(heroAt, heroOffset(20))
+    assert.ok(before.includes("│ /item-0"))
+    assert.equal(before.includes("│ /item-10"), false)
+    app.scrollMenu(8)
+    await setup.renderOnce()
+    const after = setup.captureCharFrame()
+    const afterLines = after.split("\n")
+    assert.equal(afterLines.findIndex((line) => /[█▀▄]/.test(line)), heroAt)
+    assert.equal(afterLines.findIndex((line) => line.includes("ggml-base.en")), statusAt)
+    assert.equal(after.includes("│ /item-0"), false)
+    assert.ok(after.includes("/item-"))
+    assert.match(after, /↑↓ move · enter select · esc back · click/)
     app.destroy()
   } finally {
     setup.renderer.destroy()

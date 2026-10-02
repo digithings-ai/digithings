@@ -23,6 +23,43 @@ const FRAME_WIDTH = 80
 const HERO_FACE = 5
 const HERO_SLOT = 6
 const FADE_MS = 200
+const STATUS_ROWS = 1
+const FOOTER_ROWS = 1
+const MIN_MENU_ROWS = 3
+const STATUS_MARK = "─"
+
+export function heroOffset(rows) {
+  const height = Math.max(0, Math.floor(Number(rows) || 0))
+  const chrome = HERO_SLOT + HERO_GAP + STATUS_ROWS + MIN_MENU_ROWS + FOOTER_ROWS + HERO_GAP
+  const room = height - chrome
+  if (room <= 0) return 0
+  return Math.min(Math.floor(height / 3), room)
+}
+
+export function statusParts(text) {
+  const raw = oneLine(text)
+  const pieces = raw.split(" · ").filter(Boolean)
+  const summary = pieces.length ? pieces[pieces.length - 1] : ""
+  const head = pieces.length > 1 ? pieces.slice(0, -1).join(" · ") : ""
+  return { mark: STATUS_MARK, head, summary, kind: summaryKind(summary) }
+}
+
+function summaryKind(summary) {
+  const value = summary.trim().toLowerCase()
+  if (!value) return "info"
+  if (value.startsWith("ok")) return "ok"
+  if (value.startsWith("not ") || value.includes("missing") || value.includes("unavailable")) return "missing"
+  return "info"
+}
+
+function statusLine(text, truecolor) {
+  const parts = statusParts(text)
+  const chunks = [fg(mutedColor(truecolor))(`${parts.mark} `)]
+  if (parts.head) chunks.push({ __isChunk: true, text: `${parts.head} · ` })
+  if (!parts.summary || parts.kind === "info") chunks.push({ __isChunk: true, text: parts.summary })
+  else chunks.push(fg(statusColor(truecolor, parts.kind))(parts.summary))
+  return new StyledText(chunks)
+}
 
 function colorOf(cell) {
   if (!cell.color) return null
@@ -235,6 +272,7 @@ export function mountDigivoice(renderer, session, options = {}) {
   const heroBox = new BoxRenderable(renderer, {
     width: "100%",
     height: HERO_SLOT,
+    flexShrink: 0,
     flexDirection: "column",
     alignItems: "center",
   })
@@ -266,29 +304,43 @@ export function mountDigivoice(renderer, session, options = {}) {
   for (const line of faceLines) faceBox.add(line)
   heroBox.add(shadowBox)
   heroBox.add(faceBox)
-  const statusBox = new BoxRenderable(renderer, { width: "100%", alignItems: "center" })
-  const statusNode = new TextRenderable(renderer, { content: "" })
-  statusBox.add(statusNode)
-  const topGap = new BoxRenderable(renderer, { height: HERO_GAP })
-  const page = new BoxRenderable(renderer, {
-    flexGrow: 1,
+  const lift = new BoxRenderable(renderer, {
     width: "100%",
-    overflow: "hidden",
-    flexDirection: "column",
+    height: heroOffset(renderer.height || 0),
+    flexShrink: 0,
+  })
+  const wordGap = new BoxRenderable(renderer, { height: HERO_GAP, flexShrink: 0 })
+  const statusBox = new BoxRenderable(renderer, {
+    width: "100%",
+    height: STATUS_ROWS,
+    flexShrink: 0,
     alignItems: "flex-start",
-    justifyContent: "flex-start",
+  })
+  const statusNode = new TextRenderable(renderer, {
+    content: "",
+    height: 1,
+    width: frameWidth,
+    truncate: true,
+    wrapMode: "none",
+  })
+  statusBox.add(statusNode)
+  const page = new ScrollBoxRenderable(renderer, {
+    width: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    stickyScroll: false,
+    scrollX: false,
+    viewportCulling: false,
+    contentOptions: { minHeight: 0 },
   })
   const column = new BoxRenderable(renderer, {
     width: "100%",
-    flexGrow: 1,
-    minHeight: 0,
     flexDirection: "column",
     alignItems: "flex-start",
   })
   const list = new BoxRenderable(renderer, {
     width: "100%",
-    flexGrow: 1,
-    minHeight: 0,
     flexDirection: "column",
     alignItems: "flex-start",
   })
@@ -304,8 +356,8 @@ export function mountDigivoice(renderer, session, options = {}) {
   })
   let historyMounted = false
   const pager = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
-  const bottomGap = new BoxRenderable(renderer, { height: HERO_GAP })
-  const footerBox = new BoxRenderable(renderer, { width: "100%", alignItems: "center" })
+  const bottomGap = new BoxRenderable(renderer, { height: HERO_GAP, flexShrink: 0 })
+  const footerBox = new BoxRenderable(renderer, { width: "100%", flexShrink: 0, alignItems: "center" })
   const footer = new TextRenderable(renderer, { content: FOOTER })
   footer.onMouseUp = () => {
     goBack()
@@ -314,9 +366,10 @@ export function mountDigivoice(renderer, session, options = {}) {
   column.add(list)
   column.add(pager)
   page.add(column)
+  frame.add(lift)
   frame.add(heroBox)
+  frame.add(wordGap)
   frame.add(statusBox)
-  frame.add(topGap)
   frame.add(page)
   frame.add(bottomGap)
   frame.add(footerBox)
@@ -337,6 +390,7 @@ export function mountDigivoice(renderer, session, options = {}) {
   }
 
   function paintHero() {
+    lift.height = heroOffset(renderer.height || 0)
     const drawn = wordmarkLines("DIGIVOICE", { cols: frameWidth, tMs, truecolor })
     shadowLines[0].content = " "
     drawn.lines.forEach((cells, index) => {
@@ -601,7 +655,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     clear(pager, pageNodes)
     mountHistory(false)
     hoverIndex = null
-    statusNode.content = statusText
+    statusNode.content = statusLine(statusText, truecolor)
     if (!screen) {
       paintHero()
       return
@@ -628,7 +682,8 @@ export function mountDigivoice(renderer, session, options = {}) {
       if (screen.notice) addLine(list, rowNodes, screen.notice)
       if (screen.kind === "history") {
         const count = (screen.rows || []).filter((row) => row.kind === "take").length
-        const used = HERO_SLOT + 1 + HERO_GAP + HERO_GAP + 2
+        const used =
+          heroOffset(renderer.height || 24) + HERO_SLOT + HERO_GAP + STATUS_ROWS + HERO_GAP + FOOTER_ROWS
         const room = Math.max(1, (renderer.height || 24) - used)
         historyScroll.height = Math.max(1, Math.min(Math.max(count, 1), room))
         mountHistory(true)
@@ -640,7 +695,22 @@ export function mountDigivoice(renderer, session, options = {}) {
       addLine(pager, pageNodes, "→ next", () => pageBy(1))
     }
     paintHero()
+    pinSelection()
     fadePane(screen.path || "")
+  }
+
+  function pinSelection() {
+    if (!screen || !["home", "settings", "system", "logs"].includes(screen.kind)) return
+    const target = (headerFor(screen) ? 1 : 0) + (screen.selected || 0)
+    const view = page.viewport ? page.viewport.height : 0
+    if (view <= 0) return
+    const top = page.scrollTop || 0
+    if (target < top) page.scrollTop = target
+    else if (target >= top + view) page.scrollTop = target - view + 1
+  }
+
+  function scrollMenu(rows) {
+    page.scrollTop = Math.max(0, (page.scrollTop || 0) + rows)
   }
 
   function finish(code) {
@@ -1285,6 +1355,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     get restarting() {
       return restarting
     },
+    scrollMenu,
     destroy() {
       armCapture(false)
       if (timer) clearInterval(timer)
