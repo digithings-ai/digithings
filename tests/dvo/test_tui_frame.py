@@ -7,6 +7,7 @@ from digivoice.home import HOME_BLOCKS, HOME_GROUPS, HOME_MENU, render_home_over
 from digivoice.pixel_hero import word_cells
 from digivoice.settings import default_settings
 from digivoice.setup import postprocess_menu_options
+
 from digivoice.tui import (
     MenuBlock,
     _alpha_sgr,

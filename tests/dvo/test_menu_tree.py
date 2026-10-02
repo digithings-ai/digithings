@@ -14,6 +14,7 @@ from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG
 from digivoice.menu_tree import browse_settings, rows_at
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, load_settings
+
 from digivoice.tui import (
     HIT_BACK,
     NAV_FOOTER,
