@@ -1,6 +1,5 @@
-/** Shared clock for the hero's build-in. The wordmark's pixel columns and the chart's candles
- *  both rise left to right on this schedule, so they build together: a candle at x% of the
- *  hero starts rising when the wordmark's column at x% of its width does. */
+/** Shared clock for the hero's build-in. The wordmark's pixel columns and the chart's
+ *  candles both rise left to right on this schedule (wordmark columns still use it). */
 
 export const BUILD_WORD = "DIGIQUANT";
 /** Pixel columns in the wordmark: nine glyphs of seven columns, two columns of gap between. */
@@ -22,16 +21,37 @@ export function buildProgress(elapsedMs: number, f: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-/** Elapsed time after which every candle has finished rising. */
+/** Elapsed time after which every wordmark cell has finished rising. */
 export const BUILD_DONE_MS = sweepDelayMs(1) + BUILD_RISE_MS;
 
-/** After the wordmark (and hero copy) have settled — chart build starts then. */
-export const COPY_SETTLE_MS = 280;
-export const COPY_DONE_MS = BUILD_DONE_MS + COPY_SETTLE_MS;
+/**
+ * Chrome (logo + title + buttons) settle before the chart construct starts.
+ * Matches `.hero-rise` (~0.12s + 2×0.08s stagger + 0.55s) — deliberately shorter than
+ * the full wordmark pixel build so the chart handoff does not feel idle.
+ */
+export const CHROME_DONE_MS = 880;
+export const COPY_SETTLE_MS = 80;
+export const COPY_DONE_MS = CHROME_DONE_MS + COPY_SETTLE_MS;
 
-/** Vela candle intro duration once the chart phase begins (elegant L→R grow). */
-export const CHART_INTRO_MS = 2400;
+/** Whole chart construct target (~5s) and hard ceiling (10s). */
+export const CHART_BUILD_TARGET_MS = 5000;
+export const CHART_BUILD_MAX_MS = 10000;
 
-/** Stagger between mounting volume-adjacent overlays during the chart build. */
-export const INDICATOR_STAGGER_MS = 520;
+/** Axis + grid preamble (X L→R, Y B→T, then grid). */
+export const AXIS_X_MS = 520;
+export const AXIS_Y_MS = 420;
+export const GRID_FADE_MS = 280;
+/** Y starts near the end of X so the total preamble stays tight. */
+export const AXIS_Y_START_MS = 360;
+export const GRID_START_MS = AXIS_Y_START_MS + AXIS_Y_MS;
+export const BARS_START_MS = GRID_START_MS + GRID_FADE_MS;
 
+/** L→R candle + volume sweep after axes/grid (fills the ~5s target). */
+export const BARS_SWEEP_MS = Math.max(2800, CHART_BUILD_TARGET_MS - BARS_START_MS);
+
+/** Fallback if replay is unavailable — Vela intro grow (clamped by Vela to 5s). */
+export const CHART_INTRO_MS = Math.min(4800, CHART_BUILD_MAX_MS);
+
+/** Indicators stream once bars are underway. */
+export const INDICATOR_START_MS = Math.round(BARS_SWEEP_MS * 0.2);
+export const INDICATOR_STAGGER_MS = 260;
