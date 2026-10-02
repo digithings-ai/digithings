@@ -71,7 +71,7 @@ npm run dev:local --workspace digiquant-web
 
 That script is `next dev --hostname 127.0.0.1 --port 3910`. Open `http://127.0.0.1:3910`. `npm run dev --workspace digiquant-web` does not pass a port.
 
-Leave `NEXT_PUBLIC_DASHBOARD_API_URL` and `NEXT_PUBLIC_DQ_API_URL` unset. On loopback the desk calls same-origin `/official-api`, and `apps/digiquant-web/next.config.mjs` rewrites that to `http://127.0.0.1:8788`. You do not add port 3910 to `DASHBOARD_API_ALLOWED_ORIGINS` for this path.
+Leave `NEXT_PUBLIC_DASHBOARD_API_URL` and `NEXT_PUBLIC_DQ_API_URL` unset. On loopback the desk calls same-origin `/official-api`, and `apps/digiquant-web/next.config.mjs` rewrites that to `http://127.0.0.1:8788`. Set `DIGIQUANT_WEB_OFFICIAL_API_ORIGIN` to `http://127.0.0.1:8789` when the ui-surfaces API is on 8789 and the older API still holds 8788. You do not add port 3910 to `DASHBOARD_API_ALLOWED_ORIGINS` for this path.
 
 Trailing slash is on. `/app` and `/app/` are the brief. Also open:
 
