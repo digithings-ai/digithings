@@ -94,7 +94,7 @@ One-command from a checkout (CLI + Hammerspoon symlink + models bootstrap):
 bash digivoice/scripts/install.sh
 ```
 
-That script records `git rev-parse HEAD` as `DIGIVOICE_TIP_SHA` and **never rsyncs** this folder over `~/Library/Application Support/digivoice/hammerspoon`. Live adapter path is a symlink:
+That script records `git rev-parse HEAD` as `DIGIVOICE_TIP_SHA`, installs the CLI with `uv tool install -e ./digivoice` when uv is on PATH (no pre-activated venv), and **never rsyncs** this folder over `~/Library/Application Support/digivoice/hammerspoon`. Live adapter path is a symlink:
 
 ```bash
 mkdir -p ~/.hammerspoon
@@ -106,8 +106,9 @@ ln -s /path/to/digithings/digivoice/hammerspoon ~/.hammerspoon/digivoice
 Manual path if you skip the script:
 
 1. Install [Hammerspoon](https://www.hammerspoon.org/) and grant **Accessibility**.
-2. Install digivoice (`uv sync --all-packages` or `pip install -e ./digivoice`) so
-   `digivoice` is on `PATH`, or set `DIGIVOICE_BIN` to the absolute binary.
+2. Install digivoice (`uv tool install -e ./digivoice`, or `uv sync --all-packages` /
+   `pip install -e ./digivoice` in a venv) so `digivoice` is on `PATH`, or set
+   `DIGIVOICE_BIN` to the absolute binary.
 3. Symlink this folder (do **not** copy into Application Support):
 
    ```bash

@@ -3,8 +3,11 @@
 #
 #   bash digivoice/scripts/install.sh [--skip-models]
 #
-# Wires: editable CLI (uv/pip) + ~/.hammerspoon/digivoice symlink + models dir
+# Wires: editable CLI + ~/.hammerspoon/digivoice symlink + models dir
 # (+ optional ggml-base.en.bin fetch).
+#
+# CLI: prefers `uv tool install -e` (no pre-activated venv). Falls back to
+# `uv pip install -e` only inside an active or repo `.venv`, then plain pip.
 #
 # SAFETY — never rsync this checkout's hammerspoon/ over
 #   ~/Library/Application Support/digivoice/hammerspoon
@@ -13,7 +16,8 @@
 # (refuses unless dest/.digivoice-tip matches DIGIVOICE_TIP_SHA).
 #
 # Two-step if uv/pip is missing: install uv (https://docs.astral.sh/uv/), then
-# re-run this script.
+# re-run this script. Mac proof path: uv tool install -e ./digivoice, then
+# digivoice install --fetch-models.
 
 set -euo pipefail
 
@@ -48,15 +52,31 @@ for arg in "$@"; do
   esac
 done
 
-if command -v uv >/dev/null 2>&1; then
-  uv pip install -e "$ROOT/digivoice"
-elif command -v pip >/dev/null 2>&1; then
-  pip install -e "$ROOT/digivoice"
-else
+install_editable_cli() {
+  local pkg="$ROOT/digivoice"
+  if command -v uv >/dev/null 2>&1; then
+    if uv tool install -e "$pkg"; then
+      return 0
+    fi
+    echo "digivoice install: uv tool install failed; trying uv pip in a venv" >&2
+    if [[ -z "${VIRTUAL_ENV:-}" ]]; then
+      uv venv "$ROOT/.venv"
+      # shellcheck disable=SC1091
+      source "$ROOT/.venv/bin/activate"
+    fi
+    uv pip install -e "$pkg"
+    return 0
+  fi
+  if command -v pip >/dev/null 2>&1; then
+    pip install -e "$pkg"
+    return 0
+  fi
   echo "digivoice install: uv or pip required." >&2
   echo "Two-step: install uv from https://docs.astral.sh/uv/ then re-run this script." >&2
-  exit 2
-fi
+  return 2
+}
+
+install_editable_cli
 
 FETCH=(--fetch-models)
 if [[ "$SKIP_MODELS" -eq 1 ]]; then

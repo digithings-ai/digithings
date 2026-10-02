@@ -56,13 +56,13 @@ One command from a digithings checkout:
 bash digivoice/scripts/install.sh
 ```
 
-That records the git tip SHA, installs the editable CLI (`uv pip install -e ./digivoice`, or `pip` if uv is missing), symlinks `~/.hammerspoon/digivoice` → `digivoice/hammerspoon`, creates the models/recordings dirs, and fetches `ggml-base.en.bin` when it is absent (`--skip-models` to skip the fetch).
+That records the git tip SHA, installs the editable CLI (`uv tool install -e ./digivoice` when uv is present — no pre-activated venv; otherwise `uv pip` inside a repo `.venv` or plain `pip install -e`), symlinks `~/.hammerspoon/digivoice` → `digivoice/hammerspoon`, creates the models/recordings dirs, and fetches `ggml-base.en.bin` when it is absent (`--skip-models` to skip the fetch).
 
 If uv/pip is not installed, that is the frozen two-step: install [uv](https://docs.astral.sh/uv/), then re-run the script.
 
 **Never rsync** `digivoice/hammerspoon/` over `~/Library/Application Support/digivoice/hammerspoon`. The installer only symlinks `~/.hammerspoon/digivoice`. An Application Support copy is left alone unless its `.digivoice-tip` SHA matches the checkout (otherwise it would wipe a live banner tip).
 
-After the script, `digivoice install` / `update` refreshes the same wiring. `digivoice uninstall` removes the symlink (keep data; `--purge-data` deletes the data dir). Uninstall the console script with `uv pip uninstall digivoice`.
+After the script, `digivoice install` / `update` refreshes the same wiring. `digivoice uninstall` removes the symlink (keep data; `--purge-data` deletes the data dir). Uninstall the console script with `uv tool uninstall digivoice` (or `uv pip uninstall` / `pip uninstall` if you used a venv install).
 
 Workspace install without the script: `uv sync --all-packages` or `pip install -e ./digivoice`, then `digivoice install`.
 
@@ -98,7 +98,7 @@ digivoice doctor
 | `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
 | `digivoice settings` / `setup` | `settings` shows or changes `settings.json` (models, rewrite on/off + preset + model + runner + auto-route, paste_on_stop, word_detection / spelling_detection stubs default off, live_banner, banner_position, banner_animations). `--json` for agents. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys / Hardware stub / Review & save / Doctor / Quit, arrow keys + Enter on a TTY); `setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`) prints current values + the menu tree with no prompts, exit 0. |
 | `digivoice install` / `update` | Wire the Hammerspoon symlink, models dir, and tip SHA stamp. `--fetch-models` downloads `ggml-base.en.bin` (skip if present). Never rsyncs Application Support. |
-| `digivoice uninstall` | Remove the `~/.hammerspoon/digivoice` symlink and install stamp. `--purge-data` also deletes the data dir. CLI package: `uv pip uninstall digivoice`. |
+| `digivoice uninstall` | Remove the `~/.hammerspoon/digivoice` symlink and install stamp. `--purge-data` also deletes the data dir. CLI package: `uv tool uninstall digivoice` (or pip/uv pip if installed into a venv). |
 | `digivoice cancel` | Creates the cancel-file: a running `dict` discards its take (no paste, no history entry, wav deleted). Esc in the Hammerspoon sample does the same. |
 | `digivoice status` | Prints the `status.json` snapshot the banner reads. |
 

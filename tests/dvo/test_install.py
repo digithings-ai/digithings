@@ -212,3 +212,14 @@ def test_install_script_forbids_app_support_rsync() -> None:
     assert "digivoice install" in text or "python -m digivoice install" in text
     # The script must mention the SHA guard, not perform an unguarded copy.
     assert "DIGIVOICE_TIP_SHA" in text or "tip" in text.lower()
+
+
+def test_install_script_prefers_uv_tool_without_bare_uv_pip() -> None:
+    script = Path(__file__).resolve().parents[2] / "digivoice" / "scripts" / "install.sh"
+    text = script.read_text(encoding="utf-8")
+    assert "uv tool install -e" in text
+    tool_pos = text.index("uv tool install -e")
+    pip_pos = text.index("uv pip install -e")
+    assert tool_pos < pip_pos, "uv tool install must run before uv pip fallback"
+    assert "VIRTUAL_ENV" in text or ".venv" in text
+    assert "rsync" in text

@@ -167,9 +167,12 @@ def _write_stamp(data_dir: Path, stamp: InstallStamp) -> None:
 
 
 def _reinstall_cli(runner: CommandRunner, package: Path) -> str:
-    result = runner(["uv", "pip", "install", "-e", str(package)], timeout=120.0)
-    if result.code == 0:
-        return f"cli .......... uv pip install -e {package}"
+    tool = runner(["uv", "tool", "install", "-e", str(package)], timeout=120.0)
+    if tool.code == 0:
+        return f"cli .......... uv tool install -e {package}"
+    pip_uv = runner(["uv", "pip", "install", "-e", str(package)], timeout=120.0)
+    if pip_uv.code == 0:
+        return f"cli .......... uv pip install -e {package} (active venv)"
     pip = runner(["pip", "install", "-e", str(package)], timeout=120.0)
     if pip.code == 0:
         return f"cli .......... pip install -e {package}"
@@ -237,7 +240,9 @@ def run_install(
         lines.append(_reinstall_cli(active, package_root()))
     else:
         cli = resolve_cli_path(env, home)
-        lines.append(f"cli .......... {cli} (editable install; pass --reinstall-cli to uv pip)")
+        lines.append(
+            f"cli .......... {cli} (editable install; pass --reinstall-cli to refresh via uv tool)"
+        )
         payload["cli"] = cli
 
     models_line = _maybe_fetch_model(Path(paths.models_dir), active, fetch_models)
@@ -325,7 +330,7 @@ def run_uninstall(
         lines.append(
             f"data ......... kept {paths.data_dir} (models, history). "
             "Pass --purge-data to delete it. Uninstall the CLI with: "
-            "uv pip uninstall digivoice  (or pip uninstall digivoice)"
+            "uv tool uninstall digivoice  (or uv pip / pip uninstall if installed in a venv)"
         )
         payload["data_purged"] = False
 
