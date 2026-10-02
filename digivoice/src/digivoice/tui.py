@@ -1078,6 +1078,7 @@ def choose(
     pulse: bool = False,
     groups: Sequence[Group] | None = None,
     detail: bool = False,
+    start_at: int = 0,
 ) -> int | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
@@ -1092,7 +1093,7 @@ def choose(
     if _is_tty(stdin):
         if not options:
             return None
-        selected = 0
+        selected = start_at % len(options)
         color = _use_ansi()
         screen = _use_screen()
         color_true = _truecolor()

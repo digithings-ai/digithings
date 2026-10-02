@@ -10,20 +10,21 @@ the subcommands use.
 
 from __future__ import annotations
 
-import argparse
+import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
+from digivoice.doctor import doctor_checks
 from digivoice.menu_tree import browse_settings
+from digivoice.panels import browse_history, browse_system, present_doctor
 from digivoice.paths import resolve_paths
 from digivoice.reload import LaunchReport, ensure_home_control, stop_home_control
 from digivoice.runner import CommandRunner
 from digivoice.setup import _install_with_progress
 from digivoice.tui import (
     _is_tty,
-    _write_info_frame,
     choose,
     fullscreen_enter,
     fullscreen_leave,
@@ -33,12 +34,12 @@ from digivoice.tui import (
 HOME_TITLE = "DIGIVOICE"
 HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 
-# App-home actions. Settings opens the /settings path. Status is the context
-# strip, not a row. Update/Uninstall stay CLI-only stubs.
+# App-home actions. Settings opens /settings. System holds reload, reset,
+# restart, and update. Status is the context strip, not a row.
 HOME_MENU = (
     "Doctor (health checks)",
-    "History (recent)",
-    "Reload (local control)",
+    "History (previous takes)",
+    "System (reload, reset, restart, update)",
     "Settings (/settings)",
     "Quit",
 )
@@ -154,7 +155,8 @@ def render_home_overview(
         lines.append(f"  {marker} {item}")
     lines += [
         "",
-        "Settings opens /settings. Enter a folder, Enter toggles or cycles a value, Esc goes up.",
+        "Settings opens /settings. System holds reload, reset, restart, and update.",
+        "Enter opens a folder or a list. Esc goes up.",
         "",
         "— Settings (current) —",
         settings_text.rstrip(),
@@ -235,27 +237,30 @@ def run_home(
                 return 0
             entry = HOME_MENU[picked]
             if entry.startswith("Doctor"):
-                result = _cli._doctor(runtime)
-                _write_info_frame(
+                present_doctor(
+                    doctor_checks(platform, home, dict(env), runtime.probe),
                     stdout,
-                    "Doctor",
-                    result.stdout.splitlines() or [result.stderr],
-                    subtitle=HOME_SUBTITLE,
+                    stdin,
                 )
             elif entry.startswith("History"):
-                args = argparse.Namespace(last=5, grep=None, copy_last=False, as_json=False)
-                result = _cli._history(args, runtime)
-                _write_info_frame(
+                browse_history(paths, platform, runtime.probe, runner, stdin, stdout)
+            elif entry.startswith("System"):
+
+                def _restart() -> None:
+                    stop_home_control(platform, home, env, runner=runner)
+                    fullscreen_leave(stdout)
+                    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+                browse_system(
+                    paths,
+                    platform,
+                    home,
+                    env,
+                    stdin,
                     stdout,
-                    "History",
-                    result.stdout.splitlines(),
-                    subtitle=HOME_SUBTITLE,
+                    runner=runner,
+                    restart=_restart,
                 )
-            elif entry.startswith("Reload"):
-                args = argparse.Namespace(as_json=False)
-                result = _cli._reload(args, runtime)
-                body = result.stdout.splitlines() or [result.stderr.strip()]
-                _write_info_frame(stdout, "Reload", body, subtitle=HOME_SUBTITLE)
             elif entry.startswith("Settings"):
                 browse_settings(paths, stdin, stdout, install=_install_with_progress)
     finally:

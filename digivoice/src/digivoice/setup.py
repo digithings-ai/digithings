@@ -309,13 +309,16 @@ def _install_with_progress(
     def progress(got: int, total: int | None) -> None:
         if total:
             pct = min(100, int(got * 100 / total))
-            msg = f"Downloading {entry.filename} — {pct}%"
+            filled = round(24 * pct / 100)
+            bar = "█" * filled + "░" * (24 - filled)
+            msg = f"{bar}  {pct}%"
         else:
-            msg = f"Downloading {entry.filename} — {got} bytes"
+            msg = f"{'░' * 24}  {got} bytes"
+        title = f"Downloading {entry.title.replace(' (default)', '')}"
         if _is_tty(stdout):
-            _write_info_frame(stdout, "Download", [msg], footer="working…", wait=False)
+            _write_info_frame(stdout, title, [msg, entry.filename], footer="working…", wait=False)
         else:
-            stdout.write(f"  {msg}\n")
+            stdout.write(f"  {title}  {msg}\n")
             stdout.flush()
 
     dest = install_catalog_model(paths, entry, progress=progress)
