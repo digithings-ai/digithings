@@ -2,17 +2,15 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { EMPTY_READ, STUB_READ, readBlock, type ReadResult } from "../read";
+import { PaneFrame, useFocusedPane } from "./pane";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
-const BG = "#14120f";
 const INK = "#e7e1d6";
 const DIM = "#8a8175";
-const LINE = "#3a342c";
 const BAD = "#c47a6a";
-const OK = "#7d9a78";
 
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
@@ -38,6 +36,7 @@ function shown(read: ReadResult | undefined): Shown {
 export function BriefPage() {
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
   const layout = layoutFor(PATH);
+  const [focus, setFocus] = useFocusedPane(layout.length);
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -58,8 +57,8 @@ export function BriefPage() {
   }, []);
 
   return (
-    <box width="100%" height="100%" position="relative" overflow="hidden" backgroundColor={BG}>
-      {layout.map((placement) => {
+    <box width="100%" height="100%" position="relative" overflow="hidden">
+      {layout.map((placement, index) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
         const view = shown(reads[placement.id]);
@@ -71,16 +70,15 @@ export function BriefPage() {
             top={share(placement.y - 1, ROWS)}
             width={share(placement.w, COLS)}
             height={share(placement.h, ROWS)}
-            border
-            borderColor={view.status === "ok" ? OK : view.status === "empty" || view.status === "loading" ? LINE : BAD}
-            title={def.title}
-            titleColor={DIM}
-            bottomTitle={view.asOf ? `as of ${view.asOf}` : def.route}
-            overflow="hidden"
-            paddingLeft={1}
-            paddingRight={1}
+            onMouseDown={() => setFocus(index)}
           >
-            <text fg={tone(view.status)}>{view.lines.join("\n")}</text>
+            <PaneFrame
+              title={def.title}
+              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              focused={index === focus}
+              lines={view.lines}
+              ink={tone(view.status)}
+            />
           </box>
         );
       })}

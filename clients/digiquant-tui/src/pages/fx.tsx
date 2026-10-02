@@ -2,15 +2,14 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
+import { PaneFrame, useFocusedPane } from "./pane";
+import { shapeLines } from "./shape";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
-const BG = "#14120f";
 const INK = "#e7e1d6";
 const DIM = "#8a8175";
-const LINE = "#3a342c";
 const BAD = "#c47a6a";
-const OK = "#7d9a78";
 
 const FX_BLOCK_IDS = [
   "fx-summary",
@@ -438,13 +437,7 @@ function ink(status: ReadResult["status"] | "loading"): string {
   return BAD;
 }
 
-function edge(status: ReadResult["status"] | "loading"): string {
-  if (status === "ok") return OK;
-  if (status === "empty" || status === "loading") return LINE;
-  return BAD;
-}
-
-function FxBlock({ id, api }: { id: string; api: string }) {
+function FxBlock({ id, api, focused }: { id: string; api: string; focused: boolean }) {
   const def = BLOCKS[id];
   const route = def?.route;
   const kind = def?.kind;
@@ -468,31 +461,28 @@ function FxBlock({ id, api }: { id: string; api: string }) {
   const lines = loaded ? fxBlockLines(def.id, loaded.result, loaded.data) : ["loading…"];
   const status = fxTone(loaded?.result ?? null, lines);
   return (
-    <box
-      width="100%"
-      height="100%"
-      border
-      borderColor={edge(status)}
+    <PaneFrame
       title={def.title}
-      titleColor={DIM}
-      bottomTitle={loaded?.result.asOf ? `as of ${loaded.result.asOf}` : def.route}
-      overflow="hidden"
-      paddingLeft={1}
-      paddingRight={1}
-      backgroundColor={BG}
-    >
-      <text fg={ink(status)}>{lines.slice(0, 14).join("\n")}</text>
-    </box>
+      status={loaded?.result.asOf ? `as of ${loaded.result.asOf}` : def.route}
+      focused={focused}
+      blocks={shapeLines(lines)}
+      ink={ink(status)}
+    />
   );
 }
 
 /** FX hub, ideas, watch, rates, and settings. One block per catalog route. */
 export function FxDesk({ path, api = API }: { path: string; api?: string }) {
   if (!isFxPath(path)) return null;
+  return <FxLayout path={path} api={api} />;
+}
+
+function FxLayout({ path, api }: { path: string; api: string }) {
   const layout = layoutFor(path);
+  const [focus, setFocus] = useFocusedPane(layout.length, path);
   return (
-    <box width="100%" height="100%" position="relative" overflow="hidden" backgroundColor={BG}>
-      {layout.map((placement) => (
+    <box width="100%" height="100%" position="relative" overflow="hidden">
+      {layout.map((placement, index) => (
         <box
           key={placement.id}
           position="absolute"
@@ -500,8 +490,9 @@ export function FxDesk({ path, api = API }: { path: string; api?: string }) {
           top={share(placement.y - 1, ROWS)}
           width={share(placement.w, COLS)}
           height={share(placement.h, ROWS)}
+          onMouseDown={() => setFocus(index)}
         >
-          <FxBlock id={placement.id} api={api} />
+          <FxBlock id={placement.id} api={api} focused={index === focus} />
         </box>
       ))}
     </box>

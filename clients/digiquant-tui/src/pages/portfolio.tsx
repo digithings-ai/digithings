@@ -3,15 +3,13 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, readBlock, type ReadResult } from "../read";
+import { PaneFrame, useFocusedPane } from "./pane";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
-const BG = "#14120f";
 const INK = "#e7e1d6";
 const DIM = "#8a8175";
-const LINE = "#3a342c";
 const BAD = "#c47a6a";
-const OK = "#7d9a78";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
 export const PORTFOLIO_PATHS = [
@@ -87,12 +85,6 @@ const tone = (status: ReadResult["status"] | "loading") => {
   return BAD;
 };
 
-const border = (status: ReadResult["status"] | "loading") => {
-  if (status === "ok") return OK;
-  if (status === "empty" || status === "loading") return LINE;
-  return BAD;
-};
-
 type Reads = Record<string, ReadResult | undefined>;
 
 function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string; reads?: Reads }) {
@@ -100,6 +92,8 @@ function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string;
     path: "",
     reads: {},
   });
+  const blocks = portfolioBlocks(path);
+  const [focus, setFocus] = useFocusedPane(blocks.length, path);
   const controlled = reads !== undefined;
   const shown = controlled ? reads : fetched.path === path ? fetched.reads : {};
 
@@ -123,8 +117,8 @@ function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string;
   }, [api, controlled, path]);
 
   return (
-    <box width="100%" height="100%" position="relative" backgroundColor={BG}>
-      {portfolioBlocks(path).map((block) => {
+    <box width="100%" height="100%" position="relative">
+      {blocks.map((block, index) => {
         const view = visibleRead(shown[block.id]);
         return (
           <box
@@ -134,16 +128,15 @@ function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string;
             top={share(block.y - 1, ROWS)}
             width={share(block.w, COLS)}
             height={share(block.h, ROWS)}
-            border
-            borderColor={border(view.status)}
-            title={block.title}
-            titleColor={DIM}
-            bottomTitle={view.asOf ? `as of ${view.asOf}` : block.route}
-            overflow="hidden"
-            paddingLeft={1}
-            paddingRight={1}
+            onMouseDown={() => setFocus(index)}
           >
-            <text fg={tone(view.status)}>{view.lines.join("\n")}</text>
+            <PaneFrame
+              title={block.title}
+              status={view.asOf ? `as of ${view.asOf}` : block.route}
+              focused={index === focus}
+              lines={view.lines}
+              ink={tone(view.status)}
+            />
           </box>
         );
       })}

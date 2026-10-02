@@ -5,6 +5,7 @@ import { BLOCKS, layoutFor, type BlockDef } from "../../../../../clients/digiqua
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import type { Placement } from "../../../../../clients/digiquant-tui/src/grid";
 import { readDeskBlock } from "../read-block";
+import { DeskPane, usePaneFocus } from "./pane";
 
 /**
  * Pipeline page for the desk. One block per official read. Same reads as the terminal.
@@ -49,26 +50,11 @@ function pipelinePlacements(): { id: PipelineId; def: BlockDef; placement: Place
   return out;
 }
 
-function PipelineBlock({ def, read }: { def: BlockDef; read: ReadResult | undefined }) {
-  const status = read?.status ?? "loading";
-  const lines = linesOf(read);
-  return (
-    <section aria-label={def.title} data-route={def.route} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-hair bg-surface">
-      <h2 className="m-0 shrink-0 border-b border-hair px-2 py-1 text-[0.65rem] font-normal text-ink-mute">{def.title}</h2>
-      <p className={`m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-2 py-1 text-[0.7rem] leading-[1.45] ${tone[status]}`}>
-        {lines.join("\n")}
-      </p>
-      <p className="m-0 shrink-0 truncate border-t border-hair px-2 py-0.5 text-[0.6rem] text-ink-mute">
-        {read?.asOf ? `as of ${read.asOf}` : def.route}
-      </p>
-    </section>
-  );
-}
-
 /** Desk pipeline. Not mounted by the frame. */
 export function PipelinePage() {
   const [reads, setReads] = useState<Partial<Record<PipelineId, ReadResult>>>({});
   const blocks = pipelinePlacements();
+  const panes = usePaneFocus(blocks.map((block) => block.id));
 
   useEffect(() => {
     const ac = new AbortController();
@@ -87,16 +73,29 @@ export function PipelinePage() {
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-1 p-1">
-      {blocks.map(({ id, def, placement }) => (
-        <div
-          key={id}
-          data-block={id}
-          className="flex min-h-0 min-w-0"
-          style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
-        >
-          <PipelineBlock def={def} read={reads[id]} />
-        </div>
-      ))}
+      {blocks.map(({ id, def, placement }) => {
+        const read = reads[id];
+        const status = read?.status ?? "loading";
+        return (
+          <div
+            key={id}
+            data-block={id}
+            className="flex min-h-0 min-w-0"
+            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={read?.asOf ?? null}
+              lines={linesOf(read)}
+              tone={tone[status]}
+              focused={panes.focus === id}
+              onFocus={() => panes.focusAt(id)}
+              onNext={panes.next}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
