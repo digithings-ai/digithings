@@ -17,6 +17,6 @@ This app is bun-managed and lives outside the root npm workspaces.
 
 A digichat terminal tab is parked and not built here.
 
-Bloomberg, LuxAlgo, LuxAlgo charts, and chat are web-only and are not in
-this terminal. A later pass transports this spine to the web. That transport
-is not built here.
+These slots open in the browser on the digiquant site, not in this terminal:
+`/app/tools/terminal/`, `/app/tools/luxalgo/`, `/app/tools/charts/`,
+`/app/tools/chat/`.

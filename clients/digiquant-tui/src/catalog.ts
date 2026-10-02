@@ -1,7 +1,7 @@
 import type { Layout } from "./grid";
 
 // Parked: a digichat terminal tab is not built. See README.md.
-// Web-only, not in this terminal: Bloomberg, LuxAlgo, LuxAlgo charts, chat.
+// Browser pages, not drawn here: /tools/terminal, /tools/luxalgo, /tools/charts, /tools/chat.
 
 const FX_PAIR = "USDJPY";
 
