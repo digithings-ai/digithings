@@ -1,11 +1,9 @@
-"""Shared stdlib TUI primitives: fullscreen frames, pixel wordmark, menus.
+"""Shared stdlib TUI primitives: fullscreen frames, pixel hero, menus.
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
-viewport: alternate screen, content centered, one repaint per key. The home
-hero is the DIGIVOICE pixel wordmark (half-block cells, brief build-in, then
-soft teal particles and a quiet glint — landing chrome, not a rainbow title).
-Menus use a step rail — active section marked, the current row checked and
-inverted — so the shell does not read as a flat wizard list.
+viewport: alternate screen, one repaint per key. The home hero is the
+landing pixel field — 7×10 DIGIVOICE block letters plus ambient shimmer
+filling leftover rows — not a thin teal title line. Menus use a step rail.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -24,6 +22,8 @@ import time
 import tty
 from collections.abc import Sequence
 from typing import TextIO
+
+from digivoice.pixel_hero import PIXEL_GLYPHS, render_pixel_hero, render_wordmark_lines
 
 # TTY contract:
 # - Full viewport: alternate screen while a shell is open, CSI clear + home
@@ -46,11 +46,14 @@ _ANSI_CLEAR_DOWN = "\x1b[J"
 _ANSI_ALT_ON = "\x1b[?1049h"
 _ANSI_ALT_OFF = "\x1b[?1049l"
 _ANSI_RESET = "\x1b[0m"
+_ANSI_MOUSE_ON = "\x1b[?1003h\x1b[?1006h"
+_ANSI_MOUSE_OFF = "\x1b[?1003l\x1b[?1006l"
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 # digithings landing accent (teal). Header chrome stays one hue — no rainbow title.
-_TEAL_RGB = (61, 214, 196)
 _TEAL = "\x1b[38;2;61;214;196m"
+# SGR mouse cell, 0-based, or None when the terminal is not reporting motion.
+_pointer: tuple[int, int] | None = None
 
 _STATUS_SYMBOLS = frozenset({"▦", "▥", "■", "□", "▤"})
 
@@ -59,144 +62,6 @@ _KICKER = "digivoice"
 
 # Nested home → setup stays on one alternate screen.
 _fullscreen_depth = 0
-
-# Pixel glyphs are 7 wide x 10 tall, `#` = filled. D/I/G/T/H/N/S copied from
-# apps/digithings-web/components/landing/PixelWordmark.tsx; V/O/C/E drawn in
-# the same block language for the DIGIVOICE wordmark.
-_PIXEL_GLYPHS: dict[str, tuple[str, ...]] = {
-    "D": (
-        "######.",
-        "#######",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "#######",
-        "######.",
-    ),
-    "I": (
-        "#######",
-        "#######",
-        "..##...",
-        "..##...",
-        "..##...",
-        "..##...",
-        "..##...",
-        "..##...",
-        "#######",
-        "#######",
-    ),
-    "G": (
-        ".#####.",
-        "#######",
-        "##.....",
-        "##.....",
-        "##..###",
-        "##..###",
-        "##...##",
-        "##...##",
-        "#######",
-        ".#####.",
-    ),
-    "T": (
-        "#######",
-        "#######",
-        "...##..",
-        "...##..",
-        "...##..",
-        "...##..",
-        "...##..",
-        "...##..",
-        "...##..",
-        "...##..",
-    ),
-    "H": (
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "#######",
-        "#######",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-    ),
-    "N": (
-        "##...##",
-        "###..##",
-        "###..##",
-        "##.#.##",
-        "##.#.##",
-        "##..###",
-        "##..###",
-        "##...##",
-        "##...##",
-        "##...##",
-    ),
-    "S": (
-        ".######",
-        "#######",
-        "##.....",
-        "##.....",
-        "######.",
-        "######.",
-        ".....##",
-        ".....##",
-        "#######",
-        "######.",
-    ),
-    "V": (
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        ".#####.",
-        "..###..",
-    ),
-    "O": (
-        ".#####.",
-        "#######",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "##...##",
-        "#######",
-        ".#####.",
-    ),
-    "C": (
-        ".#####.",
-        "#######",
-        "##.....",
-        "##.....",
-        "##.....",
-        "##.....",
-        "##.....",
-        "##.....",
-        "#######",
-        ".#####.",
-    ),
-    "E": (
-        "#######",
-        "#######",
-        "##.....",
-        "##.....",
-        "######.",
-        "######.",
-        "##.....",
-        "##.....",
-        "#######",
-        "#######",
-    ),
-}
 
 TUI_FOOTER_HINT = "↑↓ move · enter select · esc back · q quit"
 
@@ -301,191 +166,6 @@ def fullscreen_leave(stdout: TextIO) -> None:
             pass
 
 
-def _letter_gap(cols: int, letters: int) -> int:
-    for gap in (2, 1, 0):
-        width = letters * 7 + max(0, letters - 1) * gap
-        if width <= max(1, cols - 2):
-            return gap
-    return 0
-
-
-def _pixel_grid(word: str, gap: int) -> list[list[bool]]:
-    rows: list[list[bool]] = [[] for _ in range(10)]
-    for index, ch in enumerate(word.upper()):
-        if index:
-            for row in rows:
-                row.extend([False] * gap)
-        glyph = _PIXEL_GLYPHS.get(ch)
-        for y in range(10):
-            if glyph is None:
-                rows[y].extend([False] * 7)
-            else:
-                rows[y].extend(cell == "#" for cell in glyph[y])
-    return rows
-
-
-def _filled_cells(grid: list[list[bool]]) -> list[tuple[int, int]]:
-    cells: list[tuple[int, int]] = []
-    for y, row in enumerate(grid):
-        for x, on in enumerate(row):
-            if on:
-                cells.append((x, y))
-    return cells
-
-
-def _glint_index(cells: list[tuple[int, int]]) -> dict[tuple[int, int], int]:
-    if not cells:
-        return {}
-    step = max(1, len(cells) // 12)
-    chosen = cells[::step][:12]
-    return {cell: index for index, cell in enumerate(chosen)}
-
-
-def _lit_set(cells: list[tuple[int, int]], frac: float) -> set[tuple[int, int]]:
-    if frac >= 1:
-        return set(cells)
-    ordered = sorted(cells, key=lambda point: (point[0] * 13 + point[1] * 7) % 97)
-    count = int(len(ordered) * frac)
-    if frac > 0 and count == 0 and ordered:
-        count = 1
-    return set(ordered[:count])
-
-
-def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tuple[int, int]]:
-    if frac <= 0 or frac >= 1 or width <= 0:
-        return set()
-    found: set[tuple[int, int]] = set()
-    n = 0
-    while len(found) < 12 and n < 80:
-        point = ((n * 17 + 5) % width, (n * 5 + 2) % 10)
-        n += 1
-        if point in blocked:
-            continue
-        found.add(point)
-    return found
-
-
-def _teal_sgr(*, bold: bool = False, dim: bool = False, invert: bool = False) -> str:
-    r, g, b = _TEAL_RGB
-    bits: list[str] = []
-    if invert:
-        bits.extend(("1", "7"))
-    elif bold:
-        bits.append("1")
-    elif dim:
-        bits.append("2")
-    bits.append(f"38;2;{r};{g};{b}")
-    return f"\x1b[{';'.join(bits)}m"
-
-
-def _idle_particles(width: int, blocked: set[tuple[int, int]], phase: int) -> set[tuple[int, int]]:
-    """Landing-style stray cells: soft teal dots that drift after the build-in."""
-    if width <= 0:
-        return set()
-    found: set[tuple[int, int]] = set()
-    n = 0
-    while n < 200 and len(found) < 32:
-        point = ((n * 17 + 5 + phase * 3) % width, (n * 5 + 2 + phase) % 10)
-        n += 1
-        if point in blocked:
-            continue
-        if (n + phase) % 3 == 0:
-            continue
-        found.add(point)
-    return found
-
-
-def _cell_sgr(
-    x: int,
-    y: int,
-    phase: int,
-    glints: dict[tuple[int, int], int],
-    hot_ok: bool,
-    letter_index: int = 0,
-) -> str:
-    _ = letter_index
-    gi = glints.get((x, y))
-    if hot_ok and gi is not None and (gi + phase) % 8 == 0:
-        return _teal_sgr(invert=True)
-    if (x * 3 + y * 5) % 4 == 0:
-        return _teal_sgr(dim=True)
-    if (x * 3 + y * 5) % 4 == 3:
-        return _teal_sgr(bold=True)
-    return _teal_sgr()
-
-
-def render_wordmark_lines(
-    word: str = "DIGIVOICE",
-    *,
-    cols: int = 100,
-    phase: int = 0,
-    frac: float = 1.0,
-    ansi: bool = False,
-) -> list[str]:
-    """Five half-block rows. `frac` reveals cells for the build-in; `phase` glints."""
-    letters = word.upper()
-    gap = _letter_gap(cols, max(1, len(letters)))
-    grid = _pixel_grid(letters, gap)
-    if not grid or not grid[0]:
-        return []
-    cells = _filled_cells(grid)
-    lit = _lit_set(cells, frac)
-    glints = _glint_index(cells)
-    strays = _stray_set(len(grid[0]), set(cells), frac)
-    idle = _idle_particles(len(grid[0]), set(cells), phase) if frac >= 1 else set()
-    hot_ok = ansi and frac >= 1
-    lines: list[str] = []
-    width = len(grid[0])
-    stride = 7 + gap if gap else 7
-    n_letters = max(1, len(letters))
-    for y in range(0, 10, 2):
-        parts: list[str] = []
-        dirty = False
-        for x in range(width):
-            top_on = (x, y) in lit or (x, y) in strays
-            bot_on = (x, y + 1) in lit or (x, y + 1) in strays
-            if not top_on and not bot_on:
-                particle = (x, y) in idle or (x, y + 1) in idle
-                if particle:
-                    if ansi:
-                        parts.append(_teal_sgr(dim=True))
-                        dirty = True
-                    parts.append("·")
-                    continue
-                if dirty and ansi:
-                    parts.append(_ANSI_RESET)
-                    dirty = False
-                parts.append(" ")
-                continue
-            if top_on and bot_on:
-                ch = "█"
-                sx, sy = x, y
-            elif top_on:
-                ch = "▀"
-                sx, sy = x, y
-            else:
-                ch = "▄"
-                sx, sy = x, y + 1
-            if ansi:
-                letter_index = min(sx // stride, n_letters - 1) if stride else 0
-                stray_only = (sx, sy) in strays and (sx, sy) not in lit
-                if stray_only:
-                    sgr = "\x1b[2m"
-                else:
-                    sgr = _cell_sgr(sx, sy, phase, glints, hot_ok, letter_index)
-                if sgr:
-                    parts.append(sgr)
-                    dirty = True
-                elif dirty:
-                    parts.append(_ANSI_RESET)
-                    dirty = False
-            parts.append(ch)
-        if dirty and ansi:
-            parts.append(_ANSI_RESET)
-        lines.append("".join(parts))
-    return lines
-
-
 def pixel_wordmark(word: str = "DIGIVOICE", fill: str = "█", empty: str = " ") -> str:
     """Render WORD in the PixelWordmark block language (10 text rows)."""
     rows: list[str] = []
@@ -493,7 +173,7 @@ def pixel_wordmark(word: str = "DIGIVOICE", fill: str = "█", empty: str = " ")
     for y in range(10):
         parts: list[str] = []
         for ch in word:
-            glyph = _PIXEL_GLYPHS.get(ch)
+            glyph = PIXEL_GLYPHS.get(ch)
             if glyph is None:
                 parts.append(empty * 7)
             else:
@@ -503,7 +183,7 @@ def pixel_wordmark(word: str = "DIGIVOICE", fill: str = "█", empty: str = " ")
 
 
 def tui_header_lines(subtitle: str | None = None) -> list[str]:
-    """Half-block wordmark + subtitle. Frames compose their own centered panel."""
+    """Ten-row pixel wordmark + subtitle. Frames compose their own panel."""
     return [
         *render_wordmark_lines("DIGIVOICE", cols=100, ansi=False),
         "",
@@ -516,7 +196,7 @@ def pixel_wordmark_cells(word: str = "DIGIVOICE") -> list[tuple[int, int]]:
     cells: list[tuple[int, int]] = []
     x = 0
     for ch in word.upper():
-        glyph = _PIXEL_GLYPHS.get(ch)
+        glyph = PIXEL_GLYPHS.get(ch)
         if glyph is not None:
             for y in range(10):
                 for c, mark in enumerate(glyph[y]):
@@ -627,8 +307,11 @@ def _panel_lines(
     labels = [_option_parts(option)[0] for option in options] or [""]
     natural = max(len(label) for label in labels)
     label_w = min(natural, max(8, panel_w - 20))
+    if density == "tight":
+        groups = None
+        subtitle = None
     roomy = density == "roomy"
-    spaced = density != "compact"
+    spaced = density not in {"compact", "tight"}
 
     lines.append(_paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi))
     if subtitle and spaced:
@@ -709,16 +392,17 @@ def _compose(
     redraw: bool,
     ansi: bool,
     screen: bool | None = None,
+    fill: bool = False,
 ) -> str:
     # `ansi` = SGR color; `screen` = clear/home/eol. Default screen to ansi for
     # older call sites; choose/play_intro pass screen independently of NO_COLOR.
     screen_ok = ansi if screen is None else screen
     placed: list[str] = []
     if word_lines:
-        anchor = _visible_len(word_lines[0])
+        anchor = cols if fill else _visible_len(word_lines[0])
         placed.extend(_pad_line(line, cols, anchor, screen_ok) for line in word_lines)
     placed.extend(_pad_line(line, cols, panel_w, screen_ok) for line in panel_lines)
-    top = (rows - len(placed)) // 2 if len(placed) < rows else 0
+    top = 0 if fill else ((rows - len(placed)) // 2 if len(placed) < rows else 0)
     if clear and screen_ok:
         prefix = _ANSI_CLEAR_HOME
     elif redraw and screen_ok:
@@ -751,20 +435,19 @@ def render_screen(
     use_screen: bool | None = None,
     clear: bool = False,
     redraw: bool = False,
+    t_ms: int | None = None,
+    pointer: tuple[int, int] | None = None,
 ) -> str:
-    """One centered frame. `hero` adds the DIGIVOICE wordmark above the step rail."""
+    """One frame. `hero` paints the DIGIVOICE pixel field above the step rail."""
     term_cols, term_rows = _term_size()
     cols = term_cols if cols is None else cols
     rows = term_rows if rows is None else rows
     panel_w = max(36, min(64, cols - 4))
     if hero and not subtitle:
         subtitle = "local speech control"
-    word_lines = (
-        render_wordmark_lines("DIGIVOICE", cols=cols, phase=phase, ansi=use_ansi) if hero else []
-    )
-    chosen: list[str] = []
+    elapsed = phase * 160 if t_ms is None else t_ms
     chosen_panel: list[str] = []
-    for density in ("roomy", "comfy", "compact"):
+    for density in ("roomy", "comfy", "compact", "tight"):
         panel = _panel_lines(
             title=title,
             options=options,
@@ -779,18 +462,30 @@ def render_screen(
             hint=hint,
             ansi=use_ansi,
         )
-        block = [*word_lines, ""] if hero and density != "compact" else list(word_lines)
-        if hero and density == "compact":
-            block = list(word_lines)
-        block.extend(panel)
-        chosen = block
-        chosen_panel = panel
-        if len(block) <= rows or density == "compact":
+        header_h = rows - len(panel)
+        if header_h >= 10 or density == "tight":
+            chosen_panel = panel
             break
-    word_n = len(chosen) - len(chosen_panel)
+        chosen_panel = panel
+    header_h = max(0, rows - len(chosen_panel))
+    word_lines = (
+        render_pixel_hero(
+            "DIGIVOICE",
+            cols=cols,
+            rows=max(header_h, 10) if header_h < 10 else header_h,
+            t_ms=elapsed,
+            ansi=use_ansi,
+            pointer=pointer,
+            field=True,
+        )
+        if hero
+        else []
+    )
+    if hero and header_h < 10:
+        word_lines = word_lines[:header_h]
     return _compose(
-        chosen[:word_n],
-        chosen[word_n:],
+        word_lines,
+        chosen_panel,
         cols,
         rows,
         panel_w,
@@ -798,11 +493,31 @@ def render_screen(
         redraw=redraw,
         ansi=use_ansi,
         screen=use_screen,
+        fill=hero,
     )
 
 
 def _arrow_name(code: str) -> str:
     return {"A": "up", "B": "down", "C": "right", "D": "left"}.get(code, "esc")
+
+
+def parse_sgr_mouse(body: str) -> tuple[int, int] | None:
+    """Decode ``btn;x;y`` from CSI ``< ... M``. Returns 0-based (col, row)."""
+    parts = body.split(";")
+    if len(parts) != 3:
+        return None
+    try:
+        _btn, x, y = (int(part) for part in parts)
+    except ValueError:
+        return None
+    if x <= 0 or y <= 0:
+        return None
+    return (x - 1, y - 1)
+
+
+def _note_pointer(cell: tuple[int, int] | None) -> None:
+    global _pointer
+    _pointer = cell
 
 
 def _read_byte(fd: int, wait: float) -> str | None:
@@ -827,17 +542,38 @@ def _read_key_on_fd(fd: int, timeout: float | None = None) -> str | None:
         if second is None:
             return "esc"
         if second == "[":
+            peek = _read_byte(fd, 0.04)
+            if peek is None:
+                return "esc"
+            if peek == "<":
+                # SGR mouse: CSI < btn ; x ; y M/m. Never treat M as quit/esc.
+                packed: list[str] = []
+                while True:
+                    ch = _read_byte(fd, 0.04)
+                    if ch is None:
+                        return "esc"
+                    if ch in "Mm":
+                        break
+                    packed.append(ch)
+                    if len(packed) > 16:
+                        return "esc"
+                cell = parse_sgr_mouse("".join(packed))
+                if cell is not None:
+                    _note_pointer(cell)
+                    return "mouse"
+                return "esc"
             # CSI cursor: [A or [1;3A — final byte is 0x40–0x7E.
-            body: list[str] = []
-            while True:
-                ch = _read_byte(fd, 0.04)
-                if ch is None:
-                    return "esc"
-                body.append(ch)
-                if "@" <= ch <= "~":
-                    break
-                if len(body) > 8:
-                    return "esc"
+            body: list[str] = [peek]
+            if not ("@" <= peek <= "~"):
+                while True:
+                    ch = _read_byte(fd, 0.04)
+                    if ch is None:
+                        return "esc"
+                    body.append(ch)
+                    if "@" <= ch <= "~":
+                        break
+                    if len(body) > 8:
+                        return "esc"
             return _arrow_name(body[-1])
         if second == "O":
             # SS3 application cursor keys: OA/OB/OC/OD.
@@ -896,9 +632,10 @@ def choose(
 ) -> int | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
-    TTY mode centers a step-rail frame and redraws on every key. Space confirms
-    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE wordmark and, when
-    `pulse` is set, lets a few cells glint while idle. Returns None on back.
+    TTY mode paints a step-rail frame and redraws on every key. Space confirms
+    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel field and,
+    when `pulse` is set, shimmers the field (SGR mouse trail when the terminal
+    reports motion; otherwise ambient only). Returns None on back.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -914,9 +651,13 @@ def choose(
         first = True
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
+        born = time.monotonic()
         try:
             _set_menu_raw(fd)
             _cursor(stdout, False)
+            if live:
+                stdout.write(_ANSI_MOUSE_ON)
+                stdout.flush()
             while True:
                 stdout.write(
                     render_screen(
@@ -933,12 +674,14 @@ def choose(
                         use_screen=screen,
                         clear=first,
                         redraw=not first,
+                        t_ms=int((time.monotonic() - born) * 1000),
+                        pointer=_pointer if live else None,
                     )
                 )
                 stdout.flush()
                 first = False
                 key = _read_key_on_fd(fd, 0.16 if live else None)
-                if key is None:
+                if key is None or key == "mouse":
                     phase = (phase + 1) % 8
                     continue
                 if key == "up" or key in {"k", "K"}:
@@ -952,6 +695,13 @@ def choose(
         except (OSError, ValueError):
             pass
         finally:
+            if live:
+                try:
+                    stdout.write(_ANSI_MOUSE_OFF)
+                    stdout.flush()
+                except (OSError, ValueError):
+                    pass
+            _note_pointer(None)
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
     stdout.write(f"\n{title}\n")
@@ -1154,12 +904,21 @@ def play_intro(
     tag = subtitle or "local speech control"
     try:
         for index, frac in enumerate(steps):
-            word = render_wordmark_lines("DIGIVOICE", cols=cols, frac=frac, ansi=ansi)
             panel = [
                 _paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi),
                 _paint(_fit(f"│  {tag}", panel_w), "kv", ansi),
                 _paint(_fit("└", panel_w), "rule", ansi),
             ]
+            header_h = max(10, rows - len(panel))
+            word = render_pixel_hero(
+                "DIGIVOICE",
+                cols=cols,
+                rows=header_h,
+                t_ms=index * 180,
+                frac=frac,
+                ansi=ansi,
+                field=True,
+            )
             stdout.write(
                 _compose(
                     word,
@@ -1171,6 +930,7 @@ def play_intro(
                     redraw=index != 0,
                     ansi=ansi,
                     screen=screen,
+                    fill=True,
                 )
             )
             stdout.flush()
@@ -1197,6 +957,7 @@ __all__ = [
     "choose_many",
     "fullscreen_enter",
     "fullscreen_leave",
+    "parse_sgr_mouse",
     "pixel_build_frame",
     "pixel_wordmark",
     "pixel_wordmark_cells",
