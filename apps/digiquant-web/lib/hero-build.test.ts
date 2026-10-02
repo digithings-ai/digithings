@@ -17,12 +17,18 @@ import {
   INDICATOR_SWEEP_MS,
   PHASE_SUM_MS,
   buildProgress,
+  AXIS_X_MS,
+  AXIS_Y_MS,
+  AXIS_Y_START_MS,
   candleSweepClip,
   candleSweepRange,
   columnDelayMs,
   finalSeriesDomain,
+  INDICATOR_LAG_MS,
   paddedPriceWindow,
   revealYDomain,
+  staggerReveal,
+  VOLUME_LAG_MS,
   heroIndicatorStrokes,
   revealStroke,
   sweepDelayMs,
@@ -89,6 +95,28 @@ describe("hero build clock", () => {
     expect(prefix.volumeMax).toBeLessThan(full.volumeMax);
     expect(revealYDomain(bars, 1).priceMax).toBe(full.priceMax);
     expect(revealYDomain(bars, 1).volumeMax).toBe(full.volumeMax);
+    const n = bars.length;
+    for (const elapsed of [0, 180, 800, 1400, BARS_SWEEP_MS]) {
+      const layer = staggerReveal(elapsed, n);
+      expect(revealYDomain(bars, layer.candles)).toEqual(full);
+      expect(revealYDomain(bars, layer.indicators)).toEqual(full);
+      expect(revealYDomain(bars, layer.volume).volumeMax).toBe(full.volumeMax);
+      expect(layer.indicators).toBeLessThanOrEqual(layer.candles);
+      expect(layer.volume).toBeLessThanOrEqual(layer.candles);
+      if (layer.candles < n) expect(layer.volume).toBeLessThan(layer.candles);
+    }
+    const early = staggerReveal(120, n);
+    expect(early.candles).toBeGreaterThan(0);
+    expect(early.indicators).toBe(0);
+    expect(early.volume).toBe(0);
+    const mid = staggerReveal(BARS_SWEEP_MS * 0.55, n);
+    expect(mid.candles).toBeGreaterThan(mid.indicators);
+    expect(mid.indicators).toBeGreaterThan(mid.volume);
+    expect(mid.volume).toBeGreaterThan(0);
+    expect(INDICATOR_LAG_MS).toBeGreaterThan(0);
+    expect(INDICATOR_LAG_MS).toBeLessThan(BARS_SWEEP_MS);
+    expect(VOLUME_LAG_MS).toBeGreaterThan(INDICATOR_LAG_MS);
+    expect(VOLUME_LAG_MS).toBeLessThan(BARS_SWEEP_MS);
   });
 
   it("uncovers candles from the left edge and keeps the right side hidden", () => {
@@ -117,11 +145,14 @@ describe("hero build clock", () => {
   });
 
   it("keeps the chart construct near the 5s target and under the 10s cap", () => {
-    expect(BARS_START_MS).toBeGreaterThanOrEqual(600);
-    expect(BARS_START_MS).toBeLessThanOrEqual(1000);
-    expect(BARS_SWEEP_MS).toBe(2000);
-    expect(INDICATOR_SWEEP_MS).toBe(1200);
-    expect(INDICATOR_START_MS).toBe(BARS_SWEEP_MS);
+    expect(AXIS_Y_START_MS).toBeGreaterThan(0);
+    expect(AXIS_Y_START_MS).toBeLessThan(AXIS_X_MS);
+    expect(BARS_START_MS).toBeGreaterThan(AXIS_Y_START_MS);
+    expect(BARS_START_MS).toBeLessThan(AXIS_Y_START_MS + AXIS_Y_MS);
+    expect(BARS_SWEEP_MS).toBe(2400);
+    expect(INDICATOR_SWEEP_MS).toBe(BARS_SWEEP_MS);
+    expect(INDICATOR_START_MS).toBe(INDICATOR_LAG_MS);
+    expect(INDICATOR_START_MS).toBeLessThan(BARS_SWEEP_MS);
     expect(HANDOFF_MS).toBeLessThan(300);
     expect(PHASE_SUM_MS).toBe(CHART_BUILD_END_MS);
     expect(PHASE_SUM_MS).toBeGreaterThanOrEqual(CHART_BUILD_TARGET_MS - 400);

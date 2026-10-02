@@ -47,10 +47,21 @@ export const AXIS_Y_MS = 280;
 export const AXIS_Y_START_MS = 240;
 export const GRID_MS = 200;
 export const GRID_START_MS = AXIS_Y_START_MS + AXIS_Y_MS;
-export const BARS_START_MS = GRID_START_MS + GRID_MS;
+/**
+ * Candles start while the Y axis is still drawing. They do not wait for the
+ * axis stroke or the grid to finish.
+ */
+export const BARS_START_MS = AXIS_Y_START_MS + 160;
 
-/** Candles + volume L→R together after axes/grid. */
-export const BARS_SWEEP_MS = 2000;
+/** Candles, then indicators, then volume. Same sweep speed, so a lag stays behind. */
+export const BARS_SWEEP_MS = 2400;
+/** Indicators begin after candles have a head start. They must not lead. */
+export const INDICATOR_LAG_MS = 360;
+/** Volume begins after indicators. It trails the candle at each index. */
+export const VOLUME_LAG_MS = 900;
+export const INDICATOR_SWEEP_MS = BARS_SWEEP_MS;
+/** Lag after the candle sweep starts — not a wait for that sweep to finish. */
+export const INDICATOR_START_MS = INDICATOR_LAG_MS;
 
 /**
  * Fixed plot for the candle sweep. The left edge is the first bar and the right
@@ -173,27 +184,41 @@ export function revealHiddenPlotFraction(
   return 1 - shown / barCount;
 }
 
+export type StaggerCounts = { candles: number; indicators: number; volume: number };
+
 /**
- * Indicators start when the candle sweep ends (it has already begun) and travel
- * L→R on their own pass. Abutting the candle sweep — no gap, no silence pad.
+ * How many bars of each layer are visible `elapsedMs` after candles start.
+ * Indicators and volume overlap the candle sweep; they never get ahead of it.
+ * Volume stays at least one bar behind until both layers are finished.
  */
-export const INDICATOR_SWEEP_MS = 1200;
-export const INDICATOR_START_MS = BARS_SWEEP_MS;
+export function staggerReveal(
+  elapsedMs: number,
+  barCount: number,
+  sweepMs: number = BARS_SWEEP_MS,
+): StaggerCounts {
+  const candles = revealedBarCount(elapsedMs, barCount, sweepMs);
+  const indicators =
+    elapsedMs < INDICATOR_LAG_MS ? 0 : revealedBarCount(elapsedMs - INDICATOR_LAG_MS, barCount, sweepMs);
+  const volume = elapsedMs < VOLUME_LAG_MS ? 0 : revealedBarCount(elapsedMs - VOLUME_LAG_MS, barCount, sweepMs);
+  const done = candles >= barCount && volume >= barCount && indicators >= barCount;
+  return {
+    candles,
+    indicators: Math.min(indicators, candles),
+    volume: done ? barCount : Math.min(volume, Math.max(0, candles - 1)),
+  };
+}
 
 /** Fallback if replay is unavailable — Vela intro grow (clamped by Vela to 5s). */
 export const CHART_INTRO_MS = Math.min(BARS_SWEEP_MS, CHART_BUILD_MAX_MS);
 
 /**
- * Scheduled phase sum (chrome + handoff + axes/grid + bars + indicators).
- * Indicator pass follows the candles (`INDICATOR_START_MS === BARS_SWEEP_MS`), so this
- * is also the wall-clock from first paint to the last stroke when the feed is on time.
+ * Wall clock from first paint to the last volume bar. Indicators and volume
+ * overlap the candle sweep, so this is not the sum of three full passes.
  */
-export const PHASE_SUM_MS =
-  CHROME_DONE_MS + HANDOFF_MS + BARS_START_MS + BARS_SWEEP_MS + INDICATOR_SWEEP_MS;
+export const PHASE_SUM_MS = COPY_DONE_MS + BARS_START_MS + VOLUME_LAG_MS + BARS_SWEEP_MS;
 
-/** Same instant as PHASE_SUM_MS: axes start + candle sweep + indicator sweep. */
-export const CHART_BUILD_END_MS =
-  COPY_DONE_MS + BARS_START_MS + INDICATOR_START_MS + INDICATOR_SWEEP_MS;
+/** Same instant as PHASE_SUM_MS. */
+export const CHART_BUILD_END_MS = PHASE_SUM_MS;
 
 /** One hero bar. `time` is the open, epoch ms — the same clock Vela drawings use. */
 export type HeroBar = {

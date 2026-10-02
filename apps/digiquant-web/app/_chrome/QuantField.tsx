@@ -7,6 +7,7 @@ import {
   AXIS_Y_MS,
   AXIS_Y_START_MS,
   BARS_START_MS,
+  BARS_SWEEP_MS,
   candleSweepRange,
   CHART_BUILD_MAX_MS,
   COPY_DONE_MS,
@@ -14,13 +15,15 @@ import {
   EMA_LENGTH,
   GRID_MS,
   GRID_START_MS,
-  INDICATOR_START_MS,
   SMA_COLOR,
   SMA_LENGTH,
+  VOLUME_LAG_MS,
+  heroIndicatorStrokes,
   heroOverlayInputs,
   paddedPriceWindow,
-  revealHiddenPlotFraction,
+  revealStroke,
   revealYDomain,
+  staggerReveal,
   type HeroBar,
   type HeroOverlay,
 } from "@/lib/hero-build";
@@ -31,13 +34,13 @@ import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
  *  Clock is lib/hero-build.ts, from first paint:
  *  1. Chrome is the wordmark + copy (QuantWordmark / .hero-rise). This component
  *     does not wait on BUILD_DONE_MS.
- *  2. At COPY_DONE_MS, construct strokes: X left→right, right Y bottom→top, then
- *     the grid. Series and volume stay hidden. Not a clip over finished candles.
- *  3. The finished chart is already laid out: full series, locked price and
- *     volume domains, SMA 20, EMA 50, and one overlay. Bars then uncover
- *     left→right. Nothing rescales as a bar appears.
- *  4. The same locked scale carries the indicator lines. They uncover with the
- *     bars. They do not get a second pass that moves the axis.
+ *  2. At COPY_DONE_MS, X draws left→right. The Y axis starts before X finishes.
+ *  3. Candles uncover left→right on the locked full-series scale while Y is
+ *     still drawing. Each bar is already at its final x/y.
+ *  4. SMA 20, EMA 50, and one overlay follow a little behind the candles, on
+ *     that same scale. They do not lead, and they do not rescale.
+ *  5. Volume follows the candles, left to right, at final heights. It trails
+ *     the bar at the same index.
  *  Reduced motion skips the sweeps. A failed feed still lets chrome finish and
  *  says the chart is unavailable. Hard stop at CHART_BUILD_MAX_MS.
  *
@@ -160,6 +163,7 @@ export function QuantField() {
   const ref = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
+  const revealRef = useRef<SVGSVGElement>(null);
   const overlayRef = useRef<SVGSVGElement>(null);
   const xRef = useRef<SVGLineElement>(null);
   const yRef = useRef<SVGLineElement>(null);
@@ -188,8 +192,6 @@ export function QuantField() {
     let finished = false;
     let nativeOn = false;
     let barsStarted = false;
-    let replayEnded = false;
-    let indicatorDue = false;
     let indicatorStarted = false;
     let hasBars = false;
     let book: HeroBar[] = [];
@@ -283,6 +285,10 @@ export function QuantField() {
         unavailable();
       }
       if (coverRef.current) coverRef.current.style.width = "0px";
+      if (revealRef.current) {
+        revealRef.current.replaceChildren();
+        revealRef.current.style.display = "none";
+      }
       lockFrame(loadedSeries());
       try {
         chart?.replay.stop();
@@ -309,11 +315,7 @@ export function QuantField() {
       applyLockedDomain(chart, rows, overlayKind);
     };
 
-    /** Cover the plot only. The price scale and time axis stay visible at the locked frame. */
-    const paintCover = (elapsed: number, barCount: number) => {
-      const cover = coverRef.current;
-      if (!cover) return false;
-      const hidden = barCount > 1 ? revealHiddenPlotFraction(elapsed, barCount) : 1;
+    const plotBox = () => {
       const rawGutter = getComputedStyle(host).getPropertyValue("--vela-scale-gutter");
       const rawBottom = getComputedStyle(host).getPropertyValue("--vela-bottom-gutter");
       const gutter = Number.parseFloat(rawGutter);
@@ -321,6 +323,16 @@ export function QuantField() {
       const right = Number.isFinite(gutter) && gutter > 0 ? gutter : 56;
       const timeAxis = Number.isFinite(bottom) && bottom > 0 ? bottom : TIME_AXIS_PX;
       const plot = Math.max(0, host.clientWidth - right);
+      const plotH = Math.max(0, host.clientHeight - timeAxis);
+      return { right, timeAxis, plot, plotH };
+    };
+
+    /** Cover only unrevealed candles. The price scale and time axis stay put. */
+    const paintCover = (shown: number, barCount: number) => {
+      const cover = coverRef.current;
+      if (!cover) return false;
+      const hidden = barCount > 1 && shown < barCount ? 1 - shown / barCount : shown >= barCount ? 0 : 1;
+      const { right, timeAxis, plot } = plotBox();
       cover.style.top = "0px";
       cover.style.right = `${right}px`;
       cover.style.bottom = `${timeAxis}px`;
@@ -331,13 +343,19 @@ export function QuantField() {
 
     const maybeIndicators = () => {
       if (dead || finished || indicatorStarted) return;
-      if (!indicatorDue || !replayEnded) return;
       if (!hasBars && book.length === 0) {
         unavailable();
         finished = true;
         return;
       }
       indicatorStarted = true;
+      if (!volumeHandle && chart) {
+        try {
+          volumeHandle = chart.addNativeIndicator("volume");
+        } catch {
+          /* volume already mounted */
+        }
+      }
       clearDrawings();
       mountNative();
       lockFrame(loadedSeries());
@@ -355,38 +373,97 @@ export function QuantField() {
       barsStarted = true;
       beat("bars");
       const frozen = rowsNow.map((bar) => ({ ...bar }));
+      const strokes = heroIndicatorStrokes(frozen, overlayKind);
+      const timeIndex = new Map(frozen.map((bar, index) => [bar.time, index]));
+      const price = paddedPriceWindow(revealYDomain(frozen, 0, overlayKind));
+      const volumeMax = revealYDomain(frozen, 0, overlayKind).volumeMax;
       try {
-        if (!volumeHandle) volumeHandle = chart.addNativeIndicator("volume");
-        mountNative();
-        indicatorStarted = true;
         applySafe(CANDLES_VISIBLE);
         theme(THEME);
-        overlay.dataset.phase = "done";
         lockFrame(frozen);
+        const svg = revealRef.current;
+        if (svg) svg.style.display = "";
+        const paintLayers = (counts: { candles: number; indicators: number; volume: number }) => {
+          frame.dataset.revealCandles = String(counts.candles);
+          frame.dataset.revealIndicators = String(counts.indicators);
+          frame.dataset.revealVolume = String(counts.volume);
+          const { plot, plotH } = plotBox();
+          paintCover(counts.candles, frozen.length);
+          if (!svg || plot < 8 || plotH < 8) return;
+          svg.style.width = `${plot}px`;
+          svg.style.height = `${plotH}px`;
+          svg.setAttribute("viewBox", `0 0 ${plot} ${plotH}`);
+          svg.replaceChildren();
+          const span = price.max - price.min || 1;
+          const ns = "http://www.w3.org/2000/svg";
+          if (counts.indicators >= 2) {
+            for (const stroke of strokes) {
+              const points = revealStroke(stroke, frozen, counts.indicators - 1);
+              if (points.length < 2) continue;
+              const d = points
+                .map((point, k) => {
+                  const index = timeIndex.get(point.time) ?? 0;
+                  const x = ((index + 0.5) / frozen.length) * plot;
+                  const y = ((price.max - point.price) / span) * plotH;
+                  return `${k === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+                })
+                .join(" ");
+              const path = document.createElementNS(ns, "path");
+              path.setAttribute("d", d);
+              path.setAttribute("fill", "none");
+              path.setAttribute("stroke", stroke.color);
+              path.setAttribute("stroke-width", "1.5");
+              svg.appendChild(path);
+            }
+          }
+          const band = plotH * 0.2;
+          const barW = Math.max(1, (plot / frozen.length) * 0.62);
+          for (let i = 0; i < counts.volume; i++) {
+            const bar = frozen[i];
+            const vol = bar?.volume ?? 0;
+            if (!bar || !(vol > 0) || !(volumeMax > 0)) continue;
+            const h = Math.max(1, (vol / volumeMax) * band);
+            const rect = document.createElementNS(ns, "rect");
+            rect.setAttribute("x", String(((i + 0.5) / frozen.length) * plot - barW / 2));
+            rect.setAttribute("y", String(plotH - h));
+            rect.setAttribute("width", String(barW));
+            rect.setAttribute("height", String(h));
+            rect.setAttribute("fill", bar.close >= bar.open ? UP : DOWN);
+            rect.setAttribute("opacity", "0.55");
+            svg.appendChild(rect);
+          }
+        };
         let elapsed = 0;
         let lastTick = performance.now();
+        const total = VOLUME_LAG_MS + BARS_SWEEP_MS;
         const tick = (now: number) => {
           if (dead || finished) return;
           elapsed += Math.min(48, Math.max(0, now - lastTick));
           lastTick = now;
           lockFrame(frozen);
-          if (paintCover(elapsed, frozen.length)) {
+          const counts = staggerReveal(elapsed, frozen.length);
+          paintLayers(counts);
+          if (elapsed < total) {
             raf = requestAnimationFrame(tick);
             return;
           }
+          if (svg) {
+            svg.replaceChildren();
+            svg.style.display = "none";
+          }
+          if (!volumeHandle) volumeHandle = chart.addNativeIndicator("volume");
+          mountNative();
           lockFrame(frozen);
           if (coverRef.current) coverRef.current.style.width = "0px";
-          replayEnded = true;
           finished = true;
           beat("done");
           chart?.resize();
         };
-        paintCover(0, frozen.length);
+        paintLayers(staggerReveal(0, frozen.length));
         revealHost();
         raf = requestAnimationFrame(tick);
       } catch {
         if (coverRef.current) coverRef.current.style.width = "0px";
-        replayEnded = true;
         revealHost();
         applySafe(CANDLES_VISIBLE);
         theme(THEME);
@@ -462,6 +539,10 @@ export function QuantField() {
         overlay.dataset.phase = "grid";
         grid.style.transition = `opacity ${GRID_MS}ms ease`;
         grid.style.opacity = "1";
+      });
+      later(GRID_START_MS + GRID_MS, () => {
+        if (finished) return;
+        overlay.dataset.phase = "done";
       });
     };
 
@@ -587,10 +668,6 @@ export function QuantField() {
     if (!reduced) {
       later(COPY_DONE_MS, () => runAxes());
       later(COPY_DONE_MS + BARS_START_MS, () => startBars());
-      later(COPY_DONE_MS + BARS_START_MS + INDICATOR_START_MS, () => {
-        indicatorDue = true;
-        maybeIndicators();
-      });
     }
 
     later(CHART_BUILD_MAX_MS, () => {
@@ -649,6 +726,12 @@ export function QuantField() {
           aria-hidden
           className="pointer-events-none absolute top-0 z-20"
           style={{ width: 0, right: 56, bottom: TIME_AXIS_PX, background: "var(--bg)" }}
+        />
+        <svg
+          ref={revealRef}
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 z-30"
+          style={{ display: "none" }}
         />
       </div>
       <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>
