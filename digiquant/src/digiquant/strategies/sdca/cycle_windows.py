@@ -46,7 +46,7 @@ def _window(name: str, kind: CycleKind, pin: date) -> CycleWindow:
 
 
 class SdcaCycleWindows(BaseModel):
-    """Named cycle windows. ``btc_v1()`` / ``eth_research_v1()`` are pin sets."""
+    """Named cycle windows. ``btc_v1()`` / ``eth_research_v1()`` / ``gold_v1()`` are pin sets."""
 
     model_config = ConfigDict(frozen=True, strict=True)
 
@@ -84,6 +84,28 @@ class SdcaCycleWindows(BaseModel):
                 _window("2021_peak", CycleKind.PEAK, date(2021, 11, 10)),
                 _window("2022_trough", CycleKind.TROUGH, date(2022, 11, 21)),
                 _window("2025_peak", CycleKind.PEAK, date(2025, 1, 20)),
+            )
+        )
+
+    @classmethod
+    def gold_v1(cls) -> SdcaCycleWindows:
+        """Documented gold cycle pins used by Stage A.
+
+        Pins: 2008-03-17 high (~$1033 pre-GFC top), 2008-10-24 low
+        (~$680 GFC washout), 2011-09-06 high (~$1920 secular top),
+        2015-12-17 low (~$1050 bear bottom), 2020-08-07 high (~$2070
+        covid high), 2022-10-21 low (~$1620 dip), 2026-09-29 high
+        (current run high, incomplete top). ±45 days each.
+        """
+        return cls(
+            windows=(
+                _window("2008_peak", CycleKind.PEAK, date(2008, 3, 17)),
+                _window("2008_trough", CycleKind.TROUGH, date(2008, 10, 24)),
+                _window("2011_peak", CycleKind.PEAK, date(2011, 9, 6)),
+                _window("2015_trough", CycleKind.TROUGH, date(2015, 12, 17)),
+                _window("2020_peak", CycleKind.PEAK, date(2020, 8, 7)),
+                _window("2022_trough", CycleKind.TROUGH, date(2022, 10, 21)),
+                _window("2026_peak", CycleKind.PEAK, date(2026, 9, 29)),
             )
         )
 
