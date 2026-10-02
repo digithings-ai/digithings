@@ -4,7 +4,7 @@
 # not run Containers itself. wrangler deploy is the source of truth for
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
 # DigiQuant clocks resumed 2026-10-01; house-run is weekly Monday only.
-# Path A traps (agent/project/refresh + twelve-x) stay omitted.
+# twelve-x FX Hub clocks live. Path A traps restored (dispatch-only YAML).
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -49,10 +49,25 @@ crons = [
   "8 22 * * SUN",      # continuous-improvement
   "8 8 * * MON",       # maintenance
   "9 0 * * SUN",       # provider-review
+  "11 7 * * *",        # agent-pr-finalizer
+  "13 6 * * MON",      # agent-backlog-snapshot
   "21 6 * * *",        # ci-pr-hygiene
+  "10 6 * * MON",      # refresh-repo-activity
+  "23 9 * * *",        # project-enforce-assignment
   "27 7 * * *",        # smoke-stack
   "33 6 * * MON",      # security-pip-audit
   "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
-  "17 6 * * *"         # smoke-site
+  "17 6 * * *",        # smoke-site
+  "7 0 * * MON-FRI",   # twelve-x-asia
+  "12 7 * * MON-FRI",  # twelve-x-london
+  "17 12 * * MON-FRI", # twelve-x-new-york
+  "4 */4 * * *",       # twelve-x-market-context-intraday
+  "30 5 * * *",        # twelve-x-market-context-daily
+  "8 7 * * SAT",       # twelve-x-market-context-weekly
+  "30 17 * * MON-FRI", # twelve-x-performance-eval
+  "3 6,18 * * *",      # twelve-x-primemarket-heartbeat
+  "52 * * * MON-FRI",  # twelve-x-session-catchup
+  "30 2 * * *",        # twelve-x-archive-maintenance
+  "8 9 * * MON"        # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
 ]

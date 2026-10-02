@@ -22,11 +22,27 @@ const RESUMED_PIPELINE_IDS = [
 
 const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
 
-const PAUSED_TRAP_IDS = [
+const PATH_A_TRAP_IDS = [
   "agent-pr-finalizer",
   "agent-backlog-snapshot",
   "refresh-repo-activity",
   "project-enforce-assignment",
+] as const;
+
+const PATH_A_ENABLED_IDS = [
+  "agent-pr-finalizer",
+  "agent-backlog-snapshot",
+  "ci-pr-hygiene",
+  "refresh-repo-activity",
+  "project-enforce-assignment",
+  "smoke-stack",
+  "security-pip-audit",
+  "security-npm-audit",
+  "token-canary",
+  "smoke-site",
+] as const;
+
+const TWELVE_X_ENABLED_IDS = [
   "twelve-x-asia",
   "twelve-x-london",
   "twelve-x-new-york",
@@ -37,15 +53,7 @@ const PAUSED_TRAP_IDS = [
   "twelve-x-primemarket-heartbeat",
   "twelve-x-session-catchup",
   "twelve-x-archive-maintenance",
-] as const;
-
-const PATH_A_ENABLED_IDS = [
-  "ci-pr-hygiene",
-  "smoke-stack",
-  "security-pip-audit",
-  "security-npm-audit",
-  "token-canary",
-  "smoke-site",
+  "twelve-x-digisearch-parity",
 ] as const;
 
 const ENABLED_CRONS = [
@@ -65,12 +73,27 @@ const ENABLED_CRONS = [
   "8 22 * * SUN",
   "8 8 * * MON",
   "9 0 * * SUN",
+  "11 7 * * *",
+  "13 6 * * MON",
   "21 6 * * *",
+  "10 6 * * MON",
+  "23 9 * * *",
   "27 7 * * *",
   "33 6 * * MON",
   "37 6 * * MON",
   "41 6 * * *",
   "17 6 * * *",
+  "7 0 * * MON-FRI",
+  "12 7 * * MON-FRI",
+  "17 12 * * MON-FRI",
+  "4 */4 * * *",
+  "30 5 * * *",
+  "8 7 * * SAT",
+  "30 17 * * MON-FRI",
+  "3 6,18 * * *",
+  "52 * * * MON-FRI",
+  "30 2 * * *",
+  "8 9 * * MON",
 ] as const;
 
 describe("jobsForCron", () => {
@@ -79,10 +102,10 @@ describe("jobsForCron", () => {
   });
 
   it("keeps twelve-x new_york on weekday-only cron", () => {
-    expect(jobsForCron("17 12 * * MON-FRI")).toEqual([]);
-    const jobs = jobsForCron("17 12 * * MON-FRI", { includeDisabled: true });
+    const jobs = jobsForCron("17 12 * * MON-FRI");
     expect(jobs.map((j) => j.id)).toEqual(["twelve-x-new-york"]);
-    expect(jobs[0].enabled).toBe(false);
+    expect(jobs[0].enabled).toBe(true);
+    expect(jobsForCron("17 12 * * *")).toEqual([]);
   });
 
   it("returns empty for unknown cron", () => {
@@ -136,16 +159,9 @@ describe("jobsForCron", () => {
   });
 
   it("market_context jobs pass bucket inputs", () => {
-    expect(jobsForCron("4 */4 * * *")).toEqual([]);
-    expect(
-      jobsForCron("4 */4 * * *", { includeDisabled: true })[0].inputs?.bucket,
-    ).toBe("intraday");
-    expect(
-      jobsForCron("30 5 * * *", { includeDisabled: true })[0].inputs?.bucket,
-    ).toBe("daily");
-    expect(
-      jobsForCron("8 7 * * SAT", { includeDisabled: true })[0].inputs?.bucket,
-    ).toBe("weekly");
+    expect(jobsForCron("4 */4 * * *")[0].inputs?.bucket).toBe("intraday");
+    expect(jobsForCron("30 5 * * *")[0].inputs?.bucket).toBe("daily");
+    expect(jobsForCron("8 7 * * SAT")[0].inputs?.bucket).toBe("weekly");
   });
 
   it("uses named weekdays so Cloudflare cannot reinterpret numeric DOWs", () => {
@@ -249,19 +265,21 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("30 13 * * *");
   });
 
-  it("resumes DigiQuant clocks; Path A traps stay paused; weekly Mon house-run only", () => {
+  it("resumes twelve-x clocks and Path A traps; weekly Mon house-run only", () => {
     expect(
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...PAUSED_TRAP_IDS].sort());
+    ).toEqual([...DISABLED_HOUSE_RETRY_IDS].sort());
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS].sort());
+    ).toEqual(
+      [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS].sort(),
+    );
     expect(uniqueEnabledCrons()).toEqual([...ENABLED_CRONS]);
-    expect(uniqueEnabledCrons()).not.toContain("17 12 * * MON-FRI");
+    expect(uniqueEnabledCrons()).toContain("17 12 * * MON-FRI");
     expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
     expect(uniqueEnabledCrons()).not.toContain("17 9 * * *");
     expect(uniqueEnabledCrons()).not.toContain("17 10 * * *");
@@ -269,6 +287,53 @@ describe("jobsForCron", () => {
     expect(uniqueEnabledCrons()).toContain("17 9 * * MON");
     expect(uniqueEnabledCrons()).toContain("40 13 * * MON-FRI");
     expect(uniqueEnabledCrons()).toContain("8 22 * * SUN");
-    expect(uniqueEnabledCrons()).not.toContain("11 7 * * *");
+    expect(uniqueEnabledCrons()).toContain("11 7 * * *");
+    expect(uniqueEnabledCrons()).toContain("13 6 * * MON");
+    expect(uniqueEnabledCrons()).toContain("10 6 * * MON");
+    expect(uniqueEnabledCrons()).toContain("23 9 * * *");
+    const finalizer = JOBS.find((job) => job.id === "agent-pr-finalizer");
+    expect(finalizer).toMatchObject({
+      kind: "workflow_dispatch",
+      workflow: "agent-pr-finalizer.yml",
+      cron: "11 7 * * *",
+      enabled: true,
+      inputs: { dry_run: "false" },
+      repo: "digithings-ai/digithings",
+    });
+    for (const id of PATH_A_TRAP_IDS) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.enabled).toBe(true);
+      expect(job?.kind).toBe("workflow_dispatch");
+      expect(job?.repo).toBe("digithings-ai/digithings");
+    }
+    const archive = JOBS.find((job) => job.id === "twelve-x-archive-maintenance");
+    expect(archive?.enabled).toBe(true);
+    expect(archive?.inputs).toEqual({ dry_run: "false", dump_before_prune: "true" });
+    for (const id of TWELVE_X_ENABLED_IDS) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.enabled).toBe(true);
+      expect(job?.kind).toBe("workflow_dispatch");
+      expect(job?.repo).toBe("digithings-ai/twelve-x");
+    }
+  });
+
+  it("dispatches weekly twelve-x digisearch parity near Monday 09:00 UTC", () => {
+    const job = JOBS.find((row) => row.id === "twelve-x-digisearch-parity");
+    expect(job).toMatchObject({
+      id: "twelve-x-digisearch-parity",
+      cron: "8 9 * * MON",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "digisearch_parity_check.yml",
+      ref: "develop",
+      enabled: true,
+    });
+    expect(job?.inputs).toBeUndefined();
+    expect(jobsForCron("8 9 * * MON").map((row) => row.id)).toEqual([
+      "twelve-x-digisearch-parity",
+    ]);
+    // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
+    expect(jobsForCron("0 9 * * MON")).toEqual([]);
+    expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
   });
 });

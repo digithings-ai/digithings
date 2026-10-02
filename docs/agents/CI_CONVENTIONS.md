@@ -12,9 +12,11 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copilot automation — see §0). Every file has a row in the inventory below.
 
+**GHA leftover sweep (2026-10-01, develop after #4970):** `.github/workflows` on `develop` has **zero** `on.schedule` keys (pinned by `tests/scripts/test_no_gha_schedules.py`). Production clocks fire from `apps/digithings-cron`. Keep `workflow_dispatch` / `repository_dispatch`. `digisearch_parity` is not a workflow in this repo. Trigger cells below that still say `schedule` are historical GHA clocks now owned by Cloudflare, or files that exist only on `main`.
+
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
-| `agent-backlog-snapshot.yml` | Agent: backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
+| `agent-backlog-snapshot.yml` | Agent: backlog snapshot | dispatch (CF clock Mon 06:13 UTC) | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
 | `agent-quota-reset.yml` | Agent: quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
 | `pipeline-digiquant.yml` | Pipeline: dashboard research | schedule (`17 9/10/11/12 * * *`, off-peak retries before NY open), `repository_dispatch` `digiquant-baseline`, dispatch | Unified research+portfolio pipeline; skip-if-already-succeeded on later crons; `resolve` picks Sunday `all` / else `none` | Working | none |
 | *(spec, not installed)* `docs/agent-backlog/execution-tenancy/kairos-cron-check.workflow.yml` | Pipeline: execution cron check | schedule (daily 12:15 UTC), dispatch | Overlay + execution sync + notify `--check`/`--dry-run` probe; **must not** share the house portfolio job. Copy to `.github/workflows/execution-cron-check.yml` on a `chore/`/`feat/` branch (`cursor/*` cannot write workflows) | Spec pinned by `tests/scripts/test_digiquant_cron_workflow.py` | none |
@@ -44,7 +46,7 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
 | `test-digitrace.yml` | Test: digitrace | workflow_call | digitrace unit tests | Working | `digitrace/**`, `tests/dsm/**` |
 | `ci-docs.yml` | CI: docs | push (main/develop), PR | Internal markdown link check + agents-init drift check (single job) | Working | markdown, agents surface |
-| `project-enforce-assignment.yml` | Project: enforce assignment | schedule (daily 09:00), dispatch | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
+| `project-enforce-assignment.yml` | Project: enforce assignment | dispatch (CF clock daily 09:23 UTC) | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
 | `security-gitleaks.yml` | Security: gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | PR: paths-ignore `**.md`, `docs/**` |
 | `security-pip-audit.yml` | Security: pip-audit | workflow_call, PR, push (main/develop), schedule (Mon 06:00) | CVE audit per Python component; blocks on HIGH/CRITICAL | Working | none |
 | `ci-pr-hygiene.yml` | CI: PR hygiene | PR, schedule (daily 06:00), dispatch | Issue linkage (`Require Fixes`) + path-gated `project_fields.tsv` coverage | Working | TSV job: `project_fields.tsv` + this workflow |
@@ -66,7 +68,8 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
 | `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
 | `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
-| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
+| `agent-pr-finalizer.yml` | Agent: PR finalizer | dispatch (CF clock daily 07:11 UTC) | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
+| `refresh-repo-activity.yml` | Refresh: repo activity snapshot | dispatch (CF clock Mon 06:10 UTC) | Regenerates `apps/digithings-web/lib/repo-activity.json` and opens a `chore/` PR | Working | none |
 | `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
 
 ---
