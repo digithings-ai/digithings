@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { DeskFrame } from "@/components/desk/desk-frame";
-import { EmptySlot } from "@/components/desk/empty-slot";
+import { GloomberbTerminal } from "@/components/desk/gloomberb-terminal";
 
 export const metadata: Metadata = {
   title: "Terminal — digiquant",
@@ -11,7 +11,7 @@ export default function ToolsTerminalPage() {
   return (
     <main id="main" className="h-[100svh]">
       <DeskFrame current="/tools/terminal">
-        <EmptySlot title="Terminal" />
+        <GloomberbTerminal />
       </DeskFrame>
     </main>
   );
