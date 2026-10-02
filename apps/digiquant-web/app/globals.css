@@ -11,6 +11,7 @@
 @import "@digithings/ui/styles/stages.css";
 @import "@digithings/ui/styles/marquee.css";
 @import "@digithings/ui/styles/data-layout.css";
+@import "@digithings/ui/styles/deck.css";
 @import "@digithings/ui/styles/chat-widgets.css";
 @import "@digithings/ui/styles/chat-aui.css";
 @import "@digithings/ui/styles/chat-digichat.css";
@@ -33,6 +34,7 @@
 @source "../../../packages/ui/src/components/stages";
 @source "../../../packages/ui/src/components/effects-chrome";
 @source "../../../packages/ui/src/components/data-layout";
+@source "../../../packages/ui/src/components/deck";
 @source "../../../packages/ui/src/components/finance-composites";
 @source "../../../packages/ui/src/components/marquee";
 @source "../../../packages/ui/src/components/chat";

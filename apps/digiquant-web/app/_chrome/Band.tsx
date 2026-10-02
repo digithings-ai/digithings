@@ -16,6 +16,7 @@ export function Band({
   takeaway,
   status = "placeholder",
   fill = false,
+  plain = false,
   children,
 }: {
   id: BandId;
@@ -23,17 +24,17 @@ export function Band({
   takeaway: string;
   status?: string;
   fill?: boolean;
+  /** Skip the reveal transform. Sticky children (the workflow deck) cannot pin inside it. */
+  plain?: boolean;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   const index = BANDS.findIndex((b) => b.id === id);
   const label = BANDS[index]?.label ?? id;
   const screen = open ? "lg:min-h-[calc(100svh-var(--nav-shell-h,62px))] lg:justify-center" : "";
-  return (
-    <section id={id} aria-labelledby={`${id}-h`} className="relative z-10 border-b border-hair">
-      <Reveal
-        className={`mx-auto flex w-full max-w-[var(--frame-w)] flex-col gap-[clamp(1.25rem,3vh,2.5rem)] px-[var(--page-pad)] py-[var(--page-step)] ${screen}`}
-      >
+  const frameClass = `mx-auto flex w-full max-w-[var(--frame-w)] flex-col gap-[clamp(1.25rem,3vh,2.5rem)] px-[var(--page-pad)] py-[var(--page-step)] ${screen}`;
+  const frame = (
+    <>
         <header className="flex flex-col gap-[0.7rem]">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="section-eyebrow m-0">
@@ -65,7 +66,11 @@ export function Band({
             {children}
           </div>
         ) : null}
-      </Reveal>
+    </>
+  );
+  return (
+    <section id={id} aria-labelledby={`${id}-h`} className="relative z-10 border-b border-hair">
+      {plain ? <div className={frameClass}>{frame}</div> : <Reveal className={frameClass}>{frame}</Reveal>}
     </section>
   );
 }
