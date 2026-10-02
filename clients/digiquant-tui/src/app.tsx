@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { BLOCKS, PAGES, pageByPath, layoutFor } from "./catalog";
+import { BLOCKS, PAGES, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
 import { COLS, ROWS, nudge, type Layout } from "./grid";
 import { readBlock, type ReadResult } from "./read";
 
@@ -48,6 +48,24 @@ export function App() {
   modeRef.current = mode;
 
   const page = PAGES[pageIndex];
+  const aligned = layoutMatchesPage(page.path, layout);
+  const shown = aligned ? layout : layoutFor(page.path);
+  const shownReads = aligned ? reads : {};
+  const shownFocus = aligned ? focus : -1;
+
+  const openPage = (index: number) => {
+    const i = Math.max(0, Math.min(PAGES.length - 1, index));
+    if (i === pageRef.current) return;
+    const placements = layoutFor(PAGES[i].path);
+    pageRef.current = i;
+    layoutRef.current = placements;
+    focusRef.current = -1;
+    setPageIndex(i);
+    setLayout(placements);
+    setFocus(-1);
+    setReads({});
+    setNote("");
+  };
 
   useEffect(() => {
     const placements = layoutFor(page.path);
@@ -71,6 +89,7 @@ export function App() {
 
   useEffect(() => {
     if (!STATUS) return;
+    if (!layoutMatchesPage(page.path, layout)) return;
     if (layout.some((p) => !reads[p.id])) return;
     const payload = {
       path: page.path,
@@ -126,8 +145,7 @@ export function App() {
         if (dx > 0 && layoutRef.current.length) setFocus(0);
         return;
       }
-      setPageIndex((i) => Math.max(0, Math.min(PAGES.length - 1, i + dy)));
-      setNote("");
+      openPage(pageRef.current + dy);
       return;
     }
     const id = layoutRef.current[focusRef.current]?.id;
@@ -149,17 +167,14 @@ export function App() {
       setMode("desk");
       return;
     }
-    setPageIndex(PAGES.findIndex((p) => p.path === next.path));
+    openPage(PAGES.findIndex((p) => p.path === next.path));
     setMode("desk");
     setDraft("");
-    setNote("");
   };
 
-  const selected = focus >= 0 ? layout[focus] : undefined;
+  const selected = shownFocus >= 0 ? shown[shownFocus] : undefined;
   const footer = [
-    "tab block",
-    "arrows move",
-    "shift+arrows resize",
+    selected ? "tab block   arrows move   shift+arrows resize" : "↑↓ page   → block",
     "/ path",
     "q quit",
     selected ? `${selected.id} ${selected.x},${selected.y} ${selected.w}×${selected.h}` : page.path,
@@ -175,24 +190,25 @@ export function App() {
         <text fg={DIM}>{`  ${page.label}  ${page.path}  ${API}`}</text>
       </box>
       <box flexGrow={1} flexDirection="row">
-        <box width={24} border borderColor={focus < 0 ? GOLD : LINE} title="pages" flexDirection="column">
+        <box width={24} border borderColor={shownFocus < 0 ? GOLD : LINE} title="pages" flexDirection="column">
           {PAGES.map((item, i) => {
             const current = i === pageIndex;
-            const indent = item.path.split("/").filter(Boolean).length > 1 ? "  " : "";
+            const child = item.path.split("/").filter(Boolean).length > 1;
+            const mark = current ? "›" : " ";
             return (
               <text key={item.path} fg={current ? GOLD : DIM}>
-                {`${current ? "›" : " "} ${indent}${item.label}`}
+                {child ? `  ${mark} ${item.label}` : `${mark} ${item.label}`}
               </text>
             );
           })}
         </box>
         <box flexGrow={1} position="relative" overflow="hidden">
-          {layout.map((placement, i) => {
+          {shown.map((placement, i) => {
             const def = BLOCKS[placement.id];
-            const read = reads[placement.id];
+            const read = shownReads[placement.id];
             const status = read?.status ?? "loading";
             const lines = read?.lines ?? ["loading…"];
-            const on = i === focus;
+            const on = i === shownFocus;
             return (
               <box
                 key={placement.id}
