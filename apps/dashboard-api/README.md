@@ -41,8 +41,8 @@ npm run dev --workspace dashboard-api
 ```bash
 cp .dev.vars.example .dev.vars      # then paste SUPABASE_SERVICE_ROLE_KEY
 npx wrangler dev --port 8788
-# in apps/digiquant-app:
-NEXT_PUBLIC_DQ_API_URL=http://localhost:8788 npx next dev -p 3930
+# in apps/digiquant-app (defaults to http://127.0.0.1:8788):
+npx next dev -p 3930
 ```
 
 Only the contracted routes (§6.1–6.9) exist on the worker; blocks bound to
@@ -63,7 +63,12 @@ to it. Local dev: `DASHBOARD_DEV_CALLER=enterprise+12x`.
 
 MCP tools are generated from the catalog: one per GET route (the original
 eight names kept, plus `get_access_manifest`); `{param}` routes take the
-param as a tool argument.
+param as a tool argument. `get_access_manifest` is the discovery tool —
+call it first; `tools/list` then shows only the routes this caller may
+read. Phase 4 routes (strategies, desks, features, settings, chat) are
+generated the same way. Chat reads fail closed until digichat is wired.
+Settings writes return 503 `not_provisioned` until the settings edge
+function is configured. Strategy deploy stays a typed "soon" state.
 
 ### Route modules and writes
 

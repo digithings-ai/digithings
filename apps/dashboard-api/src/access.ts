@@ -51,7 +51,8 @@ export const DESKS: DeskDef[] = [
         path: "/brief", label: "Brief",
         blocks: [
           b("brief", "/brief"), b("decision", "/brief/decision"), b("risks", "/brief/risks"),
-          b("live", "/kpis/live", PRO), b("performance", "/performance", PRO),
+          b("signals", "/theses/signals", PRO), b("movers", "/allocations/enriched", PRO),
+          b("live", "/kpis/live", PRO), b("pl-run-health", "/pipeline/runs/latest/health"),
         ],
       },
       {
@@ -70,7 +71,8 @@ export const DESKS: DeskDef[] = [
       {
         path: "/pipeline", label: "Pipeline",
         blocks: [
-          b("pl-run-health", "/pipeline/runs/latest/health"), b("pl-narrative", "/pipeline/runs/latest/narrative"),
+          b("pl-run-health", "/pipeline/runs/latest/health"), b("sh-pipeline-chip", "/pipeline/runs/latest"),
+          b("pl-narrative", "/pipeline/runs/latest/narrative"),
           b("pl-canvas", "/pipeline/runs/latest/graph", PRO), b("pl-node-document", "/pipeline/runs/latest/nodes/selected/document", PRO),
           b("pl-call-trace", "/pipeline/runs/latest/trace", PRO), b("pl-artifacts", "/pipeline/runs/latest/artifacts", PRO),
         ],
@@ -82,9 +84,24 @@ export const DESKS: DeskDef[] = [
       { path: "/tools/terminal", label: "Terminal", status: "soon", blocks: [] },
       { path: "/tools/luxalgo", label: "LuxAlgo", status: "soon", blocks: [] },
       { path: "/tools/charts", label: "Charts", status: "soon", blocks: [] },
-      { path: "/tools/chat", label: "digichat", status: "wip", ...PRO, blocks: [b("ch-sessions", "/chat/sessions"), b("ch-thread", "/chat/sessions/current"), b("ch-composer", "/chat/sessions/current")] },
-      { path: "/settings", label: "Settings", blocks: [b("se-prefs", "/settings/prefs"), b("se-desk", "/settings/desk")] },
-      { path: "/settings/paper", label: "Paper", ...PRO, blocks: [b("se-brokers", "/settings/brokers")] },
+      {
+        path: "/tools/chat", label: "digichat", status: "wip", ...PRO,
+        blocks: [
+          b("ch-sessions", "/chat/sessions"), b("ch-thread", "/chat/sessions/current"),
+          b("ch-transcript", "/chat/sessions/current/messages"), b("ch-composer", "/chat/sessions/current"),
+          b("ch-rename", "/chat/sessions/{id}"), b("ch-send", "/chat/sessions/{id}/messages"),
+        ],
+      },
+      {
+        path: "/settings", label: "Settings",
+        blocks: [
+          b("se-prefs", "/settings/prefs"), b("se-desk", "/settings/desk"),
+          b("se-integrations", "/settings/integrations"), b("se-keys", "/settings/keys"),
+          b("se-key", "/settings/keys/{id}"),
+          b("sh-desks", "/desks"), b("sh-spine", "/desks/active/spine"), b("sh-features", "/features"),
+        ],
+      },
+      { path: "/settings/paper", label: "Paper", ...PRO, blocks: [b("se-brokers", "/settings/brokers"), b("se-brokers-connect", "/settings/brokers/connect")] },
     ],
   },
   {

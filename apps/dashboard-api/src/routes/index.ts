@@ -5,12 +5,20 @@
 
 import { identityTrusted } from "../access";
 import type { Env } from "../index";
+import { registerDesk } from "./desk";
 import { registerFx } from "./fx";
 import { registerPipeline } from "./pipeline";
 import { registerPortfolio } from "./portfolio";
+import { registerStrategies } from "./strategies";
 import { Registry, type RouteModule } from "./registry";
 
-export const ROUTE_MODULES: RouteModule<Env>[] = [registerPortfolio, registerPipeline, registerFx];
+export const ROUTE_MODULES: RouteModule<Env>[] = [
+  registerPortfolio,
+  registerPipeline,
+  registerFx,
+  registerStrategies,
+  registerDesk,
+];
 
 export function buildRegistry(modules: readonly RouteModule<Env>[] = ROUTE_MODULES): Registry<Env> {
   const reg = new Registry<Env>();
