@@ -332,7 +332,7 @@ export function AppFirstSection() {
         header={
           <div className="flex w-full min-w-0 flex-col gap-[0.7rem]">
             <h2 className={HEADLINE}>
-              <span className="why-rent">Anyones AI stack,</span>{" "}
+              <span className="why-rent">Anyone&apos;s AI stack,</span>{" "}
               <span className="why-own">or a digithings stack</span>
             </h2>
             {tourMode === "static" ? (

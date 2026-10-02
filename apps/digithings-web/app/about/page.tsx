@@ -30,17 +30,17 @@ const PROPERTIES: { label: string; body: string }[] = [
   },
   {
     label: "Self-hostable anywhere",
-    body: "One compose file runs the stack on a laptop, a VM or a cluster.",
+    body: "One compose file runs the core services on a single host. Chat, the vault, the heartbeat, and observability are extra profiles.",
   },
   {
     label: "Bring your own keys",
-    body: "Use any provider LiteLLM speaks. The stack never stores your provider credentials.",
+    body: "Use any provider LiteLLM speaks. A key you type into chat stays in that tab. Keys set in the operator environment stay on the host that runs the stack.",
   },
   {
     label: "A glass box",
     body:
-      "Every request carries one id through every service, and each step lands in an audit log " +
-      "you keep.",
+      "Each request carries one id across service calls, and workflow events land in a log on " +
+      "that host.",
   },
 ];
 
@@ -51,7 +51,7 @@ const COMPOSES_WITH: { label: string; body: string }[] = [
   { label: "Pydantic v2", body: "typed models at every boundary" },
   { label: "LiteLLM", body: "provider routing and caching" },
   { label: "MCP", body: "every capability as a discoverable tool" },
-  { label: "Docker", body: "one compose file for the whole topology" },
+  { label: "Docker", body: "one compose file for the core services; chat, vault, and observability are profiles" },
 ];
 
 export default function AboutPage() {
