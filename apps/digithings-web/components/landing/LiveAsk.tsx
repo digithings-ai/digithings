@@ -8,11 +8,10 @@ import { ChatEmbedShell } from "@/components/ChatEmbedShell";
  *
  * This replaces the round-4..6 `QuickAsk` simulation (fixture runtime, canned
  * answers badged `example`). That box answered where it stood because its
- * transcript lived in-page and could be handed to `/chat`; a live iframe's
- * transcript is cross-origin and unreachable, so the trade is explicit: the
- * conversation here IS the real product (digigraph backend, same `/embed` the
- * `/chat` route frames), and the expand control opens `/chat` fresh rather
- * than carrying a transcript over.
+ * transcript lived in-page and could be handed to `/chat`. This frame is the
+ * same digichat `/embed` the `/chat` route uses. The transcript is persisted
+ * on the digichat origin, so the expand control opens `/chat` and that page
+ * restores the same session.
  *
  * The frame keeps the simulation's fixed reading height
  * (`clamp(22rem, 40vh, 30rem)`) so the morph geometry in `FaqMorph` is
