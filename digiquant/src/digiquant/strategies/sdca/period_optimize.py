@@ -835,8 +835,9 @@ class LongTermSelection(BaseModel):
         ...,
         ge=1,
         description=(
-            "Half-width every emitted window uses, derived from the tightest frozen "
-            "long grid member rather than hand-picked per series"
+            "Half-width every emitted window uses — the caller's `half_width_days`, "
+            "defaulting to the tightest frozen long grid member. Carried so a run "
+            "describes its own windows, on the refusal shape as much as the kept one"
         ),
     )
     calendar_days: int = Field(
@@ -1103,6 +1104,7 @@ def select_long_term_periods(
     max_peak_days_pct: float = 25.0,
     min_peaks: int = MIN_PEAKS,
     min_troughs: int = MIN_TROUGHS,
+    half_width_days: int | None = None,
 ) -> LongTermSelection:
     """Select a SMALL secular window set: prominence-ranked pivots under a day cap.
 
@@ -1121,9 +1123,18 @@ def select_long_term_periods(
     the derivation is this module's own, reused unmodified, never a hand-entered
     pin. Each is then ranked by prominence (the move to its next opposite-kind
     corner) with the earlier date breaking ties, and the walk takes them in that
-    order until the day budget is spent. Window width is the tightest frozen long
-    grid member; the cap, not the width, is what makes the set small, so the
-    narrowest grid member keeps as much real structure as the cap allows.
+    order until the day budget is spent.
+
+    **The width (Ruling 1).** ``half_width_days`` defaults to the tightest frozen
+    long grid member, and the default is *behaviour-preserving*: it is the width
+    this function always used. The parameter exists because widening is qualitative
+    — a wider window costs more days under the same cap, so it can drop the set
+    below ``min_peaks`` and the selection then refuses outright — which is only
+    legible if the width can be set up front rather than discovered after a run.
+    Detection is unaffected by the width: only the emitted windows' extent, and
+    therefore how many of them the day budget admits, changes. The chosen width
+    travels in ``LongTermSelection``, including on the refusal shape, so a saved
+    run never leaves the reader to re-derive the windows it describes.
 
     **No relaxed minimum.** When the detected pivots — or what survives the cap —
     cannot meet ``min_peaks`` / ``min_troughs``, the result is ``selected is False``
@@ -1141,9 +1152,22 @@ def select_long_term_periods(
         raise ValueError(f"select_long_term_periods requires min_peaks >= 1, got {min_peaks}")
     if min_troughs < 1:
         raise ValueError(f"select_long_term_periods requires min_troughs >= 1, got {min_troughs}")
+    if half_width_days is not None and half_width_days < 1:
+        raise ValueError(
+            f"select_long_term_periods requires half_width_days >= 1, got {half_width_days}"
+        )
+    # ``dates[0]`` / ``dates[-1]`` are read below, and the day budget is measured
+    # against the calendar, so a series that cannot be indexed is refused here —
+    # with a message, rather than as an IndexError from inside the walk.
+    if len(dates) != len(prices):
+        raise ValueError("select_long_term_periods requires dates and prices of the same length")
+    if len(dates) < 2:
+        raise ValueError(
+            f"select_long_term_periods requires at least two calendar days, got {len(dates)}"
+        )
 
     horizon = PeriodHorizon.long()
-    half_width = min(horizon.half_widths)
+    half_width = min(horizon.half_widths) if half_width_days is None else half_width_days
     peak_pins, trough_pins = detect_pivots(dates, prices, horizon)
 
     budget_days = int(len(dates) * max_peak_days_pct / 100.0)

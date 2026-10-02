@@ -37,6 +37,7 @@ import pytest
 from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, SdcaCycleWindows
 from digiquant.strategies.sdca.period_optimize import (
     EXPOSURE_FLOOR_PCT,
+    LONG_HALF_WIDTHS,
     MIN_PEAKS,
     MIN_TROUGHS,
     HitTest,
@@ -950,3 +951,213 @@ def test_the_long_first_surface_is_exported() -> None:
     for name in ("HitTest", "LongTermSelection", "window_is_hit", "select_long_term_periods"):
         assert name in period_optimize.__all__, f"{name} is missing from __all__"
         assert hasattr(period_optimize, name)
+
+
+# ================================= Plan 21 Task 1b: the half-width parameter (Ruling 1)
+#
+# Task-1 review: the long half-width was pinned to ``min(LONG_HALF_WIDTHS)`` = 60d,
+# so the ladder could not be re-run per width even though widening is qualitative —
+# it can drop ``n_peaks`` below ``MIN_PEAKS`` and the set then refuses. The width is
+# therefore settable up-front. Three things must hold:
+#
+# - **the default reproduces the pre-change selection exactly.** The literals below
+#   ARE that pre-change output (captured before the keyword existed), so a refactor
+#   that quietly moves the default fails here instead of being noticed by a rerun
+#   nobody diffs;
+# - **an explicit width is honoured** — wider windows, cap still enforced;
+# - **the value travels in the model**, including on the refusal shape, so a run
+#   describes its own windows rather than leaving the reader to re-derive them.
+#
+# Plus the calendar guard: a too-short series must raise a clean ``ValueError``,
+# never an ``IndexError`` from indexing ``dates[0]`` / ``dates[-1]``.
+
+_PRE_CHANGE_HALF_WIDTH = min(LONG_HALF_WIDTHS)
+
+
+def test_the_default_half_width_reproduces_the_pre_change_selection_exactly() -> None:
+    """Ruling 1 is additive: the default call is what it was, field for field."""
+    dates, prices = _secular_three_cycles()
+    selection = select_long_term_periods(dates, prices)
+    assert _PRE_CHANGE_HALF_WIDTH == 60
+    assert selection.half_width_days == _PRE_CHANGE_HALF_WIDTH
+    # Captured from the pre-change implementation on this exact fixture.
+    assert selection.model_dump(exclude={"peak_days_pct", "trough_days_pct"}) == {
+        "half_width_days": 60,
+        "calendar_days": 1894,
+        "max_peak_days_pct": 25.0,
+        "peak_days": 363,
+        "trough_days": 363,
+        "peak_pins": (date(2021, 1, 14), date(2022, 8, 5), date(2024, 2, 24)),
+        "trough_pins": (date(2021, 7, 22), date(2023, 2, 10), date(2024, 8, 31)),
+        "peak_prominence_pct": (50.0, 50.0, 49.73684210526316),
+        "trough_prominence_pct": (100.0, 100.0, 98.95287958115183),
+        "peaks": (
+            {
+                "name": "long_peak_20210114_pm60",
+                "kind": CycleKind.PEAK,
+                "start": date(2020, 11, 15),
+                "end": date(2021, 3, 15),
+            },
+            {
+                "name": "long_peak_20220805_pm60",
+                "kind": CycleKind.PEAK,
+                "start": date(2022, 6, 6),
+                "end": date(2022, 10, 4),
+            },
+            {
+                "name": "long_peak_20240224_pm60",
+                "kind": CycleKind.PEAK,
+                "start": date(2023, 12, 26),
+                "end": date(2024, 4, 24),
+            },
+        ),
+        "troughs": (
+            {
+                "name": "long_trough_20210722_pm60",
+                "kind": CycleKind.TROUGH,
+                "start": date(2021, 5, 23),
+                "end": date(2021, 9, 20),
+            },
+            {
+                "name": "long_trough_20230210_pm60",
+                "kind": CycleKind.TROUGH,
+                "start": date(2022, 12, 12),
+                "end": date(2023, 4, 11),
+            },
+            {
+                "name": "long_trough_20240831_pm60",
+                "kind": CycleKind.TROUGH,
+                "start": date(2024, 7, 2),
+                "end": date(2024, 10, 30),
+            },
+        ),
+        "selected": True,
+        "reason": None,
+    }
+    assert selection.peak_days_pct == pytest.approx(19.165786694825766)
+    assert selection.trough_days_pct == pytest.approx(19.165786694825766)
+    # And the default is the frozen tightest long width, named explicitly — not a
+    # bare literal that could drift away from the grid it claims to come from.
+    assert selection.half_width_days == min(PeriodHorizon.long().half_widths)
+    assert select_long_term_periods(dates, prices, half_width_days=_PRE_CHANGE_HALF_WIDTH) == (
+        selection
+    )
+
+
+def test_the_default_call_is_unchanged_on_every_long_first_fixture() -> None:
+    """The behaviour-preservation pin is a family, not one lucky fixture."""
+    fixtures = (
+        _secular_three_cycles(),
+        _up_heavy(),
+        _zigzag(200, 100, 6, tail_up=100),
+    )
+    for dates, prices in fixtures:
+        default = select_long_term_periods(dates, prices)
+        explicit = select_long_term_periods(dates, prices, half_width_days=60)
+        assert default == explicit
+        assert default.half_width_days == 60
+    # The refusal shape is unchanged too (captured pre-change).
+    dates, prices = _ramped_series(
+        [
+            (100.0, 130.0, 161),
+            (130.0, 100.0, 81),
+            (100.0, 180.0, 161),
+            (180.0, 100.0, 81),
+            (100.0, 180.0, 81),
+        ]
+    )
+    refused = select_long_term_periods(dates, prices)
+    assert refused == select_long_term_periods(dates, prices, half_width_days=60)
+    assert refused.selected is False
+    assert refused.half_width_days == 60
+    assert refused.peak_pins == (dates[160], dates[400])
+    assert refused.trough_pins == (dates[240], dates[480])
+    assert refused.reason is not None
+    assert "minimums are never relaxed" in refused.reason
+
+
+def test_an_explicit_half_width_widens_the_windows_and_still_enforces_the_cap() -> None:
+    """90d windows are 181 days wide (not 121), and the day cap still binds."""
+    dates, prices = _secular_three_cycles()
+    default = select_long_term_periods(dates, prices)
+    wide = select_long_term_periods(dates, prices, half_width_days=90)
+    assert wide.half_width_days == 90
+    assert wide.selected is True
+    default_span = (default.peaks[0].end - default.peaks[0].start).days + 1
+    wide_span = (wide.peaks[0].end - wide.peaks[0].start).days + 1
+    assert default_span == 121
+    assert wide_span == 181 > default_span
+    for window in wide.windows:
+        assert (window.end - window.start).days + 1 == 181
+        # The pin is still the window's centre — only the width moved.
+        centre = window.start + timedelta(days=90)
+        assert centre in wide.peak_pins or centre in wide.trough_pins
+    # Width is what costs days, so a wider window buys fewer of them — and the
+    # cap is still enforced, still binding, on the set it returned.
+    budget = int(len(dates) * wide.max_peak_days_pct / 100.0)
+    assert wide.peak_days <= budget
+    assert wide.peak_days_pct <= wide.max_peak_days_pct == 25.0
+    assert wide.trough_days_pct <= wide.max_peak_days_pct
+    assert wide.n_peaks == 2 < default.n_peaks == 3
+    assert wide.n_troughs == 2 < default.n_troughs == 3
+    assert wide.peak_days + wide_span > budget, "the cap must be the reason it is small"
+    # Same detected structure: the pins do not depend on the width.
+    assert wide.peak_pins == default.peak_pins
+    assert wide.trough_pins == default.trough_pins
+
+
+def test_a_wide_half_width_can_refuse_by_dropping_below_the_frozen_minima() -> None:
+    """Ruling 1's stated hazard: widening can break the minimum — never relaxed."""
+    dates, prices = _secular_three_cycles()
+    refused = select_long_term_periods(dates, prices, half_width_days=120)
+    assert refused.selected is False
+    assert refused.windows == ()
+    assert refused.n_peaks == 0
+    assert refused.n_troughs == 0
+    assert refused.peak_days == 0 and refused.peak_days_pct == 0.0
+    # The reason quotes what the cap *did* keep, so the width is legible as the cause.
+    assert refused.reason is not None
+    assert "kept 1 peak / 1 trough windows" in refused.reason
+    assert f"min_peaks={MIN_PEAKS}" in refused.reason
+    assert "minimums are never relaxed" in refused.reason
+    # The refusal still describes the run that produced it.
+    assert refused.half_width_days == 120
+    assert refused.peak_pins == select_long_term_periods(dates, prices).peak_pins
+
+
+def test_a_narrower_half_width_keeps_more_real_structure_under_the_same_cap() -> None:
+    """Width is the lever the cap trades against; the cap itself never moves."""
+    dates, prices = _secular_three_cycles()
+    narrow = select_long_term_periods(dates, prices, half_width_days=30)
+    default = select_long_term_periods(dates, prices)
+    assert narrow.half_width_days == 30
+    assert narrow.n_peaks == default.n_peaks == 3
+    assert narrow.peak_days == 183 < default.peak_days == 363
+    assert narrow.peak_days_pct < default.peak_days_pct
+    assert narrow.max_peak_days_pct == default.max_peak_days_pct
+
+
+def test_selection_rejects_a_non_positive_half_width() -> None:
+    dates, prices = _secular_three_cycles()
+    for bad in (0, -1, -90):
+        with pytest.raises(ValueError, match="half_width_days"):
+            select_long_term_periods(dates, prices, half_width_days=bad)
+
+
+def test_a_calendar_too_short_to_index_fails_cleanly_never_with_indexerror() -> None:
+    """The guard: a clean ValueError, because ``dates[0]`` / ``dates[-1]`` are read."""
+    for length in (0, 1):
+        dates, prices = _calendar(length), [_LOW] * length
+        with pytest.raises(ValueError, match="at least"):
+            select_long_term_periods(dates, prices)
+        with pytest.raises(ValueError) as excinfo:
+            select_long_term_periods(dates, prices, half_width_days=30)
+        assert not isinstance(excinfo.value, IndexError)
+        assert "at least" in str(excinfo.value)
+    # A misaligned pair is still caught by length, not by a stray index.
+    with pytest.raises(ValueError, match="same length"):
+        select_long_term_periods(_calendar(1), [])
+    # Two bars are enough to pass this guard; the pivot confirmation requirement is
+    # reported by the detector's own message.
+    with pytest.raises(ValueError, match="at least"):
+        select_long_term_periods(_calendar(2), [_LOW, _HIGH])
