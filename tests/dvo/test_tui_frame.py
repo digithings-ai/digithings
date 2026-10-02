@@ -160,6 +160,12 @@ def test_home_frame_is_centered_half_block() -> None:
     letter_rows = [i for i, line in enumerate(lines) if any(ch in line for ch in "▀▄█")]
     assert letter_rows
     assert letter_rows[-1] - letter_rows[0] == 4
+    gap = 0
+    for line in lines[letter_rows[-1] + 1 :]:
+        if line.strip():
+            break
+        gap += 1
+    assert gap >= 2
     blanks = 0
     for line in lines:
         if line.strip():
