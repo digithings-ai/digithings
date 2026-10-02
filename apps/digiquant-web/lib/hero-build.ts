@@ -80,6 +80,99 @@ export function candleSweepClip(elapsedMs: number, sweepMs: number = BARS_SWEEP_
   return `inset(0 ${hiddenRight}% 0 0)`;
 }
 
+/** Price and volume extremes of one series. */
+export type LockedDomain = {
+  priceMin: number;
+  priceMax: number;
+  volumeMax: number;
+};
+
+/**
+ * Y extremes of the complete series, including the overlay that will be on the
+ * finished chart. A visible prefix is not an input.
+ */
+export function finalSeriesDomain(bars: readonly HeroBar[], overlay?: HeroOverlay): LockedDomain {
+  let priceMin = Number.POSITIVE_INFINITY;
+  let priceMax = Number.NEGATIVE_INFINITY;
+  let volumeMax = 0;
+  const consider = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    if (value < priceMin) priceMin = value;
+    if (value > priceMax) priceMax = value;
+  };
+  for (const bar of bars) {
+    consider(bar.low);
+    consider(bar.high);
+    if (bar.volume != null && bar.volume > volumeMax) volumeMax = bar.volume;
+  }
+  if (overlay && bars.length > 0) {
+    for (const stroke of heroIndicatorStrokes(bars, overlay)) {
+      for (const point of stroke.points) consider(point.price);
+    }
+  }
+  if (priceMin === Number.POSITIVE_INFINITY || priceMax === Number.NEGATIVE_INFINITY) {
+    return { priceMin: 0, priceMax: 1, volumeMax };
+  }
+  return { priceMin, priceMax, volumeMax };
+}
+
+/**
+ * Domain used while `revealedCount` bars are visible. Always the full series:
+ * scaling the prefix moves the axis as each bar appears.
+ */
+export function revealYDomain(
+  bars: readonly HeroBar[],
+  revealedCount: number,
+  overlay?: HeroOverlay,
+): LockedDomain {
+  void revealedCount;
+  return finalSeriesDomain(bars, overlay);
+}
+
+/**
+ * Price window Vela paints for a locked domain. Same expansion as its default
+ * 10% top and bottom margins, so the axis labels are the finished chart's.
+ */
+export function paddedPriceWindow(
+  domain: LockedDomain,
+  margins: { top: number; bottom: number } = { top: 10, bottom: 10 },
+): { min: number; max: number } {
+  const { priceMin: min, priceMax: max } = domain;
+  if (!(max > min)) {
+    const pad = Math.abs(min) * 0.1 || 1;
+    return { min: min - pad, max: max + pad };
+  }
+  const content = Math.max(0.1, 1 - (margins.top + margins.bottom) / 100);
+  const above = margins.top / 100 / content;
+  const below = margins.bottom / 100 / content;
+  const span = max - min;
+  return { min: min - span * below, max: max + span * above };
+}
+
+/** Bars visible at `elapsedMs`. Bar 0 is visible at once; the count only grows. */
+export function revealedBarCount(
+  elapsedMs: number,
+  barCount: number,
+  sweepMs: number = BARS_SWEEP_MS,
+): number {
+  if (!(barCount > 0)) return 0;
+  if (!(sweepMs > 0) || elapsedMs >= sweepMs) return barCount;
+  const t = Math.min(1, Math.max(0, elapsedMs / sweepMs));
+  return Math.min(barCount, Math.floor(t * barCount) + 1);
+}
+
+/** Fraction of the plot still covered on the right. 1 hides every bar but the first. */
+export function revealHiddenPlotFraction(
+  elapsedMs: number,
+  barCount: number,
+  sweepMs: number = BARS_SWEEP_MS,
+): number {
+  if (!(barCount > 0)) return 0;
+  const shown = revealedBarCount(elapsedMs, barCount, sweepMs);
+  if (shown >= barCount) return 0;
+  return 1 - shown / barCount;
+}
+
 /**
  * Indicators start when the candle sweep ends (it has already begun) and travel
  * L→R on their own pass. Abutting the candle sweep — no gap, no silence pad.

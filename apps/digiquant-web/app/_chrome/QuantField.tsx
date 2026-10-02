@@ -7,7 +7,6 @@ import {
   AXIS_Y_MS,
   AXIS_Y_START_MS,
   BARS_START_MS,
-  candleHiddenRightPercent,
   candleSweepRange,
   CHART_BUILD_MAX_MS,
   COPY_DONE_MS,
@@ -16,15 +15,14 @@ import {
   GRID_MS,
   GRID_START_MS,
   INDICATOR_START_MS,
-  INDICATOR_SWEEP_MS,
   SMA_COLOR,
   SMA_LENGTH,
-  heroIndicatorStrokes,
   heroOverlayInputs,
-  revealStroke,
+  paddedPriceWindow,
+  revealHiddenPlotFraction,
+  revealYDomain,
   type HeroBar,
   type HeroOverlay,
-  type HeroStroke,
 } from "@/lib/hero-build";
 import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
 
@@ -35,10 +33,11 @@ import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
  *     does not wait on BUILD_DONE_MS.
  *  2. At COPY_DONE_MS, construct strokes: X left→right, right Y bottom→top, then
  *     the grid. Series and volume stay hidden. Not a clip over finished candles.
- *  3. Candles and volume then sweep left→right together on a fixed full-span
- *     frame (the playhead does not drag the right edge).
- *  4. SMA 20, EMA 50, and one overlay travel left→right after that sweep, then
- *     hand off to the same native studies.
+ *  3. The finished chart is already laid out: full series, locked price and
+ *     volume domains, SMA 20, EMA 50, and one overlay. Bars then uncover
+ *     left→right. Nothing rescales as a bar appears.
+ *  4. The same locked scale carries the indicator lines. They uncover with the
+ *     bars. They do not get a second pass that moves the axis.
  *  Reduced motion skips the sweeps. A failed feed still lets chrome finish and
  *  says the chart is unavailable. Hard stop at CHART_BUILD_MAX_MS.
  *
@@ -108,6 +107,44 @@ function asBars(rows: unknown): HeroBar[] {
   }
   out.sort((a, b) => a.time - b.time);
   return out;
+}
+
+type PricePane = {
+  kind?: string;
+  manualScale: { min: number; max: number } | null;
+  scale: { min: number; max: number };
+  scaleTarget: { min: number; max: number };
+};
+
+/** Freeze the price pane on the full-series window. Autoscale copies the visible prefix. */
+function applyLockedDomain(chart: Vela, bars: readonly HeroBar[], overlay: HeroOverlay) {
+  const price = paddedPriceWindow(revealYDomain(bars, 0, overlay));
+  const control = chart.renderer as unknown as {
+    renderer?: {
+      scene?: { panes?: { values: () => Iterable<PricePane> } };
+      scheduler?: { invalidate: (tier: number) => void };
+    };
+    set: (feature: Record<string, unknown>) => void;
+  };
+  const write = () => {
+    const panes = control.renderer?.scene?.panes;
+    if (!panes) return;
+    const locked = { min: price.min, max: price.max };
+    for (const pane of panes.values()) {
+      if (pane.kind !== "price") continue;
+      pane.manualScale = locked;
+      pane.scale = locked;
+      pane.scaleTarget = locked;
+    }
+  };
+  write();
+  try {
+    control.set({ animAutoscale: 0, autoScale: false });
+  } catch {
+    /* renderer without a scale lock */
+  }
+  write();
+  control.renderer?.scheduler?.invalidate(4);
 }
 
 function lineLength(el: SVGLineElement): number {
@@ -245,7 +282,8 @@ export function QuantField() {
       } else {
         unavailable();
       }
-      if (coverRef.current) coverRef.current.style.width = "0%";
+      if (coverRef.current) coverRef.current.style.width = "0px";
+      lockFrame(loadedSeries());
       try {
         chart?.replay.stop();
       } catch {
@@ -254,141 +292,97 @@ export function QuantField() {
       chart?.resize();
     };
 
-    const paintIndicators = (strokes: HeroStroke[], index: number) => {
-      if (!chart) return;
-      let visible = false;
-      strokes.forEach((stroke, slot) => {
-        const points = revealStroke(stroke, book, index);
-        if (points.length < 2) return;
-        visible = true;
-        const anchors = points.map((point) => ({ time: point.time, price: point.price }));
-        const existing = drawingIds[slot];
-        if (!existing) {
-          const drawn = chart?.drawings.add("polyline", {
-            anchors,
-            style: { lineColor: stroke.color, lineWidth: 2, lineStyle: "solid" },
-          });
-          if (drawn) {
-            drawingIds[slot] = drawn.id;
-            try {
-              chart?.drawings.lock(drawn.id, true);
-            } catch {
-              /* lock is cosmetic */
-            }
-          }
-          return;
-        }
-        try {
-          chart?.drawings.update(existing, { anchors });
-        } catch {
-          /* one missed frame — the next tick retries */
-        }
-      });
-      if (visible) {
-        setCaption(`LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${picked.label}`);
-      }
+    const loadedSeries = (): HeroBar[] => {
+      const native = (chart?.renderer as unknown as { renderer?: { bars?: unknown } } | null)?.renderer;
+      const fromChart = asBars(native?.bars);
+      if (fromChart.length >= 2) return fromChart;
+      return book;
     };
 
-    const runIndicatorSweep = () => {
-      if (dead || finished || indicatorStarted) return;
-      indicatorStarted = true;
-      beat("indicators");
-      if (book.length < 2 || !chart) {
-        clearDrawings();
-        mountNative();
-        finished = true;
-        beat(hasBars ? "done" : "unavailable");
-        return;
+    const lockFrame = (rows: readonly HeroBar[]) => {
+      if (!chart || rows.length < 2) return;
+      try {
+        chart.setVisibleRange(candleSweepRange(rows[0].time, rows[rows.length - 1].time, BAR_MS));
+      } catch {
+        /* renderer without range control */
       }
-      const strokes = heroIndicatorStrokes(book, overlayKind);
-      const elapsed = performance.now() - t0;
-      const room = CHART_BUILD_MAX_MS - elapsed - 40;
-      const duration = Math.max(180, Math.min(INDICATOR_SWEEP_MS, room));
-      const started = performance.now();
-      const tick = (now: number) => {
-        if (dead || finished) return;
-        const progress = Math.min(1, (now - started) / duration);
-        const index = Math.round(progress * (book.length - 1));
-        paintIndicators(strokes, index);
-        if (progress < 1) {
-          raf = requestAnimationFrame(tick);
-          return;
-        }
-        clearDrawings();
-        mountNative();
-        finished = true;
-        beat("done");
-        chart?.resize();
-      };
-      raf = requestAnimationFrame(tick);
+      applyLockedDomain(chart, rows, overlayKind);
+    };
+
+    /** Cover the plot only. The price scale and time axis stay visible at the locked frame. */
+    const paintCover = (elapsed: number, barCount: number) => {
+      const cover = coverRef.current;
+      if (!cover) return false;
+      const hidden = barCount > 1 ? revealHiddenPlotFraction(elapsed, barCount) : 1;
+      const rawGutter = getComputedStyle(host).getPropertyValue("--vela-scale-gutter");
+      const rawBottom = getComputedStyle(host).getPropertyValue("--vela-bottom-gutter");
+      const gutter = Number.parseFloat(rawGutter);
+      const bottom = Number.parseFloat(rawBottom);
+      const right = Number.isFinite(gutter) && gutter > 0 ? gutter : 56;
+      const timeAxis = Number.isFinite(bottom) && bottom > 0 ? bottom : TIME_AXIS_PX;
+      const plot = Math.max(0, host.clientWidth - right);
+      cover.style.top = "0px";
+      cover.style.right = `${right}px`;
+      cover.style.bottom = `${timeAxis}px`;
+      cover.style.left = "auto";
+      cover.style.width = hidden <= 0 ? "0px" : `${hidden * plot}px`;
+      return hidden > 0;
     };
 
     const maybeIndicators = () => {
       if (dead || finished || indicatorStarted) return;
       if (!indicatorDue || !replayEnded) return;
-      if (!hasBars) {
+      if (!hasBars && book.length === 0) {
         unavailable();
         finished = true;
         return;
       }
-      runIndicatorSweep();
-    };
-
-    const pinSweepFrame = () => {
-      const bounds = chart?.replay.bounds;
-      if (!chart || !bounds) return;
-      try {
-        chart.setVisibleRange(candleSweepRange(bounds.first, bounds.last, BAR_MS));
-      } catch {
-        /* renderer without range control */
-      }
+      indicatorStarted = true;
+      clearDrawings();
+      mountNative();
+      lockFrame(loadedSeries());
+      finished = true;
+      beat(hasBars || book.length > 0 ? "done" : "unavailable");
     };
 
     const startBars = () => {
       if (!chart || dead || finished || barsStarted) return;
-      if (!hasBars && !chart.replay.bounds) return;
-      barsStarted = true;
-      beat("bars");
-      const bounds = chart.replay.bounds;
-      if (!bounds) {
-        replayEnded = true;
-        revealHost();
-        applySafe(CANDLES_VISIBLE);
-        theme(THEME);
-        overlay.dataset.phase = "done";
-        maybeIndicators();
+      const rowsNow = loadedSeries();
+      if (rowsNow.length < 2) {
+        if (hasBars || chart.replay.bounds) later(40, () => startBars());
         return;
       }
+      barsStarted = true;
+      beat("bars");
+      const frozen = rowsNow.map((bar) => ({ ...bar }));
       try {
         if (!volumeHandle) volumeHandle = chart.addNativeIndicator("volume");
+        mountNative();
+        indicatorStarted = true;
         applySafe(CANDLES_VISIBLE);
         theme(THEME);
-        revealHost();
         overlay.dataset.phase = "done";
-        setCaption(`${baseCaption} · volume`);
-        pinSweepFrame();
+        lockFrame(frozen);
         const started = performance.now();
-        const paintCover = (elapsed: number) => {
-          const cover = coverRef.current;
-          if (!cover) return false;
-          const hidden = candleHiddenRightPercent(elapsed);
-          cover.style.width = `${hidden}%`;
-          return hidden > 0;
-        };
         const tick = (now: number) => {
           if (dead || finished) return;
-          if (paintCover(now - started)) {
+          lockFrame(frozen);
+          if (paintCover(now - started, frozen.length)) {
             raf = requestAnimationFrame(tick);
             return;
           }
-          pinSweepFrame();
+          lockFrame(frozen);
+          if (coverRef.current) coverRef.current.style.width = "0px";
           replayEnded = true;
-          maybeIndicators();
+          finished = true;
+          beat("done");
+          chart?.resize();
         };
-        paintCover(0);
+        paintCover(0, frozen.length);
+        revealHost();
         raf = requestAnimationFrame(tick);
       } catch {
-        if (coverRef.current) coverRef.current.style.width = "0%";
+        if (coverRef.current) coverRef.current.style.width = "0px";
         replayEnded = true;
         revealHost();
         applySafe(CANDLES_VISIBLE);
@@ -529,7 +523,7 @@ export function QuantField() {
         drawings: false,
         animations: reduced
           ? false
-          : { intro: false, zoom: true, pan: true, autoscale: true },
+          : { intro: false, zoom: true, pan: true, autoscale: false },
       });
       host.style.touchAction = "pan-y";
       chart.data.registerProvider("coinbase", new CoinbaseProvider());
@@ -650,8 +644,8 @@ export function QuantField() {
         <div
           ref={coverRef}
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 z-20"
-          style={{ width: "0%", background: "var(--bg)" }}
+          className="pointer-events-none absolute top-0 z-20"
+          style={{ width: 0, right: 56, bottom: TIME_AXIS_PX, background: "var(--bg)" }}
         />
       </div>
       <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>

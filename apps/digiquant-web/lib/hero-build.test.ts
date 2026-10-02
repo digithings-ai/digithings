@@ -20,6 +20,9 @@ import {
   candleSweepClip,
   candleSweepRange,
   columnDelayMs,
+  finalSeriesDomain,
+  paddedPriceWindow,
+  revealYDomain,
   heroIndicatorStrokes,
   revealStroke,
   sweepDelayMs,
@@ -61,6 +64,31 @@ describe("hero build clock", () => {
     expect(shown).toBeGreaterThan(0);
     expect(shown).toBeLessThan(0.15);
     expect(frame.from).toBeLessThan(rightToLeft.from);
+  });
+
+  it("locks the Y domain to the full series while bars reveal", () => {
+    const bars: HeroBar[] = Array.from({ length: 60 }, (_, i) => {
+      const close = i < 50 ? 200 : 80;
+      return {
+        time: 1_700_000_000_000 + i * 60_000,
+        open: close - 0.4,
+        high: i === 59 ? 420 : close + 0.6,
+        low: i === 59 ? 40 : close - 0.6,
+        close,
+        volume: i === 59 ? 9_000 : 12 + i,
+      };
+    });
+    const full = finalSeriesDomain(bars);
+    for (const shown of [1, 4, 30, 59]) {
+      expect(revealYDomain(bars, shown)).toEqual(full);
+      expect(paddedPriceWindow(revealYDomain(bars, shown))).toEqual(paddedPriceWindow(full));
+    }
+    const prefix = finalSeriesDomain(bars.slice(0, 4));
+    expect(prefix.priceMin).toBeGreaterThan(full.priceMin);
+    expect(prefix.priceMax).toBeLessThan(full.priceMax);
+    expect(prefix.volumeMax).toBeLessThan(full.volumeMax);
+    expect(revealYDomain(bars, 1).priceMax).toBe(full.priceMax);
+    expect(revealYDomain(bars, 1).volumeMax).toBe(full.volumeMax);
   });
 
   it("uncovers candles from the left edge and keeps the right side hidden", () => {
