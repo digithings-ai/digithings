@@ -38,6 +38,9 @@ export const COPY_DONE_MS = CHROME_DONE_MS + HANDOFF_MS;
 export const CHART_BUILD_TARGET_MS = 5000;
 export const CHART_BUILD_MAX_MS = 10000;
 
+/** The hero chart fades in as one finished frame. It does not build bar by bar. */
+export const HERO_FADE_MS = 700;
+
 /**
  * Axes then grid (~0.8s): X L→R, Y B→T (overlaps end of X), then faint grid.
  * Times are relative to construct t0 (axes start), not first paint.
@@ -52,6 +55,25 @@ export const GRID_START_MS = AXIS_Y_START_MS + AXIS_Y_MS;
  * axis stroke or the grid to finish.
  */
 export const BARS_START_MS = AXIS_Y_START_MS + 160;
+
+/** What is on screen `elapsedMs` after the X axis starts. `plot` still has both axes. */
+export type HeroAxisFrame = "off" | "x" | "xy" | "plot";
+
+/**
+ * Axis frame for the reveal. Once X is up, later times stay on `x`, `xy`, or
+ * `plot` — the axis is not cleared to make room for a second chart.
+ */
+export function heroAxisFrame(elapsedMs: number): HeroAxisFrame {
+  if (elapsedMs < 0) return "off";
+  if (elapsedMs < AXIS_Y_START_MS) return "x";
+  if (elapsedMs < BARS_START_MS) return "xy";
+  return "plot";
+}
+
+/** True when that frame still shows the axes that were drawn at the start. */
+export function axisFrameKeepsAxes(frame: HeroAxisFrame): boolean {
+  return frame !== "off";
+}
 
 /** Candles, then indicators, then volume. Same sweep speed, so a lag stays behind. */
 export const BARS_SWEEP_MS = 2400;

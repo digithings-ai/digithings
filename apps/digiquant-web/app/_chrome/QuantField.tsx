@@ -3,46 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 import type { IndicatorHandle, Vela } from "@luxalgo/vela";
 import {
-  AXIS_X_MS,
-  AXIS_Y_MS,
-  AXIS_Y_START_MS,
-  BARS_START_MS,
-  BARS_SWEEP_MS,
-  candleSweepRange,
   CHART_BUILD_MAX_MS,
-  COPY_DONE_MS,
-  EMA_COLOR,
-  EMA_LENGTH,
-  GRID_MS,
-  GRID_START_MS,
-  SMA_COLOR,
-  SMA_LENGTH,
-  VOLUME_LAG_MS,
-  heroIndicatorStrokes,
+  HERO_FADE_MS,
+  candleSweepRange,
   heroOverlayInputs,
   paddedPriceWindow,
-  revealStroke,
   revealYDomain,
-  staggerReveal,
+  EMA_COLOR,
+  EMA_LENGTH,
+  SMA_COLOR,
+  SMA_LENGTH,
   type HeroBar,
   type HeroOverlay,
 } from "@/lib/hero-build";
 import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
 
-/** Hero backdrop: a LuxAlgo Vela chart.
+/** Hero backdrop: one finished LuxAlgo Vela chart, faded in.
  *
- *  Clock is lib/hero-build.ts, from first paint:
- *  1. Chrome is the wordmark + copy (QuantWordmark / .hero-rise). This component
- *     does not wait on BUILD_DONE_MS.
- *  2. At COPY_DONE_MS, X draws left→right. The Y axis starts before X finishes.
- *  3. Candles uncover left→right on the locked full-series scale while Y is
- *     still drawing. Each bar is already at its final x/y.
- *  4. SMA 20, EMA 50, and one overlay follow a little behind the candles, on
- *     that same scale. They do not lead, and they do not rescale.
- *  5. Volume follows the candles, left to right, at final heights. It trails
- *     the bar at the same index.
- *  Reduced motion skips the sweeps. A failed feed still lets chrome finish and
- *  says the chart is unavailable. Hard stop at CHART_BUILD_MAX_MS.
+ *  Vela owns the axes for the whole life of the chart. There is no SVG axis
+ *  stroke and no left-to-right reveal — those unmounted the frame and let
+ *  Vela autoscale a second time. The price window is the full series, locked
+ *  before the fade. Reduced motion shows the chart immediately. A failed feed
+ *  still leaves the chrome up and says the chart is unavailable.
  *
  *  Wheel: zoom-out while the gesture is live; after settle or the zoom-out
  *  budget, the next wheel scrolls the page. Horizontal / shift stays on the chart. */
@@ -65,27 +47,9 @@ const THEME = {
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
-const HIDDEN_THEME = { ...THEME, textColor: "transparent", gridColor: "transparent", borderColor: "transparent" };
-
 const WHEEL_IDLE_MS = 140;
 const ZOOM_OUT_BUDGET = 720;
-const TIME_AXIS_PX = 22;
 const BAR_MS = 60_000;
-
-const CANDLES_HIDDEN = {
-  candles: { bodyVisible: false, wickVisible: false, borderVisible: false },
-  grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-  priceScale: { labelsVisible: false },
-} as const;
-
-const CANDLES_VISIBLE = {
-  candles: { bodyVisible: true, wickVisible: true, borderVisible: true },
-  grid: { vertLines: { visible: true }, horzLines: { visible: true } },
-  priceScale: { labelsVisible: true },
-} as const;
-
-const GRID_H = [1, 2, 3, 4] as const;
-const GRID_V = [1, 2, 3, 4, 5] as const;
 
 type BarSource = {
   getBars: (ticker: string, timeframe: string, range: { limit?: number }) => Promise<unknown>;
@@ -121,7 +85,7 @@ type PricePane = {
 
 /** Freeze the price pane on the full-series window. Autoscale copies the visible prefix. */
 function applyLockedDomain(chart: Vela, bars: readonly HeroBar[], overlay: HeroOverlay) {
-  const price = paddedPriceWindow(revealYDomain(bars, 0, overlay));
+  const price = paddedPriceWindow(revealYDomain(bars, bars.length, overlay));
   const control = chart.renderer as unknown as {
     renderer?: {
       scene?: { panes?: { values: () => Iterable<PricePane> } };
@@ -150,34 +114,15 @@ function applyLockedDomain(chart: Vela, bars: readonly HeroBar[], overlay: HeroO
   control.renderer?.scheduler?.invalidate(4);
 }
 
-function lineLength(el: SVGLineElement): number {
-  const x1 = Number(el.getAttribute("x1"));
-  const y1 = Number(el.getAttribute("y1"));
-  const x2 = Number(el.getAttribute("x2"));
-  const y2 = Number(el.getAttribute("y2"));
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  return Number.isFinite(len) && len > 0 ? len : 1;
-}
-
 export function QuantField() {
   const ref = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const coverRef = useRef<HTMLDivElement>(null);
-  const revealRef = useRef<SVGSVGElement>(null);
-  const overlayRef = useRef<SVGSVGElement>(null);
-  const xRef = useRef<SVGLineElement>(null);
-  const yRef = useRef<SVGLineElement>(null);
-  const gridRef = useRef<SVGGElement>(null);
   const [caption, setCaption] = useState("LuxAlgo Vela");
 
   useEffect(() => {
     const host = ref.current;
     const frame = frameRef.current;
-    const overlay = overlayRef.current;
-    const xLine = xRef.current;
-    const yLine = yRef.current;
-    const grid = gridRef.current;
-    if (!host || !frame || !overlay || !xLine || !yLine || !grid) return;
+    if (!host || !frame) return;
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const product = HERO_PRODUCTS[Math.floor(Math.random() * HERO_PRODUCTS.length)] ?? HERO_PRODUCTS[0];
@@ -188,20 +133,10 @@ export function QuantField() {
     let overlayInd: IndicatorHandle | null = null;
     let sma: IndicatorHandle | null = null;
     let ema: IndicatorHandle | null = null;
-    let volumeHandle: IndicatorHandle | null = null;
-    let finished = false;
-    let nativeOn = false;
-    let barsStarted = false;
-    let indicatorStarted = false;
+    let shown = false;
     let hasBars = false;
     let book: HeroBar[] = [];
-    const drawingIds: string[] = [];
-    let raf = 0;
     const timers: Array<ReturnType<typeof setTimeout>> = [];
-    const t0 = performance.now();
-    const baseCaption = `LuxAlgo Vela · ${product} · 1m`;
-    setCaption(baseCaption);
-    frame.dataset.heroBeat = reduced ? "chrome" : "chrome";
 
     const later = (ms: number, fn: () => void) => {
       const id = setTimeout(() => {
@@ -214,88 +149,15 @@ export function QuantField() {
       frame.dataset.heroBeat = name;
     };
 
-    const applySafe = (config: unknown) => {
-      try {
-        chart?.renderer.applyConfig(config);
-      } catch {
-        /* renderer without rich config — keep going */
-      }
-    };
-
-    const theme = (next: typeof THEME) => {
-      try {
-        chart?.renderer.set({ theme: next });
-      } catch {
-        /* ignore */
-      }
-    };
+    setCaption(`LuxAlgo Vela · ${product} · 1m`);
+    beat("chrome");
+    host.style.transition = reduced ? "none" : `opacity ${HERO_FADE_MS}ms ease`;
+    if (reduced) host.style.opacity = "1";
 
     const unavailable = () => {
       setCaption("LuxAlgo Vela · chart unavailable");
       beat("unavailable");
-    };
-
-    const clearDrawings = () => {
-      const live = chart;
-      const ids = drawingIds.filter((id) => id.length > 0);
-      drawingIds.length = 0;
-      if (!live) return;
-      for (const id of ids) {
-        try {
-          live.drawings.remove(id);
-        } catch {
-          /* already gone */
-        }
-      }
-    };
-
-    const mountNative = () => {
-      if (!chart || nativeOn) return;
-      nativeOn = true;
-      sma = chart.addNativeIndicator("sma", { inputs: { length: SMA_LENGTH, color: SMA_COLOR } });
-      ema = chart.addNativeIndicator("ema", { inputs: { length: EMA_LENGTH, color: EMA_COLOR } });
-      overlayInd = chart.addNativeIndicator(picked.type, { inputs: heroOverlayInputs(overlayKind) });
-      setCaption(`LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${picked.label}`);
-    };
-
-    const revealHost = () => {
       host.style.opacity = "1";
-    };
-
-    const showComplete = () => {
-      if (dead || finished) return;
-      finished = true;
-      if (raf) cancelAnimationFrame(raf);
-      overlay.dataset.phase = "done";
-      revealHost();
-      applySafe(CANDLES_VISIBLE);
-      theme(THEME);
-      if (hasBars || book.length > 0) {
-        if (!volumeHandle && chart) {
-          try {
-            volumeHandle = chart.addNativeIndicator("volume");
-          } catch {
-            /* volume already mounted */
-          }
-        }
-        clearDrawings();
-        mountNative();
-        beat("done");
-      } else {
-        unavailable();
-      }
-      if (coverRef.current) coverRef.current.style.width = "0px";
-      if (revealRef.current) {
-        revealRef.current.replaceChildren();
-        revealRef.current.style.display = "none";
-      }
-      lockFrame(loadedSeries());
-      try {
-        chart?.replay.stop();
-      } catch {
-        /* ignore */
-      }
-      chart?.resize();
     };
 
     const loadedSeries = (): HeroBar[] => {
@@ -315,235 +177,25 @@ export function QuantField() {
       applyLockedDomain(chart, rows, overlayKind);
     };
 
-    const plotBox = () => {
-      const rawGutter = getComputedStyle(host).getPropertyValue("--vela-scale-gutter");
-      const rawBottom = getComputedStyle(host).getPropertyValue("--vela-bottom-gutter");
-      const gutter = Number.parseFloat(rawGutter);
-      const bottom = Number.parseFloat(rawBottom);
-      const right = Number.isFinite(gutter) && gutter > 0 ? gutter : 56;
-      const timeAxis = Number.isFinite(bottom) && bottom > 0 ? bottom : TIME_AXIS_PX;
-      const plot = Math.max(0, host.clientWidth - right);
-      const plotH = Math.max(0, host.clientHeight - timeAxis);
-      return { right, timeAxis, plot, plotH };
+    const mountStudies = () => {
+      if (!chart || sma) return;
+      sma = chart.addNativeIndicator("sma", { inputs: { length: SMA_LENGTH, color: SMA_COLOR } });
+      ema = chart.addNativeIndicator("ema", { inputs: { length: EMA_LENGTH, color: EMA_COLOR } });
+      overlayInd = chart.addNativeIndicator(picked.type, { inputs: heroOverlayInputs(overlayKind) });
+      setCaption(`LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${picked.label}`);
     };
 
-    /** Cover only unrevealed candles. The price scale and time axis stay put. */
-    const paintCover = (shown: number, barCount: number) => {
-      const cover = coverRef.current;
-      if (!cover) return false;
-      const hidden = barCount > 1 && shown < barCount ? 1 - shown / barCount : shown >= barCount ? 0 : 1;
-      const { right, timeAxis, plot } = plotBox();
-      cover.style.top = "0px";
-      cover.style.right = `${right}px`;
-      cover.style.bottom = `${timeAxis}px`;
-      cover.style.left = "auto";
-      cover.style.width = hidden <= 0 ? "0px" : `${hidden * plot}px`;
-      return hidden > 0;
-    };
-
-    const maybeIndicators = () => {
-      if (dead || finished || indicatorStarted) return;
-      if (!hasBars && book.length === 0) {
-        unavailable();
-        finished = true;
-        return;
-      }
-      indicatorStarted = true;
-      if (!volumeHandle && chart) {
-        try {
-          volumeHandle = chart.addNativeIndicator("volume");
-        } catch {
-          /* volume already mounted */
-        }
-      }
-      clearDrawings();
-      mountNative();
+    const fadeIn = () => {
+      if (dead || shown) return;
+      const rows = loadedSeries();
+      if (rows.length < 2 && !hasBars) return;
+      shown = true;
+      mountStudies();
+      lockFrame(rows);
+      chart?.resize();
       lockFrame(loadedSeries());
-      finished = true;
-      beat(hasBars || book.length > 0 ? "done" : "unavailable");
-    };
-
-    const startBars = () => {
-      if (!chart || dead || finished || barsStarted) return;
-      const rowsNow = loadedSeries();
-      if (rowsNow.length < 2) {
-        if (hasBars || chart.replay.bounds) later(40, () => startBars());
-        return;
-      }
-      barsStarted = true;
-      beat("bars");
-      const frozen = rowsNow.map((bar) => ({ ...bar }));
-      const strokes = heroIndicatorStrokes(frozen, overlayKind);
-      const timeIndex = new Map(frozen.map((bar, index) => [bar.time, index]));
-      const price = paddedPriceWindow(revealYDomain(frozen, 0, overlayKind));
-      const volumeMax = revealYDomain(frozen, 0, overlayKind).volumeMax;
-      try {
-        applySafe(CANDLES_VISIBLE);
-        theme(THEME);
-        lockFrame(frozen);
-        const svg = revealRef.current;
-        if (svg) svg.style.display = "";
-        const paintLayers = (counts: { candles: number; indicators: number; volume: number }) => {
-          frame.dataset.revealCandles = String(counts.candles);
-          frame.dataset.revealIndicators = String(counts.indicators);
-          frame.dataset.revealVolume = String(counts.volume);
-          const { plot, plotH } = plotBox();
-          paintCover(counts.candles, frozen.length);
-          if (!svg || plot < 8 || plotH < 8) return;
-          svg.style.width = `${plot}px`;
-          svg.style.height = `${plotH}px`;
-          svg.setAttribute("viewBox", `0 0 ${plot} ${plotH}`);
-          svg.replaceChildren();
-          const span = price.max - price.min || 1;
-          const ns = "http://www.w3.org/2000/svg";
-          if (counts.indicators >= 2) {
-            for (const stroke of strokes) {
-              const points = revealStroke(stroke, frozen, counts.indicators - 1);
-              if (points.length < 2) continue;
-              const d = points
-                .map((point, k) => {
-                  const index = timeIndex.get(point.time) ?? 0;
-                  const x = ((index + 0.5) / frozen.length) * plot;
-                  const y = ((price.max - point.price) / span) * plotH;
-                  return `${k === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
-                })
-                .join(" ");
-              const path = document.createElementNS(ns, "path");
-              path.setAttribute("d", d);
-              path.setAttribute("fill", "none");
-              path.setAttribute("stroke", stroke.color);
-              path.setAttribute("stroke-width", "1.5");
-              svg.appendChild(path);
-            }
-          }
-          const band = plotH * 0.2;
-          const barW = Math.max(1, (plot / frozen.length) * 0.62);
-          for (let i = 0; i < counts.volume; i++) {
-            const bar = frozen[i];
-            const vol = bar?.volume ?? 0;
-            if (!bar || !(vol > 0) || !(volumeMax > 0)) continue;
-            const h = Math.max(1, (vol / volumeMax) * band);
-            const rect = document.createElementNS(ns, "rect");
-            rect.setAttribute("x", String(((i + 0.5) / frozen.length) * plot - barW / 2));
-            rect.setAttribute("y", String(plotH - h));
-            rect.setAttribute("width", String(barW));
-            rect.setAttribute("height", String(h));
-            rect.setAttribute("fill", bar.close >= bar.open ? UP : DOWN);
-            rect.setAttribute("opacity", "0.55");
-            svg.appendChild(rect);
-          }
-        };
-        let elapsed = 0;
-        let lastTick = performance.now();
-        const total = VOLUME_LAG_MS + BARS_SWEEP_MS;
-        const tick = (now: number) => {
-          if (dead || finished) return;
-          elapsed += Math.min(48, Math.max(0, now - lastTick));
-          lastTick = now;
-          lockFrame(frozen);
-          const counts = staggerReveal(elapsed, frozen.length);
-          paintLayers(counts);
-          if (elapsed < total) {
-            raf = requestAnimationFrame(tick);
-            return;
-          }
-          if (svg) {
-            svg.replaceChildren();
-            svg.style.display = "none";
-          }
-          if (!volumeHandle) volumeHandle = chart.addNativeIndicator("volume");
-          mountNative();
-          lockFrame(frozen);
-          if (coverRef.current) coverRef.current.style.width = "0px";
-          finished = true;
-          beat("done");
-          chart?.resize();
-        };
-        paintLayers(staggerReveal(0, frozen.length));
-        revealHost();
-        raf = requestAnimationFrame(tick);
-      } catch {
-        if (coverRef.current) coverRef.current.style.width = "0px";
-        revealHost();
-        applySafe(CANDLES_VISIBLE);
-        theme(THEME);
-        overlay.dataset.phase = "done";
-        maybeIndicators();
-      }
-    };
-
-    const placeLines = () => {
-      const w = host.clientWidth;
-      const h = host.clientHeight;
-      if (w < 8 || h < 8) return;
-      const raw = getComputedStyle(host).getPropertyValue("--vela-scale-gutter");
-      const gutter = Number.parseFloat(raw);
-      const right = Math.max(24, w - (Number.isFinite(gutter) && gutter > 0 ? gutter : 56));
-      const bottom = Math.max(TIME_AXIS_PX + 8, h - TIME_AXIS_PX);
-      overlay.setAttribute("viewBox", `0 0 ${w} ${h}`);
-      xLine.setAttribute("x1", "0");
-      xLine.setAttribute("y1", String(bottom));
-      xLine.setAttribute("x2", String(right));
-      xLine.setAttribute("y2", String(bottom));
-      yLine.setAttribute("x1", String(right));
-      yLine.setAttribute("y1", String(bottom));
-      yLine.setAttribute("x2", String(right));
-      yLine.setAttribute("y2", "1");
-      const hs = grid.querySelectorAll<SVGLineElement>('[data-g="h"]');
-      const vs = grid.querySelectorAll<SVGLineElement>('[data-g="v"]');
-      hs.forEach((line, i) => {
-        const y = ((i + 1) / (hs.length + 1)) * bottom;
-        line.setAttribute("x1", "0");
-        line.setAttribute("x2", String(right));
-        line.setAttribute("y1", String(y));
-        line.setAttribute("y2", String(y));
-      });
-      vs.forEach((line, i) => {
-        const x = ((i + 1) / (vs.length + 1)) * right;
-        line.setAttribute("x1", String(x));
-        line.setAttribute("x2", String(x));
-        line.setAttribute("y1", "0");
-        line.setAttribute("y2", String(bottom));
-      });
-    };
-
-    const growLine = (el: SVGLineElement, ms: number) => {
-      const len = lineLength(el);
-      el.style.strokeWidth = "1.25";
-      el.style.transition = "none";
-      el.style.strokeDasharray = `${len}`;
-      el.style.strokeDashoffset = `${len}`;
-      requestAnimationFrame(() => {
-        if (dead || finished) return;
-        el.style.transition = `stroke-dashoffset ${ms}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-        el.style.strokeDashoffset = "0";
-      });
-    };
-
-    const runAxes = () => {
-      if (dead || finished || reduced) return;
-      beat("axes");
-      placeLines();
-      applySafe(CANDLES_HIDDEN);
-      theme(HIDDEN_THEME);
-      overlay.dataset.phase = "x";
-      grid.style.opacity = "0";
-      growLine(xLine, AXIS_X_MS);
-      later(AXIS_Y_START_MS, () => {
-        if (finished) return;
-        overlay.dataset.phase = "xy";
-        growLine(yLine, AXIS_Y_MS);
-      });
-      later(GRID_START_MS, () => {
-        if (finished) return;
-        overlay.dataset.phase = "grid";
-        grid.style.transition = `opacity ${GRID_MS}ms ease`;
-        grid.style.opacity = "1";
-      });
-      later(GRID_START_MS + GRID_MS, () => {
-        if (finished) return;
-        overlay.dataset.phase = "done";
-      });
+      host.style.opacity = "1";
+      beat("done");
     };
 
     let pageUnlocked = false;
@@ -600,10 +252,10 @@ export function QuantField() {
         timeframe: "1",
         bars: 300,
         live: !reduced,
-        theme: reduced ? THEME : HIDDEN_THEME,
+        theme: THEME,
         upColor: UP,
         downColor: DOWN,
-        volume: reduced,
+        volume: true,
         drawings: false,
         animations: reduced
           ? false
@@ -611,14 +263,15 @@ export function QuantField() {
       });
       host.style.touchAction = "pan-y";
       chart.data.registerProvider("coinbase", new CoinbaseProvider());
-      if (!reduced) applySafe(CANDLES_HIDDEN);
 
       const source = chart.data.providerInstance("coinbase") as BarSource | undefined;
       if (source && typeof source.getBars === "function") {
         void source
           .getBars(product, "1", { limit: 300 })
           .then((rows) => {
-            if (!dead) book = asBars(rows);
+            if (dead) return;
+            book = asBars(rows);
+            fadeIn();
           })
           .catch(() => undefined);
       }
@@ -627,70 +280,35 @@ export function QuantField() {
         if (dead) return;
         hasBars = (ev?.bars ?? 0) > 0;
         if (!hasBars) unavailable();
-        else if (!barsStarted && performance.now() - t0 >= COPY_DONE_MS + BARS_START_MS) startBars();
+        else fadeIn();
       });
 
       await chart.ready().catch(() => undefined);
       if (dead) return;
       hasBars = hasBars || Boolean(chart.replay.bounds);
       chart.resize();
-      // Axes already draw from their own placeLines. A late ready() must not
-      // move the strokes under an in-flight dashoffset.
-      if (frame.dataset.heroBeat === "chrome") placeLines();
-
-      if (reduced) {
-        revealHost();
-        applySafe(CANDLES_VISIBLE);
-        theme(THEME);
-        if (hasBars) mountNative();
-        else unavailable();
-        overlay.dataset.phase = "done";
-        finished = true;
-        beat(hasBars ? "done" : "unavailable");
-        return;
-      }
-
-      if (performance.now() - t0 >= COPY_DONE_MS + BARS_START_MS) startBars();
+      if (hasBars) fadeIn();
+      else if (reduced) unavailable();
     };
-
-    if (reduced) {
-      overlay.dataset.phase = "done";
-      revealHost();
-    } else {
-      host.style.opacity = "0";
-      overlay.dataset.phase = "armed";
-    }
 
     void mountChart().catch(() => {
       if (!dead) unavailable();
     });
 
-    if (!reduced) {
-      later(COPY_DONE_MS, () => runAxes());
-      later(COPY_DONE_MS + BARS_START_MS, () => startBars());
-    }
-
     later(CHART_BUILD_MAX_MS, () => {
+      if (shown) return;
       if (!hasBars && book.length === 0) unavailable();
-      showComplete();
+      else fadeIn();
     });
 
     return () => {
       dead = true;
-      if (raf) cancelAnimationFrame(raf);
       if (idleTimer) clearTimeout(idleTimer);
       for (const id of timers) clearTimeout(id);
       host.removeEventListener("wheel", onWheelCapture, { capture: true });
-      try {
-        chart?.replay.stop();
-      } catch {
-        /* ignore */
-      }
-      clearDrawings();
       overlayInd?.remove();
       sma?.remove();
       ema?.remove();
-      volumeHandle?.remove();
       chart?.destroy();
     };
   }, []);
@@ -701,40 +319,12 @@ export function QuantField() {
         <div
           ref={ref}
           aria-label={caption}
-          className="absolute inset-0 h-full w-full opacity-0 [transform:translateZ(0)]"
-        />
-        <svg
-          ref={overlayRef}
-          className="hero-construct"
-          data-phase="armed"
-          aria-hidden="true"
-          preserveAspectRatio="none"
-        >
-          <g ref={gridRef} className="hero-construct__grid" style={{ opacity: 0 }}>
-            {GRID_H.map((n) => (
-              <line key={`h${n}`} data-g="h" />
-            ))}
-            {GRID_V.map((n) => (
-              <line key={`v${n}`} data-g="v" />
-            ))}
-          </g>
-          <line ref={xRef} className="hero-construct__x" />
-          <line ref={yRef} className="hero-construct__y" />
-        </svg>
-        <div
-          ref={coverRef}
-          aria-hidden
-          className="pointer-events-none absolute top-0 z-20"
-          style={{ width: 0, right: 56, bottom: TIME_AXIS_PX, background: "var(--bg)" }}
-        />
-        <svg
-          ref={revealRef}
-          aria-hidden
-          className="pointer-events-none absolute top-0 left-0 z-30"
-          style={{ display: "none" }}
+          className="hero-chart absolute inset-0 h-full w-full [transform:translateZ(0)]"
         />
       </div>
-      <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>
+      <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">
+        {caption}
+      </p>
     </>
   );
 }

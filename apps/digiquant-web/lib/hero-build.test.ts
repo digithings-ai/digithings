@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   BUILD_COLUMNS,
@@ -7,6 +10,7 @@ import {
   BARS_START_MS,
   BARS_SWEEP_MS,
   CHART_BUILD_MAX_MS,
+  HERO_FADE_MS,
   CHART_BUILD_TARGET_MS,
   CHART_INTRO_MS,
   CHART_BUILD_END_MS,
@@ -36,6 +40,12 @@ import {
 } from "./hero-build";
 
 describe("hero build clock", () => {
+  it("fades the finished chart in instead of building it", () => {
+    expect(HERO_FADE_MS).toBeGreaterThan(200);
+    expect(HERO_FADE_MS).toBeLessThan(1200);
+    expect(HERO_FADE_MS).toBeLessThan(CHART_BUILD_MAX_MS);
+  });
+
   it("sweeps from the first wordmark column to the last", () => {
     expect(BUILD_COLUMNS).toBe(79);
     expect(sweepDelayMs(0)).toBe(BUILD_START_MS);
