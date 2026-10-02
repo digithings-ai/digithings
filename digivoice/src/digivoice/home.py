@@ -1,8 +1,8 @@
 """Bare-`digivoice` app home: status strip plus actions over the commands.
 
-A TTY takes the whole viewport: alternate screen, content centered, DIGIVOICE
-half-block wordmark (build-in, then a quiet glint), status strip, and a
-step-rail menu. Pipes, CI, and agents get a printed overview and exit 0 —
+A TTY takes the whole viewport: alternate screen, DIGIVOICE pixel-hero
+field (7×10 block letters plus ambient shimmer filling leftover rows),
+status strip, and a step-rail menu. Pipes, CI, and agents get a printed overview and exit 0 —
 never a hang. Setup is a submenu entry that returns to home; it is not the
 home screen. Every entry routes to the handlers the subcommands use.
 """

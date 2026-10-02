@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 from digivoice.home import HOME_GROUPS, HOME_MENU, render_home_overview
-from digivoice.tui import render_screen, render_wordmark_lines
+from digivoice.pixel_hero import render_pixel_hero
+from digivoice.tui import parse_sgr_mouse, render_screen, render_wordmark_lines
 
 pytestmark = pytest.mark.unit
 
@@ -29,12 +30,12 @@ def _frame(**overrides: object) -> str:
     return render_screen("Actions", list(HOME_MENU), 0, **params)  # type: ignore[arg-type]
 
 
-def test_wordmark_is_five_half_block_rows() -> None:
+def test_wordmark_is_ten_full_block_rows() -> None:
     rows = render_wordmark_lines("DIGIVOICE", cols=120, ansi=False)
-    assert len(rows) == 5
-    assert len(rows[0]) == 79
+    assert len(rows) == 10
     assert all(len(row) == len(rows[0]) for row in rows)
-    assert any(ch in "\n".join(rows) for ch in "▀▄█")
+    assert "█" in "\n".join(rows)
+    assert "▀" not in "\n".join(rows) and "▄" not in "\n".join(rows)
 
 
 def test_wordmark_glint_changes_with_phase() -> None:
@@ -53,9 +54,9 @@ def test_wordmark_uses_teal_not_rainbow() -> None:
 
 
 def test_idle_header_has_moving_teal_particles() -> None:
-    """Landing-style stray particles stay after the build-in and drift with phase."""
-    still = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, frac=1, phase=0, ansi=True))
-    later = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, frac=1, phase=4, ansi=True))
+    """Landing field shimmers after the build-in; letters stay teal."""
+    still = "\n".join(render_pixel_hero("DIGIVOICE", cols=120, rows=18, t_ms=0, ansi=True))
+    later = "\n".join(render_pixel_hero("DIGIVOICE", cols=120, rows=18, t_ms=2400, ansi=True))
     assert "·" in still
     assert "38;2;61;214;196" in still
     assert still != later
@@ -68,10 +69,11 @@ def test_wordmark_builds_in() -> None:
     assert "█" in "\n".join(full)
 
 
-def test_home_frame_is_centered_with_a_step_rail() -> None:
+def test_home_frame_is_a_full_bleed_pixel_hero() -> None:
     frame = _frame()
     assert "▶" not in frame
-    assert any(ch in frame for ch in "▀▄█")
+    assert "█" in frame
+    assert "▀" not in frame and "▄" not in frame
     assert "STATUS" in frame
     assert "▦" in frame and "▥" in frame and ("■" in frame or "□" in frame)
     for name in ("OPERATE", "MAINTAIN", "CONFIGURE", "LEAVE"):
@@ -83,14 +85,12 @@ def test_home_frame_is_centered_with_a_step_rail() -> None:
     assert "■" in doctor
     assert "□" in settings
     assert "■" not in settings
-    content = [line for line in frame.splitlines() if line.strip()]
-    assert content[0].startswith(" ")
-    blanks = 0
-    for line in frame.splitlines():
-        if line.strip():
-            break
-        blanks += 1
-    assert blanks >= 2
+    # Header is the field, not a vertically-centered island of blank rows.
+    lines = frame.replace("\r\n", "\n").splitlines()
+    stripped = [i for i, line in enumerate(lines) if line.strip()]
+    assert stripped
+    assert stripped[0] <= 2
+    assert frame.count("█") >= 300
 
 
 def test_home_frame_keeps_every_action_on_a_short_terminal() -> None:
@@ -207,3 +207,34 @@ def test_menu_raw_keeps_opost_for_newline_translation() -> None:
     finally:
         os.close(slave)
         os.close(master)
+
+
+def test_sgr_mouse_motion_is_not_esc() -> None:
+    """Landing field may follow the pointer; CSI <32;x;yM must not quit home."""
+    assert parse_sgr_mouse("32;10;5") == (9, 4)
+    assert parse_sgr_mouse("0;1;1") == (0, 0)
+    assert parse_sgr_mouse("nope") is None
+
+    import os
+    import pty
+    import termios
+    import threading
+    import time
+    import tty
+
+    from digivoice.tui import _read_key_on_fd
+
+    master, slave = pty.openpty()
+    saved = termios.tcgetattr(slave)
+    tty.setraw(slave)
+
+    def feed() -> None:
+        time.sleep(0.05)
+        os.write(master, b"\x1b[<32;12;8M\x1b[A")
+
+    threading.Thread(target=feed, daemon=True).start()
+    got = [_read_key_on_fd(slave, timeout=0.5) for _ in range(2)]
+    termios.tcsetattr(slave, termios.TCSADRAIN, saved)
+    os.close(slave)
+    os.close(master)
+    assert got == ["mouse", "up"], got
