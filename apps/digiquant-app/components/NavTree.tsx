@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useState, type KeyboardEvent } from 'react';
 import { sectionOf, type NavNode } from '@/lib/nav';
+import { lockTitle } from '@/lib/access';
 import { useAccess } from './Access';
 
 function Tag({ n }: { n: NavNode }) {
-  if (n.lock) return <span className="nav-tag" title={`Requires ${n.lock}`}>[{n.lock}]</span>;
+  if (n.lock) return <span className="nav-tag" title={lockTitle(n.lock)}>[{n.lock}]</span>;
   return n.status ? <span className="nav-tag">[{n.status}]</span> : null;
 }
 
