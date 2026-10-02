@@ -2,9 +2,10 @@
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
 viewport: alternate screen, content centered, one repaint per key. The home
-hero is the DIGIVOICE pixel wordmark (half-block cells, brief build-in, a
-few cells pulse). Menus use a step rail — active section marked, the current
-row checked and inverted — so the shell does not read as a flat wizard list.
+hero is the DIGIVOICE pixel wordmark (half-block cells, brief build-in, then
+soft teal particles and a quiet glint — landing chrome, not a rainbow title).
+Menus use a step rail — active section marked, the current row checked and
+inverted — so the shell does not read as a flat wizard list.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -47,16 +48,9 @@ _ANSI_ALT_OFF = "\x1b[?1049l"
 _ANSI_RESET = "\x1b[0m"
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
-# digiquant teal accent for selected/active rows (ANSI only, NO_COLOR skips).
+# digithings landing accent (teal). Header chrome stays one hue — no rainbow title.
+_TEAL_RGB = (61, 214, 196)
 _TEAL = "\x1b[38;2;61;214;196m"
-# Multi-color letter accents for the DIGIVOICE wordmark (one hue per letter).
-_WORDMARK_HUES: tuple[tuple[int, int, int], ...] = (
-    (61, 214, 196),
-    (229, 183, 101),
-    (226, 112, 138),
-    (90, 163, 196),
-    (217, 122, 90),
-)
 
 _STATUS_SYMBOLS = frozenset({"▦", "▥", "■", "□", "▤"})
 
@@ -371,9 +365,34 @@ def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tu
     return found
 
 
-def _wordmark_color(letter_index: int) -> str:
-    r, g, b = _WORDMARK_HUES[letter_index % len(_WORDMARK_HUES)]
-    return f"\x1b[38;2;{r};{g};{b}m"
+def _teal_sgr(*, bold: bool = False, dim: bool = False, invert: bool = False) -> str:
+    r, g, b = _TEAL_RGB
+    bits: list[str] = []
+    if invert:
+        bits.extend(("1", "7"))
+    elif bold:
+        bits.append("1")
+    elif dim:
+        bits.append("2")
+    bits.append(f"38;2;{r};{g};{b}")
+    return f"\x1b[{';'.join(bits)}m"
+
+
+def _idle_particles(width: int, blocked: set[tuple[int, int]], phase: int) -> set[tuple[int, int]]:
+    """Landing-style stray cells: soft teal dots that drift after the build-in."""
+    if width <= 0:
+        return set()
+    found: set[tuple[int, int]] = set()
+    n = 0
+    while n < 200 and len(found) < 32:
+        point = ((n * 17 + 5 + phase * 3) % width, (n * 5 + 2 + phase) % 10)
+        n += 1
+        if point in blocked:
+            continue
+        if (n + phase) % 3 == 0:
+            continue
+        found.add(point)
+    return found
 
 
 def _cell_sgr(
@@ -384,15 +403,15 @@ def _cell_sgr(
     hot_ok: bool,
     letter_index: int = 0,
 ) -> str:
+    _ = letter_index
     gi = glints.get((x, y))
-    color = _wordmark_color(letter_index)
     if hot_ok and gi is not None and (gi + phase) % 8 == 0:
-        return f"\x1b[1;7m{color}"
+        return _teal_sgr(invert=True)
     if (x * 3 + y * 5) % 4 == 0:
-        return f"\x1b[2m{color}"
+        return _teal_sgr(dim=True)
     if (x * 3 + y * 5) % 4 == 3:
-        return f"\x1b[1m{color}"
-    return color
+        return _teal_sgr(bold=True)
+    return _teal_sgr()
 
 
 def render_wordmark_lines(
@@ -413,6 +432,7 @@ def render_wordmark_lines(
     lit = _lit_set(cells, frac)
     glints = _glint_index(cells)
     strays = _stray_set(len(grid[0]), set(cells), frac)
+    idle = _idle_particles(len(grid[0]), set(cells), phase) if frac >= 1 else set()
     hot_ok = ansi and frac >= 1
     lines: list[str] = []
     width = len(grid[0])
@@ -425,6 +445,13 @@ def render_wordmark_lines(
             top_on = (x, y) in lit or (x, y) in strays
             bot_on = (x, y + 1) in lit or (x, y + 1) in strays
             if not top_on and not bot_on:
+                particle = (x, y) in idle or (x, y + 1) in idle
+                if particle:
+                    if ansi:
+                        parts.append(_teal_sgr(dim=True))
+                        dirty = True
+                    parts.append("·")
+                    continue
                 if dirty and ansi:
                     parts.append(_ANSI_RESET)
                     dirty = False

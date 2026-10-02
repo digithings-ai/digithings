@@ -28,7 +28,7 @@ Before editing `digivoice/`:
 ## Rules
 
 - Product name is lowercase `digivoice` in prose, docs, and the package name.
-- Speech stays local: `whisper-cli` and Piper only. Optional post-STT rewrite uses a local runner (ollama / llama.cpp) only — never a cloud LLM. Rewrite is disabled by default.
+- Speech stays local: `whisper-cli` and Piper only. Optional post-STT rewrite uses a local GGUF shipped with digivoice (`qwen2.5-1.5b-instruct-q4_k_m.gguf` via llama.cpp / local ollama) — never a cloud LLM, URL, or ollama registry tag. Rewrite is disabled by default. Timeout is off by default; when on, 15 / 30 / 60 seconds only.
 - Word / spelling detection settings (`word_detection`, `spelling_detection`) default off; stubs only in this slice (doctor `detection` info, not wired to STT).
 - Super Whisper is not a dependency. Do not shell out to it or read its config.
 - OpenCode `@renjfk/opencode-voice` is optional for people who want a TUI binding. digivoice must keep working when that plugin is absent.

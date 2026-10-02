@@ -9,7 +9,10 @@ import pytest
 from digivoice.cli import Runtime, run
 from digivoice.paths import resolve_paths
 from digivoice.settings import (
+    REWRITE_TIMEOUT_PRESETS,
     VoiceSettings,
+    cycle_rewrite_timeout,
+    format_rewrite_timeout,
     load_settings,
     parse_setting_value,
     save_settings,
@@ -27,6 +30,7 @@ def test_defaults_keep_rewrite_disabled(tmp_path: Path) -> None:
     settings = load_settings(paths)
     assert settings.rewrite_enabled is False
     assert settings.rewrite_preset == "none"
+    assert settings.rewrite_timeout_seconds is None
     assert settings.paste_on_stop is True
     assert settings.word_detection is False
     assert settings.spelling_detection is False
@@ -48,9 +52,10 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     settings = VoiceSettings(
         rewrite_enabled=True,
         rewrite_preset="email",
-        rewrite_model="qwen2.5:3b",
-        rewrite_runner="ollama",
+        rewrite_model="qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        rewrite_runner="llama.cpp",
         rewrite_auto_route=True,
+        rewrite_timeout_seconds=30.0,
     )
     target = save_settings(paths, settings)
     assert target == settings_path(paths)
@@ -58,8 +63,9 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     loaded = load_settings(paths)
     assert loaded.rewrite_enabled is True
     assert loaded.rewrite_preset == "email"
-    assert loaded.rewrite_model == "qwen2.5:3b"
+    assert loaded.rewrite_model == "qwen2.5-1.5b-instruct-q4_k_m.gguf"
     assert loaded.rewrite_auto_route is True
+    assert loaded.rewrite_timeout_seconds == 30.0
 
 
 def test_corrupt_settings_file_falls_back_to_defaults(tmp_path: Path) -> None:
@@ -75,6 +81,44 @@ def test_parse_bool_and_null() -> None:
     assert parse_setting_value("rewrite_model", "none") is None
     with pytest.raises(ValueError):
         parse_setting_value("rewrite_enabled", "maybe")
+
+
+def test_timeout_presets_only_and_off_by_default() -> None:
+    assert REWRITE_TIMEOUT_PRESETS == (15.0, 30.0, 60.0)
+    assert parse_setting_value("rewrite_timeout_seconds", "off") is None
+    assert parse_setting_value("rewrite_timeout_seconds", "disabled") is None
+    assert parse_setting_value("rewrite_timeout_seconds", "15") == 15.0
+    assert parse_setting_value("rewrite_timeout_seconds", "30") == 30.0
+    assert parse_setting_value("rewrite_timeout_seconds", "60") == 60.0
+    with pytest.raises(ValueError):
+        parse_setting_value("rewrite_timeout_seconds", "45")
+    with pytest.raises(ValueError):
+        parse_setting_value("rewrite_timeout_seconds", "12.5")
+    assert cycle_rewrite_timeout(None) == 15.0
+    assert cycle_rewrite_timeout(15.0) == 30.0
+    assert cycle_rewrite_timeout(30.0) == 60.0
+    assert cycle_rewrite_timeout(60.0) is None
+    assert format_rewrite_timeout(None) == "off"
+    assert format_rewrite_timeout(15.0) == "15s"
+
+
+def test_cli_timeout_off_and_presets(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    shown = json.loads(run(["settings", "--json"], runtime).stdout)
+    assert shown["rewrite_timeout_seconds"] is None
+    assert run(["settings", "set", "rewrite_timeout_seconds", "30"], runtime).code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    assert load_settings(paths).rewrite_timeout_seconds == 30.0
+    bad = run(["settings", "set", "rewrite_timeout_seconds", "45"], runtime)
+    assert bad.code == 2
+    assert load_settings(paths).rewrite_timeout_seconds == 30.0
+    assert run(["settings", "set", "rewrite_timeout_seconds", "off"], runtime).code == 0
+    assert load_settings(paths).rewrite_timeout_seconds is None
 
 
 def test_cli_settings_show_and_json(tmp_path: Path) -> None:
@@ -118,6 +162,30 @@ def test_cli_settings_set_get(tmp_path: Path) -> None:
         ).rewrite_preset
         == "coding"
     )
+
+
+def test_cli_rejects_remote_rewrite_model(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    for remote in (
+        "https://openrouter.ai/api/v1",
+        "http://127.0.0.1:11434/model",
+        "openrouter/qwen",
+        "qwen2.5:3b",
+    ):
+        bad = run(["settings", "set", "rewrite_model", remote], runtime)
+        assert bad.code == 2, remote
+    ok = run(
+        ["settings", "set", "rewrite_model", "qwen2.5-1.5b-instruct-q4_k_m.gguf"],
+        runtime,
+    )
+    assert ok.code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    assert load_settings(paths).rewrite_model == "qwen2.5-1.5b-instruct-q4_k_m.gguf"
 
 
 def test_cli_setup_alias(tmp_path: Path) -> None:

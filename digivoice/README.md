@@ -114,14 +114,22 @@ CLI callers; it is not the hotkey command.
 
 ### Post-STT rewrite (optional, local only)
 
-Disabled by default. When enabled, digivoice runs a **local** ollama or llama.cpp model after whisper and before paste. Presets: `email`, `sms`, `professional`, `coding`, `blog`, `none`. Optional `rewrite_auto_route` picks a preset from the focused app using `rewrite_app_routes` in settings (defaults cover Mail/Messages/Terminal/Cursor/etc.; fully overridable JSON map — not hard-coded in the rewrite module). Fail soft: raw transcript if the runner/model is missing or errors. No cloud LLM. Place a GGUF under the models directory or set `rewrite_model` to an Ollama tag; weights are not bundled (doctor reports readiness).
+Disabled by default. When enabled, digivoice runs the **shipped local** GGUF
+(`qwen2.5-1.5b-instruct-q4_k_m.gguf` under the models directory) via llama.cpp
+(or local ollama) after whisper and before paste. Presets: `email`, `sms`,
+`professional`, `coding`, `blog`, `none`. Optional `rewrite_auto_route` picks a
+preset from the focused app using `rewrite_app_routes` in settings. Fail soft:
+raw transcript if the runner/model is missing or errors. No cloud LLM, no
+OpenRouter, no user URL — `doctor` reports when the local GGUF is not installed.
+Timeout is off by default; enable it to cycle 15 / 30 / 60 seconds.
 
 ```bash
 digivoice settings set rewrite_enabled true
-digivoice settings set rewrite_runner ollama
-digivoice settings set rewrite_model qwen2.5:3b
+digivoice settings set rewrite_runner llama.cpp
+digivoice settings set rewrite_model qwen2.5-1.5b-instruct-q4_k_m.gguf
 digivoice settings set rewrite_preset email
 digivoice settings set rewrite_auto_route true
+digivoice settings set rewrite_timeout_seconds 30
 ```
 
 ### Cancel and empty takes
