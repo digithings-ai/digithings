@@ -71,9 +71,7 @@ def main() -> int:
             failures.append(f"#{num} «{title}» — placeholder phase: «{phase}»")
             continue
         if model not in VALID_MODELS:
-            failures.append(
-                f"#{num} «{title}» — invalid model «{model}» (must be sonnet or opus)"
-            )
+            failures.append(f"#{num} «{title}» — invalid model «{model}» (must be sonnet or opus)")
             continue
         print(f"✅  #{num} — phase: {phase} | model: {model}")
 

@@ -9,27 +9,31 @@ from digisearch.core.filter_validator import validate_odata_filter
 # Valid filters — must pass through unchanged
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestValidFilters:
-    @pytest.mark.parametrize("filter_str", [
-        "sourceType eq 'EXCHANGE'",
-        "score ge 0.5",
-        "createdAt le '2024-01-01T00:00:00Z'",
-        "status ne 'deleted'",
-        "priority gt 3",
-        "count lt 100",
-        "field eq 'value' and other ne 'x'",
-        "a eq 1 or b eq 2",
-        "not (status eq 'inactive')",
-        "items/any(i: i/type eq 'pdf')",
-        "tags/all(t: t/active eq true)",
-        "field in ('a', 'b', 'c')",
-        "price add 10 ge 100",
-        "price sub 5 lt 50",
-        "qty mul 2 gt 10",
-        "total div 3 le 7",
-        "index mod 2 eq 0",
-    ])
+    @pytest.mark.parametrize(
+        "filter_str",
+        [
+            "sourceType eq 'EXCHANGE'",
+            "score ge 0.5",
+            "createdAt le '2024-01-01T00:00:00Z'",
+            "status ne 'deleted'",
+            "priority gt 3",
+            "count lt 100",
+            "field eq 'value' and other ne 'x'",
+            "a eq 1 or b eq 2",
+            "not (status eq 'inactive')",
+            "items/any(i: i/type eq 'pdf')",
+            "tags/all(t: t/active eq true)",
+            "field in ('a', 'b', 'c')",
+            "price add 10 ge 100",
+            "price sub 5 lt 50",
+            "qty mul 2 gt 10",
+            "total div 3 le 7",
+            "index mod 2 eq 0",
+        ],
+    )
     def test_valid_filter_passes_through(self, filter_str: str) -> None:
         result = validate_odata_filter(filter_str)
         assert result == filter_str
@@ -50,20 +54,24 @@ class TestValidFilters:
 # Blocked patterns — must raise ValueError
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestBlockedPatterns:
-    @pytest.mark.parametrize("malicious", [
-        "exec(import os)",
-        "eval('__import__(\"os\")')",
-        "system('rm -rf /')",
-        "__class__.__subclasses__()",
-        "__import__('os').system('ls')",
-        "<script>alert(1)</script>",
-        "javascript:alert(1)",
-        "data:text/html,<h1>XSS</h1>",
-        "EXEC(SELECT 1)",
-        "EVAL(something)",
-    ])
+    @pytest.mark.parametrize(
+        "malicious",
+        [
+            "exec(import os)",
+            "eval('__import__(\"os\")')",
+            "system('rm -rf /')",
+            "__class__.__subclasses__()",
+            "__import__('os').system('ls')",
+            "<script>alert(1)</script>",
+            "javascript:alert(1)",
+            "data:text/html,<h1>XSS</h1>",
+            "EXEC(SELECT 1)",
+            "EVAL(something)",
+        ],
+    )
     def test_blocked_pattern_raises(self, malicious: str) -> None:
         with pytest.raises(ValueError, match="blocked pattern|unsupported"):
             validate_odata_filter(malicious)
@@ -78,20 +86,24 @@ class TestBlockedPatterns:
 # Unsupported characters — must raise ValueError
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestUnsupportedCharacters:
-    @pytest.mark.parametrize("bad_char_filter", [
-        "field eq 'value'; DROP TABLE users",
-        "field eq `backtick`",
-        "field eq value\x00null",
-        "field eq value\ninjected",
-        "field eq value\rinjected",
-        "field ~ 'pattern'",
-        "field ^ 'value'",
-        "field | 'value'",
-        "field & 'value'",
-        "{\"$where\": \"this\"}",
-    ])
+    @pytest.mark.parametrize(
+        "bad_char_filter",
+        [
+            "field eq 'value'; DROP TABLE users",
+            "field eq `backtick`",
+            "field eq value\x00null",
+            "field eq value\ninjected",
+            "field eq value\rinjected",
+            "field ~ 'pattern'",
+            "field ^ 'value'",
+            "field | 'value'",
+            "field & 'value'",
+            '{"$where": "this"}',
+        ],
+    )
     def test_unsupported_chars_raises(self, bad_char_filter: str) -> None:
         with pytest.raises(ValueError):
             validate_odata_filter(bad_char_filter)
@@ -100,6 +112,7 @@ class TestUnsupportedCharacters:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestEdgeCases:

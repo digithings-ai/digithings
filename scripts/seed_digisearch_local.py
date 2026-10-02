@@ -113,7 +113,9 @@ def main() -> None:
             src = str(path.resolve())
         payload = {"source": src, "index_name": args.index}
         out = _post_json(f"{base}/ingest", payload, auth)
-        print(f"ingest {path.name} -> {out.get('status', 'ok')} chunks={out.get('chunks_created')} doc_id={out.get('doc_id')}")
+        print(
+            f"ingest {path.name} -> {out.get('status', 'ok')} chunks={out.get('chunks_created')} doc_id={out.get('doc_id')}"
+        )
 
 
 if __name__ == "__main__":

@@ -33,9 +33,7 @@ class HybridSearcher:
         k = top_k or query.top_k
         expand_q = Query(text=query.text, top_k=k * 2, mode=query.mode)
         kw_results = (
-            self.keyword.search(expand_q, top_k=k * 2)
-            if hasattr(self.keyword, "search")
-            else []
+            self.keyword.search(expand_q, top_k=k * 2) if hasattr(self.keyword, "search") else []
         )
         vec_results = self.vector.search(expand_q) if hasattr(self.vector, "search") else []
         vec_results = list(vec_results)[: k * 2] if vec_results else []

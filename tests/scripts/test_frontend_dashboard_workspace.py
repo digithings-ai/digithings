@@ -67,9 +67,9 @@ def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
     assert "NEXT_PUBLIC_DIGICHAT_POPUP=1" in build
     assert "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai" in build
     assert "NEXT_PUBLIC_DIGICHAT_EMBED_HOST=digiquant.io" in build
-    shell = (
-        REPO_ROOT / "apps" / "dashboard" / "components" / "app-shell-context.tsx"
-    ).read_text(encoding="utf-8")
+    shell = (REPO_ROOT / "apps" / "dashboard" / "components" / "app-shell-context.tsx").read_text(
+        encoding="utf-8"
+    )
     assert "dashboard-sidebar-collapsed" in shell
     assert "localStorage.setItem(STORAGE_KEY" in shell
 
@@ -92,9 +92,7 @@ def test_dashboard_has_no_nested_lockfile() -> None:
 
 
 def test_dashboard_icons_and_theme_keys_are_not_olympus() -> None:
-    layout = (REPO_ROOT / "apps" / "dashboard" / "app" / "layout.tsx").read_text(
-        encoding="utf-8"
-    )
+    layout = (REPO_ROOT / "apps" / "dashboard" / "app" / "layout.tsx").read_text(encoding="utf-8")
     manifest = (REPO_ROOT / "apps" / "dashboard" / "app" / "manifest.ts").read_text(
         encoding="utf-8"
     )

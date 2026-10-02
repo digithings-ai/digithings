@@ -176,7 +176,9 @@ def test_workflow_returns_backtest(
 ) -> None:
     """Workflow: prompt → research → real Nautilus backtest result."""
     if not e2e_available:
-        pytest.skip("E2E stack not available. Start with: docker compose up -d or bash scripts/run_local.sh (then set DIGIGRAPH_URL/DIGIQUANT_URL to 18000/18001)")
+        pytest.skip(
+            "E2E stack not available. Start with: docker compose up -d or bash scripts/run_local.sh (then set DIGIGRAPH_URL/DIGIQUANT_URL to 18000/18001)"
+        )
     # The workflow's backtest node needs real OHLCV CSVs (digigraph sets
     # DIGIQUANT_DATA_DIR=/app/data, backed by the ./digiquant/data mount). With
     # no CSVs it returns an error rather than a backtest, so skip rather than

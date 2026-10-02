@@ -1,5 +1,6 @@
 # tests/provider_review/test_probe.py
 """Unit tests for scripts/provider_review/probe.py."""
+
 from __future__ import annotations
 
 import json
@@ -85,8 +86,14 @@ def test_providers_dict_has_eight_entries():
     """PROVIDERS covers exactly the 8 still-probeable providers (github_models retired #1589)."""
     assert len(PROVIDERS) == 8
     expected = {
-        "gemini", "groq", "cerebras", "mistral", "nvidia_nim",
-        "ollama_cloud", "openrouter", "deepseek",
+        "gemini",
+        "groq",
+        "cerebras",
+        "mistral",
+        "nvidia_nim",
+        "ollama_cloud",
+        "openrouter",
+        "deepseek",
     }
     assert set(PROVIDERS.keys()) == expected
     assert "github_models" not in PROVIDERS

@@ -75,7 +75,9 @@ def _shadow_plan():
     )
 
 
-def _seed_store_with_links(store: AttentionStore) -> tuple[UUID, dict[str, tuple[ShadowProviderAttemptDetail, ...]]]:
+def _seed_store_with_links(
+    store: AttentionStore,
+) -> tuple[UUID, dict[str, tuple[ShadowProviderAttemptDetail, ...]]]:
     plan = _shadow_plan()
     store.append_plan(plan, attempt_id=_ATTEMPT, recorded_at=_TS)
     details: dict[str, tuple[ShadowProviderAttemptDetail, ...]] = {}

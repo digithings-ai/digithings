@@ -12,7 +12,11 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[4] / "digiquant" / "scripts" / "research" / "execute_at_open.py"
+    Path(__file__).resolve().parents[4]
+    / "digiquant"
+    / "scripts"
+    / "research"
+    / "execute_at_open.py"
 )
 
 

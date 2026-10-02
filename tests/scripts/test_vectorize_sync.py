@@ -314,7 +314,9 @@ def _credential_capturing_main(monkeypatch: pytest.MonkeyPatch) -> dict[str, dic
             return []
 
     class _FakeVectorizeBackend:
-        def __init__(self, index_name: str, *, account_id: str, api_token: str, **kwargs: Any) -> None:
+        def __init__(
+            self, index_name: str, *, account_id: str, api_token: str, **kwargs: Any
+        ) -> None:
             captured["vectorize"] = {"account_id": account_id, "api_token": api_token}
 
     monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)

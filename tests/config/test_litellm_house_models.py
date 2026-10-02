@@ -292,15 +292,15 @@ def _assert_ci_only_product_picker(models: dict) -> None:
 def test_digichat_public_picker_is_ci_cheap_only() -> None:
     """digithings.ai / dashboard pickers: CI cheap slugs only — never OpenRouter."""
     embed = yaml.safe_load(
-        (
-            REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml"
-        ).read_text(encoding="utf-8")
+        (REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     _assert_ci_only_product_picker(embed["hosts"]["digithings.ai"]["models"])
     dashboard = yaml.safe_load(
-        (
-            REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml"
-        ).read_text(encoding="utf-8")
+        (REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     _assert_ci_only_product_picker(dashboard["deployment"]["models"])
 

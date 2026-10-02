@@ -315,6 +315,7 @@ def test_max_drawdown_unavailable_without_nav_path(criteria) -> None:
     assert dd.status is MetricAvailability.UNAVAILABLE
     assert dd.unavailable_reason == "path_nav_unavailable"
 
+
 def test_unavailable_and_inconclusive_explicit(criteria) -> None:
     inc_req = _request(request_id="inc", targets=(("AAPL", "0.4"), ("MSFT", "0.4")))
     ch_req = _request(request_id="ch", targets=(("AAPL", "0.5"), ("MSFT", "0.3")))

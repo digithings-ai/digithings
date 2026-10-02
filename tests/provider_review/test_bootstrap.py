@@ -1,5 +1,6 @@
 # tests/provider_review/test_bootstrap.py
 """Unit tests for scripts/provider_review/bootstrap.py."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -17,7 +18,7 @@ def test_extract_finds_tagged_entry(tmp_path):
         "phase_models:\n"
         "  # llm-decision: reasoning free-preferred\n"
         "  # DeepSeek chosen for math benchmark strength on free tier\n"
-        "  master-digest: \"ollama-cloud/deepseek-v3.1:671b\"\n"
+        '  master-digest: "ollama-cloud/deepseek-v3.1:671b"\n'
     )
     decisions = extract_decision_comments([str(cfg)])
     assert len(decisions) == 1
@@ -48,8 +49,7 @@ def test_extract_scans_directory_recursively(tmp_path):
     sub = tmp_path / "sub"
     sub.mkdir()
     (sub / "a.yaml").write_text(
-        "# llm-decision: extraction free-preferred\n"
-        "model: gemini/gemini-2.5-flash\n"
+        "# llm-decision: extraction free-preferred\nmodel: gemini/gemini-2.5-flash\n"
     )
     (sub / "b.yaml").write_text("model: gemini/gemini-2.5-flash\n")
     decisions = extract_decision_comments([str(tmp_path)])
@@ -62,7 +62,11 @@ def test_extract_scans_directory_recursively(tmp_path):
 def test_extract_model_none_when_assignment_beyond_lookahead(tmp_path):
     """model is None when the YAML value is more than 5 lines below the tag."""
     cfg = tmp_path / "config.yaml"
-    lines = ["# llm-decision: reasoning free-preferred"] + ["# comment"] * 5 + ["model: gemini/gemini-2.5-flash"]
+    lines = (
+        ["# llm-decision: reasoning free-preferred"]
+        + ["# comment"] * 5
+        + ["model: gemini/gemini-2.5-flash"]
+    )
     cfg.write_text("\n".join(lines) + "\n")
     decisions = extract_decision_comments([str(cfg)])
     assert len(decisions) == 1

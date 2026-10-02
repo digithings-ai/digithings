@@ -146,9 +146,7 @@ def test_kit_is_not_on_the_marketing_site() -> None:
     """digithings.ai must not ship /brand — the kit is design-reference only."""
     assert not (MARKETING_BRAND_PAGE / "page.tsx").exists()
     assert not MARKETING_PUBLIC_BRAND.exists() or not any(MARKETING_PUBLIC_BRAND.rglob("*"))
-    nav = (REPO_ROOT / "apps" / "digithings-web" / "app" / "_nav.tsx").read_text(
-        encoding="utf-8"
-    )
+    nav = (REPO_ROOT / "apps" / "digithings-web" / "app" / "_nav.tsx").read_text(encoding="utf-8")
     assert 'href: "/brand"' not in nav
     redirects = (REPO_ROOT / "apps" / "digithings-web" / "public" / "_redirects").read_text(
         encoding="utf-8"
@@ -158,14 +156,7 @@ def test_kit_is_not_on_the_marketing_site() -> None:
 
 def test_design_reference_ships_the_kit_page() -> None:
     page = (
-        REPO_ROOT
-        / "apps"
-        / "reference"
-        / "app"
-        / "(gallery)"
-        / "(lab)"
-        / "brand"
-        / "page.tsx"
+        REPO_ROOT / "apps" / "reference" / "app" / "(gallery)" / "(lab)" / "brand" / "page.tsx"
     ).read_text(encoding="utf-8")
     assert "{BRAND_TAGLINE}" in page
     assert "design-reference" in page

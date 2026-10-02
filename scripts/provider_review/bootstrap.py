@@ -8,6 +8,7 @@ Writes everything to /tmp/review/ for the agent to consume.
 Usage:
     python scripts/provider_review/bootstrap.py
 """
+
 from __future__ import annotations
 
 import datetime
@@ -19,8 +20,7 @@ import yaml
 
 SNAPSHOTS_DIR = Path("docs/providers/snapshots")
 LITELLM_PRICING_URL = (
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
-    "model_prices_and_context_window.json"
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 )
 DECISION_SCAN_PATHS = [
     "config/model_modes.yaml",
@@ -39,10 +39,7 @@ def _json_default(obj: object) -> str:
 
 def load_snapshots() -> dict:
     """Return {stem: parsed_yaml} for all files in SNAPSHOTS_DIR."""
-    return {
-        p.stem: yaml.safe_load(p.read_text())
-        for p in sorted(SNAPSHOTS_DIR.glob("*.yaml"))
-    }
+    return {p.stem: yaml.safe_load(p.read_text()) for p in sorted(SNAPSHOTS_DIR.glob("*.yaml"))}
 
 
 def fetch_litellm_pricing() -> dict:
@@ -76,15 +73,17 @@ def extract_decision_comments(scan_paths: list[str]) -> list[dict]:
                     for j in range(i + 1, min(i + 1 + _DECISION_LOOKAHEAD, len(lines))):
                         candidate = lines[j].strip()
                         if not candidate.startswith("#") and ":" in candidate:
-                            model = candidate.split(":", 1)[1].strip().strip('"\'')
+                            model = candidate.split(":", 1)[1].strip().strip("\"'")
                             break
-                    decisions.append({
-                        "file": str(yaml_file),
-                        "line": i + 1,
-                        "tags": tags,
-                        "prose": prose,
-                        "model": model,
-                    })
+                    decisions.append(
+                        {
+                            "file": str(yaml_file),
+                            "line": i + 1,
+                            "tags": tags,
+                            "prose": prose,
+                            "model": model,
+                        }
+                    )
     return decisions
 
 

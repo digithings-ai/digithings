@@ -29,9 +29,7 @@ _SAMPLE = [
 @pytest.mark.unit
 def test_strategy_list_json() -> None:
     runner = CliRunner()
-    with patch(
-        "digiquant.service.service_list_strategies", return_value=_SAMPLE
-    ) as list_fn:
+    with patch("digiquant.service.service_list_strategies", return_value=_SAMPLE) as list_fn:
         result = runner.invoke(strategy_group, ["list"])
     assert result.exit_code == 0, result.output
     list_fn.assert_called_once_with()

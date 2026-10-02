@@ -21,6 +21,7 @@ execution/fill model — the indicator math and parameters are shared, not forke
 Usage:
     python scripts/validation/pine_backtest.py btc_slapper digiquant/data/validation/BTC-USD_1d.csv
 """
+
 from __future__ import annotations
 
 import csv
@@ -424,8 +425,10 @@ def run_backtest(
         if buy_signal and p.enable_long:
             if pos <= 0:  # flat or short → reverse/open long
                 label = (
-                    "MR&T Long" if mr_long and trend_long
-                    else "Trend Long" if trend_long
+                    "MR&T Long"
+                    if mr_long and trend_long
+                    else "Trend Long"
+                    if trend_long
                     else "MR Long"
                 )
                 if pos < 0:
@@ -435,8 +438,10 @@ def run_backtest(
         elif sell_signal and p.enable_short:
             if pos >= 0:  # flat or long → reverse/open short
                 label = (
-                    "MR&T Short" if mr_short and trend_short
-                    else "Trend Short" if trend_short
+                    "MR&T Short"
+                    if mr_short and trend_short
+                    else "Trend Short"
+                    if trend_short
                     else "MR Short"
                 )
                 if pos > 0:
@@ -469,9 +474,14 @@ def run_backtest(
 def _dir_metrics(trades: list[Trade], initial: float) -> dict:
     if not trades:
         return {
-            "trades": 0, "net_profit": 0.0, "net_profit_pct": 0.0,
-            "percent_profitable": 0.0, "profit_factor": None,
-            "avg_trade": 0.0, "wins": 0, "losses": 0,
+            "trades": 0,
+            "net_profit": 0.0,
+            "net_profit_pct": 0.0,
+            "percent_profitable": 0.0,
+            "profit_factor": None,
+            "avg_trade": 0.0,
+            "wins": 0,
+            "losses": 0,
         }
     wins = [t for t in trades if t.pnl > 0]
     losses = [t for t in trades if t.pnl <= 0]
@@ -530,18 +540,43 @@ def summarize(out: BacktestOutput) -> dict:
 def write_trades_csv(out: BacktestOutput, path: str | Path) -> None:
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow([
-            "trade_num", "direction", "entry_label", "entry_date", "entry_price",
-            "exit_date", "exit_price", "qty", "pnl", "pnl_pct_equity",
-            "cumulative_equity", "exit_reason", "max_runup_pct", "max_drawdown_pct",
-        ])
+        w.writerow(
+            [
+                "trade_num",
+                "direction",
+                "entry_label",
+                "entry_date",
+                "entry_price",
+                "exit_date",
+                "exit_price",
+                "qty",
+                "pnl",
+                "pnl_pct_equity",
+                "cumulative_equity",
+                "exit_reason",
+                "max_runup_pct",
+                "max_drawdown_pct",
+            ]
+        )
         for i, t in enumerate(out.trades, 1):
-            w.writerow([
-                i, t.direction, t.entry_label, t.entry_date, f"{t.entry_price:.2f}",
-                t.exit_date, f"{t.exit_price:.2f}", f"{t.qty:.6f}", f"{t.pnl:.2f}",
-                f"{t.pnl_pct:.2f}", f"{t.equity_after:.2f}", t.exit_reason,
-                f"{t.max_runup_pct:.2f}", f"{t.max_drawdown_pct:.2f}",
-            ])
+            w.writerow(
+                [
+                    i,
+                    t.direction,
+                    t.entry_label,
+                    t.entry_date,
+                    f"{t.entry_price:.2f}",
+                    t.exit_date,
+                    f"{t.exit_price:.2f}",
+                    f"{t.qty:.6f}",
+                    f"{t.pnl:.2f}",
+                    f"{t.pnl_pct:.2f}",
+                    f"{t.equity_after:.2f}",
+                    t.exit_reason,
+                    f"{t.max_runup_pct:.2f}",
+                    f"{t.max_drawdown_pct:.2f}",
+                ]
+            )
 
 
 def _fmt(v) -> str:
@@ -553,9 +588,9 @@ def _fmt(v) -> str:
 
 
 def print_summary(s: dict) -> None:
-    print(f"\n{'='*64}")
+    print(f"\n{'=' * 64}")
     print(f"  {s['strategy']}  ·  {s['symbol']}  ·  {s['period']}")
-    print(f"{'='*64}")
+    print(f"{'=' * 64}")
     print(f"  Initial capital : {_fmt(s['initial_capital'])}")
     print(f"  Final equity    : {_fmt(s['final_equity'])}")
     print(f"  Net profit      : {_fmt(s['net_profit_pct'])}%")

@@ -590,8 +590,9 @@ def _bridge_stub(monkeypatch, *, created: bool = True) -> list[tuple[str, str, s
     monkeypatch.setattr(
         mod,
         "_invoke_handoff",
-        lambda webset_id, *, watch_id, run_id: calls.append((webset_id, watch_id, run_id))
-        or (_BridgeSearch(), created),
+        lambda webset_id, *, watch_id, run_id: (
+            calls.append((webset_id, watch_id, run_id)) or (_BridgeSearch(), created)
+        ),
     )
     return calls
 
@@ -716,10 +717,10 @@ def _research_turn_stub(monkeypatch, **overrides) -> list[tuple[str, str, str]]:
     monkeypatch.setattr(
         agent_mod,
         "run_research_turn",
-        lambda payload: calls.append(
-            (payload["user_message"], payload["effort"], payload["session_id"])
-        )
-        or turn,
+        lambda payload: (
+            calls.append((payload["user_message"], payload["effort"], payload["session_id"]))
+            or turn
+        ),
     )
     return calls
 

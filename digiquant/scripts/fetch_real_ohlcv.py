@@ -22,8 +22,12 @@ def main() -> int:
     parser.add_argument("--symbols", nargs="+", default=["AAPL"], help="Ticker symbols")
     parser.add_argument("--start", default="2024-01-01", help="Start date YYYY-MM-DD")
     parser.add_argument("--end", default="2024-12-31", help="End date YYYY-MM-DD")
-    parser.add_argument("--out", type=Path, default=None, help="Output dir (default: digiquant/data) or single file")
-    parser.add_argument("--interval", default="1d", choices=["1d", "1wk", "1h", "1m"], help="Bar interval")
+    parser.add_argument(
+        "--out", type=Path, default=None, help="Output dir (default: digiquant/data) or single file"
+    )
+    parser.add_argument(
+        "--interval", default="1d", choices=["1d", "1wk", "1h", "1m"], help="Bar interval"
+    )
     args = parser.parse_args()
 
     try:
@@ -57,7 +61,15 @@ def main() -> int:
         # yfinance returns Open, High, Low, Close, Volume (or MultiIndex for multi-ticker)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [c[0] for c in df.columns]
-        df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+        df = df.rename(
+            columns={
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            }
+        )
         df = df[["open", "high", "low", "close", "volume"]].dropna()
         df.index.name = "timestamp"
         df["symbol"] = symbol

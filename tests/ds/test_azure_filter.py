@@ -153,6 +153,7 @@ def test_build_odata_date_ne() -> None:
 
 # --- Numeric filters (int and float) ---
 
+
 @pytest.mark.unit
 def test_build_odata_numeric_gt_ge_lt_le() -> None:
     """Numeric comparison ops: gt, ge, lt, le (no quotes)."""
@@ -201,6 +202,7 @@ def test_build_odata_numeric_ne() -> None:
 
 # --- Categorical (string eq/ne) ---
 
+
 @pytest.mark.unit
 def test_build_odata_categorical_eq() -> None:
     """Categorical field eq: already covered by test_build_odata_single_eq; explicit categorical."""
@@ -233,6 +235,7 @@ def test_build_odata_categorical_in_multiple() -> None:
 
 # --- Boolean ---
 
+
 @pytest.mark.unit
 def test_build_odata_boolean_false() -> None:
     """Boolean false."""
@@ -245,6 +248,7 @@ def test_build_odata_boolean_false() -> None:
 
 # --- Null ---
 
+
 @pytest.mark.unit
 def test_build_odata_null() -> None:
     """Null value produces (field eq null)."""
@@ -256,6 +260,7 @@ def test_build_odata_null() -> None:
 
 
 # --- Combined (date + categorical + numeric) ---
+
 
 @pytest.mark.unit
 def test_build_odata_combined_date_categorical_numeric() -> None:
@@ -280,6 +285,7 @@ def test_build_odata_combined_date_categorical_numeric() -> None:
 
 
 # --- Edge cases ---
+
 
 @pytest.mark.unit
 def test_build_odata_default_op_eq() -> None:

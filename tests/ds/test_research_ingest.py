@@ -117,10 +117,14 @@ def test_ingest_falls_back_to_payload_json_when_content_missing() -> None:
 def test_metadata_filter_by_date_range() -> None:
     """Range filter on date_ordinal returns only docs in the window."""
     ingest_research_payload(
-        _make_research_row(document_key="tech-old", iso_date="2026-04-15", content="old tech research")
+        _make_research_row(
+            document_key="tech-old", iso_date="2026-04-15", content="old tech research"
+        )
     )
     ingest_research_payload(
-        _make_research_row(document_key="tech-new", iso_date="2026-04-25", content="new tech research")
+        _make_research_row(
+            document_key="tech-new", iso_date="2026-04-25", content="new tech research"
+        )
     )
     ingest_research_payload(
         _make_research_row(
@@ -144,7 +148,9 @@ def test_metadata_filter_by_date_range() -> None:
 def test_metadata_filter_by_doc_type() -> None:
     """Equality filter on doc_type returns only the matching doc_type."""
     ingest_research_payload(
-        _make_research_row(document_key="digest-row", doc_type="Daily Digest", content="digest body")
+        _make_research_row(
+            document_key="digest-row", doc_type="Daily Digest", content="digest body"
+        )
     )
     ingest_research_payload(
         _make_research_row(document_key="delta-row", doc_type="Daily Delta", content="delta body")
@@ -195,7 +201,9 @@ def test_metadata_filter_by_sector() -> None:
 @pytest.mark.unit
 def test_search_strategies_mcp_tool_returns_typed_results() -> None:
     """The MCP tool returns the documented dict shape for downstream agents."""
-    ingest_research_payload(_make_research_row(content="Crude oil bullish bias on supply tightness."))
+    ingest_research_payload(
+        _make_research_row(content="Crude oil bullish bias on supply tightness.")
+    )
     hits = search_strategies(query="bullish bias", top_k=5)
     assert isinstance(hits, list)
     assert hits, "expected at least one hit for the seeded chunk"

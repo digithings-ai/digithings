@@ -88,4 +88,3 @@ def test_intraday_candles_job_is_ungated() -> None:
     runs = " ".join(str(s.get("run", "")) for s in job.get("steps", []) or [])
     assert runs.count("fetch-fx-intraday") == 2
     assert "--interval 5m" in runs
-

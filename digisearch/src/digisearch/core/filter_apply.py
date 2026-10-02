@@ -26,7 +26,9 @@ def _values_for_in(value: Any) -> set[str]:
     return {str(value).lower()}
 
 
-def chunk_metadata_matches(structured: list[dict[str, Any]] | None, meta: dict[str, Any] | None) -> bool:
+def chunk_metadata_matches(
+    structured: list[dict[str, Any]] | None, meta: dict[str, Any] | None
+) -> bool:
     """Return True if *meta* satisfies all structured filter clauses (AND)."""
     if not structured:
         return True

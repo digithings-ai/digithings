@@ -51,7 +51,9 @@ def _first_existing(paths: tuple[Path, ...]) -> Path | None:
     return None
 
 
-def _with_wilder_rsi(df: pl.DataFrame, close_col: str, out_col: str, length: int = 14) -> pl.DataFrame:
+def _with_wilder_rsi(
+    df: pl.DataFrame, close_col: str, out_col: str, length: int = 14
+) -> pl.DataFrame:
     """Wilder RSI on an ordered close column (weekly or daily)."""
     delta = pl.col(close_col).diff()
     gain = pl.when(delta > 0).then(delta).otherwise(0.0)
@@ -254,7 +256,9 @@ def _write_plot(
     ax = axes[0]
     ax.plot(plot_df["date"], plot_df["valuation_z"], label="valuation_z (power-law)", lw=1.2)
     ax.plot(plot_df["date"], plot_df["weekly_rsi_z"], label="weekly RSI z", lw=0.9, alpha=0.85)
-    ax.plot(plot_df["date"], plot_df["weekly_macd_z"], label="weekly MACD-hist z", lw=0.9, alpha=0.85)
+    ax.plot(
+        plot_df["date"], plot_df["weekly_macd_z"], label="weekly MACD-hist z", lw=0.9, alpha=0.85
+    )
     ax.axhline(0, color="0.6", lw=0.6)
     ax.set_ylim(-3.2, 3.2)
     ax.set_ylabel("z (cheap = +)")

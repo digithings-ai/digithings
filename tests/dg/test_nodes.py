@@ -64,7 +64,6 @@ class TestResearchNode:
         assert out.get("error")
         assert "invalid JSON" in out.get("error", "")
 
-
     def test_llm_raises_returns_error(self) -> None:
         with patch("digigraph.graph.research.digisearch", return_value=None):
             with patch("digigraph.graph.research.completion_text") as m:
@@ -151,7 +150,12 @@ class TestResearchNode:
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch(
                 "digigraph.graph.research._load_research_settings",
-                return_value=(None, "default", "default", "You have digisearch. Use it and summarize."),
+                return_value=(
+                    None,
+                    "default",
+                    "default",
+                    "You have digisearch. Use it and summarize.",
+                ),
             ):
                 with patch(
                     "digigraph.orchestration.builtin.invoke_digisearch_tool",
@@ -471,11 +475,13 @@ class TestBacktestNode:
         mock_client.__exit__ = MagicMock(return_value=False)
         with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
-                backtest_node({
-                    "strategy_name": "ema_cross",
-                    "symbols": ["GLD"],
-                    "strategy_params": {"fast_ema_period": 8, "slow_ema_period": 21},
-                })
+                backtest_node(
+                    {
+                        "strategy_name": "ema_cross",
+                        "symbols": ["GLD"],
+                        "strategy_params": {"fast_ema_period": 8, "slow_ema_period": 21},
+                    }
+                )
         sync_call_json = mock_post.call_args_list[2][1]["json"]
         assert sync_call_json["strategy_params"] == {"fast_ema_period": 8, "slow_ema_period": 21}
 
@@ -496,11 +502,13 @@ class TestBacktestNode:
         mock_client.__exit__ = MagicMock(return_value=False)
         with patch("digigraph.graph.nodes.sync_client", return_value=mock_client):
             with patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
-                backtest_node({
-                    "strategy_name": "mr",
-                    "symbols": ["AAPL"],
-                    "request_id": "trace-xyz",
-                })
+                backtest_node(
+                    {
+                        "strategy_name": "mr",
+                        "symbols": ["AAPL"],
+                        "request_id": "trace-xyz",
+                    }
+                )
         expected_hdrs = {"X-Request-ID": "trace-xyz"}
         for i in range(3):
             assert mock_post.call_args_list[i][1]["headers"] == expected_hdrs

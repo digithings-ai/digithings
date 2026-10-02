@@ -11,6 +11,7 @@ from digisearch.search.multi_index import _rrf_merge
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _chunk(cid: str) -> Chunk:
     return Chunk(id=cid, content=f"content-{cid}", doc_id=f"doc-{cid}")
 
@@ -34,6 +35,7 @@ class _FakeSearcher:
 # _rrf_score
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestRrfScore:
     def test_rank_1_default_k(self) -> None:
@@ -53,6 +55,7 @@ class TestRrfScore:
 # ---------------------------------------------------------------------------
 # _rrf_merge (MultiIndex helper)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestRrfMerge:
@@ -101,6 +104,7 @@ class TestRrfMerge:
 # ---------------------------------------------------------------------------
 # HybridSearcher
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestHybridSearcher:

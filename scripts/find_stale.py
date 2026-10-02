@@ -79,13 +79,29 @@ def summarize(output: str) -> dict[str, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("paths", nargs="*", default=DEFAULT_PATHS,
-                        help="Paths to scan (default: all Python source dirs)")
-    parser.add_argument("--min-confidence", type=int, default=60, metavar="PCT",
-                        help="Minimum confidence %% to report (default: 60)")
-    parser.add_argument("--whitelist", type=Path, default=DEFAULT_WHITELIST, metavar="FILE",
-                        help="Whitelist file for known false positives")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        default=DEFAULT_PATHS,
+        help="Paths to scan (default: all Python source dirs)",
+    )
+    parser.add_argument(
+        "--min-confidence",
+        type=int,
+        default=60,
+        metavar="PCT",
+        help="Minimum confidence %% to report (default: 60)",
+    )
+    parser.add_argument(
+        "--whitelist",
+        type=Path,
+        default=DEFAULT_WHITELIST,
+        metavar="FILE",
+        help="Whitelist file for known false positives",
+    )
     args = parser.parse_args()
 
     if not check_vulture():
@@ -111,8 +127,12 @@ def main() -> int:
         summary = summarize(stdout)
         total = sum(summary.values())
         breakdown = ", ".join(f"{v} {k}s" for k, v in sorted(summary.items()))
-        print(f"\nfind-stale: {total} candidate(s) found at ≥{args.min_confidence}% confidence ({breakdown})")
-        print("           Review manually — not all are true dead code (Pydantic models, MCP tools, etc.)")
+        print(
+            f"\nfind-stale: {total} candidate(s) found at ≥{args.min_confidence}% confidence ({breakdown})"
+        )
+        print(
+            "           Review manually — not all are true dead code (Pydantic models, MCP tools, etc.)"
+        )
         print(f"           Add false positives to {args.whitelist}")
     else:
         print(f"find-stale: no dead code found at ≥{args.min_confidence}% confidence")

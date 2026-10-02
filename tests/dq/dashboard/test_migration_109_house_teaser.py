@@ -45,7 +45,7 @@ def test_teaser_policies_on_shared_tables(sql: str) -> None:
         ), table
         assert re.search(
             rf'CREATE\s+POLICY\s+"authenticated_read_house_teaser"\s+ON\s+public\.{table}\b'
-            rf'[\s\S]*?FOR\s+SELECT\s+TO\s+authenticated[\s\S]*?USING\s*\(\s*true\s*\)',
+            rf"[\s\S]*?FOR\s+SELECT\s+TO\s+authenticated[\s\S]*?USING\s*\(\s*true\s*\)",
             sql,
             re.I,
         ), table

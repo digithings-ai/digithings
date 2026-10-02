@@ -9,6 +9,7 @@ from digisearch.ingestion.ocr.base import OCRProvider
 try:
     import pytesseract
     from PIL import Image
+
     _TESS_AVAILABLE = True
 except ImportError:
     _TESS_AVAILABLE = False
@@ -24,5 +25,6 @@ class TesseractOCR(OCRProvider):
             img = Image.open(image)
         else:
             from io import BytesIO
+
             img = Image.open(BytesIO(image))
         return pytesseract.image_to_string(img)

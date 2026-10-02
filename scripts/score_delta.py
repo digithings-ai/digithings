@@ -111,7 +111,9 @@ def format_json_output(baseline: dict[str, int], current: dict[str, int]) -> str
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--baseline",
         metavar="REF",
@@ -139,13 +141,17 @@ def main() -> int:
         )
 
     # Nothing staged → nothing to compare.
-    has_staged = subprocess.run(
-        ["git", "diff", "--staged", "--quiet"], cwd=REPO_ROOT
-    ).returncode != 0
+    has_staged = (
+        subprocess.run(["git", "diff", "--staged", "--quiet"], cwd=REPO_ROOT).returncode != 0
+    )
 
     if not has_staged:
         if args.format == "json":
-            print(json.dumps({"regression": False, "message": "nothing staged to compare", "dimensions": {}}))
+            print(
+                json.dumps(
+                    {"regression": False, "message": "nothing staged to compare", "dimensions": {}}
+                )
+            )
         else:
             print("score-delta: nothing staged — no delta to report (exit 0)")
         return 0

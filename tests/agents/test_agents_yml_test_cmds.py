@@ -143,7 +143,8 @@ class TestAgentsYmlTestCmds:
         run_lines = [
             line
             for line in text.splitlines()
-            if re.match(r"^[ \t]*run:", line) or (line.strip().startswith("uv run") and "python" in line)
+            if re.match(r"^[ \t]*run:", line)
+            or (line.strip().startswith("uv run") and "python" in line)
         ]
         joined = "\n".join(run_lines)
         assert "gh aw" not in joined

@@ -11,6 +11,7 @@ from digigraph.project_config import DigiProjectConfig, ProjectLimits
 # Defaults
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 def test_project_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """ProjectLimits fields use specified defaults when no YAML or env overrides present."""
@@ -27,6 +28,7 @@ def test_project_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # YAML overrides
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 def test_project_limits_yaml_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,6 +53,7 @@ def test_project_limits_yaml_override(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # Env-var overrides (highest precedence)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 def test_project_limits_env_override_max_rows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,6 +92,7 @@ def test_project_limits_env_override_timeout(monkeypatch: pytest.MonkeyPatch) ->
 # Integration with DigiProjectConfig.get_limits()
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 def test_digi_project_config_get_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """DigiProjectConfig.get_limits() returns a ProjectLimits with defaults when no limits: key."""
@@ -105,7 +109,9 @@ def test_digi_project_config_get_limits_defaults(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
-def test_digi_project_config_get_limits_from_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_digi_project_config_get_limits_from_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """DigiProjectConfig.get_limits() reads limits: block from digiproject.yaml."""
     monkeypatch.delenv("DIGI_MAX_ROWS_PER_FETCH", raising=False)
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)
@@ -123,7 +129,9 @@ def test_digi_project_config_get_limits_from_yaml(tmp_path: Path, monkeypatch: p
 
 
 @pytest.mark.unit
-def test_digi_project_config_get_limits_env_wins_over_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_digi_project_config_get_limits_env_wins_over_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Env vars take precedence over the limits: YAML block in DigiProjectConfig."""
     monkeypatch.setenv("DIGI_MAX_ROWS_PER_FETCH", "99")
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)

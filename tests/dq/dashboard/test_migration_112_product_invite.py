@@ -38,8 +38,7 @@ def test_creates_hashed_invite_tables(sql: str) -> None:
 def test_hash_is_sha256_hex_and_service_role_only(sql: str) -> None:
     assert "code_hash ~ '^[0-9a-f]{64}$'" in sql
     assert (
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.product_invite_codes "
-        "TO service_role"
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.product_invite_codes TO service_role"
     ) in sql
     assert (
         "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.product_invite_codes TO anon"

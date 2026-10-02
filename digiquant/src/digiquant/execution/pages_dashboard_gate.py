@@ -54,7 +54,9 @@ _ALPACA_DASHBOARD_RE = re.compile(
 _SETTINGS_DASHBOARD_RE = re.compile(
     r'export\s+const\s+SETTINGS_PATH\s*=\s*"/dashboard/settings/"\s*;'
 )
-_ALPACA_DASHBOARD_LEGACY_RE = re.compile(r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/olympus/')
+_ALPACA_DASHBOARD_LEGACY_RE = re.compile(
+    r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/olympus/'
+)
 _SETTINGS_DASHBOARD_LEGACY_RE = re.compile(r'export\s+const\s+SETTINGS_PATH\s*=\s*"/olympus/')
 
 DASHBOARD_PATHS: tuple[str, ...] = (

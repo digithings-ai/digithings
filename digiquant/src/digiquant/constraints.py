@@ -47,8 +47,14 @@ def satisfies_constraints(
     except (ValueError, TypeError, AttributeError):
         trades_per_year = 0.0
 
-    if constraints.max_trades_per_year is not None and trades_per_year > constraints.max_trades_per_year:
+    if (
+        constraints.max_trades_per_year is not None
+        and trades_per_year > constraints.max_trades_per_year
+    ):
         return False
-    if constraints.min_trades_per_year is not None and trades_per_year < constraints.min_trades_per_year:
+    if (
+        constraints.min_trades_per_year is not None
+        and trades_per_year < constraints.min_trades_per_year
+    ):
         return False
     return True

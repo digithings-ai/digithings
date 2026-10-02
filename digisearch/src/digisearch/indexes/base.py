@@ -42,4 +42,3 @@ class DigiIndex(ABC):
     def snapshot(self, path: str) -> None:
         """Export snapshot to path."""
         ...
-

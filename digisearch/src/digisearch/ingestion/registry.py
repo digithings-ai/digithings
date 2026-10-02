@@ -13,26 +13,31 @@ def _default_parsers() -> list[Parser]:
     parsers: list[Parser] = []
     try:
         from digisearch.ingestion.parsers.pdf import PDFParser
+
         parsers.append(PDFParser())
     except ImportError:
         pass
     try:
         from digisearch.ingestion.parsers.docx import DocxParser
+
         parsers.append(DocxParser())
     except ImportError:
         pass
     try:
         from digisearch.ingestion.parsers.html import HTMLParser
+
         parsers.append(HTMLParser())
     except ImportError:
         pass
     try:
         from digisearch.ingestion.parsers.markdown import MarkdownParser
+
         parsers.append(MarkdownParser())
     except ImportError:
         pass
     try:
         from digisearch.ingestion.parsers.csv import CSVParser
+
         parsers.append(CSVParser())
     except ImportError:
         pass

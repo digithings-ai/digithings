@@ -107,9 +107,7 @@ def ingest_live(index_name: str, paths: list[Path], digisearch_url: str) -> int:
 
     for path in paths:
         rel = path.relative_to(REPO_ROOT)
-        payload = json.dumps(
-            {"source": str(path.absolute()), "index_name": index_name}
-        ).encode()
+        payload = json.dumps({"source": str(path.absolute()), "index_name": index_name}).encode()
         req = urllib.request.Request(
             endpoint,
             data=payload,
@@ -162,7 +160,9 @@ def main() -> int:
 
     if args.apply:
         digisearch_url = os.environ.get("DIGISEARCH_URL", DEFAULT_DIGISEARCH_URL)
-        print(f"Ingesting {len(paths)} source files into index '{index_name}' via {digisearch_url}...")
+        print(
+            f"Ingesting {len(paths)} source files into index '{index_name}' via {digisearch_url}..."
+        )
         return ingest_live(index_name, paths, digisearch_url)
 
     print(f"Resolving {len(paths)} source files for index '{index_name}'...")

@@ -203,7 +203,9 @@ def plot_indicator_multiples(inputs: Mapping[str, object], path: Path) -> Path:
                 fontsize=9,
             )
         ax.set_ylabel("0–100")
-    fig.suptitle("Underlying indicators (included members in the composite; weight 0 unused)", y=1.01)
+    fig.suptitle(
+        "Underlying indicators (included members in the composite; weight 0 unused)", y=1.01
+    )
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")

@@ -97,9 +97,7 @@ def test_premium_provider_included_when_key_set(
 
 
 @pytest.mark.unit
-def test_summary_mode_used_by_default(
-    mcp_config: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_summary_mode_used_by_default(mcp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Default mode is SUMMARY: descriptors have 'name', 'description', 'provider', 'server'
     keys but NOT the full OpenAI 'type'/'function' keys."""
     monkeypatch.delenv("INTRINIO_API_KEY", raising=False)
@@ -140,9 +138,7 @@ def test_detailed_mode_returns_openai_schema(
 @pytest.mark.unit
 def test_missing_config_returns_empty(tmp_path: Path) -> None:
     """When the config file doesn't exist, return an empty list (no exception)."""
-    result = register_mcp_server(
-        "openbb", config_path=str(tmp_path / "nonexistent.yaml")
-    )
+    result = register_mcp_server("openbb", config_path=str(tmp_path / "nonexistent.yaml"))
     assert result == []
 
 

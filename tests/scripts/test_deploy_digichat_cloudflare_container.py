@@ -123,9 +123,7 @@ def test_the_deploy_step_does_not_pin_wrangler_4_28_0_on_with() -> None:
     assert "--message" in deploy_step["with"]["command"]
 
     declared = json.loads(
-        (REPO_ROOT / "apps" / "digichat-cloudflare" / "package.json").read_text(
-            encoding="utf-8"
-        )
+        (REPO_ROOT / "apps" / "digichat-cloudflare" / "package.json").read_text(encoding="utf-8")
     )["devDependencies"]["wrangler"]
     assert declared.lstrip("^~").startswith("4."), declared
     yaml_text = WORKFLOW.read_text(encoding="utf-8")

@@ -21,19 +21,24 @@ def indexed_results(client: TestClient) -> None:
     """Put chunks in stub index so /query returns something."""
     idx = "__unit_test_api__"
     for i in range(3):
-        add_chunks(idx, [
-            Chunk(
-                id=f"c{i}",
-                content=f"Content {i}",
-                doc_id=f"d{i}",
-                embedding=None,
-                metadata={"sourceType": "EXCHANGE", "fromAddress": f"u{i}@test.com"},
-            ),
-        ])
+        add_chunks(
+            idx,
+            [
+                Chunk(
+                    id=f"c{i}",
+                    content=f"Content {i}",
+                    doc_id=f"d{i}",
+                    embedding=None,
+                    metadata={"sourceType": "EXCHANGE", "fromAddress": f"u{i}@test.com"},
+                ),
+            ],
+        )
 
 
 @pytest.mark.unit
-def test_query_accepts_filter_columns_response_mode(client: TestClient, indexed_results: None) -> None:
+def test_query_accepts_filter_columns_response_mode(
+    client: TestClient, indexed_results: None
+) -> None:
     """POST /query accepts filter, filters, columns, response_mode, summarize_if_over."""
     r = client.post(
         "/query",
@@ -60,7 +65,9 @@ def test_query_accepts_filter_columns_response_mode(client: TestClient, indexed_
 
 
 @pytest.mark.unit
-def test_query_response_mode_summary_returns_summary(client: TestClient, indexed_results: None) -> None:
+def test_query_response_mode_summary_returns_summary(
+    client: TestClient, indexed_results: None
+) -> None:
     """When response_mode=summary, response includes summary with data_summary and text_summary."""
     r = client.post(
         "/query",

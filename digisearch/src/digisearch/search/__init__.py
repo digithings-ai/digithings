@@ -12,9 +12,11 @@ __all__ = [
     "VectorSearcher",
 ]
 
+
 # Lazy import to avoid circular deps
 def __getattr__(name: str):
     if name == "VectorSearcher":
         from digisearch.search.vector import VectorSearcher
+
         return VectorSearcher
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

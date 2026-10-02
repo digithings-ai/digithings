@@ -18,7 +18,11 @@ def test_register_tool_rejects_duplicate() -> None:
 
     schema: dict = {
         "type": "function",
-        "function": {"name": name, "description": "probe", "parameters": {"type": "object", "properties": {}}},
+        "function": {
+            "name": name,
+            "description": "probe",
+            "parameters": {"type": "object", "properties": {}},
+        },
     }
     reg.register_tool(name, schema, _handler)
     with pytest.raises(ValueError, match="already registered"):

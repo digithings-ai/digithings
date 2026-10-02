@@ -105,9 +105,7 @@ def test_notimplementederror_pragma_does_not_suppress_pandas(target_path):
 
 def test_notimplementederror_emdash_reason_on_pragma_line_is_no_op(target_path):
     target_path.write_text(
-        "# score:allow notimplementederror stub — reason\n"
-        "def stub():\n"
-        "    pass\n",
+        "# score:allow notimplementederror stub — reason\ndef stub():\n    pass\n",
         encoding="utf-8",
     )
     results = score.scan(_unified_diff(["    raise NotImplementedError"]))
@@ -121,10 +119,7 @@ def test_notimplementederror_emdash_reason_on_pragma_line_is_no_op(target_path):
 
 def test_todo_suppressed_with_pragma(target_path):
     target_path.write_text(
-        "# score:allow todo\n"
-        "# intentional deferred marker (human gate)\n"
-        "def stub():\n"
-        "    pass\n",
+        "# score:allow todo\n# intentional deferred marker (human gate)\ndef stub():\n    pass\n",
         encoding="utf-8",
     )
     results = score.scan(_unified_diff(["    # TODO: wire broker adapter"]))
@@ -149,10 +144,7 @@ def test_todo_fires_without_pragma(target_path):
 
 def test_todo_pragma_does_not_suppress_pandas(target_path):
     target_path.write_text(
-        "# score:allow todo\n"
-        "# reason: deliberate TODO marker only\n"
-        "def stub():\n"
-        "    pass\n",
+        "# score:allow todo\n# reason: deliberate TODO marker only\ndef stub():\n    pass\n",
         encoding="utf-8",
     )
     results = score.scan(_unified_diff(["import pandas as pd"]))
@@ -166,9 +158,7 @@ def test_todo_pragma_does_not_suppress_pandas(target_path):
 
 def test_todo_emdash_reason_on_pragma_line_is_no_op(target_path):
     target_path.write_text(
-        "# score:allow todo — reason\n"
-        "def stub():\n"
-        "    pass\n",
+        "# score:allow todo — reason\ndef stub():\n    pass\n",
         encoding="utf-8",
     )
     results = score.scan(_unified_diff(["    # TODO: wire broker adapter"]))

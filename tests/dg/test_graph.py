@@ -185,9 +185,7 @@ def test_postgres_checkpointer_conninfo_carries_connection_bounds(
     """
     pytest.importorskip("psycopg")
     monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
-    monkeypatch.setenv(
-        "CORE_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres"
-    )
+    monkeypatch.setenv("CORE_POSTGRES_URI", "postgresql://u:p@db.example.test:5432/postgres")
 
     ckpt = _graph_module.get_checkpointer()
 

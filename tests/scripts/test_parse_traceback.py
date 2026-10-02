@@ -52,7 +52,10 @@ def test_identify_component_prefers_src_prefix() -> None:
 def test_identify_component_handles_absolute_and_windows_paths() -> None:
     abs_path = str(REPO_ROOT / "digisearch" / "src" / "digisearch" / "ingest.py")
     assert pt.identify_component(abs_path) == "digisearch"
-    assert pt.identify_component(r"digiquant\src\digiquant\dashboard\portfolio\state.py") == "digiquant"
+    assert (
+        pt.identify_component(r"digiquant\src\digiquant\dashboard\portfolio\state.py")
+        == "digiquant"
+    )
 
 
 def test_parse_traceback_extracts_last_frame_and_component() -> None:
@@ -80,10 +83,14 @@ def test_parse_traceback_returns_none_for_unrelated_text() -> None:
     assert pt.parse_traceback("all green, nothing to see") is None
 
 
-def test_main_json_omits_full_trace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_json_omits_full_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     path = tmp_path / "tb.txt"
     path.write_text(DIGIGRAPH_TRACE, encoding="utf-8")
-    monkeypatch.setattr(sys, "argv", ["parse_traceback.py", "--input", str(path), "--format", "json"])
+    monkeypatch.setattr(
+        sys, "argv", ["parse_traceback.py", "--input", str(path), "--format", "json"]
+    )
     code = pt.main()
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
@@ -92,7 +99,9 @@ def test_main_json_omits_full_trace(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert payload["error_type"] == "ValueError"
 
 
-def test_main_missing_input_still_exits_zero(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_missing_input_still_exits_zero(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setattr(
         sys,
         "argv",

@@ -52,13 +52,23 @@ def count_findings(output: str) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("paths", nargs="*", default=DEFAULT_PATHS,
-                        help="Paths to scan (default: all Python source dirs)")
-    parser.add_argument("--fix", action="store_true",
-                        help="Apply fixes in-place (default: dry-run)")
-    parser.add_argument("--diff", action="store_true",
-                        help="Show unified diff of what would change (implies dry-run)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        default=DEFAULT_PATHS,
+        help="Paths to scan (default: all Python source dirs)",
+    )
+    parser.add_argument(
+        "--fix", action="store_true", help="Apply fixes in-place (default: dry-run)"
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Show unified diff of what would change (implies dry-run)",
+    )
     args = parser.parse_args()
 
     # Validate ruff is available

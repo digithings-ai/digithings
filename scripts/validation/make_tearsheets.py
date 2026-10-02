@@ -7,6 +7,7 @@ Performance Summary (All / Long / Short).
 
     python scripts/validation/make_tearsheets.py
 """
+
 from __future__ import annotations
 
 import json
@@ -74,17 +75,17 @@ def _summary_table(s: dict) -> str:
 
 def _strategy_section(s: dict) -> str:
     reversal = "yes" if s["strategy"] == "btc_slapper" else "no"
-    return f"""## {s['strategy']}  ·  {s['symbol']}
+    return f"""## {s["strategy"]}  ·  {s["symbol"]}
 
-- **Period:** {s['period']}  ({s['bars']} daily bars)
-- **Initial capital:** {_money(s['initial_capital'])}  →  **Final equity:** {_money(s['final_equity'])}
-- **Net profit:** {_pct(s['net_profit_pct'])}
-- **Max drawdown (mark-to-market):** {_pct(s['max_drawdown_pct'])}
+- **Period:** {s["period"]}  ({s["bars"]} daily bars)
+- **Initial capital:** {_money(s["initial_capital"])}  →  **Final equity:** {_money(s["final_equity"])}
+- **Net profit:** {_pct(s["net_profit_pct"])}
+- **Max drawdown (mark-to-market):** {_pct(s["max_drawdown_pct"])}
 - **Reversal stop:** {reversal}
 
 {_summary_table(s)}
 
-Per-trade list: `{OUT_DIR}/{s['strategy']}_trades.csv` — diff against TradingView's List of Trades (entry/exit date, direction, price, P&L).
+Per-trade list: `{OUT_DIR}/{s["strategy"]}_trades.csv` — diff against TradingView's List of Trades (entry/exit date, direction, price, P&L).
 """
 
 

@@ -33,19 +33,23 @@ def test_format_delegate_result_mermaid_only() -> None:
 
 @pytest.mark.unit
 def test_format_delegate_result_table() -> None:
-    summary, body = _format_delegate_result({
-        "table": [{"a": 1, "b": 2}, {"a": 3, "b": 4}],
-        "columns": ["a", "b"],
-    })
+    summary, body = _format_delegate_result(
+        {
+            "table": [{"a": 1, "b": 2}, {"a": 3, "b": 4}],
+            "columns": ["a", "b"],
+        }
+    )
     assert "table" in summary
     assert "|" in body and "a" in body and "b" in body
 
 
 @pytest.mark.unit
 def test_format_delegate_result_matrix() -> None:
-    summary, body = _format_delegate_result({
-        "matrix": {"x": {"x": 1.0, "y": 0.5}, "y": {"x": 0.5, "y": 1.0}},
-    })
+    summary, body = _format_delegate_result(
+        {
+            "matrix": {"x": {"x": 1.0, "y": 0.5}, "y": {"x": 0.5, "y": 1.0}},
+        }
+    )
     assert "correlation" in summary
     assert "|" in body and "x" in body and "y" in body
 
@@ -80,10 +84,12 @@ def test_format_delegate_result_echarts_with_svg_image_path() -> None:
 @pytest.mark.unit
 def test_format_tool_result_search_with_name() -> None:
     formatter = OpenWebUIStreamFormatter()
-    out = formatter.format_tool_result({
-        "name": "digisearch",
-        "results": [{"content": "hi", "score": 0.9, "doc_id": "d1", "metadata": {}}],
-    })
+    out = formatter.format_tool_result(
+        {
+            "name": "digisearch",
+            "results": [{"content": "hi", "score": 0.9, "doc_id": "d1", "metadata": {}}],
+        }
+    )
     assert "Result" in out
     assert "|" in out
     assert "hi" in out
@@ -92,10 +98,12 @@ def test_format_tool_result_search_with_name() -> None:
 @pytest.mark.unit
 def test_format_tool_result_delegate_json() -> None:
     formatter = OpenWebUIStreamFormatter()
-    out = formatter.format_tool_result({
-        "name": "visualization_agent",
-        "content": '{"mermaid_source": "flowchart LR\\n  A-->B"}',
-    })
+    out = formatter.format_tool_result(
+        {
+            "name": "visualization_agent",
+            "content": '{"mermaid_source": "flowchart LR\\n  A-->B"}',
+        }
+    )
     assert "Result" in out
     assert "```mermaid" in out
     assert "A-->B" in out
@@ -104,7 +112,9 @@ def test_format_tool_result_delegate_json() -> None:
 @pytest.mark.unit
 def test_format_tool_result_backward_compat_no_name() -> None:
     formatter = OpenWebUIStreamFormatter()
-    out = formatter.format_tool_result({"results": [{"content": "x", "score": 0.5, "doc_id": "d1", "metadata": {}}]})
+    out = formatter.format_tool_result(
+        {"results": [{"content": "x", "score": 0.5, "doc_id": "d1", "metadata": {}}]}
+    )
     assert "Result" in out
     assert "|" in out
 

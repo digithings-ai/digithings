@@ -86,6 +86,7 @@ CANON_SKIP_PREFIXES = (
 def is_canon_skipped(rel: str) -> bool:
     return any(rel.startswith(p) for p in CANON_SKIP_PREFIXES)
 
+
 # 1. Raw palette utilities: any variant prefix chain, any Tailwind color
 #    family with a numeric shade. Token-backed utilities never match (no
 #    numeric shade suffix on ink/surface/hair/accent/up/down/warn/term-*).

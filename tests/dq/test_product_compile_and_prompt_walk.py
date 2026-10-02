@@ -34,10 +34,13 @@ def test_compile_research_portfolio_dry_run() -> None:
 def test_idempotency_key_for_is_stable() -> None:
     from digiquant.portfolio.product_compile import idempotency_key_for
 
-    assert idempotency_key_for(
-        graph_name="research-portfolio-chain",
-        run_date=date(2026, 9, 3),
-    ) == "research-portfolio-chain:2026-09-03:daily:none"
+    assert (
+        idempotency_key_for(
+            graph_name="research-portfolio-chain",
+            run_date=date(2026, 9, 3),
+        )
+        == "research-portfolio-chain:2026-09-03:daily:none"
+    )
 
 
 @pytest.mark.unit

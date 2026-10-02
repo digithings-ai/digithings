@@ -22,6 +22,7 @@ joined with the asset close, ready for digiquant.indicators.m2_signals.M2SignalC
     python scripts/validation/build_m2_composite.py --asset-csv digiquant/data/validation/BTC-USD_1d.csv
     python scripts/validation/build_m2_composite.py --tv-csv tv_m2_total.csv --asset-csv ...
 """
+
 from __future__ import annotations
 
 import argparse
@@ -116,14 +117,24 @@ def build_from_fred(offset_days: int, roc_length: int) -> tuple[pl.DataFrame, li
         fx[key] = df
         notes.append(_coverage(key, df))
     composite = build_m2_composite(
-        usm2=fred["usm2"], cnm2=fred["cnm2"], cnyusd=fx["cnyusd"],
-        eum2=fred["eum2"], eurusd=fx["eurusd"], jpm2=fred["jpm2"], jpyusd=fx["jpyusd"],
-        gbm2=fred["gbm2"], gbpusd=fx["gbpusd"], offset_days=offset_days, roc_length=roc_length,
+        usm2=fred["usm2"],
+        cnm2=fred["cnm2"],
+        cnyusd=fx["cnyusd"],
+        eum2=fred["eum2"],
+        eurusd=fx["eurusd"],
+        jpm2=fred["jpm2"],
+        jpyusd=fx["jpyusd"],
+        gbm2=fred["gbm2"],
+        gbpusd=fx["gbpusd"],
+        offset_days=offset_days,
+        roc_length=roc_length,
     )
     return composite, notes
 
 
-def build_from_tv(tv_csv: str | Path, offset_days: int, roc_length: int) -> tuple[pl.DataFrame, list[str]]:
+def build_from_tv(
+    tv_csv: str | Path, offset_days: int, roc_length: int
+) -> tuple[pl.DataFrame, list[str]]:
     """Build composite from a TradingView export of the `total` series."""
     raw = pl.read_csv(tv_csv)
     # Accept common TradingView column names.
@@ -140,12 +151,20 @@ def build_from_tv(tv_csv: str | Path, offset_days: int, roc_length: int) -> tupl
         pl.col(total_col).cast(pl.Float64).alias("total"),
     ).sort("date")
     df = df.with_columns(pl.col("total").shift(offset_days).alias("total_shifted"))
-    df = df.with_columns([
-        (100.0 * (pl.col("total_shifted") - pl.col("total_shifted").shift(roc_length))
-         / pl.col("total_shifted").shift(roc_length)).alias("roc_sig"),
-        (100.0 * (pl.col("total") - pl.col("total").shift(roc_length))
-         / pl.col("total").shift(roc_length)).alias("roc_plot"),
-    ])
+    df = df.with_columns(
+        [
+            (
+                100.0
+                * (pl.col("total_shifted") - pl.col("total_shifted").shift(roc_length))
+                / pl.col("total_shifted").shift(roc_length)
+            ).alias("roc_sig"),
+            (
+                100.0
+                * (pl.col("total") - pl.col("total").shift(roc_length))
+                / pl.col("total").shift(roc_length)
+            ).alias("roc_plot"),
+        ]
+    )
     return df, [f"Source: TradingView export {tv_csv} — authoritative (1:1)."]
 
 

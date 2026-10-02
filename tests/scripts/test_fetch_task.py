@@ -27,10 +27,7 @@ def _write_fake_gh(bin_dir: Path, payload: dict) -> None:
     fake = bin_dir / "gh"
     # The stub ignores args and prints the payload. The script only uses
     # `gh issue view ... --json ...` and `gh auth status` (not invoked here).
-    fake.write_text(
-        "#!/usr/bin/env bash\n"
-        f"cat <<'__JSON__'\n{json.dumps(payload)}\n__JSON__\n"
-    )
+    fake.write_text(f"#!/usr/bin/env bash\ncat <<'__JSON__'\n{json.dumps(payload)}\n__JSON__\n")
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 

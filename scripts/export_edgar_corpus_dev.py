@@ -55,9 +55,7 @@ def main() -> None:
     try:
         from datasets import load_dataset
     except ImportError as e:
-        raise SystemExit(
-            "Missing dependency: pip install -e \"./digisearch[edgar-corpus]\""
-        ) from e
+        raise SystemExit('Missing dependency: pip install -e "./digisearch[edgar-corpus]"') from e
 
     out_dir: Path = args.out_dir
     if args.clean:

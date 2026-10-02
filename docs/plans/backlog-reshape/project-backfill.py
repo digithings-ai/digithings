@@ -9,6 +9,7 @@ Usage:
   python3 project-backfill.py            # dry run
   python3 project-backfill.py --apply    # execute
 """
+
 import json
 import subprocess
 import sys
@@ -18,10 +19,10 @@ OWNER = "digithings-ai"
 REPO = "digithings-ai/digithings"
 
 FIELD = {
-    "phase":    "PVTSSF_lADODCLeec4BVAGjzhQe7Rw",
-    "area":     "PVTSSF_lADODCLeec4BVAGjzhQe7Vo",
+    "phase": "PVTSSF_lADODCLeec4BVAGjzhQe7Rw",
+    "area": "PVTSSF_lADODCLeec4BVAGjzhQe7Vo",
     "priority": "PVTSSF_lADODCLeec4BVAGjzhQe7Vs",
-    "kind":     "PVTSSF_lADODCLeec4BVAGjzhQe7bc",
+    "kind": "PVTSSF_lADODCLeec4BVAGjzhQe7bc",
 }
 OPT = {
     "phase": {
@@ -33,30 +34,49 @@ OPT = {
         "Client Pilot": "cea67c2c",
     },
     "area": {
-        "DigiGraph": "64fb1b51", "DigiSearch": "c4d1712a", "DigiQuant": "320e44e0",
-        "DigiChat":  "f2e0930b", "DigiKey":    "87c52e14", "DigiClaw":  "2ab0471a",
-        "DigiSmith": "733214e8", "DigiBase":   "67bc54a2", "Website":   "61caae04",
-        "Atlas":     "e78729ab", "Client Pilot": "e911491e", "Docs":      "820a5756",
-        "Infra":     "d3fbf4c4", "Cross-cutting": "70e7b58f",
+        "DigiGraph": "64fb1b51",
+        "DigiSearch": "c4d1712a",
+        "DigiQuant": "320e44e0",
+        "DigiChat": "f2e0930b",
+        "DigiKey": "87c52e14",
+        "DigiClaw": "2ab0471a",
+        "DigiSmith": "733214e8",
+        "DigiBase": "67bc54a2",
+        "Website": "61caae04",
+        "Atlas": "e78729ab",
+        "Client Pilot": "e911491e",
+        "Docs": "820a5756",
+        "Infra": "d3fbf4c4",
+        "Cross-cutting": "70e7b58f",
     },
     "priority": {"P0": "0efbf390", "P1": "cc02d53a", "P2": "fc431d36", "P3": "c4bda5c6"},
-    "kind":     {"Epic": "460e6ce9", "Feature": "83196803", "Task": "bca36774",
-                 "Bug": "d57c41ef", "Chore": "76193410", "Research": "40c40521"},
+    "kind": {
+        "Epic": "460e6ce9",
+        "Feature": "83196803",
+        "Task": "bca36774",
+        "Bug": "d57c41ef",
+        "Chore": "76193410",
+        "Research": "40c40521",
+    },
 }
 
 COMPONENT_TO_AREA = {
-    "component:digigraph":  "digigraph",
+    "component:digigraph": "digigraph",
     "component:digisearch": "digisearch",
-    "component:digiquant":  "digiquant",
-    "component:digichat":   "digichat",
-    "component:digikey":    "digikey",
-    "component:digiclaw":   "digiclaw",
-    "component:digismith":  "digismith",
-    "component:digibase":   "digibase",
-    "component:website":    "Website",
+    "component:digiquant": "digiquant",
+    "component:digichat": "digichat",
+    "component:digikey": "digikey",
+    "component:digiclaw": "digiclaw",
+    "component:digismith": "digismith",
+    "component:digibase": "digibase",
+    "component:website": "Website",
 }
-PRIO_MAP = {"priority:critical": "P0", "priority:high": "P1",
-            "priority:medium": "P2", "priority:low": "P3"}
+PRIO_MAP = {
+    "priority:critical": "P0",
+    "priority:high": "P1",
+    "priority:medium": "P2",
+    "priority:low": "P3",
+}
 
 
 def sh(cmd, check=True):
@@ -67,16 +87,37 @@ def sh(cmd, check=True):
 
 
 def fetch_open_issues():
-    r = sh(["gh", "issue", "list", "--repo", REPO, "--state", "open",
-            "--limit", "300", "--json", "number,title,labels,id"])
+    r = sh(
+        [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            REPO,
+            "--state",
+            "open",
+            "--limit",
+            "300",
+            "--json",
+            "number,title,labels,id",
+        ]
+    )
     raw = json.loads(r.stdout)
-    return [{"n": i["number"], "t": i["title"], "id": i["id"],
-             "l": [lab["name"] for lab in i["labels"]]} for i in raw]
+    return [
+        {
+            "n": i["number"],
+            "t": i["title"],
+            "id": i["id"],
+            "l": [lab["name"] for lab in i["labels"]],
+        }
+        for i in raw
+    ]
 
 
 def fetch_project_items():
-    r = sh(["gh", "project", "item-list", "1", "--owner", OWNER,
-            "--limit", "300", "--format", "json"])
+    r = sh(
+        ["gh", "project", "item-list", "1", "--owner", OWNER, "--limit", "300", "--format", "json"]
+    )
     items = json.loads(r.stdout)["items"]
     out = {}
     for it in items:
@@ -95,12 +136,20 @@ def fetch_project_items():
 
 
 def add_to_project(content_id):
-    q = (
-        'mutation($p:ID!,$c:ID!){'
-        'addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}'
+    q = "mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}"
+    r = sh(
+        [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={q}",
+            "-f",
+            f"p={PROJECT_ID}",
+            "-f",
+            f"c={content_id}",
+        ]
     )
-    r = sh(["gh", "api", "graphql", "-f", f"query={q}",
-            "-f", f"p={PROJECT_ID}", "-f", f"c={content_id}"])
     return json.loads(r.stdout)["data"]["addProjectV2ItemById"]["item"]["id"]
 
 
@@ -108,13 +157,27 @@ def set_field(item_id, field_key, option_name):
     opt_id = OPT[field_key][option_name]
     fid = FIELD[field_key]
     q = (
-        'mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){'
-        'updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,'
-        'value:{singleSelectOptionId:$o}}){projectV2Item{id}}}'
+        "mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){"
+        "updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,"
+        "value:{singleSelectOptionId:$o}}){projectV2Item{id}}}"
     )
-    sh(["gh", "api", "graphql", "-f", f"query={q}",
-        "-f", f"p={PROJECT_ID}", "-f", f"i={item_id}", "-f", f"f={fid}",
-        "-f", f"o={opt_id}"])
+    sh(
+        [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={q}",
+            "-f",
+            f"p={PROJECT_ID}",
+            "-f",
+            f"i={item_id}",
+            "-f",
+            f"f={fid}",
+            "-f",
+            f"o={opt_id}",
+        ]
+    )
 
 
 def derive_area(labels, title):
@@ -130,7 +193,12 @@ def derive_area(labels, title):
     if "component:root" in ls:
         if "type:infra" in ls:
             return "Infra"
-        if any("website" in lbl for lbl in labels) or "website" in tl or "digithings.ai" in tl or "digiquant.io" in tl:
+        if (
+            any("website" in lbl for lbl in labels)
+            or "website" in tl
+            or "digithings.ai" in tl
+            or "digiquant.io" in tl
+        ):
             return "Website"
         return "Cross-cutting"
     if "type:infra" in ls:
@@ -207,10 +275,10 @@ def main():
             existing = project[n]
 
         derived = {
-            "phase":    derive_phase(i["l"], i["t"]),
-            "area":     derive_area(i["l"], i["t"]),
+            "phase": derive_phase(i["l"], i["t"]),
+            "area": derive_area(i["l"], i["t"]),
             "priority": derive_priority(i["l"]),
-            "kind":     derive_kind(i["l"]),
+            "kind": derive_kind(i["l"]),
         }
         changes = {}
         for k, v in derived.items():

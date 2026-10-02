@@ -88,8 +88,7 @@ def test_issue_missing_from_tsv_fails(cov: Any, monkeypatch: pytest.MonkeyPatch)
 def test_row_with_too_few_columns_fails(cov: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     # Five columns — missing model.
     cov.TSV.write_text(
-        "issue\tphase\tarea\tkind\tpriority\tmodel\n"
-        "7\tPhase 1\tdigigraph\tTask\tP1\n",
+        "issue\tphase\tarea\tkind\tpriority\tmodel\n7\tPhase 1\tdigigraph\tTask\tP1\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(

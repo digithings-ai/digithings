@@ -40,7 +40,9 @@ class SemanticChunker(Chunker):
         return result
 
     def chunk(self, doc: Document) -> list[Chunk]:
-        if not self.embedder or (not hasattr(self.embedder, "embed") and not hasattr(self.embedder, "embed_batch")):
+        if not self.embedder or (
+            not hasattr(self.embedder, "embed") and not hasattr(self.embedder, "embed_batch")
+        ):
             return self._fallback.chunk(doc)
         text = doc.content
         if len(text) < self.min_chunk_size:
@@ -63,7 +65,10 @@ class SemanticChunker(Chunker):
             current = [sentences[0]]
             for i in range(1, len(sentences)):
                 sim = self._cosine(embs[i - 1], embs[i])
-                if sim < (1 - self.threshold) and sum(len(s) for s in current) >= self.min_chunk_size:
+                if (
+                    sim < (1 - self.threshold)
+                    and sum(len(s) for s in current) >= self.min_chunk_size
+                ):
                     content = " ".join(current)
                     chunks.append(
                         Chunk(
@@ -94,6 +99,7 @@ class SemanticChunker(Chunker):
 
     def _cosine(self, a: list[float], b: list[float]) -> float:
         import math
+
         dot = sum(x * y for x, y in zip(a, b))
         na = math.sqrt(sum(x * x for x in a))
         nb = math.sqrt(sum(x * x for x in b))

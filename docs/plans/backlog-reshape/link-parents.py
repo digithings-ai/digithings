@@ -7,6 +7,7 @@ Usage:
   python3 link-parents.py           # dry run
   python3 link-parents.py --apply
 """
+
 import json
 import subprocess
 import sys
@@ -60,10 +61,8 @@ query {{ repository(owner: "{REPO_OWNER}", name: "{REPO_NAME}") {{
 
 
 def add_subissue(parent_id: str, child_id: str):
-    q = ("mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c})"
-         "{issue{id}}}")
-    sh(["gh", "api", "graphql", "-f", f"query={q}",
-        "-f", f"p={parent_id}", "-f", f"c={child_id}"])
+    q = "mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){issue{id}}}"
+    sh(["gh", "api", "graphql", "-f", f"query={q}", "-f", f"p={parent_id}", "-f", f"c={child_id}"])
 
 
 def main():

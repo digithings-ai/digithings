@@ -3,6 +3,7 @@
 
 One-shot. Re-running would create duplicates — check before re-run.
 """
+
 import subprocess
 import sys
 import textwrap
@@ -12,7 +13,8 @@ REPO = "digithings-ai/digithings"
 TASKS = [
     # ---- Epic #295: Atlas daily-update backend ----
     {
-        "parent": 295, "slug": "295-publish",
+        "parent": 295,
+        "slug": "295-publish",
         "title": "[agent] Atlas daily snapshot publish — JSON artifact consumable by frontend",
         "labels": "agent-task,component:digiquant,priority:high,complexity:S,type:feature,risk:low",
         "goal": "After the daily pipeline recomputes outputs, publish a single JSON snapshot at a stable, frontend-consumable location (object store path, committed data branch, or signed URL). Atlas frontend reads this snapshot to render the daily view.",
@@ -26,7 +28,8 @@ TASKS = [
         "docs": "apps/digiquant-atlas/ARCHITECTURE.md; digiquant/docs/ if schema lives there.",
     },
     {
-        "parent": 295, "slug": "295-frontend-wire",
+        "parent": 295,
+        "slug": "295-frontend-wire",
         "title": "[agent] Atlas frontend reads daily snapshot — replace stubs/mocks",
         "labels": "agent-task,component:digiquant,priority:high,complexity:M,type:feature,risk:low",
         "goal": "Atlas Next.js frontend reads the published daily snapshot and renders it. No stub data, no placeholders, no hardcoded mock fixtures in production paths.",
@@ -40,7 +43,8 @@ TASKS = [
         "docs": "apps/digiquant-atlas/cloudflare/README.md; frontend README after move to cloudflare/atlas/.",
     },
     {
-        "parent": 295, "slug": "295-alerting",
+        "parent": 295,
+        "slug": "295-alerting",
         "title": "[agent] Atlas daily job — failure alerting",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:S,type:infra,risk:low",
         "goal": "When the daily GHA job (#298) fails, a human is notified within one business day. Minimum bar: GitHub Actions failure visible + email-style notification.",
@@ -52,10 +56,10 @@ TASKS = [
         ],
         "docs": "apps/digiquant-atlas/RUNBOOK.md.",
     },
-
     # ---- Epic #296: Atlas user profiling ----
     {
-        "parent": 296, "slug": "296-schema-profile",
+        "parent": 296,
+        "slug": "296-schema-profile",
         "title": "[agent] Investment-profile schema — Pydantic v2, versioned",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:M,type:feature,risk:low",
         "goal": "Define the data model for a user investment profile: risk tolerance, horizon, liquidity needs, base currency, coarse tax jurisdiction, ESG preferences, excluded sectors, experience level. Versioned so future migrations are tractable.",
@@ -69,7 +73,8 @@ TASKS = [
         "docs": "digiquant/docs/profiles/README.md (new).",
     },
     {
-        "parent": 296, "slug": "296-schema-assets",
+        "parent": 296,
+        "slug": "296-schema-assets",
         "title": "[agent] Asset-preferences schema — watchlists, custom universe, exclusions",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:S,type:feature,risk:low",
         "goal": "Companion schema to the investment profile: per-user watchlists, a custom asset universe (tickers/ETFs), and exclusion lists (tickers/sectors). Separate from the profile because it mutates more often.",
@@ -82,7 +87,8 @@ TASKS = [
         "docs": "digiquant/docs/profiles/README.md.",
     },
     {
-        "parent": 296, "slug": "296-persistence",
+        "parent": 296,
+        "slug": "296-persistence",
         "title": "[agent] Profile persistence — per-user storage backend (digikey-adjacent initially)",
         "labels": "agent-task,component:digikey,priority:medium,complexity:M,type:feature,risk:med",
         "goal": "Store and retrieve per-user investment profiles and asset preferences. Initial backend lives alongside digikey (shares identity boundary); migrate to digistore when that module lands (#172).",
@@ -96,7 +102,8 @@ TASKS = [
         "docs": "digikey/ARCHITECTURE.md (new section); digiquant/docs/profiles/README.md.",
     },
     {
-        "parent": 296, "slug": "296-jwt-claims",
+        "parent": 296,
+        "slug": "296-jwt-claims",
         "title": "[agent] Profile claims on digikey JWTs — profile_id and profile_version",
         "labels": "agent-task,component:digikey,priority:medium,complexity:S,type:feature,risk:med",
         "goal": "digikey JWTs carry minimal profile pointers (`profile_id`, `profile_version`) so downstream services (Atlas, digigraph) can key off the authenticated user without a second DB lookup.",
@@ -109,7 +116,8 @@ TASKS = [
         "docs": "digikey/ARCHITECTURE.md.",
     },
     {
-        "parent": 296, "slug": "296-intake-subgraph",
+        "parent": 296,
+        "slug": "296-intake-subgraph",
         "title": "[agent] digichat intake sub-graph — guided profile-building conversation",
         "labels": "agent-task,component:digigraph,priority:medium,complexity:L,type:feature,risk:med",
         "goal": "A LangGraph sub-graph that walks a user through a 5–8 minute conversation and emits a complete `InvestmentProfile` via Pydantic v2 structured outputs. Asks clarifying follow-ups on ambiguous answers.",
@@ -123,7 +131,8 @@ TASKS = [
         "docs": "digigraph/ARCHITECTURE.md; digigraph/docs/subgraphs/intake.md (new).",
     },
     {
-        "parent": 296, "slug": "296-intake-ui",
+        "parent": 296,
+        "slug": "296-intake-ui",
         "title": "[agent] digichat UI for profile intake — entry CTA, progress, review screen",
         "labels": "agent-task,component:digichat,priority:medium,complexity:M,type:feature,risk:low",
         "goal": "User-facing surface in digichat for running the intake sub-graph: 'Set up your profile' CTA on first login, inline progress during the conversation, a review-and-edit screen before final submit.",
@@ -137,7 +146,8 @@ TASKS = [
         "docs": "apps/digichat/README.md.",
     },
     {
-        "parent": 296, "slug": "296-revision",
+        "parent": 296,
+        "slug": "296-revision",
         "title": "[agent] Profile revision flow — re-run intake or edit fields directly",
         "labels": "agent-task,component:digichat,priority:low,complexity:S,type:feature,risk:low",
         "goal": "Users can update their profile after initial setup — either by re-running intake or editing the fields directly in a settings panel.",
@@ -150,7 +160,8 @@ TASKS = [
         "docs": "apps/digichat/README.md.",
     },
     {
-        "parent": 296, "slug": "296-atlas-reads-profile",
+        "parent": 296,
+        "slug": "296-atlas-reads-profile",
         "title": "[agent] Atlas filters and ranks daily output by user profile",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:M,type:feature,risk:low",
         "goal": "Logged-in Atlas users see a view filtered by their profile: custom universe honored, exclusions applied, ranking weighted by risk/horizon preferences.",
@@ -163,7 +174,8 @@ TASKS = [
         "docs": "apps/digiquant-atlas/ARCHITECTURE.md.",
     },
     {
-        "parent": 296, "slug": "296-custom-research",
+        "parent": 296,
+        "slug": "296-custom-research",
         "title": "[agent] Custom research trigger — user-requested one-off research run",
         "labels": "agent-task,component:digiquant,priority:low,complexity:L,type:feature,risk:med",
         "goal": "From Atlas, a user can submit a prompt scoped to their profile; the system runs a research job and delivers results back (in Atlas, email, or notification).",
@@ -176,10 +188,10 @@ TASKS = [
         ],
         "docs": "apps/digiquant-atlas/ARCHITECTURE.md; digigraph/docs/subgraphs/.",
     },
-
     # ---- Epic #297: Atlas into digiquant migration ----
     {
-        "parent": 297, "slug": "297-adr",
+        "parent": 297,
+        "slug": "297-adr",
         "title": "[agent] ADR — Atlas belongs in digiquant/, not apps/",
         "labels": "agent-task,component:root,priority:high,complexity:S,type:research,risk:low",
         "goal": "File ADR-00XX that reverses the `apps/digiquant-atlas/` pattern: Atlas is a digiquant product and lives inside the module. Captures the rationale (product family coherence, frontend-umbrella alignment, tooling de-duplication) and the phased migration plan.",
@@ -192,7 +204,8 @@ TASKS = [
         "docs": "docs/adr/00XX-atlas-in-digiquant.md (new).",
     },
     {
-        "parent": 297, "slug": "297-python-move",
+        "parent": 297,
+        "slug": "297-python-move",
         "title": "[agent] Atlas Python package move — digiquant_atlas → digiquant.olympus.atlas",
         "labels": "agent-task,component:digiquant,priority:high,complexity:L,type:migration,risk:med",
         "goal": "Move `apps/digiquant-atlas/src/digiquant_atlas/` to `digiquant/src/digiquant/olympus/atlas/`. Hard cut on import root (no shim, per pre-1.0 decision). Update all callers: scripts, tests, skill manifests.",
@@ -206,7 +219,8 @@ TASKS = [
         "docs": "digiquant/ARCHITECTURE.md; digiquant/AGENTS.md.",
     },
     {
-        "parent": 297, "slug": "297-docs-move",
+        "parent": 297,
+        "slug": "297-docs-move",
         "title": "[agent] Move Atlas docs, config, scripts into digiquant/",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:M,type:migration,risk:low",
         "goal": "Move `apps/digiquant-atlas/docs/`, `config/`, and `scripts/` into sensible homes under `digiquant/`. Docs → `digiquant/docs/atlas/`; config → `digiquant/config/atlas/`; scripts → `digiquant/scripts/atlas/`.",
@@ -219,7 +233,8 @@ TASKS = [
         "docs": "CLAUDE.md; AGENTS.md; digiquant/AGENTS.md.",
     },
     {
-        "parent": 297, "slug": "297-supabase-move",
+        "parent": 297,
+        "slug": "297-supabase-move",
         "title": "[agent] Move Atlas supabase migrations into digiquant/supabase/",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:S,type:migration,risk:med",
         "goal": "Relocate `apps/digiquant-atlas/supabase/migrations/` to `digiquant/supabase/migrations/`. No schema changes — paths only.",
@@ -232,7 +247,8 @@ TASKS = [
         "docs": "digiquant/ARCHITECTURE.md (data section).",
     },
     {
-        "parent": 297, "slug": "297-skills-agent-surface",
+        "parent": 297,
+        "slug": "297-skills-agent-surface",
         "title": "[agent] Consolidate Atlas skills and agent surface under digiquant/",
         "labels": "agent-task,component:digiquant,priority:medium,complexity:M,type:migration,risk:low",
         "goal": "Atlas's 40+ skills move to `digiquant/atlas/skills/`. Its private `.claude/`, `.cursor/`, `.agents/` surfaces are reconciled with the monorepo root: content merged where non-duplicated, deleted otherwise.",
@@ -245,7 +261,8 @@ TASKS = [
         "docs": "AGENTS.md; digiquant/AGENTS.md; .claude/ via agents-init.",
     },
     {
-        "parent": 297, "slug": "297-ci-fold",
+        "parent": 297,
+        "slug": "297-ci-fold",
         "title": "[agent] Fold Atlas .github/workflows/ into monorepo root",
         "labels": "agent-task,component:root,priority:medium,complexity:M,type:infra,risk:med",
         "goal": "Atlas's own workflows under `apps/digiquant-atlas/.github/workflows/` move to the monorepo root `.github/workflows/` as `atlas-*.yml`. Reconcile with existing `digiquant-*.yml` — Atlas tests become part of the digiquant test matrix where sensible.",
@@ -258,7 +275,8 @@ TASKS = [
         "docs": "CLAUDE.md (commands section if affected); AGENTS.md.",
     },
     {
-        "parent": 297, "slug": "297-cleanup",
+        "parent": 297,
+        "slug": "297-cleanup",
         "title": "[agent] Delete apps/digiquant-atlas/ shell and finalize migration",
         "labels": "agent-task,component:root,priority:medium,complexity:S,type:migration,risk:low",
         "goal": "After all phases land, delete the `apps/digiquant-atlas/` directory (or reduce to a one-line README pointing to `digiquant/`). Final sweep: CLAUDE.md, ARCHITECTURE.md, docs/VISION.md, memory files.",
@@ -279,7 +297,7 @@ def build_body(task: dict) -> str:
     return textwrap.dedent(f"""
         ## Goal
 
-        {task['goal']}
+        {task["goal"]}
 
         ## Acceptance criteria
 
@@ -287,11 +305,11 @@ def build_body(task: dict) -> str:
 
         ## Documentation
 
-        {task['docs']}
+        {task["docs"]}
 
         ## Parent
 
-        Part of #{task['parent']}.
+        Part of #{task["parent"]}.
         """).strip()
 
 
@@ -302,10 +320,17 @@ def main():
     for t in TASKS:
         body = build_body(t)
         cmd = [
-            "gh", "issue", "create", "--repo", REPO,
-            "--title", t["title"],
-            "--label", t["labels"],
-            "--body", body,
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            REPO,
+            "--title",
+            t["title"],
+            "--label",
+            t["labels"],
+            "--body",
+            body,
         ]
         print(f"→ {t['title']}")
         if not dry_run:

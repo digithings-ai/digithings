@@ -324,9 +324,7 @@ def test_scheduler_rejects_disabled_and_event_start(tmp_path: Path) -> None:
     agents = [
         AgentDefinition(
             name="off",
-            schedule=AgentSchedule(
-                mode=ScheduleMode.CONTINUOUS, interval_seconds=5, enabled=False
-            ),
+            schedule=AgentSchedule(mode=ScheduleMode.CONTINUOUS, interval_seconds=5, enabled=False),
         ),
         AgentDefinition(
             name="evt",

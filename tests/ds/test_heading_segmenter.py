@@ -200,16 +200,7 @@ def test_stub_with_descendant_heading_preserves_text_without_duplication() -> No
 
 @pytest.mark.unit
 def test_no_content_dropped_with_stub_and_fenced_code_block() -> None:
-    doc = (
-        "## Stub\n"
-        "## Real\n"
-        "\n"
-        "```python\n"
-        "# fake heading\n"
-        "```\n"
-        "\n"
-        "body text\n"
-    )
+    doc = "## Stub\n## Real\n\n```python\n# fake heading\n```\n\nbody text\n"
     segs = heading_segments(doc)
     concatenated = "".join(s.text for s in segs)
     source_chars = len(re.sub(r"\s", "", doc))

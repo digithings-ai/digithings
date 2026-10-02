@@ -11,7 +11,9 @@ from digikey.jwt_issue import issue_access_token
 def mint_test_jwt(*, scopes: list[str] | None = None, tenant_slug: str = "pytest-tenant") -> str:
     pem = os.environ.get("_PYTEST_DIGIKEY_PRIVATE_PEM", "").strip()
     if not pem:
-        raise RuntimeError("_PYTEST_DIGIKEY_PRIVATE_PEM must be set by tests/conftest.py pytest_configure")
+        raise RuntimeError(
+            "_PYTEST_DIGIKEY_PRIVATE_PEM must be set by tests/conftest.py pytest_configure"
+        )
     priv = load_private_key_from_pem(pem)
     token, _ = issue_access_token(
         priv,

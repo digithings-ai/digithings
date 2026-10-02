@@ -445,9 +445,7 @@ def run_nautilus(
     engine.add_instrument(inst)
     engine.add_data(bars)
     injected: dict[str, object] = {
-        k: v
-        for k, v in dict(calibration or {}).items()
-        if config_declares_field(strategy, k)
+        k: v for k, v in dict(calibration or {}).items() if config_declares_field(strategy, k)
     }
     if config_declares_field(strategy, "size_pct_equity"):
         injected.setdefault("size_pct_equity", float(d["size_pct_equity"]))
@@ -866,9 +864,7 @@ def run_and_write(
             provenance_notes.append(note)
         if dropped_this_run:
             provenance_notes.append(
-                "This run omitted "
-                + ", ".join(dropped_this_run)
-                + " (missing source series)."
+                "This run omitted " + ", ".join(dropped_this_run) + " (missing source series)."
             )
         provenance_notes.append(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "

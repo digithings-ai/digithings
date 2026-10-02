@@ -86,8 +86,9 @@ def parse_traceback(text: str) -> dict | None:
 
     if not frames:
         # No standard frames — try to extract error type/message only
-        error_match = re.search(r'^(\w+(?:\.\w+)*Error|\w+Exception|KeyboardInterrupt):\s*(.*)$',
-                                 text, re.MULTILINE)
+        error_match = re.search(
+            r"^(\w+(?:\.\w+)*Error|\w+Exception|KeyboardInterrupt):\s*(.*)$", text, re.MULTILINE
+        )
         if error_match:
             return {
                 "component": "unknown",
@@ -108,7 +109,9 @@ def parse_traceback(text: str) -> dict | None:
     error_type = "UnknownError"
     error_msg = error_line
 
-    error_match = re.match(r'^(\w+(?:\.\w+)*(?:Error|Exception|Warning|Interrupt)):\s*(.*)', error_line)
+    error_match = re.match(
+        r"^(\w+(?:\.\w+)*(?:Error|Exception|Warning|Interrupt)):\s*(.*)", error_line
+    )
     if error_match:
         error_type = error_match.group(1)
         error_msg = error_match.group(2).strip()
@@ -140,10 +143,12 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--input", "-i", metavar="FILE",
-                        help="Read traceback from file (default: stdin)")
-    parser.add_argument("--format", choices=["text", "json"], default="text",
-                        help="Output format (default: text)")
+    parser.add_argument(
+        "--input", "-i", metavar="FILE", help="Read traceback from file (default: stdin)"
+    )
+    parser.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)"
+    )
     args = parser.parse_args()
 
     if args.input:
@@ -172,17 +177,21 @@ def main() -> int:
         print(json.dumps(output, indent=2))
     else:
         loc = f"{result['file']}:{result['line']}" if result["file"] else "(unknown location)"
-        print(f"Component: {result['component']} | File: {loc} | "
-              f"Error: {result['error_type']}: {result['message']}")
+        print(
+            f"Component: {result['component']} | File: {loc} | "
+            f"Error: {result['error_type']}: {result['message']}"
+        )
         print()
         print("Next steps:")
         if result["component"] != "unknown":
             print(f"  1. Read {result['component']}/AGENTS.md")
             print(f"  2. Open {loc} at line {result['line']}")
-        print(f"  3. Create issue: scripts/create_issue.sh "
-              f"--component {result['component']} "
-              f"--type fix "
-              f"--title \"fix({result['component']}): {result['error_type']} at {loc}\"")
+        print(
+            f"  3. Create issue: scripts/create_issue.sh "
+            f"--component {result['component']} "
+            f"--type fix "
+            f'--title "fix({result["component"]}): {result["error_type"]} at {loc}"'
+        )
 
     return 0
 

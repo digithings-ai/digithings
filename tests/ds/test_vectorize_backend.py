@@ -561,9 +561,7 @@ def test_query_raises_when_workspace_id_is_set() -> None:
     post = _RecordingPost(body=_MATCHES)
     backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
     with pytest.raises(VectorizeBackendError, match="workspace_id"):
-        backend.query(
-            DsQuery(text="x", top_k=3, embedding=[0.0] * 384, workspace_id="ws-1")
-        )
+        backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384, workspace_id="ws-1"))
     assert post.calls == []
 
 

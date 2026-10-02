@@ -13,8 +13,20 @@ from digigraph.tools.analytics import load_dataset, plot_distribution, summary_s
 def sample_dataset_path(tmp_path: Path) -> str:
     """Write a small JSON dataset and return path."""
     data = [
-        {"content": "a", "score": 0.5, "doc_id": "d1", "rank": 1, "metadata": {"sourceType": "EXCHANGE", "sentDateTime": "2025-01-01"}},
-        {"content": "b", "score": 0.8, "doc_id": "d2", "rank": 2, "metadata": {"sourceType": "TEAMS", "sentDateTime": "2025-01-02"}},
+        {
+            "content": "a",
+            "score": 0.5,
+            "doc_id": "d1",
+            "rank": 1,
+            "metadata": {"sourceType": "EXCHANGE", "sentDateTime": "2025-01-01"},
+        },
+        {
+            "content": "b",
+            "score": 0.8,
+            "doc_id": "d2",
+            "rank": 2,
+            "metadata": {"sourceType": "TEAMS", "sentDateTime": "2025-01-02"},
+        },
     ]
     path = tmp_path / "data.json"
     path.write_text(json.dumps(data), encoding="utf-8")

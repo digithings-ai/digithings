@@ -133,9 +133,7 @@ def reset_store():
 
 
 @pytest.mark.unit
-def test_get_store_defaults_to_in_memory(
-    monkeypatch: pytest.MonkeyPatch, reset_store
-) -> None:
+def test_get_store_defaults_to_in_memory(monkeypatch: pytest.MonkeyPatch, reset_store) -> None:
     from digigraph.graph.graph import get_store
 
     monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)

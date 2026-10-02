@@ -63,15 +63,19 @@ def _family(label: str) -> str:
     return "mr"
 
 
-def compare(strategy: str, ohlcv_csv: str | Path, tv_export_csv: str | Path,
-            start_date: str | None = None) -> dict:
+def compare(
+    strategy: str, ohlcv_csv: str | Path, tv_export_csv: str | Path, start_date: str | None = None
+) -> dict:
     """Run the parity check and return a structured result (no printing).
 
     Keys: strategy, tv_entries, our_entries, matched, match_pct, wrong_direction,
     tv_only (missed) and ours_only (extra), each as a list of {date,direction,signal}.
     """
     out = run_backtest(strategy, ohlcv_csv, start_date=start_date)
-    ours = [{"date": t.entry_date, "direction": t.direction, "signal": t.entry_label} for t in out.trades]
+    ours = [
+        {"date": t.entry_date, "direction": t.direction, "signal": t.entry_label}
+        for t in out.trades
+    ]
     tv_entries = parse_tv_entries(tv_export_csv)
     ours_by_date = {e["date"]: e for e in ours}
     tv_by_date = {e["date"]: e for e in tv_entries}
@@ -112,7 +116,9 @@ def main() -> None:
     print(f"\n{strategy}: TV entries={r['tv_entries']}  ours={r['our_entries']}")
     print(f"  matched (date+dir): {r['matched']}/{r['tv_entries']} = {r['match_pct']:.1f}%")
     if r["wrong_direction"]:
-        print(f"  same date, wrong direction: {len(r['wrong_direction'])} -> {r['wrong_direction']}")
+        print(
+            f"  same date, wrong direction: {len(r['wrong_direction'])} -> {r['wrong_direction']}"
+        )
     miss_fam = Counter(e["signal"] for e in r["tv_only"])
     extra_fam = Counter(e["signal"] for e in r["ours_only"])
     print(f"  TV-only (we missed): {len(r['tv_only'])} by signal -> {dict(miss_fam)}")

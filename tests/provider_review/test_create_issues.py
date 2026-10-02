@@ -1,5 +1,6 @@
 # tests/provider_review/test_create_issues.py
 """Unit tests for scripts/provider_review/create_issues.py."""
+
 from __future__ import annotations
 
 import pytest
@@ -20,9 +21,7 @@ def test_is_duplicate_same_provider_trigger():
 def test_is_duplicate_different_trigger():
     """Returns False when same provider has a different trigger in open issues."""
     finding = {"provider": "gemini", "trigger": "better_free"}
-    open_issues = [
-        {"number": 1, "title": "...", "body": "<!-- dedup-key: gemini:quota_drop -->"}
-    ]
+    open_issues = [{"number": 1, "title": "...", "body": "<!-- dedup-key: gemini:quota_drop -->"}]
     assert is_duplicate(finding, open_issues) is False
 
 

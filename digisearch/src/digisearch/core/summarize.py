@@ -46,7 +46,11 @@ def _infer_datetime_cols(df: pl.DataFrame) -> list[str]:
 def _infer_categorical_cols(df: pl.DataFrame, numeric: list[str], dt: list[str]) -> list[str]:
     """Columns we treat as categorical (string or few-unique)."""
     skip = {"content", "doc_id", "rank", "score"} | set(numeric) | set(dt)
-    return [c for c in df.columns if c not in skip and df[c].dtype in (pl.Utf8, pl.String, pl.Categorical)]
+    return [
+        c
+        for c in df.columns
+        if c not in skip and df[c].dtype in (pl.Utf8, pl.String, pl.Categorical)
+    ]
 
 
 def summarize_results(
@@ -63,7 +67,12 @@ def summarize_results(
     """
     if not results:
         return {
-            "data_summary": {"total_rows": 0, "counts": {}, "numeric_stats": {}, "categorical_top": {}},
+            "data_summary": {
+                "total_rows": 0,
+                "counts": {},
+                "numeric_stats": {},
+                "categorical_top": {},
+            },
             "sample": [],
             "text_summary": "0 results.",
         }
@@ -102,7 +111,9 @@ def summarize_results(
     categorical_top: dict[str, list[dict[str, Any]]] = {}
     for c in categorical_cols:
         top = df[c].value_counts().head(categorical_top_k)
-        categorical_top[c] = [{"value": str(v), "count": int(cnt)} for v, cnt in zip(top[c], top["count"])]
+        categorical_top[c] = [
+            {"value": str(v), "count": int(cnt)} for v, cnt in zip(top[c], top["count"])
+        ]
 
     data_summary = {
         "total_rows": total,

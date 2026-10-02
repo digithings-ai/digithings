@@ -44,6 +44,7 @@ def generate_synthetic_ohlcv(
     Generate synthetic OHLCV with Polars (for tests and demos).
     Returns one row per (timestamp, symbol) with deterministic prices.
     """
+
     def _parse(s: str) -> datetime:
         if "T" in s:
             return datetime.fromisoformat(s.replace("Z", "+00:00"))
@@ -60,20 +61,19 @@ def generate_synthetic_ohlcv(
         open_ = [base + (j % 10) - 5.0 for j in range(n)]
         high = [open_[j] + 1.0 + (rng + j) % 3 for j in range(n)]
         low = [open_[j] - 1.0 - (rng + j + 1) % 3 for j in range(n)]
-        close = [
-            low[j] + (high[j] - low[j]) * 0.5 + 0.1 * ((j + rng) % 5 - 2)
-            for j in range(n)
-        ]
+        close = [low[j] + (high[j] - low[j]) * 0.5 + 0.1 * ((j + rng) % 5 - 2) for j in range(n)]
         vol = [1000.0 + (rng + j) % 5000 for j in range(n)]
-        df = pl.DataFrame({
-            "timestamp": ts,
-            "open": open_,
-            "high": high,
-            "low": low,
-            "close": close,
-            "volume": vol,
-            "symbol": sym,
-        })
+        df = pl.DataFrame(
+            {
+                "timestamp": ts,
+                "open": open_,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": vol,
+                "symbol": sym,
+            }
+        )
         out.append(df)
     return pl.concat(out).sort(["symbol", "timestamp"])
 

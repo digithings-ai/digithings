@@ -46,9 +46,12 @@ def load_config() -> dict:
 
 # ── Table / list helpers for Copilot + Cursor prose adapters ──────────────────
 
+
 def _component_table(components: list[dict]) -> str:
-    rows = ["| Component | Port | Description | Agent Guide |",
-            "|-----------|------|-------------|-------------|"]
+    rows = [
+        "| Component | Port | Description | Agent Guide |",
+        "|-----------|------|-------------|-------------|",
+    ]
     for c in components:
         port = str(c["port"]) if c["port"] else "—"
         name = c["name"]
@@ -83,7 +86,9 @@ def _agent_surface_prose(surface: dict) -> str:
     out = []
     subagents = surface.get("subagents") or []
     if subagents:
-        out.append("**Subagents** (first-class in Claude Code; other tools should emulate the intent):\n")
+        out.append(
+            "**Subagents** (first-class in Claude Code; other tools should emulate the intent):\n"
+        )
         for s in subagents:
             out.append(f"- `{s['name']}` — {s['purpose']}")
         out.append("")
@@ -281,6 +286,7 @@ def generate_cursor(cfg: dict) -> str:
 
 # ── Claude Code artifacts (from agents/sources/) ──────────────────────────────
 
+
 def _source_for_subagent(name: str) -> Path:
     return SOURCES_ROOT / "subagents" / f"{name}.md"
 
@@ -334,7 +340,9 @@ def collect_claude_outputs(cfg: dict) -> list[tuple[Path, str]]:
     for s in surface.get("subagents") or []:
         src = _source_for_subagent(s["name"])
         if not src.exists():
-            missing.append(f"subagent '{s['name']}': expected source at {src.relative_to(REPO_ROOT)}")
+            missing.append(
+                f"subagent '{s['name']}': expected source at {src.relative_to(REPO_ROOT)}"
+            )
             continue
         outputs.append((_dest_for_subagent(s["name"]), _with_generated_header(src)))
 
@@ -348,7 +356,9 @@ def collect_claude_outputs(cfg: dict) -> list[tuple[Path, str]]:
     for c in surface.get("commands") or []:
         src = _source_for_command(c["name"])
         if not src.exists():
-            missing.append(f"command '{c['name']}': expected source at {src.relative_to(REPO_ROOT)}")
+            missing.append(
+                f"command '{c['name']}': expected source at {src.relative_to(REPO_ROOT)}"
+            )
             continue
         outputs.append((_dest_for_command(c["name"]), _with_generated_header(src)))
 
@@ -364,22 +374,26 @@ def collect_claude_outputs(cfg: dict) -> list[tuple[Path, str]]:
 
 # ── Drift / check mode ────────────────────────────────────────────────────────
 
+
 def _diff_file(path: Path, expected: str) -> list[str]:
     """Return a unified-diff list of lines if the file differs from expected; empty otherwise."""
     actual = path.read_text(encoding="utf-8") if path.exists() else ""
     if actual == expected:
         return []
     rel = path.relative_to(REPO_ROOT)
-    return list(difflib.unified_diff(
-        actual.splitlines(keepends=True),
-        expected.splitlines(keepends=True),
-        fromfile=f"{rel} (on disk)",
-        tofile=f"{rel} (expected)",
-        n=2,
-    ))
+    return list(
+        difflib.unified_diff(
+            actual.splitlines(keepends=True),
+            expected.splitlines(keepends=True),
+            fromfile=f"{rel} (on disk)",
+            tofile=f"{rel} (expected)",
+            n=2,
+        )
+    )
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def _build_outputs(cfg: dict) -> list[tuple[Path, str]]:
     return [
@@ -391,8 +405,11 @@ def _build_outputs(cfg: dict) -> list[tuple[Path, str]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Generate agent-tool adapters from agents.yml.")
-    ap.add_argument("--check", action="store_true",
-                    help="Don't write; exit non-zero if any output would change (drift guard for CI).")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="Don't write; exit non-zero if any output would change (drift guard for CI).",
+    )
     args = ap.parse_args()
 
     if not CONFIG_PATH.exists():

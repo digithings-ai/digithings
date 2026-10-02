@@ -8,6 +8,7 @@ Usage:
     python scripts/provider_review/probe.py
     # writes /tmp/review/probe-results.json
 """
+
 from __future__ import annotations
 
 import json
@@ -127,5 +128,9 @@ if __name__ == "__main__":
     for r in results:
         status = r["status"].upper()
         latency = f"{r['latency_ms']}ms" if r["latency_ms"] is not None else "—"
-        suffix = f" ({r['error'][:80]})" if r.get("error") else (f" — {r['reason']}" if r.get("reason") else "")
+        suffix = (
+            f" ({r['error'][:80]})"
+            if r.get("error")
+            else (f" — {r['reason']}" if r.get("reason") else "")
+        )
         print(f"  {status:7} {r['provider']:<15} {latency}{suffix}")

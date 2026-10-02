@@ -28,7 +28,9 @@ from digiquant.research.snapshot import SCHEMA_VERSION, SnapshotEnvelope  # noqa
 
 
 def _default_output_path() -> Path:
-    return REPO_ROOT / "digiquant" / "docs" / "schemas" / f"research_snapshot.v{SCHEMA_VERSION}.json"
+    return (
+        REPO_ROOT / "digiquant" / "docs" / "schemas" / f"research_snapshot.v{SCHEMA_VERSION}.json"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -10,6 +10,7 @@ Usage:
   python3 scripts/score.py --set security=8,quality=9,optimization=7,accuracy=9
   python3 scripts/score.py --delta                       # diff vs base branch
 """
+
 import json
 import re
 import subprocess
@@ -22,31 +23,34 @@ DEFAULTS = {"security": 8, "quality": 8, "optimization": 7, "accuracy": 9}
 # ── Heuristic patterns ────────────────────────────────────────────────────────
 
 _SEC = [
-    (r'(?i)(?:api_key|apikey|secret_key|password|passwd|token)\s*=\s*["\'][^"\'$\{]{6,}["\']',
-     "Possible hardcoded credential"),
-    (r'subprocess\.[^\n]+shell\s*=\s*True',
-     "subprocess(shell=True) — command injection risk"),
-    (r'\beval\s*\([^\n)]+\)',
-     "eval() call — code injection risk"),
-    (r'(?m)^[+][^+].*\b0\.0\.0\.0\b',
-     "Binding to 0.0.0.0 — broad network exposure"),
-    (r'(?im)^[+][^+].*#\s*TODO.*(auth|security|permission|password|secret)',
-     "Security TODO left unresolved in staged changes"),
+    (
+        r'(?i)(?:api_key|apikey|secret_key|password|passwd|token)\s*=\s*["\'][^"\'$\{]{6,}["\']',
+        "Possible hardcoded credential",
+    ),
+    (r"subprocess\.[^\n]+shell\s*=\s*True", "subprocess(shell=True) — command injection risk"),
+    (r"\beval\s*\([^\n)]+\)", "eval() call — code injection risk"),
+    (r"(?m)^[+][^+].*\b0\.0\.0\.0\b", "Binding to 0.0.0.0 — broad network exposure"),
+    (
+        r"(?im)^[+][^+].*#\s*TODO.*(auth|security|permission|password|secret)",
+        "Security TODO left unresolved in staged changes",
+    ),
 ]
 
 _QUAL = [
-    (r'(?m)^[+][^+].*#\s*TODO\b', "TODO added in staged changes"),
-    (r'(?m)^[+][^+].{121,}',      "Line >120 chars added"),
+    (r"(?m)^[+][^+].*#\s*TODO\b", "TODO added in staged changes"),
+    (r"(?m)^[+][^+].{121,}", "Line >120 chars added"),
 ]
 
 _OPT = [
-    (r'(?s)for\s+\w+\s+in\s+.{1,80}:\n(?:\s+.+\n){0,3}\s+(?:await\s+)?(?:\w+\.)+(?:query|execute|find|get|fetch|select|insert|update)\(',
-     "Query inside loop — possible N+1"),
-    (r'await\s+\w[\w.()]+\s*\n\s*await\s+\w',
-     "Sequential awaits — consider gather/Promise.all"),
+    (
+        r"(?s)for\s+\w+\s+in\s+.{1,80}:\n(?:\s+.+\n){0,3}\s+(?:await\s+)?(?:\w+\.)+(?:query|execute|find|get|fetch|select|insert|update)\(",
+        "Query inside loop — possible N+1",
+    ),
+    (r"await\s+\w[\w.()]+\s*\n\s*await\s+\w", "Sequential awaits — consider gather/Promise.all"),
 ]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _run(*cmd):
     return subprocess.run(list(cmd), capture_output=True, text=True)
@@ -58,6 +62,7 @@ def get_thresholds():
         return dict(DEFAULTS)
     try:
         import yaml
+
         cfg = yaml.safe_load(path.read_text()) or {}
         t = cfg.get("scoring_thresholds", {})
         return {d: int(t.get(d, DEFAULTS[d])) for d in DIMENSIONS}
@@ -73,7 +78,9 @@ def get_thresholds():
 
 
 def staged_files():
-    return [f for f in _run("git", "diff", "--cached", "--name-only").stdout.strip().splitlines() if f]
+    return [
+        f for f in _run("git", "diff", "--cached", "--name-only").stdout.strip().splitlines() if f
+    ]
 
 
 def staged_diff():
@@ -106,8 +113,8 @@ def heuristic(diff, patterns):
 
 
 def test_coverage(files):
-    src = [f for f in files if not re.search(r'test|spec', f, re.I)]
-    tests = [f for f in files if re.search(r'test|spec', f, re.I)]
+    src = [f for f in files if not re.search(r"test|spec", f, re.I)]
+    tests = [f for f in files if re.search(r"test|spec", f, re.I)]
     if src and not tests:
         return ["Source files staged without test files — verify coverage exists"]
     return []
@@ -119,15 +126,15 @@ def read_criteria(dim):
         return [f"(rubric missing — re-run installer to generate docs/scoring/{dim.upper()}.md)"]
     text = path.read_text()
     # Format 1: numbered list  "1. **criterion** — ..."
-    criteria = re.findall(r'^\d+\.\s+\*\*(.+?)\*\*', text, re.MULTILINE)
+    criteria = re.findall(r"^\d+\.\s+\*\*(.+?)\*\*", text, re.MULTILINE)
     if criteria:
         return criteria[:10]
     # Format 2: table row  "| 1 | **criterion** | ..."
-    criteria = re.findall(r'^\|\s*\d+\s*\|\s*\*\*(.+?)\*\*', text, re.MULTILINE)
+    criteria = re.findall(r"^\|\s*\d+\s*\|\s*\*\*(.+?)\*\*", text, re.MULTILINE)
     if criteria:
         return criteria[:10]
     # Format 3: bare numbered list "1. criterion text"
-    criteria = re.findall(r'^\d+\.\s+(.+)', text, re.MULTILINE)
+    criteria = re.findall(r"^\d+\.\s+(.+)", text, re.MULTILINE)
     return criteria[:10]
 
 
@@ -137,16 +144,28 @@ _tty = sys.stdout.isatty()
 G = "\033[32m" if _tty else ""
 R = "\033[31m" if _tty else ""
 Y = "\033[33m" if _tty else ""
-B = "\033[1m"  if _tty else ""
-X = "\033[0m"  if _tty else ""
+B = "\033[1m" if _tty else ""
+X = "\033[0m" if _tty else ""
 
-def _ok(m):   print(f"  {G}✓{X} {m}")
-def _warn(m): print(f"  {Y}⚠{X}  {m}")
-def _err(m):  print(f"  {R}✗{X} {m}")
-def _sec(t):  print(f"\n{B}── {t} {'─' * max(0, 52 - len(t))}{X}\n")
+
+def _ok(m):
+    print(f"  {G}✓{X} {m}")
+
+
+def _warn(m):
+    print(f"  {Y}⚠{X}  {m}")
+
+
+def _err(m):
+    print(f"  {R}✗{X} {m}")
+
+
+def _sec(t):
+    print(f"\n{B}── {t} {'─' * max(0, 52 - len(t))}{X}\n")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main():
     args = sys.argv[1:]
@@ -169,9 +188,9 @@ def main():
     thresholds = get_thresholds()
     files = staged_files()
 
-    print(f"\n{B}╔{'═'*54}╗{X}")
+    print(f"\n{B}╔{'═' * 54}╗{X}")
     print(f"{B}║{'digidev — Quality Gate Score':^54}║{X}")
-    print(f"{B}╚{'═'*54}╝{X}")
+    print(f"{B}╚{'═' * 54}╝{X}")
 
     if not files:
         print("\nNo staged changes. Run 'git add <files>' first.\n")
@@ -198,10 +217,10 @@ def main():
     _ok("Lint clean")
 
     warnings = {
-        "Security":     heuristic(diff, _SEC),
-        "Quality":      heuristic(diff, _QUAL),
+        "Security": heuristic(diff, _SEC),
+        "Quality": heuristic(diff, _QUAL),
         "Optimization": heuristic(diff, _OPT),
-        "Accuracy":     test_coverage(files),
+        "Accuracy": test_coverage(files),
     }
     any_warn = False
     for dim, findings in warnings.items():
@@ -224,7 +243,7 @@ def main():
         results = {}
         for dim in DIMENSIONS:
             score = submitted.get(dim)
-            thr   = thresholds[dim]
+            thr = thresholds[dim]
             if score is None:
                 _err(f"{dim.upper()}: not provided (required)")
                 all_pass = False
@@ -257,7 +276,7 @@ def main():
         print()
 
     _sec("Submit your self-score")
-    print(f"  {B}make score SCORES=\"security=?,quality=?,optimization=?,accuracy=?\"{X}")
+    print(f'  {B}make score SCORES="security=?,quality=?,optimization=?,accuracy=?"{X}')
     print("  Replace ? with your honest score (0–10) for each dimension.\n")
     sys.exit(0)
 

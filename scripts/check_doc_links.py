@@ -47,7 +47,6 @@ def _strip_fenced_code(text: str) -> str:
     return FENCE_RE.sub("", text)
 
 
-
 def _is_excluded(rel_posix: str) -> bool:
     return any(rel_posix == p.rstrip("/") or rel_posix.startswith(p) for p in EXCLUDE_PREFIXES)
 

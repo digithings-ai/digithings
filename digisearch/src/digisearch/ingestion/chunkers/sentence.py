@@ -7,6 +7,7 @@ from digisearch.ingestion.chunkers.base import Chunker
 
 try:
     import nltk as _nltk_module
+
     _NLTK_AVAILABLE = True
 except ImportError:
     _nltk_module = None  # type: ignore[assignment]
@@ -36,7 +37,11 @@ class SentenceChunker(Chunker):
         if _NLTK_AVAILABLE:
             sents = _nltk_module.sent_tokenize(doc.content)
         else:
-            sents = [s.strip() for s in doc.content.replace("!", ".").replace("?", ".").split(".") if s.strip()]
+            sents = [
+                s.strip()
+                for s in doc.content.replace("!", ".").replace("?", ".").split(".")
+                if s.strip()
+            ]
         chunks: list[Chunk] = []
         for i in range(0, len(sents), self.max_sentences):
             batch = sents[i : i + self.max_sentences]

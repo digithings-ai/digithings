@@ -15,9 +15,7 @@ from typing import Any  # score:allow untyped any — dynamically loaded yfinanc
 
 import pytest
 
-_SANDBOX_RETRY = (
-    Path(__file__).resolve().parents[2] / "digiquant" / "sandbox" / "yfinance_retry.py"
-)
+_SANDBOX_RETRY = Path(__file__).resolve().parents[2] / "digiquant" / "sandbox" / "yfinance_retry.py"
 
 
 class _FakeFrame:

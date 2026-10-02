@@ -64,10 +64,42 @@ _COL_MAP: dict[str, str] = {
 _TICKER_RE = re.compile(r"\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b")
 _STOPWORDS = frozenset(
     {
-        "A", "AN", "AND", "ARE", "AS", "AT", "BE", "BY", "DO", "FOR",
-        "FROM", "IF", "IN", "IS", "IT", "NA", "NO", "NOT", "OF", "ON",
-        "OR", "THE", "TO", "US", "UK", "ETF", "TBD", "OHLCV", "CSV",
-        "API", "URL", "UTC", "EOF", "SEC", "NYSE", "NASDAQ",
+        "A",
+        "AN",
+        "AND",
+        "ARE",
+        "AS",
+        "AT",
+        "BE",
+        "BY",
+        "DO",
+        "FOR",
+        "FROM",
+        "IF",
+        "IN",
+        "IS",
+        "IT",
+        "NA",
+        "NO",
+        "NOT",
+        "OF",
+        "ON",
+        "OR",
+        "THE",
+        "TO",
+        "US",
+        "UK",
+        "ETF",
+        "TBD",
+        "OHLCV",
+        "CSV",
+        "API",
+        "URL",
+        "UTC",
+        "EOF",
+        "SEC",
+        "NYSE",
+        "NASDAQ",
     }
 )
 
@@ -101,6 +133,7 @@ def parse_watchlist(path: Path) -> list[str]:
 # Cache helpers
 # ---------------------------------------------------------------------------
 
+
 def cache_path(ticker: str, cache_dir: Path) -> Path:
     return cache_dir / f"{ticker}.parquet"
 
@@ -118,6 +151,7 @@ def is_stale(ticker: str, cache_dir: Path, max_stale_days: int) -> bool:
 # Supabase upsert
 # ---------------------------------------------------------------------------
 
+
 def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
     """Upsert OHLCV rows to the Supabase ``price_history`` table.
 
@@ -134,9 +168,7 @@ def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
     try:
         from supabase import create_client  # type: ignore[import]
     except ImportError as exc:
-        raise RuntimeError(
-            "supabase-py is not installed.  Run: pip install supabase"
-        ) from exc
+        raise RuntimeError("supabase-py is not installed.  Run: pip install supabase") from exc
 
     client = create_client(url, key)
 
@@ -172,6 +204,7 @@ def upsert_to_supabase(ticker: str, df: pl.DataFrame) -> int:
 # ---------------------------------------------------------------------------
 # Download
 # ---------------------------------------------------------------------------
+
 
 def _import_yfinance():  # type: ignore[return]
     try:
@@ -223,9 +256,7 @@ def download_batch(tickers: list[str], period: str) -> dict[str, pl.DataFrame]:
             # Drop rows where all OHLC columns are null
             price_cols = [c for c in ("open", "high", "low", "close") if c in df.columns]
             if price_cols:
-                df = df.filter(
-                    pl.any_horizontal([pl.col(c).is_not_null() for c in price_cols])
-                )
+                df = df.filter(pl.any_horizontal([pl.col(c).is_not_null() for c in price_cols]))
 
             df = df.with_columns(pl.lit(ticker).alias("symbol"))
             results[ticker] = df
@@ -248,6 +279,7 @@ def download_batch(tickers: list[str], period: str) -> dict[str, pl.DataFrame]:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -312,10 +344,7 @@ def main() -> int:
     if args.refresh:
         stale = [t for t in tickers if is_stale(t, cache_dir, args.max_stale_days)]
         fresh_count = len(tickers) - len(stale)
-        print(
-            f"  Refresh mode: {fresh_count} fresh, {len(stale)} stale"
-            f" (>{args.max_stale_days}d)"
-        )
+        print(f"  Refresh mode: {fresh_count} fresh, {len(stale)} stale (>{args.max_stale_days}d)")
         to_download = stale
     else:
         to_download = tickers

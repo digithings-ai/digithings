@@ -230,13 +230,9 @@ def test_streaming_digigraph_error_channel_always_emits() -> None:
     assert not any(e[0] == "content" for e in without_code)
 
     quota_message = "Free-tier model quota is exhausted."
-    with_code = _collect_events(
-        {"error": quota_message, "error_code": "free_quota_exceeded"}
-    )
+    with_code = _collect_events({"error": quota_message, "error_code": "free_quota_exceeded"})
     error_events = [e for e in with_code if e[0] == "error"]
-    assert error_events == [
-        ("error", {"code": "free_quota_exceeded", "message": quota_message})
-    ]
+    assert error_events == [("error", {"code": "free_quota_exceeded", "message": quota_message})]
     assert not any(e[0] == "content" for e in with_code)
 
 

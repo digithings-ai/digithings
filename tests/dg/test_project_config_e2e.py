@@ -112,9 +112,7 @@ def test_status_endpoint_sees_mtime_cache_refresh(
     requests must yield the updated values on the second call, without a process restart.
     """
     cfg = tmp_path / "digiproject.yaml"
-    cfg.write_text(
-        "project:\n  name: before\n  version: '0.1.0'\nagents:\n  llm_mode: test\n"
-    )
+    cfg.write_text("project:\n  name: before\n  version: '0.1.0'\nagents:\n  llm_mode: test\n")
     monkeypatch.setenv("DIGI_PROJECT_CONFIG", str(cfg))
 
     from digigraph import project_config as pc
@@ -126,9 +124,7 @@ def test_status_endpoint_sees_mtime_cache_refresh(
     assert first["project_name"] == "before"
     assert first["llm_mode"] == "test"
 
-    cfg.write_text(
-        "project:\n  name: after\n  version: '0.2.0'\nagents:\n  llm_mode: medium\n"
-    )
+    cfg.write_text("project:\n  name: after\n  version: '0.2.0'\nagents:\n  llm_mode: medium\n")
     # Bump mtime deterministically past filesystem granularity.
     import os
     import time

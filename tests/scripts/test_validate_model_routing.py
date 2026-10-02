@@ -178,10 +178,7 @@ def test_repo_config_pins_h6_deliberation_prefix_and_master_digest(
     """Smoke against committed config — CI --routing depends on these pins."""
     mod = _load()
     monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
-    assert (
-        mod.get_model_for_phase("portfolio/deliberation-AAPL")
-        == "deepseek/deepseek-v4-flash"
-    )
+    assert mod.get_model_for_phase("portfolio/deliberation-AAPL") == "deepseek/deepseek-v4-flash"
     assert mod.get_model_for_phase("master-digest") == "deepseek/deepseek-v4-flash"
     assert (REPO_ROOT / "config" / "model_modes.yaml").is_file()
 

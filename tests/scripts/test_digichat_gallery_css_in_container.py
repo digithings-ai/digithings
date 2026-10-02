@@ -30,9 +30,7 @@ def test_gallery_chatbot_css_exists() -> None:
 
 
 def test_product_skin_imports_gallery_sheet_not_a_fork() -> None:
-    text = (REPO_ROOT / "packages/ui/src/styles/chatbot.css").read_text(
-        encoding="utf-8"
-    )
+    text = (REPO_ROOT / "packages/ui/src/styles/chatbot.css").read_text(encoding="utf-8")
     assert PRODUCT_IMPORT in text
     assert "@import" in text
 

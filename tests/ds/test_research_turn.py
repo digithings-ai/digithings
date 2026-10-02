@@ -20,20 +20,25 @@ def client() -> TestClient:
 @pytest.mark.unit
 def test_run_research_turn_aggregates_citations() -> None:
     idx = "__agent_turn__"
-    add_chunks(idx, [
-        Chunk(
-            id="c1",
-            content="Momentum factor details",
-            doc_id="d1",
-            embedding=None,
-            metadata={"evidence_tier": "peer_reviewed", "title": "FactPaper"},
-        ),
-    ])
-    out = run_research_turn({
-        "user_message": "momentum",
-        "index_name": idx,
-        "top_k": 5,
-    })
+    add_chunks(
+        idx,
+        [
+            Chunk(
+                id="c1",
+                content="Momentum factor details",
+                doc_id="d1",
+                embedding=None,
+                metadata={"evidence_tier": "peer_reviewed", "title": "FactPaper"},
+            ),
+        ],
+    )
+    out = run_research_turn(
+        {
+            "user_message": "momentum",
+            "index_name": idx,
+            "top_k": 5,
+        }
+    )
     assert out.get("error") is None
     assert out.get("service") == "digisearch"
     assert out.get("total", 0) >= 1
@@ -44,15 +49,18 @@ def test_run_research_turn_aggregates_citations() -> None:
 @pytest.mark.unit
 def test_api_v1_research_turn(client: TestClient) -> None:
     idx = "__agent_http__"
-    add_chunks(idx, [
-        Chunk(
-            id="c2",
-            content="Risk parity overview",
-            doc_id="doc-rp",
-            embedding=None,
-            metadata={"sourceType": "PDF"},
-        ),
-    ])
+    add_chunks(
+        idx,
+        [
+            Chunk(
+                id="c2",
+                content="Risk parity overview",
+                doc_id="doc-rp",
+                embedding=None,
+                metadata={"sourceType": "PDF"},
+            ),
+        ],
+    )
     r = client.post(
         "/v1/research_turn",
         json={"user_message": "risk", "index_name": idx, "top_k": 3},

@@ -480,9 +480,7 @@ def compute_levels(
     sl = stop_value
     risk = abs(ref - sl)
     snap_tol = cfg.snap_tol_atr * atr_value
-    snap_pool = _entry_side_snap_pool(
-        direction, ref, pivot_res, pivot_sup, don_high, don_low
-    )
+    snap_pool = _entry_side_snap_pool(direction, ref, pivot_res, pivot_sup, don_high, don_low)
     ladder: list[TpRung] = []
     for r in cfg.tp_rmultiples:
         base_price = ref + sign * float(r) * risk

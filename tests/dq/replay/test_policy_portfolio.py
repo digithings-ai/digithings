@@ -82,9 +82,7 @@ def _portfolio_payload(
 ) -> dict[str, object]:
     return {
         "mode": "portfolio_target",
-        "target_weights": [
-            {"ticker": ticker, "weight": weight} for ticker, weight in targets
-        ],
+        "target_weights": [{"ticker": ticker, "weight": weight} for ticker, weight in targets],
     }
 
 

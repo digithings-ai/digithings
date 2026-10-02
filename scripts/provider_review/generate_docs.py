@@ -76,7 +76,7 @@ def update_frontmatter(doc_path: Path, snap: dict[str, Any], today: str) -> bool
     if not changed:
         return False
 
-    new_text = f"---\n{fm_block}\n---\n" + text[m.end():]
+    new_text = f"---\n{fm_block}\n---\n" + text[m.end() :]
     doc_path.write_text(new_text)
     return True
 
@@ -88,8 +88,7 @@ def update_model_table(doc_path: Path, snap: dict[str, Any]) -> bool:
         return False
 
     # Build table
-    rows = ["| Model ID | Context Window | Max Output | Notes |",
-            "|---|---|---|---|"]
+    rows = ["| Model ID | Context Window | Max Output | Notes |", "|---|---|---|---|"]
     for m in models:
         name = f"`{m['name']}`"
         ctx = f"{m['context_window']:,}" if m.get("context_window") else "—"
@@ -209,8 +208,12 @@ Each file is derived from `docs/providers/snapshots/` and updated weekly by the 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Regenerate docs/free-providers/ from YAML snapshots")
-    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing files")
+    parser = argparse.ArgumentParser(
+        description="Regenerate docs/free-providers/ from YAML snapshots"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print changes without writing files"
+    )
     args = parser.parse_args()
 
     today = datetime.now(UTC).date().isoformat()
@@ -225,7 +228,9 @@ def main() -> int:
         doc_path = DOCS_DIR / f"{slug}.md"
 
         if not doc_path.exists():
-            print(f"  [SKIP] No doc found for {snap_path.name} (slug: {slug}) — manual creation needed")
+            print(
+                f"  [SKIP] No doc found for {snap_path.name} (slug: {slug}) — manual creation needed"
+            )
             continue
 
         file_changed = False

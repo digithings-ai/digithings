@@ -49,9 +49,7 @@ def _exa(monkeypatch):
 
 def test_tool_is_registered_with_offset(_exa):
     pytest.importorskip("mcp.server.fastmcp")
-    tool = next(
-        t for t in mcp_server.mcp._tool_manager.list_tools() if t.name == "exa_web_search"
-    )
+    tool = next(t for t in mcp_server.mcp._tool_manager.list_tools() if t.name == "exa_web_search")
     assert "offset" in tool.parameters["properties"]
 
 

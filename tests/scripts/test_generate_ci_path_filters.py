@@ -40,9 +40,7 @@ gpf = _load()
 def test_render_filters_emits_dorny_indent_and_quoted_globs() -> None:
     block = gpf.render_filters({"digibase": ["digibase/**", "tests/db/**"]})
     assert block == (
-        "            digibase:\n"
-        "              - 'digibase/**'\n"
-        "              - 'tests/db/**'\n"
+        "            digibase:\n              - 'digibase/**'\n              - 'tests/db/**'\n"
     )
 
 
@@ -130,7 +128,9 @@ def test_print_mode_does_not_write(
     yaml_src = tmp_path / "ci_paths.yaml"
     yaml_src.write_text("digikey:\n  - digikey/**\n", encoding="utf-8")
     ci = tmp_path / "ci.yml"
-    original = f"            {gpf.START}\n            x:\n              - 'y'\n            {gpf.END}\n"
+    original = (
+        f"            {gpf.START}\n            x:\n              - 'y'\n            {gpf.END}\n"
+    )
     ci.write_text(original, encoding="utf-8")
     monkeypatch.setattr(gpf, "SOURCE", yaml_src)
     monkeypatch.setattr(gpf, "CI_YML", ci)

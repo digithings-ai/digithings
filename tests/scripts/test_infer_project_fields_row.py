@@ -57,9 +57,7 @@ def test_default_row_is_phase3_cross_cutting_task_p2_sonnet(mod: Any) -> None:
         ("client-pilot", "Client Pilot"),
     ],
 )
-def test_phase_labels_map_to_board_phase_strings(
-    mod: Any, label: str, phase: str
-) -> None:
+def test_phase_labels_map_to_board_phase_strings(mod: Any, label: str, phase: str) -> None:
     row = mod.infer_row(7, _labels(label))
     assert row[1] == phase
 

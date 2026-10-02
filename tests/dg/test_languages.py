@@ -158,12 +158,7 @@ def test_language_lists_stay_in_sync_with_frontend() -> None:
     must never read as green in CI.
     """
     frontend_path = (
-        Path(__file__).resolve().parents[2]
-        / "apps"
-        / "digichat"
-        / "src"
-        / "lib"
-        / "languages.ts"
+        Path(__file__).resolve().parents[2] / "apps" / "digichat" / "src" / "lib" / "languages.ts"
     )
     if not frontend_path.exists():
         pytest.skip(f"frontend languages.ts not found at {frontend_path} — skipping sync check")

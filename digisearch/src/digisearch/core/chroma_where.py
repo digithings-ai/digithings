@@ -22,7 +22,9 @@ def _chrom_op(op: str) -> str:
     return m.get(op.lower(), "$eq")
 
 
-def structured_filters_to_chroma_where(structured: list[dict[str, Any]] | None) -> dict[str, Any] | None:
+def structured_filters_to_chroma_where(
+    structured: list[dict[str, Any]] | None,
+) -> dict[str, Any] | None:
     """Build a Chroma ``where`` dict from structured filters [{field, op, value}, ...].
 
     Chroma supports $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, and logical $and.

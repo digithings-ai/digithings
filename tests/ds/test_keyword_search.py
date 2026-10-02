@@ -127,6 +127,7 @@ class TestBM25Searcher:
             from importlib import reload
 
             import digisearch.search.keyword as kw_module
+
             reload(kw_module)
             if not kw_module._BM25_AVAILABLE:
                 with pytest.raises(ImportError):
