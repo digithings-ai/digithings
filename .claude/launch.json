@@ -115,7 +115,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "apps/dashboard",
+        "apps/digiquant-web",
         "run",
         "dev",
         "--",
