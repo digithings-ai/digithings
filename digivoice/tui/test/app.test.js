@@ -4,7 +4,15 @@ import test from "node:test"
 import { createTestRenderer } from "@opentui/core/testing"
 
 import { FOOTER, heroOffset, mountDigivoice, onHangup, optionBinding, statusParts } from "../src/app.js"
-import { BUILD_MS, LIT_SHADE, REST_SHADE, SHADES, letterGap, wordmarkLines } from "../src/hero.js"
+import {
+  BUILD_MS,
+  LIT_SHADE,
+  REST_SHADE,
+  SHADES,
+  letterGap,
+  pixelScale,
+  wordmarkLines,
+} from "../src/hero.js"
 
 const HOME_ROWS = [
   { action: "History", path: "/history", meta: "", kind: "dir", name: "History" },
@@ -131,14 +139,18 @@ test("wordmark is five rows with gap 2 and one color mode", () => {
   const drawn = cube.lines.flat().map((cell) => cell.ch).join("")
   assert.match(drawn, /[█▀▄]/)
   for (const cell of cube.lines.flat()) {
-    if (!cell.color) continue
-    assert.equal(cell.color.rgb, undefined)
-    assert.ok(SHADES.some((shade) => shade.cube === cell.color.cube))
+    for (const color of [cell.color, cell.bg]) {
+      if (!color) continue
+      assert.equal(color.rgb, undefined)
+      assert.ok(SHADES.some((shade) => shade.cube === color.cube))
+    }
   }
   for (const cell of rgb.lines.flat()) {
-    if (!cell.color) continue
-    assert.equal(cell.color.cube, undefined)
-    assert.ok(SHADES.some((shade) => shade.rgb === cell.color.rgb))
+    for (const color of [cell.color, cell.bg]) {
+      if (!color) continue
+      assert.equal(color.cube, undefined)
+      assert.ok(SHADES.some((shade) => shade.rgb === color.rgb))
+    }
   }
   const later = wordmarkLines("DIGIVOICE", { cols: 120, tMs: 2000, truecolor: false })
   const shape = (drawn) => drawn.lines.map((row) => row.map((cell) => cell.ch).join("")).join("\n")
@@ -186,9 +198,13 @@ test("voice levels brighten letter cubes from the bottom and leave the gaps dark
     for (const cell of sample.lines.flat()) {
       if (cell.ch === " ") {
         assert.equal(cell.color, null)
+        assert.equal(cell.bg, undefined)
         continue
       }
-      assert.ok(cell.color.cube === REST_SHADE.cube || cell.color.cube === LIT_SHADE.cube)
+      for (const color of [cell.color, cell.bg]) {
+        if (!color) continue
+        assert.ok(color.cube === REST_SHADE.cube || color.cube === LIT_SHADE.cube)
+      }
     }
     for (const cube of sample.cubes) {
       const row = sample.lines[Math.floor(cube.y / 2)]
@@ -216,6 +232,60 @@ test("voice levels brighten letter cubes from the bottom and leave the gaps dark
     return new Set(fracs).size > 1
   })
   assert.equal(uneven, true)
+})
+
+test("glyph cells become smaller square pixels when the window can hold them", () => {
+  assert.equal(pixelScale({ cols: 260, rows: 80, letters: 9 }), 3)
+  assert.equal(pixelScale({ cols: 180, rows: 80, letters: 9 }), 2)
+  assert.equal(pixelScale({ cols: 100, rows: 56, letters: 9 }), 1)
+  assert.equal(pixelScale({ cols: 260, rows: 18, letters: 9 }), 1)
+  assert.equal(letterGap(260, 9, 3), 2)
+  const fine = wordmarkLines("DIGIVOICE", { cols: 260, rows: 80, tMs: 0, truecolor: false })
+  assert.equal(fine.scale, 3)
+  assert.equal(fine.rows, 15)
+  assert.equal(fine.gap, 2)
+  assert.equal(fine.cubes.filter((cube) => cube.x === 0).length, 30)
+  assert.equal(fine.cubes.filter((cube) => cube.x >= 21 && cube.x < 27).length, 0)
+  assert.equal(fine.cubes.some((cube) => cube.x >= 18 && cube.x < 21 && cube.y < 3), false)
+  const pair = wordmarkLines("DIGIVOICE", { cols: 180, rows: 80, tMs: 0, truecolor: false })
+  assert.equal(pair.scale, 2)
+  assert.equal(pair.rows, 10)
+  const samples = []
+  for (let tMs = 0; tMs <= 4000; tMs += 80) {
+    samples.push(wordmarkLines("DIGIVOICE", { cols: 260, rows: 80, tMs, truecolor: true }))
+  }
+  const shape = (drawn) => drawn.lines.map((row) => row.map((cell) => cell.ch).join("")).join("\n")
+  const mixed = []
+  for (const sample of samples) {
+    assert.equal(sample.scale, 3)
+    assert.equal(shape(sample), shape(samples[0]))
+    assertBottomUp(sample.cubes)
+    const bright = sample.cubes.filter((cube) => cube.bright).length
+    if (bright > 0 && bright < sample.cubes.length) mixed.push(sample)
+    for (const cell of sample.lines.flat()) {
+      if (cell.ch === " ") {
+        assert.equal(cell.color, null)
+        assert.equal(cell.bg, undefined)
+        continue
+      }
+      assert.match(cell.ch, /[▀▄]/)
+      for (const color of [cell.color, cell.bg]) {
+        if (!color) continue
+        assert.equal(color.cube, undefined)
+        assert.ok(color.rgb === REST_SHADE.rgb || color.rgb === LIT_SHADE.rgb)
+      }
+    }
+    for (const cube of sample.cubes) {
+      assert.notEqual(sample.lines[Math.floor(cube.y / 2)][cube.x].ch, " ")
+    }
+  }
+  assert.ok(mixed.length >= 2)
+  assert.equal(
+    mixed.some((sample, index) =>
+      mixed.slice(index + 1).some((other) => brightKey(other.cubes) !== brightKey(sample.cubes)),
+    ),
+    true,
+  )
 })
 
 test("home pins the hero and esc does not quit", async () => {

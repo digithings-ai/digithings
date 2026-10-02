@@ -6,12 +6,13 @@ import {
   ScrollBoxRenderable,
   StyledText,
   TextRenderable,
+  bg,
   createTimeline,
   engine,
   fg,
 } from "@opentui/core"
 
-import { HERO_GAP, wordmarkLines } from "./hero.js"
+import { HERO_GAP, pixelScale, slotRowsFor, wordmarkLines } from "./hero.js"
 
 export const FOOTER = "↑↓ move · enter select · esc back · click"
 export const HOTKEY_PROMPT = "input new hotkey"
@@ -22,15 +23,16 @@ const SPIN = ["·", "··", "···"]
 const FRAME_WIDTH = 80
 const HERO_FACE = 5
 const HERO_SLOT = 6
+const MAX_SLOT = slotRowsFor(3)
 const FADE_MS = 200
 const STATUS_ROWS = 1
 const FOOTER_ROWS = 1
 const MIN_MENU_ROWS = 3
 const STATUS_MARK = "─"
 
-export function heroOffset(rows) {
+export function heroOffset(rows, slot = HERO_SLOT) {
   const height = Math.max(0, Math.floor(Number(rows) || 0))
-  const chrome = HERO_SLOT + HERO_GAP + STATUS_ROWS + MIN_MENU_ROWS + FOOTER_ROWS + HERO_GAP
+  const chrome = slot + HERO_GAP + STATUS_ROWS + MIN_MENU_ROWS + FOOTER_ROWS + HERO_GAP
   const room = height - chrome
   if (room <= 0) return 0
   return Math.min(Math.floor(height / 3), room)
@@ -61,17 +63,21 @@ function statusLine(text, truecolor) {
   return new StyledText(chunks)
 }
 
-function colorOf(cell) {
-  if (!cell.color) return null
-  if (cell.color.rgb != null) return RGBA.fromInts(cell.color.rgb, cell.color.rgb, cell.color.rgb)
-  return RGBA.fromIndex(cell.color.cube)
+function rgbaOf(color) {
+  if (!color) return null
+  if (color.rgb != null) return RGBA.fromInts(color.rgb, color.rgb, color.rgb)
+  return RGBA.fromIndex(color.cube)
 }
 
 function paintCells(cells) {
   const chunks = cells.map((cell) => {
-    const color = colorOf(cell)
-    if (!color) return { __isChunk: true, text: cell.ch }
-    return fg(color)(cell.ch)
+    const front = rgbaOf(cell.color)
+    const back = rgbaOf(cell.bg)
+    if (!front && !back) return { __isChunk: true, text: cell.ch }
+    let chunk = cell.ch
+    if (front) chunk = fg(front)(chunk)
+    if (back) chunk = bg(back)(chunk)
+    return chunk
   })
   return new StyledText(chunks)
 }
@@ -283,8 +289,8 @@ export function mountDigivoice(renderer, session, options = {}) {
     alignItems: "center",
   })
   const shadowLines = Array.from(
-    { length: HERO_SLOT },
-    () => new TextRenderable(renderer, { content: " ", height: 1 }),
+    { length: MAX_SLOT },
+    (_, index) => new TextRenderable(renderer, { content: " ", height: index < HERO_SLOT ? 1 : 0 }),
   )
   for (const line of shadowLines) shadowBox.add(line)
   const faceBox = new BoxRenderable(renderer, {
@@ -298,8 +304,8 @@ export function mountDigivoice(renderer, session, options = {}) {
     zIndex: 1,
   })
   const faceLines = Array.from(
-    { length: HERO_FACE },
-    () => new TextRenderable(renderer, { content: "", height: 1 }),
+    { length: MAX_SLOT - 1 },
+    (_, index) => new TextRenderable(renderer, { content: "", height: index < HERO_FACE ? 1 : 0 }),
   )
   for (const line of faceLines) faceBox.add(line)
   heroBox.add(shadowBox)
@@ -379,19 +385,42 @@ export function mountDigivoice(renderer, session, options = {}) {
   const rowNodes = []
   const pageNodes = []
 
+  let heroSlot = HERO_SLOT
+
   function paintShadowLine(cells) {
     const color = shadowColor(truecolor)
     const shifted = [{ ch: " ", color: null }, ...cells]
     const chunks = shifted.map((cell) => {
       if (!cell.ch || cell.ch === " ") return { __isChunk: true, text: cell.ch || " " }
-      return fg(color)(cell.ch)
+      const mark = fg(color)(cell.ch)
+      return cell.bg ? bg(color)(mark) : mark
     })
     return new StyledText(chunks)
   }
 
   function paintHero() {
-    lift.height = heroOffset(renderer.height || 0)
-    const drawn = wordmarkLines("DIGIVOICE", { cols: frameWidth, tMs, truecolor })
+    const termW = Math.max(1, renderer.width || frameWidth)
+    const termH = Math.max(0, renderer.height || 0)
+    const scale = pixelScale({ cols: termW, rows: termH, letters: 9 })
+    const drawCols = scale === 1 ? frameWidth : termW
+    const drawn = wordmarkLines("DIGIVOICE", { cols: drawCols, rows: termH, tMs, truecolor, scale })
+    const markWidth = drawn.lines[0]?.length ?? 0
+    const nextFrame = Math.max(frameWidth, Math.min(termW, markWidth + 2))
+    if (frame.width !== nextFrame) frame.width = nextFrame
+    const faceRows = drawn.rows
+    heroSlot = faceRows + 1
+    heroBox.height = heroSlot
+    shadowBox.height = heroSlot
+    faceBox.height = faceRows
+    shadowLines.forEach((line, index) => {
+      line.height = index < heroSlot ? 1 : 0
+      if (index >= heroSlot) line.content = " "
+    })
+    faceLines.forEach((line, index) => {
+      line.height = index < faceRows ? 1 : 0
+      if (index >= faceRows) line.content = ""
+    })
+    lift.height = heroOffset(termH, heroSlot)
     shadowLines[0].content = " "
     drawn.lines.forEach((cells, index) => {
       faceLines[index].content = paintCells(cells)
@@ -683,7 +712,12 @@ export function mountDigivoice(renderer, session, options = {}) {
       if (screen.kind === "history") {
         const count = (screen.rows || []).filter((row) => row.kind === "take").length
         const used =
-          heroOffset(renderer.height || 24) + HERO_SLOT + HERO_GAP + STATUS_ROWS + HERO_GAP + FOOTER_ROWS
+          heroOffset(renderer.height || 24, heroSlot) +
+          heroSlot +
+          HERO_GAP +
+          STATUS_ROWS +
+          HERO_GAP +
+          FOOTER_ROWS
         const room = Math.max(1, (renderer.height || 24) - used)
         historyScroll.height = Math.max(1, Math.min(Math.max(count, 1), room))
         mountHistory(true)
