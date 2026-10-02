@@ -118,8 +118,10 @@ CLI callers; it is not the hotkey command.
 
 Disabled by default. When enabled, digivoice runs the **shipped local** GGUF
 (`qwen2.5-1.5b-instruct-q4_k_m.gguf` under the models directory) via llama.cpp
-(or local ollama) after whisper and before paste. Presets: `email`, `sms`,
-`professional`, `coding`, `blog`, `none`. Optional `rewrite_auto_route` picks a
+(or local ollama) after whisper and before paste. The pass keeps the dictated
+words and only lightly fixes grammar and spelling. A preset (`email`, `sms`,
+`professional`, `coding`, `blog`, `none`) is a format, not a request to write
+something new. Optional `rewrite_auto_route` picks a
 preset from the focused app using `rewrite_app_routes` in settings. Fail soft:
 raw transcript if the runner/model is missing or errors. No cloud LLM, no
 OpenRouter, no user URL — `doctor` reports when the local GGUF is not installed.

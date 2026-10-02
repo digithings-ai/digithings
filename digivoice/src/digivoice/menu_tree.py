@@ -186,7 +186,7 @@ def rows_at(
                 name="enabled",
                 kind="pick",
                 value=_on_off(settings.rewrite_enabled),
-                explain="On rewrites with the local model. Off pastes the words as spoken.",
+                explain=("On lightly fixes grammar and spelling. Off pastes the words as spoken."),
             ),
             TreeRow(
                 name="style",
@@ -204,7 +204,7 @@ def rows_at(
     if here == "/settings/rewrite/enabled":
         return _bool_choices(
             "rewrite_enabled",
-            "Rewrite with the local model.",
+            "Lightly fix grammar and spelling. Do not add content.",
             "Paste the words as spoken.",
         )
     if here == "/settings/rewrite/style":
@@ -327,12 +327,12 @@ def _model_title(field: str, current: str) -> str:
 
 
 _STYLE_EXPLAIN: dict[str, str] = {
-    "email": "Clear greeting, paragraphs, and a sign-off.",
-    "sms": "Short and plain.",
-    "professional": "Polished tone for a post.",
-    "coding": "Structured notes for a coding agent.",
-    "blog": "Readable prose.",
-    "none": "Light cleanup only.",
+    "email": "Format as an email. Do not add a subject or new points.",
+    "sms": "Keep it short, in the dictated words.",
+    "professional": "Format as a short post. Do not add new points.",
+    "coding": "Format the code or technical prose already dictated.",
+    "blog": "Format as prose. Do not add a title or new points.",
+    "none": "Light grammar and spelling only.",
 }
 
 

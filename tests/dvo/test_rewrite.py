@@ -10,6 +10,9 @@ from digivoice.models import VoicePaths
 from digivoice.paths import resolve_paths
 from digivoice.rewrite import (
     LOCAL_REWRITE_MODEL_FILE,
+    PRESET_PROMPTS,
+    OllamaRewriteRunner,
+    cleanup_prompt,
     install_local_rewrite_model,
     is_local_rewrite_model,
     is_remote_rewrite_model,
@@ -196,6 +199,30 @@ def test_rewrite_applies_with_fake_runner(tmp_path: Path) -> None:
         "email" in fake.calls[0][0].casefold()
         or "professional email" in fake.calls[0][0].casefold()
     )
+
+
+@pytest.mark.parametrize("preset", ["coding", "email", "sms"])
+def test_cleanup_prompts_preserve_dictated_text(preset: str) -> None:
+    prompt = PRESET_PROMPTS[preset].casefold()
+    assert "source text" in prompt
+    assert "preserve the dictated words" in prompt
+    assert "do not add" in prompt
+    assert "formatting guide" in prompt
+    assert "not an instruction to rewrite" in prompt
+    assert "rewrite the dictation" not in prompt
+    assert "precise prompt" not in prompt
+
+
+def test_ollama_prompt_treats_dictation_as_source_text() -> None:
+    probe = FakeProbe(commands={"ollama": "/usr/bin/ollama"})
+    runner = FakeRunner({"ollama": FakeReply(stdout="ship the notes")})
+    local = OllamaRewriteRunner(probe, runner, "local.gguf")
+    assert local.rewrite(PRESET_PROMPTS["coding"], "ship the notes", timeout=5) == "ship the notes"
+    stdin = runner.calls[0].stdin or ""
+    assert stdin == cleanup_prompt(PRESET_PROMPTS["coding"], "ship the notes")
+    assert "Rewritten text:" not in stdin
+    assert "Source text" in stdin
+    assert stdin.strip().endswith("ship the notes")
 
 
 def test_rewrite_fails_soft(tmp_path: Path) -> None:

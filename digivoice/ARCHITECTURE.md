@@ -143,8 +143,14 @@ The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any si
    the banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
    collapsed into one line.
 3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local llama.cpp (or
-   local ollama) with a preset (email / SMS / professional / coding / blog). The
-   model is a local GGUF: a suggested catalog file under the models
+   local ollama) lightly cleans the dictated words. The dictation is source text,
+   never a brief to write something new. Context (email, SMS, professional, coding,
+   blog, or none) is a formatting guide and a hint for a misspoken word. It does
+   not add sentences, explanations, or extra context. Grammar and spelling stay
+   light. Coding formats code or technical prose already dictated and does not
+   invent code, APIs, or an implementation. Email formats an email and does not
+   invent a subject, recipients, or new points. SMS stays short and in the
+   dictated words. The model is a local GGUF: a suggested catalog file under the models
    dir, or an absolute file already on disk. The download list adds whisper.cpp
    medium and large ggml files plus Qwen2.5 7B, Llama 3.2 3B, and Gemma 2 2B
    GGUF weights. The same chooser also lists runnable files discovered under
@@ -278,7 +284,7 @@ Always informational:
 | `history` | JSONL path and whether the file exists |
 | `paths` | Active data directory, macOS models path, Linux models path, recordings directory |
 | `tcc` | Mic and Accessibility are not probed; see `hammerspoon/README.md` |
-| `rewrite` | Disabled by default (info). Names the configured local GGUF (default `qwen2.5-1.5b-instruct-q4_k_m.gguf`) and reports when that file is not installed. When rewrite is enabled: ok if local runner+GGUF ready, else missing (dict still uses raw transcript). Cloud / URL models are not a doctor path. Setup → Post-process lists suggested local GGUFs (download + wire). |
+| `rewrite` | Disabled by default (info). Names the configured local GGUF (default `qwen2.5-1.5b-instruct-q4_k_m.gguf`) and reports when that file is not installed. When rewrite is enabled: ok if local runner+GGUF ready, else missing (dict still uses raw transcript). The pass preserves the dictated words; context is format only. Cloud / URL models are not a doctor path. Setup → Post-process lists suggested local GGUFs (download + wire). |
 | `detection` | Always info (never required). `word_detection` / `spelling_detection` default off; stubs only, STT still uses whisper |
 | `interrupt` | Documents paste-on-stop + new-take behavior, and Esc / `digivoice cancel` discard |
 

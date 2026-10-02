@@ -376,7 +376,10 @@ def test_postprocess_menu_wraps_on_typical_terminal() -> None:
         "Post-process",
         options,
         0,
-        subtitle="After dictation, optionally rewrite the words with a local model.",
+        subtitle=(
+            "After dictation, optionally clean light grammar and spelling "
+            "with a local model. Context is format only."
+        ),
         cols=80,
         rows=28,
         use_ansi=False,

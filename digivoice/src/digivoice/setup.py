@@ -153,7 +153,8 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  tts_voice ............... {settings.tts_voice or '(auto / DIGIVOICE_PIPER_VOICE)'}",
         "",
         "— Post-process —",
-        "  Clean up after dictation rewrites the words when on; off pastes them as spoken.",
+        "  Clean up after dictation lightly fixes grammar and spelling when on; "
+        "off pastes them as spoken. It does not add content.",
         "  Select a suggested local model to download and wire it. Never a cloud URL.",
         f"  rewrite_enabled ......... {str(settings.rewrite_enabled).lower()}",
         f"  rewrite_preset .......... {settings.rewrite_preset}",
@@ -395,7 +396,7 @@ def postprocess_menu_options(working: dict[str, Any]) -> list[str]:
     return [
         (
             f"Clean up after dictation [{enabled}] "
-            "(off = paste as spoken; on = rewrite with the local model first)"
+            "(off = paste as spoken; on = light grammar and spelling, no added content)"
         ),
         f"Rewrite style [{working['rewrite_preset']}] (how the cleaned-up text should read)",
         (
@@ -460,8 +461,8 @@ def _edit_postprocess(
             stdin,
             stdout,
             subtitle=(
-                "After dictation, optionally rewrite the words with a local model. "
-                "Off pastes them as spoken."
+                "After dictation, optionally clean light grammar and spelling "
+                "with a local model. Context is format only. Off pastes them as spoken."
             ),
         )
         if picked is None or picked == len(options) - 1:
@@ -470,7 +471,7 @@ def _edit_postprocess(
             value = choose(
                 "Clean up after dictation",
                 [
-                    "on (rewrite the words after whisper)",
+                    "on (light grammar and spelling after whisper)",
                     "off (paste them as spoken)",
                 ],
                 stdin,
