@@ -194,6 +194,7 @@ function PrefsForm({ d }: { d: Prefs }) {
       <Select label="Density" options={options} value={density} onChange={setDensity} />
       <Toggle label="Daily digest" on={digest} onChange={setDigest} hint={d.daily_digest == null ? 'not set' : undefined} />
       <Toggle label="Research notices" on={notices} onChange={setNotices} hint={d.research_notices == null ? 'not set' : undefined} />
+      {d.note ? <p className="note">{d.note}</p> : null}
       <p className="pad"><Button primary disabled={res.kind === 'busy'} onClick={() => void save()}>Save prefs</Button></p>
       <ResultLine res={res} />
     </>
@@ -213,7 +214,7 @@ export function SettingsDeskBlock() {
         <>
           <KvList rows={[
             { k: 'Plan', v: d.plan },
-            { k: 'Config', v: d.config ? `${d.config}${d.config_note ? ` · ${d.config_note}` : ''}` : null },
+            { k: 'Config', v: d.config ? `${d.config}${d.config_note ? ` · ${d.config_note}` : ''}` : d.config_note },
             { k: 'Book date', v: d.book_date, mono: true },
             { k: 'Posture', v: d.posture },
           ]} />
@@ -282,6 +283,7 @@ export function SettingsBrokersBlock() {
               { key: 'l', label: 'Last used', cell: (b) => dash(b.last_used) },
             ]}
           />
+          {d.note ? <p className="note">{d.note}</p> : null}
           <BrokerConnect options={arr(d.connectable)} />
         </>
       )}
@@ -364,6 +366,7 @@ function KeysPanel({ d }: { d: Keys }) {
           },
         ]}
       />
+      {d.note ? <p className="note">{d.note}</p> : null}
       <ResultLine res={rev} />
       <Field label="New key label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. desk read" />
       <Field label="Scope" value={scope} onChange={(e) => setScope(e.target.value)} placeholder="optional" />

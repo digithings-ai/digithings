@@ -43,6 +43,8 @@ export type Prefs = {
   density_options?: string[] | null;
   daily_digest?: boolean | null;
   research_notices?: boolean | null;
+  /** Set when the settings edge function is not configured. */
+  note?: string | null;
 };
 
 /** GET /settings/desk */
@@ -67,7 +69,7 @@ export type FxFeedSettings = {
 
 /** GET /settings/brokers */
 export type BrokerRow = { broker: string; env?: string | null; auth?: string | null; fingerprint_tail?: string | null; status?: string | null; last_used?: string | null };
-export type Brokers = { brokers: BrokerRow[]; connectable?: string[] | null };
+export type Brokers = { brokers: BrokerRow[]; connectable?: string[] | null; note?: string | null };
 /** POST /settings/brokers/connect body { broker, env } -> { status?, detail?, auth_url? } */
 export type BrokerConnectResult = { status?: string | null; detail?: string | null; auth_url?: string | null };
 
@@ -77,7 +79,7 @@ export type Integrations = { integrations: IntegrationRow[]; note?: string | nul
 
 /** GET /settings/keys */
 export type KeyRow = { id: string; label?: string | null; tail?: string | null; scope?: string | null; status?: string | null; created_at?: string | null };
-export type Keys = { keys: KeyRow[] };
+export type Keys = { keys: KeyRow[]; note?: string | null };
 /** POST /settings/keys body { label, scope } -> one-time { id, key, tail }. DELETE /settings/keys/:id -> 204. */
 export type KeyMintResult = { id?: string | null; key?: string | null; tail?: string | null };
 

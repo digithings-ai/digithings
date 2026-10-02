@@ -156,18 +156,31 @@ export function SleevesBlock() {
   );
 }
 
-/** GET /allocations/enriched — day movers (sorted by day return; rows without one are left out, not zeroed). */
+/** GET /allocations/enriched — day movers. A missing day return stays an em dash; it is not dropped and not zeroed. */
 export function MoversBlock() {
   const [ticker, setTicker] = useState<string | null>(null);
   return (
     <>
       <Block<Book> no="11" label="Book · movers" route="/allocations/enriched" asOf={(d) => d.book_as_of}>
         {(d) => {
-          const rows = d.rows.filter((r) => !r.is_cash && Number.isFinite(r.day_return_pct)).sort((a, b) => (b.day_return_pct as number) - (a.day_return_pct as number));
-          return rows.length ? (
+          const rows = d.rows.filter((r) => !r.is_cash && r.ticker.toUpperCase() !== 'CASH');
+          rows.sort((a, b) => {
+            const av = a.day_return_pct;
+            const bv = b.day_return_pct;
+            const aMissing = av == null || !Number.isFinite(av);
+            const bMissing = bv == null || !Number.isFinite(bv);
+            if (aMissing !== bMissing) return aMissing ? 1 : -1;
+            if (!aMissing && !bMissing && av != null && bv != null) {
+              const byAbs = Math.abs(bv) - Math.abs(av);
+              if (byAbs !== 0) return byAbs;
+            }
+            return a.ticker.localeCompare(b.ticker);
+          });
+          return (
             <DataTable
               rows={rows}
               rowKey={(r) => r.ticker}
+              empty="no names"
               onRowClick={(r) => setTicker(r.ticker)}
               cols={[
                 { key: 't', label: 'Ticker', cell: (r) => r.ticker },
@@ -175,7 +188,7 @@ export function MoversBlock() {
                 { key: 'd', label: 'Day', num: true, cell: (r) => signed(r.day_return_pct ?? null), tone: (r) => tone(r.day_return_pct) },
               ]}
             />
-          ) : withheld('day return');
+          );
         }}
       </Block>
       <DossierDrawer ticker={ticker} onClose={() => setTicker(null)} />

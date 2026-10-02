@@ -5,10 +5,12 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as RKeyEve
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { CommandLine, type CommandLineHandle } from './CommandLine';
 import { DeskPicker, PageGate } from './Access';
+import { ChatRail } from './ChatRail';
 import { Logo } from './Logo';
 import { NavTree } from './NavTree';
 
 const PIN_KEY = 'dq-nav-pinned';
+const CHAT_KEY = 'dq-chat-rail';
 const W_KEY = 'dq-nav-width';
 const W_DEFAULT = 200;
 const W_MIN = 140;
@@ -27,6 +29,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [width, setWidth] = useState(W_DEFAULT);
   const [dragging, setDragging] = useState(false);
   const [help, setHelp] = useState(false);
+  const [chat, setChat] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const cmd = useRef<CommandLineHandle>(null);
   const helpRef = useRef<HTMLDivElement>(null);
@@ -60,6 +63,7 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       if (localStorage.getItem(PIN_KEY) === '0') setPinned(false);
+      if (localStorage.getItem(CHAT_KEY) === '1') setChat(true);
       const w = Number(localStorage.getItem(W_KEY));
       if (w >= W_MIN && w <= W_MAX) setWidth(w);
     } catch { /* storage unavailable */ }
@@ -147,7 +151,7 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className={`shell${showRail ? ' has-rail' : ''}${dragging ? ' dragging' : ''}`} style={{ ['--rail' as string]: `${width}px` }}>
+    <div className={`shell${showRail ? ' has-rail' : ''}${chat ? ' has-chat' : ''}${dragging ? ' dragging' : ''}`} style={{ ['--rail' as string]: `${width}px` }}>
       <a className="skip" href="#main">skip to content</a>
       <header className="top">
         <div className="brand">
@@ -160,6 +164,20 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <DeskPicker />
         <CommandLine ref={cmd} pathname={pathname} />
+        <button
+          type="button"
+          className="btn help-btn"
+          aria-pressed={chat}
+          aria-expanded={chat}
+          aria-controls="chat-rail"
+          onClick={() => {
+            setChat((v) => {
+              const next = !v;
+              try { localStorage.setItem(CHAT_KEY, next ? '1' : '0'); } catch { /* storage unavailable */ }
+              return next;
+            });
+          }}
+        >chat</button>
         <button type="button" className="btn help-btn" onClick={() => setHelp((h) => !h)} aria-label="Keyboard shortcuts" aria-expanded={help} aria-controls="help">?</button>
       </header>
 
@@ -190,6 +208,7 @@ export function Shell({ children }: { children: ReactNode }) {
       ) : null}
 
       <main id="main" tabIndex={-1} className="main"><PageGate>{children}</PageGate></main>
+      <ChatRail open={chat} />
 
       {help ? (
         <div id="help" ref={helpRef} tabIndex={-1} className="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">

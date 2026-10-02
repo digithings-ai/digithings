@@ -12,8 +12,9 @@ Principles: never invent numbers (fail closed, "—"); one catalog (`access.ts`)
 | Atoms (Phase 0) | Done: DataTable v2 (sort/filter/row click/sticky/pagination), AreaChart (+underwater), BarChart, RangeTabs, Drawer, gallery at `/blocks/atoms`. |
 | Worker foundation (Phase 0) | Done: real tier ladder, `routes/` registry (+`{param}` templates), `tableRead()` enveloped reader, twelve-x reader (fails closed without key), PUT/POST/DELETE plumbing (401 without `x-digi-user`), catalog-generated MCP tools, edge identity key, brief+ gate on raw `/v1/tables/*`. |
 | Live data | Worker runs against live core Supabase locally (`.dev.vars` populated from the main checkouts). Real `/portfolio` verified. |
-| Routes | Phases 1–3 registered in `src/routes/` and the catalog: portfolio enrichment, drawdown, theses/signals, brief decision/risks, dossier, pipeline run routes, FX hub and rates. Flags, paper exposure, and directives return a typed empty state. Draft SQL is in `apps/dashboard-api/migrations-draft/` and is not applied. |
-| Blocks | 12 implemented, 7 partial, ~57 with no route. 13 pages have layouts. |
+| Routes | Phases 1–4 registered in `src/routes/` and the catalog. Phase 4 adds strategies (core `strategies` store), shell desks/features (the access catalog), settings reads (typed empty until the edge function is wired), and chat (502 until digichat is wired). Flags, paper exposure, and directives stay a typed empty state. Draft SQL is in `apps/dashboard-api/migrations-draft/` and is not applied. |
+| Blocks | Strategies, settings, chat, and shell pages have layouts. The brief page also shows signals, movers (em dash when the day return is missing), and run health. DigiChat is a docked rail plus `/tools/chat`. |
+| Phase 5 | Catalog routes generate MCP tools (including `get_access_manifest`, documented in `apps/dashboard-api/README.md`). The app defaults to local `wrangler dev` at `http://127.0.0.1:8788`. The `?as=` mock impersonation is gone. Real-data screenshots are blocked in this environment (no browser session against live books). Docker, LuxAlgo/Bloomberg live data, and the CONTRACT.md merge stay deferred. |
 
 ### Review findings from Phase 0 (all fixed unless noted)
 - Identity headers were spoofable on a directly reachable worker → `DASHBOARD_EDGE_KEY` + `x-digi-edge-key`. **Deploy requirement: set it on every deployed worker and have the edge send it** (unset = headers trusted, dev only).
@@ -74,12 +75,12 @@ Principles: never invent numbers (fail closed, "—"); one catalog (`access.ts`)
 - UI: redesign 13, existing layouts filled.
 - Gate: group `12x` (edge maps product grant `fx_hub`).
 
-**Phase 4: shell, settings, chat, strategies** (writer D)
+**Phase 4: shell, settings, chat, strategies** (writer D). DONE, with the blocks below.
 - Reads: `/desks`, `/features`, `/settings/*` (edge function), `/chat/sessions*`, `/strategies*` (strategies tables).
 - Writes (identity-required, fail closed): settings prefs PUT, FX directives PUT (writes to the draft table only once Chris applies it; until then 503 typed "not provisioned"), chat session create/rename.
 - UI: layouts + DigiChat rail; deploy flow stays "coming soon".
 
-**Phase 5: MCP parity and live**
+**Phase 5: MCP parity and live.** Catalog tools, `get_access_manifest`, and the wrangler default are done. Screenshots are blocked (no live browser). Docker, LuxAlgo/Bloomberg, and the CONTRACT.md merge stay deferred.
 - Verify every catalog route has a generated tool and tier test; `get_access_manifest` documented; local `wrangler dev` default for the app; retire the mock API; real-data screenshots for each page.
 - Deferred after: Docker packaging, LuxAlgo/Bloomberg live-MCP data, CONTRACT.md merge of `contracts/*.md`.
 
@@ -98,7 +99,24 @@ Principles: never invent numbers (fail closed, "—"); one catalog (`access.ts`)
 
 ## 7. Risks and open items
 - Edge shim (digikey → identity headers + edge key) is outside this slice; until it exists the app runs on the dev caller. Needs an owner.
-- twelve-x schema is not in the repo: Phase 3 starts with a read-only schema survey; route shapes follow what exists.
-- Writes depend on edge identity; until then every write returns 401.
+- twelve-x schema is not in the repo: Phase 3 route shapes follow the reader; flags, paper exposure, and directives stay draft SQL.
+- Settings writes and chat are fail-closed: 401 without `x-digi-user`, 503 `not_provisioned` until the settings edge function and the digichat database are wired. No migration was applied.
 - `workers_dev` public URL: decide with the edge work.
 - Needs Chris: review of drafted migrations; approval before any schema is applied; deploy-time `DASHBOARD_EDGE_KEY`.
+- Real-data screenshots for each page: blocked here (no browser against the live book).
+
+## 8. Slice consolidation (2026-10-02)
+
+The other session's dashboard wire-up (shell, desk atoms, fail-closed Brief panes on `apps/dashboard`) is folded into this catalog terminal. Entitlements stay in `apps/dashboard-api/src/access.ts` only.
+
+Folded in:
+
+- Fail-closed em dashes. Movers keep a held name when the day return is missing and render "—". They do not drop the row and do not substitute zero.
+- House-book reads and the envelope `{ data, as_of, retrieval_pin, provenance }` were already the worker contract. The app client now types `retrieval_pin` and surfaces the worker's error message.
+- No invented strategy P&L. A tearsheet curve is shown only when every point has a date. Deploy steps stay `todo`.
+- Brief seat uses the existing catalog blocks (decision, signals, risks, movers, run health) on the 12×12 grid.
+
+Left on `apps/dashboard` (not ported):
+
+- `BriefDesk` / `DeskChart` one-viewport pane chrome. The terminal grid already covers that seat. Gloomberg quotes, the tape, and LuxAlgo stay sidebar `[soon]` entries, matching this plan.
+- Slice A shell and slice B desk-atom restyles of `apps/dashboard`. This app already has the shell, DataTable, charts, and drawer. A second utilitarian skin would be a parallel product.
