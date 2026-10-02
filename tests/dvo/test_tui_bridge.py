@@ -10,7 +10,7 @@ from digivoice.opentui import opentui_argv
 from digivoice.paths import resolve_paths
 from digivoice.settings import load_settings
 from digivoice.status import system_log_path
-from digivoice.tui_bridge import dispatch
+from digivoice.tui_bridge import cancel_download, dispatch, run_download
 
 from tests.dvo.fakes import FakeProbe, FakeRunner
 
@@ -47,7 +47,25 @@ def test_bridge_boot_lists_home_and_model_language_once(tmp_path: Path) -> None:
         assert visible.count(language) == 1
 
 
-def test_bridge_apply_confirms_before_a_missing_download(tmp_path: Path) -> None:
+def test_bridge_rows_mark_downloaded_models(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    (models / "ggml-base.en.bin").write_bytes(b"base")
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/speech/model"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    base = next(row for row in rows if row["path"].endswith("ggml-base.en"))
+    tiny = next(row for row in rows if row["path"].endswith("ggml-tiny.en"))
+    assert base["downloaded"] is True
+    assert tiny["downloaded"] is False
+
+
+def test_bridge_apply_opens_a_download_for_a_missing_model(tmp_path: Path) -> None:
     env = _env(tmp_path)
     rows = dispatch(
         {"op": "rows", "path": "/settings/speech/model"},
@@ -62,10 +80,187 @@ def test_bridge_apply_confirms_before_a_missing_download(tmp_path: Path) -> None
         home=tmp_path,
         env=env,
     )
-    assert pending["confirm"] is True
+    assert pending["download"] is True
+    assert pending["filename"] == "ggml-tiny.en.bin"
+    assert pending["index"] == index
     paths = resolve_paths("linux", tmp_path, env)
     assert load_settings(paths).stt_model == "ggml-base.en"
-    assert "Download" in pending["rows"][0]["action"]
+    assert not (Path(paths.models_dir) / "ggml-tiny.en.bin").exists()
+
+
+def test_bridge_apply_selects_a_downloaded_model_without_fetching(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    (models / "ggml-tiny.en.bin").write_bytes(b"tiny")
+    (models / "ggml-base.en.bin").write_bytes(b"base")
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/speech/model"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    index = next(i for i, row in enumerate(rows) if row["path"].endswith("ggml-tiny.en"))
+    saved = dispatch(
+        {"op": "apply", "path": "/settings/speech/model", "index": index},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert saved["stay"] is True
+    assert saved["path"] == "/settings/speech/model"
+    assert saved["index"] == index
+    assert load_settings(paths).stt_model == "ggml-tiny.en"
+    assert (models / "ggml-base.en.bin").read_bytes() == b"base"
+    chosen = saved["rows"][index]
+    assert chosen["downloaded"] is True
+
+
+def test_download_streams_progress_and_keeps_other_models(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    (models / "ggml-base.en.bin").write_bytes(b"base")
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/speech/model"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    index = next(i for i, row in enumerate(rows) if row["path"].endswith("ggml-small.en"))
+
+    def fetch(url: str, dest: Path, progress=None) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"small")
+        if progress is not None:
+            progress(2, 8)
+            progress(8, 8)
+
+    events: list[dict] = []
+    run_download(
+        paths,
+        {"path": "/settings/speech/model", "index": index, "filename": "ggml-small.en.bin"},
+        emit=events.append,
+        fetch=fetch,
+        home=tmp_path,
+        env=env,
+    )
+    assert events[0] == {"got": 2, "total": 8}
+    assert events[1] == {"got": 8, "total": 8}
+    assert events[-1]["ok"] is True
+    assert events[-1]["index"] == index
+    assert (models / "ggml-base.en.bin").read_bytes() == b"base"
+    assert (models / "ggml-small.en.bin").read_bytes() == b"small"
+    assert not (models / "ggml-small.en.bin.partial").exists()
+    assert load_settings(paths).stt_model == "ggml-small.en"
+    marked = events[-1]["rows"][index]
+    assert marked["downloaded"] is True
+
+
+def test_download_failure_stays_unmarked(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    (models / "ggml-base.en.bin").write_bytes(b"base")
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/rewrite/model"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    index = next(i for i, row in enumerate(rows) if not row["downloaded"])
+
+    def fetch(url: str, dest: Path, progress=None) -> None:
+        dest.write_bytes(b"nope")
+        if progress is not None:
+            progress(1, 4)
+        raise OSError("disk full")
+
+    before = load_settings(paths).rewrite_model
+    events: list[dict] = []
+    run_download(
+        paths,
+        {"path": "/settings/rewrite/model", "index": index, "filename": rows[index]["choice"]},
+        emit=events.append,
+        fetch=fetch,
+        home=tmp_path,
+        env=env,
+    )
+    assert events[0]["got"] == 1
+    assert "disk full" in events[-1]["error"]
+    assert "ok" not in events[-1]
+    assert (models / "ggml-base.en.bin").read_bytes() == b"base"
+    assert not any(path.name.endswith(".partial") for path in models.iterdir())
+    assert load_settings(paths).stt_model == "ggml-base.en"
+    assert load_settings(paths).rewrite_model == before
+
+
+def test_cancel_download_removes_only_the_partial(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    (models / "ggml-base.en.bin").write_bytes(b"base")
+    (models / "ggml-tiny.en.bin.partial").write_bytes(b"half")
+    result = cancel_download(paths, "ggml-tiny.en.bin")
+    assert result["cancelled"] is True
+    assert (models / "ggml-base.en.bin").read_bytes() == b"base"
+    assert not (models / "ggml-tiny.en.bin.partial").exists()
+    assert not (models / "ggml-tiny.en.bin").exists()
+
+
+def test_voice_missing_opens_a_download_and_a_file_selects(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/speech/voice"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    auto = next(i for i, row in enumerate(rows) if row["choice"] == "auto")
+    assert rows[auto]["downloaded"] is False
+    picked = dispatch(
+        {"op": "apply", "path": "/settings/speech/voice", "index": auto},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert "download" not in picked
+    assert picked["stay"] is True
+    assert load_settings(paths).tts_voice is None
+    amy = next(i for i, row in enumerate(rows) if row["choice"] == "en_US-amy-medium.onnx")
+    assert rows[amy]["downloaded"] is False
+    opened = dispatch(
+        {"op": "apply", "path": "/settings/speech/voice", "index": amy},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert opened["download"] is True
+    assert opened["filename"] == "en_US-amy-medium.onnx"
+    models = Path(paths.models_dir)
+    models.mkdir()
+    (models / "en_US-amy-medium.onnx").write_bytes(b"voice")
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/speech/voice"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    amy = next(i for i, row in enumerate(rows) if row["choice"] == "en_US-amy-medium.onnx")
+    assert rows[amy]["downloaded"] is True
+    saved = dispatch(
+        {"op": "apply", "path": "/settings/speech/voice", "index": amy},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert saved["stay"] is True
+    assert load_settings(paths).tts_voice == "en_US-amy-medium.onnx"
 
 
 def test_bridge_restart_does_not_stop_and_update_stays_a_note(tmp_path: Path) -> None:

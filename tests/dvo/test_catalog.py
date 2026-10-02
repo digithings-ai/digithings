@@ -10,6 +10,7 @@ from digivoice.catalog import (
     STT_CATALOG,
     find_rewrite,
     find_stt,
+    find_voice,
     install_catalog_model,
     stt_filename,
     stt_language,
@@ -99,6 +100,73 @@ def test_install_catalog_model_downloads_and_is_idempotent(tmp_path: Path) -> No
 
     again = install_catalog_model(paths, entry, fetch=boom)
     assert again == str(target)
+
+
+def test_failed_download_removes_the_partial_and_keeps_other_models(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    sibling = models / "ggml-base.en.bin"
+    sibling.write_bytes(b"keep")
+    entry = next(item for item in STT_CATALOG if item.id == "ggml-tiny.en")
+    seen: list[tuple[int, int | None]] = []
+
+    def fetch(url: str, dest: Path, progress=None) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"partial")
+        if progress is not None:
+            progress(1, 8)
+            progress(4, 8)
+        raise OSError("stopped")
+
+    def progress(got: int, total: int | None) -> None:
+        seen.append((got, total))
+
+    with pytest.raises(OSError, match="stopped"):
+        install_catalog_model(paths, entry, fetch=fetch, progress=progress)
+    assert sibling.read_bytes() == b"keep"
+    assert not (models / entry.filename).exists()
+    assert not (models / f"{entry.filename}.partial").exists()
+    assert seen == [(1, 8), (4, 8)]
+
+
+def test_voice_download_keeps_both_pieces_or_neither(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    sibling = models / "ggml-base.en.bin"
+    sibling.write_bytes(b"keep")
+    entry = find_voice("en_US-amy-medium.onnx")
+    assert entry is not None
+
+    def fetch(url: str, dest: Path, progress=None) -> None:
+        dest.write_bytes(b"ok")
+        if progress is not None:
+            progress(3, 6)
+            progress(6, 6)
+
+    install_catalog_model(paths, entry, fetch=fetch)
+    assert (models / entry.filename).read_bytes() == b"ok"
+    assert (models / f"{entry.filename}.json").read_bytes() == b"ok"
+    assert not list(models.glob("*.partial"))
+    assert sibling.read_bytes() == b"keep"
+
+    other = find_voice("en_GB-alba-medium.onnx")
+    assert other is not None
+    calls = {"n": 0}
+
+    def fail(url: str, dest: Path, progress=None) -> None:
+        calls["n"] += 1
+        dest.write_bytes(b"half")
+        if calls["n"] == 2:
+            raise OSError("sidecar")
+
+    with pytest.raises(OSError, match="sidecar"):
+        install_catalog_model(paths, other, fetch=fail)
+    assert not (models / other.filename).exists()
+    assert not (models / f"{other.filename}.json").exists()
+    assert not list(models.glob("*.partial"))
+    assert (models / entry.filename).is_file()
 
 
 def test_install_catalog_accepts_legacy_two_arg_fetch(tmp_path: Path) -> None:
