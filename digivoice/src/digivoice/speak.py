@@ -12,6 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from digivoice.errors import SpeakError
+from digivoice.focus import FocusTarget
 from digivoice.models import SpeakResult, VoicePaths
 from digivoice.paths import piper_fallback
 from digivoice.probe import CommandProbe
@@ -52,6 +53,31 @@ AX_SELECTED_TEXT_ARGS: list[str] = [
 FRONTMOST_APP_SCRIPT = (
     'tell application "System Events" to get name of first process whose frontmost is true'
 )
+GHOSTTY_BUNDLE = "com.mitchellh.ghostty"
+AX_TARGET_SCRIPT = """on run argv
+  set targetId to item 1 of argv
+  set targetName to item 2 of argv
+  tell application "System Events"
+    if targetId is not "" then
+      set proc to first process whose bundle identifier is targetId
+    else if targetName is not "" then
+      set proc to first process whose name is targetName
+    else
+      set proc to first process whose frontmost is true
+    end if
+    tell proc
+      set allElems to entire contents of window 1
+      repeat with e in allElems
+        try
+          if focused of e is true then
+            set sel to value of attribute "AXSelectedText" of e
+            if sel is not missing value then return sel
+          end if
+        end try
+      end repeat
+    end tell
+  end tell
+end run"""
 GHOSTTY_APP_NAME = "Ghostty"
 GHOSTTY_SELECTION_PBOARD = "com.mitchellh.ghostty.selection"
 
@@ -177,6 +203,26 @@ def _ax_selected_text(osascript: str, runner: CommandRunner) -> str | None:
     return cleaned
 
 
+def _ax_in_target(osascript: str, runner: CommandRunner, focus: FocusTarget) -> str | None:
+    """Selected text in the captured app, or None when that app has none."""
+    result = runner(
+        [osascript, "-e", AX_TARGET_SCRIPT, "-", focus.bundle_id, focus.name],
+        timeout=READ_SOURCE_TIMEOUT,
+    )
+    if result.code != 0:
+        return None
+    cleaned = result.stdout.strip()
+    if not cleaned or cleaned.casefold() == "missing value":
+        return None
+    return cleaned
+
+
+def _target_is_ghostty(focus: FocusTarget) -> bool:
+    if focus.bundle_id == GHOSTTY_BUNDLE:
+        return True
+    return focus.name.casefold() == GHOSTTY_APP_NAME.casefold()
+
+
 def _frontmost_is_ghostty(osascript: str, runner: CommandRunner) -> bool:
     """True when the frontmost process is Ghostty. Never raises: unknown means no."""
     result = runner([osascript, "-e", FRONTMOST_APP_SCRIPT], timeout=READ_SOURCE_TIMEOUT)
@@ -193,7 +239,12 @@ def _named_pasteboard(pbpaste: str, runner: CommandRunner, name: str) -> str | N
     return result.stdout.strip() or None
 
 
-def read_selection(platform: str, probe: CommandProbe, runner: CommandRunner) -> str:
+def read_selection(
+    platform: str,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    focus: FocusTarget | None = None,
+) -> str:
     """Read the current text selection. Soft-fails when nothing is selected.
 
     On darwin, in order:
@@ -211,11 +262,19 @@ def read_selection(platform: str, probe: CommandProbe, runner: CommandRunner) ->
         osascript = probe.lookup("osascript")
         if not osascript:
             raise SpeakError("osascript not on PATH; cannot read the selection")
-        selected = _ax_selected_text(osascript, runner)
+        known = focus is not None and focus.known
+        selected = (
+            _ax_in_target(osascript, runner, focus)
+            if known and focus is not None
+            else _ax_selected_text(osascript, runner)
+        )
         if selected:
             return selected
         pbpaste = probe.lookup("pbpaste")
-        if pbpaste and _frontmost_is_ghostty(osascript, runner):
+        ghostty = _target_is_ghostty(focus) if known and focus is not None else False
+        if pbpaste and not ghostty and not known:
+            ghostty = _frontmost_is_ghostty(osascript, runner)
+        if pbpaste and ghostty:
             ghostty = _named_pasteboard(pbpaste, runner, GHOSTTY_SELECTION_PBOARD)
             if ghostty:
                 return ghostty

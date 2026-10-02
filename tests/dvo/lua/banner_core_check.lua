@@ -151,16 +151,52 @@ eq(quiet.phase, "idle", "done settles to the idle icon")
 eq(quiet.w, side, "done hugs the grid")
 eq(core.layout({ state = "idle", text = "nope", detail = "" }, "dict", "full").phase, "idle", "idle icon")
 eq(core.layout({ state = "error", text = "boom", detail = "long" }, "dict", "retract").phase, "error", "error icon")
-eq(core.layout({ state = "empty", text = "", detail = "n" }, "dict", "full").phase, "warning", "warning icon")
+eq(core.layout({ state = "empty", text = "", detail = "n" }, "dict", "full").phase, "", "nothing to show has no icon")
+eq(core.layout({ state = "warning", text = "", detail = "n" }, "dict", "full").phase, "warning", "warning icon")
 eq(core.icon_phase("bogus"), "", "unknown state has no icon")
 check(core.should_draw("recording", false), "recording shows while retracted")
 check(core.should_draw("transcribing", false), "dictating shows while retracted")
+check(core.should_draw("loading", false), "loading is processing")
 check(core.should_draw("rewriting", false), "processing shows while retracted")
+check(core.should_draw("pasting", false), "pasting shows")
+check(core.should_draw("speaking", false), "speaking shows")
 check(core.should_draw("error", false), "a current error shows")
-check(core.should_draw("empty", false), "a current warning shows")
+check(core.should_draw("warning", false), "a current warning shows")
+check(not core.should_draw("empty", false), "nothing to show hides")
+check(not core.should_draw("pending", false), "pending hides")
+check(not core.should_draw("recording", false, true), "a pending flag hides even recording")
 check(not core.should_draw("idle", false), "idle stays hidden unless pinned")
 check(core.should_draw("idle", true), "pinned idle stays visible")
+check(not core.should_draw("idle", true, true), "pending hides a pinned idle icon")
 check(not core.should_draw("done", false), "a finished take retracts")
+local routes = {
+  { "launch", false },
+  { "pin_on", true },
+  { "pin_off", false },
+  { "show", true },
+  { "hide", false },
+  { "toggle", true },
+  { "take_start", false },
+  { "recording", true },
+  { "transcribing", true },
+  { "loading", true },
+  { "rewriting", true },
+  { "pasting", true },
+  { "speaking", true },
+  { "empty", false },
+  { "error", true },
+  { "warning", true },
+  { "take_end", false },
+  { "pending", false },
+}
+for _, row in ipairs(routes) do
+  eq(core.route_banner(row[1], {}), row[2], "route " .. row[1])
+end
+eq(core.route_banner("launch", { pinned = true }), true, "launch with pin shows idle")
+eq(core.route_banner("take_end", { pinned = true }), true, "pin keeps idle after the take")
+eq(core.route_banner("show", { pending = true }), false, "pending hides a show")
+eq(core.route_banner("toggle", { showing = true }), false, "toggle hides when it is up")
+eq(core.route_banner("recording", { pending = true }), false, "pending hides recording")
 eq(core.focus_action(true), "focus", "an open terminal is focused")
 eq(core.focus_action(false), "open", "a missing terminal is opened")
 eq(core.focus_action(false), "open", "a second call still opens once per click")

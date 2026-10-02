@@ -15,6 +15,7 @@ from digivoice import history as history_log
 from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
+from digivoice.focus import FocusTarget, capture_frontmost, focus_target
 from digivoice.menu_tree import rows_at
 from digivoice.models import CliResult, PasteResult, VoicePaths
 from digivoice.nav import norm_path, section_of
@@ -130,6 +131,16 @@ def build_parser() -> _Parser:
         action="store_true",
         help="Skip post-STT local rewrite even when enabled in settings",
     )
+    dictate.add_argument(
+        "--focus-name",
+        default="",
+        help="Name of the app that had focus when dictation started",
+    )
+    dictate.add_argument(
+        "--focus-bundle",
+        default="",
+        help="Bundle id of the app that had focus when dictation started",
+    )
 
     speak_cmd = sub.add_parser("speak", help="Speak text with Piper")
     source = speak_cmd.add_mutually_exclusive_group()
@@ -144,6 +155,16 @@ def build_parser() -> _Parser:
         ),
     )
     speak_cmd.add_argument("text", nargs="*", help="Text to speak")
+    speak_cmd.add_argument(
+        "--focus-name",
+        default="",
+        help="Name of the app that had focus when speak started",
+    )
+    speak_cmd.add_argument(
+        "--focus-bundle",
+        default="",
+        help="Bundle id of the app that had focus when speak started",
+    )
 
     history = sub.add_parser("history", help="List dictation history entries")
     history.add_argument("--last", type=int, default=None, help="Limit to the last N entries")
@@ -419,6 +440,8 @@ def _dict_take(
     runner = _runner(runtime)
     stage_runner = cancellable_runner(runner, cancel.requested)
     notes: list[str] = []
+    will_paste = not args.no_paste and settings.paste_on_stop
+    focus = _resolve_focus(args, runtime) if will_paste else FocusTarget()
     stop_file = args.stop_file
     if mode == "toggle" and not stop_file:
         stop_file = str(default_stop_file(paths))
@@ -472,7 +495,6 @@ def _dict_take(
         return _cancelled(reporter, recording.wav_path)
     notes.append(f"transcribed with {transcript.model}")
     text_out = transcript.text
-    will_paste = not args.no_paste and settings.paste_on_stop
     if args.no_rewrite:
         notes.append("rewrite skipped (--no-rewrite)")
     else:
@@ -527,13 +549,24 @@ def _dict_take(
             detail="skipped (paste_on_stop=false in settings)",
         )
     else:
-        pasted = paste(runtime.platform, runtime.probe, runner, text_out)
+        pasted = paste(runtime.platform, runtime.probe, runner, text_out, focus)
     notes.append(f"paste {pasted.detail}")
     reporter.update("done", text=text_out, detail=pasted.detail)
     return CliResult(code=0, stdout=f"{text_out}\n", stderr=_notes(notes))
 
 
-def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime) -> str:
+def _resolve_focus(args: argparse.Namespace, runtime: Runtime) -> FocusTarget:
+    """Use the app captured at the hotkey. Otherwise read the frontmost process now."""
+    named = focus_target(
+        str(getattr(args, "focus_name", "") or runtime.env.get("DIGIVOICE_FOCUS_NAME", "")),
+        str(getattr(args, "focus_bundle", "") or runtime.env.get("DIGIVOICE_FOCUS_BUNDLE", "")),
+    )
+    if named.known:
+        return named
+    return capture_frontmost(runtime.platform, runtime.probe, _runner(runtime))
+
+
+def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime, focus: FocusTarget) -> str:
     text = " ".join(args.text).strip()
     source_flags = sum(
         1 for flag in (args.clipboard, args.selection, args.clipboard_or_history) if flag
@@ -546,7 +579,7 @@ def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime) -> str:
     if args.clipboard:
         return read_clipboard(runtime.platform, runtime.probe, runner)
     if args.selection:
-        return read_selection(runtime.platform, runtime.probe, runner)
+        return read_selection(runtime.platform, runtime.probe, runner, focus)
     if args.clipboard_or_history:
         # Kept for CLI callers; does NOT fall back to history (esp. not kind:dict).
         return read_clipboard(runtime.platform, runtime.probe, runner)
@@ -559,8 +592,9 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
     reporter = _banner_reporter(paths, load_settings(paths), "speak")
     reporter.update("loading")
+    focus = _resolve_focus(args, runtime) if args.selection else FocusTarget()
     try:
-        text = _resolve_speak_text(args, runtime)
+        text = _resolve_speak_text(args, runtime, focus)
     except UsageError as exc:
         return _usage(exc.message)
     except VoiceError as exc:

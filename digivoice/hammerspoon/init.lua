@@ -312,9 +312,20 @@ current_view = function(s)
   return core.pick_view(s.local_state, read_json(STATUS_FILE), s)
 end
 
+local function flag_pending()
+  local flag = read_json(FLAG_FILE)
+  return type(flag) == "table" and flag.pending == true
+end
+
 local function render(s)
   local view = current_view(s)
-  if s.hidden or not s.config.live_banner then
+  local pending = s.pending == true or flag_pending()
+  if s.hidden or not s.config.live_banner
+    or not core.should_draw(view.state, s.config.banner_pinned == true, pending) then
+    if canvas then
+      delete_canvas()
+      s.signature = nil
+    end
     return
   end
   local screen = hs.screen.mainScreen()
@@ -627,6 +638,9 @@ local function poll_flag()
     return
   end
   local flag = read_json(FLAG_FILE)
+  if flag and flag.pending == true then
+    return
+  end
   if flag and flag.visible then
     M.spawn_preview(type(flag.text) == "string" and flag.text or "")
   end
@@ -671,14 +685,34 @@ ensure_esc_tap = function()
   -- A separate Esc tap would keep the old key after a remap.
 end
 
+local function focus_argv()
+  if not hs.application or not hs.application.frontmostApplication then
+    return {}
+  end
+  local app = hs.application.frontmostApplication()
+  if type(app) ~= "table" then
+    return {}
+  end
+  local name = app.name and app:name() or ""
+  local bundle = app.bundleID and app:bundleID() or ""
+  if name == "" and bundle == "" then
+    return {}
+  end
+  return { "--focus-name", tostring(name), "--focus-bundle", tostring(bundle) }
+end
+
 local function start_dict()
   hs.fs.mkdir(DATA_DIR)
   os.remove(STOP_FILE)
   os.remove(CANCEL_FILE)
+  local argv = { "dict", "--toggle", "--stop-file", STOP_FILE }
+  for _, part in ipairs(focus_argv()) do
+    argv[#argv + 1] = part
+  end
   local s = begin_session("dict")
   s.task = hs.task.new(DIGIVOICE, function(exit_code, std_out, std_err)
     finish_session(s, exit_code, std_out, std_err)
-  end, { "dict", "--toggle", "--stop-file", STOP_FILE })
+  end, argv)
   if not s.task then
     end_session(s)
     print("digivoice: could not start digivoice dict (" .. DIGIVOICE .. ")")
@@ -723,10 +757,14 @@ function M.speak_selection()
   if session and session.kind == "dict" and not session.standby then
     return
   end
+  local argv = { "speak", "--selection" }
+  for _, part in ipairs(focus_argv()) do
+    argv[#argv + 1] = part
+  end
   local s = begin_session("speak")
   s.task = hs.task.new(DIGIVOICE, function(exit_code, std_out, std_err)
     finish_session(s, exit_code, std_out, std_err)
-  end, { "speak", "--selection" })
+  end, argv)
   if not s.task then
     end_session(s)
     print("digivoice: could not start digivoice speak (" .. DIGIVOICE .. ")")
