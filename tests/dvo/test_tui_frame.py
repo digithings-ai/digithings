@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from digivoice.home import HOME_GROUPS, HOME_MENU, render_home_overview
+from digivoice.pixel_hero import word_cells
 from digivoice.settings import default_settings
 from digivoice.setup import postprocess_menu_options
 from digivoice.tui import parse_sgr_mouse, render_screen, render_wordmark_lines, wrap_text
@@ -40,15 +41,19 @@ def test_wordmark_is_five_half_block_rows() -> None:
     assert any(ch in "\n".join(rows) for ch in "▀▄█")
 
 
-def test_wordmark_glint_changes_with_phase() -> None:
-    first = render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True)
-    later = render_wordmark_lines("DIGIVOICE", cols=120, phase=3, ansi=True)
-    assert first != later
-    assert "\x1b[" in first[0]
+def test_wordmark_glint_is_a_short_flash() -> None:
+    """A glint cell goes bold for a short slice of its period, then rests."""
+    letters, _stray = word_cells("DIGIVOICE", 2)
+    glint = next(cell for cell in letters if cell.glint)
+    assert glint.glint_delay_ms > 1400
+    before = render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=glint.glint_delay_ms - 50)
+    during = render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=glint.glint_delay_ms + 40)
+    assert before != during
+    assert "38;2;" not in "\n".join(during)
 
 
 def test_wordmark_is_one_foreground_color() -> None:
-    """Dim, bold, and inverse only. No teal and no per-letter hues."""
+    """Dim and bold on the terminal foreground. No teal and no per-letter hues."""
     joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True))
     assert "38;2;" not in joined
     assert "\x1b[" in joined
@@ -77,20 +82,13 @@ def test_wordmark_has_no_particle_field() -> None:
     assert not any("·" in row for row in plain)
 
 
-def test_hero_band_is_a_voice_field_behind_the_lockup() -> None:
-    """Tall home: waveform blocks and the mono fact line sit around DIGIVOICE."""
+def test_home_header_is_the_pixel_lockup_only() -> None:
+    """The hero is the half-block wordmark. No waveform and no fact line."""
     frame = _frame()
-    assert "local speech  /  on this mac  /  no cloud" in frame
-    assert "░" in frame or "▒" in frame
+    assert "local speech  /  on this mac  /  no cloud" not in frame
+    assert "░" not in frame and "▒" not in frame
     assert "▀███▀" in frame
     assert "38;2;" not in frame
-
-
-def test_hero_field_keeps_moving_after_the_build() -> None:
-    early = _frame(t_ms=1600)
-    later = _frame(t_ms=2800)
-    assert "▀███▀" in early and "▀███▀" in later
-    assert early != later
 
 
 def test_hero_wordmark_builds_in_over_the_first_second() -> None:
