@@ -23,9 +23,9 @@ describe("hasTradeKpis", () => {
 
 describe("isDcaIndexEntry", () => {
   it("prefers vs_lump extras over the slug", () => {
-    expect(isDcaIndexEntry({ strategy: "mystery", vs_lump_pct: -12 })).toBe(true);
-    expect(isDcaIndexEntry({ strategy: "btc_slapper" })).toBe(false);
-    expect(isDcaIndexEntry({ strategy: "btc_sdca" })).toBe(true);
+    expect(isDcaIndexEntry({ strategy: "mystery", vs_lump_pct: -12, win_rate_pct: null })).toBe(true);
+    expect(isDcaIndexEntry({ strategy: "btc_slapper", win_rate_pct: null })).toBe(false);
+    expect(isDcaIndexEntry({ strategy: "btc_sdca", win_rate_pct: null })).toBe(true);
   });
 });
 
@@ -34,10 +34,11 @@ describe("isDcaTearsheet", () => {
     expect(
       isDcaTearsheet({
         strategy: "btc_slapper",
+        win_rate_pct: null,
         dca: { vs_lump_pct: 1 } as never,
       }),
     ).toBe(true);
-    expect(isDcaTearsheet({ strategy: "btc_slapper" })).toBe(false);
+    expect(isDcaTearsheet({ strategy: "btc_slapper", win_rate_pct: null })).toBe(false);
   });
 });
 
