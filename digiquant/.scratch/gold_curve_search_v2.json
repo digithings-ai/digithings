@@ -1,0 +1,77 @@
+{
+  "weights": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "rs_eth": 0.0,
+    "dxy": 0.5,
+    "gvz": 0.5,
+    "walcl": 0.5,
+    "hy_oas": 0.0,
+    "ig_oas": 0.0,
+    "breakeven_5y": 0.25,
+    "nfci": 0.25,
+    "gdx_gld": 0.5,
+    "gld_slv": 0.5,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.0
+  },
+  "search": {
+    "num_shapes": 1728,
+    "num_evaluations": 6912,
+    "num_feasible": 216,
+    "worst_vs_flat_dca_pct": -26.310781887747737,
+    "shape": {
+      "buy_max_rate": 35.0,
+      "buy_knee_risk": 45.0,
+      "sell_knee_risk": 50.0,
+      "sell_max_rate": 10.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0,
+      "buy_mid_knee_risk": null,
+      "buy_mid_curvature": 1.0,
+      "sell_mid_knee_risk": 85.0,
+      "sell_mid_curvature": 1.0
+    }
+  },
+  "gate_projection_drops_mid_tier": true,
+  "gated_shape": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 45.0,
+    "sell_knee_risk": 50.0,
+    "sell_max_rate": 10.0,
+    "buy_curvature": 1.0,
+    "sell_curvature": 2.0,
+    "buy_mid_knee_risk": null,
+    "buy_mid_curvature": 1.0,
+    "sell_mid_knee_risk": null,
+    "sell_mid_curvature": 1.0
+  },
+  "gate": {
+    "mean_oos_vs_flat_dca_pct": 3.043631068418936,
+    "beats_flat_dca_oos": true,
+    "per_fold": [
+      {
+        "fold": 0,
+        "oos_vs_flat_dca_pct": 2.3701814557279155,
+        "max_drawdown_pct": 1.4915224077174467,
+        "feasible": false
+      },
+      {
+        "fold": 1,
+        "oos_vs_flat_dca_pct": -8.430071334200761,
+        "max_drawdown_pct": 24.447740317320328,
+        "feasible": true
+      },
+      {
+        "fold": 2,
+        "oos_vs_flat_dca_pct": 15.190783083729652,
+        "max_drawdown_pct": 18.75447264299652,
+        "feasible": true
+      }
+    ],
+    "sensitivity_stable": false,
+    "sensitivity_max_abs_delta": 3.8740175212303365,
+    "sensitivity_neighbor_count": 47
+  }
+}

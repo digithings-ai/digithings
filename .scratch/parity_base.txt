@@ -1,0 +1,781 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/chrisstefan/Code/digithings/.worktrees/task/4804-sdca-strategy-for-gold--gld
+configfile: pytest.ini
+testpaths: tests, digillm/tests, digifetch/tests, digisearch/tests
+plugins: langsmith-0.10.12, platformdirs-4.12.2, cov-7.1.0, anyio-4.14.2
+collected 6774 items / 74 errors / 198 deselected / 32 skipped / 6576 selected
+
+tests/agents/test_agents_yml_test_cmds.py .....                          [  0%]
+tests/agents/test_tier_routing.py ............................           [  0%]
+tests/config/test_compose_omniroute.py ..                                [  0%]
+tests/config/test_litellm_house_models.py .......F...F...                [  0%]
+tests/contracts/test_cross_service_surface.py ..........FF..sFF..s.      [  1%]
+tests/contracts/test_digichat_openapi_paths.py .                         [  1%]
+tests/contracts/test_openapi_contract.py F..F..F..F..F                   [  1%]
+tests/db/connectors/test_connector_base_removed.py ...                   [  1%]
+tests/db/connectors/test_supabase_connector.py .......................   [  1%]
+tests/db/test_emit_event.py ...                                          [  1%]
+tests/db/test_http_client.py ........                                    [  1%]
+tests/db/test_metrics.py .........                                       [  1%]
+tests/db/test_otel.py .......                                            [  2%]
+tests/db/test_redact_mapping.py ..                                       [  2%]
+tests/db/test_request_id.py .........                                    [  2%]
+tests/db/test_service_auth.py ................                           [  2%]
+tests/db/test_unhandled_500_request_id.py .                              [  2%]
+tests/dc/test_audit.py .                                                 [  2%]
+tests/dc/test_heartbeat.py ....                                          [  2%]
+tests/dc/test_monitors_tick.py ......                                    [  2%]
+tests/dc/test_scheduler.py .......................                       [  3%]
+tests/dg/test_analytics.py ...                                           [  3%]
+tests/dg/test_chat_prompt.py ............                                [  3%]
+tests/dg/test_circuit_breaker.py ......                                  [  3%]
+tests/dg/test_compaction.py ...............                              [  3%]
+tests/dg/test_cors.py ...                                                [  3%]
+tests/dg/test_data_engineer_gate.py ..F                                  [  3%]
+tests/dg/test_digisearch_handler.py FFFFFFFFFFFFFFFF                     [  3%]
+tests/dg/test_digisearch_tool.py ..........                              [  4%]
+tests/dg/test_digisearch_unconfigured.py .......                         [  4%]
+tests/dg/test_digistore_tools.py FFFFFF                                  [  4%]
+tests/dg/test_digivault_tool.py FFFFFFFFFFFFFFFFFF.FFFFFFFFFFFFFFFFFFF   [  4%]
+tests/dg/test_env_utils.py ............                                  [  5%]
+tests/dg/test_llm_user_facing_error.py ...                               [  5%]
+tests/dg/test_mcp_checkpoint_redact.py ........                          [  5%]
+tests/dg/test_mcp_client.py .........................                    [  5%]
+tests/dg/test_mcp_registry.py .........                                  [  5%]
+tests/dg/test_mcp_server.py ....s.F............FFFFFFFFFFFFFFF.          [  6%]
+tests/dg/test_mcp_ssrf.py ...............................FF.             [  6%]
+tests/dg/test_models.py ..................                               [  7%]
+tests/dg/test_path_utils.py ...............                              [  7%]
+tests/dg/test_policy.py ........                                         [  7%]
+tests/dg/test_project_config.py ...........                              [  7%]
+tests/dg/test_project_limits.py ........                                 [  7%]
+tests/dg/test_research_brief_golden.py ..                                [  7%]
+tests/dg/test_retrieval.py ...........FFFFFFFFFFFF                       [  8%]
+tests/dg/test_run_storage.py ....                                        [  8%]
+tests/dg/test_schema_sync.py ..                                          [  8%]
+tests/dg/test_subgraph_streaming.py ...                                  [  8%]
+tests/dg/test_tenant_corpus_parity.py ........                           [  8%]
+tests/dg/test_thread_scope.py ...........                                [  8%]
+tests/dg/test_tool_exposure_mode.py ........                             [  8%]
+tests/dg/test_trace_events_rag_body.py ...F.                             [  8%]
+tests/dg/test_trading_profile.py .                                       [  8%]
+tests/dg/test_vertical_orchestrator_circuit_breaker.py ......            [  8%]
+tests/dg/test_web_search_hub_errors.py ........                          [  8%]
+tests/dg/test_web_search_request_args.py ..                              [  8%]
+tests/dg/test_write_result_session_escape.py ....                        [  9%]
+tests/digigraph/test_execute_python_sandbox.py ....                      [  9%]
+tests/dk/test_blank_tenant_issuance.py ..........                        [  9%]
+tests/dk/test_blocklist.py .ssss.                                        [  9%]
+tests/dk/test_blocklist_rehydrate.py s.                                  [  9%]
+tests/dk/test_cli_issue_key.py ..                                        [  9%]
+tests/dk/test_cors.py ...                                                [  9%]
+tests/dk/test_digikey_litellm_field.py .                                 [  9%]
+tests/dk/test_durable_store.py ..........                                [  9%]
+tests/dk/test_healthz.py ...                                             [  9%]
+tests/dk/test_input_validation.py ........                               [  9%]
+tests/dk/test_jti_schema_upgrade.py s..                                  [  9%]
+tests/dk/test_jwt_roundtrip.py .                                         [  9%]
+tests/dk/test_license_edge.py .........                                  [  9%]
+tests/dk/test_license_mint.py ............................               [ 10%]
+tests/dk/test_license_receiver.py ........................               [ 10%]
+tests/dk/test_metrics_endpoint_dk.py .                                   [ 10%]
+tests/dk/test_profile_claims.py .....                                    [ 10%]
+tests/dk/test_ratelimit.py ......                                        [ 10%]
+tests/dk/test_scopes.py .....                                            [ 10%]
+tests/dk/test_tenant_slug_verified.py ...                                [ 11%]
+tests/dq/brokers/test_alpaca_adapter.py sss.ssssssssssssssssssssssssssss [ 11%]
+s..                                                                      [ 11%]
+tests/dq/brokers/test_connections.py ................................... [ 12%]
+......                                                                   [ 12%]
+tests/dq/brokers/test_contracts.py ..................................... [ 12%]
+...........................                                              [ 13%]
+tests/dq/brokers/test_ibkr_adapter.py .................................. [ 13%]
+..                                                                       [ 13%]
+tests/dq/brokers/test_luxalgo_mirror.py .........                        [ 13%]
+tests/dq/dashboard/execution/test_cron_check.py ....                     [ 13%]
+tests/dq/dashboard/execution/test_execute_at_open_venue.py ..            [ 13%]
+tests/dq/dashboard/execution/test_house_pipeline_proof.py .............. [ 14%]
+........                                                                 [ 14%]
+tests/dq/dashboard/execution/test_migration_102.py ..................... [ 14%]
+............                                                             [ 14%]
+tests/dq/dashboard/execution/test_pages_dashboard_gate.py .............. [ 14%]
+.................                                                        [ 15%]
+tests/dq/dashboard/execution/test_remaining_hops_frontend_parity.py .... [ 15%]
+...                                                                      [ 15%]
+tests/dq/dashboard/execution/test_route_cron.py ............             [ 15%]
+tests/dq/dashboard/execution/test_router.py .........................    [ 15%]
+tests/dq/dashboard/execution/test_staging_e2e.py ....................... [ 16%]
+...................................                                      [ 16%]
+tests/dq/dashboard/execution/test_sync.py ........                       [ 16%]
+tests/dq/dashboard/execution/test_sync_cron.py .....................     [ 17%]
+tests/dq/dashboard/execution/test_vendor_secret_files.py ......          [ 17%]
+tests/dq/dashboard/overlay/test_byok_seal.py ........s                   [ 17%]
+tests/dq/dashboard/overlay/test_cron.py ................................ [ 17%]
+.                                                                        [ 17%]
+tests/dq/dashboard/overlay/test_graph_invoke.py ...                      [ 18%]
+tests/dq/dashboard/overlay/test_isolation.py ....                        [ 18%]
+tests/dq/dashboard/overlay/test_migration_104.py ............            [ 18%]
+tests/dq/dashboard/overlay/test_migration_105.py ........                [ 18%]
+tests/dq/dashboard/test_attention_plan.py ...........                    [ 18%]
+tests/dq/dashboard/test_attention_plan_io.py ....                        [ 18%]
+tests/dq/dashboard/test_attention_store.py ............                  [ 18%]
+tests/dq/dashboard/test_content_freeze_provenance.py .............       [ 18%]
+tests/dq/dashboard/test_context_compiler.py .....................        [ 19%]
+tests/dq/dashboard/test_cutover_113.py .........                         [ 19%]
+tests/dq/dashboard/test_cutover_900.py ......                            [ 19%]
+tests/dq/dashboard/test_deliberation_amendment.py ........               [ 19%]
+tests/dq/dashboard/test_deliberation_selection_planner.py .............. [ 19%]
+                                                                         [ 19%]
+tests/dq/dashboard/test_direction_prerequisites_outcome_integrity.py ... [ 19%]
+...                                                                      [ 19%]
+tests/dq/dashboard/test_economic_calendar_auth_select.py .               [ 19%]
+tests/dq/dashboard/test_edit_mode.py ..............................      [ 20%]
+tests/dq/dashboard/test_envcompat.py ............                        [ 20%]
+tests/dq/dashboard/test_evidence_bundle.py .........                     [ 20%]
+tests/dq/dashboard/test_evidence_bundle_models.py ......                 [ 20%]
+tests/dq/dashboard/test_evidence_bundle_store.py .........               [ 20%]
+tests/dq/dashboard/test_frozen_uuid_namespaces.py .................      [ 21%]
+tests/dq/dashboard/test_migration_107.py ........                        [ 21%]
+tests/dq/dashboard/test_migration_109_house_teaser.py .....              [ 21%]
+tests/dq/dashboard/test_migration_110_anon_house_only.py .....           [ 21%]
+tests/dq/dashboard/test_migration_112_product_invite.py ...              [ 21%]
+tests/dq/dashboard/test_migration_115_plan_tier.py .......               [ 21%]
+tests/dq/dashboard/test_migration_117_security_advisor.py ........       [ 21%]
+tests/dq/dashboard/test_migration_118_knowledge_notes_vault.py ......... [ 21%]
+.....                                                                    [ 22%]
+tests/dq/dashboard/test_migration_126_product_invite_plan_floor.py ...   [ 22%]
+tests/dq/dashboard/test_migration_billing.py ..........                  [ 22%]
+tests/dq/dashboard/test_migration_tenancy.py ........................    [ 22%]
+tests/dq/dashboard/test_postgrest_timeout.py ..s..                       [ 22%]
+tests/dq/dashboard/test_research_attention_planner.py .................. [ 22%]
+...                                                                      [ 22%]
+tests/dq/dashboard/test_research_corpus.py ...........                   [ 23%]
+tests/dq/dashboard/test_research_policy_shadow_evaluation.py .....       [ 23%]
+tests/dq/dashboard/test_research_retrieval.py .......................... [ 23%]
+..................................                                       [ 24%]
+tests/dq/dashboard/test_research_state_legacy_backfill.py ..........     [ 24%]
+tests/dq/dashboard/test_research_state_models.py .................       [ 24%]
+tests/dq/dashboard/test_research_state_store.py ....................     [ 24%]
+tests/dq/dashboard/test_research_state_views.py ......                   [ 24%]
+tests/dq/dashboard/test_tenancy.py .........                             [ 25%]
+tests/dq/data/test_breadth.py ....                                       [ 25%]
+tests/dq/data/test_calendar_sync.py ...........................          [ 25%]
+tests/dq/data/test_correlation.py .............                          [ 25%]
+tests/dq/data/test_enrichment_snapshots.py .....                         [ 25%]
+tests/dq/data/test_etf_flows.py .........                                [ 25%]
+tests/dq/data/test_fed_probabilities.py ...........                      [ 26%]
+tests/dq/data/test_fetchers.py ........                                  [ 26%]
+tests/dq/data/test_gloomberb_agent_tools.py ..........................   [ 26%]
+tests/dq/data/test_gloomberb_client.py ................................. [ 27%]
+........................................................................ [ 28%]
+....................                                                     [ 28%]
+tests/dq/data/test_gloomberb_macro.py ............                       [ 28%]
+tests/dq/data/test_gloomberb_models.py ................................. [ 29%]
+..................................                                       [ 29%]
+tests/dq/data/test_gloomberb_normalizers.py ............................ [ 30%]
+.................................................                        [ 30%]
+tests/dq/data/test_gloomberb_prediction_markets.py ......                [ 30%]
+tests/dq/data/test_gold_enrichment_pulls.py .......                      [ 31%]
+tests/dq/data/test_instrument_metadata.py ...                            [ 31%]
+tests/dq/data/test_levels.py ..................................          [ 31%]
+tests/dq/data/test_levels_api.py ........................s...            [ 32%]
+tests/dq/data/test_live_opens.py .....                                   [ 32%]
+tests/dq/data/test_macro_ingest.py ..................                    [ 32%]
+tests/dq/data/test_merge.py .....                                        [ 32%]
+tests/dq/data/test_migration_124.py .......                              [ 32%]
+tests/dq/data/test_migration_125.py .....                                [ 32%]
+tests/dq/data/test_migration_131.py ......                               [ 32%]
+tests/dq/data/test_onchain_bgeometrics.py ...........................    [ 33%]
+tests/dq/data/test_onchain_bitview.py .................                  [ 33%]
+tests/dq/data/test_onchain_coinmetrics.py .............................. [ 33%]
+....................                                                     [ 34%]
+tests/dq/data/test_onchain_hyperdash.py ..................               [ 34%]
+tests/dq/data/test_onchain_ingest.py ...                                 [ 34%]
+tests/dq/data/test_prices_cli.py ........................                [ 34%]
+tests/dq/data/test_prices_refresh.py ............                        [ 35%]
+tests/dq/data/test_prices_utils.py ...                                   [ 35%]
+tests/dq/data/test_r2_history.py .............                           [ 35%]
+tests/dq/data/test_r2_history_restatement.py ........                    [ 35%]
+tests/dq/data/test_refresh_gate.py ........                              [ 35%]
+tests/dq/data/test_relative_strength.py ....                             [ 35%]
+tests/dq/data/test_supabase_writer.py ..............                     [ 35%]
+tests/dq/data/test_technicals.py ...................                     [ 36%]
+tests/dq/data/test_trading_days_filter.py .                              [ 36%]
+tests/dq/execution/test_market_hours.py ......................           [ 36%]
+tests/dq/indicators/test_m2_signals.py .......                           [ 36%]
+tests/dq/indicators/test_macro_liquidity.py ............                 [ 36%]
+tests/dq/indicators/test_rs_ranker.py ........                           [ 36%]
+tests/dq/notify/test_cloudflare_email.py .........................       [ 37%]
+tests/dq/notify/test_digest.py ....                                      [ 37%]
+tests/dq/notify/test_dispatch.py ......                                  [ 37%]
+tests/dq/notify/test_entitlements.py ................................... [ 37%]
+.............                                                            [ 38%]
+tests/dq/notify/test_events.py ...                                       [ 38%]
+tests/dq/notify/test_migration_103.py ..........                         [ 38%]
+tests/dq/notify/test_sync_hook.py .                                      [ 38%]
+tests/dq/notify/test_tier_gates.py ...                                   [ 38%]
+tests/dq/ops/test_checkpoint_archive.py ................................ [ 38%]
+............................                                             [ 39%]
+tests/dq/ops/test_document_archive.py .....                              [ 39%]
+tests/dq/profiles/test_asset_preferences.py ............                 [ 39%]
+tests/dq/profiles/test_investment_profile.py ...............             [ 39%]
+tests/dq/profiles/test_pipeline_schedule.py ...............              [ 40%]
+tests/dq/replay/test_allocation_comparison.py ..............             [ 40%]
+tests/dq/replay/test_asof_dataset.py .........                           [ 40%]
+tests/dq/replay/test_comparison.py ...........                           [ 40%]
+tests/dq/replay/test_governance.py ............                          [ 40%]
+tests/dq/replay/test_governance_decisions.py ..........                  [ 40%]
+tests/dq/replay/test_models.py .......................                   [ 41%]
+tests/dq/replay/test_policy_manifests.py .........                       [ 41%]
+tests/dq/replay/test_policy_portfolio.py ....sss..s..                    [ 41%]
+tests/dq/replay/test_policy_registry.py ........                         [ 41%]
+tests/dq/replay/test_policy_replay_cli.py ..                             [ 41%]
+tests/dq/replay/test_policy_replay_service.py .......                    [ 41%]
+tests/dq/replay/test_policy_replay_store.py ............                 [ 42%]
+tests/dq/replay/test_worker.py ..s.                                      [ 42%]
+tests/dq/research/data/test_queries.py ..                                [ 42%]
+tests/dq/research/data/test_queries_derived.py ..................        [ 42%]
+tests/dq/research/data/test_tools.py .......                             [ 42%]
+tests/dq/research/data/test_tools_retry.py ...                           [ 42%]
+tests/dq/stages/test_contracts.py ......                                 [ 42%]
+tests/dq/stages/test_import_boundary.py .                                [ 42%]
+tests/dq/stages/test_timeframe.py ...                                    [ 42%]
+tests/dq/store/test_strategy_store.py ..................                 [ 42%]
+tests/dq/strategies/sdca/test_asset_profile.py ..............            [ 43%]
+tests/dq/strategies/sdca/test_backtest.py ........................       [ 43%]
+tests/dq/strategies/sdca/test_btc_power_law.py .......................   [ 43%]
+tests/dq/strategies/sdca/test_composite_risk.py .............            [ 44%]
+tests/dq/strategies/sdca/test_curve.py ..............                    [ 44%]
+tests/dq/strategies/sdca/test_curve_optimize.py ....................     [ 44%]
+tests/dq/strategies/sdca/test_curve_shape.py ........................... [ 44%]
+....                                                                     [ 45%]
+tests/dq/strategies/sdca/test_dca_metrics.py .......                     [ 45%]
+tests/dq/strategies/sdca/test_fit_weights.py .....                       [ 45%]
+tests/dq/strategies/sdca/test_generic_valuation.py ..................... [ 45%]
+                                                                         [ 45%]
+tests/dq/strategies/sdca/test_indicator_catalog.py ..................... [ 45%]
+                                                                         [ 45%]
+tests/dq/strategies/sdca/test_nautilus_strategy.py sssssssssssssssssssss [ 46%]
+ssssssssssss                                                             [ 46%]
+tests/dq/strategies/sdca/test_onchain_valuation.py .........             [ 46%]
+tests/dq/strategies/sdca/test_optimize.py .............                  [ 46%]
+tests/dq/strategies/sdca/test_parity_fixture.py .                        [ 46%]
+tests/dq/strategies/sdca/test_presets.py ...................             [ 47%]
+tests/dq/strategies/sdca/test_price_oscillators.py ..................... [ 47%]
+                                                                         [ 47%]
+tests/dq/strategies/sdca/test_providers.py .......                       [ 47%]
+tests/dq/strategies/sdca/test_regularize.py ....                         [ 47%]
+tests/dq/strategies/sdca/test_remaining_pct.py .....s                    [ 47%]
+tests/dq/strategies/sdca/test_risk_index.py .........s.....s             [ 47%]
+tests/dq/strategies/sdca/test_risk_model.py ...                          [ 47%]
+tests/dq/strategies/sdca/test_rolling_z.py ....                          [ 47%]
+tests/dq/strategies/sdca/test_sdca_gold_macro_indicators.py ............ [ 48%]
+                                                                         [ 48%]
+tests/dq/strategies/sdca/test_sdca_gold_price_family.py ...........      [ 48%]
+tests/dq/strategies/sdca/test_sdca_gold_uup.py .....                     [ 48%]
+tests/dq/strategies/sdca/test_stage_a.py ..........                      [ 48%]
+tests/dq/strategies/sdca/test_tearsheet_charts.py .............s         [ 48%]
+tests/dq/strategies/sdca/test_two_stage.py ......                        [ 48%]
+tests/dq/strategies/sdca/test_valuation.py ...............               [ 49%]
+tests/dq/strategies/sdca/test_walk_forward.py ...........                [ 49%]
+tests/dq/strategies/sdca/test_weight_search.py .......                   [ 49%]
+tests/dq/strategies/test_m2_liquidity_config.py sss                      [ 49%]
+tests/dq/strategies/test_rs_rotation.py ....s                            [ 49%]
+tests/dq/strategies/test_strategies_init.py ..                           [ 49%]
+tests/dq/test_addm.py .........................                          [ 49%]
+tests/dq/test_backtest_cache_lru.py .                                    [ 49%]
+tests/dq/test_backtest_job_ttl.py .                                      [ 49%]
+tests/dq/test_charts.py ....FFFF.F.FF.F.F.F.F.F.FF                       [ 50%]
+tests/dq/test_constraints.py .......................                     [ 50%]
+tests/dq/test_core_advisor_harden_139.py ........                        [ 50%]
+tests/dq/test_cors.py ...                                                [ 50%]
+tests/dq/test_data.py ........                                           [ 50%]
+tests/dq/test_data_path.py ..                                            [ 50%]
+tests/dq/test_default_trade_size.py ....s                                [ 51%]
+tests/dq/test_drift.py ..                                                [ 51%]
+tests/dq/test_drop_market_tables_127.py .....                            [ 51%]
+tests/dq/test_export_sdca_macro.py ........                              [ 51%]
+tests/dq/test_golden_record.py .                                         [ 51%]
+tests/dq/test_graph_pipeline_builder_shim.py s                           [ 51%]
+tests/dq/test_honesty.py ...............                                 [ 51%]
+tests/dq/test_instrument_metadata.py ...                                 [ 51%]
+tests/dq/test_lean_lane_imports.py .                                     [ 51%]
+tests/dq/test_market_data_asof.py ...                                    [ 51%]
+tests/dq/test_market_data_parity.py .................................... [ 52%]
+.....                                                                    [ 52%]
+tests/dq/test_mcp_hosted_defaults.py ....                                [ 52%]
+tests/dq/test_mcp_market_data_backend.py ......................          [ 52%]
+tests/dq/test_migration_prefix_uniqueness.py .......                     [ 52%]
+tests/dq/test_models.py .........                                        [ 52%]
+tests/dq/test_optimize_bayesian.py .........                             [ 53%]
+tests/dq/test_optimize_export.py ss....                                  [ 53%]
+tests/dq/test_orchestrator_invoke_digifetch.py ..........                [ 53%]
+tests/dq/test_performance_returns.py ......                              [ 53%]
+tests/dq/test_prices_live_publish.py .......                             [ 53%]
+tests/dq/test_prices_live_rate_guard.py ...............                  [ 53%]
+tests/dq/test_prices_live_subscriber.py .....                            [ 53%]
+tests/dq/test_product_compile_and_prompt_walk.py s...                    [ 53%]
+tests/dq/test_research_conftest_collection_gate.py ...                   [ 53%]
+tests/dq/test_strategy_aliases.py ....                                   [ 53%]
+tests/dq/test_strategy_cli.py ....                                       [ 53%]
+tests/dq/test_strategy_specs.py .................................        [ 54%]
+tests/dq/test_supabase_retry.py ....                                     [ 54%]
+tests/dq/test_tearsheet_cache_dir.py ...                                 [ 54%]
+tests/dq/test_tearsheet_data.py ........................                 [ 54%]
+tests/dq/test_tearsheet_honesty.py ...........FFFFFF.....                [ 55%]
+tests/dq/test_tearsheet_path.py ..                                       [ 55%]
+tests/dq/test_tearsheet_sdca_publish.py .......s                         [ 55%]
+tests/dq/test_tearsheet_signal_delay.py ........sssss                    [ 55%]
+tests/dq/test_tighten_anon_read_129.py .....                             [ 55%]
+tests/dq/test_tool_rounds.py .....                                       [ 55%]
+tests/dq/test_tradingview.py ....................................        [ 56%]
+tests/dq/test_verify_macro_depth.py ..                                   [ 56%]
+tests/dq/test_web_search_cli.py .............                            [ 56%]
+tests/dq/test_yfinance_retry.py .....                                    [ 56%]
+tests/dq/vault/test_envelope.py ........................................ [ 57%]
+....................................                                     [ 57%]
+tests/ds/test_audit_rag_demo.py ..                                       [ 57%]
+tests/ds/test_azure_filter.py .........................                  [ 58%]
+tests/ds/test_azure_workspace_scope.py .......                           [ 58%]
+tests/ds/test_backend_error_surfacing.py .FF....                         [ 58%]
+tests/ds/test_chonkie_chunking.py ..F..F..FF..                           [ 58%]
+tests/ds/test_chroma_backend.py F                                        [ 58%]
+tests/ds/test_chroma_embedding_provider.py F.FFFs                        [ 58%]
+tests/ds/test_chunkers.py ........                                       [ 58%]
+tests/ds/test_cors.py ...                                                [ 58%]
+tests/ds/test_edgar_export.py ....                                       [ 58%]
+tests/ds/test_embed_pipeline_factory.py ............F                    [ 59%]
+tests/ds/test_embedders.py .                                             [ 59%]
+tests/ds/test_embedding_cache.py .........                               [ 59%]
+tests/ds/test_embedding_cache_model_namespace.py .                       [ 59%]
+tests/ds/test_evidence_filters.py .....                                  [ 59%]
+tests/ds/test_filter_validator.py ...................................... [ 59%]
+........                                                                 [ 60%]
+tests/ds/test_heading_segmenter.py .................                     [ 60%]
+tests/ds/test_hybrid_search.py .....................                     [ 60%]
+tests/ds/test_ingest_paths.py ...                                        [ 60%]
+tests/ds/test_ingest_segments.py ..                                      [ 60%]
+tests/ds/test_input_validation.py EEEEE                                  [ 60%]
+tests/ds/test_keyword_search.py ...........sss.                          [ 61%]
+tests/ds/test_mcp_hosting_web_search.py .ss                              [ 61%]
+tests/ds/test_minilm_embedder.py .....                                   [ 61%]
+tests/ds/test_monitors_api.py FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF. [ 61%]
+F                                                                        [ 61%]
+tests/ds/test_monitors_dedup.py ..............                           [ 62%]
+tests/ds/test_monitors_delivery.py ..............................        [ 62%]
+tests/ds/test_monitors_exa_adapter.py ........................           [ 62%]
+tests/ds/test_monitors_mcp.py sEEEEEEEF                                  [ 63%]
+tests/ds/test_monitors_models.py ....................                    [ 63%]
+tests/ds/test_monitors_provisioning.py ...............................   [ 63%]
+tests/ds/test_monitors_runner.py ...................................     [ 64%]
+tests/ds/test_monitors_store.py ...........................F             [ 64%]
+tests/ds/test_namespace_dedupe.py .......F                               [ 64%]
+tests/ds/test_parser_segments.py .....                                   [ 64%]
+tests/ds/test_parsers.py ......                                          [ 65%]
+tests/ds/test_pdf_segments.py ...                                        [ 65%]
+tests/ds/test_pipeline_ingest.py .....F                                  [ 65%]
+tests/ds/test_query_sensitive_seed.py ..                                 [ 65%]
+tests/ds/test_reranker.py .......F                                       [ 65%]
+tests/ds/test_research_ingest.py FFFFFFFF..F.                            [ 65%]
+tests/ds/test_retrieval_backend.py ..........                            [ 65%]
+tests/ds/test_search.py ..                                               [ 65%]
+tests/ds/test_segment_aware_chunker.py .....                             [ 65%]
+tests/ds/test_segments.py ....                                           [ 65%]
+tests/ds/test_stable_ids.py ..                                           [ 65%]
+tests/ds/test_standard_hits.py ..                                        [ 65%]
+tests/ds/test_summarize.py ...                                           [ 65%]
+tests/ds/test_tables.py .....                                            [ 65%]
+tests/ds/test_trackers_ingest.py .......                                 [ 66%]
+tests/ds/test_url_ingest.py F..F..F                                      [ 66%]
+tests/ds/test_vectorize_backend.py ..............................        [ 66%]
+tests/ds/test_vectorize_ingest.py .                                      [ 66%]
+tests/ds/test_vectorize_selection.py ..........FFF                       [ 66%]
+tests/ds/test_web_accounting.py .......                                  [ 66%]
+tests/ds/test_web_answer.py ............FFFFFFFF....                     [ 67%]
+tests/ds/test_web_eval_live.py .FFFss                                    [ 67%]
+tests/ds/test_web_grounding_models.py ...........                        [ 67%]
+tests/ds/test_web_scrape_ssrf.py .......                                 [ 67%]
+tests/ds/test_web_structured.py ...........FFFFFFF...                    [ 68%]
+tests/ds/test_websets_api.py EFEEEEEEEEEEEEEEEEEEEEEEEEFF.sE.EE...       [ 68%]
+tests/ds/test_websets_company.py .........................               [ 68%]
+tests/ds/test_websets_driver.py ...................s.................... [ 69%]
+...                                                                      [ 69%]
+tests/ds/test_websets_enrich.py ........................................ [ 70%]
+...........                                                              [ 70%]
+tests/ds/test_websets_live.py .....s                                     [ 70%]
+tests/ds/test_websets_models.py ....................                     [ 70%]
+tests/ds/test_websets_runner.py ....................                     [ 71%]
+tests/ds/test_websets_service.py ...............................         [ 71%]
+tests/ds/test_websets_store.py ...............................           [ 72%]
+tests/ds/test_websets_verify.py .............................            [ 72%]
+tests/ds/test_websets_webhook.py ...................................     [ 73%]
+tests/ds/test_workspace_filter.py .                                      [ 73%]
+tests/dsk/test_compiler.py ..........                                    [ 73%]
+tests/dsk/test_dogfood.py ............                                   [ 73%]
+tests/dsk/test_frontmatter.py .....                                      [ 73%]
+tests/dsk/test_ingest.py ..........                                      [ 73%]
+tests/dsk/test_ingest_url.py ..............                              [ 73%]
+tests/dsk/test_models.py .................                               [ 74%]
+tests/dsk/test_package.py ....                                           [ 74%]
+tests/dsk/test_security.py ......................                        [ 74%]
+tests/dsk/test_synthesize.py ..........ssss                              [ 74%]
+tests/dsm/test_cors.py ..                                                [ 74%]
+tests/dsm/test_healthz.py ....                                           [ 74%]
+tests/dsm/test_metrics_endpoint.py .                                     [ 74%]
+tests/dsm/test_redaction.py ..............                               [ 75%]
+tests/dsm/test_server.py ...                                             [ 75%]
+tests/dsm/test_trace.py ....                                             [ 75%]
+tests/dv/test_d1_store.py .................................              [ 75%]
+tests/dv/test_frontmatter.py .......                                     [ 75%]
+tests/dv/test_local_search.py ...........                                [ 75%]
+tests/dv/test_mcp_path_prefix.py .....................                   [ 76%]
+tests/dv/test_orchestrator_tools.py ..........                           [ 76%]
+tests/dv/test_scope_duplicate_oracle.py ...                              [ 76%]
+tests/dv/test_seed_knowledge_vault.py ..                                 [ 76%]
+tests/dv/test_server.py ................................................ [ 77%]
+........................................................................ [ 78%]
+......................                                                   [ 78%]
+tests/dv/test_supabase_store.py ....................                     [ 78%]
+tests/dv/test_tenant_scope.py ....................................       [ 79%]
+tests/dv/test_vault.py ................                                  [ 79%]
+tests/dv/test_vault_store.py .......................                     [ 80%]
+tests/dv/test_wikilinks.py ......                                        [ 80%]
+tests/integration/test_request_id_hops.py ..                             [ 80%]
+tests/provider_review/test_bootstrap.py ......                           [ 80%]
+tests/provider_review/test_create_issues.py ....                         [ 80%]
+tests/scripts/docs_onboard/test_classify_pages.py .                      [ 80%]
+tests/scripts/docs_onboard/test_extensions.py .........                  [ 80%]
+tests/scripts/docs_onboard/test_fetch_docs.py .                          [ 80%]
+tests/scripts/docs_onboard/test_ingest_openapi.py .....................  [ 80%]
+tests/scripts/docs_onboard/test_models.py ..                             [ 80%]
+tests/scripts/docs_onboard/test_naming.py .....                          [ 80%]
+tests/scripts/docs_onboard/test_run_onboard.py ...                       [ 80%]
+tests/scripts/docs_onboard/test_scrape_site.py .                         [ 80%]
+tests/scripts/docs_onboard/test_workspace.py .                           [ 80%]
+tests/scripts/docs_onboard/test_write_search_index.py ...                [ 81%]
+tests/scripts/docs_onboard/test_write_vault_notes.py ........            [ 81%]
+tests/scripts/test_agent_pr_checks.py ...........                        [ 81%]
+tests/scripts/test_backfill_market_data_r2.py ..............             [ 81%]
+tests/scripts/test_branch_taxonomy_release_please.py .                   [ 81%]
+tests/scripts/test_build_brand_headers.py F.F..F...                      [ 81%]
+tests/scripts/test_build_digiquant_dashboard_path.py .........           [ 81%]
+tests/scripts/test_build_digiquant_settings_markers.py ..                [ 81%]
+tests/scripts/test_build_manifest_families.py ...                        [ 81%]
+tests/scripts/test_check_allocation_shadow_isolation.py ................ [ 82%]
+...                                                                      [ 82%]
+tests/scripts/test_check_architecture_drift.py ...                       [ 82%]
+tests/scripts/test_check_deploy_freshness.py ........................... [ 82%]
+.......................                                                  [ 82%]
+tests/scripts/test_check_frontend_canon.py ............................. [ 83%]
+...............                                                          [ 83%]
+tests/scripts/test_check_pandas_boundary.py .                            [ 83%]
+tests/scripts/test_check_project_fields_coverage.py .........            [ 83%]
+tests/scripts/test_check_review_coverage.py ............................ [ 84%]
+...................................................                      [ 85%]
+tests/scripts/test_check_tenant_corpus_map.py ............               [ 85%]
+tests/scripts/test_check_workflow_tokens.py ..........                   [ 85%]
+tests/scripts/test_check_worktree_conflicts.py .                         [ 85%]
+tests/scripts/test_checkpoint_archive_workflow.py ....                   [ 85%]
+tests/scripts/test_checkpoint_size_gate.py ...........                   [ 85%]
+tests/scripts/test_ci_required_checks_aggregate.py ......                [ 85%]
+tests/scripts/test_classify_npm_audit.py .............                   [ 85%]
+tests/scripts/test_compose_litellm_redis_url.py ...                      [ 85%]
+tests/scripts/test_compose_searxng_sidecar.py ..                         [ 85%]
+tests/scripts/test_d1_sync.py .......................................    [ 86%]
+tests/scripts/test_db_migrate_ledger_gate.py ............                [ 86%]
+tests/scripts/test_db_migrate_ledger_rename.py ...........               [ 86%]
+tests/scripts/test_deploy_build_inputs.py ....                           [ 86%]
+tests/scripts/test_deploy_digichat_cloudflare_container.py ......        [ 87%]
+tests/scripts/test_digichat_gallery_css_in_container.py .....            [ 87%]
+tests/scripts/test_digifetch_post_deploy_verification_doc.py .s....      [ 87%]
+tests/scripts/test_digiquant_cron_workflow.py ...................        [ 87%]
+tests/scripts/test_digiquant_pipeline_env.py ...                         [ 87%]
+tests/scripts/test_digiquant_prices_workflow.py ....                     [ 87%]
+tests/scripts/test_digithings_guide_project.py .s....                    [ 87%]
+tests/scripts/test_enrich_gold_refresh_workflow.py ..                    [ 87%]
+tests/scripts/test_evaluate_research_policy_shadow.py ..                 [ 87%]
+tests/scripts/test_fetch_repo_activity.py .............................. [ 88%]
+..................................                                       [ 88%]
+tests/scripts/test_fetch_task.py ...                                     [ 88%]
+tests/scripts/test_frontend_dashboard_workspace.py ..........            [ 88%]
+tests/scripts/test_generate_ci_path_filters.py .......                   [ 89%]
+tests/scripts/test_gloomberb_session_cookie_runbook.py ......            [ 89%]
+tests/scripts/test_infer_project_fields_row.py ......................... [ 89%]
+.                                                                        [ 89%]
+tests/scripts/test_install_hooks.py .                                    [ 89%]
+tests/scripts/test_market_data_refresh_workflow.py ..................... [ 89%]
+............                                                             [ 90%]
+tests/scripts/test_market_data_restatement_4621.py .............         [ 90%]
+tests/scripts/test_mcp_container.py ..........                           [ 90%]
+tests/scripts/test_package_lock_platform_coverage.py ...                 [ 90%]
+tests/scripts/test_parse_traceback.py .......                            [ 90%]
+tests/scripts/test_pipeline_digiquant_attempt.py ..............          [ 90%]
+tests/scripts/test_pre_push_hook.py .                                    [ 90%]
+tests/scripts/test_prices_cron_dst.py .................................. [ 91%]
+....                                                                     [ 91%]
+tests/scripts/test_probe_gloomberb_macro_panel.py ..                     [ 91%]
+tests/scripts/test_project_root_guard.py ..........                      [ 91%]
+tests/scripts/test_project_stub_fields_pause.py ....                     [ 91%]
+tests/scripts/test_readiness.py ........................                 [ 91%]
+tests/scripts/test_refresh_market_data_r2_gloomberb.py .....             [ 92%]
+tests/scripts/test_refresh_market_data_r2_macro.py ...........           [ 92%]
+tests/scripts/test_refresh_model_routes.py .............                 [ 92%]
+tests/scripts/test_release_manifest_consistency.py .....                 [ 92%]
+tests/scripts/test_score.py ...................                          [ 92%]
+tests/scripts/test_score_allow_pragma.py .........                       [ 92%]
+tests/scripts/test_score_delta.py ...........                            [ 93%]
+tests/scripts/test_secrets_audit.py .............                        [ 93%]
+tests/scripts/test_seed_digiquant_demo.py .................              [ 93%]
+tests/scripts/test_stack_entrypoint.py .....                             [ 93%]
+tests/scripts/test_sync_onboard_vault.py ....                            [ 93%]
+tests/scripts/test_validate_digiquant_pools_retry.py ..........          [ 93%]
+tests/scripts/test_validate_model_routing.py ...................         [ 94%]
+tests/scripts/test_validate_providers.py ...FFF                          [ 94%]
+tests/scripts/test_validator_strict_skips.py ..                          [ 94%]
+tests/scripts/test_vectorize_sync.py ............................        [ 94%]
+tests/scripts/test_verify_agent_automerge_pr.py ........................ [ 95%]
+...                                                                      [ 95%]
+tests/scripts/test_verify_doc_only_pr.py ..........................      [ 95%]
+tests/scripts/test_workflow_environment_concurrency.py .ssssssssssssssss [ 95%]
+s.sss.ss..ssssssssssssssssssssssssssssss.sssssssssssssssssssss           [ 96%]
+tests/scripts/test_worktree_task_base_ref.py .............               [ 96%]
+tests/scripts/test_write_build_info.py ...............                   [ 97%]
+tests/scripts/test_zammad_mcp.py ...........................s........Fs. [ 97%]
+...........ss.......s.............................ssss.........s.sss.s.. [ 98%]
+.ss                                                                      [ 98%]
+tests/scripts/test_zammad_mcp_stack.py .........s.                       [ 98%]
+tests/test_e2e_contract.py ..                                            [ 99%]
+digifetch/tests/test_browser.py .........                                [ 99%]
+digifetch/tests/test_http.py ............                                [ 99%]
+digifetch/tests/test_package.py .....                                    [ 99%]
+digifetch/tests/test_ratelimit.py .......                                [ 99%]
+digifetch/tests/test_retry.py ........                                   [ 99%]
+digifetch/tests/test_ssrf.py ........................                    [100%]
+
+=========================== short test summary info ============================
+FAILED tests/config/test_litellm_house_models.py::test_digillm_catalog_api_bases_match_byok_providers_json
+FAILED tests/config/test_litellm_house_models.py::test_digichat_public_picker_is_ci_cheap_only
+FAILED tests/contracts/test_cross_service_surface.py::test_healthz_ok_shape[digigraph]
+FAILED tests/contracts/test_cross_service_surface.py::test_healthz_ok_shape[digisearch]
+FAILED tests/contracts/test_cross_service_surface.py::test_metrics_exposes_service_label[digigraph]
+FAILED tests/contracts/test_cross_service_surface.py::test_metrics_exposes_service_label[digisearch]
+FAILED tests/contracts/test_openapi_contract.py::test_digigraph_openapi_has_health_and_workflow
+FAILED tests/contracts/test_openapi_contract.py::test_digisearch_openapi_has_query_and_ingest
+FAILED tests/contracts/test_openapi_contract.py::test_openapi_json_and_docs_public[digigraph.server:app]
+FAILED tests/contracts/test_openapi_contract.py::test_openapi_json_and_docs_public[digisearch.server:app]
+FAILED tests/contracts/test_openapi_contract.py::test_digigraph_validation_error_envelope
+FAILED tests/dg/test_data_engineer_gate.py::test_project_rag_tool_list_reflects_exec_flag
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_overwrites_model_supplied_index_name
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_uses_context_index_name_when_model_omits_it
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_no_hits_still_dict_for_trace
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_fetch_all_overwrites_model_supplied_index_name
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_research_delegate_overwrites_model_supplied_index_name
+FAILED tests/dg/test_digisearch_handler.py::test_merged_digisearch_filters_returns_none_when_empty
+FAILED tests/dg/test_digisearch_handler.py::test_merged_digisearch_filters_combines_workflow_args_and_evidence_tier
+FAILED tests/dg/test_digisearch_handler.py::test_merged_digisearch_filters_ignores_non_list_state_and_args
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_forwards_merged_filters_to_invoke
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_omits_filters_key_when_merge_empty
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_fetch_all_clamps_max_results_to_project_limit
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_fetch_all_defaults_max_results_to_project_limit
+FAILED tests/dg/test_digisearch_handler.py::test_handle_digisearch_fetch_all_keeps_max_results_at_or_below_cap
+FAILED tests/dg/test_digisearch_handler.py::test_search_payload_keeps_metadata_addressable_as_json
+FAILED tests/dg/test_digisearch_handler.py::test_search_payload_clips_oversized_metadata_as_json_not_python_repr
+FAILED tests/dg/test_digisearch_handler.py::test_digisearch_rows_are_marked_truncated_too
+FAILED tests/dg/test_digistore_tools.py::test_digistore_list_handler_returns_datasets
+FAILED tests/dg/test_digistore_tools.py::test_digistore_list_handler_include_row_count_false
+FAILED tests/dg/test_digistore_tools.py::test_digistore_profile_handler_returns_profile
+FAILED tests/dg/test_digistore_tools.py::test_digistore_profile_handler_not_found_returns_error
+FAILED tests/dg/test_digistore_tools.py::test_digistore_tools_exposed_when_run_data_dir_set
+FAILED tests/dg/test_digistore_tools.py::test_digistore_tools_absent_without_run_data_dir
+FAILED tests/dg/test_digivault_tool.py::test_digivault_search_notes_is_registered
+FAILED tests/dg/test_digivault_tool.py::test_digivault_available_reads_env - ...
+FAILED tests/dg/test_digivault_tool.py::test_digivault_available_reads_project_config_when_env_empty
+FAILED tests/dg/test_digivault_tool.py::test_digivault_skill_hidden_when_unavailable
+FAILED tests/dg/test_digivault_tool.py::test_digivault_skill_exposed_when_available
+FAILED tests/dg/test_digivault_tool.py::test_schema_from_digivault_manifest_falls_back_on_error
+FAILED tests/dg/test_digivault_tool.py::test_digivault_get_note_is_registered
+FAILED tests/dg/test_digivault_tool.py::test_schema_from_digivault_manifest_get_note_falls_back_on_error
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_requires_query
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_success
+FAILED tests/dg/test_digivault_tool.py::test_search_hit_doc_id_feeds_get_note_vault_path_argument_shape
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_overwrites_model_supplied_path_prefix
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_no_context_prefix_passes_none
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_no_hits
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_invoke_error
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_not_ok_response
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_no_context_prefix_error_is_actionable
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_no_context_prefix_but_different_error_passes_through
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_real_http_failure_reaches_handler_as_ok_false
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_requires_vault_path
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_success
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_not_found
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_invoke_error
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_not_ok_response
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_overwrites_model_supplied_path_prefix
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_no_context_prefix_does_not_fall_back_unscoped
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_no_context_prefix_but_different_error_passes_through
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_marks_truncated_excerpts
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_search_does_not_mark_untruncated_excerpts
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_surfaces_segment_identity
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_omits_segment_keys_for_whole_documents
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_batch_happy_path
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_batch_surfaces_partial_errors
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_batch_all_paths_failed
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_single_path_ignores_stray_vault_paths_key
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_rejects_vault_path_and_vault_paths_together
+FAILED tests/dg/test_digivault_tool.py::test_handle_digivault_get_note_blank_vault_path_alongside_vault_paths_is_fine
+FAILED tests/dg/test_mcp_server.py::test_mcp_chat_upstream_shares_server_llm_client
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_workflow_rejects_unauthenticated_without_running
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_workflow_accepts_valid_token
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_workflow_rejects_wrong_scope
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_every_other_tool_rejects_unauthenticated[list_orchestrator_tools-kwargs0]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_every_other_tool_rejects_unauthenticated[list_orchestrator_tools_detailed-kwargs1]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_every_other_tool_rejects_unauthenticated[thread_state-kwargs2]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_every_other_tool_rejects_unauthenticated[chat-kwargs3]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_wrong_scope_denied_for_each_tool[workflow-kwargs0-wrong_scopes0]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_wrong_scope_denied_for_each_tool[chat-kwargs1-wrong_scopes1]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_wrong_scope_denied_for_each_tool[thread_state-kwargs2-wrong_scopes2]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_wrong_scope_denied_for_each_tool[list_orchestrator_tools-kwargs3-wrong_scopes3]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_wrong_scope_denied_for_each_tool[list_orchestrator_tools_detailed-kwargs4-wrong_scopes4]
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_chat_forwards_valid_token_end_to_end
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_thread_state_forwards_valid_token_end_to_end
+FAILED tests/dg/test_mcp_server.py::TestMcpToolEnforcement::test_every_registered_tool_enforces_auth
+FAILED tests/dg/test_mcp_ssrf.py::test_list_tools_async_passes_ssrf_http_client_factory
+FAILED tests/dg/test_mcp_ssrf.py::test_call_tool_async_passes_ssrf_http_client_factory
+FAILED tests/dg/test_retrieval.py::test_workflow_state_declares_force_tool - ...
+FAILED tests/dg/test_retrieval.py::test_initial_graph_state_carries_force_tool
+FAILED tests/dg/test_retrieval.py::test_initial_graph_state_sets_force_tool_to_none_when_unset
+FAILED tests/dg/test_retrieval.py::test_digi_fields_from_request_reads_force_tool_header
+FAILED tests/dg/test_retrieval.py::test_digi_fields_from_request_omits_unknown_force_tool
+FAILED tests/dg/test_retrieval.py::test_resolve_force_tool_chat_from_body_then_header
+FAILED tests/dg/test_retrieval.py::test_research_node_injects_force_tool_then_synthesizes_with_auto
+FAILED tests/dg/test_retrieval.py::test_research_node_force_tool_uses_last_user_turn_not_flattened_history
+FAILED tests/dg/test_retrieval.py::test_research_node_force_tool_keeps_auto_even_when_require_tool_calls
+FAILED tests/dg/test_retrieval.py::test_research_node_skips_force_tool_when_not_in_allowlist
+FAILED tests/dg/test_retrieval.py::test_research_node_force_tool_injects_when_allowlisted
+FAILED tests/dg/test_retrieval.py::test_research_node_auto_loads_notes_on_model_driven_search
+FAILED tests/dg/test_trace_events_rag_body.py::test_get_note_handler_rag_sources_carry_body
+FAILED tests/dq/test_charts.py::test_distribution_chart_returns_figure - Asse...
+FAILED tests/dq/test_charts.py::test_distribution_chart_returns_none_for_empty
+FAILED tests/dq/test_charts.py::test_rolling_sharpe_returns_figure - Assertio...
+FAILED tests/dq/test_charts.py::test_rolling_sharpe_returns_none_for_insufficient_data
+FAILED tests/dq/test_charts.py::test_monthly_returns_chart_returns_figure - A...
+FAILED tests/dq/test_charts.py::test_yearly_returns_chart_returns_figure - As...
+FAILED tests/dq/test_charts.py::test_monthly_yearly_combined_returns_figure
+FAILED tests/dq/test_charts.py::test_rolling_calmar_returns_figure - Assertio...
+FAILED tests/dq/test_charts.py::test_rolling_equity_returns_figure - Assertio...
+FAILED tests/dq/test_charts.py::test_rolling_drawdown_returns_figure - Assert...
+FAILED tests/dq/test_charts.py::test_underwater_from_returns_returns_figure
+FAILED tests/dq/test_charts.py::test_realized_pnl_chart_returns_figure - Asse...
+FAILED tests/dq/test_charts.py::test_rolling_sharpe_accepts_polars_series - a...
+FAILED tests/dq/test_charts.py::test_rolling_equity_accepts_polars_series - a...
+FAILED tests/dq/test_tearsheet_honesty.py::test_donut_uses_caller_wins_not_round
+FAILED tests/dq/test_tearsheet_honesty.py::test_donut_center_shows_honest_rate
+FAILED tests/dq/test_tearsheet_honesty.py::test_donut_refused_below_floor - A...
+FAILED tests/dq/test_tearsheet_honesty.py::test_donut_without_wins_renders_unknown_center
+FAILED tests/dq/test_tearsheet_honesty.py::test_donut_without_wins_clamps_percent_scale
+FAILED tests/dq/test_tearsheet_honesty.py::test_donut_without_wins_still_refuses_tiny_n
+FAILED tests/ds/test_backend_error_surfacing.py::test_chroma_query_raises_instead_of_returning_empty
+FAILED tests/ds/test_backend_error_surfacing.py::test_chroma_healthy_empty_result_still_returns_empty
+FAILED tests/ds/test_chonkie_chunking.py::test_get_chunker_backend_semantic_and_token
+FAILED tests/ds/test_chonkie_chunking.py::test_chonkie_token_chunker_real_character_tokenizer
+FAILED tests/ds/test_chonkie_chunking.py::test_cli_default_honors_digisearch_chunker_env
+FAILED tests/ds/test_chonkie_chunking.py::test_ingest_chunker_is_cached_per_resolved_name
+FAILED tests/ds/test_chroma_backend.py::test_add_keeps_canonical_doc_id_over_spoofed_metadata
+FAILED tests/ds/test_chroma_embedding_provider.py::test_embedding_provider_default_used_on_add_and_query
+FAILED tests/ds/test_chroma_embedding_provider.py::test_partial_embedding_raises
+FAILED tests/ds/test_chroma_embedding_provider.py::test_embedding_metadata_written_and_mismatch_raises
+FAILED tests/ds/test_chroma_embedding_provider.py::test_legacy_populated_collection_refuses_auto_stamp
+FAILED tests/ds/test_embed_pipeline_factory.py::test_query_request_normalizes_mode_case
+FAILED tests/ds/test_monitors_api.py::test_create_trigger_poll_cycle - Module...
+FAILED tests/ds/test_monitors_api.py::test_private_webhook_rejected_like_exa
+FAILED tests/ds/test_monitors_api.py::test_datatap_watch_rejected - ModuleNot...
+FAILED tests/ds/test_monitors_api.py::test_create_exa_provisions_remote_monitor_end_to_end
+FAILED tests/ds/test_monitors_api.py::test_create_exa_refuses_cron_and_missing_webhook_target
+FAILED tests/ds/test_monitors_api.py::test_create_exa_502_when_remote_secret_missing
+FAILED tests/ds/test_monitors_api.py::test_create_exa_502_when_remote_id_missing
+FAILED tests/ds/test_monitors_api.py::test_patch_backend_flip_refused_and_rotation_still_gated
+FAILED tests/ds/test_monitors_api.py::test_patch_backend_oss_to_exa_refused_and_same_value_is_noop
+FAILED tests/ds/test_monitors_api.py::test_patch_exa_monitor_id_clear_refused_and_delete_still_tears_down
+FAILED tests/ds/test_monitors_api.py::test_patch_exa_monitor_id_refuses_cross_watch_id_and_allows_same_value
+FAILED tests/ds/test_monitors_api.py::test_patch_rotate_refused_on_stale_exa_monitor_id_misconfig
+FAILED tests/ds/test_monitors_api.py::test_patch_rotate_refused_on_exa_backed_watch
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_exempt_but_secret_gated
+FAILED tests/ds/test_monitors_api.py::test_patch_rotate_and_update_never_leaks_secret
+FAILED tests/ds/test_monitors_api.py::test_patch_rotation_requires_literal_true
+FAILED tests/ds/test_monitors_api.py::test_trigger_recall_failure_returns_persisted_failed_run
+FAILED tests/ds/test_monitors_api.py::test_watch_and_run_not_found_codes - Mo...
+FAILED tests/ds/test_monitors_api.py::test_create_and_patch_reject_bad_schedule
+FAILED tests/ds/test_monitors_api.py::test_non_numeric_cron_step_maps_to_invalid_cron
+FAILED tests/ds/test_monitors_api.py::test_webhook_mode_without_targets_rejected
+FAILED tests/ds/test_monitors_api.py::test_delete_retains_runs_and_run_detail
+FAILED tests/ds/test_monitors_api.py::test_delete_exa_watch_tears_down_remote_best_effort
+FAILED tests/ds/test_monitors_api.py::test_delete_oss_watch_makes_no_remote_call
+FAILED tests/ds/test_monitors_api.py::test_tick_runs_due_watches_once - Modul...
+FAILED tests/ds/test_monitors_api.py::test_list_watches_filters_workspace - M...
+FAILED tests/ds/test_monitors_api.py::test_monitor_routes_require_jwt - Modul...
+FAILED tests/ds/test_monitors_api.py::test_trigger_route_holds_ten_per_minute_through_middleware
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_per_watch_secret_translates_and_persists
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_non_terminal_event_acks_without_persisting
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_broadened_non_terminal_status_acks_without_persisting[cancelled]
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_broadened_non_terminal_status_acks_without_persisting[queued]
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_broadened_non_terminal_status_acks_without_persisting[some_future_status]
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_missing_status_stays_fail_closed
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_duplicate_delivery_is_idempotent
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_bad_payload_or_unknown_monitor_fails_closed
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_non_exa_backend_watch_fails_closed
+FAILED tests/ds/test_monitors_api.py::test_exa_webhook_watch_without_a_stored_secret_fails_closed
+FAILED tests/ds/test_monitors_api.py::test_orchestrator_trigger_round_trip - ...
+FAILED tests/ds/test_monitors_api.py::test_orchestrator_monitor_tools_fail_hard
+FAILED tests/ds/test_monitors_api.py::test_orchestrator_trigger_recall_failure_returns_ok_false
+FAILED tests/ds/test_monitors_api.py::test_rate_limit_budgets_key_monitor_routes
+FAILED tests/ds/test_monitors_mcp.py::test_tools_fail_closed_without_a_store
+FAILED tests/ds/test_monitors_store.py::test_get_monitor_store_seam_reads_env
+FAILED tests/ds/test_namespace_dedupe.py::test_run_query_collapses_twins_end_to_end
+FAILED tests/ds/test_pipeline_ingest.py::test_http_ingest_delegates_to_pipeline
+FAILED tests/ds/test_reranker.py::TestFetchAllRerankSuppression::test_fetch_all_skip_rerank_even_when_enabled
+FAILED tests/ds/test_research_ingest.py::test_ingest_research_document_creates_chunks
+FAILED tests/ds/test_research_ingest.py::test_ingest_falls_back_to_payload_json_when_content_missing
+FAILED tests/ds/test_research_ingest.py::test_metadata_filter_by_date_range
+FAILED tests/ds/test_research_ingest.py::test_metadata_filter_by_doc_type - I...
+FAILED tests/ds/test_research_ingest.py::test_metadata_filter_by_sector - Imp...
+FAILED tests/ds/test_research_ingest.py::test_search_strategies_mcp_tool_returns_typed_results
+FAILED tests/ds/test_research_ingest.py::test_search_strategies_filters_by_run_type_and_date_range
+FAILED tests/ds/test_research_ingest.py::test_idempotent_reingest_replaces_chunks
+FAILED tests/ds/test_research_ingest.py::test_ingest_research_document_via_client_then_search
+FAILED tests/ds/test_url_ingest.py::test_ingest_url_ok_path - digisearch.pipe...
+FAILED tests/ds/test_url_ingest.py::test_ingest_url_temp_dir_cleaned - digise...
+FAILED tests/ds/test_url_ingest.py::test_ingest_url_redirect_updates_final_url
+FAILED tests/ds/test_vectorize_selection.py::test_query_response_documents_vectorize_backend
+FAILED tests/ds/test_vectorize_selection.py::test_real_backend_check_accepts_vectorize
+FAILED tests/ds/test_vectorize_selection.py::test_real_backend_check_accepts_canonical_cloudflare_vars
+FAILED tests/ds/test_web_answer.py::test_synthesize_calls_digillm_with_numbered_sources
+FAILED tests/ds/test_web_answer.py::test_synthesize_caps_snippet_and_total_source_chars
+FAILED tests/ds/test_web_answer.py::test_synthesize_citation_guard_counts_only_rendered_sources[Answer [2].-insufficient sources]
+FAILED tests/ds/test_web_answer.py::test_synthesize_citation_guard_counts_only_rendered_sources[Answer [1].-Answer [1].]
+FAILED tests/ds/test_web_answer.py::test_synthesize_replaces_uncited_answer_with_insufficient_sentence[I cannot answer that.]
+FAILED tests/ds/test_web_answer.py::test_synthesize_replaces_uncited_answer_with_insufficient_sentence[Answer [0].]
+FAILED tests/ds/test_web_answer.py::test_synthesize_replaces_uncited_answer_with_insufficient_sentence[Answer [9].]
+FAILED tests/ds/test_web_answer.py::test_grounded_answer_insufficient_path_keeps_cited_sources
+FAILED tests/ds/test_web_eval_live.py::test_research_cases_grounded_answer_offline
+FAILED tests/ds/test_web_eval_live.py::test_research_cases_structured_synthesis_offline
+FAILED tests/ds/test_web_eval_live.py::test_offline_oss_envelope_renders_through_format_web_results
+FAILED tests/ds/test_web_structured.py::test_synthesize_structured_sends_wrapper_schema_and_numbered_sources
+FAILED tests/ds/test_web_structured.py::test_synthesize_structured_rejects_unparseable_response
+FAILED tests/ds/test_web_structured.py::test_synthesize_structured_rejects_payload_without_citation_url
+FAILED tests/ds/test_web_structured.py::test_synthesize_structured_truncated_source_is_not_verified
+FAILED tests/ds/test_web_structured.py::test_structured_synthesis_envelope_mirrors_exa_shape
+FAILED tests/ds/test_web_structured.py::test_structured_synthesis_g2_multi_field_fixture_keeps_citations
+FAILED tests/ds/test_web_structured.py::test_structured_synthesis_supplied_pages_skips_retrieval
+FAILED tests/ds/test_websets_api.py::test_routes_require_auth - ModuleNotFoun...
+FAILED tests/ds/test_websets_api.py::test_rate_limit_budgets_key_webset_routes
+FAILED tests/ds/test_websets_api.py::test_lifespan_scheduler_drives_to_idle
+FAILED tests/scripts/test_build_brand_headers.py::test_copy_is_the_og_headline
+FAILED tests/scripts/test_build_brand_headers.py::test_stack_fits_safe_zone_and_is_compact
+FAILED tests/scripts/test_build_brand_headers.py::test_header_svg_is_outlined_not_text
+FAILED tests/scripts/test_validate_providers.py::test_preflight_configures_bounded_digillm_env
+FAILED tests/scripts/test_validate_providers.py::test_preflight_applies_house_env
+FAILED tests/scripts/test_validate_providers.py::test_no_llm_checks_remain - ...
+FAILED tests/scripts/test_zammad_mcp.py::test_allowed_host_patterns_append_port_wildcard
+= 224 failed, 6103 passed, 241 skipped, 198 deselected, 114 errors in 65.60s (0:01:05) =

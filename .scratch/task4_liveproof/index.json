@@ -1,0 +1,25 @@
+[
+  {
+    "strategy": "gold_sdca",
+    "symbol": "GLD-USD",
+    "engine": "nautilus",
+    "label": "GLD-SDCA",
+    "kind": "dca",
+    "period_start": "2018-01-02",
+    "period_end": "2026-09-29",
+    "signal_delay_days": 0,
+    "net_profit_pct": 204.2351340345494,
+    "max_drawdown_pct": -26.404457837786648,
+    "profit_factor": null,
+    "win_rate_pct": null,
+    "avg_trade_pct": null,
+    "total_trades": 0,
+    "generated_at": "2026-10-02T00:18:56+00:00",
+    "href": "/strategies/gold_sdca",
+    "vs_lump_pct": -0.5588392697845168,
+    "vs_flat_dca_pct": 41.60397940123946,
+    "capital_deployed_pct": 99.99910434364999,
+    "allocated_pct": 99.99970560390636,
+    "beats_flat_dca_oos": false
+  }
+]

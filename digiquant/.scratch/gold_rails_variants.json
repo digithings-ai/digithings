@@ -1,0 +1,64 @@
+{
+  "configs": {
+    "quad_full": {
+      "oos": -11.189135069641832,
+      "feasible": true,
+      "dd": 26.046717442936234,
+      "pinned_frac": 0.9945454545454545,
+      "saturated_frac": 0.9945454545454545
+    },
+    "linear_full": {
+      "oos": -11.206376008029306,
+      "feasible": true,
+      "dd": 26.062363926322284,
+      "pinned_frac": 1.0,
+      "saturated_frac": 1.0
+    },
+    "quad_3y": {
+      "oos": -7.400318282771146,
+      "feasible": false,
+      "dd": 11.548314125381879,
+      "pinned_frac": 0.0,
+      "saturated_frac": 0.8209090909090909
+    },
+    "quad_5y": {
+      "oos": -8.24530252237129,
+      "feasible": false,
+      "dd": 11.124051490494102,
+      "pinned_frac": 0.0,
+      "saturated_frac": 0.8918181818181818
+    },
+    "quad_cap10": {
+      "oos": -11.145541126743474,
+      "feasible": true,
+      "dd": 25.981540504728063,
+      "pinned_frac": 0.9836363636363636,
+      "saturated_frac": 0.9836363636363636
+    },
+    "quad_cap15": {
+      "oos": -11.189135069641832,
+      "feasible": true,
+      "dd": 26.046717442936234,
+      "pinned_frac": 0.9945454545454545,
+      "saturated_frac": 0.9945454545454545
+    },
+    "quad_cap25": {
+      "oos": -11.189135069641832,
+      "feasible": true,
+      "dd": 26.046717442936234,
+      "pinned_frac": 0.9945454545454545,
+      "saturated_frac": 0.9945454545454545
+    },
+    "quad_5y_cap15": {
+      "oos": -8.24530252237129,
+      "feasible": false,
+      "dd": 11.124051490494102,
+      "pinned_frac": 0.0,
+      "saturated_frac": 0.8918181818181818
+    }
+  },
+  "top2": [
+    "quad_3y",
+    "quad_5y"
+  ]
+}

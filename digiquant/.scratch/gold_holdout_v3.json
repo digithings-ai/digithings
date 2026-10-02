@@ -1,0 +1,49 @@
+{
+  "weights": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "rs_eth": 0.0,
+    "dxy": 0.0,
+    "uup": 0.5,
+    "gvz": 0.0,
+    "walcl": 0.0,
+    "hy_oas": 0.0,
+    "ig_oas": 0.0,
+    "breakeven_5y": 0.0,
+    "nfci": 0.0,
+    "gdx_gld": 0.0,
+    "gld_slv": 0.0,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.0
+  },
+  "shape": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 45.0,
+    "sell_knee_risk": 50.0,
+    "sell_max_rate": 30.0,
+    "buy_curvature": 1.0,
+    "sell_curvature": 2.0,
+    "buy_mid_knee_risk": null,
+    "buy_mid_curvature": 1.0,
+    "sell_mid_knee_risk": null,
+    "sell_mid_curvature": 1.0
+  },
+  "rails_fit_window": [
+    "2004-11-18",
+    "2022-05-11"
+  ],
+  "holdout_window": [
+    "2022-05-12",
+    "2026-09-29"
+  ],
+  "metrics": {
+    "vs_flat_dca_pct": -21.15507952929604,
+    "vs_lump_pct": -41.712475492821255,
+    "capital_deployed_pct": -31.149505509295096,
+    "capital_deployed_peak_pct": 99.99868770354067,
+    "max_drawdown_pct": 8.64695620944487
+  },
+  "feasible": true,
+  "holdout_scored_once": true
+}

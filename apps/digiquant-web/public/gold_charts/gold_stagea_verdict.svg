@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 700" font-family="sans-serif">
+<title>GLD Stage-A/B verdict: V1 vs V2 vs benchmarks</title>
+<text x="480.0" y="22" text-anchor="middle" font-size="15" font-weight="bold">GLD Stage-A/B verdict — V1 (valuation-only, barred) vs V2 (real_rate-only, candidate)</text>
+<text x="480.0" y="40" text-anchor="middle" font-size="11" fill="#333333">behavior window 2010-01-04→2026-09-29 (16.7yr) + Stage-B causal-rolling90 gate (3 folds, holdout absent)</text>
+<text x="480.0" y="56" text-anchor="middle" font-size="11" fill="#333333">V1-vs-V2 gap isolates the WEIGHT VECTOR under identical rolling90 rails — NOT trend evidence (frozen trend rails appear nowhere in the gate)</text>
+<text x="480.0" y="78" text-anchor="middle" font-size="12" font-weight="bold">(A) behavior: sell fills/yr (reselect baseline 2.03 = 34 fills)</text>
+<text x="240" y="103.0" text-anchor="end" font-size="12">baseline reselect</text>
+<rect x="250" y="86.0" width="345.4" height="26.0" fill="#666666"/>
+<text x="603.4" y="103.0" font-size="12">2.03/yr (1.00x)</text>
+<text x="240" y="157.0" text-anchor="end" font-size="12">V1 valuation-only</text>
+<rect x="250" y="140.0" width="10.2" height="26.0" fill="#c00000"/>
+<text x="268.2" y="157.0" font-size="12">0.06/yr (0.03x) — FAILS oscillation</text>
+<text x="240" y="211.0" text-anchor="end" font-size="12">V2 real_rate-only</text>
+<rect x="250" y="194.0" width="619.7" height="26.0" fill="#2a7a2a"/>
+<text x="877.7" y="211.0" font-size="12">3.65/yr (1.79x) — oscillates</text>
+<text x="480.0" y="244" text-anchor="middle" font-size="12" font-weight="bold">(B) gate: mean OOS vs flat (blue) and vs lump (orange), %</text>
+<line x1="250" y1="464.4" x2="930" y2="464.4" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="468.4" text-anchor="end" font-size="11">-5</text>
+<line x1="250" y1="436.3" x2="930" y2="436.3" stroke="#000000" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="244" y="440.3" text-anchor="end" font-size="11">0</text>
+<line x1="250" y1="408.3" x2="930" y2="408.3" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="412.3" text-anchor="end" font-size="11">5</text>
+<line x1="250" y1="380.2" x2="930" y2="380.2" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="384.2" text-anchor="end" font-size="11">10</text>
+<line x1="250" y1="352.2" x2="930" y2="352.2" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="356.2" text-anchor="end" font-size="11">15</text>
+<line x1="250" y1="324.1" x2="930" y2="324.1" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="328.1" text-anchor="end" font-size="11">20</text>
+<line x1="250" y1="296.1" x2="930" y2="296.1" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="300.1" text-anchor="end" font-size="11">25</text>
+<line x1="250" y1="268.0" x2="930" y2="268.0" stroke="#cccccc" stroke-width="1"/>
+<text x="244" y="272.0" text-anchor="end" font-size="11">30</text>
+<rect x="367.0" y="286.0" width="50" height="150.4" fill="#1f5fa8"/>
+<text x="392.0" y="280.0" text-anchor="middle" font-size="11" font-weight="bold" fill="#2a7a2a">+26.80 (beats)</text>
+<rect x="423.0" y="404.5" width="50" height="31.9" fill="#b36b00"/>
+<text x="448.0" y="398.5" text-anchor="middle" font-size="11" font-weight="bold" fill="#2a7a2a">+5.68 (beats)</text>
+<text x="420.0" y="490" text-anchor="middle" font-size="12" font-weight="bold">V1: sens 0.17 stable, feasible 3/3 — benchmarks PASS, behavior FAILS</text>
+<rect x="707.0" y="348.5" width="50" height="87.8" fill="#1f5fa8"/>
+<text x="732.0" y="342.5" text-anchor="middle" font-size="11" font-weight="bold" fill="#2a7a2a">+15.65 (beats)</text>
+<rect x="763.0" y="436.3" width="50" height="14.0" fill="#b36b00"/>
+<text x="788.0" y="430.3" text-anchor="middle" font-size="11" font-weight="bold" fill="#c00000">-2.49 (MISS)</text>
+<text x="760.0" y="490" text-anchor="middle" font-size="12" font-weight="bold">V2: sens 0.25 stable, feasible 3/3 — lump MISS (-2.49), frontier 0/1728</text>
+<rect x="250" y="268" width="680" height="202" fill="none" stroke="#000000"/>
+<text x="480.0" y="520" text-anchor="middle" font-size="12" font-weight="bold">(C) frontier: feasible shapes beating BOTH on mean OOS (/1728)</text>
+<rect x="250" y="534.0" width="220.4" height="26.0" fill="#1f5fa8"/>
+<text x="478.4" y="551.0" font-size="12">V1 560/1728</text>
+<rect x="250" y="574.0" width="0.2" height="26.0" fill="#c00000"/>
+<text x="258.2" y="591.0" font-size="12">V2 0/1728 — no shape beats both</text>
+<text x="480.0" y="648" text-anchor="middle" font-size="12" font-weight="bold">VERDICT: NEITHER clears the combined bar — V1 benchmarks pass / behavior fails (unshippable); V2 behavior passes / lump fails (NEGATIVE)</text>
+<text x="480.0" y="668" text-anchor="middle" font-size="11" fill="#333333">oscillation-vs-lump tension now MEASURED (oscillating vote trails lump; lump-beating vote never trades), not theorized</text>
+<text x="480.0" y="686" text-anchor="middle" font-size="11" fill="#333333">Stage-A in-sample (selects nothing); V1 trend-rails selection lineage caveat recorded — owner's call whether it disqualifies (moot: fails oscillation)</text>
+</svg>

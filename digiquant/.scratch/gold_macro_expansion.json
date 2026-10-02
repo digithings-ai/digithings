@@ -1,0 +1,164 @@
+{
+  "candidates": {
+    "seed": {
+      "coverage": 5107,
+      "buy_zone_share": 0.03446250244762091,
+      "mean_risk": 50.25854336302722,
+      "legs": [
+        "dxy",
+        "m2"
+      ]
+    },
+    "kitchen_sink": {
+      "coverage": 732,
+      "buy_zone_share": 0.0,
+      "mean_risk": 52.18381349468602,
+      "legs": [
+        "breakeven_5y",
+        "dxy",
+        "gvz",
+        "hy_oas",
+        "ig_oas",
+        "m2",
+        "nfci",
+        "walcl"
+      ]
+    },
+    "vol_and_liquidity": {
+      "coverage": 4591,
+      "buy_zone_share": 0.000653452406883032,
+      "mean_risk": 51.52531196662012,
+      "legs": [
+        "dxy",
+        "gvz",
+        "m2",
+        "walcl"
+      ]
+    },
+    "credit_stress": {
+      "coverage": 732,
+      "buy_zone_share": 0.004098360655737705,
+      "mean_risk": 55.737931570514796,
+      "legs": [
+        "dxy",
+        "hy_oas",
+        "ig_oas",
+        "m2",
+        "nfci"
+      ]
+    },
+    "inflation_bid": {
+      "coverage": 5107,
+      "buy_zone_share": 0.017231251223810456,
+      "mean_risk": 50.17284776949346,
+      "legs": [
+        "breakeven_5y",
+        "dxy",
+        "m2"
+      ]
+    },
+    "drop_m2": {
+      "coverage": 4591,
+      "buy_zone_share": 0.0008712698758440427,
+      "mean_risk": 52.020086578163856,
+      "legs": [
+        "dxy",
+        "gvz",
+        "walcl"
+      ]
+    },
+    "drop_dxy": {
+      "coverage": 4591,
+      "buy_zone_share": 0.008059246351557395,
+      "mean_risk": 51.15236444714264,
+      "legs": [
+        "gvz",
+        "m2",
+        "walcl"
+      ]
+    }
+  },
+  "correlations": {
+    "m2": {
+      "m2": 1.0,
+      "dxy": -0.101,
+      "gvz": -0.068,
+      "walcl": -0.313,
+      "hy_oas": -0.103,
+      "ig_oas": -0.116,
+      "breakeven_5y": -0.314,
+      "nfci": 0.123
+    },
+    "dxy": {
+      "m2": -0.101,
+      "dxy": 1.0,
+      "gvz": 0.174,
+      "walcl": 0.258,
+      "hy_oas": 0.078,
+      "ig_oas": 0.112,
+      "breakeven_5y": -0.1,
+      "nfci": -0.078
+    },
+    "gvz": {
+      "m2": -0.068,
+      "dxy": 0.174,
+      "gvz": 1.0,
+      "walcl": 0.031,
+      "hy_oas": 0.369,
+      "ig_oas": 0.281,
+      "breakeven_5y": -0.068,
+      "nfci": 0.303
+    },
+    "walcl": {
+      "m2": -0.313,
+      "dxy": 0.258,
+      "gvz": 0.031,
+      "walcl": 1.0,
+      "hy_oas": 0.394,
+      "ig_oas": 0.446,
+      "breakeven_5y": -0.036,
+      "nfci": 0.239
+    },
+    "hy_oas": {
+      "m2": -0.103,
+      "dxy": 0.078,
+      "gvz": 0.369,
+      "walcl": 0.394,
+      "hy_oas": 1.0,
+      "ig_oas": 0.86,
+      "breakeven_5y": -0.194,
+      "nfci": 0.674
+    },
+    "ig_oas": {
+      "m2": -0.116,
+      "dxy": 0.112,
+      "gvz": 0.281,
+      "walcl": 0.446,
+      "hy_oas": 0.86,
+      "ig_oas": 1.0,
+      "breakeven_5y": -0.238,
+      "nfci": 0.635
+    },
+    "breakeven_5y": {
+      "m2": -0.314,
+      "dxy": -0.1,
+      "gvz": -0.068,
+      "walcl": -0.036,
+      "hy_oas": -0.194,
+      "ig_oas": -0.238,
+      "breakeven_5y": 1.0,
+      "nfci": -0.28
+    },
+    "nfci": {
+      "m2": 0.123,
+      "dxy": -0.078,
+      "gvz": 0.303,
+      "walcl": 0.239,
+      "hy_oas": 0.674,
+      "ig_oas": 0.635,
+      "breakeven_5y": -0.28,
+      "nfci": 1.0
+    }
+  },
+  "seed_repro_max_abs_diff": 0.0
+}

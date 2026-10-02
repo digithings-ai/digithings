@@ -16,6 +16,18 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   eth_slapper: { label: "ETH L/S", symbol: "ETH-USD" },
   sol_slapper: { label: "SOL L/S", symbol: "SOL-USD" },
   btc_sdca: { label: "BTC-SDCA", symbol: "BTC-USD" },
+  // TEMPORARY local-preview only (gold v3 proof tearsheet, #4804). REVERT BEFORE ANY MERGE.
+  gold_sdca: { label: "GLD-SDCA (v3 proof)", symbol: "GLD-USD" },
+  // TEMPORARY local-preview only (gold v4 no-trend diagnostic, #4804). REVERT BEFORE ANY MERGE.
+  gold_sdca_v4: { label: "GLD-SDCA (v4 diagnostic)", symbol: "GLD-USD" },
+  // TEMPORARY local-preview only (gold v5 secular diagnostic, #4804). REVERT BEFORE ANY MERGE.
+  gold_sdca_v5: { label: "GLD-SDCA (v5 diagnostic)", symbol: "GLD-USD" },
+  // TEMPORARY local-preview only (gold reselect diagnostic, #4804 Plan 16). REVERT BEFORE ANY MERGE.
+  gold_sdca_v6_reselect: { label: "GLD-SDCA (reselect diagnostic)", symbol: "GLD-USD" },
+  // TEMPORARY local-preview only (gold reselect LIVE-PROOF Nautilus run, #4804 Plan 17 Ruling 6). REVERT BEFORE ANY MERGE.
+  gold_sdca_reselect_live: { label: "GLD-SDCA (reselect live proof)", symbol: "GLD-USD" },
+  // TEMPORARY local-preview only (gold Plan-19 indicator-fit pass list — anchor only, #4804). REVERT BEFORE ANY MERGE.
+  gold_sdca_indicator_fit: { label: "GLD-SDCA (indicator-fit pass list)", symbol: "GLD-USD" },
 };
 
 export const dynamicParams = false;

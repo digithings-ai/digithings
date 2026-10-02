@@ -186,10 +186,18 @@ export function TearsheetView({ slug }: { slug: string }) {
   useEffect(() => {
     let alive = true;
     fetchTearsheet(slug)
-      .then((d) => {
+      .then(async (d) => {
         if (!alive) return;
-        if (d) setData(d);
-        else setErr("Could not load tearsheet data — the live store returned nothing.");
+        if (d) { setData(d); return; }
+        // TEMPORARY local-preview fallback (gold v3 proof JSON in public/). REVERT BEFORE ANY MERGE.
+        try {
+          const res = await fetch(`/strategies/${slug}.json`);
+          if (res.ok) {
+            const fallback = (await res.json()) as typeof d;
+            if (alive && fallback) { setData(fallback); return; }
+          }
+        } catch { /* fall through to the empty-store error */ }
+        if (alive) setErr("Could not load tearsheet data — the live store returned nothing.");
       })
       .catch((e: unknown) => {
         if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);

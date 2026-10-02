@@ -1,0 +1,390 @@
+{
+  "symbol": "GLD-USD",
+  "calendar": "2004-11-18..2026-09-29 (5499 daily bars)",
+  "windows": "SdcaCycleWindows.gold_v1() \u00b145d",
+  "metric": "separation = mean(z | trough windows) - mean(z | peak windows); positive = votes cheap at bottoms (composite_risk.py:57 maps +z to buy)",
+  "metric_read": "higher is better; positive = the z runs HIGHER in the pinned trough windows and LOWER in the pinned peak windows, i.e. it votes cheap at bottoms; abs() is never applied to this metric",
+  "in_sample": true,
+  "in_sample_label": "IN-SAMPLE: separation is fit against the same pinned gold_v1 windows it is measured on (every bar with a valid z) \u2014 it calibrates indicator windows to pinned history and is NOT out-of-sample predictive skill; the holdout stays spent and untouched.",
+  "rule": "base = equal-weight {valuation: 1.0} on rolling90/z1.0 rails (the no-trend anchor). Candidates = every indicator whose individual best-fit separation > 0, ordered by separation descending (frozen order). For each candidate: add at equal weight alongside all kept-so-far, recompute equal-weight aggregate separation; keep if aggregate separation STRICTLY improves, else drop (record the delta for every candidate \u2014 that table IS the deliverable). Report also the pure equal-weight-of-individual-passers aggregate as a cross-check (never used for selection).",
+  "rule_notes": [
+    "Candidate pool = `verdict == 'keep'` from the fits file, which is the rule's 'individual separation > 0' MINUS Ruling 1's degenerate oscillator passes. Filtering on `separation > 0` alone would admit weekly_rsi / weekly_macd, whose passes rest on a dead side \u2014 the very legs Ruling 1 holds out of every keep list.",
+    "Frozen order = individual separation DESC, ties to the SHORTER window, then the name (the same parsimony tie-break Task 1 uses). The kept list is therefore a function of this order, not of a global optimum; greedy_select() refuses a pool whose separations are not non-increasing.",
+    "Kept iff the aggregate separation STRICTLY improves: a delta of exactly 0.0 is a DROP. The aggregate is the SHIPPED equal-weight blend (compute_composite_risk at weight 1.0 == mean(z).clip(-3, 3)), scored with the same frozen separation metric \u2014 no separate aggregate metric exists.",
+    "NULL HAZARD: compute_composite_risk sums with ignore_nulls=False, so a candidate whose warm-up leaves PINNED-window days null removes those days from the scored sample. Every step therefore records scored_days/coverage before and after next to the delta: a shrinking sample is visible and is never silently credited (or blamed) as a vote change.",
+    "The cross-check aggregate (equal weight over anchor + every non-degenerate passer, no greedy pruning) is reported for the owner and NEVER used to select."
+  ],
+  "order": "frozen: individual best-fit separation DESC, ties to the shorter window then the name; the kept list is a function of this order, not of a global optimum",
+  "anchor": {
+    "name": "valuation",
+    "form": "rolling_z",
+    "rolling_window": 90,
+    "rolling_z": 1.0,
+    "trend_rails": "none (no time trend)",
+    "weight": 1.0,
+    "built_by": "resolve_sdca_risk_model('rolling_z', dates=, price=, rolling_window=90, rolling_z=1.0) + build_risk_index(..., extra_indicators=None, valuation_weight=1.0)['valuation_z'] \u2014 shipped code, zero production edits",
+    "aggregate_separation": 3.811273371557444,
+    "scored_days": 410
+  },
+  "aggregate": {
+    "function": "digiquant.strategies.sdca.composite_risk.compute_composite_risk",
+    "weights": {
+      "valuation": 1.0
+    },
+    "clip": [
+      -3.0,
+      3.0
+    ],
+    "null_rule": "ignore_nulls=False \u2014 a null in any member nulls that day, so a candidate's warm-up shrinks the scored sample (see scored_days)"
+  },
+  "candidate_pool": [
+    {
+      "order": 1,
+      "name": "real_rate",
+      "params": {
+        "window": 504
+      },
+      "window_days": 504,
+      "individual_separation": 3.395077579057188
+    },
+    {
+      "order": 2,
+      "name": "sma_band",
+      "params": {
+        "sma_band_window": 378,
+        "sma_band_min_samples": 30
+      },
+      "window_days": 378,
+      "individual_separation": 3.116774679490648
+    },
+    {
+      "order": 3,
+      "name": "gld_slv",
+      "params": {
+        "window": 504
+      },
+      "window_days": 504,
+      "individual_separation": 2.3856563559907604
+    },
+    {
+      "order": 4,
+      "name": "nfci",
+      "params": {
+        "window": 756
+      },
+      "window_days": 756,
+      "individual_separation": 1.5969178066583383
+    },
+    {
+      "order": 5,
+      "name": "walcl",
+      "params": {
+        "roc_days": 90,
+        "window": 180
+      },
+      "window_days": 180,
+      "individual_separation": 1.0244588107612942
+    }
+  ],
+  "kept": [],
+  "kept_params": {},
+  "dropped": [
+    "real_rate",
+    "sma_band",
+    "gld_slv",
+    "nfci",
+    "walcl"
+  ],
+  "dropped_deltas": {
+    "real_rate": {
+      "individual_separation": 3.395077579057188,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 3.603175475307316,
+      "delta": -0.20809789625012787,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "kept": false
+    },
+    "sma_band": {
+      "individual_separation": 3.116774679490648,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 3.464024025524046,
+      "delta": -0.34724934603339763,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "kept": false
+    },
+    "gld_slv": {
+      "individual_separation": 2.3856563559907604,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 3.098464863774102,
+      "delta": -0.7128085077833419,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "kept": false
+    },
+    "nfci": {
+      "individual_separation": 1.5969178066583383,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 2.7040955891078906,
+      "delta": -1.1071777824495532,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "kept": false
+    },
+    "walcl": {
+      "individual_separation": 1.0244588107612942,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 2.417866091159369,
+      "delta": -1.3934072803980748,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "kept": false
+    }
+  },
+  "delta_table": [
+    {
+      "step": 1,
+      "name": "real_rate",
+      "params": {
+        "window": 504
+      },
+      "window_days": 504,
+      "individual_separation": 3.395077579057188,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 3.603175475307316,
+      "delta": -0.20809789625012787,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "coverage_before": 1.0,
+      "coverage_after": 1.0,
+      "kept": false
+    },
+    {
+      "step": 2,
+      "name": "sma_band",
+      "params": {
+        "sma_band_window": 378,
+        "sma_band_min_samples": 30
+      },
+      "window_days": 378,
+      "individual_separation": 3.116774679490648,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 3.464024025524046,
+      "delta": -0.34724934603339763,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "coverage_before": 1.0,
+      "coverage_after": 1.0,
+      "kept": false
+    },
+    {
+      "step": 3,
+      "name": "gld_slv",
+      "params": {
+        "window": 504
+      },
+      "window_days": 504,
+      "individual_separation": 2.3856563559907604,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 3.098464863774102,
+      "delta": -0.7128085077833419,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "coverage_before": 1.0,
+      "coverage_after": 1.0,
+      "kept": false
+    },
+    {
+      "step": 4,
+      "name": "nfci",
+      "params": {
+        "window": 756
+      },
+      "window_days": 756,
+      "individual_separation": 1.5969178066583383,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 2.7040955891078906,
+      "delta": -1.1071777824495532,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "coverage_before": 1.0,
+      "coverage_after": 1.0,
+      "kept": false
+    },
+    {
+      "step": 5,
+      "name": "walcl",
+      "params": {
+        "roc_days": 90,
+        "window": 180
+      },
+      "window_days": 180,
+      "individual_separation": 1.0244588107612942,
+      "aggregate_before": 3.811273371557444,
+      "aggregate_after": 2.417866091159369,
+      "delta": -1.3934072803980748,
+      "scored_days_before": 410,
+      "scored_days_after": 410,
+      "days_delta": 0,
+      "coverage_before": 1.0,
+      "coverage_after": 1.0,
+      "kept": false
+    }
+  ],
+  "aggregate_trajectory": [
+    {
+      "step": 0,
+      "added": null,
+      "kept": null,
+      "members": [
+        "valuation"
+      ],
+      "separation": 3.811273371557444,
+      "scored_days": 410
+    },
+    {
+      "step": 1,
+      "added": "real_rate",
+      "kept": false,
+      "members": [
+        "valuation"
+      ],
+      "separation_if_kept": 3.603175475307316,
+      "separation": 3.811273371557444,
+      "scored_days": 410
+    },
+    {
+      "step": 2,
+      "added": "sma_band",
+      "kept": false,
+      "members": [
+        "valuation"
+      ],
+      "separation_if_kept": 3.464024025524046,
+      "separation": 3.811273371557444,
+      "scored_days": 410
+    },
+    {
+      "step": 3,
+      "added": "gld_slv",
+      "kept": false,
+      "members": [
+        "valuation"
+      ],
+      "separation_if_kept": 3.098464863774102,
+      "separation": 3.811273371557444,
+      "scored_days": 410
+    },
+    {
+      "step": 4,
+      "added": "nfci",
+      "kept": false,
+      "members": [
+        "valuation"
+      ],
+      "separation_if_kept": 2.7040955891078906,
+      "separation": 3.811273371557444,
+      "scored_days": 410
+    },
+    {
+      "step": 5,
+      "added": "walcl",
+      "kept": false,
+      "members": [
+        "valuation"
+      ],
+      "separation_if_kept": 2.417866091159369,
+      "separation": 3.811273371557444,
+      "scored_days": 410
+    }
+  ],
+  "final": {
+    "members": [
+      "valuation"
+    ],
+    "separation": 3.811273371557444
+  },
+  "cross_check": {
+    "label": "cross-check: equal weight over the anchor + EVERY non-degenerate passer at once (no greedy pruning). Reported only \u2014 it never feeds a keep/drop decision.",
+    "members": [
+      "valuation",
+      "real_rate",
+      "sma_band",
+      "gld_slv",
+      "nfci",
+      "walcl"
+    ],
+    "separation": 2.5550264339192785,
+    "mean_peak_z": -1.0475492374956539,
+    "mean_trough_z": 1.5074771964236247,
+    "scored_days": 410,
+    "coverage": 1.0,
+    "used_for_selection": false
+  },
+  "degenerate_owner_review": [
+    {
+      "name": "weekly_rsi",
+      "params": {
+        "rsi_length": 14
+      },
+      "window_days": 105,
+      "separation": 0.44201974082299134,
+      "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
+    },
+    {
+      "name": "weekly_macd",
+      "params": {
+        "macd_fast": 8,
+        "macd_slow": 34,
+        "macd_z_window": 90
+      },
+      "window_days": 90,
+      "separation": 0.3476715149947736,
+      "note": "positive separation resting on a dead side \u2014 EXCLUDED from the greedy pool; an explicit owner look is required before any keep list includes it"
+    }
+  ],
+  "not_in_pool": {
+    "drop": [
+      {
+        "name": "uup",
+        "separation": -1.8827082130090245
+      },
+      {
+        "name": "gvz",
+        "separation": -0.16102058668693703
+      },
+      {
+        "name": "breakeven_5y",
+        "separation": -0.9026245202216832
+      },
+      {
+        "name": "gdx_gld",
+        "separation": -0.5150401804873594
+      },
+      {
+        "name": "m2",
+        "separation": -1.0788983750022396
+      }
+    ],
+    "unscoreable": [
+      {
+        "name": "hy_oas",
+        "reason": "no valid z in any pinned trough window (peak days 31, trough days 0) \u2014 separation needs both sides; trough side unscoreable"
+      },
+      {
+        "name": "ig_oas",
+        "reason": "no valid z in any pinned trough window (peak days 31, trough days 0) \u2014 separation needs both sides; trough side unscoreable"
+      }
+    ]
+  }
+}

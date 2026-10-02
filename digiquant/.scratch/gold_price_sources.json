@@ -1,0 +1,32 @@
+{
+  "SLV": {
+    "file": "SLV.csv",
+    "rows": 5137,
+    "first": "2006-04-28",
+    "last": "2026-09-29"
+  },
+  "TLT": {
+    "file": "TLT.csv",
+    "rows": 5534,
+    "first": "2004-09-30",
+    "last": "2026-09-29"
+  },
+  "TIP": {
+    "file": "TIP.csv",
+    "rows": 5534,
+    "first": "2004-09-30",
+    "last": "2026-09-29"
+  },
+  "UUP": {
+    "file": "UUP.csv",
+    "rows": 4927,
+    "first": "2007-03-01",
+    "last": "2026-09-29"
+  },
+  "CPER": {
+    "file": "CPER.csv",
+    "rows": 3738,
+    "first": "2011-11-15",
+    "last": "2026-09-29"
+  }
+}

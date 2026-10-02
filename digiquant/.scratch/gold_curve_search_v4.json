@@ -1,0 +1,90 @@
+{
+  "weights": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "rs_eth": 0.0,
+    "dxy": 0.0,
+    "uup": 0.5,
+    "gvz": 0.0,
+    "walcl": 0.0,
+    "hy_oas": 0.0,
+    "ig_oas": 0.0,
+    "breakeven_5y": 0.0,
+    "nfci": 0.0,
+    "gdx_gld": 0.0,
+    "gld_slv": 0.0,
+    "weekly_rsi": 0.25,
+    "weekly_macd": 0.25,
+    "sma_band": 0.25
+  },
+  "search": {
+    "num_shapes": 1728,
+    "num_evaluations": 6912,
+    "num_feasible": 1080,
+    "worst_vs_flat_dca_pct": -5.260947947160865,
+    "shape": {
+      "buy_max_rate": 35.0,
+      "buy_knee_risk": 45.0,
+      "sell_knee_risk": 65.0,
+      "sell_max_rate": 10.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0,
+      "buy_mid_knee_risk": null,
+      "buy_mid_curvature": 1.0,
+      "sell_mid_knee_risk": 85.0,
+      "sell_mid_curvature": 1.0
+    }
+  },
+  "gate_projection_drops_mid_tier": true,
+  "gated_shape": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 45.0,
+    "sell_knee_risk": 65.0,
+    "sell_max_rate": 10.0,
+    "buy_curvature": 1.0,
+    "sell_curvature": 2.0,
+    "buy_mid_knee_risk": null,
+    "buy_mid_curvature": 1.0,
+    "sell_mid_knee_risk": null,
+    "sell_mid_curvature": 1.0
+  },
+  "gate": {
+    "mean_oos_vs_flat_dca_pct": 10.993768811689142,
+    "beats_flat_dca_oos": true,
+    "per_fold": [
+      {
+        "fold": 0,
+        "oos_vs_flat_dca_pct": 23.75738502577476,
+        "oos_capital_deployed_pct": 99.99999927682919,
+        "oos_capital_deployed_peak_pct": 99.99999927682919,
+        "max_drawdown_pct": 35.89463307975376,
+        "feasible": true
+      },
+      {
+        "fold": 1,
+        "oos_vs_flat_dca_pct": -1.1328233261701293,
+        "oos_capital_deployed_pct": 98.22510931157112,
+        "oos_capital_deployed_peak_pct": 99.99985274379955,
+        "max_drawdown_pct": 21.469336747665885,
+        "feasible": true
+      },
+      {
+        "fold": 2,
+        "oos_vs_flat_dca_pct": 10.356744735462797,
+        "oos_capital_deployed_pct": 2.878585868039925,
+        "oos_capital_deployed_peak_pct": 99.99999722239357,
+        "max_drawdown_pct": 14.555518544229296,
+        "feasible": true
+      }
+    ],
+    "sensitivity_stable": false,
+    "sensitivity_max_abs_delta": 2.607062312155735,
+    "sensitivity_neighbor_count": 49,
+    "sensitivity_worst_neighbor_key": "buy_knee_risk:+5%",
+    "evaluation": "causal_rolling",
+    "rolling_window": 90,
+    "rolling_z": 1.0,
+    "engine_path_used": false,
+    "holdout": "absent \u2014 tail unscored in the causal re-gate"
+  }
+}
