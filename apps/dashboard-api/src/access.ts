@@ -82,7 +82,6 @@ export const DESKS: DeskDef[] = [
       { path: "/strategies/deploy", label: "Deploy", status: "wip", tier: "desk", blocks: [b("st-targets", "/strategies/targets"), b("st-deploy-flow", "/strategies/deploy-flow"), b("st-deploy-draft", "/strategies/default/deploy-draft")] },
       // Coming soon: listed in the sidebar, no blocks until built.
       { path: "/tools/terminal", label: "Terminal", status: "soon", blocks: [] },
-      { path: "/tools/luxalgo", label: "LuxAlgo", status: "soon", blocks: [] },
       { path: "/tools/charts", label: "Charts", status: "soon", blocks: [] },
       {
         path: "/tools/chat", label: "digichat", status: "wip", ...PRO,

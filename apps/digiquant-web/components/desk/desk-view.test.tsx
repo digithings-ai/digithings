@@ -3,8 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
 import { STUB_READ, presentResponse } from "../../../../clients/digiquant-tui/src/read";
 import { DeskView } from "./desk-view";
-import { deskHref, deskPathFromSlug, deskStaticParams, isDeskPath } from "./paths";
-import { WEB_SLOTS } from "./web-slots";
+import { deskPathFromSlug, deskStaticParams, isDeskPath } from "./paths";
 
 /** `next/link` drops a trailing slash unless the Next config is loaded. */
 function hasHref(html: string, href: string): boolean {
@@ -39,11 +38,12 @@ describe("terminal desk", () => {
       <DeskView path="/brief" reads={{ brief: stub }} />,
     );
     expect(html).toContain('aria-label="Pages"');
-    expect(hasHref(html, deskHref("/portfolio"))).toBe(true);
-    expect(hasHref(html, deskHref("/pipeline"))).toBe(true);
-    expect(hasHref(html, deskHref("/fx/settings"))).toBe(true);
+    expect(html).toContain('class="rail"');
+    expect(html).toContain('aria-label="digiquant"');
+    expect(html).toContain("desk: —");
     expect(hasHref(html, "/")).toBe(true);
-    for (const slot of WEB_SLOTS) expect(hasHref(html, deskHref(slot.path))).toBe(true);
+    expect(html).not.toContain("luxalgo");
+    expect(html).not.toContain("LuxAlgo");
     expect(html).toContain("Brief · scoreboard");
     expect(html).toContain(STUB_READ);
     expect(html).not.toContain("99.909");

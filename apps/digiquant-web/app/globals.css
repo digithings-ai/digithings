@@ -235,3 +235,250 @@ body {
   color: var(--ink);
   transform: translateY(2px);
 }
+
+/* Desk path field. Same chrome as the terminal draft: .cmd / .cmd-in / .cmd-list.
+   --win, --wash, and --mono are local because this site does not define them.
+   The pointer on a row comes from the kit Button, not from a cursor rule here. */
+.cmd {
+  --win: var(--term-bg);
+  --wash: var(--term-fill);
+  --mono: var(--font-mono);
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  flex: 0 1 340px;
+  min-width: 0;
+}
+.cmd-in {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  height: 20px;
+  padding: 0;
+  outline: 0;
+}
+.cmd-in:focus,
+.cmd-in:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  padding-left: 6px;
+}
+.cmd-list {
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  right: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--win);
+  border: 1px solid var(--hair-strong);
+  z-index: 40;
+  font: 11px/1 var(--mono);
+}
+.cmd-list li {
+  display: flex;
+}
+.cmd-list li.on {
+  background: var(--wash);
+  color: var(--accent);
+}
+.cmd-list .cmd-hit {
+  display: flex;
+  width: 100%;
+  height: auto;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  box-shadow: none;
+}
+.cmd .mute { color: var(--ink-mute); }
+.cmd .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Desk folder sidebar and desk selector, ported from the terminal draft.
+   --win, --wash, and --mono are local because this site does not define them.
+   Pointers stay on the kit Button. These rules do not set cursor. */
+.rail,
+.desk-pick,
+.desk-list {
+  --win: var(--term-bg);
+  --wash: var(--term-fill);
+  --mono: var(--font-mono);
+}
+.rail {
+  position: relative;
+  width: 200px;
+  flex: none;
+  background: var(--win);
+  border-right: 1px solid var(--hair-strong);
+  overflow: auto;
+  min-height: 0;
+  min-width: 0;
+}
+.rail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hair);
+  font: 10.5px/1 var(--mono);
+  color: var(--ink-mute);
+}
+.nav-title {
+  font: 10.5px/1 var(--mono);
+  color: var(--ink-mute);
+  padding: 10px 10px 4px;
+}
+.nav-row {
+  display: flex;
+  align-items: baseline;
+  font: 11.5px/1.5 var(--mono);
+}
+.nav-row.kid { padding-left: 16px; }
+.nav-tri {
+  flex: none;
+  width: 22px;
+  min-width: 22px;
+  height: auto;
+  margin: 0;
+  padding: 3px 0 3px 10px;
+  justify-content: flex-start;
+  text-align: left;
+  font: 10px/1.5 var(--mono);
+  font-weight: 400;
+  color: var(--ink-mute);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.nav-tri.leaf { opacity: 0.5; }
+.nav-tri:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.nav-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px 3px 2px;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+.nav-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-link:hover { color: var(--ink); background: var(--wash); }
+.nav-link:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.nav-link.on { color: var(--accent); }
+.nav-link.locked .nav-path { color: var(--ink-mute); }
+.nav-tag {
+  margin-left: auto;
+  font: 10px/1 var(--mono);
+  color: var(--ink-mute);
+}
+.nav-empty {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--ink-mute);
+  font: 11px/1.4 var(--mono);
+}
+.desk-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font: 11px/1 var(--mono);
+  white-space: nowrap;
+}
+.desk-pick .desk-toggle {
+  height: auto;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--hair-strong);
+}
+.desk-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.desk-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--win);
+  border: 1px solid var(--hair-strong);
+}
+.desk-list .desk-hit {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: 11px/1.3 var(--mono);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.desk-list .desk-hit:hover:not(:disabled),
+.desk-list .desk-hit:focus-visible {
+  background: var(--wash);
+  color: var(--accent);
+  outline: 0;
+}
+.desk-list .desk-hit:disabled { color: var(--ink-mute); }
+.desk-list .desk-hit[aria-current="true"] .desk-name::before { content: "▸ "; color: var(--accent); }
+.desk-name { display: flex; gap: 8px; }
+.desk-blurb {
+  display: block;
+  color: var(--ink-mute);
+  font-size: 10px;
+  margin-top: 3px;
+}
