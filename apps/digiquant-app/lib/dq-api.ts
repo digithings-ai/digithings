@@ -5,7 +5,8 @@
 export type Envelope<T> = {
   data: T;
   as_of: string | null;
-  provenance: { source: string; marks: 'stored' | 'market_api' | 'unavailable' };
+  retrieval_pin: string | null;
+  provenance: { source: string; marks: 'stored' | 'market_api' | 'unavailable'; tip_date?: string | null };
 };
 
 export type BookRow = {
@@ -84,26 +85,39 @@ export type Ledger = {
   next_cursor: string | null;
 };
 
-const base = () => (process.env.NEXT_PUBLIC_DQ_API_URL ?? '').replace(/\/+$/, '');
+/** Local `wrangler dev` (dashboard-api). Override with NEXT_PUBLIC_DQ_API_URL. */
+const DEFAULT_API = 'http://127.0.0.1:8788';
+const base = () => {
+  const raw = (process.env.NEXT_PUBLIC_DQ_API_URL ?? '').trim();
+  return (raw || DEFAULT_API).replace(/\/+$/, '');
+};
+
+async function failText(res: Response, route: string): Promise<string> {
+  let detail = '';
+  try {
+    const body = (await res.json()) as { error?: { message?: string } };
+    if (body?.error?.message) detail = `: ${body.error.message}`;
+  } catch { /* status is enough when the body is not JSON */ }
+  return `${route} failed (${res.status})${detail}`;
+}
 
 export async function dqGet<T>(route: string): Promise<Envelope<T>> {
-  if (!base()) throw new Error('NEXT_PUBLIC_DQ_API_URL is not set');
   const res = await fetch(`${base()}${route}`);
-  if (!res.ok) throw new Error(`${route} failed (${res.status})`);
+  if (!res.ok) throw new Error(await failText(res, route));
   const body: unknown = await res.json();
   if (!body || typeof body !== 'object' || (body as { data?: unknown }).data == null) throw new Error(`${route} returned no data`);
-  return body as Envelope<T>;
+  const env = body as Envelope<T>;
+  return { ...env, retrieval_pin: env.retrieval_pin ?? null };
 }
 
 /** Write route (PUT/POST/DELETE). Throws with the route and status; never pretends a write succeeded. */
 export async function dqSend<T = unknown>(method: 'PUT' | 'POST' | 'DELETE', route: string, body?: unknown): Promise<T | null> {
-  if (!base()) throw new Error('NEXT_PUBLIC_DQ_API_URL is not set');
   const res = await fetch(`${base()}${route}`, {
     method,
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${method} ${route} failed (${res.status})`);
+  if (!res.ok) throw new Error(await failText(res, `${method} ${route}`));
   return res.status === 204 ? null : ((await res.json()) as T);
 }
 

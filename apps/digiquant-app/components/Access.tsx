@@ -8,7 +8,6 @@ import type { NavGroup, NavNode } from '@/lib/nav';
 import { StateBlock } from './ui';
 
 const DESK_KEY = 'dq-desk';
-const AS_KEY = 'dq-dev-as';
 
 type Ctx = {
   manifest: Manifest | null;
@@ -25,9 +24,8 @@ export const useAccess = () => useContext(AccessCtx);
 
 /**
  * Loads the caller's access manifest once and owns the active desk. Fails closed:
- * if the manifest cannot be read, nothing is offered. `?as=<caller>` (dev only)
- * is forwarded so a mock API can impersonate a tier or group; the real worker
- * ignores it and takes identity from the edge.
+ * if the manifest cannot be read, nothing is offered. Identity comes from the
+ * worker (edge headers, or the dev caller). The app does not impersonate a tier.
  */
 export function AccessProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname() || '/';
@@ -36,14 +34,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const [deskId, setDeskId] = useState<string | null>(null);
 
   useEffect(() => {
-    let as = '';
-    try {
-      const q = new URLSearchParams(window.location.search).get('as');
-      if (q !== null) { if (q) sessionStorage.setItem(AS_KEY, q); else sessionStorage.removeItem(AS_KEY); }
-      as = sessionStorage.getItem(AS_KEY) ?? '';
-      setDeskId(localStorage.getItem(DESK_KEY));
-    } catch { /* storage unavailable */ }
-    dqGet<Manifest>(`/access/manifest${as ? `?as=${encodeURIComponent(as)}` : ''}`)
+    try { setDeskId(localStorage.getItem(DESK_KEY)); } catch { /* storage unavailable */ }
+    dqGet<Manifest>('/access/manifest')
       .then((env) => setManifest(env.data))
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'failed'));
   }, []);
