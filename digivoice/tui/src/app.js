@@ -19,10 +19,23 @@ function paintCells(cells) {
   return new StyledText(chunks)
 }
 
-function rowLabel(row, selected) {
-  const mark = selected ? "[*]" : "[ ]"
-  const meta = row.meta ? `  ${row.meta}` : ""
-  return `${mark} ${row.action}${meta}`
+const ROW_PAD = "    "
+
+function mutedColor(truecolor) {
+  if (truecolor) return RGBA.fromInts(175, 175, 175)
+  return RGBA.fromIndex(145)
+}
+
+function mutedLine(text, truecolor) {
+  return new StyledText([fg(mutedColor(truecolor))(text)])
+}
+
+function rowExtras(row) {
+  const extras = []
+  if (row.shortcut) extras.push(String(row.shortcut))
+  if (row.path) extras.push(String(row.path))
+  if (row.meta) extras.push(String(row.meta))
+  return extras
 }
 
 export function onHangup(session) {
@@ -56,23 +69,37 @@ export function mountDigivoice(renderer, session, options = {}) {
     flexDirection: "column",
     alignItems: "center",
   })
+  const topSpacer = new BoxRenderable(renderer, { flexGrow: 1 })
   const heroBox = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "center" })
   const heroLines = Array.from({ length: 5 }, () => new TextRenderable(renderer, { content: "" }))
   for (const line of heroLines) heroBox.add(line)
+  const bottomWrap = new BoxRenderable(renderer, {
+    flexGrow: 1,
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "center",
+  })
+  const column = new BoxRenderable(renderer, {
+    flexDirection: "column",
+    alignItems: "flex-start",
+  })
   const gap = new BoxRenderable(renderer, { height: HERO_GAP })
-  const contextBox = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "center" })
+  const contextBox = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
   const list = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
   const pager = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
   const footer = new TextRenderable(renderer, { content: FOOTER })
   footer.onMouseDown = () => {
     goBack()
   }
+  column.add(contextBox)
+  column.add(list)
+  column.add(pager)
+  column.add(footer)
+  bottomWrap.add(gap)
+  bottomWrap.add(column)
+  root.add(topSpacer)
   root.add(heroBox)
-  root.add(gap)
-  root.add(contextBox)
-  root.add(list)
-  root.add(pager)
-  root.add(footer)
+  root.add(bottomWrap)
   renderer.root.add(root)
 
   const rowNodes = []
@@ -98,20 +125,45 @@ export function mountDigivoice(renderer, session, options = {}) {
     nodes.push(node)
   }
 
+  function contextLines() {
+    if (!screen) return []
+    if (screen.note) return [screen.note]
+    if ((screen.path || "/") === "/") return screen.context || []
+    return []
+  }
+
   function renderList() {
     clear(list, rowNodes)
     clear(pager, pageNodes)
     clear(contextBox, contextNodes)
     if (!screen) return
-    for (const line of screen.context || []) {
-      addLine(contextBox, contextNodes, line)
+    for (const line of contextLines()) {
+      addLine(contextBox, contextNodes, mutedLine(line, truecolor))
     }
     const rows = screen.rows || []
     rows.forEach((row, index) => {
-      addLine(list, rowNodes, rowLabel(row, index === screen.selected), () => {
+      const selected = index === screen.selected
+      const mark = selected ? "[*]" : "[ ]"
+      const block = new BoxRenderable(renderer, {
+        flexDirection: "column",
+        alignItems: "flex-start",
+      })
+      const press = () => {
         screen.selected = index
         chooseCurrent()
-      })
+      }
+      const action = new TextRenderable(renderer, { content: `${mark} ${row.action}` })
+      action.onMouseDown = press
+      block.add(action)
+      for (const extra of rowExtras(row)) {
+        const line = new TextRenderable(renderer, {
+          content: mutedLine(`${ROW_PAD}${extra}`, truecolor),
+        })
+        line.onMouseDown = press
+        block.add(line)
+      }
+      list.add(block)
+      rowNodes.push(block)
     })
     if (screen.paging) {
       addLine(pager, pageNodes, "← previous", () => pageBy(-1))
@@ -168,7 +220,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       paging: Boolean(opened.paging),
       page: opened.page || 1,
       pages: opened.pages || 1,
-      context: boot.context || [],
+      context: (opened.path || boot.start || "/") === "/" ? boot.context || [] : [],
       kind: opened.path === "/doctor" ? "doctor" : "list",
       exitCode: opened.ok === false ? 1 : 0,
     }
@@ -192,7 +244,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       })
       confirmIndex = null
       if (saved.error) {
-        screen = { ...screen, context: [saved.error] }
+        screen = { ...screen, note: saved.error, context: [] }
         renderList()
         return
       }
@@ -213,11 +265,26 @@ export function mountDigivoice(renderer, session, options = {}) {
         title: "Take",
         path: "/history",
         paging: false,
-        context: [row.action, row.meta].filter(Boolean),
+        context: [],
+        note: "",
         rows: [
-          { action: "Copy", path: "/history/copy", meta: "c", kind: "copy", index: row.index },
-          { action: "Delete", path: "/history/delete", meta: "d", kind: "delete", index: row.index },
-          { action: "Back", path: "/history", meta: "", kind: "back" },
+          {
+            action: "Copy",
+            path: "/history/copy",
+            shortcut: "c",
+            meta: "",
+            kind: "copy",
+            index: row.index,
+          },
+          {
+            action: "Delete",
+            path: "/history/delete",
+            shortcut: "d",
+            meta: "",
+            kind: "delete",
+            index: row.index,
+          },
+          { action: "Back", path: "/history", shortcut: "esc", meta: "", kind: "back" },
         ],
         selected: 0,
       }
@@ -250,28 +317,36 @@ export function mountDigivoice(renderer, session, options = {}) {
     if (row.path === "/history" || row.action === "History") {
       const result = await session.call({ op: "history", page: 1 })
       stack.push({ ...screen })
-      screen = { ...result, selected: 0, context: screen.context, kind: "history" }
+      screen = { ...result, selected: 0, context: [], note: "", kind: "history" }
       renderList()
       return
     }
     if (row.path === "/system" || row.action === "System") {
       const result = await session.call({ op: "system" })
       stack.push({ ...screen })
-      screen = { ...screen, ...result, selected: 0, kind: "system" }
+      screen = { ...screen, ...result, selected: 0, context: [], note: "", kind: "system" }
       renderList()
       return
     }
     if (row.path === "/doctor" || row.action === "Doctor") {
       const result = await session.call({ op: "doctor" })
       stack.push({ ...screen })
-      screen = { ...screen, ...result, selected: 0, kind: "doctor", exitCode: result.ok ? 0 : 1 }
+      screen = {
+        ...screen,
+        ...result,
+        selected: 0,
+        context: [],
+        note: "",
+        kind: "doctor",
+        exitCode: result.ok ? 0 : 1,
+      }
       renderList()
       return
     }
     if (row.path === "/system/logs" || row.action === "Logs") {
       const result = await session.call({ op: "logs" })
       stack.push({ ...screen })
-      screen = { ...screen, ...result, selected: 0, kind: "logs" }
+      screen = { ...screen, ...result, selected: 0, context: [], note: "", kind: "logs" }
       renderList()
       return
     }
@@ -288,7 +363,7 @@ export function mountDigivoice(renderer, session, options = {}) {
         path: "/reset",
         rows: [
           { action: "Reset", path: "/reset", meta: "", kind: "reset-confirm" },
-          { action: "Back", path: "/system", meta: "", kind: "back" },
+          { action: "Back", path: "/system", shortcut: "esc", meta: "", kind: "back" },
         ],
         selected: 0,
         paging: false,
@@ -316,7 +391,7 @@ export function mountDigivoice(renderer, session, options = {}) {
         path: "/restart",
         rows: [
           { action: "Restart", path: "/restart", meta: "", kind: "restart-confirm" },
-          { action: "Back", path: "/system", meta: "", kind: "back" },
+          { action: "Back", path: "/system", shortcut: "esc", meta: "", kind: "back" },
         ],
         selected: 0,
         paging: false,
@@ -326,7 +401,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     if (row.path === "/update" || row.action === "Update") {
       const result = await session.call({ op: "update" })
-      screen = { ...screen, context: result.note ? [result.note] : [] }
+      screen = { ...screen, note: result.note || "", context: [] }
       renderList()
       return
     }
@@ -351,6 +426,8 @@ export function mountDigivoice(renderer, session, options = {}) {
       selected: 0,
       paging: false,
       kind: "settings",
+      context: [],
+      note: "",
     }
     renderList()
   }

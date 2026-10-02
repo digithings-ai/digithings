@@ -85,7 +85,7 @@ test("wordmark is five rows with gap 2 and one color mode", () => {
 })
 
 test("home shows the footer and selection, and esc does not quit", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 32 })
+  const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session()
   try {
     const app = mountDigivoice(setup.renderer, api, {
@@ -97,6 +97,14 @@ test("home shows the footer and selection, and esc does not quit", async () => {
     const frame = await setup.waitForFrame((value) => value.includes("History") && value.includes(FOOTER))
     assert.match(frame, /\[\*\] History/)
     assert.match(frame, /\[ \] Settings/)
+    const lines = frame.split("\n")
+    const historyAt = lines.findIndex((line) => line.includes("[*] History"))
+    assert.ok(historyAt > 4, "the hero sits above the menu, not on the first row")
+    assert.ok(lines[historyAt + 1].includes("/history"))
+    const settingsAt = lines.findIndex((line) => line.includes("[ ] Settings"))
+    assert.ok(lines[settingsAt + 1].includes("/settings"))
+    const glyphAt = lines.findIndex((line) => /[█▀▄]/.test(line))
+    assert.ok(glyphAt > 0, "the wordmark is not pinned to the top row")
     assert.doesNotMatch(frame, /teal|waveform/i)
     setup.mockInput.pressArrow("down")
     await setup.renderOnce()
@@ -113,7 +121,7 @@ test("home shows the footer and selection, and esc does not quit", async () => {
 })
 
 test("a click opens settings", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 32 })
+  const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session()
   try {
     const app = mountDigivoice(setup.renderer, api, {
@@ -137,7 +145,7 @@ test("a click opens settings", async () => {
 })
 
 test("enter on quit asks the bridge to stop", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 32 })
+  const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session()
   try {
     const app = mountDigivoice(setup.renderer, api, {
@@ -167,7 +175,7 @@ const SPEECH_ROWS = [
 ]
 
 test("a settings choice returns to the same row", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 32 })
+  const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     rows(request) {
       if (request.path === "/settings") {
@@ -222,7 +230,7 @@ test("a settings choice returns to the same row", async () => {
 })
 
 test("esc from a download confirm returns to that model", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 32 })
+  const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     rows(request) {
       if (request.path === "/settings/speech/model") {
@@ -295,7 +303,7 @@ test("esc from a download confirm returns to that model", async () => {
 })
 
 test("restart confirms before it asks to re-exec", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 32 })
+  const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     system() {
       return {
@@ -339,6 +347,121 @@ test("restart confirms before it asks to re-exec", async () => {
     assert.equal(app.restarting, true)
     assert.ok(api.calls.some((call) => call.op === "restart"))
     assert.ok(!api.calls.some((call) => call.op === "quit"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("history, settings, system, logs, and doctor keep the bracketed row", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    history() {
+      return {
+        title: "History",
+        path: "/history",
+        paging: false,
+        rows: [
+          {
+            action: "ship it",
+            path: "/history",
+            meta: "2026-10-02T12:00:00Z",
+            kind: "take",
+            index: 0,
+          },
+        ],
+      }
+    },
+    doctor() {
+      return {
+        title: "Doctor",
+        path: "/doctor",
+        ok: true,
+        rows: [{ action: "whisper-cli", path: "/doctor", meta: "ok", kind: "note" }],
+      }
+    },
+    logs() {
+      return {
+        title: "Logs",
+        path: "/system/logs",
+        rows: [{ action: "ready", path: "/system/logs", meta: "", kind: "note" }],
+      }
+    },
+    system() {
+      return {
+        title: "System",
+        path: "/system",
+        rows: [
+          { action: "Doctor", path: "/doctor", meta: "", kind: "dir", name: "Doctor" },
+          { action: "Logs", path: "/system/logs", meta: "", kind: "dir", name: "Logs" },
+        ],
+      }
+    },
+    rows(request) {
+      return {
+        path: request.path,
+        rows: [
+          {
+            action: "speech",
+            path: "/settings/speech",
+            meta: "",
+            kind: "dir",
+            name: "speech",
+          },
+        ],
+      }
+    },
+  })
+  try {
+    const app = mountDigivoice(setup.renderer, api, {
+      truecolor: false,
+      tMs: BUILD_MS,
+      animate: false,
+      cols: 100,
+    })
+    await setup.waitForFrame((value) => value.includes("[*] History"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("ship it"))
+    let frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] ship it/)
+    assert.match(frame, /\/history/)
+    assert.match(frame, /2026-10-02T12:00:00Z/)
+    setup.mockInput.pressEscape()
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    await setup.renderOnce()
+    await setup.waitForFrame((value) => value.includes("[*] History") && value.includes("/history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("paste") || value.includes("speech"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] speech/)
+    assert.match(frame, /\/settings\/speech/)
+    setup.mockInput.pressEscape()
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    await setup.renderOnce()
+    await setup.waitForFrame((value) => value.includes("[ ] System"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("[*] Doctor"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] Doctor/)
+    assert.match(frame, /\/doctor/)
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("whisper-cli"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] whisper-cli/)
+    assert.match(frame, /\/doctor/)
+    assert.match(frame, /\bok\b/)
+    setup.mockInput.pressEscape()
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    await setup.renderOnce()
+    await setup.waitForFrame((value) => value.includes("Logs"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("ready"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] ready/)
+    assert.match(frame, /\/system\/logs/)
     app.destroy()
   } finally {
     setup.renderer.destroy()
