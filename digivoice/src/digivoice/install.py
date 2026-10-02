@@ -266,7 +266,9 @@ def _install_opentui(
     bun = _find_bun(home, probe)
     if not bun:
         raise InstallError("bun is not available")
-    result = runner([bun, "--cwd", str(tui_root), "install"], timeout=INSTALL_TIMEOUT)
+    # `install` is the bun subcommand. `--cwd` after it selects the package.
+    # Before it, Bun 1.4.2 treats `install` as a missing script name.
+    result = runner([bun, "install", "--cwd", str(tui_root)], timeout=INSTALL_TIMEOUT)
     if result.code != 0:
         reason = error_tail(result.stderr) or f"exit {result.code}"
         raise InstallError(f"bun install failed ({reason})")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import tarfile
 import zipfile
 from pathlib import Path
@@ -21,6 +22,7 @@ from digivoice.install import (
 )
 from digivoice.models import InstallReport, InstallStamp, InstallStep
 from digivoice.paths import DEFAULT_MODEL_FILE, vendor_dir
+from digivoice.reload import reload_hammerspoon
 
 from tests.dvo.fakes import FakeCall, FakeProbe, FakeReply, FakeRunner
 
@@ -94,7 +96,10 @@ def _tui(path: Path) -> Path:
 
 def _runner(tui: Path) -> FakeRunner:
     def install_opentui(call: FakeCall) -> FakeReply:
-        cwd = Path(call.argv[call.argv.index("--cwd") + 1])
+        assert call.argv[1] == "install"
+        flag = call.argv.index("--cwd")
+        assert flag > 1
+        cwd = Path(call.argv[flag + 1])
         assert cwd == tui
         (cwd / "node_modules" / "@opentui" / "core").mkdir(parents=True)
         return FakeReply()
@@ -598,6 +603,73 @@ def test_reload_failure_keeps_the_new_adapter(tmp_path: Path) -> None:
         .read_text(encoding="utf-8")
         .startswith("-- status")
     )
+
+
+def test_opentui_argv_is_package_install_not_a_script(tmp_path: Path) -> None:
+    tui = _tui(tmp_path / "tui")
+    package = json.loads((tui / "package.json").read_text(encoding="utf-8"))
+    scripts = package.get("scripts", {})
+    assert "install" not in scripts
+    seen: list[list[str]] = []
+
+    def install_opentui(call: FakeCall) -> FakeReply:
+        seen.append(call.argv)
+        (tui / "node_modules" / "@opentui" / "core").mkdir(parents=True)
+        return FakeReply()
+
+    report, _fetched = _install(
+        tmp_path / "home",
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        runner=FakeRunner({"bun": install_opentui}),
+        adapter_source=_lua_tree(tmp_path / "lua"),
+    )
+    assert _step(report, "opentui").status == "installed"
+    argv = seen[0]
+    assert argv[1] == "install"
+    assert argv[2] == "--cwd"
+    assert Path(argv[3]) == tui
+    assert argv[-1] != "install"
+
+
+def test_adapter_treats_dropped_mach_reply_as_reloaded(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    stderr = "CFMessagePort: dropping corrupt reply Mach message\n"
+    runner = _runner_with_hs(tui, FakeReply(code=1, stderr=stderr))
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox", "hs": "/usr/bin/hs"}),
+        runner=runner,
+        adapter_source=_lua_tree(tmp_path / "lua"),
+    )
+    assert report.ok
+    step = _step(report, "adapter")
+    assert step.status == "installed"
+    assert "hammerspoon .. reloaded" in step.detail
+    assert "reload failed" not in step.detail
+    assert (hammerspoon_adapter_dir(home) / "init.lua").is_file()
+
+
+def test_reload_timeout_stays_a_failure_with_a_dropped_reply() -> None:
+    runner = FakeRunner(
+        {
+            "hs": FakeReply(
+                code=124,
+                stderr="CFMessagePort: dropping corrupt reply Mach message",
+            )
+        }
+    )
+    message, ok = reload_hammerspoon(runner, "/usr/bin/hs")
+    assert ok is False
+    assert "timed out" in message
 
 
 def test_cli_install_exits_1_when_a_step_fails(
