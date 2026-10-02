@@ -1250,6 +1250,34 @@ four Plan-16 disclosures ride along unchanged (selection-on-metric
 optimism; thin +3.85 lump margin with f2 −0.81; f1 zero mask days; #2–#4
 projection tie) plus holdout ABSENT (spent, never re-scored).
 
+**Cycle-windows Stage-A + two-vote Stage-B gate (gold, #4804) — Plan 18,
+NEGATIVE on both votes.** Pins frozen from documented history (peaks
+2008-03-17 / 2011-09-06 / 2020-08-07 / 2026-09-29 incomplete top; troughs
+2008-10-24 / 2015-12-17 / 2022-10-21; ±45d; `SdcaCycleWindows.gold_v1()`).
+Stage-A overlap search (43M-combo grid, IN-SAMPLE — selects nothing
+shippable; only the Stage-B gate judges): winner valuation-only (1.0, all
+extras 0.0), separation 87.83; best valuation-free vote (steer-compliant
+candidate) real_rate-only rank #49, separation 62.88, gap −24.95. Behavior
+on the frozen reselect curve (2010-01-04→2026-09-29, 16.7yr; baseline 34
+sells = 2.03/yr): V1 1 fill (0.06/yr, 0.03×) — NEGATIVE, does not
+oscillate; V2 61 fills (3.65/yr, 1.79×) — oscillates. Stage-B
+causal-rolling90 gate (1728 shapes × 4 windows, mask days 73/0/1, holdout
+absent): V1 mean OOS flat +26.80 (beats) / lump +5.68 (beats), feasible
+3/3, sens stable 0.17, frontier 560/1728 — benchmarks pass but behavior
+fails, unshippable; V2 mean OOS flat +15.65 (beats) / lump −2.49 (MISS),
+feasible 3/3, sens stable 0.25, frontier 0/1728 — NEGATIVE (failed: lump,
+frontier-both). Correction (Task-4 review): the V1−V2 gap isolates the
+WEIGHT VECTOR under identical rolling90 rails — NOT trend evidence; the
+frozen trend rails appear nowhere in the gate; V1-as-gated is
+trailing-anchor-only with trend-rails SELECTION LINEAGE as the caveat
+(owner's call whether it disqualifies; moot — V1 fails the oscillation
+requirement regardless). Verdict: NEITHER clears the combined bar — the
+oscillation-vs-lump tension is now MEASURED (oscillating vote trails lump;
+lump-beating vote never trades), not theorized. Visuals:
+`scripts/plot_gold_stagea_verdict.py` renders `gold_stagea_verdict.svg`
+(fills/yr + gate means vs both benchmarks + frontier); preview served JSON
++ charts only, no `page.tsx` entry (entry ONLY on BEATS-BOTH = NONE).
+
 ## Secular-leg firing verdict for gold phase-b decision (#4804, Plan 14a Task 3 — NO-GO)
 
 Real-rate leg (DFII10 staged 5940 rows, 2003-01-02→2026-09-29; `real_rate_z` window-1260, no-flip washout, voteless default; 5480 valid z days; full-history deciles 10/25/50/75/90 = -2.115/-1.432/+0.128/+1.070/+1.743, clipped ±3.0) and 200w leg (causal completed-weeks, 1000d SMA, first-valid 2008-11-06, 4500-row series in untracked `digiquant/.scratch/gold_mayer_multiple.json`) fire as follows — judged read-only on the recorded Ruling-3 / Task-2 numbers, no new runs, no weight/window/threshold changes: | event | real-rate z | 200w multiple | — 2011-09 top: z −2.522 (below 10th-pct −2.115 → top-decile rich, rich side passes) / multiple 1.7159 (week-end 2011-09-02, close 183.24 / sma200w 106.7877); 2015-12 bottom: z +1.066 (≈75th-pct 1.070, vs 90th-pct +1.743 → NOT top-decile cheap, misses by 0.677) / multiple 0.7672; 2020-08 high: z −3.000 (clip floor) / multiple 1.4819; 2022-10 dip: z +2.252 / multiple 0.9836; now: z +1.530 (2026-09-29) / multiple 1.4707 (week-end 2026-09-25). Half-a (real-rate) FAILS: the bar needs top-decile cheap spanning the 2015 bottom AND top-decile rich spanning the 2011 top, and the 2015 reading (+1.066) sits at ~75th percentile, not top-decile (≥ +1.743). Half-b (200w) FAILS on selectivity: the 2011 level passes (1.7159 ≥ 1.5) but 349 grind-days sit above 1.5 outside the ±6mo 2011 window (2011-03-06→2012-03-06), i.e. 349/4500 = 7.76% ≥ 5% bar (5% budget = 225d; excess = 124d; all-valid-days >1.5 = 423/4500 = 9.4%; >1.7 outside = 154d, concentrated 2025-09-30→2026-05-14). Verdict: **NO-GO for phase-b engine design** — both halves fail, so no engine extension follows from this plan; COT / Dow-gold / CPI-oil legs stay recon-listed, not tasked.
