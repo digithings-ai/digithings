@@ -4,27 +4,27 @@ import { PipelineBand } from "@/app/_bands/pipeline";
 
 describe("PipelineBand", () => {
   const html = renderToStaticMarkup(<PipelineBand />);
-  const listStart = html.indexOf("<ol");
-  const listEnd = html.indexOf("</ol>");
-  const list = html.slice(listStart, listEnd);
 
-  it("renders one static banner of four pipelines", () => {
-    expect(html).toContain("Four pipelines");
-    expect(html).toContain('aria-label="digiquant pipelines"');
-    expect(list.match(/<li\b/g)).toHaveLength(4);
+  it("names the section agent orchestration and stacks four workflow cards", () => {
+    expect(html).toContain("Agent orchestration");
+    expect(html).not.toContain("Four pipelines");
+    expect(html).not.toContain("AI agentic workflow infrastructure");
+    expect(html).toContain("deck-slots");
+    expect(html).toContain("deck-card");
+    expect(html.match(/class="deck-card/g)).toHaveLength(4);
     const headings = ["Research", "Investment portfolio", "Strategy building", "Trade setups"];
     let cursor = 0;
     for (const name of headings) {
-      const at = list.indexOf(`>${name}<`, cursor);
+      const at = html.indexOf(`>${name}<`, cursor);
       expect(at).toBeGreaterThanOrEqual(0);
       cursor = at;
     }
   });
 
-  it("states what is done and what is still in development", () => {
-    expect(list).toContain("done");
-    expect(list).toContain("in development");
-    expect(list).toContain("Still to come");
+  it("keeps the facts and does not finish the last two workflows", () => {
+    expect(html).toContain("done");
+    expect(html).toContain("in development");
+    expect(html).toContain("Still to come");
     expect(html).toContain("digiquant baseline research");
     expect(html).toContain("custom knowledge base");
     expect(html).toContain("12x terminal");
@@ -32,18 +32,20 @@ describe("PipelineBand", () => {
     expect(html).toContain("digigraph");
     expect(html).toContain("digiquant baseline portfolio");
     expect(html).toContain("entry, a stop, and a target");
+    expect(html).toContain("Monitoring");
+    expect(html).toContain("Agent selects a level");
+    expect(html).toContain("not a live run");
     expect(html).not.toMatch(/DigiQuant|DigiThings|DigiCon|Grokopedia/);
-    expect(html).not.toContain("99.909");
-    expect(html).not.toContain("204.04");
   });
 
-  it("does not slide, grow a runway, or accordion a stage", () => {
-    expect(html).not.toContain("motion-safe:");
+  it("draws parallel steps and does not revive the downward runway", () => {
+    expect(html).toContain("in parallel");
+    expect(html).toContain("Web search");
+    expect(html).toContain("Custom knowledge base");
+    expect(html).toContain("Prices");
+    expect(html).toContain("Charts");
     expect(html).not.toContain("100svh+220svh");
-    expect(html).not.toContain("sticky");
-    expect(html).not.toContain("overflow-x-auto");
-    expect(html).not.toContain("snap-x");
-    expect(list).not.toContain("<button");
-    expect(list).not.toContain("aria-expanded");
+    expect(html).not.toContain("motion-safe:");
+    expect(html).not.toContain("StageRunway");
   });
 });
