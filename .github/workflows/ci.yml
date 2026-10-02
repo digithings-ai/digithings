@@ -116,6 +116,7 @@ jobs:
             web:
               - 'apps/digithings-web/**'
               - 'apps/digiquant-web/**'
+              - 'apps/digiquant-app/**'
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
