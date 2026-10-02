@@ -1,5 +1,5 @@
 /**
- * DigiQuant Vela colors. Lock 8: teal up, red down.
+ * digiquant Vela colors. Lock 8: teal up, red down.
  * These match `lib/chart-colors.ts` dark fallbacks. They are not TradingView
  * green/red and not the mock stylesheet's green/salmon.
  *
