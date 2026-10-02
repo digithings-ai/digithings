@@ -71,7 +71,6 @@ SETUP_MENU = (
 
 HARDWARE_EPIC_POINTER = "See epic #4939 / CHR-853 — full hardware-aware catalog not rebuilt here."
 
-_BANNER_DENSITIES: tuple[str, ...] = ("retract", "full")
 _BANNER_POSITIONS: tuple[str, ...] = (
     "top-center",
     "top-left",
@@ -105,7 +104,6 @@ FEATURE_FIELDS = (
     "spelling_detection",
     "live_banner",
     "banner_position",
-    "banner_density",
     "banner_animations",
 )
 
@@ -170,7 +168,6 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  spelling_detection . {str(settings.spelling_detection).lower()}",
         f"  live_banner ........ {str(settings.live_banner).lower()}",
         f"  banner_position .... {settings.banner_position}",
-        f"  banner_density ..... {settings.banner_density}",
         f"  banner_animations .. {str(settings.banner_animations).lower()}",
         "",
         "— Hotkeys (locked sample) —",
@@ -559,7 +556,6 @@ def _edit_features(
             f"spelling_detection [{str(working['spelling_detection']).lower()}]",
             f"live_banner [{str(working['live_banner']).lower()}]",
             f"banner_position [{working['banner_position']}]",
-            f"banner_density [{working['banner_density']}]",
             f"banner_animations [{str(working['banner_animations']).lower()}]",
             "Back",
         ]
@@ -568,7 +564,7 @@ def _edit_features(
             options,
             stdin,
             stdout,
-            subtitle="Paste, live banner, and dictation helpers. Banner density is retract or full.",
+            subtitle="Paste, live banner, and dictation helpers. The banner is the status icon.",
         )
         if picked is None or picked == len(options) - 1:
             return
@@ -599,16 +595,6 @@ def _edit_features(
             if value is not None:
                 working["banner_position"] = value
         elif picked == 5:
-            value = _prompt_literal(
-                "banner_density",
-                working["banner_density"],
-                _BANNER_DENSITIES,
-                stdin,
-                stdout,
-            )
-            if value is not None:
-                working["banner_density"] = value
-        elif picked == 6:
             value = _prompt_bool("banner_animations", working["banner_animations"], stdin, stdout)
             if value is not None:
                 working["banner_animations"] = value

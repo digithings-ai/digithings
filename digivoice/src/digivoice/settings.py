@@ -26,7 +26,8 @@ REWRITE_TIMEOUT_PRESETS: tuple[float, ...] = (15.0, 30.0, 60.0)
 _TIMEOUT_OFF = frozenset({"", "off", "disabled", "none", "null", "0", "0.0"})
 LOCAL_REWRITE_MODEL_FILE = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
 
-_LEGACY_BANNER_DENSITIES: frozenset[str] = frozenset({"mini", "peek"})
+# Old settings.json files may still name a density. It is ignored and not shown.
+_IGNORED_SETTING_KEYS: frozenset[str] = frozenset({"banner_density"})
 BannerPosition = Literal[
     "top-center",
     "top-left",
@@ -206,14 +207,21 @@ class VoiceSettings(BaseModel):
     # Status overlay drawn by the Hammerspoon adapter (read from status.json). Display only.
     live_banner: bool = True
     banner_position: BannerPosition = "top-center"
-    # Banner density: retract (grid only, auto-hides; default) | full (stays until collapsed).
-    banner_density: BannerDensity = "retract"
+    # Kept so an old settings.json still loads. The icon is the only look; this value is ignored.
+    banner_density: BannerDensity = Field(default="retract", exclude=True)
     # False renders the dot-matrix icon as a still frame instead of animating it.
     banner_animations: bool = True
     # Pin keeps the status banner on screen. Off shows it only during a take.
     banner_pinned: bool = False
     # TUI remaps. Saved with the rest of settings.json. Blank keys are rejected.
     hotkey_bindings: HotkeyBindings = Field(default_factory=HotkeyBindings)
+
+    @field_validator("banner_density", mode="before")
+    @classmethod
+    def _ignore_banner_density(cls, value: object) -> str:
+        """Any leftover density, including unknown values, does not change the icon."""
+        _ = value
+        return "retract"
 
     @field_validator("rewrite_timeout_seconds", mode="before")
     @classmethod
@@ -246,14 +254,9 @@ def default_settings() -> VoiceSettings:
     return VoiceSettings()
 
 
-def _coerce_settings_raw(raw: dict[str, Any]) -> dict[str, Any]:
-    """Map legacy banner_density values to match Hammerspoon banner_core.lua."""
-    density = raw.get("banner_density")
-    if isinstance(density, str) and density in _LEGACY_BANNER_DENSITIES:
-        coerced = dict(raw)
-        coerced["banner_density"] = "retract"
-        return coerced
-    return raw
+def visible_setting_keys() -> list[str]:
+    """Keys a person can read or change. Density stays loadable and is not one of them."""
+    return sorted(name for name in VoiceSettings.model_fields if name not in _IGNORED_SETTING_KEYS)
 
 
 def load_settings(paths: VoicePaths) -> VoiceSettings:
@@ -267,7 +270,7 @@ def load_settings(paths: VoicePaths) -> VoiceSettings:
     if not isinstance(raw, dict):
         return default_settings()
     try:
-        return VoiceSettings.model_validate(_coerce_settings_raw(raw))
+        return VoiceSettings.model_validate(raw)
     except ValidationError:
         return default_settings()
 
@@ -352,7 +355,7 @@ def parse_setting_value(key: str, raw: str) -> Any:
 
 
 def set_setting(paths: VoicePaths, key: str, raw: str) -> VoiceSettings:
-    if key not in VoiceSettings.model_fields:
+    if key not in VoiceSettings.model_fields or key in _IGNORED_SETTING_KEYS:
         raise KeyError(key)
     current = load_settings(paths)
     value = parse_setting_value(key, raw)
@@ -383,9 +386,8 @@ def format_settings_compact(settings: VoiceSettings, paths: VoicePaths) -> str:
             f"  □ live banner .. {str(settings.live_banner).lower()}",
             "",
             "■ Banner",
-            f"  □ {settings.banner_density} ({settings.banner_position})",
+            f"  □ pin {str(settings.banner_pinned).lower()} ({settings.banner_position})",
             f"  □ animations ... {str(settings.banner_animations).lower()}",
-            f"  □ pinned ....... {str(settings.banner_pinned).lower()}",
             "",
             "■ Paths",
             f"  □ data ..... {paths.data_dir}",
@@ -415,7 +417,6 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  spelling_detection:     {settings.spelling_detection}",
         f"  live_banner:            {settings.live_banner}",
         f"  banner_position:        {settings.banner_position}",
-        f"  banner_density:         {settings.banner_density}",
         f"  banner_animations:      {settings.banner_animations}",
         f"  banner_pinned:          {settings.banner_pinned}",
         "",

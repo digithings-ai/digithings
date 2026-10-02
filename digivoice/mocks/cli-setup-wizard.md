@@ -52,7 +52,7 @@ Arrow + Enter edits one VoiceSettings field (same keys as `settings set`).
   paste_on_stop ...... true
   live_banner ........ true
   banner_position .... top-center   [↑↓ cycle literals]
-  banner_density ..... retract      [retract | full]
+  banner_pinned ...... false
   banner_animations .. true
 ```
 
@@ -95,7 +95,7 @@ digivoice doctor
 [missing] ffmpeg  not on PATH
 [ok] capture      /opt/homebrew/bin/sox
 [ok] models       ggml-base.en at …/models/ggml-base.en.bin
-[ok] settings     valid settings.json (banner_density=retract)
+[ok] settings     valid settings.json (banner_pinned=false)
 [ok] hotkeys      sample binds documented (see hammerspoon/README)
 [ok] hammerspoon  adapter at ~/.hammerspoon/digivoice (or App Support)
 [info] history    …

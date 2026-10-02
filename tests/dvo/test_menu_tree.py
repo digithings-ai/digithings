@@ -68,10 +68,10 @@ def test_toggle_opens_a_chooser_and_saves_only_the_pick(tmp_path: Path) -> None:
 
 def test_cycle_opens_a_chooser_and_saves_only_the_pick(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    browse_settings(paths, io.StringIO("3\n4\n\n\n\n"), io.StringIO())
-    assert load_settings(paths).banner_density == "retract"
-    browse_settings(paths, io.StringIO("3\n4\n2\n\n\n"), io.StringIO())
-    assert load_settings(paths).banner_density == "full"
+    browse_settings(paths, io.StringIO("3\n3\n\n\n\n"), io.StringIO())
+    assert load_settings(paths).banner_position == "top-center"
+    browse_settings(paths, io.StringIO("3\n3\n2\n\n\n"), io.StringIO())
+    assert load_settings(paths).banner_position == "top-left"
 
 
 def test_option_rows_are_choosers_not_toggles() -> None:
@@ -86,6 +86,7 @@ def test_option_rows_are_choosers_not_toggles() -> None:
         "top-center",
         "top-left",
     ]
+    assert "density" not in [row.name for row in rows]
 
 
 def test_returning_lands_on_the_same_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,7 +207,7 @@ def test_browse_esc_at_the_root_changes_nothing(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     browse_settings(paths, io.StringIO("\n"), io.StringIO())
     assert load_settings(paths).paste_on_stop is True
-    assert load_settings(paths).banner_density == "retract"
+    assert "density" not in [row.name for row in _walk(load_settings(paths))]
 
 
 def test_pressed_chord_is_ctrl_shift_space() -> None:

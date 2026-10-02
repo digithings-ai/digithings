@@ -45,7 +45,6 @@ _POSITIONS: tuple[str, ...] = (
     "bottom-right",
     "center",
 )
-_DENSITIES: tuple[str, ...] = ("retract", "full")
 _STT_IDS: tuple[str, ...] = tuple(item.id for item in STT_CATALOG)
 _REWRITE_FILES: tuple[str, ...] = tuple(item.filename for item in REWRITE_CATALOG)
 # Local Piper filenames. No download URL. On-disk .onnx files are added beside these.
@@ -228,12 +227,6 @@ def rows_at(
                 explain="Where the banner sits on the screen.",
             ),
             TreeRow(
-                name="density",
-                kind="pick",
-                value=settings.banner_density,
-                explain="Stored with the banner. The pin chooses whether the icon stays up.",
-            ),
-            TreeRow(
                 name="animations",
                 kind="pick",
                 value=_on_off(settings.banner_animations),
@@ -254,8 +247,6 @@ def rows_at(
         )
     if here == "/settings/banner/position":
         return _named_choices("banner_position", _POSITIONS, "Where the banner sits.")
-    if here == "/settings/banner/density":
-        return _named_choices("banner_density", _DENSITIES, "Stored with the banner.")
     if here == "/settings/banner/animations":
         return _bool_choices(
             "banner_animations",
@@ -441,8 +432,6 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
         current = _on_off(settings.banner_pinned)
     elif here == "/settings/banner/position":
         current = settings.banner_position
-    elif here == "/settings/banner/density":
-        current = settings.banner_density
     elif here == "/settings/banner/animations":
         current = _on_off(settings.banner_animations)
     else:
@@ -503,7 +492,6 @@ def _changed(settings: VoiceSettings, row: TreeRow, typed: str | None) -> VoiceS
             "rewrite_model": _REWRITE_FILES,
             "rewrite_runner": _RUNNERS,
             "banner_position": _POSITIONS,
-            "banner_density": _DENSITIES,
         }[row.field]
         current = "" if data.get(row.field) is None else str(data.get(row.field))
         data[row.field] = _next(current, choices)
@@ -520,7 +508,6 @@ def _norm_field_is_route(row: TreeRow) -> bool:
         "rewrite_runner",
         "rewrite_timeout_seconds",
         "banner_position",
-        "banner_density",
     }
 
 
