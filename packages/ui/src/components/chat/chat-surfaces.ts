@@ -29,7 +29,7 @@ export const digichatSurfaces = {
   exampleMark: "select-none font-mono text-[0.88rem] leading-[1.45] text-term-ink",
   turn: "digichat-turn flex flex-col items-stretch gap-[0.2rem]",
   composer:
-    "digichat-composer aui-composer-root flex flex-col gap-[0.45rem] rounded-none border border-hair bg-surface px-[0.85rem] pt-[0.75rem] pb-[0.6rem]",
+    "digichat-composer aui-composer-root flex flex-col gap-[0.45rem] rounded-none border border-hair bg-transparent px-[0.85rem] pt-[0.75rem] pb-[0.6rem]",
   composerRow: "flex items-start gap-[0.55rem]",
   composerGlyph: "shrink-0 select-none font-mono text-[0.9rem] leading-[1.5] text-ink",
   composerInput:
