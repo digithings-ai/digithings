@@ -455,3 +455,30 @@ subscriptions, and Edge Function calls (billing/Alpaca — stay direct).
 - Pagination beyond `GET /ledger` cursor (`limit`/`cursor` only there).
 - Any timeout, retry, rate-limit, or tool-call budget language — none
   specified, none implied.
+
+## 9. Phase 1–3 routes
+
+These sit on the registry, behind the same catalog gate as the sidebar.
+Success is still `{ data, as_of, retrieval_pin, provenance }`. A missing
+figure is `null` (the app shows "—"). An unconfigured reader is 502
+`upstream_empty`. A route the catalog does not grant is 403.
+
+Portfolio: `GET /allocations/enriched`, `/attribution`, `/theses`,
+`/theses/signals` (brief), `/ledger/cash`, `/performance/drawdown`,
+`/brief/decision`, `/brief/risks`, `/dossier/{ticker}`.
+
+Pipeline: `GET /pipeline/runs/latest/health` (optional `date=YYYY-MM-DD`),
+`/graph`, `/narrative`, `/trace`, `/artifacts`,
+`/nodes/selected/document` (optional `node=`). Cost and token fields on
+health stay null. The graph is the static ingest → research → decide →
+publish shape; node state is null when `node_runs` is unavailable.
+
+FX and rates (group `12x`): `GET /fx/summary`, `/fx/pairs`, `/fx/levels`,
+`/fx/sessions`, `/fx/ideas`, `/fx/ideas/{pair}`, `/fx/pairs/{pair}/path`,
+`/fx/flags/{pair}`, `/fx/paper-exposure`, `/fx/directives`,
+`/rates/summary`, `/rates/curve`, `/rates/watchlist`, `/rates/theses`.
+Bid, offer, and level pips stay null. Flags, paper exposure, and
+directives are typed empty until the draft tables exist.
+`PUT /fx/directives` returns 503 `{ error.code: "not_provisioned" }` and
+does not write. Draft SQL: `migrations-draft/`. Do not apply it from this
+contract.
