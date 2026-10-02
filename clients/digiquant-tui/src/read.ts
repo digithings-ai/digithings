@@ -123,6 +123,27 @@ function provenance(body: unknown): { asOf: string | null; head: string[] } {
   return { asOf, head };
 }
 
+/** Paint one official response. Stub envelopes stay a sentence. The website uses this too. */
+export function presentResponse(route: string, status: number, body: unknown, kind: BlockKind): ReadResult {
+  if (status < 200 || status >= 300) {
+    const message = errorMessage(body);
+    const why = message ? `: ${message}` : "";
+    return { status: "error", lines: [`${route} failed (${status})${why}`], asOf: null };
+  }
+  if (isStubEnvelope(body)) return { status: "stub", lines: [STUB_READ], asOf: null };
+  if (!body || typeof body !== "object" || (body as { data?: unknown }).data == null) {
+    return { status: "error", lines: [`${route} returned no data`], asOf: null };
+  }
+  const data = (body as { data: unknown }).data;
+  const { asOf, head } = provenance(body);
+  const bodyLines = kind === "graph" ? graphLines(data) : fieldLines(data);
+  const empty =
+    kind === "graph"
+      ? bodyLines[bodyLines.length - 1] === "No nodes in this read."
+      : isEmptyPayload(data);
+  return { status: empty ? "empty" : "ok", lines: [...head, ...bodyLines], asOf };
+}
+
 export async function readBlock(api: string, route: string, kind: BlockKind, signal?: AbortSignal): Promise<ReadResult> {
   let res: Response;
   try {
@@ -137,21 +158,5 @@ export async function readBlock(api: string, route: string, kind: BlockKind, sig
   } catch {
     body = null;
   }
-  if (!res.ok) {
-    const message = errorMessage(body);
-    const why = message ? `: ${message}` : "";
-    return { status: "error", lines: [`${route} failed (${res.status})${why}`], asOf: null };
-  }
-  if (isStubEnvelope(body)) return { status: "stub", lines: [STUB_READ], asOf: null };
-  if (!body || typeof body !== "object" || (body as { data?: unknown }).data == null) {
-    return { status: "error", lines: [`${route} returned no data`], asOf: null };
-  }
-  const data = (body as { data: unknown }).data;
-  const { asOf, head } = provenance(body);
-  const bodyLines = kind === "graph" ? graphLines(data) : fieldLines(data);
-  const empty =
-    kind === "graph"
-      ? bodyLines[bodyLines.length - 1] === "No nodes in this read."
-      : isEmptyPayload(data);
-  return { status: empty ? "empty" : "ok", lines: [...head, ...bodyLines], asOf };
+  return presentResponse(route, res.status, body, kind);
 }

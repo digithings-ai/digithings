@@ -41,14 +41,11 @@ export function TopBand() {
         </h1>
         <p className="hero-rise m-0 mt-[0.75rem] max-w-[42rem] text-[0.9375rem] leading-[1.6] text-pretty text-ink-soft" style={rise(1)}>
           digiquant runs the daily research, sizes the risk, tests every idea against history and logs each decision. You run it in
-          the dashboard. This site shows it working.
+          the terminal. This site shows it working.
         </p>
         <div className="hero-rise pointer-events-auto mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]" style={rise(2)}>
-          <CtaLink href="#dashboard" variant="ghost" className={HERO_ACTION}>
-            See the dashboard
-            <span aria-hidden="true" className="hero-action__arrow">
-              ↓
-            </span>
+          <CtaLink href="/app" variant="ghost" className={HERO_ACTION}>
+            Open the terminal
           </CtaLink>
           <CtaLink href={REPO} external variant="ghost" className={HERO_ACTION}>
             GitHub
