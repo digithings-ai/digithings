@@ -1,103 +1,75 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import { Badge } from "@digithings/ui/ui";
-import { ExecutionCard, StageCard } from "@/components/pipeline/StageCard";
-import { StageRunway } from "@/components/pipeline/StageRunway";
-import { officialGet, PIPELINE_ROUTE, runFromDocuments } from "@/lib/official-api";
-import type { RunSnapshot } from "@/lib/run-snapshot";
 import { Band } from "../_chrome/Band";
-import { EXECUTION_STAGE, PIPELINE_STAGES } from "../_stages";
 
-const SOURCE = "dashboard-api GET /v1/tables/documents";
+type PipelineStatus = "done" | "in development";
 
-interface RunRead {
-  snapshot: RunSnapshot | null;
-  reason: string;
-}
+/** Four product workflows. Research and the investment portfolio are the
+ *  digiquant baselines. Strategy building and trade setups are not finished. */
+const PIPELINES: readonly {
+  name: string;
+  status: PipelineStatus;
+  body: string;
+  later?: string;
+}[] = [
+  {
+    name: "Research",
+    status: "done",
+    body: "digiquant baseline research. Theme-delegated sub-agents search the web and read a custom knowledge base, including the 12x terminal. It runs on digithings, on digigraph and the digithings infrastructure.",
+  },
+  {
+    name: "Investment portfolio",
+    status: "done",
+    body: "digiquant baseline portfolio. Thesis generation, then stock analysis, then deliberation with portfolio management and the investment preferences.",
+  },
+  {
+    name: "Strategy building",
+    status: "in development",
+    body: "Workflows that help an agent turn an idea into an algorithmic strategy, backtest it, and ship a strategy that has been backtested.",
+  },
+  {
+    name: "Trade setups",
+    status: "in development",
+    body: "From research, prices, and charts, long or short ideas on asset pairs — the 12x work.",
+    later:
+      "Reliable setups with an entry, a stop, and a target, then monitoring. The system builds trade levels from different criteria, and an agent selects the one it judges most viable. Technical judgment on the chart.",
+  },
+];
 
-const READING: RunRead = {
-  snapshot: null,
-  reason: "Reading the latest run from the official API.",
-};
-
-/** The pipeline band. Stage cards plus the latest documents read from the official API. */
+/** Homepage `#pipeline`. One static banner: no sliding panes, no scroll runway,
+ *  no per-stage accordion. The desk at `/app/pipeline` is a different surface. */
 export function PipelineBand() {
-  const [run, setRun] = useState<RunRead>(READING);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const read = await officialGet(PIPELINE_ROUTE, {
-        select: "document_key,title,run_type,date",
-        order: "date.desc",
-        limit: "1000",
-      });
-      if (!alive) return;
-      if (!read.ok) {
-        setRun({ snapshot: null, reason: read.reason });
-        return;
-      }
-      const rows = Array.isArray(read.body) ? read.body : [];
-      const snapshot = runFromDocuments(rows);
-      setRun({
-        snapshot,
-        reason: snapshot
-          ? `Recorded run ${snapshot.runDate}. The cards above are that capture.`
-          : "The official API returned no documents for the latest run.",
-      });
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const snap = run.snapshot;
-  const total = PIPELINE_STAGES.length + 1;
-  const badge = snap ? `recorded · ${snap.runDate} · ${snap.runType ?? "run type unknown"}` : "no recorded run";
-
   return (
     <Band
       id="pipeline"
-      fill
-      status={snap ? "recorded" : "no recorded run"}
-      title="Six stages, one record per run"
-      takeaway="A run moves from inputs to learning, and each stage writes down what it did. What you see is a recorded run, not a live one."
+      status="two done"
+      title="Four pipelines"
+      takeaway="Research and the investment portfolio are the digiquant baselines, and they run. Strategy building and trade setups are in development. None of them places an order."
     >
-      <StageRunway
-        label="Pipeline stages"
-        intro={
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-hair px-3 py-2 font-mono text-[0.68rem] text-ink-mute">
-            <span>run</span>
-            <Badge variant="neutral">{badge}</Badge>
-            <span className="text-ink-soft">
-              {snap ? "a recorded run, not live" : "no run was captured for this build; the cards show the pipeline's structure"}
-            </span>
-            <span className="ms-auto hidden sm:inline">{SOURCE}</span>
-          </div>
-        }
-        outro={
-          <p className="m-0 border border-hair px-3 py-2 font-mono text-[0.72rem] leading-[1.55] text-ink-soft">
-            {run.reason} Source: {SOURCE}.
-          </p>
-        }
+      <ol
+        aria-label="digiquant pipelines"
+        className="m-0 grid list-none grid-cols-1 gap-px overflow-hidden border border-hair bg-hair p-0 md:grid-cols-2 xl:grid-cols-4"
       >
-        {PIPELINE_STAGES.map((name, i) => (
-          <li key={name} className="flex min-w-0">
-            <StageCard
-              index={i}
-              total={total}
-              name={name}
-              hasRun={snap !== null}
-              runDate={snap?.runDate ?? null}
-              recorded={snap?.stages.find((s) => s.name === name)}
-            />
+        {PIPELINES.map((pipeline, index) => (
+          <li key={pipeline.name} className="flex min-w-0 flex-col gap-3 bg-surface p-5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="font-mono text-[0.72rem] tracking-[0.08em] text-ink-mute">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <Badge variant={pipeline.status === "done" ? "accent" : "neutral"}>{pipeline.status}</Badge>
+            </div>
+            <h3 className="m-0 font-display text-[1.25rem] font-medium leading-tight tracking-[-0.02em] text-ink">
+              {pipeline.name}
+            </h3>
+            <p className="m-0 text-[0.8125rem] leading-[1.55] text-ink-soft">{pipeline.body}</p>
+            {pipeline.later ? (
+              <p className="m-0 border-t border-hair pt-3 text-[0.8125rem] leading-[1.55] text-ink-soft">
+                <span className="mb-1 block font-mono text-[0.68rem] text-ink-mute">Still to come</span>
+                {pipeline.later}
+              </p>
+            ) : null}
           </li>
         ))}
-        <li className="flex min-w-0">
-          <ExecutionCard index={PIPELINE_STAGES.length} total={total} status={EXECUTION_STAGE.status} />
-        </li>
-      </StageRunway>
+      </ol>
     </Band>
   );
 }
