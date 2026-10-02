@@ -41,7 +41,9 @@ from digiquant.strategies.sdca.period_optimize import (
     LONG_MIN_MOVE_PCT,
     MIN_PEAKS,
     MIN_TROUGHS,
+    CoveragePlacement,
     CoverageSegment,
+    DisplacedTrough,
     HitTest,
     LongTermSelection,
     OverlayGrade,
@@ -930,9 +932,50 @@ def test_the_selection_models_are_frozen_strict_and_described() -> None:
         selection.n_peaks = 9  # type: ignore[misc]
     with pytest.raises(Exception, match="frozen|immutable"):
         selection.peaks = ()  # type: ignore[misc]
-    for model in (HitTest, LongTermSelection):
+    for model in (HitTest, LongTermSelection, CoverageSegment, CoveragePlacement, DisplacedTrough):
         for name, field in model.model_fields.items():
             assert field.description, f"{model.__name__}.{name} has no description"
+    # The coverage-record models are frozen strict like the rest of the surface, and each
+    # one is constructible from exactly the fields this module documents.
+    for model, kwargs in (
+        (
+            CoverageSegment,
+            {
+                "start": _START,
+                "end": _START,
+                "gap_start": _START,
+                "gap_end": _START,
+                "gap_days": 0,
+                "covered": True,
+                "reason": None,
+            },
+        ),
+        (
+            CoveragePlacement,
+            {
+                "segment_start": _START,
+                "segment_end": _START,
+                "gap_days": 121,
+                "pin": _START,
+                "prominence_pct": 1.0,
+                "observed_move_pct": 20.0,
+            },
+        ),
+        (
+            DisplacedTrough,
+            {
+                "pin": _START,
+                "kind": CycleKind.TROUGH,
+                "prominence_pct": 1.0,
+                "observed_move_pct": 20.0,
+                "bars": 121,
+                "reason": "because",
+            },
+        ),
+    ):
+        instance = model(**kwargs)
+        with pytest.raises(Exception, match="frozen|immutable"):
+            setattr(instance, next(iter(model.model_fields)), None)
 
 
 def test_selection_validates_its_inputs() -> None:
@@ -953,7 +996,15 @@ def test_selection_validates_its_inputs() -> None:
 def test_the_long_first_surface_is_exported() -> None:
     from digiquant.strategies.sdca import period_optimize
 
-    for name in ("HitTest", "LongTermSelection", "window_is_hit", "select_long_term_periods"):
+    for name in (
+        "CoveragePlacement",
+        "CoverageSegment",
+        "DisplacedTrough",
+        "HitTest",
+        "LongTermSelection",
+        "window_is_hit",
+        "select_long_term_periods",
+    ):
         assert name in period_optimize.__all__, f"{name} is missing from __all__"
         assert hasattr(period_optimize, name)
 
@@ -985,11 +1036,12 @@ def test_the_default_half_width_reproduces_the_pre_change_selection_exactly() ->
     selection = select_long_term_periods(dates, prices)
     assert _PRE_CHANGE_HALF_WIDTH == 60
     assert selection.half_width_days == _PRE_CHANGE_HALF_WIDTH
-    # Captured from the pre-change implementation on this exact fixture. The four
-    # Ruling-2 fields are excluded and pinned separately by the Task-3b pins: this
-    # fixture's selection is unchanged by them, but the coverage report on it is not
-    # empty (its trough windows sit 447 days apart), so the fields cannot ride in a
-    # literal that is about the windows themselves.
+    # Captured from the pre-change implementation on this exact fixture. The six
+    # Ruling-2 / Ruling-3 fields are excluded and pinned separately by the Task-3b and
+    # Task-3c pins: this fixture's selection is unchanged by them, but the coverage
+    # report on it is not empty (its trough windows sit 447 days apart), so the fields
+    # cannot ride in a literal that is about the windows themselves. Every window,
+    # day-share and pin below is still compared against that pre-change capture.
     assert selection.model_dump(
         exclude={
             "peak_days_pct",
@@ -998,6 +1050,8 @@ def test_the_default_half_width_reproduces_the_pre_change_selection_exactly() ->
             "peak_hit_tests",
             "trough_hit_tests",
             "coverage_segments",
+            "coverage_placements",
+            "displaced_troughs",
         }
     ) == {
         "half_width_days": 60,
@@ -1213,21 +1267,29 @@ def test_a_calendar_too_short_to_index_fails_cleanly_never_with_indexerror() -> 
 #   the move that pin's window actually contained.
 # - **Coverage.** Actions are emitted at window ENTERS, so any stretch of calendar
 #   holding no selected trough window is flat by construction — on GLD one such
-#   stretch ran 3063 days. The selection now measures every calendar segment
-#   between consecutive selected trough windows and records the ones that are
-#   uncovered, with their dates and their gap length, rather than emitting a set
-#   whose holes have to be discovered from a tearsheet.
+#   stretch ran 3063 days. The selection measures every calendar segment between
+#   consecutive selected trough windows and records the ones that are uncovered,
+#   with their dates and their gap length, rather than emitting a set whose holes
+#   have to be discovered from a tearsheet.
 #
-# The repair Ruling 2 asks for — swap the lowest-prominence selected PEAK in the
-# segment for the best hit trough available there — is attempted and its verdict
-# recorded, and it is never admissible. The reason is structural, not a tuning
-# accident: ``_truncate_to_day_cap`` walks the ranked candidates and keeps every
-# window that fits, so the kept set is **addition-maximal**. A candidate it skipped
-# had ``covered_then | days`` over budget, and the covered set only grows, so
-# re-adding it breaches the very per-kind cap the walk enforced. Giving up a PEAK
-# cannot help either, because the two kinds are capped independently. So a segment
-# that HAS a hit trough available is recorded as blocked by the day cap — the
-# constraint that actually binds — and never quietly left unreported.
+# Task 3c (Ruling 3) then made coverage a SELECTION rule rather than a report. Ruling
+# 2's repair — swap the segment's lowest-prominence selected PEAK for the best hit
+# trough available there — was measured and proved **inadmissible**: the two kinds are
+# capped independently, so giving up a peak frees no trough budget, and the prominence
+# walk keeps every window that fits, so its set is addition-maximal and any trough
+# re-added to it breaches the very cap it enforced. The owner re-ruled instead:
+# **coverage first, prominence second, inside the unchanged per-kind trough budget.**
+# One hit trough per uncovered segment (worst gap first, earliest on a tie, best hit
+# trough by prominence in that segment), THEN the remaining budget filled by prominence
+# exactly as before. Peaks keep their own prominence walk. The cost is recorded rather
+# than absorbed — ``coverage_placements`` names every plug and ``displaced_troughs``
+# names every prominence trough the plugs pushed out — and a segment the budget cannot
+# cover stays in ``uncovered_segments``, never fudged.
+#
+# The segment universe is re-derived after every placement. The one-shot alternative
+# (one plug per hole as it stood in the prominence-only set) is pinned NOT to do that:
+# on GLD it measurably made the worst hole WORSE — 1509 days became 4218 — because
+# displacing the 2020 troughs merged two segments that were previously separate.
 
 
 def _prominent_but_unhit() -> tuple[list[date], list[float]]:
@@ -1314,9 +1376,6 @@ def _kept_segment(start: date, end: date) -> CoverageSegment:
         gap_end=gap_end,
         gap_days=(gap_end - gap_start).days + 1,
         covered=True,
-        repaired=False,
-        swapped_out_peak=None,
-        swapped_in_trough=None,
         reason=None,
     )
 
@@ -1371,22 +1430,35 @@ def test_the_hit_verdicts_for_the_kept_windows_travel_with_the_selection() -> No
 
 
 def test_a_series_needing_neither_a_drop_nor_a_repair_is_field_for_field_unchanged() -> None:
-    """Ruling 2 is additive: a set that needs neither is exactly what it was.
+    """Rulings 2 and 3 are additive: a set that needs neither is exactly what it was.
 
     ``_up_heavy`` is the fixture for it — no candidate misses the frozen bar, and its
     selected trough windows are 17 days apart (far inside one window width), so
-    nothing is uncovered and no repair is attempted. The dict below was captured
-    from the pre-change implementation on this exact fixture: it is that output, field
-    for field, so a refactor that quietly moves the new rules onto a set that needed
-    neither fails here instead of being noticed by a rerun nobody diffs.
+    nothing is uncovered, nothing is placed, and nothing is displaced. The dict below
+    was captured from the pre-change implementation on this exact fixture: it is that
+    output, field for field, so a refactor that quietly moves the new rules onto a set
+    that needed neither fails here instead of being noticed by a rerun nobody diffs.
+
+    The exemption is the six fields the two rules added (two in 3b, two in 3c, plus
+    the two coverage-report fields): they are the RECORD of those rules, so they
+    cannot ride in a literal that is about the windows. Their neutral values on this
+    fixture are asserted immediately after, and the Task-3c pins assert the non-empty
+    case.
     """
     dates, prices = _up_heavy()
     selection = select_long_term_periods(dates, prices)
     # The two new rules are inert on this fixture, so they are compared as models
-    # (the four excluded fields below) while every pre-change field is compared
+    # (the six excluded fields below) while every pre-change field is compared
     # straight out of ``model_dump``.
     assert selection.model_dump(
-        exclude={"dropped_windows", "peak_hit_tests", "trough_hit_tests", "coverage_segments"}
+        exclude={
+            "dropped_windows",
+            "peak_hit_tests",
+            "trough_hit_tests",
+            "coverage_segments",
+            "coverage_placements",
+            "displaced_troughs",
+        }
     ) == {
         "half_width_days": 60,
         "calendar_days": 1686,
@@ -1487,6 +1559,9 @@ def test_a_series_needing_neither_a_drop_nor_a_repair_is_field_for_field_unchang
     )
     assert selection.coverage_complete is True
     assert selection.uncovered_segments == ()
+    # Ruling 3's own two fields: no uncovered segment, so no plug and no cost.
+    assert selection.coverage_placements == ()
+    assert selection.displaced_troughs == ()
 
 
 def test_an_uncovered_segment_is_recorded_with_its_dates_and_gap_length() -> None:
@@ -1513,53 +1588,178 @@ def test_an_uncovered_segment_is_recorded_with_its_dates_and_gap_length() -> Non
         # window-shaped opportunity, so it is not a hole worth reporting.
         assert segment.gap_days >= 2 * selection.half_width_days + 1
         assert segment.covered is False
-        assert segment.repaired is False
-        assert segment.swapped_in_trough is None
         assert segment.reason
 
 
-def test_a_segment_with_a_hit_trough_records_the_day_cap_that_blocks_the_repair() -> None:
-    """The repair is attempted, and the verdict names the constraint that binds.
+def test_an_uncovered_segment_gets_a_hit_trough_placed_and_the_placement_is_recorded() -> None:
+    """Ruling 3: coverage is bought FIRST, inside the unchanged trough budget.
 
-    Ruling 2's swap — the lowest-prominence selected peak out, the best hit trough
-    available in that segment in — is refused here by the per-kind day cap, and the
-    segment says so. It cannot be otherwise: ``_truncate_to_day_cap`` keeps every
-    window that fits, so its kept set is addition-maximal and re-adding any skipped
-    candidate breaches the cap it enforced, and the two kinds are capped
-    independently, so giving up a peak frees no trough budget. The verdict is
-    reported rather than swallowed, because "the day cap is what blocks coverage" is
-    the finding.
+    ``_scattered_secular_set`` is the synthetic twin of the GLD hole: the prominence
+    walk keeps seven troughs with 599-day stretches between some of them while HIT
+    troughs sit unused inside those stretches. The coverage-first pass now places one
+    there, and — this is the part that is not negotiable — records it.
     """
     dates, prices = _scattered_secular_set()
     selection = select_long_term_periods(dates, prices)
-    blocked_by_cap = [
-        segment for segment in selection.uncovered_segments if "day cap" in (segment.reason or "")
-    ]
-    starved = [
-        segment
-        for segment in selection.uncovered_segments
-        if "no hit trough" in (segment.reason or "")
-    ]
-    assert blocked_by_cap, "at least one uncovered segment has a hit trough available to try"
-    assert starved, "at least one uncovered segment has nothing to swap in"
-    for segment in blocked_by_cap:
-        # A selected peak was there to give up — the day cap is what stopped it.
-        assert segment.swapped_out_peak is None
-        assert f"{selection.max_peak_days_pct:.1f}%" in (segment.reason or "")
-    # And the refusal held: nothing about the set broke on the way there.
+    assert selection.selected is True, selection.reason
+
+    placements = selection.coverage_placements
+    assert placements, "the scattered set leaves holes a hit trough can be placed in"
+    kept = set(_centres(selection, selection.troughs))
+    for placement in placements:
+        # A plug is a HIT trough, strictly inside the hole it closed, and it survives
+        # into the selected set — the cap is never breached to make room for it.
+        assert placement.pin in kept, "a placed trough must reach the selected set"
+        assert placement.segment_start < placement.pin < placement.segment_end
+        assert placement.gap_days >= 2 * selection.half_width_days + 1
+        assert placement.observed_move_pct >= LONG_MIN_MOVE_PCT
+        verdict = window_is_hit(
+            dates,
+            prices,
+            CycleWindow(
+                name=f"probe_{placement.pin:%Y%m%d}",
+                kind=CycleKind.TROUGH,
+                start=placement.pin - timedelta(days=selection.half_width_days),
+                end=placement.pin + timedelta(days=selection.half_width_days),
+            ),
+            min_move_pct=LONG_MIN_MOVE_PCT,
+        )
+        assert verdict.hit is True
+        assert verdict.max_move_pct == pytest.approx(placement.observed_move_pct)
+        assert placement.prominence_pct > 0.0
+
+    # Worst hole first: the first placement closed a longer hole than the last one did
+    # (the fixtures' holes are the same width, so the order is the date order), and no
+    # plug is recorded for a hole narrower than one window.
+    gaps = [placement.gap_days for placement in placements]
+    assert gaps == sorted(gaps, reverse=True), "the worst-offending segment goes first"
+
+    # And the plugs actually closed them: the longest uncovered stretch on the set
+    # that came out is shorter than the longest hole the prominence walk left.
     budget = len(dates) * selection.max_peak_days_pct // 100
-    assert selection.peak_days <= budget
-    assert selection.trough_days <= budget
+    assert selection.trough_days <= budget, "coverage never breaches the per-kind cap"
+    assert max(segment.gap_days for segment in selection.uncovered_segments) < max(gaps)
+
+
+def test_a_coverage_placement_displaces_a_prominence_trough_and_records_the_cost() -> None:
+    """The trade is on the record: what coverage bought, and what it paid for.
+
+    A trough budget is finite, so a plug is paid for out of the prominence walk's own
+    set. ``displaced_troughs`` names every prominence-ranked trough that would have
+    been kept and was not, with the move its window held — so the cost of the
+    coverage-first rule is readable rather than silently absorbed.
+    """
+    dates, prices = _scattered_secular_set()
+    selection = select_long_term_periods(dates, prices)
+    kept = set(_centres(selection, selection.troughs))
+
+    displaced = selection.displaced_troughs
+    assert displaced, "placing coverage into a spent trough budget must cost something"
+    for record in displaced:
+        assert record.pin not in kept, "a displaced trough is out of the set"
+        assert record.prominence_pct > 0.0
+        assert record.bars > 0
+        assert record.observed_move_pct >= LONG_MIN_MOVE_PCT, (
+            "a displaced trough was a HIT candidate — it lost on rank, not on merit"
+        )
+        assert f"{record.observed_move_pct:.2f}" in record.reason
+        assert f"{record.prominence_pct:.2f}" in record.reason
+
+    # Every displaced pin was a real detected pivot, and a pin is never both placed and
+    # displaced: a placement is committed before the walk, so it cannot be a casualty.
+    assert {record.pin for record in displaced} <= set(selection.trough_pins)
+    assert not {record.pin for record in displaced} & {
+        placement.pin for placement in selection.coverage_placements
+    }
+
+
+def test_coverage_first_leaves_the_peak_prominence_walk_exactly_alone() -> None:
+    """Ruling 3 re-ranks the TROUGH walk only; the peak side is untouched.
+
+    Captured on ``_scattered_secular_set``, the fixture where the trough walk actually
+    placed four troughs and displaced two, so a rule that leaked across to the peaks
+    would show up here. Peaks are the flat time that bounds the exposure floor and the
+    two kinds carry independent budgets, so this literal is the guard on both.
+    """
+    dates, prices = _scattered_secular_set()
+    selection = select_long_term_periods(dates, prices)
+    assert _centres(selection, selection.peaks) == (
+        date(2020, 12, 26),
+        date(2022, 12, 16),
+        date(2024, 12, 5),
+        date(2026, 11, 25),
+        date(2027, 11, 20),
+        date(2028, 11, 14),
+    )
+    assert selection.peak_prominence_pct == pytest.approx(
+        (47.5, 54.166666666666664, 50.0, 56.8, 32.22222222222222, 46.666666666666664)
+    )
+    assert selection.peak_days == 726
+    # The trough side is what moved — that is the whole premise of the pin.
+    assert selection.coverage_placements != ()
+    assert selection.displaced_troughs != ()
+
+
+def test_a_segment_with_no_hit_trough_left_stays_uncovered_and_is_recorded() -> None:
+    """The budget may refuse coverage; the refusal is recorded, never fudged.
+
+    ``_secular_three_cycles`` has only three hit trough candidates and the cap keeps
+    all three, so every uncovered segment is empty of any placeable trough. Nothing
+    may be invented to fill it: the segment stays in ``uncovered_segments`` with the
+    reason, and ``coverage_complete`` stays False.
+    """
+    dates, prices = _secular_three_cycles()
+    selection = select_long_term_periods(dates, prices)
+    assert selection.selected is True, selection.reason
+    assert selection.coverage_placements == (), "there was nothing placeable to place"
+    assert selection.displaced_troughs == (), "and nothing was displaced to try"
+    assert selection.uncovered_segments, "the holes are real and stay reported"
+    assert selection.coverage_complete is False
+    for segment in selection.uncovered_segments:
+        assert segment.covered is False
+        assert "no hit trough" in (segment.reason or ""), segment.reason
+
+
+def test_the_coverage_first_walk_is_deterministic_across_repeated_calls() -> None:
+    """Same series in, same set out — placements and displacements included."""
+    dates, prices = _scattered_secular_set()
+    first = select_long_term_periods(dates, prices)
+    repeats = [select_long_term_periods(dates, prices) for _ in range(3)]
+    for other in repeats:
+        assert other == first
+        assert other.coverage_placements == first.coverage_placements
+        assert other.displaced_troughs == first.displaced_troughs
+    assert first.coverage_placements, "the fixture must actually exercise the walk"
+
+
+def test_a_fully_covered_series_without_budget_pressure_is_field_for_field_unchanged() -> None:
+    """Ruling 3 is additive where coverage is already complete: nothing changes.
+
+    ``_up_heavy`` keeps three trough windows 17 days apart — far inside one window
+    width — so there is no uncovered segment, no placement, and no displacement. What
+    the pre-3c selection was must survive field for field, and the two fields this
+    task added are the only exemption (they are the record of a walk that did not
+    run). ``test_a_series_needing_neither_a_drop_nor_a_repair_is_field_for_field_
+    unchanged`` carries the full literal; this pin states the same claim on its own.
+    """
+    dates, prices = _up_heavy()
+    selection = select_long_term_periods(dates, prices)
+    assert selection.selected is True, selection.reason
+    assert selection.coverage_complete is True
+    assert selection.coverage_placements == ()
+    assert selection.displaced_troughs == ()
+    assert selection == select_long_term_periods(dates, prices)
 
 
 def test_the_per_kind_day_cap_and_both_minima_hold_on_every_returned_set() -> None:
-    """What a swap must never break, asserted on every fixture that returns a set.
+    """What coverage-first must never break, asserted on every fixture that returns a set.
 
-    Ruling 2 requires the cap and both minima to still hold after a swap. No swap is
-    admissible (see the cap pin above), so what is pinned here is the invariant
-    itself: no returned set breaches the per-kind day cap and none is short of either
-    minimum. A refusal stays a refusal — the minima are never relaxed to manufacture a
-    set, and hit-testing candidates never becomes a licence to ship a short one.
+    Ruling 3 requires the cap and both minima to still hold after a coverage-first
+    placement — the rule spends the SAME budget prominence used to spend, so it can
+    neither widen a kind's share nor lower a minimum. What is pinned here is the
+    invariant on every fixture that returns a set, including the ones where the walk
+    actually placed something: no set breaches the per-kind day cap, none is short of
+    either minimum, and every recorded placement reached the selected set.
     """
     fixtures = (
         _prominent_but_unhit(),
@@ -1568,6 +1768,7 @@ def test_the_per_kind_day_cap_and_both_minima_hold_on_every_returned_set() -> No
         _up_heavy(),
         _zigzag(200, 100, 6, tail_up=100),
     )
+    placed_anywhere = False
     for dates, prices in fixtures:
         selection = select_long_term_periods(dates, prices)
         assert selection.selected is True, selection.reason
@@ -1581,6 +1782,19 @@ def test_the_per_kind_day_cap_and_both_minima_hold_on_every_returned_set() -> No
         assert len(selection.peak_hit_tests) == selection.n_peaks
         assert len(selection.trough_hit_tests) == selection.n_troughs
         assert len(selection.coverage_segments) == max(0, selection.n_troughs - 1)
+        # A recorded placement is a claim about the selected set; it must hold.
+        kept = set(_centres(selection, selection.troughs))
+        for placement in selection.coverage_placements:
+            assert placement.pin in kept
+            assert placement.pin in selection.trough_pins
+        # And the displaced ones are genuinely out of it.
+        for record in selection.displaced_troughs:
+            assert record.pin not in kept
+        assert not {record.pin for record in selection.displaced_troughs} & {
+            placement.pin for placement in selection.coverage_placements
+        }
+        placed_anywhere = placed_anywhere or bool(selection.coverage_placements)
+    assert placed_anywhere, "at least one fixture must exercise the coverage-first walk"
     # A hit test that removes too many windows refuses rather than shipping a short set.
     refused = select_long_term_periods(*_secular_three_cycles(), max_peak_days_pct=5.0)
     assert refused.selected is False

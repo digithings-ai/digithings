@@ -880,14 +880,19 @@ class CoverageSegment(BaseModel):
     Actions are emitted at window ENTERS, so calendar holding no selected trough
     window is flat by construction. This is the measurement of that: the two
     bounding trough pins, the stretch of calendar between the two trough
-    *windows* that neither of them covers, and what (if anything) was done about
-    it. A stretch shorter than one window width cannot have held a whole
+    *windows* that neither of them covers, and — where nothing could be placed
+    there — why.
+
+    A stretch shorter than one window width cannot have held a whole
     window-shaped opportunity, so it is reported as covered.
 
-    The repair Ruling 2 asks for is attempted and its verdict carried here —
-    including the verdict that refuses it, because "the day cap is what blocks
-    coverage" is the finding, and a segment that could not be repaired must say
-    so rather than vanish.
+    Ruling 3 made coverage a selection rule, so a segment that HAS a placeable hit
+    trough no longer arrives here uncovered: it was filled first, and the placement
+    is recorded in ``LongTermSelection.coverage_placements`` (with its own segment
+    bounds, because placing one plug re-derives the segments either side of it). The
+    segments still reported here are therefore the ones the budget — or the absence
+    of any hit trough in them — left alone, and they carry that reason rather than
+    disappearing.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -914,24 +919,109 @@ class CoverageSegment(BaseModel):
             "so no whole window-shaped opportunity went by unselected"
         ),
     )
-    repaired: bool = Field(
-        ...,
-        description="True when a selected peak was swapped out for a hit trough in this segment",
-    )
-    swapped_out_peak: date | None = Field(
-        ...,
-        description="Pin of the selected peak given up for a trough, if a repair was applied",
-    )
-    swapped_in_trough: date | None = Field(
-        ...,
-        description="Pin of the hit trough brought into this segment, if a repair was applied",
-    )
     reason: str | None = Field(
         ...,
         description=(
-            "Why the segment is not covered (no hit trough available, or the per-kind day cap "
-            "refused to fund one, or no selected peak to give up); None when it is covered"
+            "Why the segment is still not covered (no hit trough candidate sits in it, or the "
+            "per-kind day cap had no trough days left to fund one); None when it is covered"
         ),
+    )
+
+
+class CoveragePlacement(BaseModel):
+    """One hit trough the coverage-first walk placed to close a hole.
+
+    Ruling 3 re-ranked the trough walk — coverage first, prominence second — so
+    closing a hole is now a *selection decision* and not a repair after the fact. Each
+    decision is recorded with the hole it closed, the pin it put there, and what that
+    pin's own window contained, so "coverage was bought here" is a readable claim.
+
+    A placement may name a pin the prominence walk would also have kept: the pass
+    places it first so its days are committed ahead of the walk, and the cost of that
+    is accounted in ``LongTermSelection.displaced_troughs`` rather than here.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    segment_start: date = Field(
+        ...,
+        description="The earlier bounding trough pin of the uncovered segment, when it was filled",
+    )
+    segment_end: date = Field(
+        ...,
+        description="The later bounding trough pin of the uncovered segment, when it was filled",
+    )
+    gap_days: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Length in calendar days of the uncovered stretch this placement was made for — at "
+            "least one trough window wide, or it would not have counted as a hole"
+        ),
+    )
+    pin: date = Field(
+        ...,
+        description="The hit trough placed inside the segment; it reaches the selected set",
+    )
+    prominence_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "Prominence of the placed pin, as a percent. The best HIT trough available in the "
+            "segment is the one placed, so this is the largest among them"
+        ),
+    )
+    observed_move_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "Largest move the placed pin's own window contained, as a percent — it cleared the "
+            "frozen long bar, which is why it was eligible to be placed at all"
+        ),
+    )
+
+
+class DisplacedTrough(BaseModel):
+    """A prominence-ranked trough that lost its days to a coverage placement.
+
+    The trough budget is finite, so a plug is paid for out of the prominence walk's
+    own kept set: putting a hit trough into a hole can only come from days some other
+    window was holding. This records exactly that — the pins the prominence walk would
+    have kept and the coverage-first walk did not — with the prominence that ranked
+    them and the move their windows contained, so the trade is visible instead of
+    silently absorbed. ``kind`` is always a trough: the two kinds are capped
+    independently, so a coverage trough cannot be paid for out of a peak.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    pin: date = Field(..., description="Date of the prominence-ranked trough that was dropped")
+    kind: CycleKind = Field(
+        ...,
+        description="Window kind; always a trough, since only the trough budget was spent",
+    )
+    prominence_pct: float = Field(
+        ...,
+        ge=0.0,
+        description="Prominence the pin was ranked by, as a percent, before the day budget",
+    )
+    observed_move_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "Largest move the pin's own window contained, as a percent. A displaced trough was "
+            "always a hit — it lost on rank, because coverage came first, not on merit"
+        ),
+    )
+    bars: int = Field(
+        ...,
+        ge=0,
+        description="In-calendar bars the pin's window covered when it was measured",
+    )
+    reason: str = Field(
+        ...,
+        min_length=1,
+        description="Why it was dropped, quoting its prominence, its move, and the placement(s) it funded",
     )
 
 
@@ -1029,7 +1119,25 @@ class LongTermSelection(BaseModel):
         ...,
         description=(
             "Every calendar segment between consecutive selected trough windows, in order, with "
-            "its uncovered gap and — where a repair was refused — what blocked it"
+            "its uncovered gap and — where nothing could be placed — what blocked it"
+        ),
+    )
+    coverage_placements: tuple[CoveragePlacement, ...] = Field(
+        ...,
+        description=(
+            "Hit troughs the coverage-first walk placed into an uncovered segment, in the order "
+            "it placed them (worst gap first). Each names the hole it closed, the pin it put "
+            "there, and the move that pin's window contained. Empty when there was no hole or "
+            "nothing placeable to fill one with"
+        ),
+    )
+    displaced_troughs: tuple[DisplacedTrough, ...] = Field(
+        ...,
+        description=(
+            "Prominence-ranked troughs the prominence walk would have kept and the "
+            "coverage-first walk did not, chronological, with their prominence and observed "
+            "moves. THE COST of the coverage placements above, kept on the record rather than "
+            "absorbed — empty when coverage cost nothing"
         ),
     )
     peaks: tuple[CycleWindow, ...] = Field(
@@ -1619,29 +1727,41 @@ def select_long_term_periods(
     window contained, and every kept window's verdict travels in
     ``peak_hit_tests`` / ``trough_hit_tests``.
 
-    **Coverage is measured, and the repair is attempted.** Actions are emitted at
-    window ENTERS, so calendar holding no selected trough window is flat by
-    construction; on GLD one such stretch ran 3063 days. Every calendar segment
-    between consecutive selected trough windows is therefore measured, and a
-    stretch at least one trough window wide — long enough that a whole
-    window-shaped opportunity went by unselected — is reported as uncovered in
-    ``coverage_segments``. Ruling 2 asks for the worst offending segment to be
-    repaired by swapping its lowest-prominence selected PEAK for the best HIT
-    trough available there, and that repair is attempted with the per-kind day cap
-    and both minima intact.
+    **Coverage is bought FIRST (Ruling 3).** Actions are emitted at window ENTERS, so
+    calendar holding no selected trough window is flat by construction; on GLD one
+    such stretch ran 3063 days. A calendar segment between consecutive selected
+    trough windows at least one trough window wide is a hole, and the trough budget is
+    spent on holes before it is spent on prominence:
 
-    **Why the repair is never admissible today.** It is not a tuning accident:
-    ``_truncate_to_day_cap`` keeps every window that fits, so its kept set is
-    addition-maximal. A candidate it skipped had ``covered_then | days`` over
-    budget, and the covered set only grows, so putting that window back breaches
-    the very cap the walk enforced; and the two kinds are capped independently,
-    so giving up a peak frees no trough budget. The attempt is therefore made and
-    its **verdict recorded** — ``day cap``, ``no hit trough``, or ``min_peaks`` —
-    because "the frozen day cap is what blocks coverage" is the finding a reader
-    needs, and a segment that could not be repaired must say so rather than
-    disappear. Widening the trough share of the cap, or funding the repair from a
-    dropped trough instead of a dropped peak, is an owner decision this function
-    does not make for itself.
+    > while there is an uncovered segment: take the worst one (the longest stretch,
+    > earliest on a tie); inside it place the best HIT trough by prominence, provided
+    > that trough survives the budgeted walk it is about to enter; otherwise record
+    > why the hole stays open. Then fill whatever trough budget is left by prominence,
+    > exactly as before.
+
+    The walk is a **re-ranking**, not a repair: the placed pins are ranked ahead of the
+    hit troughs, so a placement spends its days before any prominence-ranked window
+    does, and the prominence walk then fills the remainder. Peaks keep their own
+    prominence walk, and the 25% per-kind day cap, the 70% exposure floor and both
+    minima are untouched — this spends the same budget prominence spent, only in a
+    different order. Every round re-derives the segments from the set in play, so a
+    plug that splits one hole exposes the next worst; that re-derivation matters (on
+    GLD, filling each hole of the prominence-only set exactly once made the worst hole
+    *worse* — 1509 days became 4218 — because the troughs it displaced were the ones
+    separating two later segments).
+
+    **The cost is on the record.** ``coverage_placements`` names every plug — the hole,
+    the pin, and the move that pin's own window contained — and ``displaced_troughs``
+    names every prominence-ranked trough that walk would have kept and this one did
+    not. A hole the budget cannot cover stays in ``uncovered_segments`` with the reason
+    it stayed open; it is never fudged, and no minimum is relaxed to close it.
+
+    Ruling 2's repair — swapping the segment's lowest-prominence selected PEAK for the
+    best hit trough available there — was measured and removed as inadmissible: the two
+    kinds are capped independently, so giving up a peak frees no trough budget, and
+    the prominence walk's kept set is addition-maximal, so re-adding any trough to it
+    breaches the very cap it enforced. Re-ranking the trough side is what Ruling 3
+    ruled instead.
 
     **The width (Ruling 1).** ``half_width_days`` defaults to the tightest frozen
     long grid member, and the default is *behaviour-preserving*: it is the width
@@ -1754,13 +1874,132 @@ def select_long_term_periods(
         first_day=dates[0],
         last_day=dates[-1],
     )
-    kept_troughs = _truncate_to_day_cap(
+
+    # ---- coverage-first trough budget (Ruling 3).
+    #
+    # The trough walk is RE-RANKED, not repaired: `promoted` (the coverage pins) is
+    # ranked ahead of the hit troughs, so a coverage placement spends its days
+    # before any prominence-ranked window does and the prominence walk then fills
+    # whatever budget is left, exactly as it always did. Peaks keep their own
+    # prominence walk — the two kinds are capped independently, so a peak's days
+    # are not the trough side's to give.
+    window_days = 2 * half_width + 1
+
+    def budgeted_troughs(promoted: Sequence[tuple[date, float]]) -> tuple[tuple[date, float], ...]:
+        """The prominence trough walk with the coverage pins ranked ahead of it."""
+        claimed = {pin for pin, _prominence in promoted}
+        return _truncate_to_day_cap(
+            [
+                *promoted,
+                *(
+                    (pin, prominence)
+                    for pin, prominence, _verdict in hit_troughs
+                    if pin not in claimed
+                ),
+            ],
+            half_width_days=half_width,
+            budget_days=budget_days,
+            first_day=dates[0],
+            last_day=dates[-1],
+        )
+
+    def trough_days_of(pins: Sequence[date]) -> int:
+        return _covered_days(
+            [window_for(pin, CycleKind.TROUGH) for pin in pins],
+            first_day=dates[0],
+            last_day=dates[-1],
+        )
+
+    def spans(trough_pins_kept: Sequence[date]) -> list[tuple[date, date, date, date, int]]:
+        """``(earlier pin, later pin, gap start, gap end, gap days)`` per segment."""
+        out: list[tuple[date, date, date, date, int]] = []
+        for earlier, later in zip(trough_pins_kept, trough_pins_kept[1:], strict=False):
+            gap_start = max(window_for(earlier, CycleKind.TROUGH).end, dates[0]) + timedelta(days=1)
+            gap_end = min(window_for(later, CycleKind.TROUGH).start, dates[-1]) - timedelta(days=1)
+            gap_days = 0 if gap_end < gap_start else (gap_end - gap_start).days + 1
+            out.append((earlier, later, gap_start, gap_end, gap_days))
+        return out
+
+    # What prominence alone would have kept. The coverage walk is judged against it,
+    # and it is the set whose losses `displaced_troughs` reports.
+    prominence_only = _truncate_to_day_cap(
         [(pin, prominence) for pin, prominence, _verdict in hit_troughs],
         half_width_days=half_width,
         budget_days=budget_days,
         first_day=dates[0],
         last_day=dates[-1],
     )
+    promoted: list[tuple[date, float]] = []
+    coverage_placements: list[CoveragePlacement] = []
+    refused: dict[tuple[date, date], str] = {}
+
+    while True:
+        # Each round re-derives the segments from the set that is actually in play, so
+        # a plug that splits one hole can expose the next worst one. That re-derivation
+        # is load-bearing: filling each hole of the prominence-only set exactly once was
+        # measured on GLD to make the worst hole WORSE (1509 days became 4218), because
+        # displacing the 2020 troughs merged two segments that had been separate.
+        chosen = budgeted_troughs(promoted)
+        chosen_pins = [pin for pin, _prominence in chosen]
+        outstanding = [
+            span
+            for span in spans(chosen_pins)
+            if span[4] >= window_days and (span[0], span[1]) not in refused
+        ]
+        if not outstanding:
+            break
+        # Worst-offending segment first: the longest flat run, earliest on a tie.
+        earlier, later, _gap_start, _gap_end, gap_days = max(
+            outstanding, key=lambda span: (span[4], -span[0].toordinal())
+        )
+        claimed = set(chosen_pins)
+        available = [
+            (pin, prominence)
+            for pin, prominence, _verdict in hit_troughs  # prominence desc, so best first
+            if earlier < pin < later and pin not in claimed
+        ]
+        # Admissible only if the promoted pin SURVIVES the budgeted walk it is about to
+        # enter — otherwise the cap would silently drop it again and the placement would
+        # be a claim the selected set does not honour.
+        fitted = next(
+            (
+                (pin, prominence)
+                for pin, prominence in available
+                if pin in {kept for kept, _rank in budgeted_troughs([*promoted, (pin, prominence)])}
+            ),
+            None,
+        )
+        if fitted is None:
+            if not available:
+                refused[(earlier, later)] = (
+                    "uncovered: no hit trough candidate sits in this segment, so there is "
+                    "nothing to place and no window may be invented"
+                )
+            else:
+                would_need = min(
+                    trough_days_of([*chosen_pins, pin]) for pin, _prominence in available
+                )
+                refused[(earlier, later)] = (
+                    f"uncovered: the {max_peak_days_pct:.1f}% per-kind day cap cannot fund a "
+                    f"trough window in this segment — the best hit trough available there would "
+                    f"need {would_need} of the {budget_days} trough days the cap allows, and the "
+                    f"two kinds are capped independently, so giving up a peak frees nothing"
+                )
+            continue
+        pin, prominence = fitted
+        promoted.append(fitted)
+        verdict = verdict_of[pin]
+        coverage_placements.append(
+            CoveragePlacement(
+                segment_start=earlier,
+                segment_end=later,
+                gap_days=gap_days,
+                pin=pin,
+                prominence_pct=prominence,
+                observed_move_pct=verdict.max_move_pct,
+            )
+        )
+    kept_troughs = budgeted_troughs(promoted)
 
     if len(kept_peaks) < min_peaks or len(kept_troughs) < min_troughs:
         return LongTermSelection(
@@ -1779,6 +2018,8 @@ def select_long_term_periods(
             peak_hit_tests=(),
             trough_hit_tests=(),
             coverage_segments=(),
+            coverage_placements=tuple(coverage_placements),
+            displaced_troughs=(),
             peaks=(),
             troughs=(),
             selected=False,
@@ -1794,6 +2035,12 @@ def select_long_term_periods(
                     if dropped_windows
                     else ""
                 )
+                + (
+                    f"; the coverage-first walk placed {len(coverage_placements)} hit trough(s) "
+                    f"before that check, so the trough side was judged on the covered set"
+                    if coverage_placements
+                    else ""
+                )
             ),
         )
 
@@ -1803,165 +2050,63 @@ def select_long_term_periods(
         windows = tuple(window_for(pin, kind) for pin, _prominence in kept)
         return windows, tuple(prominence for _pin, prominence in kept)
 
-    # ---- coverage: every calendar segment between consecutive selected trough windows.
-    window_days = 2 * half_width + 1
+    # ---- the cost of the coverage placements, kept on the record.
+    #
+    # A trough budget is finite, so a plug is paid for out of the set the prominence
+    # walk would have produced. Naming that difference is the whole point: coverage
+    # buys exposure with prominence-ranked windows, and a reader has to be able to see
+    # which ones it spent.
+    kept_trough_pins = {pin for pin, _prominence in kept_troughs}
+    placed_pins = ", ".join(f"{pin:%Y-%m-%d}" for pin, _prominence in promoted)
+    displaced_troughs = tuple(
+        sorted(
+            (
+                DisplacedTrough(
+                    pin=pin,
+                    kind=CycleKind.TROUGH,
+                    prominence_pct=prominence,
+                    observed_move_pct=verdict_of[pin].max_move_pct,
+                    bars=verdict_of[pin].bars,
+                    reason=(
+                        f"displaced: prominence {prominence:.2f}% with a hit "
+                        f"{verdict_of[pin].max_move_pct:.2f}% move in its own window would have "
+                        f"kept it, but coverage-first commits trough days to uncovered segments "
+                        f"before prominence does, and the placement(s) at {placed_pins} took the "
+                        f"budget it was ranked for. It lost on rank, not on merit"
+                    ),
+                )
+                for pin, prominence in prominence_only
+                if pin not in kept_trough_pins
+            ),
+            key=lambda record: record.pin,
+        )
+    )
 
-    def spans(trough_pins_kept: Sequence[date]) -> list[tuple[date, date, date, date, int]]:
-        """``(earlier pin, later pin, gap start, gap end, gap days)`` per segment."""
-        out: list[tuple[date, date, date, date, int]] = []
-        for earlier, later in zip(trough_pins_kept, trough_pins_kept[1:], strict=False):
-            gap_start = max(window_for(earlier, CycleKind.TROUGH).end, dates[0]) + timedelta(days=1)
-            gap_end = min(window_for(later, CycleKind.TROUGH).start, dates[-1]) - timedelta(days=1)
-            gap_days = 0 if gap_end < gap_start else (gap_end - gap_start).days + 1
-            out.append((earlier, later, gap_start, gap_end, gap_days))
-        return out
-
-    kept_peak_pins = [pin for pin, _prominence in kept_peaks]
-    kept_trough_pins = [pin for pin, _prominence in kept_troughs]
-    verdicts: dict[tuple[date, date], CoverageSegment] = {}
-    origins: dict[tuple[date, date], tuple[date, date]] = {}
-    blocked: set[tuple[date, date]] = set()
-
-    def record(
-        span: tuple[date, date],
-        gap_start: date,
-        gap_end: date,
-        gap_days: int,
-        *,
-        covered: bool,
-        reason: str | None,
-    ) -> None:
-        origin = origins.get(span)
-        verdicts[span] = CoverageSegment(
-            start=span[0],
-            end=span[1],
+    # Report the FINAL trough set. Every uncovered span in it has a recorded verdict —
+    # the walk above either placed into it or refused it — so the fallback below only
+    # fills in covered segments, and its uncovered branch is a guard rather than an
+    # expectation. A refusal only ever attaches to a segment that is STILL uncovered:
+    # a refusal is recorded against a span whose gap was at least one window wide, and
+    # the gap between two given pins does not change, so the two can never disagree.
+    coverage_segments = tuple(
+        CoverageSegment(
+            start=earlier,
+            end=later,
             gap_start=gap_start,
             gap_end=gap_end,
             gap_days=gap_days,
-            covered=covered,
-            repaired=origin is not None,
-            swapped_out_peak=origin[1] if origin is not None else None,
-            swapped_in_trough=origin[0] if origin is not None else None,
-            reason=reason,
+            covered=gap_days < window_days,
+            reason=(
+                None
+                if gap_days < window_days
+                else refused.get((earlier, later))
+                or "uncovered: the coverage-first walk could not reach this segment"
+            ),
         )
-
-    # Each pass either gives up a selected peak or records a segment as blocked, so
-    # the loop runs out of both: no repair can repeat on a peak that is already gone,
-    # and a blocked segment is never retried.
-    while True:
-        outstanding = [
-            span
-            for span in spans(kept_trough_pins)
-            if span[4] >= window_days and (span[0], span[1]) not in blocked
-        ]
-        if not outstanding:
-            break
-        # Worst-offending segment first: the longest flat run, earliest on a tie.
-        earlier, later, gap_start, gap_end, gap_days = max(
-            outstanding, key=lambda span: (span[4], -span[0].toordinal())
+        for earlier, later, gap_start, gap_end, gap_days in spans(
+            [pin for pin, _prominence in kept_troughs]
         )
-        span = (earlier, later)
-        available = [
-            (pin, prominence)
-            for pin, prominence, _verdict in hit_troughs
-            if earlier <= pin <= later and pin not in kept_trough_pins
-        ]
-        give_up = [(pin, prominence) for pin, prominence in kept_peaks if earlier <= pin <= later]
-        if not available:
-            record(
-                span,
-                gap_start,
-                gap_end,
-                gap_days,
-                covered=False,
-                reason=(
-                    "uncovered: no hit trough candidate sits in this segment, so there is "
-                    "nothing to swap a peak for and no window may be invented"
-                ),
-            )
-            blocked.add(span)
-            continue
-        if not give_up:
-            record(
-                span,
-                gap_start,
-                gap_end,
-                gap_days,
-                covered=False,
-                reason="uncovered: no selected peak sits in this segment to give up for a trough",
-            )
-            blocked.add(span)
-            continue
-        lowest_peak = min(give_up, key=lambda item: (item[1], item[0]))
-        if len(kept_peak_pins) - 1 < min_peaks:
-            record(
-                span,
-                gap_start,
-                gap_end,
-                gap_days,
-                covered=False,
-                reason=(
-                    f"uncovered: giving up a peak here would leave {len(kept_peak_pins) - 1} "
-                    f"peak windows, under min_peaks={min_peaks}, which is never relaxed"
-                ),
-            )
-            blocked.add(span)
-            continue
-        fitted: tuple[date, float] | None = None
-        would_need = 0
-        for pin, prominence in available:  # prominence desc, so the best candidate first
-            trough_days = _covered_days(
-                [window_for(kept, CycleKind.TROUGH) for kept in (*kept_trough_pins, pin)],
-                first_day=dates[0],
-                last_day=dates[-1],
-            )
-            if trough_days <= budget_days:
-                fitted = (pin, prominence)
-                break
-            would_need = max(would_need, trough_days)
-        if fitted is None:
-            record(
-                span,
-                gap_start,
-                gap_end,
-                gap_days,
-                covered=False,
-                reason=(
-                    f"uncovered: the {max_peak_days_pct:.1f}% per-kind day cap cannot fund "
-                    f"another trough window here (it would need {would_need} of the "
-                    f"{budget_days} trough days the cap allows), and the two kinds are capped "
-                    f"independently, so giving up a peak frees no trough budget"
-                ),
-            )
-            blocked.add(span)
-            continue
-        kept_peaks = tuple(item for item in kept_peaks if item[0] != lowest_peak[0])
-        kept_troughs = tuple(sorted((*kept_troughs, fitted)))
-        kept_peak_pins = [pin for pin, _prominence in kept_peaks]
-        kept_trough_pins = [pin for pin, _prominence in kept_troughs]
-        # The span no longer exists once the trough is in; both spans it became carry
-        # the swap that created them.
-        origins[(earlier, fitted[0])] = (fitted[0], lowest_peak[0])
-        origins[(fitted[0], later)] = (fitted[0], lowest_peak[0])
-
-    # Report the FINAL trough set: a span a repair split is gone from the set, and both
-    # spans it became carry the swap through ``origins``. Every uncovered span has a
-    # recorded verdict already — the loop above blocks or repairs each one — so the
-    # fallback only ever fills in the covered segments, and the uncovered branch in it
-    # is a guard rather than an expectation.
-    final_spans = spans(kept_trough_pins)
-    for earlier, later, gap_start, gap_end, gap_days in final_spans:
-        if (earlier, later) not in verdicts:
-            covered = gap_days < window_days
-            record(
-                (earlier, later),
-                gap_start,
-                gap_end,
-                gap_days,
-                covered=covered,
-                reason=None if covered else "uncovered: no repair was attempted",
-            )
-    coverage_segments = tuple(verdicts[(earlier, later)] for earlier, later, *_rest in final_spans)
+    )
 
     peaks, peak_prominence = emit(kept_peaks, CycleKind.PEAK)
     troughs, trough_prominence = emit(kept_troughs, CycleKind.TROUGH)
@@ -1983,6 +2128,8 @@ def select_long_term_periods(
         peak_hit_tests=tuple(verdict_of[pin] for pin, _prominence in kept_peaks),
         trough_hit_tests=tuple(verdict_of[pin] for pin, _prominence in kept_troughs),
         coverage_segments=coverage_segments,
+        coverage_placements=tuple(coverage_placements),
+        displaced_troughs=displaced_troughs,
         peaks=peaks,
         troughs=troughs,
         selected=True,
@@ -1999,7 +2146,9 @@ __all__ = [
     "MEDIUM_MIN_MOVE_PCT",
     "MIN_PEAKS",
     "MIN_TROUGHS",
+    "CoveragePlacement",
     "CoverageSegment",
+    "DisplacedTrough",
     "DroppedWindow",
     "HitTest",
     "LongTermSelection",

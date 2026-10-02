@@ -25,6 +25,17 @@ time, and writes ``.scratch/gold_period_ladder.json`` instead:
     PYTHONPATH=digiquant/src .venv/bin/python \\
         digiquant/scripts/run_gold_period_optimization.py --long-first
 
+**``--long-first --post-fix`` (Plan 21, Task 3c) is a THIRD output path, not a
+rewrite.** Ruling 3 changed the long trough budget to coverage-first, so the
+ladder the model produces is no longer the one ``gold_period_ladder.json``
+records. That file is the pre-fix record and is never overwritten; the
+post-fix run writes ``.scratch/gold_period_ladder_postfix.json`` beside it and
+stamps its own ``variant``, so the two runs are comparable and neither is
+silent:
+
+    PYTHONPATH=digiquant/src .venv/bin/python \\
+        digiquant/scripts/run_gold_period_optimization.py --long-first --post-fix
+
 Nothing here re-implements search: ``select_long_term_periods`` picks the long
 regime, ``window_is_hit`` grades each window, ``grade_medium_overlay`` runs the
 ladder under the frozen objective and the frozen floor, ``score_periods`` prices
@@ -110,6 +121,7 @@ SYMBOL = "GLD-USD"
 DATA_PATH = DIGIQUANT_ROOT / "data" / "price-history" / f"{SYMBOL}.csv"
 OUT_PATH = DIGIQUANT_ROOT / ".scratch" / "gold_period_optimization.json"
 LADDER_OUT_PATH = DIGIQUANT_ROOT / ".scratch" / "gold_period_ladder.json"
+POSTFIX_LADDER_OUT_PATH = DIGIQUANT_ROOT / ".scratch" / "gold_period_ladder_postfix.json"
 
 SPLIT = 0.5
 
@@ -462,7 +474,83 @@ def long_selection_payload(
         "hit": verdicts,
         "n_unhit": sum(1 for verdict in verdicts if not verdict["hit"]),
         "calendar_bound_pins": calendar_bound_pins(selection, dates[0], dates[-1]),
+        "coverage_rule": (
+            "Plan 21 Ruling 3: the per-kind trough budget is spent on COVERAGE first — one hit "
+            "trough per uncovered calendar segment (worst gap first, earliest on a tie, best "
+            "hit trough by prominence in that segment) — and on prominence second, exactly as "
+            "before. Peaks keep their own prominence walk and the cap/floor/minima are unchanged"
+        ),
+        "n_coverage_placements": len(selection.coverage_placements),
+        "coverage_placements": [
+            placement.model_dump(mode="json") for placement in selection.coverage_placements
+        ],
+        "n_displaced_troughs": len(selection.displaced_troughs),
+        "displaced_troughs": [
+            record.model_dump(mode="json") for record in selection.displaced_troughs
+        ],
+        "coverage_segments": [
+            segment.model_dump(mode="json") for segment in selection.coverage_segments
+        ],
+        "n_uncovered_segments": len(selection.uncovered_segments),
+        "coverage_complete": selection.coverage_complete,
+        "longest_uncovered_gap_days": max(
+            (segment.gap_days for segment in selection.uncovered_segments), default=0
+        ),
     }
+
+
+def print_coverage(selection: LongTermSelection) -> None:
+    """The coverage-first trade, on the console: what was placed, what it displaced, what stayed open."""
+    print(
+        f"  coverage-first trough budget (Ruling 3): {len(selection.coverage_placements)} "
+        f"placement(s), {len(selection.displaced_troughs)} prominence trough(s) displaced, "
+        f"{len(selection.uncovered_segments)} of {len(selection.coverage_segments)} segment(s) "
+        f"still uncovered"
+    )
+    print_table(
+        "coverage placements (hit trough placed to close a hole):",
+        ("pin", "segment", "gap_days", "prom%", "move%"),
+        [
+            (
+                placement.pin.isoformat(),
+                f"{placement.segment_start.isoformat()}..{placement.segment_end.isoformat()}",
+                str(placement.gap_days),
+                f"{placement.prominence_pct:.2f}",
+                f"{placement.observed_move_pct:.2f}",
+            )
+            for placement in selection.coverage_placements
+        ],
+    )
+    print_table(
+        "displaced troughs (the cost — hit windows that lost the budget to coverage):",
+        ("pin", "prom%", "move%", "bars"),
+        [
+            (
+                record.pin.isoformat(),
+                f"{record.prominence_pct:.2f}",
+                f"{record.observed_move_pct:.2f}",
+                str(record.bars),
+            )
+            for record in selection.displaced_troughs
+        ],
+    )
+    if selection.uncovered_segments:
+        print_table(
+            "uncovered segments (flat runs the budget could not close — never fudged):",
+            ("start", "end", "gap_days", "reason"),
+            [
+                (
+                    segment.start.isoformat(),
+                    segment.end.isoformat(),
+                    str(segment.gap_days),
+                    str(segment.reason),
+                )
+                for segment in selection.uncovered_segments
+            ],
+        )
+    else:
+        print("  every segment between consecutive selected trough windows holds a trough window")
+    print("")
 
 
 def print_hit_table(title: str, verdicts: Sequence[dict[str, Any]]) -> None:
@@ -796,10 +884,19 @@ def long_first_split_sample(
     return out
 
 
-def long_first_ladder() -> int:
-    """Plan 21 mode: long regime first, then the graded medium ladder. Writes the ladder JSON."""
+def long_first_ladder(*, postfix: bool = False) -> int:
+    """Plan 21 mode: long regime first, then the graded medium ladder. Writes the ladder JSON.
+
+    ``postfix=True`` writes the Task-3c (coverage-first trough budget) run to its OWN
+    file instead of ``.scratch/gold_period_ladder.json``. The pre-fix ladder filed by
+    Task 3 is the record of what the model produced before that rule, so it is never
+    overwritten — the post-fix run is a second JSON beside it.
+    """
+    out_path = POSTFIX_LADDER_OUT_PATH if postfix else LADDER_OUT_PATH
+    variant = "post-fix (Plan 21 Task 3c: coverage-first trough budget)" if postfix else "pre-fix"
     dates, prices = load_closes(SYMBOL, DATA_PATH)
     print(f"=== GOLD LONG-FIRST PERIOD LADDER ({SYMBOL}) — Plan 21 Task 3 (#4804) ===")
+    print(f"variant: {variant} → {out_path.name}")
     print(f"{SYMBOL} {dates[0]}..{dates[-1]} ({len(dates)} daily bars) from {DATA_PATH}")
     print(LONG_FIRST_CEILING_LABEL)
     print(OBJECTIVE_LABEL)
@@ -823,6 +920,7 @@ def long_first_ladder() -> int:
         f"{selection.trough_days} = {selection.trough_days_pct:.2f}%"
     )
     print("  only PEAK days are the flat time that bounds the exposure floor")
+    print_coverage(selection)
     bound = long_block["calendar_bound_pins"]
     print(
         f"  calendar-bound pins: {bound['n_calendar_bound']} of {bound['n_windows']} "
@@ -853,6 +951,7 @@ def long_first_ladder() -> int:
         "task": 3,
         "kind": "gold-long-first-period-ladder",
         "mode": "long-first",
+        "variant": variant,
         "symbol": SYMBOL,
         "data_path": str(DATA_PATH),
         "data_sha256": sha256(DATA_PATH),
@@ -888,10 +987,10 @@ def long_first_ladder() -> int:
         payload["split_sample"] = long_first_split_sample(
             dates, prices, split=SPLIT, max_peak_days_pct=MAX_PEAK_DAYS_PCT
         )
-        LADDER_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        LADDER_OUT_PATH.write_text(json.dumps(payload, indent=2) + "\n")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2) + "\n")
         print(LONG_FIRST_CEILING_LABEL)
-        print(f"wrote {LADDER_OUT_PATH}")
+        print(f"wrote {out_path}")
         return 0
 
     medium = discover_candidate_periods(dates, prices, horizon_by_name("medium"))
@@ -1024,9 +1123,9 @@ def long_first_ladder() -> int:
     payload["comparators"] = comparator_rows
     payload["split_sample"] = split_block
 
-    LADDER_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LADDER_OUT_PATH.write_text(json.dumps(payload, indent=2) + "\n")
-    print(f"wrote {LADDER_OUT_PATH}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2) + "\n")
+    print(f"wrote {out_path}")
     return 0
 
 
@@ -1042,13 +1141,23 @@ def build_parser() -> argparse.ArgumentParser:
             ".scratch/gold_period_optimization.json, unchanged."
         ),
     )
+    parser.add_argument(
+        "--post-fix",
+        action="store_true",
+        help=(
+            "Plan 21 Task 3c (coverage-first trough budget): write the long-first ladder to "
+            ".scratch/gold_period_ladder_postfix.json instead of .scratch/gold_period_ladder.json, "
+            "so the filed pre-fix ladder stays the record of what the model produced before the "
+            "rule. Only meaningful with --long-first."
+        ),
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.long_first:
-        return long_first_ladder()
+        return long_first_ladder(postfix=args.post_fix)
     return plan20_ladder()
 
 
