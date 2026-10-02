@@ -15,16 +15,28 @@ from digivoice import history as history_log
 from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
+from digivoice.menu_tree import browse_settings, rows_at
 from digivoice.models import CliResult, PasteResult, VoicePaths
+from digivoice.nav import norm_path, section_of
+from digivoice.panels import (
+    SYSTEM_BLOCKS,
+    browse_history,
+    browse_system,
+    present_doctor,
+    restart_digivoice,
+)
 from digivoice.paste import copy_to_clipboard, paste
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 from digivoice.probe import CommandProbe, real_probe
+from digivoice.reload import stop_home_control
 from digivoice.rewrite import rewrite_transcript
 from digivoice.runner import CommandRunner, cancellable_runner, run_command
 from digivoice.settings import (
     VoiceSettings,
+    default_settings,
     format_settings_text,
     load_settings,
+    save_settings,
     set_setting,
     settings_path,
     settings_public_dict,
@@ -44,6 +56,7 @@ from digivoice.status import (
     write_banner_flag,
 )
 from digivoice.transcribe import transcribe
+from digivoice.tui import fullscreen_enter, fullscreen_leave
 
 
 class UsageError(Exception):
@@ -210,6 +223,10 @@ def build_parser() -> _Parser:
     )
     sub.add_parser("update", help="Reinstall hint (not wired yet)")
     sub.add_parser("uninstall", help="Removal hint (not wired yet)")
+    sub.add_parser("quit", help="Stop digivoice and quit Hammerspoon")
+    sub.add_parser("reset", help="Restore settings defaults; history and models stay")
+    sub.add_parser("restart", help="Quit Hammerspoon and open digivoice again")
+    sub.add_parser("system", help="Doctor, reload, reset, restart, and update")
     reload_cmd = sub.add_parser(
         "reload",
         help="Refresh local control: CLI path, settings, Lua adapter, Hammerspoon",
@@ -228,9 +245,15 @@ def _usage(message: str) -> CliResult:
 
 
 def _doctor(runtime: Runtime) -> CliResult:
-    report = render_doctor(
-        doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
-    )
+    checks = doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
+    report = render_doctor(checks)
+    if sys.stdin.isatty():
+        fullscreen_enter(sys.stdout)
+        try:
+            present_doctor(checks, sys.stdout, sys.stdin)
+        finally:
+            fullscreen_leave(sys.stdout)
+        return CliResult(code=0 if report.ok else 1, stdout="", stderr="")
     return CliResult(code=0 if report.ok else 1, stdout=report.text, stderr="")
 
 
@@ -624,6 +647,26 @@ def _history(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     if args.grep is not None and not args.grep:
         return _usage("--grep expects a pattern")
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    plain = (
+        args.last is None
+        and not args.grep
+        and not args.copy_last
+        and not getattr(args, "as_json", False)
+    )
+    if plain and sys.stdin.isatty():
+        fullscreen_enter(sys.stdout)
+        try:
+            browse_history(
+                paths,
+                runtime.platform,
+                runtime.probe,
+                runtime.runner,
+                sys.stdin,
+                sys.stdout,
+            )
+        finally:
+            fullscreen_leave(sys.stdout)
+        return CliResult(code=0, stdout="", stderr="")
     reading = history_log.read_history(paths.history_file)
     if args.copy_last:
         text = history_log.last_dict_text(paths.history_file)
@@ -725,6 +768,13 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         )
     # show
     settings = load_settings(paths)
+    if sys.stdin.isatty() and not as_json:
+        fullscreen_enter(sys.stdout)
+        try:
+            browse_settings(paths, sys.stdin, sys.stdout)
+        finally:
+            fullscreen_leave(sys.stdout)
+        return CliResult(code=0, stdout="", stderr="")
     if as_json:
         return CliResult(
             code=0,
@@ -734,12 +784,128 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     return CliResult(code=0, stdout=format_settings_text(settings, paths), stderr="")
 
 
+def _quit(runtime: Runtime) -> CliResult:
+    report = stop_home_control(
+        runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner
+    )
+    text = "\n".join(report.lines) if report.lines else report.summary
+    return CliResult(code=0, stdout=text + "\n", stderr="")
+
+
+def _reset(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    save_settings(paths, default_settings())
+    return CliResult(code=0, stdout="settings reset\n", stderr="")
+
+
+def _restart(runtime: Runtime) -> CliResult:
+    stop_home_control(runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner)
+    restart_digivoice()
+    return CliResult(code=0, stdout="", stderr="")
+
+
+def _system(runtime: Runtime) -> CliResult:
+    if not sys.stdin.isatty():
+        lines = [f"{block.action}\n{block.path}" for block in SYSTEM_BLOCKS]
+        return CliResult(code=0, stdout="\n".join(lines) + "\n", stderr="")
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+
+    def _doctor_panel() -> None:
+        present_doctor(
+            doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe),
+            sys.stdout,
+            sys.stdin,
+        )
+
+    fullscreen_enter(sys.stdout)
+    try:
+        browse_system(
+            paths,
+            runtime.platform,
+            runtime.home,
+            dict(runtime.env),
+            sys.stdin,
+            sys.stdout,
+            runner=runtime.runner,
+            doctor=_doctor_panel,
+        )
+    finally:
+        fullscreen_leave(sys.stdout)
+    return CliResult(code=0, stdout="", stderr="")
+
+
+def _settings_at(runtime: Runtime, path: str) -> CliResult:
+    """Print a settings path, or open it when stdin is a TTY."""
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    normal = norm_path(path)
+    if sys.stdin.isatty():
+        fullscreen_enter(sys.stdout)
+        try:
+            browse_settings(paths, sys.stdin, sys.stdout, start=normal)
+        finally:
+            fullscreen_leave(sys.stdout)
+        return CliResult(code=0, stdout="", stderr="")
+    settings = load_settings(paths)
+    if normal == "/settings":
+        rows = rows_at(settings, normal)
+        text = "\n".join(f"{row.name}  {normal}/{row.name}" for row in rows)
+        return CliResult(code=0, stdout=text + "\n", stderr="")
+    parent, _, name = normal.rpartition("/")
+    rows = rows_at(settings, parent or "/settings")
+    match = next((row for row in rows if row.name == name), None)
+    if match is None:
+        return CliResult(code=2, stdout="", stderr=f"unknown path {normal}\n")
+    if match.kind in {"dir", "pick"}:
+        children = rows_at(settings, normal)
+        text = "\n".join(f"{row.name}  {normal}/{row.name}" for row in children)
+        return CliResult(code=0, stdout=text + "\n", stderr="")
+    shown = match.value or match.explain
+    return CliResult(code=0, stdout=f"{shown}\n", stderr="")
+
+
+def _dispatch_path(raw: str, runtime: Runtime) -> CliResult:
+    path = norm_path(raw)
+    kind = section_of(path)
+    if kind == "quit":
+        return _quit(runtime)
+    if kind == "doctor":
+        return _doctor(runtime)
+    if kind == "history":
+        args = argparse.Namespace(last=None, grep=None, copy_last=False, as_json=False)
+        return _history(args, runtime)
+    if kind == "history-copy":
+        args = argparse.Namespace(last=None, grep=None, copy_last=True, as_json=False)
+        return _history(args, runtime)
+    if kind == "settings":
+        return _settings_at(runtime, path)
+    if kind == "system":
+        return _system(runtime)
+    if kind == "reload":
+        args = argparse.Namespace(as_json=False)
+        return _reload(args, runtime)
+    if kind == "reset":
+        return _reset(runtime)
+    if kind == "restart":
+        return _restart(runtime)
+    if kind == "update":
+        return _update()
+    if kind == "history-delete":
+        return CliResult(
+            code=2,
+            stdout="",
+            stderr="digivoice: open a take in history to delete it\n",
+        )
+    return _usage(f"unknown path {path}")
+
+
 def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     parser = build_parser()
     if argv and argv[0] in {"help", "-h", "--help"}:
         return CliResult(code=0, stdout=parser.format_help(), stderr="")
     if not argv:
         return _home(runtime)
+    if argv[0].startswith("/"):
+        return _dispatch_path(argv[0], runtime)
     try:
         args = parser.parse_args(list(argv))
     except UsageError as exc:
@@ -771,6 +937,14 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         if not hasattr(args, "as_json"):
             args.as_json = False
         return _settings(args, runtime)
+    if command == "quit":
+        return _quit(runtime)
+    if command == "reset":
+        return _reset(runtime)
+    if command == "restart":
+        return _restart(runtime)
+    if command == "system":
+        return _system(runtime)
     if command == "update":
         return _update()
     if command == "uninstall":

@@ -17,6 +17,7 @@ from typing import TextIO
 from digivoice.doctor import doctor_ready
 from digivoice.history import delete_entry, read_history
 from digivoice.models import DoctorCheck, HistoryEntry, VoicePaths
+from digivoice.nav import section_of
 from digivoice.paste import copy_to_clipboard
 from digivoice.probe import CommandProbe
 from digivoice.reload import run_reload
@@ -24,6 +25,7 @@ from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import default_settings, save_settings
 from digivoice.tui import (
     _ANSI_RESET,
+    MenuBlock,
     _compose,
     _is_tty,
     _read_key,
@@ -41,13 +43,21 @@ _OK = "\x1b[32m"
 _BAD = "\x1b[31m"
 _INFO = "\x1b[38;5;145m"
 
-SYSTEM_MENU = (
-    "Doctor (health checks, one row at a time)",
-    "Reload (ask Hammerspoon to reload its config)",
-    "Reset settings (defaults only; history and models stay)",
-    "Restart (quit this screen and open digivoice again)",
-    "Update (reinstall hint; not an in-app updater yet)",
+SYSTEM_BLOCKS: tuple[MenuBlock, ...] = (
+    MenuBlock(action="Doctor", path="/doctor"),
+    MenuBlock(action="Reload", path="/reload"),
+    MenuBlock(action="Reset", path="/reset"),
+    MenuBlock(action="Restart", path="/restart"),
+    MenuBlock(action="Update", path="/update"),
 )
+SYSTEM_MENU = tuple(block.action for block in SYSTEM_BLOCKS)
+
+_TAKE_BLOCKS: tuple[MenuBlock, ...] = (
+    MenuBlock(action="Copy", shortcut="c", path="/history/copy"),
+    MenuBlock(action="Delete", shortcut="d", path="/history/delete"),
+    MenuBlock(action="Back", shortcut="esc", path="/history"),
+)
+_TAKE_KEYS = {"c": 0, "C": 0, "d": 1, "D": 1, "copy": 0}
 
 # Short lines for the doctor screen. The CLI report still prints full paths.
 _SUMMARY: dict[tuple[str, str], str] = {
@@ -242,18 +252,36 @@ def present_doctor(
     return frame
 
 
-def _clip(entry: HistoryEntry) -> str:
+def _preview(entry: HistoryEntry) -> str:
     text = " ".join(entry.text.split())
     if len(text) > 48:
-        text = text[:47] + "…"
-    clock = entry.ts[5:16] if len(entry.ts) >= 16 else entry.ts
-    return f"{clock}  {entry.kind}  {text}"
+        return text[:47] + "…"
+    return text
+
+
+def _when(entry: HistoryEntry) -> str:
+    """Timestamp under the text. Gray metadata, not part of the sentence."""
+    ts = entry.ts
+    if len(ts) >= 16:
+        clock = f"{ts[5:10]} {ts[11:16]}"
+    else:
+        clock = ts
+    return f"{clock}  {entry.kind}"
+
+
+def _history_blocks(visible: list[HistoryEntry]) -> list[MenuBlock]:
+    return [MenuBlock(action=_preview(entry), meta=_when(entry)) for entry in visible]
 
 
 def _write_full(entry: HistoryEntry, stdout: TextIO) -> None:
     width = max(24, min(72, _term_size()[0] - 4))
     stdout.write("\n".join(wrap_text(entry.text, width)) + "\n")
     stdout.flush()
+
+
+def _follow_path(picked: str, on_path: Callable[[str], None] | None) -> None:
+    if on_path is not None:
+        on_path(picked)
 
 
 def browse_history(
@@ -263,6 +291,8 @@ def browse_history(
     runner: CommandRunner | None,
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
+    *,
+    on_path: Callable[[str], None] | None = None,
 ) -> None:
     """Newest takes first, one page at a time. Enter shows the full text."""
     stdin = stdin or sys.stdin
@@ -281,15 +311,19 @@ def browse_history(
         visible = ordered[page * _PAGE : (page + 1) * _PAGE]
         picked = choose(
             "History",
-            [_clip(entry) for entry in visible],
-            stdin,
-            stdout,
-            subtitle=(
-                f"Page {page + 1} of {pages}. Left and right change pages. Enter opens the take."
-            ),
+            stdin=stdin,
+            stdout=stdout,
+            subtitle="/history",
+            hint=f"{page + 1}/{pages}  ← →",
             paging=True,
+            blocks=_history_blocks(visible),
         )
         if picked is None:
+            return
+        if isinstance(picked, str) and picked.startswith("/"):
+            if section_of(picked) == "history":
+                continue
+            _follow_path(picked, on_path)
             return
         if picked == "page-prev":
             page = max(0, page - 1)
@@ -301,29 +335,34 @@ def browse_history(
             continue
         entry = visible[picked]
         _write_full(entry, stdout)
+        width = max(24, min(72, _term_size()[0] - 4))
         while True:
             action = choose(
                 "Take",
-                [
-                    "Copy (put this take on the clipboard)",
-                    "Delete (remove this take)",
-                    "Back",
-                ],
-                stdin,
-                stdout,
-                subtitle="The full text is above. Esc goes up.",
+                stdin=stdin,
+                stdout=stdout,
+                subtitle="/history",
+                blocks=_TAKE_BLOCKS,
+                shortcuts=_TAKE_KEYS,
+                lead=wrap_text(entry.text, width),
+                lead_meta=_when(entry),
             )
-            if action == 0:
+            copy_now = action == 0 or action == "/history/copy"
+            delete_now = action == 1 or action == "/history/delete"
+            if copy_now:
                 copied = copy_to_clipboard(platform, probe, active, entry.text)
                 stdout.write(f"  {copied.detail}\n")
                 stdout.flush()
                 continue
-            if action == 1:
+            if delete_now:
                 delete_entry(paths.history_file, entry)
                 stdout.write("  deleted\n")
                 stdout.flush()
                 ordered = list(reversed(read_history(paths.history_file).entries))
                 break
+            if isinstance(action, str) and action.startswith("/"):
+                _follow_path(action, on_path)
+                return
             break
         if not ordered:
             stdout.write("  no takes yet\n")
@@ -347,6 +386,7 @@ def browse_system(
     runner: CommandRunner | None = None,
     restart: Callable[[], None] | None = None,
     doctor: Callable[[], None] | None = None,
+    on_path: Callable[[str], None] | None = None,
 ) -> None:
     """Doctor, reload, reset, restart, and update. Esc returns to home."""
     stdin = stdin or sys.stdin
@@ -354,14 +394,27 @@ def browse_system(
     while True:
         picked = choose(
             "System",
-            list(SYSTEM_MENU),
-            stdin,
-            stdout,
-            subtitle="Controls for this install. Esc goes up.",
-            detail=True,
+            stdin=stdin,
+            stdout=stdout,
+            subtitle="/system",
+            blocks=SYSTEM_BLOCKS,
         )
         if picked is None:
             return
+        if isinstance(picked, str) and picked.startswith("/"):
+            if on_path is not None:
+                on_path(picked)
+                return
+            kind = section_of(picked)
+            picked = {
+                "doctor": 0,
+                "reload": 1,
+                "reset": 2,
+                "restart": 3,
+                "update": 4,
+            }.get(kind)
+            if picked is None:
+                return
         if picked == 0:
             if doctor is not None:
                 doctor()
@@ -372,11 +425,14 @@ def browse_system(
             stdout.flush()
         elif picked == 2:
             answer = choose(
-                "Reset settings",
-                ["Reset (back to defaults)", "Back"],
-                stdin,
-                stdout,
-                subtitle="History and downloaded models stay on disk.",
+                "Reset",
+                stdin=stdin,
+                stdout=stdout,
+                subtitle="/reset",
+                blocks=(
+                    MenuBlock(action="Reset", path="/reset"),
+                    MenuBlock(action="Back", shortcut="esc", path="/system"),
+                ),
             )
             if answer == 0:
                 save_settings(paths, default_settings())
@@ -385,10 +441,13 @@ def browse_system(
         elif picked == 3:
             answer = choose(
                 "Restart",
-                ["Restart digivoice", "Back"],
-                stdin,
-                stdout,
-                subtitle="Hammerspoon stops, then this screen opens again.",
+                stdin=stdin,
+                stdout=stdout,
+                subtitle="/restart",
+                blocks=(
+                    MenuBlock(action="Restart", path="/restart"),
+                    MenuBlock(action="Back", shortcut="esc", path="/system"),
+                ),
             )
             if answer == 0:
                 fullscreen_leave(stdout)

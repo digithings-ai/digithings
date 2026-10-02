@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from digivoice.cli import Runtime, run
-from digivoice.home import HOME_MENU, home_menu_tree, render_home_overview, run_home
+from digivoice.home import HOME_BLOCKS, HOME_MENU, home_menu_tree, render_home_overview, run_home
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
 
@@ -64,7 +64,9 @@ def test_home_is_app_actions_with_settings_path() -> None:
     settings_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Settings"))
     system_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("System"))
     assert settings_at < system_at
-    assert "/settings" in HOME_MENU[settings_at]
+    assert HOME_BLOCKS[settings_at].path == "/settings"
+    assert HOME_BLOCKS[system_at].path == "/system"
+    assert [block.path for block in HOME_BLOCKS] == ["/history", "/settings", "/system", "/quit"]
 
 
 def test_home_overview_mentions_settings_path(tmp_path: Path) -> None:
@@ -127,6 +129,25 @@ def test_reload_hs_timeout_clears_stale_status(tmp_path: Path) -> None:
     assert call is not None
     assert call.argv == ["hs", "-c", "hs.reload()"]
     assert call.timeout == 8.0
+
+
+def test_quit_and_slash_paths_map_without_a_tty(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    quit_result = run(["quit"], runtime)
+    assert quit_result.code == 0
+    assert "skipped" in quit_result.stdout
+    doctor = run(["/doctor"], runtime)
+    assert "Whisper" in doctor.stdout or "whisper" in doctor.stdout
+    pin = run(["/settings/banner/pin"], runtime)
+    assert pin.code == 0
+    assert pin.stdout.strip() == "off"
+    system = run(["system"], runtime)
+    assert "/doctor" in system.stdout
+    assert "/reload" in system.stdout
+    reset = run(["reset"], runtime)
+    assert reset.stdout == "settings reset\n"
+    missing = run(["/history/delete"], runtime)
+    assert missing.code == 2
 
 
 def test_reload_reports_live_tip_through_symlink(tmp_path: Path) -> None:
