@@ -461,9 +461,7 @@ def test_block_stacks_shortcut_path_and_meta() -> None:
     assert lines[pin_at + 1].endswith("/settings/banner/pin")
     assert lines[pin_at + 2].endswith("off")
     assert "copies" not in plain
-    colored = render_screen(
-        "Take", [], 0, cols=80, rows=24, use_ansi=True, blocks=blocks
-    )
+    colored = render_screen("Take", [], 0, cols=80, rows=24, use_ansi=True, blocks=blocks)
     path = next(line for line in colored.splitlines() if "/history/copy" in line)
     assert "38;5;145" in path
     assert "\x1b[1m" not in path
