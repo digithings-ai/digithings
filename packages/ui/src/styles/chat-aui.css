@@ -213,6 +213,14 @@
   white-space: nowrap;
 }
 
+/* Composer shell is a border only. The input is already transparent; the
+   wrapper must not paint --composer-bg / --surface behind it. */
+.digichat-thread [data-slot="aui_composer-shell"],
+.digichat-launcher [data-slot="aui_composer-shell"] {
+  --composer-bg: transparent;
+  background: transparent;
+}
+
 /* Popup / embed compact Thread: one row until a newline. Empty and one-line
    typed share 1lh — do not shorten :placeholder-shown vs typed. */
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] {
