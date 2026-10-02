@@ -1,51 +1,49 @@
-import type { ReactNode } from 'react';
-import type { PaneState } from '@/lib/desk/types';
-
-export interface DeskStateProps {
-  state: PaneState;
-  errorMessage?: string;
-  emptyMessage?: string;
-  loadingMessage?: string;
-  children?: ReactNode;
-}
-
 /**
- * Loading, empty, and error frames for a desk pane.
- * Ready renders children. The other states never invent a zero.
+ * TODO(slice-b): replace with `components/desk/atoms/DeskState.tsx` from
+ * Slice B. Same states: loading, empty, error, ready.
  */
+import type { ReactNode } from 'react';
+
+export type PaneState = 'loading' | 'empty' | 'error' | 'ready';
+
+const EMPTY = 'Empty until a run commits.';
+const LOADING = 'Waiting on the run.';
+const ERROR = 'Withheld. The run failed.';
+
 export function DeskState({
   state,
   errorMessage,
-  emptyMessage = 'Nothing here yet',
-  loadingMessage = 'Loading',
+  emptyLabel = EMPTY,
+  loadingLabel = LOADING,
   children,
-}: DeskStateProps) {
-  if (state === 'ready') return <>{children}</>;
-
+}: {
+  state: PaneState;
+  errorMessage?: string;
+  emptyLabel?: string;
+  loadingLabel?: string;
+  children?: ReactNode;
+}) {
   if (state === 'loading') {
     return (
-      <div
-        className="px-3 py-6 font-mono text-[11px] text-ink-mute"
-        data-testid="desk-state-loading"
-        role="status"
-        aria-busy="true"
-      >
-        {loadingMessage}
+      <p data-testid="pane-loading" role="status" className="px-3 py-3 text-xs text-ink-mute">
+        {loadingLabel}
+      </p>
+    );
+  }
+  if (state === 'error') {
+    return (
+      <div data-testid="pane-error" className="px-3 py-3 text-xs text-ink">
+        <p>{ERROR}</p>
+        {errorMessage ? <p className="mt-1 text-ink-mute">{errorMessage}</p> : null}
       </div>
     );
   }
-
   if (state === 'empty') {
     return (
-      <div className="px-3 py-6 font-mono text-[11px] text-ink-mute" data-testid="desk-state-empty">
-        {emptyMessage}
-      </div>
+      <p data-testid="pane-empty" className="px-3 py-3 text-xs text-ink-mute">
+        {emptyLabel}
+      </p>
     );
   }
-
-  return (
-    <div className="px-3 py-6 font-mono text-[11px] text-down" data-testid="desk-state-error" role="alert">
-      {errorMessage && errorMessage.length > 0 ? errorMessage : 'Request failed'}
-    </div>
-  );
+  return <>{children}</>;
 }
