@@ -36,11 +36,11 @@ function docWith(
     title: extra.title ?? "digiquant",
     body: { textContent: extra.body ?? "" },
     location: {
-      href: `http://127.0.0.1:3910${extra.pathname ?? "/dashboard/"}`,
-      pathname: extra.pathname ?? "/dashboard/",
+      href: `http://127.0.0.1:3910${extra.pathname ?? "/app/brief"}`,
+      pathname: extra.pathname ?? "/app/brief",
     },
     querySelector: (sel: string) => {
-      if (sel === 'nav[aria-label="Primary"]') {
+      if (sel === 'nav[aria-label="Pages"]') {
         return { querySelectorAll: () => anchors };
       }
       return null;
@@ -49,15 +49,15 @@ function docWith(
 }
 
 const shell = [
-  { label: "Brief", href: "/dashboard/" },
-  { label: "Portfolio", href: "/dashboard/portfolio/" },
-  { label: "Pipeline", href: "/dashboard/pipeline/" },
-  { label: "FX Hub", href: "/dashboard/twelve-x/" },
+  { label: "/brief", href: "/app/brief" },
+  { label: "/portfolio", href: "/app/portfolio" },
+  { label: "/pipeline", href: "/app/pipeline" },
+  { label: "/fx", href: "/app/fx" },
 ];
 
 describe("desk walk", () => {
   it("keeps the empty and cross-origin lines free of invented figures", () => {
-    expect(deskStatus("empty")).toBe("The dashboard did not load.");
+    expect(deskStatus("empty")).toBe("The terminal did not load.");
     expect(deskStatus("live")).toContain("not same-origin");
     expect(DESK_EMPTY_COPY).not.toMatch(/99\.909|204\.04|legacy_estimate/);
   });
@@ -67,26 +67,28 @@ describe("desk walk", () => {
     expect(nextWalkStop("Brief")).toBe("Portfolio");
     expect(nextWalkStop("Portfolio")).toBe("Pipeline");
     expect(nextWalkStop("Pipeline")).toBe("Brief");
-    const home = docWith(shell, { pathname: "/dashboard/" });
-    expect(nextWalkAnchor(home)?.getAttribute("href")).toBe("/dashboard/portfolio/");
+    const home = docWith(shell, { pathname: "/app/brief" });
+    expect(nextWalkAnchor(home)?.getAttribute("href")).toBe("/app/portfolio");
   });
 
   it("reads the frame path when the sidebar has no current page", () => {
-    expect(stopFromPath("/dashboard/")).toBe("Brief");
-    expect(stopFromPath("/dashboard/portfolio/")).toBe("Portfolio");
-    expect(stopFromPath("/dashboard/pipeline/runs")).toBe("Pipeline");
+    expect(stopFromPath("/app")).toBe("Brief");
+    expect(stopFromPath("/app/brief")).toBe("Brief");
+    expect(stopFromPath("/app/portfolio/")).toBe("Portfolio");
+    expect(stopFromPath("/app/pipeline/runs")).toBe("Pipeline");
+    expect(stopFromPath("/dashboard/")).toBeNull();
     expect(stopFromPath("/#pipeline")).toBeNull();
-    const doc = docWith(shell, { pathname: "/dashboard/portfolio/" });
+    const doc = docWith(shell, { pathname: "/app/portfolio/" });
     expect(activeStop(doc)).toBe("Portfolio");
   });
 
-  it("clicks only the dashboard sidebar anchors", () => {
+  it("clicks only the terminal sidebar anchors", () => {
     const doc = docWith([
       ...shell,
       { label: "Pipeline", href: "/#pipeline" },
     ]);
     expect(dashboardReady(doc)).toBe(true);
-    expect(navAnchor(doc, "Pipeline")?.getAttribute("href")).toBe("/dashboard/pipeline/");
+    expect(navAnchor(doc, "Pipeline")?.getAttribute("href")).toBe("/app/pipeline");
     const landing = docWith([
       { label: "Dashboard", href: "/#dashboard" },
       { label: "Pipeline", href: "/#pipeline" },
@@ -119,11 +121,11 @@ describe("desk walk", () => {
     vi.useFakeTimers();
     const assign = vi.fn();
     const link = {
-      href: "http://127.0.0.1:3910/dashboard/portfolio/",
+      href: "http://127.0.0.1:3910/app/portfolio",
       isConnected: true,
       click: vi.fn(),
       ownerDocument: {
-        location: { href: "http://127.0.0.1:3910/dashboard/", assign },
+        location: { href: "http://127.0.0.1:3910/app/brief", assign },
       },
     } as unknown as HTMLAnchorElement;
     const cancel = activateNavLink(link);
@@ -136,13 +138,13 @@ describe("desk walk", () => {
 
   it("does not assign when the click already moved the frame", () => {
     vi.useFakeTimers();
-    let href = "http://127.0.0.1:3910/dashboard/";
+    let href = "http://127.0.0.1:3910/app/brief";
     const assign = vi.fn();
     const link = {
-      href: "http://127.0.0.1:3910/dashboard/pipeline/",
+      href: "http://127.0.0.1:3910/app/pipeline",
       isConnected: true,
       click: () => {
-        href = "http://127.0.0.1:3910/dashboard/pipeline/";
+        href = "http://127.0.0.1:3910/app/pipeline";
       },
       ownerDocument: {
         location: {
@@ -185,10 +187,10 @@ describe("desk walk", () => {
 describe("DashboardBand", () => {
   const html = renderToStaticMarkup(<DashboardBand />);
 
-  it("embeds the dashboard and does not paint the placeholder book", () => {
-    expect(html).toContain('src="/dashboard/"');
-    expect(html).toContain('title="digiquant dashboard"');
-    expect(html).toContain("Opening the dashboard.");
+  it("embeds the terminal and does not paint the placeholder book", () => {
+    expect(html).toContain('src="/app"');
+    expect(html).toContain('title="digiquant terminal"');
+    expect(html).toContain("Opening the terminal.");
     expect(html).toContain("Take control");
     expect(html).toContain("Brief, Portfolio, and Pipeline");
     expect(html).not.toContain("01 / Book");
@@ -202,14 +204,16 @@ describe("DashboardBand", () => {
   });
 });
 
-describe("dashboard embed rewrite", () => {
+describe("terminal embed rewrite", () => {
   const source = readFileSync(new URL("../../next.config.mjs", import.meta.url), "utf8");
 
-  it("keeps the static export and proxies /dashboard to the dashboard app", () => {
+  it("keeps the static export and serves the terminal on this site", () => {
     expect(source).toContain('output: "export"');
     expect(source).toContain('source: "/official-api/:path*"');
     expect(source).toContain('destination: "http://127.0.0.1:8788/:path*"');
-    expect(source).toContain('source: "/dashboard/:path*"');
-    expect(source).toContain('destination: "http://127.0.0.1:4014/dashboard/:path*"');
+    expect(source).not.toContain("127.0.0.1:3930");
+    expect(source).not.toContain("127.0.0.1:4014");
+    expect(source).not.toContain('source: "/dashboard');
+    expect(source).not.toContain('source: "/app');
   });
 });

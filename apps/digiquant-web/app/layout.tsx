@@ -2,16 +2,8 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import {
-  HashScrollManager,
-  MotionProvider,
-  NavShell,
-  ThemeProvider,
-} from "@digithings/ui";
-import { Footer } from "./_chrome/Footer";
-import { LayoutRails } from "./_chrome/LayoutRails";
-import { SectionRail } from "./_chrome/SectionRail";
-import { Brand, DQ_NAV_PRIMARY } from "./_nav";
+import { HashScrollManager, MotionProvider, ThemeProvider } from "@digithings/ui";
+import { SiteChrome } from "@/components/site-chrome";
 
 // Self-hosted at build time by next/font, so no request leaves for Google at runtime.
 // Inter is the sans/display voice (headings, prose); JetBrains Mono is the chrome voice
@@ -86,20 +78,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />
-            <NavShell
-              brand={<Brand />}
-              links={DQ_NAV_PRIMARY}
-              homeLabel="digiquant home"
-              skipTo="#main"
-              showThemeToggle={false}
-            />
-            {/* NavShell is fixed: reserve its height (nav-shell.css knob, 62px fallback). */}
-            <LayoutRails />
-            <SectionRail />
-            <div className="pt-[var(--nav-shell-h,62px)]">
-              {children}
-            </div>
-            <Footer />
+            <SiteChrome>{children}</SiteChrome>
           </ThemeProvider>
         </MotionProvider>
       </body>

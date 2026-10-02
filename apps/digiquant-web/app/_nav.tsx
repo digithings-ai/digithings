@@ -17,7 +17,7 @@ export const Brand = () => (
 );
 
 export const DQ_NAV_PRIMARY: NavLink[] = [
-  { label: "Dashboard", href: "/#dashboard" },
+  { label: "Terminal", href: "/app" },
   { label: "Pipeline", href: "/#pipeline" },
   { label: "Chat", href: "/#chat" },
   { label: "MCP", href: "/#mcp" },
@@ -33,7 +33,7 @@ export const DQ_SITEMAP: { label: string; links: NavLink[] }[] = [
   {
     label: "Showcase",
     links: [
-      { label: "Dashboard", href: "/#dashboard" },
+      { label: "Terminal", href: "/app" },
       { label: "Pipeline", href: "/#pipeline" },
       { label: "Chat", href: "/#chat" },
     ],
