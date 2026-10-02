@@ -9,14 +9,19 @@ import {
   CHART_BUILD_MAX_MS,
   CHART_BUILD_TARGET_MS,
   CHART_INTRO_MS,
+  CHART_BUILD_END_MS,
   CHROME_DONE_MS,
   COPY_DONE_MS,
   HANDOFF_MS,
+  INDICATOR_START_MS,
   INDICATOR_SWEEP_MS,
   PHASE_SUM_MS,
   buildProgress,
   columnDelayMs,
+  heroIndicatorStrokes,
+  revealStroke,
   sweepDelayMs,
+  type HeroBar,
 } from "./hero-build";
 
 describe("hero build clock", () => {
@@ -60,9 +65,52 @@ describe("hero build clock", () => {
     expect(BARS_START_MS).toBeLessThanOrEqual(1000);
     expect(BARS_SWEEP_MS).toBe(2000);
     expect(INDICATOR_SWEEP_MS).toBe(1200);
+    expect(INDICATOR_START_MS).toBe(BARS_SWEEP_MS);
+    expect(HANDOFF_MS).toBeLessThan(300);
+    expect(PHASE_SUM_MS).toBe(CHART_BUILD_END_MS);
     expect(PHASE_SUM_MS).toBeGreaterThanOrEqual(CHART_BUILD_TARGET_MS - 400);
     expect(PHASE_SUM_MS).toBeLessThanOrEqual(CHART_BUILD_TARGET_MS + 200);
     expect(PHASE_SUM_MS).toBeLessThan(CHART_BUILD_MAX_MS);
     expect(COPY_DONE_MS + BARS_START_MS + BARS_SWEEP_MS).toBeLessThan(CHART_BUILD_MAX_MS);
+    expect(CHART_BUILD_END_MS).toBeLessThan(CHART_BUILD_MAX_MS);
+  });
+
+  it("reveals indicator strokes left to right, one pass", () => {
+    const bars: HeroBar[] = Array.from({ length: 80 }, (_, i) => {
+      const close = 100 + Math.sin(i / 4) * 8 + i * 0.15;
+      return {
+        time: 1_700_000_000_000 + i * 60_000,
+        open: close - 0.4,
+        high: close + 1.2,
+        low: close - 1.1,
+        close,
+        volume: 10 + (i % 5),
+      };
+    });
+    for (const overlay of ["bollinger-bands", "vwap", "supertrend"] as const) {
+      const strokes = heroIndicatorStrokes(bars, overlay);
+      expect(strokes.length).toBeGreaterThanOrEqual(2);
+      for (const stroke of strokes) {
+        expect(stroke.points.length).toBeGreaterThanOrEqual(2);
+        for (let i = 1; i < stroke.points.length; i++) {
+          expect(stroke.points[i].time).toBeGreaterThan(stroke.points[i - 1].time);
+        }
+        const early = revealStroke(stroke, bars, 30);
+        const late = revealStroke(stroke, bars, bars.length - 1);
+        expect(late.length).toBeGreaterThanOrEqual(early.length);
+        expect(late.length).toBe(stroke.points.length);
+      }
+    }
+    const bb = heroIndicatorStrokes(bars, "bollinger-bands");
+    const basis = bb.find((s) => s.color === "#ff9800");
+    const band = bb.find((s) => s.color === "#5b9cf6");
+    expect(basis).toBeDefined();
+    expect(band).toBeDefined();
+    if (basis && band) {
+      const at = basis.points[basis.points.length - 1];
+      const upper = band.points.find((p) => p.time === at.time);
+      expect(upper).toBeDefined();
+      if (upper) expect(upper.price).not.toBeCloseTo(at.price, 6);
+    }
   });
 });
