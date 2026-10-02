@@ -3,9 +3,9 @@
 A TTY takes the whole viewport: alternate screen, a centered five-row
 DIGIVOICE half-block wordmark in color-cube grays, status strip, and a
 step-rail menu. Pipes, CI, and agents
-get a printed overview and exit 0 — never a hang. Setup is a submenu
-entry that returns to home; it is not the home screen. Every entry
-routes to the handlers the subcommands use.
+get a printed overview and exit 0 — never a hang. Settings opens the
+/settings path and returns to home. Every entry routes to the handlers
+the subcommands use.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
+from digivoice.menu_tree import browse_settings
 from digivoice.paths import resolve_paths
 from digivoice.reload import LaunchReport, ensure_home_control, stop_home_control
 from digivoice.runner import CommandRunner
+from digivoice.setup import _install_with_progress
 from digivoice.tui import (
     _is_tty,
     _write_info_frame,
@@ -31,25 +33,22 @@ from digivoice.tui import (
 HOME_TITLE = "DIGIVOICE"
 HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 
-# App-home actions. Setup sits second-last as a "wizard…" submenu — it opens
-# the setup wizard and returns to home, it is never the home screen itself.
-# Status is not an action: the live status.json feed surfaces in the context
-# strip and via `digivoice status`. Update/Uninstall stay CLI-only stubs.
+# App-home actions. Settings opens the /settings path. Status is the context
+# strip, not a row. Update/Uninstall stay CLI-only stubs.
 HOME_MENU = (
     "Doctor (health checks)",
-    "Settings (show)",
     "History (recent)",
     "Reload (local control)",
-    "Setup (wizard…)",
+    "Settings (/settings)",
     "Quit",
 )
 
 # Contiguous slices of HOME_MENU. Status is the context strip, not a row.
 HOME_GROUPS: tuple[tuple[str, int, int], ...] = (
-    ("Operate", 0, 3),
-    ("Maintain", 3, 4),
-    ("Configure", 4, 5),
-    ("Leave", 5, 6),
+    ("Operate", 0, 2),
+    ("Maintain", 2, 3),
+    ("Configure", 3, 4),
+    ("Leave", 4, 5),
 )
 
 MIC_HINT = (
@@ -155,7 +154,7 @@ def render_home_overview(
         lines.append(f"  {marker} {item}")
     lines += [
         "",
-        "Setup lives under “Setup (wizard…)” and returns here; it is not the home screen.",
+        "Settings opens /settings. Enter a folder, Enter toggles or cycles a value, Esc goes up.",
         "",
         "— Settings (current) —",
         settings_text.rstrip(),
@@ -188,11 +187,7 @@ def run_home(
 ) -> int:
     """Run the home shell. Returns a process exit code; never hangs a pipe."""
     from digivoice import cli as _cli
-    from digivoice.settings import (
-        format_settings_compact,
-        format_settings_text,
-        load_settings,
-    )
+    from digivoice.settings import format_settings_text, load_settings
 
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -247,9 +242,6 @@ def run_home(
                     result.stdout.splitlines() or [result.stderr],
                     subtitle=HOME_SUBTITLE,
                 )
-            elif entry.startswith("Settings"):
-                text = format_settings_compact(load_settings(paths), paths)
-                _write_info_frame(stdout, "Settings", text.splitlines(), subtitle=HOME_SUBTITLE)
             elif entry.startswith("History"):
                 args = argparse.Namespace(last=5, grep=None, copy_last=False, as_json=False)
                 result = _cli._history(args, runtime)
@@ -264,8 +256,7 @@ def run_home(
                 result = _cli._reload(args, runtime)
                 body = result.stdout.splitlines() or [result.stderr.strip()]
                 _write_info_frame(stdout, "Reload", body, subtitle=HOME_SUBTITLE)
-            elif entry.startswith("Setup"):
-                # Submenu: run the wizard, then return to home (never exit).
-                _cli._setup(argparse.Namespace(print_only=False, as_json=False), runtime)
+            elif entry.startswith("Settings"):
+                browse_settings(paths, stdin, stdout, install=_install_with_progress)
     finally:
         fullscreen_leave(stdout)

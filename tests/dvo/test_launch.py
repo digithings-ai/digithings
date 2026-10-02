@@ -389,8 +389,8 @@ def test_home_quit_tears_down_hammerspoon(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(home_mod, "fullscreen_enter", lambda _o: None)
     monkeypatch.setattr(home_mod, "fullscreen_leave", lambda _o: None)
     monkeypatch.setattr(home_mod, "play_intro", lambda *_a, **_k: None)
-    # First pick = Quit (index 5)
-    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: 5)
+    quit_at = next(i for i, item in enumerate(home_mod.HOME_MENU) if item == "Quit")
+    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: quit_at)
 
     code = home_mod.run_home(
         "darwin",

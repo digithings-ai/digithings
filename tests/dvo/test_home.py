@@ -50,27 +50,26 @@ def test_home_menu_tree_matches_rendered_overview(tmp_path: Path) -> None:
     assert "Quit" in text
 
 
-def test_home_is_app_actions_with_setup_as_submenu() -> None:
+def test_home_is_app_actions_with_settings_path() -> None:
     assert [m.split(" (")[0] for m in HOME_MENU] == [
         "Doctor",
-        "Settings",
         "History",
         "Reload",
-        "Setup",
+        "Settings",
         "Quit",
     ]
     assert not any(m.startswith("Status") for m in HOME_MENU)
-    setup_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Setup"))
+    settings_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Settings"))
     reload_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Reload"))
-    assert setup_at > reload_at
-    assert "wizard" in HOME_MENU[setup_at].lower()
+    assert settings_at > reload_at
+    assert "/settings" in HOME_MENU[settings_at]
 
 
-def test_home_overview_mentions_setup_returns_home(tmp_path: Path) -> None:
+def test_home_overview_mentions_settings_path(tmp_path: Path) -> None:
     result = run([], _runtime(tmp_path))
     assert result.code == 0
-    assert "Setup" in result.stdout
-    assert "returns here" in result.stdout
+    assert "/settings" in result.stdout
+    assert "Esc goes up" in result.stdout
 
 
 def test_run_home_non_tty_never_hangs(tmp_path: Path) -> None:
