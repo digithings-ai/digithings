@@ -7,7 +7,13 @@ from digivoice.home import HOME_GROUPS, HOME_MENU, render_home_overview
 from digivoice.pixel_hero import word_cells
 from digivoice.settings import default_settings
 from digivoice.setup import postprocess_menu_options
-from digivoice.tui import parse_sgr_mouse, render_screen, render_wordmark_lines, wrap_text
+from digivoice.tui import (
+    _alpha_sgr,
+    parse_sgr_mouse,
+    render_screen,
+    render_wordmark_lines,
+    wrap_text,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -42,21 +48,40 @@ def test_wordmark_is_five_half_block_rows() -> None:
 
 
 def test_wordmark_glint_is_a_short_flash() -> None:
-    """A glint cell goes bold for a short slice of its period, then rests."""
+    """A glint cell jumps to the brightest gray, then returns to its own shade."""
     letters, _stray = word_cells("DIGIVOICE", 2)
-    glint = next(cell for cell in letters if cell.glint)
-    assert glint.glint_delay_ms > 1400
-    before = render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=glint.glint_delay_ms - 50)
-    during = render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=glint.glint_delay_ms + 40)
-    assert before != during
-    assert "38;2;" not in "\n".join(during)
+    changed = False
+    for glint in letters:
+        if not glint.glint or glint.f >= 1:
+            continue
+        before = render_wordmark_lines(
+            "DIGIVOICE", cols=120, ansi=True, t_ms=glint.glint_delay_ms - 50
+        )
+        during = render_wordmark_lines(
+            "DIGIVOICE", cols=120, ansi=True, t_ms=glint.glint_delay_ms + 40
+        )
+        if before != during:
+            changed = True
+            assert "38;5;255" in "\n".join(during)
+            assert "38;2;" not in "\n".join(during)
+            break
+    assert changed
 
 
-def test_wordmark_is_one_foreground_color() -> None:
-    """Dim and bold on the terminal foreground. No teal and no per-letter hues."""
-    joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True))
+def test_wordmark_shades_are_terminal_grays() -> None:
+    """Terminal.app draws bold and dim as one white. Shades are 256-color grays."""
+    codes = [_alpha_sgr(alpha) for alpha in (0.36, 0.5, 0.66, 0.82, 1.0)]
+    assert codes == [
+        "\x1b[38;5;236m",
+        "\x1b[38;5;241m",
+        "\x1b[38;5;246m",
+        "\x1b[38;5;251m",
+        "\x1b[38;5;255m",
+    ]
+    joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=1600))
     assert "38;2;" not in joined
-    assert "\x1b[" in joined
+    present = {level for level in ("236", "241", "246", "251", "255") if f"38;5;{level}" in joined}
+    assert len(present) >= 3
 
 
 def test_wordmark_v_is_the_version3_block_letter() -> None:
