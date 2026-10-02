@@ -13,7 +13,9 @@ bun install
 DQ_API_URL=http://127.0.0.1:8788 bun src/index.tsx
 ```
 
-`i` or Enter focuses the composer. Escape leaves it. `j` / `k` move between
-sessions. `n` asks for a new chat. `q` quits when the composer is idle.
+The composer is focused on launch, same as the web thread. Escape leaves it.
+`j` / `k` move between sessions. `n` or the header `+` asks for a new chat.
+`/` opens the command palette. Tab arms attach, mic, and send. `q` quits
+when the composer is idle.
 
 This app is bun-managed and lives outside the root npm workspaces.
