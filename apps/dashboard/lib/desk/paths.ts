@@ -1,7 +1,7 @@
 /**
  * Chrome path → dashboard-api endpoint.
  *
- * DigiCon is the digiquant type for one of these reads (see `client.ts`).
+ * A digiquant pane read is a `DigiquantRead` from `client.ts`.
  * The reads are dashboard-api, market closes, and
  * `GET /v1/tables/:table`. Chrome may say `/book` or `/movers`; the client
  * still calls `GET /portfolio` or derives movers. Do not add those routes.

@@ -21,7 +21,7 @@ function paneScroller(host: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Price pane. Candles use DigiQuant teal and red. A vertical wheel scrolls
+ * Price pane. Candles use digiquant teal and red. A vertical wheel scrolls
  * the pane column; a horizontal wheel is left to Vela.
  *
  * Vela is imported inside the effect so the static export does not evaluate
