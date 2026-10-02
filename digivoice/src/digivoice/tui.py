@@ -264,6 +264,8 @@ def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tu
 
 # Landing pixel-build runs out by ~1.1s; strays finish a little later.
 _BUILD_MS = 1400
+# Blank rows between the wordmark and the menu on the home frame.
+_HERO_GAP = 2
 # Set by play_intro so the home frame continues that same landing clock.
 _hero_origin: float | None = None
 
@@ -745,7 +747,7 @@ def render_screen(
             ansi=use_ansi,
         )
         header_h = rows - len(panel)
-        needed = 6 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
+        needed = 5 + _HERO_GAP + 1 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
         if header_h >= needed or density == "tight":
             chosen_panel = panel
             break
@@ -762,6 +764,10 @@ def render_screen(
         if hero
         else []
     )
+    if word_lines:
+        spare = rows - len(chosen_panel) - len(word_lines)
+        gap_n = min(_HERO_GAP, max(0, spare))
+        word_lines = [*word_lines, *([" "] * gap_n)]
     return _compose(
         word_lines,
         chosen_panel,
