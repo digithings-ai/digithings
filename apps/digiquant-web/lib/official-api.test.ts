@@ -42,14 +42,18 @@ describe("official API reads", () => {
       data: {
         tip: { date: "2026-10-01", contract: "finalized_accounting" },
         points: [
-          { date: "2026-06-01", nav: 110.2, contract: "legacy_estimate" },
+          { date: "2026-06-01", nav: 199.909, contract: "legacy_estimate" },
           { date: "2026-10-01", nav: 118.75, contract: "finalized_accounting" },
         ],
       },
       provenance: { source: "public_accounting_nav_history", contract: "finalized_accounting" },
     };
+    expect(JSON.stringify(house).includes("99.909")).toBe(true);
     expect(isStubPayload(house)).toBe(false);
     expect(classifyOfficialRead(200, house).ok).toBe(true);
+    expect(isStubPayload({ data: { nav: 199.909 } })).toBe(false);
+    expect(isStubPayload({ data: { nav: 1204.04 } })).toBe(false);
+    expect(isStubPayload({ data: { nav: "204.040" } })).toBe(true);
     expect(isStubPayload({ data: { contract: "legacy_estimate" } })).toBe(false);
 
     const stubTip = {
