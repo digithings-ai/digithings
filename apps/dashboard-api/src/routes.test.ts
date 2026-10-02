@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import app, { type Env } from "./index";
 import { ROUTE_MODULES, userIdFor } from "./routes";
 import { Registry, matchPath } from "./routes/registry";
@@ -7,6 +7,10 @@ import { corsHeaders } from "./cors";
 const ORIGIN = "https://digiquant.io";
 const ENV: Env = { DASHBOARD_DEV_CALLER: "enterprise+12x" };
 const FREE: Env = {};
+
+beforeEach(() => {
+  ROUTE_MODULES.length = 0;
+});
 
 afterEach(() => {
   ROUTE_MODULES.length = 0;

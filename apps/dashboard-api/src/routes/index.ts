@@ -1,14 +1,16 @@
 /**
- * Domain route modules. Add `registerFx`, `registerPipeline`, ... here as they
- * land; `index.ts` consults the registry for any path the legacy table does not
- * serve. Left empty on purpose: the eight shipped routes stay where they are.
+ * Domain route modules. `index.ts` consults the registry for any path the
+ * legacy table does not serve. The eight shipped routes stay in their builders.
  */
 
 import { identityTrusted } from "../access";
 import type { Env } from "../index";
+import { registerFx } from "./fx";
+import { registerPipeline } from "./pipeline";
+import { registerPortfolio } from "./portfolio";
 import { Registry, type RouteModule } from "./registry";
 
-export const ROUTE_MODULES: RouteModule<Env>[] = [];
+export const ROUTE_MODULES: RouteModule<Env>[] = [registerPortfolio, registerPipeline, registerFx];
 
 export function buildRegistry(modules: readonly RouteModule<Env>[] = ROUTE_MODULES): Registry<Env> {
   const reg = new Registry<Env>();

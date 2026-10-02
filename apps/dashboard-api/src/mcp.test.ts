@@ -157,6 +157,7 @@ describe("generated tools", () => {
     expect(full).toContain("get_access_manifest");
   });
   it("a generated tool dispatches through the shared route with path args filled", async () => {
+    const saved = ROUTE_MODULES.splice(0, ROUTE_MODULES.length);
     ROUTE_MODULES.push((reg) => reg.get("/fx/pairs/{pair}/path", async (_r, ctx) => Response.json({ pair: ctx.params.pair })));
     try {
       const ok = await rpc("tools/call", { name: "get_fx_pairs_pair_path", arguments: { pair: "EURUSD" } });
@@ -167,7 +168,7 @@ describe("generated tools", () => {
       const dots = await rpc("tools/call", { name: "get_fx_pairs_pair_path", arguments: { pair: ".." } });
       expect(dots.error.code).toBe(-32602);
     } finally {
-      ROUTE_MODULES.length = 0;
+      ROUTE_MODULES.splice(0, ROUTE_MODULES.length, ...saved);
     }
   });
   it("a gated-out generated tool is -32003", async () => {

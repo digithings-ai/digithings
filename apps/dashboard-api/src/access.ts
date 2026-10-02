@@ -50,23 +50,23 @@ export const DESKS: DeskDef[] = [
       {
         path: "/brief", label: "Brief",
         blocks: [
-          b("brief", "/brief"), b("decision", "/brief"), b("risks", "/brief"),
+          b("brief", "/brief"), b("decision", "/brief/decision"), b("risks", "/brief/risks"),
           b("live", "/kpis/live", PRO), b("performance", "/performance", PRO),
         ],
       },
       {
         path: "/portfolio", label: "Portfolio",
         blocks: [
-          b("portfolio", "/portfolio"), b("sleeves", "/allocations"), b("book", "/allocations"),
-          b("movers", "/allocations", PRO), b("drawdown", "/performance", PRO), b("nav", "/nav-series", PRO),
+          b("portfolio", "/portfolio"), b("sleeves", "/allocations/enriched"), b("book", "/allocations"),
+          b("movers", "/allocations/enriched", PRO), b("drawdown", "/performance/drawdown", PRO), b("nav", "/nav-series", PRO),
           b("benchmarks", "/benchmarks", PRO),
         ],
       },
-      { path: "/portfolio/holdings", label: "Holdings", blocks: [b("holdings", "/allocations")] },
+      { path: "/portfolio/holdings", label: "Holdings", blocks: [b("holdings", "/allocations/enriched"), b("dossier", "/dossier/{ticker}")] },
       { path: "/portfolio/attribution", label: "Attribution", ...PRO, blocks: [b("attribution", "/attribution")] },
       { path: "/portfolio/ledger", label: "Ledger", ...PRO, blocks: [b("ledger", "/ledger"), b("cash", "/ledger/cash")] },
       { path: "/portfolio/tearsheet", label: "Tearsheet", ...PRO, blocks: [b("performance", "/performance"), b("navtable", "/nav-series"), b("benchmarks", "/benchmarks")] },
-      { path: "/portfolio/theses", label: "Theses", blocks: [b("theses", "/theses"), b("signals", "/theses?needs_resolution=1", PRO)] },
+      { path: "/portfolio/theses", label: "Theses", blocks: [b("theses", "/theses"), b("signals", "/theses/signals", PRO)] },
       {
         path: "/pipeline", label: "Pipeline",
         blocks: [
@@ -96,7 +96,7 @@ export const DESKS: DeskDef[] = [
       { path: "/fx", label: "FX Hub", status: "soon", blocks: [b("fx-summary", "/fx/summary"), b("fx-pairs", "/fx/pairs"), b("fx-levels", "/fx/levels"), b("fx-pair-path", "/fx/pairs/{pair}/path"), b("fx-sessions", "/fx/sessions")] },
       { path: "/fx/ideas", label: "Ideas", blocks: [b("fx-ideas", "/fx/ideas"), b("fx-idea-detail", "/fx/ideas/{pair}"), b("fx-flags", "/fx/flags/{pair}"), b("fx-pair-path", "/fx/pairs/{pair}/path")] },
       { path: "/fx/watch", label: "Watch", blocks: [b("fx-pairs", "/fx/pairs"), b("fx-levels", "/fx/levels"), b("fx-paper-exposure", "/fx/paper-exposure"), b("fx-flags", "/fx/flags/{pair}")] },
-      { path: "/fx/rates", label: "Rates", blocks: [b("rt-summary", "/rates/summary"), b("rt-curve", "/rates/curve"), b("rt-watchlist", "/rates/watchlist"), b("rt-theses", "/theses?desk=rates")] },
+      { path: "/fx/rates", label: "Rates", blocks: [b("rt-summary", "/rates/summary"), b("rt-curve", "/rates/curve"), b("rt-watchlist", "/rates/watchlist"), b("rt-theses", "/rates/theses")] },
       { path: "/fx/settings", label: "Settings", blocks: [b("se-fx-feed", "/settings/fx-feed"), b("fx-directives", "/fx/directives"), b("se-brokers", "/settings/brokers")] },
     ],
   },
