@@ -112,10 +112,10 @@ body {
   .section-eyebrow__tick { width: 1.6rem; }
 }
 
-/* Hero entrance: the copy settles in after the bars have started to build. */
+/* Hero entrance: logo + copy + buttons first; chart builds afterward (see QuantField). */
 @media (prefers-reduced-motion: no-preference) {
   .hero-rise {
-    animation: hero-rise 0.7s var(--ease) calc(0.5s + var(--rise, 0) * 0.09s) both;
+    animation: hero-rise 0.55s var(--ease) calc(0.12s + var(--rise, 0) * 0.08s) both;
   }
 }
 
