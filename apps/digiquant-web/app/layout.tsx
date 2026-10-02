@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   applicationName: "digiquant",
   title: "digiquant — a quant research desk in a glass box you own",
   description:
-    "A showcase of the digiquant dashboard, the product: recordings, workflows and the method behind it. "
+    "A showcase of the digiquant dashboard, the product: the house book, the research pipeline, and the method behind it. "
     + "Research runs daily, portfolio sizes the risk, and every run writes a decision log under its own "
     + "run id, redacted on the way out. Open-source and self-hosted.",
   manifest: "/manifest.webmanifest",
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "digiquant — a quant research desk in a glass box you own",
     description:
-      "See the digiquant dashboard at work: how a strategy is built, the method behind every run, and the "
+      "See the digiquant dashboard at work: the house book, how a strategy is built, and the "
       + "tooling underneath. Open-source, self-hosted, with a decision log per run.",
     url: "https://digiquant.io",
     images: [
