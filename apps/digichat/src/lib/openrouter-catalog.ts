@@ -15,7 +15,14 @@ export type OpenRouterCatalogEntry = {
 /** Entries with no hugging_face_id fall back to this publisher-prefix allowlist for
  * the "opensource" tier — OpenRouter's schema has no universal open-weight signal,
  * unlike price (free/flagship), which is fully data-derived. Explicitly maintained;
- * expect to extend this list over time as new open-weight publishers appear. */
+ * expect to extend this list over time as new open-weight publishers appear.
+ *
+ * The list SURVIVES the models.dev catalog (config/model-catalog.json) even though
+ * the catalog carries a real `open_weights` flag. Two reasons: a live
+ * OpenRouterCatalogEntry has no such field, so the catalog path never supplies it;
+ * and even for catalog rows only 174 of openrouter's 390 carry the flag, so
+ * catalog-only coverage would shrink the bucket by up to 216 entries. `isOpenSource`
+ * unions all three signals rather than choosing between them. */
 const OPEN_WEIGHT_PUBLISHER_PREFIXES = [
   "meta-llama/",
   "mistralai/",
@@ -57,8 +64,16 @@ function isFree(entry: OpenRouterCatalogEntry): boolean {
   );
 }
 
-function isOpenSource(entry: OpenRouterCatalogEntry): boolean {
+/** Union of the three open-weight signals, none of which subsumes the others:
+ * OpenRouter's `hugging_face_id`, the models.dev catalog's `open_weights`, and the
+ * hand-maintained publisher-prefix allowlist. `catalogOpenWeights` defaults to false
+ * so every existing live-path caller is unchanged. */
+export function isOpenSource(
+  entry: OpenRouterCatalogEntry,
+  catalogOpenWeights = false,
+): boolean {
   if (entry.hugging_face_id) return true;
+  if (catalogOpenWeights) return true;
   return OPEN_WEIGHT_PUBLISHER_PREFIXES.some((prefix) => entry.id.startsWith(prefix));
 }
 
@@ -67,10 +82,13 @@ function isFlagship(entry: OpenRouterCatalogEntry): boolean {
   return price !== null && price >= FLAGSHIP_PROMPT_PRICE_FLOOR_USD_PER_1M;
 }
 
-function tierFor(entry: OpenRouterCatalogEntry): NonNullable<ByokModelOption["tier"]> | undefined {
+function tierFor(
+  entry: OpenRouterCatalogEntry,
+  catalogOpenWeights = false,
+): NonNullable<ByokModelOption["tier"]> | undefined {
   if (isFree(entry)) return "free";
   if (isFlagship(entry)) return "flagship";
-  if (isOpenSource(entry)) return "opensource";
+  if (isOpenSource(entry, catalogOpenWeights)) return "opensource";
   return undefined;
 }
 
@@ -80,7 +98,11 @@ function supportsTools(entry: OpenRouterCatalogEntry): boolean {
 
 /** Bucket a live OpenRouter catalog into the BYOK picker's tiers. Caps total entries
  * processed — anything beyond the cap is silently dropped, never processed or returned
- * (see the design spec's Security considerations on unbounded response handling). */
+ * (see the design spec's Security considerations on unbounded response handling).
+ *
+ * `tierFor` is called with one argument: live rows carry no `open_weights`, so the
+ * catalog signal cannot be supplied on this path. Catalog-sourced rows never come
+ * through here at all — their tier is precomputed by the generator. */
 export function bucketOpenRouterModels(entries: readonly OpenRouterCatalogEntry[]): OpenRouterCatalogBuckets {
   const capped = entries.slice(0, OPENROUTER_CATALOG_ENTRY_CAP);
   const all: ByokModelOption[] = [];

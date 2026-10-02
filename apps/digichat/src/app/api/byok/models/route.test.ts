@@ -39,11 +39,53 @@ describe("GET /api/byok/models", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 400 for any provider other than openrouter", async () => {
-    const res = await GET(req("/api/byok/models?provider=openai"));
+  it("returns 400 for a provider outside the BYOK allowlist", async () => {
+    const res = await GET(req("/api/byok/models?provider=not-a-provider"));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("unsupported_provider");
+  });
+
+  it("serves every non-openrouter BYOK provider from the vendored catalog, without fetching", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      for (const provider of ["openai", "anthropic", "gemini", "xai"]) {
+        const res = await GET(req(`/api/byok/models?provider=${provider}`));
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.provider).toBe(provider);
+        expect(body.source).toBe("catalog");
+        expect(typeof body.fetchedAt).toBe("string");
+        expect(Array.isArray(body.all)).toBe(true);
+      }
+      // The catalog path is a local read: an upstream fetch here would mean this
+      // route had become a fetch proxy for arbitrary provider hosts.
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("keeps openrouter on the live path", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: "openai/gpt-4o-mini" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    try {
+      const res = await GET(req("/api/byok/models?provider=openrouter"));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.source).toBe("live");
+      expect(body.provider).toBe("openrouter");
+      expect(fetchSpy).toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("rate-limits authenticated callers too, not just embed", async () => {

@@ -31,6 +31,16 @@ type Step = "provider" | "key" | "model" | "validating" | "done";
 
 const CUSTOM_MODEL = "__custom__";
 
+/** The four tier buckets `/api/byok/models` returns. Structurally typed on
+ * purpose: importing the real shape from `@/lib/model-catalog` would drag the
+ * ~330 KB generated catalog into the client bundle. */
+type LiveBuckets = {
+  free: ByokModelOption[];
+  opensource: ByokModelOption[];
+  flagship: ByokModelOption[];
+  all: ByokModelOption[];
+};
+
 /** Providers whose validation ping already returns a live `models` list and
  * whose upstream call never reads the `model` parameter (#2347) — so the
  * ping can (and should) fire as soon as the key is submitted, instead of
@@ -41,6 +51,25 @@ const LIVE_PING_MODEL_PROVIDERS: readonly BYOKProvider[] = ["openai", "anthropic
 
 function wantsKeyStepPing(provider: BYOKProvider): boolean {
   return LIVE_PING_MODEL_PROVIDERS.includes(provider);
+}
+
+/** Narrow a `/api/byok/models` body to the four bucket arrays, or `null`.
+ *
+ * The response is only structurally typed, and a picker that crashes on a
+ * malformed body is worse than one that quietly falls back to presets — so an
+ * incomplete payload is treated exactly like a failed fetch. */
+function asBuckets(data: unknown): LiveBuckets | null {
+  if (typeof data !== "object" || data === null) return null;
+  const body = data as Record<string, unknown>;
+  if (!(["free", "opensource", "flagship", "all"] as const).every((k) => Array.isArray(body[k]))) {
+    return null;
+  }
+  return {
+    free: body.free as ByokModelOption[],
+    opensource: body.opensource as ByokModelOption[],
+    flagship: body.flagship as ByokModelOption[],
+    all: body.all as ByokModelOption[],
+  };
 }
 
 function TermLine({
@@ -218,14 +247,14 @@ export function ByokCliFlow({
    * #2347. Reset on provider change / clear / restart, same as `ping`. */
   const [keyPing, setKeyPing] = useState<ByokPingResult | null>(null);
   const [keyPingPending, setKeyPingPending] = useState(false);
-  type LiveBuckets = {
-    free: ByokModelOption[];
-    opensource: ByokModelOption[];
-    flagship: ByokModelOption[];
-    all: ByokModelOption[];
-  };
   const [liveModels, setLiveModels] = useState<LiveBuckets | null>(null);
-  const [modelsFetchFailed, setModelsFetchFailed] = useState(false);
+  /** Catalog-sourced buckets (#4994). Deliberately typed structurally rather
+   * than imported from `@/lib/model-catalog`: that module pulls the ~330 KB
+   * generated catalog, which must stay behind the server-side route. */
+  const [catalogModels, setCatalogModels] = useState<LiveBuckets | null>(null);
+  /** Provider whose catalog fetch already failed. Keyed by provider so one
+   * provider's failure cannot suppress another's retry. */
+  const [modelsFetchFailedFor, setModelsFetchFailedFor] = useState<string | null>(null);
   const [tier, setTier] = useState<"free" | "opensource" | "flagship" | "all" | "custom">("all");
   const [customIds, setCustomIds] = useState<Set<string>>(new Set());
   const keyInputRef = useRef<HTMLInputElement>(null);
@@ -235,6 +264,13 @@ export function ByokCliFlow({
   const aliveRef = useRef(true);
 
   const tieredOptions = provider === "openrouter" && liveModels ? liveModels : null;
+  /** Catalog buckets, gated on the same provider split as `tieredOptions` so a
+   * stale list can never be shown against the wrong provider. */
+  const catalogTieredOptions = provider !== "openrouter" && catalogModels ? catalogModels : null;
+  /** The bucket set the tier tabs and the star control read from. A provider
+   * that has neither (no live list, no catalog yet) keeps the presets-only
+   * picker it has always had. */
+  const tierBuckets = tieredOptions ?? catalogTieredOptions;
   const liveKeyStepModels: ByokModelOption[] | null =
     wantsKeyStepPing(provider) && keyPing?.ok && keyPing.models && keyPing.models.length > 0
       ? keyPing.models.map((m) => ({ id: m.id, label: m.label }))
@@ -249,19 +285,38 @@ export function ByokCliFlow({
     });
   }, []);
 
+  // Precedence, highest first (#4994):
+  //   1. live OpenRouter buckets   — today's prices, rotating free roster
+  //   2. key-scoped ping list      — exactly what THIS key may call
+  //   3. catalog buckets           — what the provider serves, not what the key can reach
+  //   4. byokModelPresets()        — offline last resort
+  // Catalog membership is not key-scoped availability, so it sits below the
+  // ping. Every branch also checks for a non-empty list: a populated-but-empty
+  // tier used to win its `if` and collapse the picker to just "custom…".
   const modelOptions = (() => {
     if (tieredOptions) {
       const list =
         tier === "custom"
           ? tieredOptions.all.filter((m) => customIds.has(m.id))
           : tieredOptions[tier];
-      return [...list.map((m) => m.id), CUSTOM_MODEL];
+      if (list.length > 0) {
+        return [...list.map((m) => m.id), CUSTOM_MODEL];
+      }
     }
-    if (liveKeyStepModels) {
+    if (liveKeyStepModels && liveKeyStepModels.length > 0) {
       const liveIds = liveKeyStepModels.map((m) => m.id);
       return byokRequiresModel(provider)
         ? [...liveIds, CUSTOM_MODEL]
         : ["", ...liveIds, CUSTOM_MODEL];
+    }
+    if (catalogTieredOptions) {
+      const list =
+        tier === "custom"
+          ? catalogTieredOptions.all.filter((m) => customIds.has(m.id))
+          : catalogTieredOptions[tier];
+      if (list.length > 0) {
+        return [...list.map((m) => m.id), CUSTOM_MODEL];
+      }
     }
     const presets = [...byokModelPresets(provider)];
     if (!byokRequiresModel(provider)) {
@@ -273,8 +328,9 @@ export function ByokCliFlow({
   const modelLabels = modelOptions.map((m) => {
     if (m === "") return "(provider default)";
     if (m === CUSTOM_MODEL) return "custom…";
-    if (tieredOptions) {
-      return tieredOptions.all.find((o) => o.id === m)?.label ?? m;
+    const labelSource = tieredOptions ?? catalogTieredOptions;
+    if (labelSource) {
+      return labelSource.all.find((o) => o.id === m)?.label ?? m;
     }
     if (liveKeyStepModels) {
       return liveKeyStepModels.find((o) => o.id === m)?.label ?? m;
@@ -290,21 +346,32 @@ export function ByokCliFlow({
   }, []);
 
   useEffect(() => {
-    if (provider !== "openrouter" || liveModels || modelsFetchFailed) return;
+    const loaded = provider === "openrouter" ? liveModels : catalogModels;
+    if (loaded || modelsFetchFailedFor === provider) return;
     let cancelled = false;
-    fetch(p("/api/byok/models?provider=openrouter"), { credentials: "include" })
+    fetch(p(`/api/byok/models?provider=${provider}`), { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: LiveBuckets & { ok: boolean }) => {
+      .then((data: unknown) => {
         if (cancelled) return;
-        setLiveModels({ free: data.free, opensource: data.opensource, flagship: data.flagship, all: data.all });
+        const buckets = asBuckets(data);
+        if (!buckets) {
+          setModelsFetchFailedFor(provider);
+          return;
+        }
+        // openrouter answers from the live OpenRouter catalog; every other
+        // provider answers from the vendored models.dev snapshot. Either way
+        // this branch does no upstream call of its own — see
+        // api/byok/models/route.ts.
+        if (provider === "openrouter") setLiveModels(buckets);
+        else setCatalogModels(buckets);
       })
       .catch(() => {
-        if (!cancelled) setModelsFetchFailed(true);
+        if (!cancelled) setModelsFetchFailedFor(provider);
       });
     return () => {
       cancelled = true;
     };
-  }, [provider, liveModels, modelsFetchFailed]);
+  }, [provider, liveModels, catalogModels, modelsFetchFailedFor]);
 
   useEffect(() => {
     if (step === "key") keyInputRef.current?.focus();
@@ -343,6 +410,10 @@ export function ByokCliFlow({
     setKeyPing(null);
     setKeyPingPending(false);
     setCustomIds(new Set());
+    // Buckets are provider-specific on the catalog path, so drop them; the
+    // prefetch effect refetches for the new provider. (liveModels is left
+    // alone — it is only ever read while provider === "openrouter".)
+    setCatalogModels(null);
     setStep("key");
   }, []);
 
@@ -494,7 +565,7 @@ export function ByokCliFlow({
             </TermLine>
           ) : null}
 
-          {provider === "openrouter" && !liveModels && !modelsFetchFailed ? (
+          {provider === "openrouter" && !liveModels && modelsFetchFailedFor !== provider ? (
             <TermLine marker="·">
               <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
                 fetching live model catalog…
@@ -598,7 +669,7 @@ export function ByokCliFlow({
                   className="dc-byok-input h-auto"
                 />
               ) : null}
-              {tieredOptions ? (
+              {tierBuckets ? (
                 <SegmentedControl
                   aria-label="Model tier"
                   value={tier}
@@ -609,7 +680,7 @@ export function ByokCliFlow({
                   options={(["free", "opensource", "flagship", "all", "custom"] as const).map(
                     (t) => ({
                       value: t,
-                      label: `${t} (${t === "custom" ? customIds.size : tieredOptions[t].length})`,
+                      label: `${t} (${t === "custom" ? customIds.size : tierBuckets[t].length})`,
                     }),
                   )}
                 />
@@ -622,8 +693,8 @@ export function ByokCliFlow({
                   onHighlight={setModelHi}
                   onSelect={selectModel}
                   listLabel="BYOK models"
-                  onToggleStar={tieredOptions ? toggleCustom : undefined}
-                  isStarred={tieredOptions ? (id) => customIds.has(id) : undefined}
+                  onToggleStar={tierBuckets ? toggleCustom : undefined}
+                  isStarred={tierBuckets ? (id) => customIds.has(id) : undefined}
                 />
               ) : null}
             </TermLine>

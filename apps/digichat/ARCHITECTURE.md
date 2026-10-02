@@ -676,14 +676,53 @@ opens BYOK mode):
    `byokRequiresModel` instead would reintroduce the exact bug #2347 fixed —
    the two must stay independent.
 
-For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
-(no key required) as soon as `openrouter` becomes the selected provider, usually
-before the model step even renders. Once that catalog lands, the model step
-replaces the flat preset list with tier tabs (free / opensource / flagship /
-all / a user-starred "custom" set held only in component state) plus a
-per-entry star toggle. Any fetch failure or non-OpenRouter provider falls back
-to the original flat preset list unchanged — the tiered UI is strictly additive
-and never blocks the flow on network.
+For every BYOK provider, `byok-cli-flow.tsx` prefetches
+`GET /api/byok/models?provider=<id>` (no key required) as soon as that provider
+becomes the selected one, usually before the model step even renders. The route
+has **two sources** (#4994):
+
+- **openrouter — live.** Unchanged from before: a proxied
+  `GET {OPENROUTER_API_BASE}/models`, `MAX_RESPONSE_BYTES` guards, and the
+  in-process 10-minute bucket cache. OpenRouter stays live because its buckets
+  derive from today's blended per-infra prices and its `:free` roster rotates.
+- **every other provider — the vendored catalog.** `openai`, `anthropic`,
+  `gemini`, and `xai` are served from `config/model-catalog.json`, normalized
+  from models.dev by `scripts/refresh_model_catalog.py` and generated into
+  `src/lib/model-catalog.generated.ts`. That branch performs **no fetch, no
+  URL, no timeout, and no cache** — it is a module import, so the route cannot
+  degrade into a fetch proxy for a provider it has no upstream for. The
+  response gains `provider`, `source` (`"catalog" | "live"`), and — on the
+  catalog branch only — `fetchedAt`; the live branch omits `fetchedAt` because
+  its freshness is already bounded by the cache TTL.
+
+The response body itself is unchanged (`ok`, `free`, `opensource`, `flagship`,
+`all`), so existing callers keep working. `provider` is still a closed
+allowlist of the five `BYOK_PROVIDER_LIST` ids — 400 `unsupported_provider`
+otherwise. That guard is now doubly defensive: the catalog branch has no
+upstream to proxy, and the one branch that fetches has its endpoint hardcoded,
+so no attacker-chosen base URL can reach an outgoing request from here.
+
+Once buckets land, the model step replaces the flat preset list with tier tabs
+(free / opensource / flagship / all / a user-starred "custom" set held only in
+component state) plus a per-entry star toggle. Precedence is explicit, highest
+first: **(1)** the live OpenRouter buckets, **(2)** the key-scoped
+`POST /api/byok/test` `models` array, **(3)** the catalog buckets, **(4)**
+`byokModelPresets(provider)`. Membership in the catalog is *not* evidence that
+a given key can reach a model, so a key-scoped list always outranks the
+catalog; the catalog only fills the gap where no key-scoped list exists. Every
+tiered branch also requires its selected tier to be non-empty, so picking an
+empty tier falls through to presets instead of collapsing the list to just
+"custom…". Any fetch failure, malformed catalog payload, or provider with
+neither list falls back to the flat preset list unchanged — the tiered UI is
+strictly additive and never blocks the flow.
+
+The catalog is generated data, never hand-edited: `make model-catalog` refreshes
+it from models.dev, `make model-catalog-check` is the network-free CI drift
+guard, and `docs/MODEL_CATALOG.md` documents what it is **not** authoritative
+for. `config/byok-providers.json`'s `fallbackModels` are validated against the
+catalog by `tests/config/test_model_catalog.py` (strict) but are never generated
+from it, so `byokModelPresets` stays the hand-mirrored last resort it has
+always been.
 
 For OpenAI, Anthropic, and Gemini, `byok-cli-flow.tsx` fires
 `pingByokKey(key, provider, "", { requireModel: false })` as soon as the
@@ -701,8 +740,10 @@ empty list. When the visitor then picks a model, `runValidateAndActivate`
 reuses `keyPing` directly instead of issuing a second
 `POST /api/byok/test` — exactly one validation call happens across the
 whole flow for these three providers, same as it always was for the
-other providers, just moved earlier. OpenRouter's own prefetch and x.ai's
-fallback-preset-only behavior are unchanged.
+other providers, just moved earlier. OpenRouter's prefetch stays on the live
+path, and x.ai — which has neither a key-step ping nor a live list — now fills
+its picker from the catalog, falling back to the flat presets if that fetch
+does not resolve.
 
 The BFF forwards BYOK headers to digigraph for the request lifetime and never
 logs or returns the raw key. `byokActivationGate` + Vitest cover the
@@ -742,7 +783,14 @@ plus its own `byokModelPresets`) and its sibling
 catalog fails a test instead of drifting silently. `fallbackModels` has no
 counterpart in `byok-providers.ts`, which carries no model list; its in-app copy is
 `use-byok-key.ts`'s `byokModelPresets`, pinned by the first of those two files. That
-is what keeps digigraph's refusal naming a model this UI actually offers. **One
+is what keeps digigraph's refusal naming a model this UI actually offers. Since
+#4994 the list also has a *second*, independent pin: every `fallbackModels`
+entry must exist in the generated `config/model-catalog.json`
+(`tests/config/test_model_catalog.py`), so a pin retired upstream fails a test
+instead of sitting in the picker. That test is what surfaced the six retired
+ids documented in `docs/MODEL_CATALOG.md`; each needs a LiteLLM route rename
+before it can be replaced, which is why they are recorded as exemptions rather
+than silently swapped. **One
 surface of that drift class is still unguarded:** the same file's
 `byokModelPlaceholder` is a second hardcoded switch that reproduces every
 provider's `fallbackModels[0]` and renders it in its own `(e.g. …)` sentence
