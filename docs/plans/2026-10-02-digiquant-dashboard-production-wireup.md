@@ -5,7 +5,7 @@
 **Status:** plan only. No app code in this change.  
 **Base:** `develop` (tip when this doc was written: `8540d815b`). Do not branch implement work off PR #4911.  
 **Visual aid:** remock canvas on draft PR [#4911](https://github.com/digithings-ai/digithings/pull/4911), branch `cursor/digiquant-dashboard-skeleton-mocks-67ef`.  
-**Related:** #4895 (product split), #4908 (skeleton plan), #4911 (static mocks, HOLD), #4941 (canvas polish).
+**Related:** #4895 (product split), #4900 (digiquant.io showcase, open), #4908 (skeleton plan), #4911 (static mocks, HOLD), #4941 (canvas polish).
 
 This document is the handoff. An implement seat should not re-discover routes, clients, or which mock commit is the picture.
 
@@ -31,9 +31,10 @@ Also locked:
 - HOLD hatch on #4911. Do not merge, undraft, or push more remock HTML onto that branch from an implement seat.
 - Do not use the live digiquant dashboard or digiquant.io as a design source.
 - Do not touch `digikey/`, `digiquant/brokers/`, or digivoice.
-- Do not rebuild the digiquant.io marketing site (#4900 / #4895 showcase lane).
+- Locks 1 and 9 apply to `apps/dashboard` only. digiquant.io is a scrolling marketing page. Its approved scroll behavior is tip `1b2c9002d` (slice I). Do not impose the dashboard one-viewport rule on it.
+- Do not rebuild the rest of the digiquant.io marketing site. The only in-scope marketing work is slice I (landing hero sequence on #4900).
 
-Layered build order from the implement brief: atoms, then Brief sections, then the terminal shell is the *composition* order inside a seat. Across seats, the shell contract in §6 lands first so pane seats do not invent chrome.
+Layered build order from the implement brief: atoms, then Brief sections, then the terminal shell is the *composition* order inside a seat. Across seats, the shell contract in §6 lands first so pane seats do not invent chrome. Slice I does not wait on that shell.
 
 ---
 
@@ -361,9 +362,9 @@ Chart wheel: on `wheel`, if `deltaY` dominates, `preventDefault` and scroll the 
 
 File ownership is exclusive. A seat edits only its files plus the route file named in the slice. Shared types live in slice A and B; later seats import them and do not restyle them.
 
-Suggested order: **A and B in parallel** (B does not import the shell), then **C, D, E, F in parallel**, then **G**, then **H**. First three seats One should spawn: **A, B, C**.
+Suggested order: **A and B in parallel** (B does not import the shell), then **C, D, E, F in parallel**, then **G**, then **H**. **Slice I runs parallel with A** on a different tree. First three dashboard seats One should spawn: **A, B, C**. Spawn **I** in the same wave; it does not share files with them.
 
-Each seat branches from current `develop` as `task/<N>-<slug>` when an issue exists, or `cursor/<slug>` with `Refs #4895` in the PR. Do not stack on #4911.
+Each dashboard seat branches from current `develop` as `task/<N>-<slug>` when an issue exists, or `cursor/<slug>` with `Refs #4895` in the PR. Do not stack on #4911. Slice I branches from PR #4900 (`task/4895-dqweb-3910-message`), not from `develop`.
 
 ### Slice A — Desk shell
 
@@ -507,6 +508,65 @@ Each seat branches from current `develop` as `task/<N>-<slug>` when an issue exi
 
 **Depends on.** A.
 
+### Slice I — digiquant.io landing hero (separate from the dashboard)
+
+**Goal.** Production craft for the digiquant-web landing hero on PR #4900. Two parts, already named by Chris:
+
+1. **Scroll behavior is approved** at remock tip `1b2c9002d8552efa127943ea3f24e1577f3f4a47` on `task/4895-dqweb-3910-message`. Keep it. Do not redesign the wheel.
+2. **Loading sequence** must feel like one motion. Logo, all hero text, and both buttons appear first. Then the real Vela chart behind constructs itself: candles draw on, then indicators appear across the build. Not a pieced stack of unrelated fades.
+
+This slice does not touch `apps/dashboard`, DigiCon, or the desk shell.
+
+**Where the code already is.** `develop` still has the older mesh/graph hero (`apps/digiquant-web/components/landing/HeroMesh.tsx`). The live craft is on #4900:
+
+| Commit | What it locked |
+|---|---|
+| `550235c12` | Wheel: Vela may zoom-out while the gesture is live. After settle (`WHEEL_IDLE_MS` 140) or after `ZOOM_OUT_BUDGET` 720 of downward `deltaY`, the next wheel scrolls the page. Horizontal / shift stays on the chart. At the top, scrolling up re-arms zoom. `touch-action: pan-y`. |
+| `1b2c9002d` | **Approved tip for scroll.** Section rail stays hidden on the hero (band 0) and fades in once section 2 owns the viewport midpoint (`active >= 1`). |
+| `bf6730256` | Unverified attempt at the sequence: chart mount waits for `COPY_DONE_MS`, Vela `intro.grow` for `CHART_INTRO_MS` (2400), SMA → EMA → overlay staggered by 520ms, clip-path sweep removed. |
+
+The seat starts from the current #4900 head (which includes `bf6730256`) and makes that sequence pass the acceptance criteria. It does not open a second hero off `develop`.
+
+**Files.** Only under `apps/digiquant-web`:
+
+- `app/_bands/top.tsx` — foreground: `QuantWordmark`, `h1`, lede, both `CtaLink`s.
+- `app/_chrome/QuantField.tsx` — Vela mount, indicator timing, wheel capture.
+- `app/_chrome/QuantWordmark.tsx` — only if the wordmark clock must finish with the other copy.
+- `app/_chrome/SectionRail.tsx` — do not change the `active >= 1` rule.
+- `lib/hero-build.ts` and `lib/hero-build.test.ts` — phase durations.
+- `app/globals.css` — `.hero-rise` only.
+
+**Do not edit.** Other bands, `apps/dashboard`, `packages/design` demos, dashboard Vela spike, Coinbase provider wiring beyond what #4900 already uses (`@luxalgo/vela/providers/coinbase`). Hero candle colors stay the #4900 remock (`#3DFF9A` / `#FF5C6C`). Dashboard lock 8 (teal `#3dd6c4` / red `#e5533e`) does not retint this page.
+
+**Feasible staged reveal (real Vela).** Vela will not animate “add indicator” as a designed storyboard. Stage it in three beats on one clock, with no second mask on top:
+
+1. **Foreground first.** Wordmark, headline, lede, and both buttons are visible and still before any candle moves. One entrance for that group (the existing `.hero-rise` steps may stay if they finish together). The chart host stays at opacity 0 and does not run a clip-path. Do not tie candle progress to `sweepDelayMs` / the wordmark column clock — that sync is what made the hero feel pieced.
+2. **Candles construct.** On the foreground’s `animationend` (or `COPY_DONE_MS` if that constant equals the moment the last button has settled — not a long gap after it), mount Vela with volume and `animations.intro = { style: "grow", duration: CHART_INTRO_MS }`. The grow *is* the drawing. Do not also fade a fully drawn chart in over the same interval. A short opacity ramp (the 520ms in `bf6730256`) is allowed only if it finishes before candles are halfway grown; otherwise drop it.
+3. **Indicators over the build.** Volume is part of the candle mount. Then `addNativeIndicator` in order: SMA 20, EMA 50, then one overlay chosen once per reload (Bollinger, VWAP, or SuperTrend — already the cycle in `QuantField`). Space them across the intro (the 28% / +520ms / +1040ms schedule is the right shape). Update the caption when each layer actually mounts, so the label does not name SMA and EMA while only candles are on screen. If an `addNativeIndicator` call rescales or flashes the series, add SMA and EMA in one turn after the grow and bring the overlay in on the next beat — still two visible stages, not four pops.
+
+`prefers-reduced-motion: reduce`: skip grow and stagger, show the finished chart after the foreground is visible, keep page scroll (no zoom trap). If Coinbase fails, the foreground still completes and the caption reads chart unavailable. The feed must not block the logo.
+
+**Scroll acceptance (do not regress `1b2c9002d`).**
+
+- At the top of `#top`, the first downward wheel zoom-outs the chart. After the gesture idles 140ms, or after 720px of downward `deltaY`, the next downward wheel scrolls the page to `#dashboard`.
+- Horizontal wheel and shift-wheel pan the chart and do not scroll the page.
+- Scrolling back to `scrollY <= 1` and wheeling up zooms in again.
+- Touch can pan the page vertically (`touch-action: pan-y` after Vela attaches).
+- The left section rail is not visible and not tabbable while the hero owns the midpoint. It is visible from the dashboard band downward.
+- Dashboard lock 1 does not apply: the marketing page scrolls.
+
+**Sequence acceptance.**
+
+- On a cold load with motion allowed, a screen recording shows this order with no overlap between phases: (1) the wordmark’s last cell has finished rising, and the headline, lede, and both buttons are already on screen; (2) only then candles grow across the hero; (3) SMA, then EMA, then the overlay appear during that grow, each as its own arrival.
+- Headline and buttons may finish before the wordmark. They are phase 1. Candles must not move while wordmark cells are still rising.
+- The gap between the last wordmark cell finishing and the first candle moving is under 300ms. `bf6730256` sets `COPY_DONE_MS` to `BUILD_DONE_MS + 280`, and `BUILD_DONE_MS` is `sweepDelayMs(1) + BUILD_RISE_MS` (360). Cell animations also add `(9 - y) * 9`, up to 140ms of jitter, and a rise of 260–480ms, so late cells can still be moving when the chart mounts. Retie `COPY_DONE_MS` to that real last-cell end.
+- There is no clip-path wipe of the chart host, and no second full-chart fade that hides the grow.
+- Reduced motion shows the settled foreground and a complete chart without the grow.
+- Feed failure still shows the foreground and an honest caption.
+- `npm run test --workspace digiquant-web -- lib/hero-build.test.ts` passes, and the new assertion lives inside the `describe`, not after it.
+
+**Depends on.** Nothing in slices A–H. Depends on PR #4900 still being the showcase branch. HOLD hatch on #4900 stays; this slice pushes to that branch or a child stacked on it. It does not merge #4900.
+
 ---
 
 ## 7. How a seat proves it
@@ -518,9 +578,17 @@ npm run test --workspace dashboard -- <slice paths>
 npx tsc -p apps/dashboard --noEmit   # if the seat touches types; repo script may wrap this
 ```
 
-Do not run `make test-unit` for a UI slice if it pulls Nautilus (Linux SIGABRT, #42). Dashboard vitest is the gate.
+Do not run `make test-unit` for a UI slice if it pulls Nautilus (Linux SIGABRT, #42). Dashboard vitest is the gate for slices A–H.
 
-Browser check for any slice that changes chrome or panes: load the local dashboard, walk the changed route, confirm one viewport, empty and error (shut the API URL or mock a 502), and `Esc` on fullscreen. Screenshot the pane, not only the first paint.
+Slice I:
+
+```bash
+npm run test --workspace digiquant-web -- lib/hero-build.test.ts
+```
+
+Browser check for any dashboard slice that changes chrome or panes: load the local dashboard, walk the changed route, confirm one viewport, empty and error (shut the API URL or mock a 502), and `Esc` on fullscreen. Screenshot the pane, not only the first paint.
+
+Slice I browser check is the marketing hero on the #4900 dev server: record the load sequence, then wheel from the hero into the dashboard band and back to the top.
 
 ---
 
@@ -529,7 +597,7 @@ Browser check for any slice that changes chrome or panes: load the local dashboa
 **Non-goals**
 
 - Merging or restyling PR #4911. The canvas stays a visual aid.
-- digiquant.io marketing site, digithings.ai home, digivoice.
+- Rebuilding digiquant.io beyond slice I. Other #4900 bands, digithings.ai home, and digivoice stay out.
 - New dashboard-api routes (`/book`, `/movers`) in the first wave.
 - Replacing `getFullDashboardData()` everywhere in one PR.
 - Live trading, broker adapters, order tickets, digikey, new public hostnames.
@@ -545,7 +613,9 @@ Browser check for any slice that changes chrome or panes: load the local dashboa
 | Seats wire `getFullDashboardData()` into new panes | Reject in review. New panes use §4.2. |
 | Mock green P&amp;L copied from `mock.css` | Lock 8. Tokens win. |
 | One-viewport implemented as `overflow: hidden` that clips with no inner scroll | Acceptance fails. Inner pane scroll or a sub-route. |
-| Chart wheel handler calls `preventDefault` on all wheels | Horizontal zoom dies. Only steal dominant `deltaY`. |
+| Chart wheel handler calls `preventDefault` on all wheels | Horizontal zoom dies. Only steal dominant `deltaY`. Dashboard panes and the marketing hero use different handlers. Do not share them. |
+| Slice I starts the chart on `BUILD_DONE_MS` while wordmark cells are still rising | Retie `COPY_DONE_MS` to the last cell’s delay plus its rise. Keep the approved wheel and section-rail code. |
+| A dashboard seat “fixes” the marketing hero to teal/red or one-viewport | Lock 8 and lock 1 are `apps/dashboard`. Slice I keeps `#3DFF9A` / `#FF5C6C` and page scroll. |
 | Font swap fights BLEND / CSP | `layout.tsx` comment: Geist is self-hosted for CSP. A font change needs the same treatment. Ask §9 first. |
 | House book UUID treated as a secret | It is a public selector (`CONTRACT.md` §3). Still do not log service-role keys. |
 | Paying user sees a half-migrated shell | Feature-flag the shell (`NEXT_PUBLIC_DESK_SHELL=1`) until A+C cover Brief, or ship A behind the flag default off. **Recommend the flag default off** until C merges, so production `/dashboard/` does not lose the current brief in a shell-only deploy. |
@@ -577,3 +647,5 @@ No Human Gate box in the PR template applies to this docs PR. Implement slices t
 3. **Slice C — Brief.** First page that is both the remock layout and live house data (`/brief`, `/portfolio`, derived movers, Vela, run health). Gloomberg stays a placeholder on purpose.
 
 After those three, spawn D, E, F, G together. H last.
+
+**Slice I** (digiquant.io hero) is not one of those three. Spawn it in the same wave as A. It branches from PR #4900, keeps scroll tip `1b2c9002d`, and finishes the loading sequence already sketched in `bf6730256`.
