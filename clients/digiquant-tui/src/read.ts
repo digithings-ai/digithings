@@ -18,14 +18,35 @@ const scalar = (v: unknown): string => {
   return DASH;
 };
 
+const STUB_NAV_VALUES = [99.909, 204.04];
+const STUB_NAV_TEXT = new Set(["99.909", "204.04", "204.040"]);
+
+/** The worker double's NAV figures, as values. A longer number that only contains those digits is not the fixture. */
+function isExactStubNav(value: unknown): boolean {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return STUB_NAV_VALUES.some((target) => Math.abs(value - target) < 1e-6);
+  }
+  return typeof value === "string" && STUB_NAV_TEXT.has(value);
+}
+
+function hasExactStubNav(value: unknown): boolean {
+  if (isExactStubNav(value)) return true;
+  if (Array.isArray(value)) return value.some(hasExactStubNav);
+  if (value !== null && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some(hasExactStubNav);
+  }
+  return false;
+}
+
 /**
  * Secretless worker doubles, plus the fixture ledger (XLF TRIM / GLD OPEN).
- * Withhold the worker double only: NAV tip 99.909 and series tip 204.04.
+ * Withhold the worker double only: NAV tip 99.909 and series tip 204.04, matched as values.
+ * A longer number that merely contains those digits is a house figure.
  * `legacy_estimate` on an older point is a house label, not that fixture.
  */
 export function isStubEnvelope(body: unknown): boolean {
+  if (hasExactStubNav(body)) return true;
   const text = JSON.stringify(body ?? null);
-  if (text.includes("99.909") || text.includes("204.04") || text.includes("204.040")) return true;
   if (text.includes("103.040192") || text.includes("104.44808") || text.includes("3.040191838399986")) return true;
   if (text.includes('"close":500') && text.includes("2026-08-20") && text.includes('"close":515')) return true;
   const xlf = text.includes("XLF") && text.includes("2026-09-03") && text.includes("54.1");

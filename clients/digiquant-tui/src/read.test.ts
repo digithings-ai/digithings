@@ -4,6 +4,10 @@ import { DASH, EMPTY_READ, STUB_READ, fieldLines, graphLines, isEmptyPayload, is
 test("stub fingerprints are withheld, including the fixture ledger", () => {
   expect(isStubEnvelope({ data: { nav: 99.909 } })).toBe(true);
   expect(isStubEnvelope({ data: { nav: 204.04 } })).toBe(true);
+  expect(isStubEnvelope({ data: { nav: "204.040" } })).toBe(true);
+  expect(isStubEnvelope({ data: { nav: 199.909 } })).toBe(false);
+  expect(isStubEnvelope({ data: { nav: 1204.04 } })).toBe(false);
+  expect(isStubEnvelope({ data: { nav: 204.041 } })).toBe(false);
   expect(isStubEnvelope({ data: { contract: "legacy_estimate" } })).toBe(false);
   expect(
     isStubEnvelope({
@@ -33,12 +37,13 @@ test("a finalized tip is shown when an older point is legacy_estimate; the stub 
     data: {
       tip: { date: "2026-10-01", contract: "finalized_accounting" },
       points: [
-        { date: "2026-06-01", nav: 110.2, day_return_pct: null, contract: "legacy_estimate", index: 100 },
+        { date: "2026-06-01", nav: 199.909, day_return_pct: null, contract: "legacy_estimate", index: 100 },
         { date: "2026-10-01", nav: 118.75, day_return_pct: 0.4, contract: "finalized_accounting", index: 107.8 },
       ],
     },
     provenance: { source: "public_accounting_nav_history", contract: "finalized_accounting" },
   };
+  expect(JSON.stringify(house).includes("99.909")).toBe(true);
   expect(isStubEnvelope(house)).toBe(false);
   const shown = presentResponse("/nav-series", 200, house, "fields");
   expect(shown.status).toBe("ok");
