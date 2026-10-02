@@ -59,7 +59,7 @@
     "name": "digifetch_13f_holdings",
     "family": "digifetch",
     "scope": "read",
-    "summary": "13F filings / fund forms / one form's holdings (Gloomberg Cloud; anonymous).",
+    "summary": "13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "what",
@@ -106,6 +106,45 @@
     ]
   },
   {
+    "name": "digifetch_alert_add",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Add a price alert for one symbol (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "condition",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "price",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_alert_list",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Price alerts for the signed-in session (Gloomberb Cloud; session-gated).",
+    "params": []
+  },
+  {
     "name": "digifetch_analyst_research",
     "family": "digifetch",
     "scope": "read",
@@ -126,10 +165,68 @@
     ]
   },
   {
+    "name": "digifetch_bond_calculator",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Par-bond analytics over local discounting math (pure local math).",
+    "params": [
+      {
+        "name": "coupon",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "face",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "ytm",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "years",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "freq",
+        "type": "int",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_broker_positions",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Broker positions/account sync (Gloomberb Cloud; session-gated, read-only).",
+    "params": [
+      {
+        "name": "broker",
+        "type": "str",
+        "required": false,
+        "default": "ibkr"
+      },
+      {
+        "name": "account",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_cds",
     "family": "digifetch",
     "scope": "read",
-    "summary": "DTCC PPD CDS trade tape (Gloomberg Cloud; anonymous).",
+    "summary": "DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "issuer",
@@ -152,10 +249,57 @@
     ]
   },
   {
+    "name": "digifetch_cdx",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Index-CDS board (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "days",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_central_bank_rates",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Central-bank policy-rate board (Gloomberb Cloud; session-gated).",
+    "params": []
+  },
+  {
+    "name": "digifetch_compare_performance",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Rebased multi-ticker performance (composition).",
+    "params": [
+      {
+        "name": "tickers",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_congress_trades",
     "family": "digifetch",
     "scope": "read",
-    "summary": "US House disclosure trades (Gloomberg Cloud; anonymous).",
+    "summary": "US House disclosure trades (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "year",
@@ -176,6 +320,107 @@
     "family": "digifetch",
     "scope": "read",
     "summary": "Dividends, splits, and earnings history for one symbol (session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_correlation_matrix",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Pearson correlation matrix over aligned daily returns (composition).",
+    "params": [
+      {
+        "name": "tickers",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_cot",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "CFTC positioning board or one contract (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "report",
+        "type": "str",
+        "required": false,
+        "default": "legacy"
+      },
+      {
+        "name": "trader_class",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "code",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_crypto_markets",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Crypto board, up to 100 coins (Gloomberb Cloud; session-gated).",
+    "params": []
+  },
+  {
+    "name": "digifetch_custom_chart",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Explicit-series alignment onto one date union (composition).",
+    "params": [
+      {
+        "name": "series_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_debt_maturities",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "US-GAAP debt maturities with provenance (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_dividend_yield",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Trailing dividend yield (composition of corporate-actions + quote).",
     "params": [
       {
         "name": "symbol",
@@ -209,14 +454,14 @@
     "name": "digifetch_econ_calendar",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Structured economic calendar (Gloomberg Cloud; anonymous).",
+    "summary": "Structured economic calendar (Gloomberb Cloud; anonymous).",
     "params": []
   },
   {
     "name": "digifetch_econ_series",
     "family": "digifetch",
     "scope": "read",
-    "summary": "FRED-style macro series observations + metadata (Gloomberg Cloud; anonymous).",
+    "summary": "FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "series_id",
@@ -242,7 +487,7 @@
     "name": "digifetch_equity_diagnostic",
     "family": "digifetch",
     "scope": "read",
-    "summary": "AI evidence review for one listing (Gloomberg Cloud; session-gated).",
+    "summary": "AI evidence review for one listing (Gloomberb Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -265,10 +510,30 @@
     ]
   },
   {
+    "name": "digifetch_estimate_revisions",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Estimate revisions for one symbol (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_exchange_rate",
     "family": "digifetch",
     "scope": "read",
-    "summary": "USD exchange rate for an ISO-4217 `from_currency` (Gloomberg Cloud).",
+    "summary": "USD exchange rate for an ISO-4217 `from_currency` (Gloomberb Cloud).",
     "params": [
       {
         "name": "from_currency",
@@ -285,10 +550,17 @@
     ]
   },
   {
+    "name": "digifetch_fear_greed",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "CNN Fear & Greed gauge + 7 components (venue-direct, anonymous).",
+    "params": []
+  },
+  {
     "name": "digifetch_filing_events",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Classified 8-K filing events for one ticker (Gloomberg Cloud; anonymous).",
+    "summary": "Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "ticker",
@@ -305,10 +577,114 @@
     ]
   },
   {
+    "name": "digifetch_fundamental_graph",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "One statement field's per-period series (composition).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "field",
+        "type": "str",
+        "required": false,
+        "default": "total_revenue"
+      },
+      {
+        "name": "period",
+        "type": "str",
+        "required": false,
+        "default": "annual"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_fx_cross_rates",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "USD-pair FX matrix over the exchange-rate read (USD base only).",
+    "params": [
+      {
+        "name": "currencies",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "to_currency",
+        "type": "str",
+        "required": false,
+        "default": "USD"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_hacker_news",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Hacker News stories (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "feed",
+        "type": "str",
+        "required": false,
+        "default": "top"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "digifetch_hiring",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Hiring summary / postings / movers (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "mode",
+        "type": "str",
+        "required": false,
+        "default": "summary"
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "name",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
     "name": "digifetch_holders",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Holder records for one symbol (Gloomberg Cloud; session-gated).",
+    "summary": "Holder records for one symbol (Gloomberb Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -325,10 +701,300 @@
     ]
   },
   {
+    "name": "digifetch_ibkr_execute_order",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Redeem an approval token and place the bound IBKR order (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "side",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "quantity",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "approval_token",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "order_type",
+        "type": "str",
+        "required": false,
+        "default": "market"
+      },
+      {
+        "name": "limit_price",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "dry_run",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digifetch_ibkr_preview_order",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Validate an IBKR order and mint its approval ticket (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "side",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "quantity",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "order_type",
+        "type": "str",
+        "required": false,
+        "default": "market"
+      },
+      {
+        "name": "limit_price",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_ipo_calendar",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Worldwide IPO calendar (Gloomberb Cloud, anonymous).",
+    "params": [
+      {
+        "name": "status",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "region",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "deal_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "from_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "to_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "digifetch_iv_history",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Stored daily IV history with rank/percentile (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "days",
+        "type": "int",
+        "required": false,
+        "default": 1100
+      }
+    ]
+  },
+  {
+    "name": "digifetch_iv_screen",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "IV rich/cheap screen over stored history (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbols",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_iv_surface",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Stored volatility-close surface (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_kelly_sizer",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Kelly-criterion position size (pure local math).",
+    "params": [
+      {
+        "name": "win_prob",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "win_loss_ratio",
+        "type": "float",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_market_halts",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "US equity trade halts with reason (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 100
+      }
+    ]
+  },
+  {
+    "name": "digifetch_market_valuation",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Shiller CAPE plus optional econ ratios vs history thirds.",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 240
+      },
+      {
+        "name": "econ_series_ids",
+        "type": "list[str] | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_money_markets",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "SOFR/EFFR/reserve prints plus the funding spread (composition).",
+    "params": [
+      {
+        "name": "sofr_series",
+        "type": "str",
+        "required": false,
+        "default": "SOFR"
+      },
+      {
+        "name": "effr_series",
+        "type": "str",
+        "required": false,
+        "default": "EFFR"
+      },
+      {
+        "name": "reserves_series",
+        "type": "str",
+        "required": false,
+        "default": "WRESBAL"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 5
+      }
+    ]
+  },
+  {
     "name": "digifetch_news",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Aggregated market news headlines (Gloomberg Cloud; anonymous).",
+    "summary": "Aggregated market news headlines (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "feed",
@@ -357,10 +1023,92 @@
     ]
   },
   {
+    "name": "digifetch_note_add",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Add a note on one symbol (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "content",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "title",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_options_calculator",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "European Black-Scholes price / IV solve (pure local math).",
+    "params": [
+      {
+        "name": "spot",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "strike",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "rate",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "vol",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "expiry_years",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "kind",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "price",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_options_chain",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Options chain for one listing (Gloomberg Cloud; JSON envelope).",
+    "summary": "Options chain for one listing (Gloomberb Cloud; JSON envelope).",
     "params": [
       {
         "name": "symbol",
@@ -381,6 +1129,191 @@
         "default": null
       }
     ]
+  },
+  {
+    "name": "digifetch_options_flow",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Recorded options-flow history (Gloomberb Cloud; **requires Pro**).",
+    "params": [
+      {
+        "name": "before",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "min_premium",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "right",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "kind",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "min_vol_oi",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "max_expiry_days",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "symbols",
+        "type": "list[str] | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_options_scenario",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Multi-leg European option scenario over the options_chain read.",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "legs_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "rate",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "spots",
+        "type": "list[float]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "valuation_dates",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "vol_shifts",
+        "type": "list[float] | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_polls",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "VoteHub political polls (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "poll_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "subject",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_portfolio_add",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Add one symbol to the session portfolio (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "quantity",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "note",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_portfolio_remove",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Remove one symbol from the session portfolio (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_portfolio_view",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Portfolio snapshot for the signed-in session (Gloomberb Cloud; session-gated).",
+    "params": []
   },
   {
     "name": "digifetch_prediction_markets",
@@ -424,7 +1357,7 @@
     "name": "digifetch_price_history",
     "family": "digifetch",
     "scope": "read",
-    "summary": "OHLCV bars for one listing (Gloomberg Cloud; JSON envelope).",
+    "summary": "OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).",
     "params": [
       {
         "name": "symbol",
@@ -468,7 +1401,7 @@
     "name": "digifetch_proxy_statements",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Executive-compensation proxy statements (Gloomberg Cloud; anonymous).",
+    "summary": "Executive-compensation proxy statements (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "ticker",
@@ -494,7 +1427,7 @@
     "name": "digifetch_quote",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Latest quote for one listing via Gloomberg Cloud (anonymous; JSON envelope).",
+    "summary": "Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).",
     "params": [
       {
         "name": "symbol",
@@ -511,13 +1444,99 @@
     ]
   },
   {
+    "name": "digifetch_quote_recap",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "NBBO quote recap for one symbol (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_quotes_batch",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Batch quotes for 1-20 listings via Gloomberg Cloud (anonymous).",
+    "summary": "Batch quotes for 1-20 listings via Gloomberb Cloud (anonymous).",
     "params": [
       {
         "name": "symbols",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_rate_path",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "US rate path over live Kalshi KXFED markets (venue-direct).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 200
+      }
+    ]
+  },
+  {
+    "name": "digifetch_relationship_graph",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Pair relationship: indexed prices, ratio, rolling correlation, beta.",
+    "params": [
+      {
+        "name": "base",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "quote",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "window",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_relative_valuation",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Peer trailing-multiples table over financials reads (composition).",
+    "params": [
+      {
+        "name": "tickers",
         "type": "list[str]",
         "required": true,
         "default": null
@@ -554,7 +1573,7 @@
     "name": "digifetch_risk_reports",
     "family": "digifetch",
     "scope": "read",
-    "summary": "10-K risk-factor reports, diffed year-over-year (Gloomberg Cloud; anonymous).",
+    "summary": "10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "ticker",
@@ -580,14 +1599,14 @@
     "name": "digifetch_saved_searches",
     "family": "digifetch",
     "scope": "read",
-    "summary": "The signed-in session's saved searches (Gloomberg Cloud; session-gated).",
+    "summary": "The signed-in session's saved searches (Gloomberb Cloud; session-gated).",
     "params": []
   },
   {
     "name": "digifetch_screener",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Market screener for gainers/losers/most-active (Gloomberg Cloud; **requires Pro**).",
+    "summary": "Market screener for gainers/losers/most-active (Gloomberb Cloud; **requires Pro**).",
     "params": [
       {
         "name": "category",
@@ -613,7 +1632,7 @@
     "name": "digifetch_search",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Search listings across venues (Gloomberg Cloud; anonymous).",
+    "summary": "Search listings across venues (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "query",
@@ -633,7 +1652,7 @@
     "name": "digifetch_sec_filings",
     "family": "digifetch",
     "scope": "read",
-    "summary": "SEC filings, filing documents, or filing content (Gloomberg Cloud).",
+    "summary": "SEC filings, filing documents, or filing content (Gloomberb Cloud).",
     "params": [
       {
         "name": "ticker",
@@ -674,10 +1693,42 @@
     ]
   },
   {
+    "name": "digifetch_session_movers",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Pre-market / after-hours / gaps movers (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "category",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "side",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "count",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "mode",
+        "type": "str",
+        "required": false,
+        "default": "cache-first"
+      }
+    ]
+  },
+  {
     "name": "digifetch_shiller",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Robert Shiller's monthly valuation series (Gloomberg Cloud; anonymous).",
+    "summary": "Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).",
     "params": [
       {
         "name": "limit",
@@ -691,7 +1742,7 @@
     "name": "digifetch_short_interest",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Biweekly short-interest settlements (Gloomberg Cloud; session-gated).",
+    "summary": "Biweekly short-interest settlements (Gloomberb Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -708,10 +1759,44 @@
     ]
   },
   {
+    "name": "digifetch_short_volume",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "FINRA daily short volume, NMS or OTC (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "scope",
+        "type": "str",
+        "required": false,
+        "default": "nms"
+      }
+    ]
+  },
+  {
+    "name": "digifetch_sovereign_cds",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Sovereign-CDS board, 5Y spreads in bp (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "days",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_statements",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Annual/quarterly financial statement rows (Gloomberg Cloud; session-gated).",
+    "summary": "Annual/quarterly financial statement rows (Gloomberb Cloud; session-gated).",
     "params": [
       {
         "name": "symbol",
@@ -734,10 +1819,74 @@
     ]
   },
   {
+    "name": "digifetch_substack",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Own-account Substack reader (venue-direct).",
+    "params": [
+      {
+        "name": "publication",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "mode",
+        "type": "str",
+        "required": false,
+        "default": "feed"
+      },
+      {
+        "name": "post_id",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "digifetch_thesis_add",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Add an investment thesis for one ticker (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "title",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "document",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_ticker_financials",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Quote, profile, fundamentals, statements, and price history (Gloomberg Cloud).",
+    "summary": "Quote, profile, fundamentals, statements, and price history (Gloomberb Cloud).",
     "params": [
       {
         "name": "symbol",
@@ -763,7 +1912,7 @@
     "name": "digifetch_ticker_tweets",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Recent X/Twitter posts mentioning one ticker (Gloomberg Cloud; session-gated).",
+    "summary": "Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; session-gated).",
     "params": [
       {
         "name": "ticker",
@@ -792,10 +1941,30 @@
     ]
   },
   {
+    "name": "digifetch_time_and_sales",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Time and sales prints for one symbol (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
     "name": "digifetch_transcripts",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Earnings-call transcripts (Gloomberg Cloud; session-gated, requires Pro).",
+    "summary": "Earnings-call transcripts (Gloomberb Cloud; session-gated, requires Pro).",
     "params": [
       {
         "name": "ticker",
@@ -818,10 +1987,56 @@
     ]
   },
   {
+    "name": "digifetch_treasury_auctions",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "US Treasury auction results, newest first (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "security_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "from_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "to_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "digifetch_trending",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Yahoo trending symbols with delayed quotes (venue-direct).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
     "name": "digifetch_tweet_search",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Search X/Twitter posts by query (Gloomberg Cloud; session-gated).",
+    "summary": "Search X/Twitter posts by query (Gloomberb Cloud; session-gated).",
     "params": [
       {
         "name": "query",
@@ -850,17 +2065,123 @@
     ]
   },
   {
+    "name": "digifetch_valuation_graph",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Per-period valuation rows plus the multiples snapshot (composition).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "period",
+        "type": "str",
+        "required": false,
+        "default": "annual"
+      }
+    ]
+  },
+  {
     "name": "digifetch_venues",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Exchange venue metadata (Gloomberg Cloud; anonymous).",
+    "summary": "Exchange venue metadata (Gloomberb Cloud; anonymous).",
     "params": []
+  },
+  {
+    "name": "digifetch_view_add",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Add a custom view from a spec object (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "spec_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_vix_term_structure",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "VIX term snapshot over two econ-series closes (composition).",
+    "params": [
+      {
+        "name": "near_series",
+        "type": "str",
+        "required": false,
+        "default": "VIXCLS"
+      },
+      {
+        "name": "far_series",
+        "type": "str",
+        "required": false,
+        "default": "VIX3M"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 5
+      }
+    ]
+  },
+  {
+    "name": "digifetch_watchlist_add",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Add one symbol to the session watchlist (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digifetch_watchlist_remove",
+    "family": "digifetch",
+    "scope": "read",
+    "summary": "Remove one symbol from the session watchlist (Gloomberb Cloud; session-gated).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
   },
   {
     "name": "digifetch_yield_curve",
     "family": "digifetch",
     "scope": "read",
-    "summary": "Treasury yield-curve tenors (Gloomberg Cloud; anonymous).",
+    "summary": "Treasury yield-curve tenors (Gloomberb Cloud; anonymous).",
     "params": []
   },
   {
