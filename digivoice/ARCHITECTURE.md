@@ -135,8 +135,12 @@ The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any si
    16-bit, which is what whisper.cpp wants, so nothing has to resample. The file is
    `recordings/dict-<UTC stamp>-<8 hex>.wav`.
 2. **Transcribe** (`transcribe.py`). `whisper-cli` (or the `whisper-cpp` alias) with
-   `-m <models_dir>/ggml-base.en.bin -f <wav> -l en -nt`. stdout is the transcript; the
-   banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
+   `-m <model> -f <wav> -l en -nt` (multilingual catalog models use `-l auto`). The
+   model is the selected local file: the weights under `models_dir`, an absolute `.bin`,
+   or the same filename already installed under LM Studio, Ollama (`OLLAMA_MODELS`), or
+   MLX Studio. A missing file raises `model <id> is not installed locally: <path>`,
+   the take exits 1, and that line is appended to `system.log`. stdout is the transcript;
+   the banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
    collapsed into one line.
 3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local llama.cpp (or
    local ollama) with a preset (email / SMS / professional / coding / blog). The
@@ -154,7 +158,7 @@ The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any si
    default; when enabled it cycles 15 / 30 / 60 seconds only. Fail soft —
    raw transcript on error. Disabled by default. `--no-rewrite` skips.
 4. **History** (`history.py`). One JSON object appended to `history.jsonl` (rewritten text when applied).
-5. **Paste** (`paste.py`). darwin only, and never fatal. Skipped when `paste_on_stop` is false. When it is on, the transcript is copied with `pbcopy` and Command-V is sent to the app that had focus when the take started (`--focus-name` / `--focus-bundle`, or the frontmost process captured before recording). `osascript -e` receives that bundle id and name as the script argv. A leading `-` is not passed: with `-e` it is not an end-of-options mark, and it used to become the bundle id so the keystroke missed the app. Speak `--selection` uses the same argv when it reads that app's selected text.
+5. **Paste** (`paste.py`). darwin only, and never fatal. Skipped when `paste_on_stop` is false. When it is on, the transcript is copied with `pbcopy` and Command-V is sent to the app that had focus when the take started (`--focus-name` / `--focus-bundle`, or the frontmost process captured before recording). `osascript -e` receives that bundle id and name as the script argv. A leading `-` is not passed: with `-e` it is not an end-of-options mark, and it used to become the bundle id so the keystroke missed the app. Speak `--selection` uses that same argv when it reads the captured app's selected text, and the Cmd+C fallback activates that app before the keystroke.
 
 Recording modes:
 
@@ -206,12 +210,18 @@ the wav path, the paste result, and the history path all go to stderr.
 
 1. **Resolve text.** Argv words, or `--clipboard` (`pbpaste` / `wl-paste` / `xclip` / `xsel`),
    or `--selection` (macOS, in order: focused element's Accessibility selected
-   text, then Ghostty's selection pasteboard when Ghostty is frontmost, then
-   Cmd+C via osascript only when the clipboard *changes*; Linux: primary),
+   text in the captured app when `--focus-name` / `--focus-bundle` is set, else the
+   frontmost app; then Ghostty's selection pasteboard when that target is Ghostty;
+   then Cmd+C via osascript only when the clipboard *changes*. A captured app is
+   activated before that Command-C, with the same argv rule as paste: no leading
+   dash. Linux: primary),
    or `--clipboard-or-history` (clipboard only; **no** history fallback — not the hotkey path).
    Hammerspoon speak uses `--selection`.
 2. **Piper** (`speak.py`). `piper --model <voice.onnx> --output_file <speak-…wav>` with text
-   on stdin. Voice from `DIGIVOICE_PIPER_VOICE` or the first `*.onnx` under models.
+   on stdin. A saved `tts_voice` file on disk wins, including when `DIGIVOICE_PIPER_VOICE`
+   points at a missing default. The env path is used when no saved file exists and that
+   path exists. Otherwise the first `*.onnx` under models. The take errors only when no
+   voice file can be found.
 3. **Play.** `afplay` on darwin; `aplay` then `ffplay` on Linux.
 4. **History.** Append `{kind:"speak", text, wav:null}`.
 
@@ -220,9 +230,9 @@ the wav path, the paste result, and the history path all go to stderr.
 | Frontmost app | Step 1: AX selected text | Step 2: Ghostty pasteboard | Step 3: Cmd+C change-detect |
 | --- | --- | --- | --- |
 | Ghostty | Miss (terminal grid exposes no `AXSelectedText`; osascript's `missing value` is filtered, never spoken) | **Hit** — `pbpaste -pboard com.mitchellh.ghostty.selection` (copy-on-select) | Fallback when the selection pasteboard is empty (otherwise never reached; clipboard untouched) |
-| TextEdit / Notes / Mail (NSText) | **Hit** — focused text view's `AXSelectedText` | Skipped (not Ghostty) | Fallback for non-text focus |
-| Safari / Chrome | Hit in text fields; miss on page content | Skipped | **Hit** — page selections copy via Cmd+C |
-| Grok Bot / other apps | Hit when a text field holds the selection | Skipped | **Hit** (previously the only path; unchanged) |
+| TextEdit / Notes / Mail (NSText) | **Hit** — focused text view's `AXSelectedText` in the captured app | Skipped (not Ghostty) | Fallback: activate that app, then Cmd+C |
+| Safari / Chrome | Hit in text fields; miss on page content | Skipped | **Hit** — activate the captured app, then Cmd+C |
+| Grok Bot / other apps | Hit when a text field holds the selection | Skipped | **Hit** — activate the captured app, then Cmd+C |
 
 An unchanged general clipboard at step 3 is empty selection, never readout:
 leftover dictation or coding replies are not spoken, and no `kind:dict` history

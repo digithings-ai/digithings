@@ -515,6 +515,7 @@ def _dict_take(
             recording.wav_path,
             model_id=settings.stt_model,
             home=runtime.home,
+            env=runtime.env,
         )
     except VoiceError as exc:
         if cancel.requested():

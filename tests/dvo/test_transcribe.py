@@ -127,6 +127,48 @@ def test_silence_marker_next_to_speech_is_dropped() -> None:
     assert clean_transcript("[BLANK_AUDIO] ship it. [ Silence ]") == "ship it."
 
 
+def test_transcribe_opens_a_catalog_copy_under_an_install_root(
+    paths: VoicePaths, tmp_path: Path
+) -> None:
+    weight = tmp_path / ".lmstudio" / "models" / "whisper" / "ggml-small.en.bin"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"fake weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship the notes\n")})
+    result = transcribe(
+        paths,
+        WHISPER,
+        runner,
+        "/tmp/a.wav",
+        model_id="ggml-small.en",
+        home=tmp_path,
+        env={},
+    )
+    assert result.text == "ship the notes"
+    assert result.model_path == str(weight)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    assert call.argv[call.argv.index("-m") + 1] == str(weight)
+    assert call.argv[call.argv.index("-l") + 1] == "en"
+
+
+def test_transcribe_keeps_a_missing_absolute_bin(paths: VoicePaths, tmp_path: Path) -> None:
+    missing = tmp_path / "gone.bin"
+    decoy = tmp_path / ".ollama" / "models" / "gone.bin"
+    decoy.parent.mkdir(parents=True)
+    decoy.write_bytes(b"not this one")
+    with pytest.raises(TranscribeError, match="not installed locally") as excinfo:
+        transcribe(
+            paths,
+            WHISPER,
+            FakeRunner(),
+            "/tmp/a.wav",
+            model_id=str(missing),
+            home=tmp_path,
+        )
+    assert str(missing) in str(excinfo.value)
+    assert str(decoy) not in str(excinfo.value)
+
+
 def test_transcribe_uses_configured_stt_model(paths: VoicePaths) -> None:
     models = Path(paths.models_dir)
     models.mkdir(parents=True, exist_ok=True)
