@@ -4,7 +4,9 @@ Sample macOS hotkey adapter for digivoice. **Not** part of the Python package
 import path and **not** a hard dependency — copy or symlink into your Hammerspoon
 config.
 
-## Locked binds
+## Default binds
+
+These are the binds until a row in `settings.json` `hotkey_bindings` is saved. A saved remap replaces that row. The previous key is not also kept. The adapter re-reads the file when it changes, so the next key uses the new bind. System Reload (`hs.reload()`) reads it again at startup. A value that does not parse keeps the previous bind, prints a warning, and leaves the event tap running.
 
 | Bind | Action |
 | --- | --- |
@@ -12,7 +14,7 @@ config.
 | **Esc** (plain, no modifiers) | Cancel the active dictation: creates the cancel-file; digivoice stops the recorder / whisper / rewrite, deletes the wav, and pastes nothing and logs nothing. Only live while a take is recording, transcribing, or rewriting; Esc is swallowed only when it cancels, otherwise it reaches the focused app. Not used for speech. |
 | **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the banner shows processing or error, not the selection). **No** clipboard or `kind:dict` history fallback. |
 
-Do not invent other default binds in this sample.
+Do not invent other default binds in this sample. The terminal UI can store another key, including modifiers (`ctrl+shift+space`).
 
 ## Status banner
 

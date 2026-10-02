@@ -1,14 +1,18 @@
 --- digivoice Hammerspoon sample adapter
---- Locked binds (do not invent others):
+--- Hotkeys come from settings.json `hotkey_bindings` (hotkeys.lua).
+--- Defaults, until a row is saved:
 ---   Right Option (61)           → dict toggle (press start / press stop → transcribe + paste)
 ---   Esc                         → cancel an active take (discard; no paste, no history)
 ---                                 Esc on a preview banner only hides the preview.
 ---   Double-tap Left Option (58) → speak --selection (fail soft; the grid is the status)
+--- A saved remap replaces that bind. The previous key is not also kept.
+--- The file is re-read when it changes, and again on hs.reload().
+--- A binding that does not parse keeps the previous one and prints a warning.
 ---
 --- Status: a custom overlay banner (banner_core.lua) draws one status icon.
 --- No status word, pin, button, transcript, or waveform. A click focuses the
 --- digivoice terminal when it is already open, and opens it otherwise.
---- Esc still cancels a take. Drag moves the icon; release near an anchor snaps.
+--- The cancel bind still cancels a take. Drag moves the icon; release near an anchor snaps.
 --- Retract (default) hides the icon when voice is idle. banner_pinned keeps it.
 --- `digivoice banner show` still reveals a status preview with no dictation.
 --- Banner enable/position/density/animations/pin live in settings.json
@@ -28,6 +32,7 @@ local function script_dir()
 end
 
 local core = dofile(script_dir() .. "banner_core.lua")
+local hotkeys = dofile(script_dir() .. "hotkeys.lua")
 
 local function executable(path)
   local f = io.open(path, "r")
@@ -728,7 +733,7 @@ function M.cancel_dict()
   -- The CLI polls the cancel-file; it kills the recorder / whisper and deletes the wav.
   -- Never kill the CLI instead: its recorder runs in its own session and would be orphaned.
   if not write_file(CANCEL_FILE, "cancel\n") then
-    print("digivoice: could not write " .. CANCEL_FILE .. "; take continues (Right Option stops it)")
+    print("digivoice: could not write " .. CANCEL_FILE .. "; take continues (the dictation key stops it)")
     return false
   end
   s.local_state = "cancelling"
@@ -738,24 +743,8 @@ function M.cancel_dict()
 end
 
 ensure_esc_tap = function()
-  if not esc_tap then
-    esc_tap = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, function(event)
-      if session and session.kind == "preview" then
-        -- Esc on a preview only hides it; nothing to discard.
-        if core.is_cancel_key(event:getKeyCode(), event:getFlags()) then
-          M.hide_preview()
-          return true
-        end
-        return false
-      end
-      if core.is_cancel_key(event:getKeyCode(), event:getFlags()) then
-        -- Swallow Esc only when it actually cancels a take.
-        return M.cancel_dict()
-      end
-      return false
-    end)
-  end
-  esc_tap:start()
+  -- Cancel is the hotkey tap below, armed for the whole session.
+  -- A separate Esc tap would keep the old key after a remap.
 end
 
 local function start_dict()
@@ -825,52 +814,184 @@ function M.speak_selection()
 end
 
 --------------------------------------------------------------------------------
--- hotkeys
+-- hotkeys (settings.json hotkey_bindings; defaults until a row is saved)
 --------------------------------------------------------------------------------
 
--- Right Option = 61 (dict). Left Option = 58 (double-tap speak).
-local RIGHT_OPTION = 61
-local LEFT_OPTION = 58
-local right_option_down = false
-local left_option_down = false
-local left_option_last_tap = 0
+local binds = hotkeys.defaults()
+local binds_sig = nil
+local warned_hotkey = {}
+local modifier_down = {}
+local last_double = {}
 
-local tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
-  local flags = event:getFlags()
-  local ctrl = flags.ctrl == true
-  local shift = flags.shift == true
-  local alt = flags.alt == true
-  local keyCode = event:getKeyCode()
-
-  -- Double-tap Left Option alone → speak selection. Single tap is a no-op.
-  if keyCode == LEFT_OPTION and not ctrl and not shift then
-    local is_down = alt
-    if is_down and not left_option_down then
-      left_option_down = true
-      local now = hs.timer.secondsSinceEpoch()
-      if left_option_last_tap > 0 and (now - left_option_last_tap) <= DOUBLE_TAP_SEC then
-        left_option_last_tap = 0
-        M.speak_selection()
-      else
-        left_option_last_tap = now
-      end
-    elseif not is_down then
-      left_option_down = false
+local function refresh_hotkeys()
+  local ok_read, text = pcall(function()
+    local f = io.open(SETTINGS_FILE, "r")
+    if not f then
+      return ""
     end
+    local body = f:read("*a") or ""
+    f:close()
+    return body
+  end)
+  if not ok_read then
+    print("digivoice: could not read settings.json; keeping hotkeys")
+    return
+  end
+  if text == binds_sig then
+    return
+  end
+  binds_sig = text
+  local raw = nil
+  if text ~= "" then
+    local ok_json, decoded = pcall(read_json, SETTINGS_FILE)
+    if not ok_json or decoded == nil then
+      print("digivoice: settings.json did not parse; keeping hotkeys")
+      return
+    end
+    raw = decoded
+  end
+  local extracted = hotkeys.bindings_from_settings(raw)
+  local next_binds, warnings = hotkeys.apply(binds, extracted)
+  binds = next_binds
+  for _, warning in ipairs(warnings) do
+    if not warned_hotkey[warning] then
+      warned_hotkey[warning] = true
+      print("digivoice: " .. warning)
+    end
+  end
+end
+
+local function flag_is_down(keycode, flags)
+  if keycode == 58 or keycode == 61 then
+    return flags.alt == true
+  end
+  if keycode == 54 or keycode == 55 then
+    return flags.cmd == true
+  end
+  if keycode == 56 or keycode == 60 then
+    return flags.shift == true
+  end
+  if keycode == 59 or keycode == 62 then
+    return flags.ctrl == true
+  end
+  return false
+end
+
+local function flag_edge(keycode, flags)
+  local down = flag_is_down(keycode, flags)
+  local was = modifier_down[keycode] == true
+  modifier_down[keycode] = down
+  return down and not was
+end
+
+local function double_ready(role)
+  local now = hs.timer.secondsSinceEpoch()
+  local prev = last_double[role] or 0
+  if prev > 0 and (now - prev) <= DOUBLE_TAP_SEC then
+    last_double[role] = 0
+    return true
+  end
+  last_double[role] = now
+  return false
+end
+
+local function plain_esc(spec)
+  return spec.kind == "key"
+    and spec.keycode == 53
+    and not spec.ctrl
+    and not spec.shift
+    and not spec.alt
+    and not spec.cmd
+end
+
+local function run_hotkey(role, spec)
+  if role == "cancel" then
+    if session and session.kind == "preview" then
+      M.hide_preview()
+      return true
+    end
+    if M.cancel_dict() then
+      return true
+    end
+    -- Plain Esc with nothing to cancel still reaches the focused app.
+    if plain_esc(spec) then
+      return false
+    end
+    return spec.kind == "key"
+  end
+  if role == "dictation" then
+    M.toggle_dict()
+  else
+    M.speak_selection()
+  end
+  -- Swallow a real key so a chord does not also type. Modifier taps pass through.
+  return spec.kind == "key"
+end
+
+--- Option-key binds use alt as the down/up edge. A release has alt false, so it
+--- must still match or the next press looks like the key never came up.
+local function flags_binding(spec, keycode, flags)
+  if spec.kind ~= "flags" or spec.keycode ~= keycode then
     return false
   end
+  return (flags.ctrl == true) == spec.ctrl
+    and (flags.shift == true) == spec.shift
+    and (flags.cmd == true) == spec.cmd
+end
 
-  -- Right Option alone → dict toggle on press.
-  if keyCode == RIGHT_OPTION and not ctrl and not shift then
-    local is_down = alt
-    if is_down and not right_option_down then
-      right_option_down = true
-      M.toggle_dict()
-    elseif not is_down then
-      right_option_down = false
+local function handle_hotkey(event)
+  local kind = event:getType()
+  local event_kind
+  if kind == hs.eventtap.event.types.flagsChanged then
+    event_kind = "flags"
+  elseif kind == hs.eventtap.event.types.keyDown then
+    event_kind = "key"
+  else
+    return false
+  end
+  if event_kind == "key" and type(event.isARepeat) == "function" and event:isARepeat() then
+    return false
+  end
+  local keycode = event:getKeyCode()
+  local flags = event:getFlags() or {}
+  for _, role in ipairs({ "cancel", "dictation", "speak" }) do
+    local spec = binds[role]
+    local hit = false
+    if spec and spec.kind == event_kind then
+      if event_kind == "flags" then
+        hit = flags_binding(spec, keycode, flags)
+      else
+        hit = hotkeys.matches(spec, keycode, flags)
+      end
+    end
+    if hit then
+      if event_kind == "flags" and not flag_edge(keycode, flags) then
+        return false
+      end
+      if spec.double and not double_ready(role) then
+        return false
+      end
+      return run_hotkey(role, spec)
     end
   end
   return false
+end
+
+-- flagsChanged is types[1] so existing tests still find this tap.
+-- keyDown is the same tap: one listener, replaced when a remap is saved.
+local tap = hs.eventtap.new({
+  hs.eventtap.event.types.flagsChanged,
+  hs.eventtap.event.types.keyDown,
+}, function(event)
+  local ok, result = pcall(function()
+    refresh_hotkeys()
+    return handle_hotkey(event)
+  end)
+  if not ok then
+    print("digivoice: hotkey error: " .. tostring(result))
+    return false
+  end
+  return result == true
 end)
 
 --- True when the banner canvas is on screen. Home launch calls `M.ensure_banner`.
@@ -905,6 +1026,7 @@ function M.ensure_banner()
 end
 
 function M.start()
+  refresh_hotkeys()
   tap:start()
   -- Poll the spawn flag so `digivoice banner show` reveals a status preview.
   -- Hidden until a take, a pin, or that flag.

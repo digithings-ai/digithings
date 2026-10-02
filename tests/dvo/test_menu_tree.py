@@ -14,7 +14,14 @@ from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG
 from digivoice.menu_tree import browse_settings, rows_at
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, load_settings
-from digivoice.tui import choose, render_screen, row_hits
+from digivoice.tui import (
+    MenuBlock,
+    capture_binding,
+    choose,
+    chord_from_code,
+    render_screen,
+    row_hits,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -160,6 +167,35 @@ def test_browse_esc_at_the_root_changes_nothing(tmp_path: Path) -> None:
     browse_settings(paths, io.StringIO("\n"), io.StringIO())
     assert load_settings(paths).paste_on_stop is True
     assert load_settings(paths).banner_density == "retract"
+
+
+def test_pressed_chord_is_ctrl_shift_space() -> None:
+    assert chord_from_code(6, 32) == "ctrl+shift+space"
+    assert chord_from_code(1, ord("R")) == "R"
+    assert chord_from_code(5, ord("c")) == "ctrl+c"
+
+
+def test_capture_records_the_pressed_chord(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kitty CSI u keeps modifiers. Typed names stay on the non-TTY path."""
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("digivoice.tui._term_size", lambda: (80, 24))
+    block = MenuBlock(action="dictation", path="/settings/hotkeys", meta="Right Option")
+    master, slave = pty.openpty()
+
+    def feed() -> None:
+        time.sleep(0.2)
+        os.write(master, b"\x1b[32;6u")
+
+    threading.Thread(target=feed, daemon=True).start()
+    raw = os.fdopen(slave, "rb+", buffering=0)
+    tty_io = io.TextIOWrapper(raw, encoding="utf-8", newline="\n", write_through=True)
+    try:
+        saved = capture_binding("hotkeys", [block], 0, stdin=tty_io, stdout=tty_io)
+    finally:
+        tty_io.close()
+        os.close(master)
+    assert saved == "ctrl+shift+space"
 
 
 def test_hotkey_capture_persists_and_blank_cancels(tmp_path: Path) -> None:
