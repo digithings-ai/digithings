@@ -73,7 +73,6 @@ export function PipelinePage() {
   useEffect(() => {
     const ac = new AbortController();
     let cancel = false;
-    setReads({});
     for (const { id, def } of pipelinePlacements()) {
       void readDeskBlock(def.route, def.kind, ac.signal).then((result) => {
         if (cancel) return;
