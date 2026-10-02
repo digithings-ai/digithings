@@ -166,13 +166,13 @@ def test_setting_row_separates_name_value_and_explanation() -> None:
 def test_selected_row_is_brackets_with_a_star() -> None:
     """Selection is a bold ``[*]``. The row is not a teal bar."""
     plain = _frame()
-    doctor = next(line for line in plain.splitlines() if "Doctor" in line)
-    assert "[*]" in doctor
+    history = next(line for line in plain.splitlines() if "History" in line)
+    assert "[*]" in history
     colored = _frame(use_ansi=True)
     assert "38;2;61;214;196" not in colored
-    colored_doctor = next(line for line in colored.splitlines() if "Doctor" in line)
-    assert "\x1b[1m[*]" in colored_doctor
-    assert "\x1b[7" not in colored_doctor
+    colored_history = next(line for line in colored.splitlines() if "History" in line)
+    assert "\x1b[1m[*]" in colored_history
+    assert "\x1b[7" not in colored_history
 
 
 def test_wordmark_has_no_particle_field() -> None:
@@ -213,9 +213,9 @@ def test_home_frame_is_centered_half_block() -> None:
         assert name in frame
     for item in HOME_MENU:
         assert item.split(" (")[0] in frame
-    doctor = next(line for line in frame.splitlines() if "Doctor" in line)
+    history = next(line for line in frame.splitlines() if "History" in line)
     settings = next(line for line in frame.splitlines() if "Settings" in line)
-    assert "[*]" in doctor
+    assert "[*]" in history
     assert "[ ]" in settings
     assert "[*]" not in settings
     lines = frame.replace("\r\n", "\n").splitlines()
@@ -257,7 +257,7 @@ def test_groups_cover_the_home_menu_in_order() -> None:
 def test_non_tty_overview_stays_the_plain_tree() -> None:
     text = render_home_overview("settings-body")
     assert text.startswith("┌─ DIGIVOICE")
-    assert "▶ Doctor" in text
+    assert "▶ History" in text
     assert "settings-body" in text
 
 

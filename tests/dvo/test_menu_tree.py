@@ -51,8 +51,34 @@ def test_browse_toggles_paste(tmp_path: Path) -> None:
 
 def test_browse_cycles_banner_density(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    browse_settings(paths, io.StringIO("3\n3\n\n\n"), io.StringIO())
+    browse_settings(paths, io.StringIO("3\n4\n\n\n"), io.StringIO())
     assert load_settings(paths).banner_density == "full"
+
+
+def test_rewrite_is_enabled_style_and_model() -> None:
+    rows = rows_at(VoiceSettings(), "/settings/rewrite")
+    assert [row.name for row in rows] == ["enabled", "style", "model"]
+    assert rows[1].kind == "pick"
+    styles = rows_at(VoiceSettings(), "/settings/rewrite/style")
+    assert [row.choice for row in styles] == [
+        "email",
+        "sms",
+        "professional",
+        "coding",
+        "blog",
+        "none",
+    ]
+    names = [row.name for row in _walk(VoiceSettings())]
+    assert "runner" not in names
+    assert "timeout" not in names
+    assert "apps" not in names
+
+
+def test_banner_pin_is_a_toggle() -> None:
+    rows = rows_at(VoiceSettings(), "/settings/banner")
+    assert [row.name for row in rows][:2] == ["show", "pin"]
+    assert rows[1].field == "banner_pinned"
+    assert rows[1].value == "off"
 
 
 def test_speech_lists_model_voice_and_paste_only() -> None:

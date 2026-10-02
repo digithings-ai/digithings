@@ -62,6 +62,25 @@ def test_linux_home_skips_hammerspoon_without_calling_out(tmp_path: Path) -> Non
     assert "hammerspoon skipped · banner skipped" in result.stdout
 
 
+def test_armed_banner_is_hidden_until_a_take(tmp_path: Path) -> None:
+    def reply(call: FakeCall) -> FakeReply:
+        expr = call.argv[-1]
+        if "ensure_banner" in expr:
+            return FakeReply(code=0, stdout="armed\n")
+        return FakeReply(code=0, stdout="ok\n")
+
+    report = ensure_home_control(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        runner=FakeRunner({"hs": reply}),
+        which_hs=lambda: "hs",
+        which_open=lambda: "open",
+    )
+    assert report.summary == "hammerspoon up · banner armed"
+    assert "hidden until a take" in "\n".join(report.lines)
+
+
 def test_running_hammerspoon_shows_banner_without_open(tmp_path: Path) -> None:
     def reply(call: FakeCall) -> FakeReply:
         expr = call.argv[-1]

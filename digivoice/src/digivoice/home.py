@@ -34,22 +34,20 @@ from digivoice.tui import (
 HOME_TITLE = "DIGIVOICE"
 HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 
-# App-home actions. Settings opens /settings. System holds reload, reset,
-# restart, and update. Status is the context strip, not a row.
+# Four home actions. Doctor lives under System. Status is the context strip.
 HOME_MENU = (
-    "Doctor (health checks)",
     "History (previous takes)",
-    "System (reload, reset, restart, update)",
     "Settings (/settings)",
+    "System (doctor, reload, reset, restart, update)",
     "Quit",
 )
 
-# Contiguous slices of HOME_MENU. Status is the context strip, not a row.
+# Contiguous slices of HOME_MENU. Settings sits above System.
 HOME_GROUPS: tuple[tuple[str, int, int], ...] = (
-    ("Operate", 0, 2),
+    ("Operate", 0, 1),
+    ("Configure", 1, 2),
     ("Maintain", 2, 3),
-    ("Configure", 3, 4),
-    ("Leave", 4, 5),
+    ("Leave", 3, 4),
 )
 
 MIC_HINT = (
@@ -155,7 +153,7 @@ def render_home_overview(
         lines.append(f"  {marker} {item}")
     lines += [
         "",
-        "Settings opens /settings. System holds reload, reset, restart, and update.",
+        "History, Settings, System, and Quit. Doctor lives under System.",
         "Enter opens a folder or a list. Esc goes up.",
         "",
         "— Settings (current) —",
@@ -236,13 +234,7 @@ def run_home(
                 stop_home_control(platform, home, env, runner=runner)
                 return 0
             entry = HOME_MENU[picked]
-            if entry.startswith("Doctor"):
-                present_doctor(
-                    doctor_checks(platform, home, dict(env), runtime.probe),
-                    stdout,
-                    stdin,
-                )
-            elif entry.startswith("History"):
+            if entry.startswith("History"):
                 browse_history(paths, platform, runtime.probe, runner, stdin, stdout)
             elif entry.startswith("System"):
 
@@ -250,6 +242,13 @@ def run_home(
                     stop_home_control(platform, home, env, runner=runner)
                     fullscreen_leave(stdout)
                     os.execv(sys.executable, [sys.executable, *sys.argv])
+
+                def _doctor() -> None:
+                    present_doctor(
+                        doctor_checks(platform, home, dict(env), runtime.probe),
+                        stdout,
+                        stdin,
+                    )
 
                 browse_system(
                     paths,
@@ -260,6 +259,7 @@ def run_home(
                     stdout,
                     runner=runner,
                     restart=_restart,
+                    doctor=_doctor,
                 )
             elif entry.startswith("Settings"):
                 browse_settings(paths, stdin, stdout, install=_install_with_progress)

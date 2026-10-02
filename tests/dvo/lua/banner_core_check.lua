@@ -18,6 +18,7 @@ eq(d.live_banner, true, "default enabled")
 eq(d.banner_position, "top-center", "default position")
 eq(d.banner_density, "retract", "default density")
 eq(d.banner_animations, true, "default animations")
+eq(d.banner_pinned, false, "default pin off")
 local s = core.parse_settings({ live_banner = false, banner_position = "bottom-left", banner_density = "full", banner_animations = false })
 eq(s.live_banner, false, "banner off")
 eq(s.banner_position, "bottom-left", "position kept")
@@ -28,6 +29,8 @@ eq(core.parse_settings({ banner_density = "huge" }).banner_density, "retract", "
 eq(core.parse_settings({ banner_density = "mini" }).banner_density, "retract", "legacy mini rejected")
 eq(core.parse_settings({ banner_density = "peek" }).banner_density, "retract", "legacy peek rejected")
 eq(core.parse_settings({ live_banner = "no" }).live_banner, true, "non-boolean ignored")
+eq(core.parse_settings({ banner_pinned = true }).banner_pinned, true, "pin on")
+eq(core.parse_settings({ banner_pinned = "yes" }).banner_pinned, false, "non-boolean pin ignored")
 
 -- density click toggle: retract → full → retract
 eq(core.next_density("retract"), "full", "retract expands")
@@ -132,24 +135,28 @@ eq(#core.wrap(string.rep("x", 30), 10), 3, "long word hard split")
 eq(#core.wrap("a\n\nb", 10), 2, "blank lines dropped")
 
 local short = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "full")
-eq(#short.lines, 1, "short text one line")
+eq(short.body, "processing", "status word, not the transcript")
+eq(#short.lines, 1, "status is one line")
 eq(short.clipped, false, "not clipped")
+eq(short.raw, "", "no transcript kept for copy")
 eq(short.hint, nil, "no chrome hints")
 eq(short.title, nil, "no chrome title")
 local long_text = string.rep("word ", 200)
 local retracted = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "retract")
-eq(#retracted.lines, 0, "retract hides the transcript")
-eq(retracted.body, "", "retract has no text")
+eq(retracted.body, "processing", "retract still shows the status word")
 local open = core.layout({ state = "rewriting", text = long_text, detail = "" }, "dict", "full")
-check(open.w > retracted.w and #open.lines > #retracted.lines and open.h > retracted.h, "full is bigger")
+eq(open.w, retracted.w, "density does not widen a status banner")
+eq(open.body, retracted.body, "full does not show the transcript")
 local grid = core.layout({ state = "recording", text = "ignored", detail = "" }, "dict", "retract")
-eq(#grid.lines, 0, "retract is grid only")
-eq(grid.body, "", "retract has no text")
-eq(grid.w, core.PAD * 2 + core.ICON, "retract hugs the grid")
-eq(grid.h, core.PAD * 2 + core.ICON, "retract hugs the grid")
-local idle = core.layout({ state = "recording", text = "", detail = "" }, "dict", "full")
-eq(#idle.lines, 0, "recording has no body")
-eq(idle.h, core.PAD * 2 + core.ICON, "compact height")
+eq(grid.body, "recording", "recording is the status word")
+check(grid.w > core.PAD * 2 + core.ICON, "status word sits beside the grid")
+check(grid.w < 180, "status banner stays small")
+local quiet = core.layout({ state = "done", text = "final words", detail = "" }, "dict", "full")
+eq(quiet.body, "", "done has no status word")
+eq(quiet.w, core.PAD * 2 + core.ICON, "done hugs the grid")
+eq(core.layout({ state = "idle", text = "nope", detail = "" }, "dict", "full").body, "", "idle is the grid")
+eq(core.layout({ state = "error", text = "boom", detail = "long" }, "dict", "retract").body, "error", "error word")
+eq(core.layout({ state = "empty", text = "", detail = "n" }, "dict", "full").body, "warning", "warning word")
 eq(core.next_density("bogus"), "retract", "unknown density collapses")
 
 -- linger: full stays (nil = no auto-hide); retract dismisses after a few seconds
@@ -158,45 +165,36 @@ eq(core.linger_seconds("error", "full"), nil, "full stays on error")
 eq(core.linger_seconds("done", "retract"), 4.0, "retract dismisses after a few seconds")
 eq(core.linger_seconds("cancelled", "retract"), 1.2, "cancelled clears fast")
 
--- hug widths: short text stays far under the cap, empty hugs the grid
+-- status word stays far under the old transcript cap
 local hug = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "full")
-check(hug.w < core.WIDTH_EXPANDED, "full hugs short text")
-check(hug.w > core.PAD * 2 + core.ICON, "full wider than grid-only")
+check(hug.w < core.WIDTH_EXPANDED, "status banner stays under the old cap")
+check(hug.w > core.PAD * 2 + core.ICON, "status word is wider than the grid")
 eq(hug.h, core.PAD * 2 + math.max(core.ICON, core.LINE_HEIGHT), "one line hugs the grid row")
 local icon_mid = core.PAD + core.ICON / 2
 local text_mid = hug.text_y + core.FONT_SIZE / 2
-check(math.abs(icon_mid - text_mid) < 0.001, "first line centers on the icon row")
-eq(core.body_for({ state = "cancelled", text = "", detail = "" }), "", "cancel is grid only")
-eq(core.body_for({ state = "empty", text = "", detail = "n" }), "", "empty is grid only")
-eq(core.body_for({ state = "error", text = "", detail = "boom" }), "", "error detail is not a label")
-eq(core.body_for({ state = "rewriting", text = "hi", detail = "preset" }), "hi", "transcript stays")
-local hug_empty = core.layout({ state = "recording", text = "", detail = "" }, "dict", "retract")
-eq(hug_empty.w, core.PAD * 2 + core.ICON, "empty hugs the grid")
-eq(hug_empty.h, core.PAD * 2 + core.ICON, "empty hugs the grid")
+check(math.abs(icon_mid - text_mid) < 0.001, "status word centers on the icon row")
+eq(core.body_for({ state = "cancelled", text = "kept", detail = "" }), "", "cancel is grid only")
+eq(core.body_for({ state = "empty", text = "kept", detail = "n" }), "warning", "empty is a warning")
+eq(core.body_for({ state = "error", text = "kept", detail = "boom" }), "error", "error is a word")
+eq(core.body_for({ state = "rewriting", text = "hi", detail = "preset" }), "processing", "no transcript")
+eq(core.status_word("recording"), "recording", "recording word")
+local hug_empty = core.layout({ state = "cancelled", text = "nope", detail = "" }, "dict", "retract")
+eq(hug_empty.w, core.PAD * 2 + core.ICON, "quiet state hugs the grid")
+eq(hug_empty.h, core.PAD * 2 + core.ICON, "quiet state hugs the grid")
 -- equal padding all densities: grid cell origin sits at PAD
 local cell0 = core.cell_box(0)
 check(math.abs(cell0.x - core.PAD) < core.PAD and math.abs(cell0.y - core.PAD) < core.PAD, "grid top-left with even pad")
--- uniform line widths
-for _, line in ipairs(hug.lines) do
-  eq(#line, hug.longest, "lines share one uniform width")
-end
--- first line locks the final width: same longest line, same width
-local a = core.layout({ state = "done", text = "same longest line here yes\nshort", detail = "" }, "dict", "full", { screen_h = 900 })
-local b = core.layout({ state = "done", text = "same longest line here yes\nshort plus more", detail = "" }, "dict", "full", { screen_h = 900 })
-eq(a.w, b.w, "width locks from the longest line")
--- full caps near half the viewport: tiny screen clamps the line budget
-eq(core.full_max_lines(900), 23, "50vh budget on a normal screen")
-eq(core.full_max_lines(200), 4, "small screen clamps lines")
-local tall = core.layout(
-  { state = "rewriting", text = string.rep("word ", 400), detail = "" }, "dict", "full", { screen_h = 200 }
-)
-check(tall.h <= 100, "short screen caps full height at 50vh")
-check(tall.clipped, "overflow is marked for the scroll window")
-check(#tall.all > #tall.lines, "scroll keeps lines past the window")
--- full window is a plain slice for scrolling, with no ellipsis mid-list
-for _, line in ipairs(tall.lines) do
-  check(not line:find("…", 1, true), "no mid-list ellipsis in full")
-end
+-- one status line, same width whatever the transcript was
+eq(#hug.lines, 1, "one status line")
+eq(hug.lines[1], "processing", "the line is the status word")
+local a = core.layout({ state = "recording", text = "same longest line here yes\nshort", detail = "" }, "dict", "full", { screen_h = 900 })
+local b = core.layout({ state = "recording", text = string.rep("word ", 80), detail = "" }, "dict", "full", { screen_h = 200 })
+eq(a.w, b.w, "transcript length does not change the banner")
+eq(a.body, "recording", "recording word")
+eq(core.full_max_lines(900), 23, "50vh budget helper still matches a normal screen")
+eq(core.full_max_lines(200), 4, "small screen helper still clamps")
+check(b.h < 80, "status banner stays a single row")
+eq(b.clipped, false, "a status word does not scroll")
 
 -- theme chrome flips, status colors stay (RYG untouched by theme)
 -- Dark is the remock canvas #000; light is ivory paper #F9F8F6.
@@ -239,18 +237,19 @@ local rf = core.reanchor({ x = 300, y = 300, w = 38, h = 38 }, { w = 200, h = 10
 eq(rf.x, 300, "free float keeps top-left")
 eq(rf.y, 300, "free float keeps top-left")
 
--- hover controls: retract stacks centered, full rows right-aligned
+-- hover control: one centered pin, both densities
 local retract_ctl = core.controls_layout(38, 38, "retract")
-eq(retract_ctl.dir, "stack", "retract stacks")
-eq(retract_ctl.buttons[1].x, retract_ctl.buttons[2].x, "stack shares x")
-check(retract_ctl.buttons[2].y > retract_ctl.buttons[1].y, "stack grows down")
-eq(retract_ctl.buttons[1].x, (38 - 18) / 2, "stack centered")
+eq(retract_ctl.dir, "pin", "one pin")
+eq(#retract_ctl.buttons, 1, "only the pin")
+eq(retract_ctl.buttons[1].id, "pin", "pin id")
+eq(retract_ctl.buttons[1].x, (38 - 18) / 2, "pin centered")
 local wide_ctl = core.controls_layout(280, 60, "full")
-eq(wide_ctl.dir, "row", "full rows")
-eq(wide_ctl.buttons[1].y, wide_ctl.buttons[2].y, "row shares y")
-eq(wide_ctl.buttons[1].x + 18 + 4 + 18, 280, "row right-aligned")
-eq(core.controls_height("retract"), 4 + 18 * 2 + 4, "stack height")
-eq(core.controls_height("full"), 4 + 18, "row height")
+eq(wide_ctl.buttons[1].id, "pin", "full is also a pin")
+eq(wide_ctl.buttons[1].x, (280 - 18) / 2, "pin stays centered")
+eq(core.controls_height("retract"), 4 + 18, "pin height")
+eq(core.controls_height("full"), 4 + 18, "pin height when full")
+eq(core.linger_seconds("done", "retract", true), 1.2, "pin settles done")
+eq(core.linger_seconds("error", "retract", true), nil, "pin keeps an error")
 
 -- launch notice lists commands and the cli
 local notice = core.launch_notice("/x/digivoice")

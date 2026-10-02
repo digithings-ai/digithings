@@ -10,7 +10,7 @@ config.
 | --- | --- |
 | **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. |
 | **Esc** (plain, no modifiers) | Cancel the active dictation: creates the cancel-file; digivoice stops the recorder / whisper / rewrite, deletes the wav, and pastes nothing and logs nothing. Only live while a take is recording, transcribing, or rewriting; Esc is swallowed only when it cancels, otherwise it reaches the focused app. Not used for speech. |
-| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the grid is the status; full density shows the selection). **No** clipboard or `kind:dict` history fallback. |
+| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the banner shows processing or error, not the selection). **No** clipboard or `kind:dict` history fallback. |
 
 Do not invent other default binds in this sample.
 
@@ -18,23 +18,22 @@ Do not invent other default binds in this sample.
 
 Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
-The banner is **display only** (a click toggles density retract → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows icon-only copy + close below the banner (stacked when retracted, right-aligned row when full), using the digichat copy and close marks; close hides instantly and never discards. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. Center pins keep the center on expand, edge pins grow outward. Dictated text appears at once. The box hugs the text with equal padding, and the first line sits on the status-icon row. Full caps near half the screen height and wheel-scrolls with no scrollbar. Chrome follows the system appearance (remock dark ground, ivory light ground); RYG status colors stay. Status is the grid only — no discarded/empty/error sentence beside it. The banner is hidden by default: `digivoice banner show [--text T]` (or `hide` / `toggle`) spawns a preview with no dictation; Esc on a preview only hides it.
+The banner is **display only** and **status only** (a click toggles density retract → full; it never steals focus and never starts or stops anything). Esc is the only take control. Hover shows one pin under the banner. Pin keeps it on screen and snaps it to the top; unpin hides it until the next take. Drag moves the banner freely; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`); a later take reuses it. The box is the grid plus one short word, with equal padding, and that word sits on the status-icon row. Chrome follows the system appearance (remock dark ground, ivory light ground); RYG status colors stay. Launch does not draw the banner. It appears for a take, an error, a warning, or a pin. `digivoice banner show` reveals a status preview (not the flag text); Esc on a preview only hides it.
 
 | Phase | Animation (digichat 5x5 square grid) | Text shown |
 | --- | --- | --- |
-| recording | red equalizer wave | none (grid only) |
-| transcribing | teal diagonal sweep | none yet (no live streaming STT) |
-| rewriting | teal circular sweep | the transcript, in full density |
-| pasting | teal downward sweep | the text being pasted |
-| speaking | teal equalizer | the selected text |
-| loading | teal grid twinkle | none |
-| done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final transcript, or nothing (the grid is the status) |
+| recording | red equalizer wave | recording |
+| transcribing / rewriting / pasting / speaking / loading | teal sweep or twinkle | processing |
+| error | red `x` | error |
+| nothing heard | amber `!` | warning |
+| done / cancelled | check or stop square | none (grid only) |
+| pinned, idle | quiet gray grid | none |
 
-No titles, no hints, no settings UI on the banner — state reads from the grid alone.
-Density comes from settings: **retract** (default) is the grid only and
-auto-dismisses a few seconds after idle/done, **full** shows the whole
-transcript and stays until collapsed or removed. The banner reads `status.json`
-that the CLI writes, so it shows exactly what digivoice is doing.
+No titles, no hints, no transcript, no settings UI on the banner.
+Density comes from settings: **retract** (default) auto-dismisses a few seconds
+after idle/done, **full** stays until collapsed or removed. Neither density
+shows the transcript. The banner reads `status.json` that the CLI writes, so
+the word matches what digivoice is doing.
 
 Click the banner to toggle density (retract → full → retract).
 
@@ -49,8 +48,9 @@ digivoice settings set live_banner false          # disable the overlay entirely
 digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
                                                   # | middle-left | middle-right | bottom-center
                                                   # | bottom-left | bottom-right | center
-digivoice settings set banner_density full        # retract (grid only, default) | full (stays)
-digivoice settings set banner_animations false    # still grid frame + instant text (default true)
+digivoice settings set banner_density full        # retract (hides after a take, default) | full (stays)
+digivoice settings set banner_animations false    # still grid frame (default true)
+digivoice settings set banner_pinned true         # keep the banner up (default false)
 digivoice settings --json                         # show everything
 ```
 

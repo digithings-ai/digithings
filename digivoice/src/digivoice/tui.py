@@ -1079,14 +1079,16 @@ def choose(
     groups: Sequence[Group] | None = None,
     detail: bool = False,
     start_at: int = 0,
-) -> int | None:
+    paging: bool = False,
+) -> int | str | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
     TTY mode paints a step-rail frame and redraws on every key. Space confirms
     like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel lockup.
     When `pulse` is set, the lockup builds on the landing clock and a few
     cells keep glinting. :func:`play_intro` arms that clock.
-    Returns None on back.
+    Returns None on back. With `paging`, left/right return ``page-prev`` and
+    ``page-next`` instead of backing out or confirming.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -1146,6 +1148,10 @@ def choose(
                     selected = (selected - 1) % len(options)
                 elif key == "down" or key in {"j", "J"}:
                     selected = (selected + 1) % len(options)
+                elif paging and (key == "left" or key in {"h", "H"}):
+                    return "page-prev"
+                elif paging and (key == "right" or key in {"l", "L"}):
+                    return "page-next"
                 elif key in {"enter", " ", "right"}:
                     return selected
                 elif key in {"esc", "q", "Q", "left"}:
@@ -1159,7 +1165,10 @@ def choose(
     stdout.write(f"\n{title}\n")
     for i, option in enumerate(options, start=1):
         stdout.write(f"  {i}) {option}\n")
-    stdout.write("  (number, or blank to go back)\n")
+    if paging:
+        stdout.write("  (number, next/prev, or blank to go back)\n")
+    else:
+        stdout.write("  (number, or blank to go back)\n")
     stdout.flush()
     try:
         raw = stdin.readline()
@@ -1170,6 +1179,10 @@ def choose(
     raw = raw.strip()
     if not raw:
         return None
+    if paging and raw.casefold() in {"n", "next", ">", "l"}:
+        return "page-next"
+    if paging and raw.casefold() in {"p", "prev", "<", "h"}:
+        return "page-prev"
     try:
         index = int(raw) - 1
     except ValueError:

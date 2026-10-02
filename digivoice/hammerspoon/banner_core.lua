@@ -8,7 +8,8 @@
 ---   * theme chrome (digichat light/dark flips; RYG status colors stay)
 ---   * drag/snap anchors, hover controls layout, reanchoring
 --- init.lua only draws what this module computes. No chrome: no titles, no hints.
---- Dictated text is shown at once. Status labels stay off the banner; the grid is the state.
+--- The banner is status only: one short word beside the grid. No transcript.
+--- It stays hidden until a take, an error, a warning, or the pin (always-show).
 
 local M = {}
 
@@ -44,6 +45,7 @@ M.DEFAULTS = {
   banner_position = "top-center",
   banner_density = "retract",
   banner_animations = true,
+  banner_pinned = false,
 }
 
 function M.parse_settings(raw)
@@ -52,6 +54,7 @@ function M.parse_settings(raw)
     banner_position = M.DEFAULTS.banner_position,
     banner_density = M.DEFAULTS.banner_density,
     banner_animations = M.DEFAULTS.banner_animations,
+    banner_pinned = M.DEFAULTS.banner_pinned,
   }
   if type(raw) ~= "table" then
     return out
@@ -67,6 +70,9 @@ function M.parse_settings(raw)
   end
   if type(raw.banner_density) == "string" and M.DENSITIES[raw.banner_density] then
     out.banner_density = raw.banner_density
+  end
+  if type(raw.banner_pinned) == "boolean" then
+    out.banner_pinned = raw.banner_pinned
   end
   return out
 end
@@ -185,6 +191,7 @@ local MATRIX = {
     end,
   },
   stopped = { color = GRAY, glyph = STOP },
+  idle = { color = GRAY, base = 0.35 },
 }
 
 M.MATRIX = MATRIX
@@ -202,6 +209,7 @@ M.STATE_MATRIX = {
   cancelling = "stopped",
   empty = "warn",
   error = "error",
+  idle = "idle",
 }
 
 M.LABELS = {
@@ -216,7 +224,24 @@ M.LABELS = {
   cancelling = "cancelling",
   empty = "nothing heard",
   error = "error",
+  idle = "idle",
 }
+
+--- One word beside the grid. The transcript never lands on the banner.
+M.STATUS_WORD = {
+  recording = "recording",
+  loading = "processing",
+  transcribing = "processing",
+  rewriting = "processing",
+  pasting = "processing",
+  speaking = "processing",
+  error = "error",
+  empty = "warning",
+}
+
+function M.status_word(state)
+  return M.STATUS_WORD[state] or ""
+end
 
 function M.matrix_for(state)
   return MATRIX[M.STATE_MATRIX[state] or "load"]
@@ -330,7 +355,17 @@ function M.final_view(code, snapshot, session, stdout, stderr, cancelling)
   return { state = "error", text = "", detail = detail }
 end
 
-function M.linger_seconds(state, density)
+function M.linger_seconds(state, density, pinned)
+  -- A pin keeps an error or a warning up. Done settles to a quiet idle.
+  if pinned and (state == "error" or state == "empty" or state == "idle") then
+    return nil
+  end
+  if pinned and (state == "done" or state == "cancelled" or state == "cancelling") then
+    return 1.2
+  end
+  if pinned then
+    return nil
+  end
   -- Full density stays until collapsed or removed: no auto-hide timer.
   if density == "full" then
     return nil
@@ -393,10 +428,12 @@ function M.theme_colors(theme)
   return M.CHROME.dark
 end
 
---- Transcript only. Cancelled, empty, and error stay on the grid; no status
---- sentence sits beside the icon.
+--- Status word only. Recording, processing, error, and warning. No transcript.
 function M.body_for(view)
-  return view.text or ""
+  if type(view) ~= "table" then
+    return ""
+  end
+  return M.status_word(view.state)
 end
 
 --- Greedy word wrap to `cols` columns. Hard-splits words longer than a line.
@@ -471,13 +508,9 @@ function M.text_origin_y()
   return M.PAD + (M.ICON - M.FONT_SIZE) / 2
 end
 
---- Box geometry for a view at a density. No chrome: no title line, no hints —
---- state reads from the grid symbol/animation alone. Retract is the grid only.
---- Full widens and shows the whole transcript.
---- The box hugs content (no min-width gutter): width derives from the longest
---- wrapped line, capped at the full max. The width locks from the full
---- wrapped text up front.
---- Empty text hugs the grid. `raw` is the full transcript for copy.
+--- Box geometry for a view. No chrome: no title, no transcript.
+--- A status word sits on the icon row. Idle and done hug the grid.
+--- Density no longer widens the box; it only changes how long the banner stays.
 function M.layout(view, kind, density, opts)
   kind = kind -- kind no longer changes geometry; kept for call shape.
   opts = opts or {}
@@ -505,46 +538,27 @@ function M.layout(view, kind, density, opts)
     }
   end
   local body = M.body_for(view)
-  if density ~= "full" or body == "" then
+  if body == "" then
     return grid_only()
   end
-  local cols = math.min(math.floor((M.WIDTH_EXPANDED - text_x - M.PAD) / M.CHAR_WIDTH), M.FULL_MAX_CH)
-  cols = math.max(8, cols)
-  local all = M.wrap(body, cols)
-  local longest = 0
-  for _, line in ipairs(all) do
-    longest = math.max(longest, #line)
-  end
-  longest = math.max(longest, 1)
-  local limit = math.min(M.LINES_EXPANDED, M.full_max_lines(opts.screen_h))
-  -- Full scrolls instead of truncating: plain window, no ellipsis mid-list.
-  local padded = M.pad_lines(all, longest)
-  local clipped = #padded > limit
-  local lines = {}
-  for i = 1, math.min(limit, #padded) do
-    lines[i] = padded[i]
-  end
+  local longest = math.max(#body, 1)
+  local lines = { body }
   local width = text_x + longest * M.CHAR_WIDTH + M.PAD
-  -- Text sits beside the grid. The box is the taller of the grid and the
-  -- lines, plus the same PAD on every side. No header row under the text.
-  local height = math.max(grid_side, M.PAD + #lines * M.LINE_HEIGHT + M.PAD)
-  if type(opts.screen_h) == "number" and opts.screen_h > 0 then
-    height = math.min(height, math.floor(opts.screen_h * 0.5))
-  end
+  local height = math.max(grid_side, M.PAD + M.LINE_HEIGHT + M.PAD)
   return {
     w = width,
     h = height,
     text_x = text_x,
     text_y = text_y,
     text_w = width - text_x - M.PAD,
-    cols = cols,
+    cols = longest,
     lines = lines,
-    body = table.concat(lines, "\n"),
-    clipped = clipped,
-    total = #all,
+    body = body,
+    clipped = false,
+    total = 1,
     longest = longest,
-    all = M.pad_lines(all, longest),
-    raw = body,
+    all = lines,
+    raw = "",
   }
 end
 
@@ -677,37 +691,22 @@ function M.reanchor(prev, size, anchor)
   return { x = prev.x, y = prev.y }
 end
 
---- Hover controls below the banner: icon-only copy + close, 18px squares.
---- Retract stacks them centered; full rows them right-aligned.
+--- Hover control: one pin, centered under the banner. 18px square.
 --- Frames are relative to the banner's top-left (y starts below the box).
 function M.controls_layout(box_w, box_h, density)
   local y = box_h + M.CTRL_GAP
-  if density ~= "full" then
-    local x = (box_w - M.CTRL_SIZE) / 2
-    return {
-      dir = "stack",
-      buttons = {
-        { id = "copy", x = x, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
-        { id = "close", x = x, y = y + M.CTRL_SIZE + M.CTRL_GAP, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
-      },
-    }
-  end
-  local total = M.CTRL_SIZE * 2 + M.CTRL_GAP
-  local x = box_w - total
+  local x = (box_w - M.CTRL_SIZE) / 2
   return {
-    dir = "row",
+    dir = "pin",
+    density = density,
     buttons = {
-      { id = "copy", x = x, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
-      { id = "close", x = x + M.CTRL_SIZE + M.CTRL_GAP, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
+      { id = "pin", x = x, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
     },
   }
 end
 
---- Extra canvas height the hover controls need below the box.
+--- Extra canvas height the hover pin needs below the box.
 function M.controls_height(density)
-  if density ~= "full" then
-    return M.CTRL_GAP + M.CTRL_SIZE * 2 + M.CTRL_GAP
-  end
   return M.CTRL_GAP + M.CTRL_SIZE
 end
 

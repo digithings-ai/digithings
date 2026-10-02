@@ -53,17 +53,17 @@ def test_home_menu_tree_matches_rendered_overview(tmp_path: Path) -> None:
 
 def test_home_is_app_actions_with_settings_path() -> None:
     assert [m.split(" (")[0] for m in HOME_MENU] == [
-        "Doctor",
         "History",
-        "System",
         "Settings",
+        "System",
         "Quit",
     ]
     assert not any(m.startswith("Status") for m in HOME_MENU)
+    assert not any(m.startswith("Doctor") for m in HOME_MENU)
     assert not any(m.startswith("Reload") for m in HOME_MENU)
     settings_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Settings"))
     system_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("System"))
-    assert settings_at > system_at
+    assert settings_at < system_at
     assert "/settings" in HOME_MENU[settings_at]
 
 

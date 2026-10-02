@@ -5,22 +5,19 @@
 ---                                 Esc on a preview banner only hides the preview.
 ---   Double-tap Left Option (58) → speak --selection (fail soft; the grid is the status)
 ---
---- Status: a custom overlay banner (banner_core.lua) draws what the digivoice CLI
---- writes to status.json. It is display only: no title chrome, no hints, no
---- settings UI — a click toggles density retract → full, Esc cancels a take.
+--- Status: a custom overlay banner (banner_core.lua) draws a status word and
+--- the grid. It is display only: no title chrome, no transcript, no settings
+--- UI — a click toggles density retract → full, Esc cancels a take.
 --- Ship model: background only — no Dock icon, no digivoice menubar mark, no
 --- launch toast. Customize and Quit live in the digivoice TUI (Quit tears HS down;
 --- closing the Terminal alone leaves Hammerspoon running).
---- Hover shows icon-only copy + close below the banner (stacked when
---- retracted, right-aligned row when full). The glyphs are the digichat lucide copy and
---- x marks. Drag moves it freely; release near one of the 9 anchors snaps and
---- persists the position. Dictated text appears at once (no typewriter).
---- Close hides instantly.
---- Full caps near half the screen height and wheel-scrolls with no scrollbar.
---- The banner is hidden by default: takes spawn it, or spawn a preview without
---- any dictation via `digivoice banner show` (CLI) / M.spawn_preview() (console).
---- Banner enable/position/density/animations live in digivoice's settings.json
---- (`digivoice settings set banner_density full`) and are re-read per take.
+--- Hover shows one pin under the banner. Pin keeps it on screen (and at the
+--- top); unpin hides it until the next take. Drag moves it freely; release
+--- near one of the 9 anchors snaps and persists the position.
+--- The banner stays hidden until a take, an error, a warning, or the pin.
+--- `digivoice banner show` still reveals a status preview with no dictation.
+--- Banner enable/position/density/animations/pin live in settings.json
+--- (`digivoice settings set banner_pinned true`) and are re-read per take.
 --- Install: see README.md in this directory.
 --- This file is a sample outside the Python package import path.
 
@@ -124,6 +121,8 @@ local hover_seq = 0
 local current_view
 local ensure_scroll_tap
 local ensure_esc_tap
+local write_file
+local end_session
 
 local function now_ms()
   return math.floor(hs.timer.secondsSinceEpoch() * 1000)
@@ -214,8 +213,7 @@ local function cell_color(state, i, t, animate)
   }
 end
 
---- Visible body: the transcript at once. Full density that overflows shows
---- the scroll window over the already-wrapped lines.
+--- Visible body: the one status word. There is no transcript to scroll.
 local function visible_text(s, box)
   if s.density == "full" and box.clipped and box.all and #box.all > 0 then
     local rows = box.all
@@ -239,29 +237,8 @@ local function scroll_max(s, box)
   return 0
 end
 
---- DigiChat copy mark: lucide `copy` as drawn by CopyIcon in
---- packages/ui/src/components/chat/stock/thread.aui.tsx (lucide-react 0.577).
---- Two 14px rounded sheets on a 24px grid: back at (2,2), front at (8,8).
-local function icon_copy(x, y, color, id)
-  local k = core.CTRL_SIZE / 24
-  local radius = 2 * k
-  local function sheet(px, py)
-    return {
-      type = "rectangle",
-      action = "stroke",
-      strokeColor = color,
-      strokeWidth = 2 * k,
-      roundedRectRadii = { xRadius = radius, yRadius = radius },
-      frame = { x = x + px * k, y = y + py * k, w = 14 * k, h = 14 * k },
-      id = id,
-    }
-  end
-  return { sheet(2, 2), sheet(8, 8) }
-end
-
---- DigiChat close mark: lucide `x` (XIcon), stroke 2, round caps.
---- Paths M18 6 L6 18 and M6 6 L18 18 on the same 24px grid.
-local function icon_close(x, y, color, id)
+--- Pin mark on a 24px grid: a head, a stem, and a foot. Filled head when on.
+local function icon_pin(x, y, color, id, on)
   local k = core.CTRL_SIZE / 24
   local function pt(px, py)
     return { x = x + px * k, y = y + py * k }
@@ -277,7 +254,21 @@ local function icon_close(x, y, color, id)
       id = id,
     }
   end
-  return { seg({ 18, 6 }, { 6, 18 }), seg({ 6, 6 }, { 18, 18 }) }
+  local parts = {
+    seg({ 7, 7 }, { 17, 7 }),
+    seg({ 12, 7 }, { 12, 18 }),
+    seg({ 9, 18 }, { 15, 18 }),
+  }
+  if on then
+    parts[#parts + 1] = {
+      type = "rectangle",
+      action = "fill",
+      fillColor = color,
+      frame = { x = x + 9 * k, y = y + 4 * k, w = 6 * k, h = 3 * k },
+      id = id,
+    }
+  end
+  return parts
 end
 
 local function build_canvas(s, view, box)
@@ -355,7 +346,7 @@ local function build_canvas(s, view, box)
   end
   canvas:appendElements(cells)
 
-  -- Hover: icon-only copy + close below the banner.
+  -- Hover: one pin under the banner. Filled when the banner is pinned.
   if controls then
     for _, btn in ipairs(controls.buttons) do
       canvas:appendElements({
@@ -371,13 +362,7 @@ local function build_canvas(s, view, box)
           frame = { x = btn.x, y = btn.y, w = btn.w, h = btn.h },
         },
       })
-      local parts
-      if btn.id == "copy" then
-        parts = icon_copy(btn.x, btn.y, chrome.text, btn.id)
-      else
-        parts = icon_close(btn.x, btn.y, chrome.text, btn.id)
-      end
-      canvas:appendElements(parts)
+      canvas:appendElements(icon_pin(btn.x, btn.y, chrome.text, btn.id, s.config.banner_pinned == true))
     end
   end
 
@@ -485,6 +470,7 @@ local function render(s)
     s.density,
     theme,
     tostring(s.hover),
+    tostring(s.config.banner_pinned),
   }, "\0")
   if signature ~= s.signature or not canvas then
     s.signature = signature
@@ -602,31 +588,33 @@ function finish_drag(s)
 end
 
 --------------------------------------------------------------------------------
--- hover controls: icon-only copy + close
+-- hover control: pin (always show) 
 --------------------------------------------------------------------------------
 
-local function copy_body(text)
-  -- Test hook: point DIGIVOICE_PBCOPY_FILE at a file to capture copies.
-  local sink = os.getenv("DIGIVOICE_PBCOPY_FILE")
-  if sink and sink ~= "" then
-    local f = io.open(sink, "w")
-    if f then
-      f:write(tostring(text or ""))
-      f:close()
-      return true
-    end
+--- Patch banner_pinned in settings.json without rewriting the other keys.
+local function write_pinned(pinned)
+  local flag = pinned and "true" or "false"
+  local f = io.open(SETTINGS_FILE, "r")
+  local text = ""
+  if f then
+    text = f:read("*a") or ""
+    f:close()
   end
-  local p = io.popen("pbcopy", "w")
-  if not p then
-    return false
+  if text:find('"banner_pinned"') then
+    text = text:gsub('"banner_pinned"%s*:%s*%a+', '"banner_pinned": ' .. flag, 1)
+  elseif text:match("^%s*{") then
+    text = text:gsub("^%s*{", '{"banner_pinned": ' .. flag .. ", ", 1)
+  else
+    text = '{"banner_pinned": ' .. flag .. "}\n"
   end
-  p:write(tostring(text or ""))
-  p:close()
-  return true
+  write_file(SETTINGS_FILE, text)
 end
 
---- Close hides at once. Takes keep running silently; previews end.
---- Esc still discards a take; close never does.
+local function task_running(s)
+  return s.task and s.task.isRunning and s.task:isRunning()
+end
+
+--- Hide the canvas. Takes keep running; previews end. Esc still discards a take.
 local function hide_banner(s)
   stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
@@ -639,6 +627,43 @@ local function hide_banner(s)
     clear_flag()
   else
     s.hidden = true
+  end
+end
+
+--- Pin keeps the banner up and snaps it to the top. Unpin hides it when idle.
+local function toggle_pin(s)
+  local next_pin = not (s.config.banner_pinned == true)
+  s.config.banner_pinned = next_pin
+  write_pinned(next_pin)
+  if next_pin then
+    s.hidden = false
+    local screen = hs.screen.mainScreen()
+    if screen and s.box then
+      local origin = core.resolve_position(
+        "top-center",
+        screen:frame(),
+        { w = s.box.w, h = s.box.h },
+        core.MARGIN
+      )
+      s.origin = { x = origin.x, y = origin.y }
+      s.anchor = "tc"
+      if canvas then
+        canvas:topLeft({ x = origin.x, y = origin.y })
+      end
+      save_pos({ x = origin.x, y = origin.y, anchor = "tc" })
+    end
+    s.signature = nil
+    render(s)
+    return
+  end
+  if task_running(s) then
+    s.signature = nil
+    render(s)
+    return
+  end
+  hide_banner(s)
+  if session == s then
+    end_session(s)
   end
 end
 
@@ -667,10 +692,8 @@ function finish_click(s, id)
   if id == nil then
     id = hit_test(s)
   end
-  if id == "copy" then
-    copy_body((s.box and (s.box.raw or s.box.body)) or "")
-  elseif id == "close" then
-    hide_banner(s)
+  if id == "pin" then
+    toggle_pin(s)
   else
     if s.kind == "preview" and s.discarded then
       return
@@ -731,7 +754,7 @@ local function stop_esc_tap()
   end
 end
 
-local function end_session(s)
+function end_session(s)
   if session ~= s then
     return
   end
@@ -814,10 +837,22 @@ local function finish_session(s, exit_code, stdout, stderr)
   if s.config.live_banner then
     s.signature = nil
     render(s)
-    -- Full density stays until collapsed or removed; retract auto-dismisses.
-    local wait = core.linger_seconds(s.final.state, s.density)
+    -- Full stays until collapsed. A pin settles done into a quiet idle.
+    -- Retract dismisses a few seconds after the take ends.
+    local wait = core.linger_seconds(s.final.state, s.density, s.config.banner_pinned)
     if wait ~= nil then
       hide_timer = hs.timer.doAfter(wait, function()
+        if session ~= s then
+          return
+        end
+        if s.config.banner_pinned then
+          s.final = nil
+          s.local_state = "idle"
+          s.standby = true
+          s.signature = nil
+          render(s)
+          return
+        end
         end_session(s)
       end)
     end
@@ -882,7 +917,7 @@ end
 -- dictation
 --------------------------------------------------------------------------------
 
-local function write_file(path, text)
+function write_file(path, text)
   local f = io.open(path, "w")
   if not f then
     return false
@@ -1065,8 +1100,12 @@ function M.ensure_banner()
     start_frames(session)
     return canvas ~= nil and "shown" or "hidden"
   end
+  -- Launch arms hotkeys. The banner stays hidden unless it is pinned.
+  if not config.banner_pinned then
+    return "armed"
+  end
   local s = begin_session("dict")
-  s.local_state = "loading"
+  s.local_state = "idle"
   s.standby = true
   start_frames(s)
   if canvas ~= nil then
@@ -1077,8 +1116,8 @@ end
 
 function M.start()
   tap:start()
-  -- Poll the spawn flag so `digivoice banner show` reveals a preview. Hidden
-  -- by default: nothing draws until a take or a flag asks for it.
+  -- Poll the spawn flag so `digivoice banner show` reveals a status preview.
+  -- Hidden until a take, a pin, or that flag.
   idle_timer = hs.timer.doEvery(1.0, poll_flag)
   -- Background-only: hide the Hammerspoon Dock icon. No digivoice menubar mark,
   -- no launch toast (TUI is the sole chrome for customize / Quit).
