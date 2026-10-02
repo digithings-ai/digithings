@@ -6,6 +6,16 @@ from pathlib import Path
 
 import typer
 
+from digisearch.grokipedia.tools import (
+    grokipedia_get_page as grokipedia_get_page_tool,
+)
+from digisearch.grokipedia.tools import (
+    grokipedia_search as grokipedia_search_tool,
+)
+from digisearch.grokipedia.tools import (
+    grokipedia_typeahead as grokipedia_typeahead_tool,
+)
+
 app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
@@ -174,6 +184,39 @@ def index_inspect(
 
 
 app.add_typer(index_app, name="index")
+
+grokipedia_app = typer.Typer(
+    help="Read-only grokipedia public JSON API spike (unofficial; opt-in)."
+)
+
+
+@grokipedia_app.command("search")
+def grokipedia_search_cmd(
+    query: str = typer.Argument(..., help="Full-text search query"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Result cap (1-50)"),
+) -> None:
+    """GET /api/full-text-search — requires DIGISEARCH_GROKIPEDIA_ALLOW_API=1."""
+    typer.echo(grokipedia_search_tool(query, limit=limit))
+
+
+@grokipedia_app.command("page")
+def grokipedia_page_cmd(
+    slug: str = typer.Argument(..., help="Page slug, e.g. Python"),
+) -> None:
+    """GET /api/page?includeContent=true — requires DIGISEARCH_GROKIPEDIA_ALLOW_API=1."""
+    typer.echo(grokipedia_get_page_tool(slug))
+
+
+@grokipedia_app.command("typeahead")
+def grokipedia_typeahead_cmd(
+    query: str = typer.Argument(..., help="Prefix query"),
+    limit: int = typer.Option(8, "--limit", "-n", help="Suggestion cap (1-20)"),
+) -> None:
+    """GET /api/typeahead — requires DIGISEARCH_GROKIPEDIA_ALLOW_API=1."""
+    typer.echo(grokipedia_typeahead_tool(query, limit=limit))
+
+
+app.add_typer(grokipedia_app, name="grokipedia")
 
 
 def main() -> None:

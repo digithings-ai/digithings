@@ -16,6 +16,15 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
 from digisearch.core.models import Query
+from digisearch.grokipedia.tools import (
+    grokipedia_get_page as _grokipedia_get_page_impl,
+)
+from digisearch.grokipedia.tools import (
+    grokipedia_search as _grokipedia_search_impl,
+)
+from digisearch.grokipedia.tools import (
+    grokipedia_typeahead as _grokipedia_typeahead_impl,
+)
 from digisearch.logging import configure_logging
 from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
 from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
@@ -230,6 +239,38 @@ def search_strategies(
         run_type=run_type,
         index_name=index_name,
     )
+
+
+@mcp.tool()
+def grokipedia_search(query: str, limit: int = 10) -> str:
+    """Search grokipedia via the unofficial public JSON API (read-only spike).
+
+    GET ``https://grokipedia.com/api/full-text-search?query=…&limit=…``.
+    robots.txt currently Disallow: /api/; live calls need
+    ``DIGISEARCH_GROKIPEDIA_ALLOW_API=1``. Rate-limited to ~30 req/min.
+    Returns JSON or a ``[grokipedia …]`` error string (never HTML scrape).
+    """
+    return _grokipedia_search_impl(query=query, limit=limit)
+
+
+@mcp.tool()
+def grokipedia_get_page(slug: str) -> str:
+    """Fetch one grokipedia page as JSON (includeContent=true; read-only spike).
+
+    GET ``https://grokipedia.com/api/page?slug=…&includeContent=true``.
+    Content is capped for MCP payloads. Same robots opt-in and 30/min budget
+    as ``grokipedia_search``. Prefer this JSON over fetching wiki HTML.
+    """
+    return _grokipedia_get_page_impl(slug=slug)
+
+
+@mcp.tool()
+def grokipedia_typeahead(query: str, limit: int = 8) -> str:
+    """Cheap grokipedia typeahead via GET ``/api/typeahead?query=…&limit=…``.
+
+    Optional spike helper. Same robots opt-in and shared 30/min budget.
+    """
+    return _grokipedia_typeahead_impl(query=query, limit=limit)
 
 
 try:

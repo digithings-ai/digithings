@@ -154,6 +154,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Agent LangGraph pipeline (`plan → retrieve → aggregate`) | Implemented (optional `[agent]` extra) | `agent/pipeline.py` |
 | Agent citations helper | Implemented | `agent/citations.py` |
 | Crossref discovery | Implemented | `discovery/crossref.py` |
+| grokipedia JSON MCP spike | Implemented (opt-in) | `grokipedia/` |
 | Bulk ingest worker | **Placeholder** — logs and exits | `ingest_worker.py` |
 | Canonical filesystem ingest (`ingest_source` / `ingest_paths`) | Implemented | `pipeline/ingest.py` |
 | Embed pipeline factory (`resolve_embedding_pipeline`) | Implemented | `embedding/factory.py` |
@@ -984,6 +985,9 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | `websets_list_items` | Compact item text newest-first (`webset_id`, `verification`, `limit`, `cursor`) | No |
 | `websets_events` | Compact event tail oldest-first (`webset_id`, `after`, `limit`) | No |
 | `websets_export` | CSV/JSON export text for verified items (caps at 200 rows in chat) | No |
+| `grokipedia_search` | Unofficial grokipedia JSON search (`GET /api/full-text-search`). Live HTTP opt-in (`DIGISEARCH_GROKIPEDIA_ALLOW_API=1`); robots.txt Disallow: /api/. ~30 req/min. JSON only, no HTML scrape. | Spike |
+| `grokipedia_get_page` | Unofficial grokipedia JSON page (`GET /api/page?includeContent=true`). Same opt-in + budget; MCP content cap 20k chars. | Spike |
+| `grokipedia_typeahead` | Cheap grokipedia typeahead (`GET /api/typeahead`). Same opt-in + shared budget. | Spike |
 
 The four monitor tools share the HTTP API's store/runner and its
 `watch_config_error` create gate (a watch whose cron could not parse would raise
@@ -1008,7 +1012,8 @@ These are the names the MCP server advertises. digigraph prefixes the operator
 server id (`{id}_{tool}`, `mcp_client.prefixed_tool_name`), so the model calls
 `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`,
 and `digisearch_research_turn` — plus the `digisearch_monitors_*` /
-`digisearch_websets_*` families from the Phase C/D surfaces. (The MCP-prefixed
+`digisearch_websets_*` families from the Phase C/D surfaces and
+`digisearch_grokipedia_*` from the unofficial grokipedia JSON spike. (The MCP-prefixed
 `digisearch_web_search` is the unified tool; its predecessor `exa_web_search`
 was folded into it by #4711.)
 
@@ -1032,6 +1037,53 @@ supervisord programs, or wrangler vars. Port resolves from `--port`, else
 wait, before litellm) with no public route — reachable only from inside the
 container.
 
+### grokipedia JSON spike (read-only, unofficial)
+
+Thin MCP/CLI surface over Grokipedia's public JSON endpoints instead of HTML
+scrape. **These endpoints are unofficial** (no partner docs, no auth, used by
+the site's own JS and community clients). Checked **2026-10-01**,
+`https://grokipedia.com/robots.txt` is:
+
+```
+User-agent: *
+Disallow: /api/
+```
+
+Live HTTP is therefore **opt-in**: set `DIGISEARCH_GROKIPEDIA_ALLOW_API=1`.
+Without it, tools return a fail-closed `[grokipedia disabled: …]` string and
+the client raises `GrokipediaRobotsError` (no request is sent). Prefer `/api/`
+JSON; HTML `Content-Type` or a non-JSON body is rejected (no scrape fallback).
+A process-wide sliding window caps calls at **30 requests / 60 seconds**.
+`User-Agent` is `digithings-digisearch/0.1 (+https://github.com/digithings-ai/digithings; grokipedia spike)`.
+
+| Method | Endpoint |
+|--------|----------|
+| `grokipedia_search(query, limit)` | `GET /api/full-text-search?query=…&limit=…` |
+| `grokipedia_get_page(slug)` | `GET /api/page?slug=…&includeContent=true` |
+| `grokipedia_typeahead(query, limit)` | `GET /api/typeahead?query=…&limit=…` |
+
+Not on the orchestrator HTTP manifest (spike-only). Community clients also
+mention `/api/page-preview`; this spike sticks to `/api/page` as specified.
+Human-gate: new outbound host `grokipedia.com`.
+
+Local invoke (after `DIGISEARCH_GROKIPEDIA_ALLOW_API=1`):
+
+```bash
+# CLI (no MCP server required)
+digisearch grokipedia search "python" --limit 5
+digisearch grokipedia page Python
+digisearch grokipedia typeahead Py --limit 8
+
+# MCP (needs a real search backend, same as `digisearch mcp`)
+DIGISEARCH_ALLOW_STUB=1 digisearch mcp --port 8765
+# then call grokipedia_search / grokipedia_get_page / grokipedia_typeahead
+# on http://127.0.0.1:8765/mcp (digigraph prefixes digisearch_grokipedia_*).
+
+# Python
+python -c "from digisearch.grokipedia import GrokipediaClient; \
+c=GrokipediaClient(allow_api=True); print(c.search('python', limit=3))"
+```
+
 ### CLI Commands
 
 Entry point: `digisearch` (Typer). All defined in `cli.py`.
@@ -1044,6 +1096,9 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch query --index <name> --text <q>` | Run search query and print ranked results |
 | `digisearch serve [--config <path>] [--port 8002]` | Start HTTP API server (uvicorn) |
 | `digisearch mcp [--port 8765]` | Start MCP server (real backend only; fails loud without one; port also via `DIGISEARCH_MCP_PORT`) |
+| `digisearch grokipedia search <query> [--limit N]` | Unofficial grokipedia JSON search (opt-in `DIGISEARCH_GROKIPEDIA_ALLOW_API=1`) |
+| `digisearch grokipedia page <slug>` | Unofficial grokipedia JSON page fetch (same opt-in) |
+| `digisearch grokipedia typeahead <query> [--limit N]` | Unofficial grokipedia typeahead (same opt-in) |
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
@@ -1210,6 +1265,10 @@ digisearch/src/digisearch/
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
+├── grokipedia/                # Read-only grokipedia.com JSON spike (search/page/typeahead)
+│   ├── client.py              # httpx GET + 30/min limiter + robots opt-in
+│   ├── models.py              # Pydantic v2 hit/page shapes (extra=ignore)
+│   └── tools.py               # MCP-free JSON string helpers (mcp_server wraps these)
 ├── pipeline/
 │   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
 │   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
@@ -1963,7 +2022,7 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools) and the opt-in grokipedia spike (`grokipedia_search`, `grokipedia_get_page`, `grokipedia_typeahead`). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`) and `digisearch_grokipedia_*` when that spike is enabled.
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
@@ -2140,7 +2199,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `OPENAI_API_KEY` | _(unset)_ | OpenAI API key for OpenAIEmbedder |
 | `COHERE_API_KEY` | _(unset)_ | Cohere key for CohereEmbedder / CohereReranker |
 | `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
-| `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
+| `DIGISEARCH_GROKIPEDIA_ALLOW_API` | unset | Opt in to unofficial grokipedia.com `/api/` JSON despite robots.txt `Disallow: /api/` (checked 2026-10-01). Spike only; default refuses live HTTP. |
 | `DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` | `6` | Multiple of a path's budget granted to a caller presenting a bearer token, keyed on the token (#4106) |
 | `DIGISEARCH_IP_CEILING_MULTIPLIER` | `6` | Coarse per-IP ceiling for token-bearing traffic, as a multiple of the path budget, on its own counter (#4106) |
 | `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
