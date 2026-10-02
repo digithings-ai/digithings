@@ -1,16 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BLOCKS, layoutFor } from "../../../../clients/digiquant-tui/src/catalog";
 import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
+import { DeskFrame } from "./desk-frame";
 import { DeskView } from "./desk-view";
+import { BriefPage } from "./pages/brief";
+import { FxDesk, isFxPath } from "./pages/fx";
+import { PipelinePage } from "./pages/pipeline";
+import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
+import { StrategiesPages } from "./pages/strategies";
 import { readDeskBlock } from "./read-block";
 
-/** Loads the current page's official reads. A path change drops the previous blocks. */
+const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
+
+function isMountedPath(path: string): boolean {
+  return path === "/brief" || path === "/pipeline" || isPortfolioPath(path) || STRATEGY_PATHS.has(path) || isFxPath(path);
+}
+
+/** Pages that paint their own blocks. Everything else stays on the catalog grid. */
+function mountedPage(path: string): ReactNode | null {
+  if (path === "/brief") return <BriefPage />;
+  if (isPortfolioPath(path)) return <PortfolioPages path={path} />;
+  if (path === "/pipeline") return <PipelinePage />;
+  if (STRATEGY_PATHS.has(path)) return <StrategiesPages path={path} />;
+  if (isFxPath(path)) return <FxDesk path={path} />;
+  return null;
+}
+
+/** Loads the current page's official reads. A mounted page fetches its own. */
 export function DeskPage({ path }: { path: string }) {
+  const page = mountedPage(path);
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
 
   useEffect(() => {
+    if (isMountedPath(path)) return;
     const placements = layoutFor(path);
     const ac = new AbortController();
     let cancel = false;
@@ -27,5 +51,8 @@ export function DeskPage({ path }: { path: string }) {
     };
   }, [path]);
 
+  if (page) {
+    return <DeskFrame current={path}>{page}</DeskFrame>;
+  }
   return <DeskView path={path} reads={reads} />;
 }
