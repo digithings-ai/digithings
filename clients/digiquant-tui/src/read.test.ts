@@ -19,9 +19,10 @@ test("stub fingerprints are withheld, including the fixture ledger", () => {
 });
 
 test("missing fields are an em dash and an empty payload stays empty", () => {
-  expect(fieldLines({ book_as_of: null, rows: [] })).toEqual([EMPTY_READ]);
+  expect(fieldLines({ book_as_of: null, rows: [] })).toEqual([`book_as_of  ${DASH}`, "rows  no rows"]);
   expect(isEmptyPayload({ book_as_of: null, rows: [] })).toBe(true);
-  expect(fieldLines({ events: [] })).toEqual([EMPTY_READ]);
+  expect(fieldLines({ events: [] })).toEqual(["events  no rows"]);
+  expect(fieldLines({})).toEqual([EMPTY_READ]);
   expect(fieldLines({ name: null, weight_pct: 12.5 })).toEqual([`name  ${DASH}`, "weight_pct  12.5"]);
   expect(fieldLines({ flagged: false, level: null })).toEqual(["flagged  false", `level  ${DASH}`]);
   expect(fieldLines({ note: "open", events: [] })).toEqual(["note  open", "events  no rows"]);

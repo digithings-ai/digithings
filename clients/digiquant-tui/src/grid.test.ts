@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BLOCKS, PAGE_LAYOUTS, PAGES } from "./catalog";
+import { BLOCKS, PAGE_LAYOUTS, PAGES, layoutMatchesPage } from "./catalog";
 import { clampSize, fit, nudge, place } from "./grid";
 
 test("fit clamps a placement into the grid", () => {
@@ -57,4 +57,12 @@ test("every page block has one route, and web-only pages are absent", () => {
   expect(joined.includes("/chat/")).toBe(false);
   expect(BLOCKS["pl-canvas"]?.kind).toBe("graph");
   expect(PAGES.some((p) => p.path === "/tools/chat")).toBe(false);
+});
+
+test("a page change does not keep the previous page's blocks", () => {
+  const brief = PAGE_LAYOUTS["/brief"];
+  expect(layoutMatchesPage("/brief", brief)).toBe(true);
+  expect(layoutMatchesPage("/fx/ideas", brief)).toBe(false);
+  const moved = brief.map((p, i) => (i === 0 ? { ...p, x: p.x + 1 } : p));
+  expect(layoutMatchesPage("/brief", moved)).toBe(true);
 });

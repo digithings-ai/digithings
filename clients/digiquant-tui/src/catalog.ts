@@ -194,3 +194,9 @@ export function pageByPath(path: string): Page | undefined {
 export function layoutFor(path: string): Layout {
   return (PAGE_LAYOUTS[path] ?? []).map((p) => ({ ...p }));
 }
+
+/** A moved layout still belongs to the page when the block ids match, in order. */
+export function layoutMatchesPage(path: string, layout: Layout): boolean {
+  const expected = PAGE_LAYOUTS[path] ?? [];
+  return expected.length === layout.length && expected.every((p, i) => p.id === layout[i]?.id);
+}

@@ -11,6 +11,8 @@ bun install
 DQ_API_URL=http://127.0.0.1:8788 bun src/index.tsx
 ```
 
+`↑` `↓` changes page. `→` or tab enters a block. Arrows move it, shift+arrows resize it. `/` jumps to a path (`/brief`, `/portfolio`, `/portfolio/holdings`, `/portfolio/attribution`, `/portfolio/ledger`, `/portfolio/theses`, `/portfolio/tearsheet`, `/performance`, `/pipeline`, `/strategies`, `/strategies/detail`, `/strategies/deploy`, `/fx`, `/fx/ideas`, `/fx/watch`, `/fx/rates`, `/fx/settings`).
+
 This app is bun-managed and lives outside the root npm workspaces.
 
 A digichat terminal tab is parked and not built here.
