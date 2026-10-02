@@ -83,9 +83,20 @@ body {
   cursor: crosshair;
 }
 
-/* Hero chart construct strokes: draw X L→R, Y B→T, then faint grid over an empty
-   Vela plot (series hidden). Timings mirror AXIS_* / GRID_* in lib/hero-build.ts.
-   Construction — not a black mask peel over finished candles. */
+/* Finished Vela chart. Opacity only — the axis is Vela's and must not be
+   redrawn by a second construct layer. */
+.hero-chart {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-chart {
+    opacity: 1;
+    transition: none;
+  }
+}
+
+/* Retired construct strokes. Kept so an older markup pass does not flash
+   an axis that Vela then removes. */
 .hero-construct {
   position: absolute;
   inset: 0;
