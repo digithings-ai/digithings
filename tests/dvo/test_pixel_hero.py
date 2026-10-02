@@ -213,3 +213,30 @@ def test_home_hero_uses_the_full_pixel_field() -> None:
     stripped = [i for i, line in enumerate(lines) if line.strip()]
     assert stripped
     assert stripped[0] <= 2
+
+
+def test_mid_height_terminal_keeps_field_around_the_letters() -> None:
+    """36-row Ghostty/Terminal must not collapse the hero to a 10-row title strip."""
+    frame = render_screen(
+        "Actions",
+        list(HOME_MENU),
+        0,
+        subtitle="local speech control",
+        context=["models: stt ggml-base.en · tts (auto) — banner full (top-center)"],
+        hero=True,
+        groups=HOME_GROUPS,
+        cols=100,
+        rows=36,
+        use_ansi=False,
+        t_ms=900,
+    )
+    body = frame.replace("\r\n", "\n")
+    lines = body.splitlines()
+    letter_rows = [i for i, line in enumerate(lines) if "█" in line]
+    assert letter_rows
+    assert letter_rows[-1] - letter_rows[0] >= 9
+    outside = [lines[i] for i in range(len(lines)) if i < letter_rows[0] or i > letter_rows[-1]]
+    assert any("·" in line for line in outside)
+    assert "STATUS" in body
+    for item in HOME_MENU:
+        assert item.split(" (")[0] in body
