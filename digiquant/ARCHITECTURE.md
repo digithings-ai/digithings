@@ -1278,6 +1278,62 @@ lump-beating vote never trades), not theorized. Visuals:
 (fills/yr + gate means vs both benchmarks + frontier); preview served JSON
 + charts only, no `page.tsx` entry (entry ONLY on BEATS-BOTH = NONE).
 
+**Generic period optimizer + perfect-strategy oracle (gold run, #4804) — Plan 20,
+machinery WORKS, gold result NEGATIVE (no selectable candidate).** Three new
+asset-agnostic core modules under `strategies/sdca/`, zero `nautilus_trader`
+import (pure Python/Polars, like the SDCA core): `risk_metrics.py`
+(`RiskMetrics`; `equity_metrics(values, *, annualization=252)` — simple per-day
+returns, risk-free 0, drawdown reused from `walk_forward`);
+`perfect_strategy.py` (`PerfectStrategyMetrics`; `perfect_strategy_path(dates,
+prices, buy_dates, sell_dates, initial_cash)` + `perfect_strategy_metrics(...)`
+— the oracle: all-in on every buy date, all-out on every sell date, HOLD on a
+neutral date, exposure = invested days / total, parity-pinned bitwise-equal to
+`dca_metrics.lump_mark_to_market` on the all-buy path); `period_optimize.py`
+(`PeriodHorizon`, `discover_candidate_periods`, `score_periods`,
+`optimize_periods`, `combine_periods`, `split_sample_check`,
+`EXPOSURE_FLOOR_PCT = 70.0`). Thin CLIs:
+`scripts/optimize_sdca_periods.py` (asset-agnostic, no gold knowledge, and
+deliberately **no** floor knob) + `scripts/run_gold_period_optimization.py`
+(gold wiring).
+**Frozen objective** (owner-ruled 2026-10-02): maximize oracle Sharpe, Calmar
+tie-break, CAGR tertiary, subject to a 70% time-in-market floor. Windows are
+DERIVED from pivots the price series produced (never hand-entered dates, per the
+`cycle_windows.py` prohibition) and every window emits BOTH edges, the last one
+truncated at the final bar and recorded. **Ceiling framing (mandatory
+everywhere):** every number is an IN-SAMPLE CEILING on the same history the
+periods were fit on — it measures PERIOD QUALITY, never achievable performance
+(real DCA drips and cannot buy one close); the split-sample pair is the only
+out-of-sample-ish read, and it must be printed next to the ceiling sentence.
+**Gold result** (`.scratch/gold_period_optimization.json`, untracked; GLD-USD
+2004-11-18→2026-09-29, 5499 bars): **no candidate is selectable at either
+horizon** — all five medium (exposure 54.74–56.23%) and all five long
+(56.85–57.36%) miss the frozen 70% floor, so `best` is `None` for medium, long
+and combined and the split-sample pairs are `(None, None)` on both horizons.
+Exposure is invariant to the search dimension (< 1.5 pp spread per horizon)
+because pivot DENSITY drives flat time and density is asset-independent (medium
+finds one pin every ~17 bars); the dense set spends ~45% of bars flat. Even the
+diagnostic ceilings **LOSE to buy-and-hold** on Sharpe (lump 0.6323 vs long
+rank-1 0.5546 / medium rank-1 0.4542 / combined 0.4325), buying only lower
+drawdown (combined 31.57% vs lump 45.56%) at ~half the exposure — so the owner's
+premise ("if our periods are well identified, our returns should be higher")
+does NOT reproduce on pivot-derived gold periods under this objective. Each
+horizon is reported against its OWN grid and never as a cross-grid contest.
+**Two OPEN owner calls, deliberately unresolved here:** (a) floor-vs-pivot-density
+— is 70% the wrong floor for swing-derived periods, or is per-swing period
+construction the wrong model (do NOT relax the floor to ~55%: that would ratify
+a 45%-flat book as "time in market"); (b) `split_sample_check`'s
+out-of-sample side is structurally binary — a 1-bit fork, because a straddling
+fitted window collapses its `enter` onto the first unseen bar, so the book is
+either all-in at the split or flat forever (measured: 5 of 312 medium / 3 of 86
+long fitted windows still overlap the unseen half, exposure 0.00%) — a genuine
+defect, filed, not fixed here. Diagnostics:
+`scripts/plot_gold_period_optimization.py` renders
+`gold_period_optimization_ceiling.svg` (stdlib SVG: GLD close + the pivot-pin
+rows, exposure per candidate against the frozen floor, Sharpe against lump/flat;
+every number read from the run JSON, no re-run, and the ~45%-flat NOT-selected
+caption rides every panel). Preview served the JSON + chart only, NO `page.tsx`
+entry: pages are candidates and this plan selected nothing.
+
 ## Secular-leg firing verdict for gold phase-b decision (#4804, Plan 14a Task 3 — NO-GO)
 
 Real-rate leg (DFII10 staged 5940 rows, 2003-01-02→2026-09-29; `real_rate_z` window-1260, no-flip washout, voteless default; 5480 valid z days; full-history deciles 10/25/50/75/90 = -2.115/-1.432/+0.128/+1.070/+1.743, clipped ±3.0) and 200w leg (causal completed-weeks, 1000d SMA, first-valid 2008-11-06, 4500-row series in untracked `digiquant/.scratch/gold_mayer_multiple.json`) fire as follows — judged read-only on the recorded Ruling-3 / Task-2 numbers, no new runs, no weight/window/threshold changes: | event | real-rate z | 200w multiple | — 2011-09 top: z −2.522 (below 10th-pct −2.115 → top-decile rich, rich side passes) / multiple 1.7159 (week-end 2011-09-02, close 183.24 / sma200w 106.7877); 2015-12 bottom: z +1.066 (≈75th-pct 1.070, vs 90th-pct +1.743 → NOT top-decile cheap, misses by 0.677) / multiple 0.7672; 2020-08 high: z −3.000 (clip floor) / multiple 1.4819; 2022-10 dip: z +2.252 / multiple 0.9836; now: z +1.530 (2026-09-29) / multiple 1.4707 (week-end 2026-09-25). Half-a (real-rate) FAILS: the bar needs top-decile cheap spanning the 2015 bottom AND top-decile rich spanning the 2011 top, and the 2015 reading (+1.066) sits at ~75th percentile, not top-decile (≥ +1.743). Half-b (200w) FAILS on selectivity: the 2011 level passes (1.7159 ≥ 1.5) but 349 grind-days sit above 1.5 outside the ±6mo 2011 window (2011-03-06→2012-03-06), i.e. 349/4500 = 7.76% ≥ 5% bar (5% budget = 225d; excess = 124d; all-valid-days >1.5 = 423/4500 = 9.4%; >1.7 outside = 154d, concentrated 2025-09-30→2026-05-14). Verdict: **NO-GO for phase-b engine design** — both halves fail, so no engine extension follows from this plan; COT / Dow-gold / CPI-oil legs stay recon-listed, not tasked.
