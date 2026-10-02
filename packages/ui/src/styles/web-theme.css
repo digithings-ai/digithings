@@ -343,7 +343,9 @@ body {
 
 .dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
 .dg-cell:hover { opacity: 0.85; }
-.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; overflow-x: hidden; overflow-y: auto; }
+.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; overflow: hidden; scrollbar-width: none; }
+.dg-cell, .dg-mosaic, .dg-mosaic-stack { scrollbar-width: none; }
+.dg-cell::-webkit-scrollbar, .dg-mosaic::-webkit-scrollbar, .dg-mosaic-stack::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 /* Name left, version right: the tile's identity line. The version sits in the
    top-right corner where a reader scanning the mosaic can compare releases down
@@ -352,7 +354,7 @@ body {
    without the wrap a narrow tile had its name run underneath it. */
 .dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
 .dg-mosaic-version { margin-left: auto; text-align: right; }
-.dg-mosaic-name { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
+.dg-mosaic-name { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
 /* Mini tiles step the name down a notch instead of clipping it: the full
    name still shows (never an abbreviation), just set smaller next to the
    version, so the head fits ~135px with padding. */
@@ -388,14 +390,17 @@ body {
 /* Focused tiles: the chips shrink to their own width and sit in the bottom-right,
    just above the compose line. The cap wraps a long row into that corner
    instead of stretching it across the card. */
-.dg-cell.on .dg-mosaic-stack { align-self: flex-end; width: fit-content; max-width: min(100%, 26rem); }
-.dg-cell.on .dg-mosaic-stack .stack-row { justify-content: flex-end; }
-/* Collapsed tiles keep the logo-only row on one scrolling line: wrapping
-   would spend unpredictable vertical room in narrow tiles (measured as a
-   46px overflow), while a horizontal scroll matches the docker chip grammar
-   and bounds the row to one line at every width. Focused tiles use the
-   wrapping named chips — the focus minimums always give them the room. */
-.dg-mosaic-stack .stack-row.compact { flex-wrap: nowrap; overflow-x: auto; }
+.dg-cell.on .dg-mosaic-stack { align-self: stretch; width: 100%; max-width: 100%; }
+.dg-cell.on .dg-mosaic-stack .stack-row { justify-content: flex-start; }
+/* Package chips wrap inside the tile. A single nowrap row used to scroll
+   out of the cell while the mosaic was resizing. */
+.dg-mosaic-stack .stack-row,
+.dg-mosaic-stack .stack-row.compact {
+  flex-wrap: wrap;
+  overflow: hidden;
+  max-width: 100%;
+}
+.dg-mosaic-stack .stack-chip { min-width: 0; max-width: 100%; }
 .dg-mosaic-role { font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.5; color: var(--ink-mute); }
 .dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
 .dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
