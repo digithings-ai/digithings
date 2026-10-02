@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import io
+import os
+import pty
+import threading
+import time
 from pathlib import Path
 
 import pytest
+from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG
 from digivoice.menu_tree import browse_settings, rows_at
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, load_settings
+from digivoice.tui import choose, render_screen, row_hits
 
 pytestmark = pytest.mark.unit
 
@@ -154,3 +160,106 @@ def test_browse_esc_at_the_root_changes_nothing(tmp_path: Path) -> None:
     browse_settings(paths, io.StringIO("\n"), io.StringIO())
     assert load_settings(paths).paste_on_stop is True
     assert load_settings(paths).banner_density == "retract"
+
+
+def test_hotkey_capture_persists_and_blank_cancels(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    browse_settings(paths, io.StringIO("4\n1\nctrl+space\n\n\n"), io.StringIO())
+    saved = load_settings(paths)
+    assert saved.hotkey_bindings.dictation == "ctrl+space"
+    assert saved.hotkey_bindings.speak == "Double-tap Left Option"
+    assert saved.hotkey_bindings.cancel == "Esc"
+    browse_settings(paths, io.StringIO("4\n2\n\n\n\n"), io.StringIO())
+    again = load_settings(paths)
+    assert again.hotkey_bindings.speak == "Double-tap Left Option"
+    assert again.hotkey_bindings.dictation == "ctrl+space"
+
+
+def test_voice_pane_opens_selects_and_returns(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    speech = rows_at(VoiceSettings(), "/settings/speech")
+    assert speech[1].name == "voice"
+    assert speech[1].kind == "pick"
+    voices = rows_at(VoiceSettings(), "/settings/speech/voice", Path(paths.models_dir))
+    assert voices
+    assert voices[0].choice == "auto"
+    names = [row.choice for row in voices]
+    assert len(names) == len(set(names))
+    browse_settings(paths, io.StringIO("1\n2\n2\n\n\n"), io.StringIO())
+    assert load_settings(paths).tts_voice == "en_US-lessac-medium.onnx"
+    browse_settings(paths, io.StringIO("1\n2\n1\n\n\n"), io.StringIO())
+    assert load_settings(paths).tts_voice is None
+
+
+def test_model_rows_show_language_and_a_unique_name() -> None:
+    for path, catalog, field in (
+        ("/settings/speech/model", STT_CATALOG, "stt_model"),
+        ("/settings/rewrite/model", REWRITE_CATALOG, "rewrite_model"),
+    ):
+        rows = rows_at(VoiceSettings(), path)
+        assert len(rows) == len(catalog)
+        choices = [row.choice for row in rows]
+        assert len(choices) == len(set(choices))
+        for row in rows:
+            block = row.as_block(path)
+            visible = f"{block.action}\n{block.meta}\n{block.path}"
+            assert row.choice in block.path
+            assert visible.count(row.choice) == 1
+            assert "English" in visible or "multilingual" in visible
+            assert row.field == field
+
+
+def test_settings_rows_do_not_trap_on_a_note_or_a_line_prompt() -> None:
+    rows = _walk(VoiceSettings())
+    assert rows
+    assert all(row.kind != "note" for row in rows)
+    assert all(row.kind != "text" for row in rows)
+
+
+def test_click_on_the_voice_row_selects_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The click that used to fall into a line prompt returns the voice row."""
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("COLORTERM", raising=False)
+    monkeypatch.setattr("digivoice.tui._term_size", lambda: (80, 24))
+    rows = rows_at(VoiceSettings(), "/settings/speech")
+    blocks = [row.as_block("/settings/speech") for row in rows]
+    voice_index = next(index for index, row in enumerate(rows) if row.name == "voice")
+    render_screen(
+        "speech",
+        [block.action for block in blocks],
+        0,
+        subtitle="/settings/speech",
+        cols=80,
+        rows=24,
+        use_ansi=True,
+        use_screen=True,
+        clear=True,
+        blocks=blocks,
+        truecolor=False,
+    )
+    voice_row = next(index for index, hit in enumerate(row_hits()) if hit == voice_index)
+    sequence = f"\x1b[<0;2;{voice_row + 1}M".encode()
+    master, slave = pty.openpty()
+
+    def feed() -> None:
+        time.sleep(0.15)
+        os.write(master, sequence)
+        time.sleep(0.4)
+        os.write(master, b"\x1b")
+
+    threading.Thread(target=feed, daemon=True).start()
+    raw = os.fdopen(slave, "rb+", buffering=0)
+    tty = io.TextIOWrapper(raw, encoding="utf-8", newline="\n", write_through=True)
+    try:
+        picked = choose(
+            "speech",
+            stdin=tty,
+            stdout=tty,
+            subtitle="/settings/speech",
+            blocks=blocks,
+        )
+    finally:
+        tty.close()
+        os.close(master)
+    assert picked == voice_index

@@ -301,8 +301,13 @@ def browse_history(
     reading = read_history(paths.history_file)
     ordered = list(reversed(reading.entries))
     if not ordered:
-        stdout.write("  no takes yet\n")
-        stdout.flush()
+        choose(
+            "History",
+            stdin=stdin,
+            stdout=stdout,
+            subtitle="/history",
+            blocks=(MenuBlock(action="No takes yet", path="/history"),),
+        )
         return
     page = 0
     while ordered:
@@ -365,8 +370,13 @@ def browse_history(
                 return
             break
         if not ordered:
-            stdout.write("  no takes yet\n")
-            stdout.flush()
+            choose(
+                "History",
+                stdin=stdin,
+                stdout=stdout,
+                subtitle="/history",
+                blocks=(MenuBlock(action="No takes yet", path="/history"),),
+            )
             return
 
 

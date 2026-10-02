@@ -82,6 +82,14 @@ def test_doctor_says_ready_when_required_checks_pass() -> None:
     assert "\x1b[32m" in frame
 
 
+def test_empty_history_stays_on_a_menu(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    out = io.StringIO()
+    browse_history(paths, "linux", FakeProbe(), FakeRunner({}), io.StringIO("\n"), out)
+    assert "No takes yet" in out.getvalue()
+    assert "/history" in out.getvalue()
+
+
 def test_history_pages_and_copies(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     for index in range(10):

@@ -26,7 +26,7 @@ from digivoice.settings import (
     load_settings,
     save_settings,
 )
-from digivoice.tui import MenuBlock, choose
+from digivoice.tui import MenuBlock, capture_binding, choose
 
 InstallFn = Callable[[VoicePaths, CatalogModel, TextIO | None], str]
 
@@ -46,6 +46,13 @@ _POSITIONS: tuple[str, ...] = (
 _DENSITIES: tuple[str, ...] = ("retract", "full")
 _STT_IDS: tuple[str, ...] = tuple(item.id for item in STT_CATALOG)
 _REWRITE_FILES: tuple[str, ...] = tuple(item.filename for item in REWRITE_CATALOG)
+# Local Piper filenames. No download URL. On-disk .onnx files are added beside these.
+_PIPER_VOICES: tuple[tuple[str, str, str], ...] = (
+    ("en_US-lessac-medium.onnx", "Lessac medium", "English"),
+    ("en_US-amy-medium.onnx", "Amy medium", "English"),
+    ("en_GB-alba-medium.onnx", "Alba medium", "English"),
+)
+_MODEL_FIELDS = frozenset({"stt_model", "rewrite_model", "tts_voice"})
 
 
 class TreeRow(BaseModel):
@@ -72,7 +79,11 @@ class TreeRow(BaseModel):
     def as_block(self, path: str) -> MenuBlock:
         """Action, slash path, then the value (or the note) as metadata."""
         meta = self.explain if self.kind == "note" else self.value
-        return MenuBlock(action=self.name, path=f"{path}/{self.name}", meta=meta)
+        if self.kind == "choice" and self.field in _MODEL_FIELDS and self.choice:
+            leaf = self.choice
+        else:
+            leaf = self.name
+        return MenuBlock(action=self.name, path=f"{path}/{leaf}", meta=meta)
 
 
 def _norm(path: str) -> str:
@@ -92,7 +103,11 @@ def _next(current: str, choices: tuple[str, ...]) -> str:
     return choices[(index + 1) % len(choices)]
 
 
-def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
+def rows_at(
+    settings: VoiceSettings,
+    path: str,
+    models_dir: Path | None = None,
+) -> list[TreeRow]:
     """Rows for one settings path. Unknown paths are empty."""
     here = _norm(path)
     if here == "/settings":
@@ -115,7 +130,7 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
             TreeRow(
                 name="hotkeys",
                 kind="dir",
-                explain="How the Mac keys are bound. Nothing here is editable.",
+                explain="Mac key binds. Enter a row, then type the key.",
             ),
         ]
     if here == "/settings/speech":
@@ -129,10 +144,9 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
             ),
             TreeRow(
                 name="voice",
-                kind="text",
-                field="tts_voice",
+                kind="pick",
                 value=voice,
-                explain="Piper voice file. Blank means auto. Enter types a name.",
+                explain="Piper voice. Enter opens the list.",
             ),
             TreeRow(
                 name="paste",
@@ -144,6 +158,8 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
         ]
     if here == "/settings/speech/model":
         return _model_choices("stt_model")
+    if here == "/settings/speech/voice":
+        return _voice_choices(settings, models_dir)
     if here == "/settings/rewrite":
         return [
             TreeRow(
@@ -209,21 +225,28 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
             ),
         ]
     if here == "/settings/hotkeys":
+        bindings = settings.hotkey_bindings
         return [
             TreeRow(
                 name="dictation",
-                kind="note",
-                explain="Right Option starts and stops dictation.",
+                kind="capture",
+                field="dictation",
+                value=bindings.dictation,
+                explain="Starts and stops dictation. Enter, then type the key.",
             ),
             TreeRow(
                 name="speak",
-                kind="note",
-                explain="Double-tap Left Option speaks the selection.",
+                kind="capture",
+                field="speak",
+                value=bindings.speak,
+                explain="Speaks the selection. Enter, then type the key.",
             ),
             TreeRow(
                 name="cancel",
-                kind="note",
-                explain="Esc during a take discards it. Nothing is pasted.",
+                kind="capture",
+                field="cancel",
+                value=bindings.cancel,
+                explain="Discards the active take. Enter, then type the key.",
             ),
         ]
     return []
@@ -279,14 +302,27 @@ def _style_choices() -> list[TreeRow]:
     ]
 
 
+def _language_label(languages: str) -> str:
+    if languages == "en":
+        return "English"
+    return languages
+
+
 def _model_choices(field: str) -> list[TreeRow]:
     catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
     recommended = DEFAULT_MODEL if field == "stt_model" else LOCAL_REWRITE_MODEL_FILE
     rows: list[TreeRow] = []
+    seen: set[str] = set()
     for item in catalog:
-        is_rec = item.id == recommended or item.filename == recommended
-        size = f"{item.size_hint} · recommended" if is_rec else item.size_hint
         stored = item.id if field == "stt_model" else item.filename
+        if stored in seen:
+            continue
+        seen.add(stored)
+        is_rec = item.id == recommended or item.filename == recommended
+        lang = _language_label(item.languages)
+        size = (
+            f"{lang} · {item.size_hint} · recommended" if is_rec else f"{lang} · {item.size_hint}"
+        )
         rows.append(
             TreeRow(
                 name=_short_title(item.title),
@@ -300,10 +336,44 @@ def _model_choices(field: str) -> list[TreeRow]:
     return rows
 
 
+def _voice_choices(settings: VoiceSettings, models_dir: Path | None) -> list[TreeRow]:
+    """One row per Piper voice. `auto` is the saved empty value."""
+    rows: list[TreeRow] = []
+    seen: set[str] = set()
+
+    def add(choice: str, name: str, explain: str) -> None:
+        if not choice or choice in seen:
+            return
+        seen.add(choice)
+        rows.append(
+            TreeRow(
+                name=name,
+                kind="choice",
+                field="tts_voice",
+                choice=choice,
+                value=explain,
+                explain=explain,
+            )
+        )
+
+    add("auto", "auto", "First Piper file on disk")
+    for filename, title, lang in _PIPER_VOICES:
+        add(filename, title, lang)
+    if models_dir is not None and models_dir.is_dir():
+        for path in sorted(models_dir.glob("*.onnx")):
+            add(path.name, path.stem, "Installed Piper voice")
+    current = (settings.tts_voice or "").strip()
+    if current:
+        add(current, Path(current).stem or current, "Saved Piper voice")
+    return rows
+
+
 def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int:
     here = _norm(path)
     if here == "/settings/speech/model":
         current = settings.stt_model
+    elif here == "/settings/speech/voice":
+        current = settings.tts_voice or "auto"
     elif here == "/settings/rewrite/model":
         current = settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE
     elif here == "/settings/rewrite/style":
@@ -333,7 +403,17 @@ def _changed(settings: VoiceSettings, row: TreeRow, typed: str | None) -> VoiceS
     if row.kind == "choice":
         if not row.choice:
             return None
-        data[row.field] = row.choice
+        if row.field == "tts_voice" and row.choice == "auto":
+            data[row.field] = None
+        else:
+            data[row.field] = row.choice
+        return VoiceSettings.model_validate(data)
+    if row.kind == "capture":
+        if typed is None or not typed.strip():
+            return None
+        bindings = dict(data.get("hotkey_bindings") or {})
+        bindings[row.field] = typed.strip()
+        data["hotkey_bindings"] = bindings
         return VoiceSettings.model_validate(data)
     if row.kind == "toggle":
         data[row.field] = not bool(getattr(settings, row.field))
@@ -375,25 +455,11 @@ def _norm_field_is_route(row: TreeRow) -> bool:
     }
 
 
-def _read_voice(stdin: TextIO, stdout: TextIO, current: str | None) -> str | None:
-    hint = current if current else "auto"
-    stdout.write(f"  voice [{hint}]  blank keeps it, none clears it\n")
-    stdout.flush()
-    try:
-        raw = stdin.readline()
-    except (OSError, ValueError):
-        return None
-    if not raw:
-        return None
-    text = raw.strip()
-    if not text:
-        return None
-    if text.casefold() in {"none", "null", "-"}:
-        return ""
-    return text
-
-
-def _stack_for(settings: VoiceSettings, start: str) -> list[str]:
+def _stack_for(
+    settings: VoiceSettings,
+    start: str,
+    models_dir: Path | None = None,
+) -> list[str]:
     """Folders from ``/settings`` down to ``start``. A leaf stays on its parent."""
     path = _norm(start)
     if not path.startswith("/settings"):
@@ -401,7 +467,7 @@ def _stack_for(settings: VoiceSettings, start: str) -> list[str]:
     chain = ["/settings"]
     cursor = "/settings"
     for part in [piece for piece in path.split("/") if piece][1:]:
-        rows = rows_at(settings, cursor)
+        rows = rows_at(settings, cursor, models_dir)
         match = next((row for row in rows if row.name == part), None)
         if match is None or match.kind not in {"dir", "pick"}:
             break
@@ -423,10 +489,11 @@ def browse_settings(
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     settings = load_settings(paths)
-    stack = _stack_for(settings, start)
+    models_dir = Path(paths.models_dir)
+    stack = _stack_for(settings, start, models_dir)
     while stack:
         path = stack[-1]
-        rows = rows_at(settings, path)
+        rows = rows_at(settings, path, models_dir)
         if not rows:
             stack.pop()
             continue
@@ -445,7 +512,7 @@ def browse_settings(
         if isinstance(picked, str) and picked.startswith("/"):
             jumped = norm_path(picked)
             if jumped.startswith("/settings"):
-                stack[:] = _stack_for(settings, jumped)
+                stack[:] = _stack_for(settings, jumped, models_dir)
                 continue
             if on_path is not None:
                 on_path(jumped)
@@ -456,11 +523,22 @@ def browse_settings(
         if row.kind in {"dir", "pick"}:
             stack.append(f"{path}/{row.name}")
             continue
-        if row.kind == "note":
+        if row.kind == "capture":
+            bound = capture_binding(
+                title,
+                [item.as_block(path) for item in rows],
+                picked,
+                stdin,
+                stdout,
+                subtitle=path,
+            )
+            nxt = _changed(settings, row, bound)
+            if nxt is None:
+                continue
+            settings = nxt
+            save_settings(paths, settings)
             continue
         typed: str | None = None
-        if row.kind == "text":
-            typed = _read_voice(stdin, stdout, settings.tts_voice)
         nxt = _changed(settings, row, typed)
         if nxt is None:
             continue

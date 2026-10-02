@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
@@ -57,6 +57,16 @@ HOTKEYS_DOCS = {
         "Esc while recording/transcribing/rewriting — discard the take (no paste, no history entry)"
     ),
 }
+
+
+class HotkeyBindings(BaseModel):
+    """Remaps stored in settings.json. The sample adapter documents its own binds."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    dictation: str = "Right Option"
+    speak: str = "Double-tap Left Option"
+    cancel: str = "Esc"
 
 
 def is_remote_rewrite_model(value: str) -> bool:
@@ -202,6 +212,8 @@ class VoiceSettings(BaseModel):
     banner_animations: bool = True
     # Pin keeps the status banner on screen. Off shows it only during a take.
     banner_pinned: bool = False
+    # TUI remaps. Saved with the rest of settings.json. Blank keys are rejected.
+    hotkey_bindings: HotkeyBindings = Field(default_factory=HotkeyBindings)
 
     @field_validator("rewrite_timeout_seconds", mode="before")
     @classmethod
