@@ -29,8 +29,8 @@ import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
  *  Wheel: zoom-out while the gesture is live; after settle or the zoom-out
  *  budget, the next wheel scrolls the page. Horizontal / shift stays on the chart. */
 
-const UP = "#3DFF9A";
-const DOWN = "#FF5C6C";
+const UP = "#3DFF9A"; // canon-allow: hero candle up
+const DOWN = "#FF5C6C"; // canon-allow: hero candle down
 const CYCLE = [
   { type: "bollinger-bands", label: "Bollinger" },
   { type: "vwap", label: "VWAP" },
@@ -39,9 +39,9 @@ const CYCLE = [
 
 const THEME = {
   background: "#000000",
-  textColor: "#d7dde4",
-  gridColor: "#1a1f24",
-  borderColor: "#2a3138",
+  textColor: "#d7dde4", // canon-allow: hero axis text
+  gridColor: "#1a1f24", // canon-allow: hero grid
+  borderColor: "#2a3138", // canon-allow: hero frame
   upColor: UP,
   downColor: DOWN,
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
