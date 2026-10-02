@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { BANDS } from "../_bands/registry";
 
 /** Wayfinding in the left gutter (≥1400px): a tick per band plus a vertical
- *  terminal path naming the band under the viewport middle. */
+ *  terminal path naming the band under the viewport middle.
+ *
+ *  Hidden on the chart hero (`top`). First appears once you’ve scrolled into
+ *  the second section (dashboard) and stays for every band below. */
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export function SectionRail() {
@@ -35,10 +38,16 @@ export function SectionRail() {
     };
   }, []);
 
+  // Hero = band 0. Rail stays off until the second section owns the midpoint.
+  const visible = active >= 1;
+
   return (
     <nav
       aria-label="Page sections"
-      className="fixed top-1/2 z-30 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-[1.1rem] font-mono text-[0.68rem] text-ink-mute min-[1400px]:flex"
+      aria-hidden={visible ? undefined : true}
+      className={`fixed top-1/2 z-30 hidden -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-[1.1rem] font-mono text-[0.68rem] text-ink-mute transition-opacity duration-300 min-[1400px]:flex ${
+        visible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+      }`}
       style={{ left: "calc((100vw - var(--frame-w) - 2 * var(--page-pad)) / 4)" }}
     >
       <ol className="m-0 flex list-none flex-col items-center p-0">
@@ -46,6 +55,7 @@ export function SectionRail() {
           <li key={band.id}>
             <a
               href={`#${band.id}`}
+              tabIndex={visible ? undefined : -1}
               aria-label={band.label}
               aria-current={index === active ? "location" : undefined}
               className="group flex h-[0.8rem] w-[1.4rem] items-center justify-center"
