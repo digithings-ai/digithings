@@ -1,52 +1,49 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PipelineBand } from "@/app/_bands/pipeline";
-import { STAGE_COPY } from "./stage-copy";
 
 describe("PipelineBand", () => {
   const html = renderToStaticMarkup(<PipelineBand />);
+  const listStart = html.indexOf("<ol");
+  const listEnd = html.indexOf("</ol>");
+  const list = html.slice(listStart, listEnd);
 
-  it("states the capture reason and does not invent a run", () => {
-    expect(html).toContain("no recorded run");
-    expect(html).toContain("Reading the latest run from the official API.");
-    expect(html).toContain("dashboard-api GET /v1/tables/documents");
-    expect(html).toContain("No run detail was recorded in this build.");
-    expect(html).toContain("—");
-    expect(html).not.toContain("sample run A");
-    expect(html).not.toContain("sample timeline");
+  it("renders one static banner of four pipelines", () => {
+    expect(html).toContain("Four pipelines");
+    expect(html).toContain('aria-label="digiquant pipelines"');
+    expect(list.match(/<li\b/g)).toHaveLength(4);
+    const headings = ["Research", "Investment portfolio", "Strategy building", "Trade setups"];
+    let cursor = 0;
+    for (const name of headings) {
+      const at = list.indexOf(`>${name}<`, cursor);
+      expect(at).toBeGreaterThanOrEqual(0);
+      cursor = at;
+    }
+  });
+
+  it("states what is done and what is still in development", () => {
+    expect(list).toContain("done");
+    expect(list).toContain("in development");
+    expect(list).toContain("Still to come");
+    expect(html).toContain("digiquant baseline research");
+    expect(html).toContain("custom knowledge base");
+    expect(html).toContain("12x terminal");
+    expect(html).toContain("digithings");
+    expect(html).toContain("digigraph");
+    expect(html).toContain("digiquant baseline portfolio");
+    expect(html).toContain("entry, a stop, and a target");
+    expect(html).not.toMatch(/DigiQuant|DigiThings|DigiCon|Grokopedia/);
     expect(html).not.toContain("99.909");
     expect(html).not.toContain("204.04");
-    expect(html).not.toContain("legacy_estimate");
   });
 
-  it("keeps the six stage names and the unwired execution card", () => {
-    expect(html).toContain("Inputs");
-    expect(html).toContain("Learning");
-    expect(html).toContain("in development");
-    expect(html).toContain("nothing places an order");
-  });
-
-  it("gives every stage its full copy and a button for each sub-step", () => {
-    for (const copy of Object.values(STAGE_COPY)) {
-      expect(html).toContain(copy.does);
-      for (const step of copy.steps) {
-        expect(html).toContain(step);
-        expect(html).toMatch(new RegExp(`<button[^>]*>[\\s\\S]*${step.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*</button>`));
-      }
-    }
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("truncate");
-    expect(html).not.toContain("line-clamp");
-  });
-
-  it("lays the deck out as one, two, then three cards and does not scroll a cramped strip", () => {
-    expect(html).toContain("grid-cols-1");
-    expect(html).toContain("lg:grid-cols-2");
-    expect(html).toContain("min-[1440px]:grid-cols-3");
-    expect(html).toContain("min-h-[28rem]");
-    expect(html).toContain("motion-safe:");
+  it("does not slide, grow a runway, or accordion a stage", () => {
+    expect(html).not.toContain("motion-safe:");
+    expect(html).not.toContain("100svh+220svh");
+    expect(html).not.toContain("sticky");
     expect(html).not.toContain("overflow-x-auto");
     expect(html).not.toContain("snap-x");
-    expect(html).not.toContain("snap-start");
+    expect(list).not.toContain("<button");
+    expect(list).not.toContain("aria-expanded");
   });
 });

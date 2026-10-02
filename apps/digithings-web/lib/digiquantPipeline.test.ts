@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { EXECUTION, PIPELINE_STAGES } from "./digiquantPipeline";
 
 /**
- * The digithings.ai stage list is a copy of the digiquant.io pipeline band,
+ * The digithings.ai stage list is a copy of the digiquant stage catalog,
  * because the two live in separate Next app roots and neither can import the
  * other's modules. A copy that can silently drift is worse than no copy, so
  * this test reads the original from disk and compares.
@@ -12,14 +12,13 @@ import { EXECUTION, PIPELINE_STAGES } from "./digiquantPipeline";
  * If it fails, the fix is to copy the change across — not to relax the test,
  * and not to invent a stage. Source of truth:
  * `apps/digiquant-web/app/_stages.ts` (names) and
- * `apps/digiquant-web/components/pipeline/stage-copy.ts` (does + steps),
- * rendered by `apps/digiquant-web/app/_bands/pipeline.tsx`.
+ * `apps/digiquant-web/components/pipeline/stage-copy.ts` (does + steps).
+ * The homepage banner is not this catalog.
  */
 
 const WEB = resolve(__dirname, "..", "..", "digiquant-web");
 const STAGES = resolve(WEB, "app", "_stages.ts");
 const COPY = resolve(WEB, "components", "pipeline", "stage-copy.ts");
-const BAND = resolve(WEB, "app", "_bands", "pipeline.tsx");
 
 type Stage = { name: string; does: string; steps: string[] };
 
@@ -62,11 +61,8 @@ function stageCopy(source: string): Stage[] {
 describe("digiquantPipeline", () => {
   const stagesSrc = readFileSync(STAGES, "utf8");
   const copySrc = readFileSync(COPY, "utf8");
-  const bandSrc = readFileSync(BAND, "utf8");
 
-  it("matches the stage names the digiquant pipeline band renders", () => {
-    expect(bandSrc).toContain("PIPELINE_STAGES.map");
-    expect(bandSrc).toContain("EXECUTION_STAGE.status");
+  it("matches the stage names in the digiquant stage catalog", () => {
     expect(PIPELINE_STAGES.map((stage) => stage.name)).toEqual(stageNames(stagesSrc));
   });
 
