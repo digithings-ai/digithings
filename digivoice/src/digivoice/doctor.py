@@ -230,8 +230,13 @@ def doctor_checks(
     ]
 
 
+def doctor_ready(checks: list[DoctorCheck]) -> bool:
+    """True when every required check is ok. Info rows do not block it."""
+    return all(check.status == "ok" for check in checks if check.id in _REQUIRED)
+
+
 def render_doctor(checks: list[DoctorCheck]) -> DoctorReport:
-    ok = all(check.status == "ok" for check in checks if check.id in _REQUIRED)
+    ok = doctor_ready(checks)
     lines = ["digivoice doctor", ""]
     lines.extend(f"[{check.status}] {check.id}  {check.detail}" for check in checks)
     lines.append("")

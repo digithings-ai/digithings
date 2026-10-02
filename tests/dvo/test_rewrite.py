@@ -296,3 +296,23 @@ def test_install_local_rewrite_model_uses_fetcher(tmp_path: Path) -> None:
     again = install_local_rewrite_model(paths, fetch=boom)
     assert again == str(target)
     assert calls["n"] == 0
+
+
+def test_llama_cpp_asks_for_one_turn(tmp_path: Path) -> None:
+    from digivoice.rewrite import LlamaCppRewriteRunner
+
+    model = tmp_path / "m.gguf"
+    model.write_bytes(b"x")
+    probe = FakeProbe(commands={"llama-cli": "/bin/llama-cli"}, files={str(model)})
+    noise = (
+        "Loading model...\nbuild      : test\n\n> um hello\ncleaned\n\n"
+        "[ Prompt: 10 t/s | Generation: 10 t/s ]\n\nExiting...\n"
+    )
+    runner = FakeRunner({"llama-cli": FakeReply(stdout=noise)})
+    local = LlamaCppRewriteRunner(probe, runner, str(model))
+    assert local.rewrite("clean it", "um hello", timeout=5) == "cleaned"
+    argv = runner.calls[0].argv
+    assert "--single-turn" in argv
+    assert "--simple-io" in argv
+    assert argv[argv.index("-sys") + 1] == "clean it"
+    assert argv[argv.index("-p") + 1] == "um hello"

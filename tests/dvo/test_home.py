@@ -32,7 +32,8 @@ def test_bare_non_tty_prints_home_overview(tmp_path: Path) -> None:
     assert "■" in result.stdout or "□" in result.stdout
     for item in HOME_MENU:
         assert item.split(" (")[0] in result.stdout
-    assert "Reload" in result.stdout
+    assert "System" in result.stdout
+    assert "reload" in result.stdout
     assert "dict --toggle" in result.stdout
 
 
@@ -54,14 +55,15 @@ def test_home_is_app_actions_with_settings_path() -> None:
     assert [m.split(" (")[0] for m in HOME_MENU] == [
         "Doctor",
         "History",
-        "Reload",
+        "System",
         "Settings",
         "Quit",
     ]
     assert not any(m.startswith("Status") for m in HOME_MENU)
+    assert not any(m.startswith("Reload") for m in HOME_MENU)
     settings_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Settings"))
-    reload_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("Reload"))
-    assert settings_at > reload_at
+    system_at = next(i for i, m in enumerate(HOME_MENU) if m.startswith("System"))
+    assert settings_at > system_at
     assert "/settings" in HOME_MENU[settings_at]
 
 

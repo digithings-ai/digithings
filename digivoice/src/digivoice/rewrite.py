@@ -141,25 +141,49 @@ class LlamaCppRewriteRunner:
         binary = self._binary()
         if not binary:
             raise RuntimeError("llama-cli / llama-completion not on PATH")
-        prompt = f"{system}\n\nDictation:\n{user}\n\nRewritten text:"
         argv = [
             binary,
             "-m",
             self._model_path,
+            "-sys",
+            system,
             "-p",
-            prompt,
+            user,
             "-n",
-            "512",
+            "256",
+            "-c",
+            "2048",
+            "--temp",
+            "0.2",
+            "--single-turn",
+            "--simple-io",
             "--no-display-prompt",
+            "--reasoning",
+            "off",
         ]
         result = self._runner(argv, timeout=timeout)
         if result.code != 0:
             reason = error_tail(result.stderr) or f"exit {result.code}"
             raise RuntimeError(f"llama.cpp failed ({reason})")
-        text = result.stdout.strip()
+        text = _llama_reply(result.stdout, user)
         if not text:
             raise RuntimeError("llama.cpp returned empty rewrite")
         return text
+
+
+def _llama_reply(stdout: str, user: str) -> str:
+    """Keep the generated text. llama-cli also prints its banner and a timing line."""
+    marker = f"> {user}"
+    text = stdout
+    if marker in text:
+        text = text.split(marker, 1)[1]
+    kept: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[ Prompt:") or stripped == "Exiting...":
+            break
+        kept.append(line)
+    return "\n".join(kept).strip()
 
 
 def resolve_rewrite_model_path(paths: VoicePaths, settings: VoiceSettings) -> str | None:

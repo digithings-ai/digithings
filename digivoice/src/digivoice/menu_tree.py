@@ -1,6 +1,7 @@
-"""TTY settings as a path. Enter opens a folder or changes the value. Esc goes up.
+"""TTY settings as a path. Enter opens a folder, a list, or changes a value.
 
-Each row carries a one-line explanation. Bools toggle. Short lists cycle.
+A model row opens the catalog. Size and the recommended flag are on each
+row. A missing file downloads only after confirm. Esc goes up.
 The numbered ``setup`` wizard stays for pipes and agents.
 """
 
@@ -15,7 +16,9 @@ from pydantic import BaseModel, ConfigDict
 
 from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, CatalogModel
 from digivoice.models import VoicePaths
+from digivoice.paths import DEFAULT_MODEL
 from digivoice.settings import (
+    LOCAL_REWRITE_MODEL_FILE,
     PRESET_LABELS,
     VoiceSettings,
     cycle_rewrite_timeout,
@@ -55,6 +58,7 @@ class TreeRow(BaseModel):
     explain: str
     value: str = ""
     field: str = ""
+    choice: str = ""
 
     def label(self) -> str:
         if self.kind == "dir":
@@ -114,10 +118,9 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
         return [
             TreeRow(
                 name="model",
-                kind="cycle",
-                field="stt_model",
-                value=settings.stt_model,
-                explain="Which local whisper file transcribes. Enter cycles the suggested list.",
+                kind="pick",
+                value=_model_title("stt_model", settings.stt_model),
+                explain="Local whisper file. Enter opens the list. A download asks first.",
             ),
             TreeRow(
                 name="voice",
@@ -133,23 +136,10 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
                 value=_on_off(settings.paste_on_stop),
                 explain="Paste the words when dictation stops.",
             ),
-            TreeRow(
-                name="words",
-                kind="toggle",
-                field="word_detection",
-                value=_on_off(settings.word_detection),
-                explain="Flag odd words after dictation. Stored only, not wired to speech yet.",
-            ),
-            TreeRow(
-                name="spelling",
-                kind="toggle",
-                field="spelling_detection",
-                value=_on_off(settings.spelling_detection),
-                explain="Flag spelling after dictation. Stored only, not wired to speech yet.",
-            ),
         ]
+    if here == "/settings/speech/model":
+        return _model_choices("stt_model")
     if here == "/settings/rewrite":
-        model = settings.rewrite_model or "auto"
         return [
             TreeRow(
                 name="enabled",
@@ -167,10 +157,9 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
             ),
             TreeRow(
                 name="model",
-                kind="cycle",
-                field="rewrite_model",
-                value=model,
-                explain="On-device model file. Enter cycles the suggested list. Never a cloud URL.",
+                kind="pick",
+                value=_model_title("rewrite_model", settings.rewrite_model or ""),
+                explain="On-device model. Enter opens the list. A download asks first.",
             ),
             TreeRow(
                 name="runner",
@@ -199,6 +188,8 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
                 explain="Front-app name to rewrite style. Enter cycles that app's style.",
             ),
         ]
+    if here == "/settings/rewrite/model":
+        return _model_choices("rewrite_model")
     if here == "/settings/rewrite/apps":
         rows: list[TreeRow] = []
         for name in sorted(settings.rewrite_app_routes):
@@ -272,8 +263,79 @@ def _catalog_entry(field: str, value: str) -> CatalogModel | None:
     return None
 
 
+def _short_title(title: str) -> str:
+    return title.replace(" (default)", "")
+
+
+def _plain(text: str) -> str:
+    return text.replace(" (default)", "").replace("(", "").replace(")", "")
+
+
+def _model_title(field: str, current: str) -> str:
+    """Name shown on the model row. Empty current means the recommended file."""
+    catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
+    recommended = DEFAULT_MODEL if field == "stt_model" else LOCAL_REWRITE_MODEL_FILE
+    needle = current or recommended
+    for item in catalog:
+        if item.id == needle or item.filename == needle:
+            return _short_title(item.title)
+    return current or _short_title(catalog[0].title)
+
+
+def _model_choices(field: str) -> list[TreeRow]:
+    catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
+    recommended = DEFAULT_MODEL if field == "stt_model" else LOCAL_REWRITE_MODEL_FILE
+    rows: list[TreeRow] = []
+    for item in catalog:
+        is_rec = item.id == recommended or item.filename == recommended
+        size = f"{item.size_hint} · recommended" if is_rec else item.size_hint
+        stored = item.id if field == "stt_model" else item.filename
+        rows.append(
+            TreeRow(
+                name=_short_title(item.title),
+                kind="choice",
+                field=field,
+                value=size,
+                choice=stored,
+                explain=_plain(item.best_for),
+            )
+        )
+    return rows
+
+
+def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int:
+    here = _norm(path)
+    if here == "/settings/speech/model":
+        current = settings.stt_model
+    elif here == "/settings/rewrite/model":
+        current = settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE
+    else:
+        return 0
+    for index, row in enumerate(rows):
+        if row.choice == current:
+            return index
+    return 0
+
+
+def _missing_catalog(paths: VoicePaths, row: TreeRow) -> CatalogModel | None:
+    if row.field not in {"stt_model", "rewrite_model"}:
+        return None
+    entry = _catalog_entry(row.field, row.choice)
+    if entry is None:
+        return None
+    dest = Path(paths.models_dir) / entry.filename
+    if dest.is_file():
+        return None
+    return entry
+
+
 def _changed(settings: VoiceSettings, row: TreeRow, typed: str | None) -> VoiceSettings | None:
     data = settings.model_dump(mode="json")
+    if row.kind == "choice":
+        if not row.choice:
+            return None
+        data[row.field] = row.choice
+        return VoiceSettings.model_validate(data)
     if row.kind == "toggle":
         data[row.field] = not bool(getattr(settings, row.field))
     elif row.kind == "text":
@@ -352,19 +414,26 @@ def browse_settings(
             stack.pop()
             continue
         title = path
+        choosing = any(row.kind == "choice" for row in rows)
+        subtitle = (
+            "Enter selects. A missing file asks before it downloads. Esc goes up."
+            if choosing
+            else "Enter opens a folder or changes the value. Esc goes up."
+        )
         picked = choose(
             title,
             [row.label() for row in rows],
             stdin,
             stdout,
-            subtitle="Enter opens a folder or changes the value. Esc goes up.",
+            subtitle=subtitle,
             detail=True,
+            start_at=_list_cursor(settings, path, rows),
         )
         if picked is None:
             stack.pop()
             continue
         row = rows[picked]
-        if row.kind == "dir":
+        if row.kind in {"dir", "pick"}:
             stack.append(f"{path}/{row.name}")
             continue
         if row.kind == "note":
@@ -375,16 +444,31 @@ def browse_settings(
         nxt = _changed(settings, row, typed)
         if nxt is None:
             continue
-        if row.field in {"stt_model", "rewrite_model"} and install is not None:
-            entry = _catalog_entry(row.field, str(getattr(nxt, row.field) or ""))
-            if entry is not None:
-                dest = Path(paths.models_dir) / entry.filename
-                if not dest.is_file():
-                    try:
-                        install(paths, entry, stdout)
-                    except (OSError, ValueError) as exc:
-                        stdout.write(f"  could not install {entry.filename}: {exc}\n")
-                        stdout.flush()
-                        continue
+        if row.kind == "choice":
+            missing = _missing_catalog(paths, row)
+            if missing is not None:
+                if install is None:
+                    stdout.write(f"  {missing.filename} is not on disk\n")
+                    stdout.flush()
+                    continue
+                answer = choose(
+                    _short_title(missing.title),
+                    [f"Download ({missing.size_hint})", "Back"],
+                    stdin,
+                    stdout,
+                    subtitle="Nothing downloads until you confirm.",
+                )
+                if answer != 0:
+                    continue
+                try:
+                    install(paths, missing, stdout)
+                except (OSError, ValueError) as exc:
+                    stdout.write(f"  could not install {missing.filename}: {exc}\n")
+                    stdout.flush()
+                    continue
+            settings = nxt
+            save_settings(paths, settings)
+            stack.pop()
+            continue
         settings = nxt
         save_settings(paths, settings)
