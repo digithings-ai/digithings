@@ -37,6 +37,42 @@ describe("official API reads", () => {
     if (!stub.ok) expect(stub.reason).toContain("stub");
   });
 
+  it("shows a finalized tip when an older point is legacy_estimate and withholds the stub fixture", () => {
+    const house = {
+      data: {
+        tip: { date: "2026-10-01", contract: "finalized_accounting" },
+        points: [
+          { date: "2026-06-01", nav: 110.2, contract: "legacy_estimate" },
+          { date: "2026-10-01", nav: 118.75, contract: "finalized_accounting" },
+        ],
+      },
+      provenance: { source: "public_accounting_nav_history", contract: "finalized_accounting" },
+    };
+    expect(isStubPayload(house)).toBe(false);
+    expect(classifyOfficialRead(200, house).ok).toBe(true);
+    expect(isStubPayload({ data: { contract: "legacy_estimate" } })).toBe(false);
+
+    const stubTip = {
+      data: {
+        tip: { date: "2026-09-24", contract: "legacy_estimate" },
+        points: [{ date: "2026-09-24", nav: 99.909, contract: "legacy_estimate" }],
+      },
+      provenance: { contract: "legacy_estimate" },
+    };
+    const withheld = classifyOfficialRead(200, stubTip);
+    expect(withheld.ok).toBe(false);
+    if (!withheld.ok) expect(withheld.reason).toContain("stub");
+
+    const stubSeries = {
+      data: {
+        tip: { date: "2026-08-28", contract: "finalized_accounting" },
+        points: [{ date: "2026-08-28", nav: 204.04, contract: "finalized_accounting" }],
+      },
+    };
+    expect(isStubPayload(stubSeries)).toBe(true);
+    expect(classifyOfficialRead(200, stubSeries).ok).toBe(false);
+  });
+
   it("treats 502 withheld envelopes as empty", () => {
     const read = classifyOfficialRead(502, WITHHELD);
     expect(read.ok).toBe(false);
