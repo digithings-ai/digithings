@@ -19,7 +19,7 @@ import {
   type DeskPhase,
 } from "./desk-walk";
 
-/** The product frame: the dashboard app, same-origin in dev so a walkthrough can click its sidebar.
+/** The product frame: the terminal, same-origin in dev so a walkthrough can click its sidebar.
  *  A trusted pointer, wheel, or key inside the frame stops the walk. Take control does too. */
 export function EmbeddedDesk() {
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -180,7 +180,7 @@ export function EmbeddedDesk() {
       onKeyDown={yieldFromShell}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hair px-2 py-1 text-[0.62rem] text-ink-mute">
-        <span>digiquant · dashboard</span>
+        <span>digiquant · terminal</span>
         <span className="flex flex-wrap items-center gap-2">
           <span aria-live="polite">{deskStatus(phase)}</span>
           {phase === "opening" || phase === "walking" ? (
@@ -195,7 +195,7 @@ export function EmbeddedDesk() {
       ) : null}
       <iframe
         ref={frameRef}
-        title="digiquant dashboard"
+        title="digiquant terminal"
         src={DESK_EMBED_SRC}
         loading="eager"
         hidden={phase === "empty"}

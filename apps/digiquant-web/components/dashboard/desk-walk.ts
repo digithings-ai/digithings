@@ -1,7 +1,7 @@
-/** Walkthrough policy for the embedded digiquant dashboard.
+/** Walkthrough policy for the embedded digiquant terminal.
  *  Clicks are real sidebar anchors. A trusted pointer, wheel, or key yields. */
 
-export const DESK_EMBED_SRC = "/dashboard/";
+export const DESK_EMBED_SRC = "/app";
 
 export const WALK_STOPS = ["Brief", "Portfolio", "Pipeline"] as const;
 
@@ -18,28 +18,22 @@ export const CLICK_FALLBACK_MS = 900;
 export const DESK_YIELD_LABEL = "Take control";
 
 export const DESK_EMPTY_COPY =
-  "The dashboard did not load. This frame stays empty. No figures are filled in.";
+  "The terminal did not load. This frame stays empty. No figures are filled in.";
 
 const YIELD_TYPES = new Set(["pointerdown", "wheel", "keydown"]);
-
-const STOP_PATHS: Record<WalkStop, readonly string[]> = {
-  Brief: ["/dashboard", "/dashboard/"],
-  Portfolio: ["/dashboard/portfolio", "/dashboard/portfolio/"],
-  Pipeline: ["/dashboard/pipeline", "/dashboard/pipeline/"],
-};
 
 export function deskStatus(phase: DeskPhase): string {
   switch (phase) {
     case "opening":
-      return "Opening the dashboard.";
+      return "Opening the terminal.";
     case "walking":
       return "Walking Brief, Portfolio, and Pipeline.";
     case "yours":
-      return "You have the dashboard.";
+      return "You have the terminal.";
     case "live":
-      return "The dashboard is in this frame. The walkthrough stays off because this frame is not same-origin.";
+      return "The terminal is in this frame. The walkthrough stays off because this frame is not same-origin.";
     case "empty":
-      return "The dashboard did not load.";
+      return "The terminal did not load.";
     default: {
       const never: never = phase;
       return never;
@@ -65,16 +59,25 @@ export function bindYieldListeners(target: EventTarget, onYield: () => void): ()
   };
 }
 
-/** Sidebar anchor for one stop. Href must be the dashboard route, so the landing nav's Pipeline link does not match. */
+function routePath(href: string): string {
+  return href.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+}
+
+/** True when this href is that terminal stop. /app alone is Brief, after the root redirect. */
+export function pathMatchesStop(href: string, stop: WalkStop): boolean {
+  const path = routePath(href);
+  if (stop === "Pipeline") return path === "/app/pipeline" || path.startsWith("/app/pipeline/");
+  if (stop === "Portfolio") return path === "/app/portfolio" || path.startsWith("/app/portfolio/");
+  return path === "/app" || path === "/app/brief" || path.startsWith("/app/brief/");
+}
+
+/** Sidebar anchor for one stop. Href must be the terminal route, so the landing nav's Pipeline link does not match. */
 export function navAnchor(doc: Document, stop: WalkStop): HTMLAnchorElement | null {
-  const nav = doc.querySelector('nav[aria-label="Primary"]');
+  const nav = doc.querySelector('nav[aria-label="Pages"]');
   if (!nav) return null;
-  const want = new Set(STOP_PATHS[stop]);
   for (const node of nav.querySelectorAll("a")) {
-    const href = (node.getAttribute("href") ?? "").replace(/[?#].*$/, "");
-    if (anchorLabel(node.textContent) === stop && want.has(href)) {
-      return node as HTMLAnchorElement;
-    }
+    const href = node.getAttribute("href") ?? "";
+    if (pathMatchesStop(href, stop)) return node as HTMLAnchorElement;
   }
   return null;
 }
@@ -84,10 +87,9 @@ export function dashboardReady(doc: Document): boolean {
 }
 
 export function stopFromPath(pathname: string): WalkStop | null {
-  const path = pathname.replace(/\/+$/, "") || "/";
-  if (path === "/dashboard/pipeline" || path.startsWith("/dashboard/pipeline/")) return "Pipeline";
-  if (path === "/dashboard/portfolio" || path.startsWith("/dashboard/portfolio/")) return "Portfolio";
-  if (path === "/dashboard") return "Brief";
+  if (pathMatchesStop(pathname, "Pipeline")) return "Pipeline";
+  if (pathMatchesStop(pathname, "Portfolio")) return "Portfolio";
+  if (pathMatchesStop(pathname, "Brief")) return "Brief";
   return null;
 }
 
@@ -141,7 +143,7 @@ export function probeEmbed(frame: { contentDocument: Document | null }): EmbedPr
   return { kind: "scriptable", href };
 }
 
-/** Same-origin document that is a 404 or a dead proxy, and not the dashboard shell. */
+/** Same-origin document that is a 404 or a dead proxy, and not the terminal shell. */
 export function embedLooksDown(doc: Document): boolean {
   if (dashboardReady(doc)) return false;
   const title = doc.title ?? "";
