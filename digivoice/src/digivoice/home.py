@@ -22,7 +22,7 @@ from digivoice.doctor import doctor_checks
 from digivoice.history import read_history
 from digivoice.menu_tree import browse_settings
 from digivoice.nav import QuitRequested, norm_path, section_of
-from digivoice.panels import _UPDATE, browse_history, browse_system, present_doctor
+from digivoice.panels import _UPDATE, browse_history, browse_system, present_doctor, present_logs
 from digivoice.paste import copy_to_clipboard
 from digivoice.paths import resolve_paths
 from digivoice.reload import LaunchReport, ensure_home_control, run_reload, stop_home_control
@@ -299,6 +299,9 @@ def run_home(
         if kind == "update":
             stdout.write(_UPDATE + "\n")
             stdout.flush()
+            return
+        if kind == "logs":
+            present_logs(paths, stdin, stdout)
             return
         if kind == "history-copy":
             reading = read_history(paths.history_file)

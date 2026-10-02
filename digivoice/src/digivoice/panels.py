@@ -2,7 +2,7 @@
 
 Doctor walks each check with the status word on the left and a short line.
 History is one page at a time: open a take to read it, then copy or delete.
-System holds doctor, reload, reset, restart, and update.
+System holds doctor, reload, reset, restart, update, and logs.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from digivoice.probe import CommandProbe
 from digivoice.reload import run_reload
 from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import default_settings, save_settings
+from digivoice.status import read_system_log, system_log_path
 from digivoice.tui import (
     _ANSI_RESET,
     MenuBlock,
@@ -49,6 +50,7 @@ SYSTEM_BLOCKS: tuple[MenuBlock, ...] = (
     MenuBlock(action="Reset", path="/reset"),
     MenuBlock(action="Restart", path="/restart"),
     MenuBlock(action="Update", path="/update"),
+    MenuBlock(action="Logs", path="/system/logs"),
 )
 SYSTEM_MENU = tuple(block.action for block in SYSTEM_BLOCKS)
 
@@ -58,6 +60,14 @@ _TAKE_BLOCKS: tuple[MenuBlock, ...] = (
     MenuBlock(action="Back", shortcut="esc", path="/history"),
 )
 _TAKE_KEYS = {"c": 0, "C": 0, "d": 1, "D": 1, "copy": 0}
+_SYSTEM_KIND = {
+    "doctor": 0,
+    "reload": 1,
+    "reset": 2,
+    "restart": 3,
+    "update": 4,
+    "logs": 5,
+}
 
 # Short lines for the doctor screen. The CLI report still prints full paths.
 _SUMMARY: dict[tuple[str, str], str] = {
@@ -380,6 +390,22 @@ def browse_history(
             return
 
 
+def present_logs(
+    paths: VoicePaths,
+    stdin: TextIO | None = None,
+    stdout: TextIO | None = None,
+) -> None:
+    """Show the whole system log inside the menu. A missing file stays on the page."""
+    stdin = stdin or sys.stdin
+    stdout = stdout or sys.stdout
+    lines = [line for line in read_system_log(system_log_path(paths)).splitlines() if line.strip()]
+    if lines:
+        blocks = tuple(MenuBlock(action=line, path="/system/logs") for line in lines)
+    else:
+        blocks = (MenuBlock(action="No log yet", path="/system/logs"),)
+    choose("Logs", stdin=stdin, stdout=stdout, subtitle="/system/logs", blocks=blocks)
+
+
 def restart_digivoice() -> None:
     """Replace this process with a fresh digivoice. Does not return."""
     os.execv(sys.executable, [sys.executable, *sys.argv])
@@ -398,7 +424,7 @@ def browse_system(
     doctor: Callable[[], None] | None = None,
     on_path: Callable[[str], None] | None = None,
 ) -> None:
-    """Doctor, reload, reset, restart, and update. Esc returns to home."""
+    """Doctor, reload, reset, restart, update, and logs. Esc returns to home."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     while True:
@@ -416,13 +442,7 @@ def browse_system(
                 on_path(picked)
                 return
             kind = section_of(picked)
-            picked = {
-                "doctor": 0,
-                "reload": 1,
-                "reset": 2,
-                "restart": 3,
-                "update": 4,
-            }.get(kind)
+            picked = _SYSTEM_KIND.get(kind)
             if picked is None:
                 return
         if picked == 0:
@@ -468,3 +488,5 @@ def browse_system(
         elif picked == 4:
             stdout.write(_UPDATE + "\n")
             stdout.flush()
+        elif picked == 5:
+            present_logs(paths, stdin, stdout)

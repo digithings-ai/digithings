@@ -11,6 +11,7 @@ from digivoice.models import DoctorCheck
 from digivoice.panels import browse_history, browse_system, present_doctor
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, load_settings, save_settings
+from digivoice.status import StatusReporter, system_log_path
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
 
@@ -148,6 +149,53 @@ def test_system_reset_restores_defaults(tmp_path: Path) -> None:
     assert saved.paste_on_stop is True
     assert saved.stt_model == "ggml-base.en"
     assert "settings reset" in out.getvalue()
+
+
+def test_system_logs_shows_the_whole_file(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    system_log_path(paths).write_text(
+        "1000 error whisper failed\n1001 empty nothing heard\n",
+        encoding="utf-8",
+    )
+    out = io.StringIO()
+    browse_system(
+        paths,
+        "linux",
+        tmp_path,
+        {"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        io.StringIO("6\n\n"),
+        out,
+    )
+    text = out.getvalue()
+    assert "whisper failed" in text
+    assert "nothing heard" in text
+    assert "/system/logs" in text
+
+
+def test_system_logs_empty_stays_on_the_page(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    out = io.StringIO()
+    browse_system(
+        paths,
+        "linux",
+        tmp_path,
+        {"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        io.StringIO("6\n\n"),
+        out,
+    )
+    assert "No log yet" in out.getvalue()
+    assert "/system/logs" in out.getvalue()
+
+
+def test_error_status_appends_a_system_log_line(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    StatusReporter(paths.data_dir + "/status.json", "dict", clock_ms=lambda: 1000).update(
+        "error", detail="boom"
+    )
+    StatusReporter(paths.data_dir + "/status.json", "dict", clock_ms=lambda: 1001).update(
+        "recording", text="still talking"
+    )
+    assert system_log_path(paths).read_text(encoding="utf-8") == "1000 error boom\n"
 
 
 def test_system_update_stays_a_hint(tmp_path: Path) -> None:

@@ -23,6 +23,7 @@ from digivoice.panels import (
     browse_history,
     browse_system,
     present_doctor,
+    present_logs,
     restart_digivoice,
 )
 from digivoice.paste import copy_to_clipboard, paste
@@ -51,8 +52,10 @@ from digivoice.status import (
     default_cancel_file,
     read_banner_flag,
     read_status,
+    read_system_log,
     request_cancel,
     status_path,
+    system_log_path,
     write_banner_flag,
 )
 from digivoice.transcribe import transcribe
@@ -226,7 +229,7 @@ def build_parser() -> _Parser:
     sub.add_parser("quit", help="Stop digivoice and quit Hammerspoon")
     sub.add_parser("reset", help="Restore settings defaults; history and models stay")
     sub.add_parser("restart", help="Quit Hammerspoon and open digivoice again")
-    sub.add_parser("system", help="Doctor, reload, reset, restart, and update")
+    sub.add_parser("system", help="Doctor, reload, reset, restart, update, and logs")
     reload_cmd = sub.add_parser(
         "reload",
         help="Refresh local control: CLI path, settings, Lua adapter, Hammerspoon",
@@ -863,6 +866,21 @@ def _settings_at(runtime: Runtime, path: str) -> CliResult:
     return CliResult(code=0, stdout=f"{shown}\n", stderr="")
 
 
+def _logs(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    if sys.stdin.isatty():
+        fullscreen_enter(sys.stdout)
+        try:
+            present_logs(paths, sys.stdin, sys.stdout)
+        finally:
+            fullscreen_leave(sys.stdout)
+        return CliResult(code=0, stdout="", stderr="")
+    text = read_system_log(system_log_path(paths)).strip()
+    if not text:
+        text = "No log yet"
+    return CliResult(code=0, stdout=text + "\n", stderr="")
+
+
 def _dispatch_path(raw: str, runtime: Runtime) -> CliResult:
     path = norm_path(raw)
     kind = section_of(path)
@@ -889,6 +907,8 @@ def _dispatch_path(raw: str, runtime: Runtime) -> CliResult:
         return _restart(runtime)
     if kind == "update":
         return _update()
+    if kind == "logs":
+        return _logs(runtime)
     if kind == "history-delete":
         return CliResult(
             code=2,

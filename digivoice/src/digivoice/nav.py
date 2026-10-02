@@ -23,6 +23,8 @@ _EXACT: dict[str, str] = {
     "/system/restart": "restart",
     "/update": "update",
     "/system/update": "update",
+    "/logs": "logs",
+    "/system/logs": "logs",
 }
 
 
