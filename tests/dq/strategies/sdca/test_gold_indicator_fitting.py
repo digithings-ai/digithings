@@ -1,27 +1,47 @@
 """Gold per-indicator z-window fitting harness — metric + grid completeness (#4804).
 
-Plan-19 Task 1. The harness fits every WIRED gold indicator's shipped z-function
-over a FROZEN parameter grid and scores it with the pre-registered in-sample
-metric ``separation = mean(z | peak windows) - mean(z | trough windows)``
-against the pinned ``SdcaCycleWindows.gold_v1()`` pins.
+Plan-19 Task 1 (amended by Plan-19 **Ruling 1**). The harness fits every WIRED
+gold indicator's shipped z-function over a FROZEN parameter grid and scores it
+with the in-sample metric
 
-Two contracts are pinned here:
+    ``separation = mean(z | trough windows) - mean(z | peak windows)``
 
-1. **The metric is exact and sign-aware.** ``separation`` on a synthetic z whose
-   peak/trough means are known comes back as the exact difference; positive
-   means the z runs HIGHER in the pinned peak windows (the plan's reading of
-   "rich at tops"). ``None`` z is skipped, never zero-filled, and a one-sided
-   calendar (peak days but no trough days — the hy_oas/ig_oas case, whose staged
-   CSVs start 2023-09-30 while the last trough window ends 2022-12-05) yields
+against the pinned ``SdcaCycleWindows.gold_v1()`` pins. **Positive = the z votes
+CHEAP at bottoms**, which is the convention every shipped z already uses
+(``composite_risk.py:57`` maps ``+z`` to ``buy``, and the shipped Stage-A
+objective is algebraically ``+(50/3) * separation``). ``abs()`` is FORBIDDEN on
+this metric: it would reward a leg that votes backwards.
+
+Three contracts are pinned here:
+
+1. **The metric is exact, signed, and never absolute.** ``separation`` on a
+   synthetic z whose peak/trough means are known comes back as the exact
+   difference, and a MIRRORED z comes back at exactly the negated separation.
+   ``None`` z is skipped, never zero-filled, and a one-sided calendar (peak days
+   but no trough days — the hy_oas/ig_oas case, whose staged CSVs start
+   2023-09-30 while the last trough window ends 2022-12-05) yields
    ``separation=None`` plus a REASON, never a silent zero and never a raise.
 
-2. **The grid is complete and dispatch-only.** Every wired indicator named by
+2. **The shares come from the RAW z, per side.** ``peak_negative_share`` and
+   ``trough_positive_share`` are counted off the raw vectors, so a dead-zone
+   oscillator that sits at exactly ``0.0`` reads ``0.0`` on the dead side — the
+   old single ``sign_share`` aggregate was NOT recoverable as ``1 - x`` (a
+   dead-zone leg would read a perfect ``1.0`` for a vote it never cast).
+   ``zero_z_share`` records how much of the scored window sits exactly at zero.
+
+3. **The grid is complete and dispatch-only.** Every wired indicator named by
    the plan has a non-empty grid of the frozen shape, every grid row's params
    are accepted by the SHIPPED signature, and ``build_z`` returns exactly what
    the shipped z-function returns (call-with-a-param, never reimplement math).
 
-Not vacuous: the one-sided case fails the scoring tests, and the dispatch test
-compares against the shipped function's own output rather than a restated copy.
+Plus the DEGENERATE-PASS gate: a row whose pass rests on a side whose mean never
+leaves the ±0.06 dead zone is flagged ``degenerate``; an indicator whose every
+scored row is degenerate AND whose best separation is strictly positive is a
+``degenerate_pass`` — listed separately, never a keep without an owner look.
+
+Not vacuous: the one-sided case fails the scoring tests, the abs-guard fails on
+any ``abs()`` of the metric, and the dispatch test compares against the shipped
+function's own output rather than a restated copy.
 """
 
 from __future__ import annotations
@@ -119,42 +139,165 @@ def _two_level_z(
     return z
 
 
+def _dead_zone_z(
+    dates: list[date],
+    windows: SdcaCycleWindows,
+    *,
+    peak: float,
+) -> list[float | None]:
+    """The dead-zone oscillator shape: real z at the tops, EXACTLY 0.0 at the troughs.
+
+    This is the shape that made ``1 - sign_share`` invalid: the dead side never
+    votes, so an aggregate read would report a perfect agreement it never cast.
+    """
+    z: list[float | None] = []
+    for day in dates:
+        kind = windows.kind_on(day)
+        z.append(peak if kind is CycleKind.PEAK else 0.0 if kind is CycleKind.TROUGH else 0.0)
+    return z
+
+
+def _mirror(z: list[float | None]) -> list[float | None]:
+    return [None if v is None else -v for v in z]
+
+
 # --------------------------------------------------------------------------- #
-# 1. The frozen metric
+# 1. The frozen metric (Ruling 1: trough - peak, cheap-at-bottoms positive)
 # --------------------------------------------------------------------------- #
 
 
 def test_separation_is_exact_on_a_synthetic_z() -> None:
-    """Known peak/trough means -> the exact difference (2.0 - (-1.0) = 3.0)."""
+    """Known peak/trough means -> the exact difference (1.0 - (-2.0) = +3.0)."""
     fitter = _load_fitter()
     dates, windows = _calendar(), _windows()
     scored = _window_days(windows, dates)
 
-    score = fitter.separation(dates, _two_level_z(dates, windows, peak=2.0, trough=-1.0), windows)
+    score = fitter.separation(dates, _two_level_z(dates, windows, peak=-2.0, trough=1.0), windows)
 
     assert score.separation == pytest.approx(3.0)
-    assert score.mean_peak_z == pytest.approx(2.0)
-    assert score.mean_trough_z == pytest.approx(-1.0)
+    assert score.mean_peak_z == pytest.approx(-2.0)
+    assert score.mean_trough_z == pytest.approx(1.0)
     assert score.peak_days == len(scored[CycleKind.PEAK])
     assert score.trough_days == len(scored[CycleKind.TROUGH])
     assert score.scored_days == len(scored[CycleKind.PEAK]) + len(scored[CycleKind.TROUGH])
     assert score.coverage == pytest.approx(1.0)
-    assert score.sign_share == pytest.approx(1.0)
+    # Raw-z shares: every peak day is below zero, every trough day above.
+    assert score.peak_negative_share == pytest.approx(1.0)
+    assert score.trough_positive_share == pytest.approx(1.0)
+    assert score.zero_z_share == pytest.approx(0.0)
+    assert score.degenerate is False
     assert score.reason is None
 
 
-def test_separation_sign_convention_positive_is_high_at_tops() -> None:
-    """Positive separation = z runs higher in peak windows; the mirror is negative."""
+def test_separation_sign_convention_positive_is_cheap_at_bottoms() -> None:
+    """Ruling 1: +separation = cheap at bottoms; rich-at-tops scores negative."""
     fitter = _load_fitter()
     dates, windows = _calendar(), _windows()
 
-    rich = fitter.separation(dates, _two_level_z(dates, windows, peak=2.0, trough=-1.0), windows)
     cheap = fitter.separation(dates, _two_level_z(dates, windows, peak=-1.0, trough=2.0), windows)
+    rich = fitter.separation(dates, _two_level_z(dates, windows, peak=2.0, trough=-1.0), windows)
 
-    assert rich.separation == pytest.approx(3.0)
-    assert rich.sign_share == pytest.approx(1.0)
-    assert cheap.separation == pytest.approx(-3.0)
-    assert cheap.sign_share == pytest.approx(0.0)
+    assert cheap.separation == pytest.approx(3.0)
+    assert cheap.peak_negative_share == pytest.approx(1.0)
+    assert cheap.trough_positive_share == pytest.approx(1.0)
+    assert rich.separation == pytest.approx(-3.0)
+    assert rich.peak_negative_share == pytest.approx(0.0)
+    assert rich.trough_positive_share == pytest.approx(0.0)
+
+
+def test_separation_never_absorbs_the_sign() -> None:
+    """The abs() guard: a mirrored z scores the exact NEGATION, never |separation|."""
+    fitter = _load_fitter()
+    dates, windows = _calendar(), _windows()
+    cheap = _two_level_z(dates, windows, peak=-1.0, trough=2.0)
+
+    good = fitter.separation(dates, cheap, windows)
+    anti = fitter.separation(dates, _mirror(cheap), windows)
+
+    assert good.separation == pytest.approx(3.0)
+    assert anti.separation == pytest.approx(-3.0)
+    assert anti.separation == pytest.approx(-float(good.separation))
+    # A loud anti-correlated leg is NOT rescued by its magnitude.
+    strong = fitter.separation(dates, _two_level_z(dates, windows, peak=5.0, trough=-5.0), windows)
+    assert strong.separation < 0.0
+    assert abs(strong.separation) == pytest.approx(10.0)
+    # ...and the mirror of it is the only positive reading of the same magnitude.
+    assert fitter.separation(
+        dates, _mirror(_two_level_z(dates, windows, peak=5.0, trough=-5.0)), windows
+    ).separation == pytest.approx(10.0)
+
+
+def test_sign_shares_come_from_raw_z_not_one_minus_the_aggregate() -> None:
+    """A dead side reads 0.0 on BOTH shares; ``1 - x`` would have read a perfect 1.0."""
+    fitter = _load_fitter()
+    dates, windows = _calendar(), _windows()
+    scored = _window_days(windows, dates)
+
+    score = fitter.separation(dates, _dead_zone_z(dates, windows, peak=1.5), windows)
+
+    assert score.separation == pytest.approx(-1.5)
+    assert score.mean_trough_z == pytest.approx(0.0)
+    assert score.peak_negative_share == pytest.approx(0.0)
+    assert score.trough_positive_share == pytest.approx(0.0)
+    assert score.zero_z_share == pytest.approx(
+        len(scored[CycleKind.TROUGH])
+        / (len(scored[CycleKind.PEAK]) + len(scored[CycleKind.TROUGH]))
+    )
+    # One side never leaves the dead zone -> the pass rests on the other side alone.
+    assert score.degenerate is True
+
+
+def test_degenerate_row_flags_a_dead_side_pass_and_only_that() -> None:
+    """One side inside ±0.06 -> degenerate; both sides outside it -> not."""
+    fitter = _load_fitter()
+    dates, windows = _calendar(), _windows()
+
+    dead = fitter.separation(dates, _dead_zone_z(dates, windows, peak=-1.5), windows)
+    live = fitter.separation(dates, _two_level_z(dates, windows, peak=-1.5, trough=0.6), windows)
+
+    # cheap at the bottoms, dead zone at the tops: a one-sided pass.
+    assert dead.separation == pytest.approx(1.5)
+    assert dead.degenerate is True
+    # both sides carry a real opinion -> not degenerate, whatever the threshold.
+    assert live.separation == pytest.approx(2.1)
+    assert live.degenerate is False
+    # The threshold is inclusive at 0.06 and exclusive just past it.
+    assert fitter.row_is_degenerate(separation=0.6, mean_peak_z=-0.06, mean_trough_z=2.0) is True
+    assert fitter.row_is_degenerate(separation=0.6, mean_peak_z=-0.0601, mean_trough_z=2.0) is False
+    # An unscored row has no pass to rest on -> never degenerate.
+    assert fitter.row_is_degenerate(separation=None, mean_peak_z=None, mean_trough_z=None) is False
+    assert fitter.row_is_degenerate(separation=0.6, mean_peak_z=None, mean_trough_z=0.0) is False
+
+
+def test_degenerate_verdict_lists_a_positive_dead_zone_pass_separately() -> None:
+    """DEGENERATE-PASS = every scored row dead-side AND best separation strictly > 0."""
+    fitter = _load_fitter()
+
+    dead_pass = [
+        _row(fitter, window_days=105, separation=0.44, mean_peak_z=-0.44, mean_trough_z=0.0),
+        _row(fitter, window_days=154, separation=0.14, mean_peak_z=-0.14, mean_trough_z=0.0),
+    ]
+    assert fitter.degenerate_verdict(dead_pass) == (True, True)
+
+    # Degenerate but not a pass: every row dead-side, best separation exactly 0.0.
+    flat = [_row(fitter, window_days=90, separation=0.0, mean_peak_z=0.0, mean_trough_z=0.0)]
+    assert fitter.degenerate_verdict(flat) == (True, False)
+
+    # Degenerate but not a pass: dead-side rows whose best separation is negative.
+    losing = [_row(fitter, window_days=90, separation=-0.02, mean_peak_z=-0.02, mean_trough_z=0.05)]
+    assert fitter.degenerate_verdict(losing) == (True, False)
+
+    # One live row anywhere in the grid clears the indicator-level flag.
+    mixed = dead_pass + [
+        _row(fitter, window_days=378, separation=-3.1, mean_peak_z=-1.96, mean_trough_z=1.15)
+    ]
+    assert fitter.degenerate_verdict(mixed) == (False, False)
+
+    # Nothing scored (hy_oas / ig_oas) -> no flag at all, never a fake degenerate.
+    assert fitter.degenerate_verdict([]) == (False, False)
+    assert fitter.degenerate_verdict(
+        [_row(fitter, window_days=90, separation=None, mean_peak_z=None, mean_trough_z=None)]
+    ) == (False, False)
 
 
 def test_separation_ignores_null_z_and_reports_coverage() -> None:
@@ -163,7 +306,7 @@ def test_separation_ignores_null_z_and_reports_coverage() -> None:
     dates, windows = _calendar(), _windows()
     scored = _window_days(windows, dates)
     peak_kept = scored[CycleKind.PEAK][::2]
-    z = _two_level_z(dates, windows, peak=2.0, trough=-1.0)
+    z = _two_level_z(dates, windows, peak=-2.0, trough=1.0)
     for i in peak_kept:
         z[i] = None
 
@@ -188,6 +331,10 @@ def test_separation_without_any_valid_z_is_none_with_a_reason() -> None:
     assert score.reason is not None and "valid z" in score.reason
     assert score.scored_days == 0
     assert score.coverage == 0.0
+    assert score.degenerate is False
+    assert score.peak_negative_share is None
+    assert score.trough_positive_share is None
+    assert score.zero_z_share is None
 
 
 def test_one_sided_calendar_is_empty_with_a_reason_not_a_silent_skip() -> None:
@@ -209,6 +356,7 @@ def test_one_sided_calendar_is_empty_with_a_reason_not_a_silent_skip() -> None:
     assert score.trough_days == 0
     assert score.separation is None
     assert score.reason is not None and "trough" in score.reason
+    assert score.degenerate is False
 
 
 def test_separation_rejects_misaligned_lengths() -> None:
@@ -491,6 +639,39 @@ def test_fit_indicator_scores_every_grid_row_and_picks_the_best() -> None:
     )
     assert fits.best_medium is not None and fits.best_medium.window_days <= 378
     assert fits.best_long is not None and fits.best_long.window_days >= 504
+    # nfci carries a real opinion on both sides here -> never flagged degenerate.
+    assert fits.degenerate is False
+    assert fits.degenerate_pass is False
+    # the stored row flag is exactly the derivation from the row's own means
+    for row in fits.rows:
+        assert row.degenerate == fitter.row_is_degenerate(
+            separation=row.separation,
+            mean_peak_z=row.mean_peak_z,
+            mean_trough_z=row.mean_trough_z,
+        )
+        assert fitter.degenerate_verdict(fits.rows) == (fits.degenerate, fits.degenerate_pass)
+
+
+def test_fit_indicator_flags_the_dead_zone_oscillator_but_never_a_zero_pass() -> None:
+    """The log-MACD dead band sits at z == 0 on the synthetic calendar.
+
+    Every scored row is degenerate, yet the best separation is exactly 0.0 — so
+    it is a DEGENERATE indicator and NOT a degenerate PASS (strict ``> 0``).
+    """
+    fitter = _load_fitter()
+    dates, date_s, price_s, sources = _dispatch_inputs()
+
+    fits = fitter.fit_indicator("weekly_macd", dates, date_s, price_s, sources, _dispatch_windows())
+
+    assert fits.status == "scored"
+    assert fits.degenerate is True
+    assert fits.degenerate_pass is False
+    assert all(row.degenerate for row in fits.rows)
+    assert fits.best_overall is not None
+    assert fits.best_overall.separation == pytest.approx(0.0)
+    # the raw-z shares are what expose it: the dead side casts no vote at all
+    assert fits.best_overall.zero_z_share is not None
+    assert fits.best_overall.zero_z_share > 0.5
 
 
 def test_fit_indicator_on_a_late_source_reports_empty_with_a_reason() -> None:
@@ -513,21 +694,48 @@ def test_fit_indicator_on_a_late_source_reports_empty_with_a_reason() -> None:
     assert fits.best_overall is None
     assert fits.best_medium is None
     assert fits.best_long is None
+    # nothing scored -> nothing to call degenerate (never a fake flag).
+    assert fits.degenerate is False
+    assert fits.degenerate_pass is False
 
 
-def _row(fitter: Any, *, window_days: int, separation: float | None) -> Any:
+def _row(
+    fitter: Any,
+    *,
+    window_days: int,
+    separation: float | None,
+    mean_peak_z: float | None = None,
+    mean_trough_z: float | None = None,
+) -> Any:
+    """A hand-built GridRow for the pure selection/degenerate helpers.
+
+    ``mean_*`` default to the row's own separation / 0.0 so the older
+    tie-break callers keep reading naturally; pass them explicitly whenever the
+    dead-zone side matters.
+    """
+    if separation is not None and mean_peak_z is None:
+        mean_peak_z = separation
     return fitter.GridRow(
         params={"window": window_days},
         window_days=window_days,
         separation=separation,
-        mean_peak_z=separation,
-        mean_trough_z=0.0,
-        sign_share=1.0 if (separation or 0.0) > 0 else 0.0,
+        mean_peak_z=mean_peak_z,
+        mean_trough_z=mean_trough_z,
+        peak_negative_share=1.0 if (separation or 0.0) > 0 else 0.0,
+        trough_positive_share=1.0 if (separation or 0.0) > 0 else 0.0,
+        zero_z_share=0.0,
         coverage=1.0,
         z_coverage=1.0,
         peak_days=45,
         trough_days=45,
         scored_days=90,
+        degenerate=(
+            False
+            if separation is None
+            else fitter.row_is_degenerate(
+                separation=separation, mean_peak_z=mean_peak_z, mean_trough_z=mean_trough_z
+            )
+        ),
         reason=None,
     )
 

@@ -6,12 +6,29 @@ function in ``indicator_catalog`` / ``price_oscillators``, called with a
 parameter. This harness never restates indicator math — it only sweeps the
 frozen grids and scores them.
 
-**Frozen fit metric (pre-registered in the plan header):**
-``separation = mean(z | peak windows) - mean(z | trough windows)``; higher is
-better (positive = the indicator's z runs higher in the pinned peak windows,
-the plan's reading of "rich at tops"). Every bar with a valid z is IN-SAMPLE:
-this fits windows to the pinned ``SdcaCycleWindows.gold_v1()`` history, it does
-not measure out-of-sample skill. The holdout stays spent and untouched.
+**Frozen fit metric (Plan-19 Ruling 1 — the pre-registration sign was a
+CORRECTNESS BUG, corrected here):**
+``separation = mean(z | trough windows) - mean(z | peak windows)``; higher is
+better, and **positive = the z votes CHEAP at bottoms**. That is the convention
+every shipped z already uses: ``composite_risk.py:57`` maps ``risk =
+50 - composite_z*50/3`` so ``+z`` = buy = cheap, and the shipped Stage-A
+objective ``stage_a.py:88-99`` (``mean_risk(peaks) - mean_risk(troughs)``) is
+algebraically ``+(50/3) * separation``. ``abs()`` is FORBIDDEN anywhere on this
+metric: it would reward a leg that votes backwards. Every bar with a valid z is
+IN-SAMPLE: this fits windows to the pinned ``SdcaCycleWindows.gold_v1()``
+history, it does not measure out-of-sample skill. The holdout stays spent and
+untouched.
+
+**Shares and the degenerate gate (Ruling 1):** the two shares
+(``peak_negative_share``, ``trough_positive_share``) are counted off the RAW z
+vectors, per side. The old single ``sign_share`` aggregate is not recoverable
+from them as ``1 - x`` — a dead-zone oscillator sits at exactly ``0.0``, which
+would read as perfect agreement it never cast — so ``zero_z_share`` is recorded
+beside them. A row is ``degenerate`` when ONE side's window mean never leaves
+the ±``DEGENERATE_MEAN_ABS`` dead zone (its pass then rests on the other side
+alone); an indicator whose every scored row is degenerate AND whose best
+separation is strictly positive is a ``degenerate_pass`` — listed separately,
+never in a keep list without an explicit owner look.
 
 **Frozen grids (plan header):**
 
@@ -48,10 +65,11 @@ before writing this file — the plan's named oscillator sets were guesses):
   RSI is the spec's own documented calendar footprint
   ``(rsi_length + 1) * 7`` days (``documented_warmup_calendar_days``), and for
   every other leg is the z ``window`` itself.
-* Tie-break: higher ``separation`` first, then the SHORTER window (parsimony).
-  Medium read = best row with ``window_days`` ≤ 378; long read = best row with
-  ``window_days`` ≥ 504. Both are reported per indicator; a band with no row is
-  ``null`` (never a guess).
+* Tie-break: higher ``separation`` first (highest corrected = votes cheapest at
+  the pinned bottoms), then the SHORTER window (parsimony). Medium read = best
+  row with ``window_days`` ≤ 378; long read = best row with ``window_days``
+  ≥ 504. Both are reported per indicator; a band with no row is ``null`` (never
+  a guess).
 * Unscoreable legs (the staged ``hy_oas``/``ig_oas`` CSVs start 2023-09-30 while
   the last ``gold_v1`` trough window ends 2022-12-05, so they only ever see the
   current-top window) come back with ``status="unscoreable"`` and a REASON —
@@ -127,6 +145,27 @@ SMA_BAND_MIN_SAMPLES: tuple[int, ...] = (30, 60)
 
 MEDIUM_WINDOW_MAX = 378
 LONG_WINDOW_MIN = 504
+
+# Ruling 1: a window-side mean inside +/- this band is a DEAD ZONE — the z has no
+# opinion there, so a positive separation resting on it is one-sided.
+DEGENERATE_MEAN_ABS = 0.06
+
+METRIC_DEFINITION = (
+    "separation = mean(z | trough windows) - mean(z | peak windows); "
+    "positive = votes cheap at bottoms (composite_risk.py:57 maps +z to buy)"
+)
+METRIC_READ = (
+    "higher is better; positive = the z runs HIGHER in the pinned trough windows "
+    "and LOWER in the pinned peak windows, i.e. it votes cheap at bottoms; "
+    "abs() is never applied to this metric"
+)
+DEGENERATE_LABEL = (
+    f"DEGENERATE: a grid row is degenerate when one side's window mean never "
+    f"leaves the +/-{DEGENERATE_MEAN_ABS} dead zone (pass rests on the other side "
+    f"alone); an indicator is degenerate_pass when EVERY scored row is degenerate "
+    f"and its best separation is strictly positive. Degenerate legs are listed "
+    f"separately and never enter a keep list without an explicit owner look."
+)
 
 IN_SAMPLE_LABEL = (
     "IN-SAMPLE: separation is fit against the same pinned gold_v1 windows it is "
@@ -204,14 +243,24 @@ class GridPoint(BaseModel):
 
 
 class SeparationScore(BaseModel):
-    """Frozen metric result for one z-series against the pinned windows."""
+    """Frozen metric result for one z-series against the pinned windows (Ruling 1).
+
+    ``separation`` is the SIGNED ``mean(trough) - mean(peak)``: positive votes
+    cheap at bottoms. The two shares are counted per side off the RAW z — they
+    are deliberately NOT derivable from each other (``1 - x`` is invalid because
+    a dead-zone oscillator sits at exactly ``0.0``) — and ``degenerate`` records
+    that one side never leaves the dead zone.
+    """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     separation: float | None
     mean_peak_z: float | None
     mean_trough_z: float | None
-    sign_share: float | None
+    peak_negative_share: float | None
+    trough_positive_share: float | None
+    zero_z_share: float | None
+    degenerate: bool
     coverage: float = Field(ge=0.0, le=1.0)
     peak_days: int = Field(ge=0)
     trough_days: int = Field(ge=0)
@@ -229,7 +278,10 @@ class GridRow(BaseModel):
     separation: float | None
     mean_peak_z: float | None
     mean_trough_z: float | None
-    sign_share: float | None
+    peak_negative_share: float | None
+    trough_positive_share: float | None
+    zero_z_share: float | None
+    degenerate: bool
     coverage: float = Field(ge=0.0, le=1.0)
     z_coverage: float = Field(ge=0.0, le=1.0)
     peak_days: int = Field(ge=0)
@@ -239,7 +291,13 @@ class GridRow(BaseModel):
 
 
 class IndicatorFits(BaseModel):
-    """Every scored grid row for one indicator, plus the three frozen reads."""
+    """Every scored grid row for one indicator, plus the three frozen reads.
+
+    ``degenerate`` is True only when EVERY scored row is degenerate (an unscored
+    indicator is never flagged); ``degenerate_pass`` additionally requires a
+    strictly positive best separation, i.e. a positive pass resting on a dead
+    side. Both are listed separately from any keep list.
+    """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
@@ -252,6 +310,9 @@ class IndicatorFits(BaseModel):
     best_overall: GridRow | None
     best_medium: GridRow | None
     best_long: GridRow | None
+    degenerate: bool
+    degenerate_pass: bool
+    verdict: str
 
 
 # This harness is loaded by file path in tests (importlib module_from_spec without
@@ -265,22 +326,48 @@ IndicatorFits.model_rebuild()
 # --------------------------------------------------------------------------- #
 
 
+def row_is_degenerate(
+    *,
+    separation: float | None,
+    mean_peak_z: float | None,
+    mean_trough_z: float | None,
+) -> bool:
+    """True when ONE window side's mean never leaves the dead zone.
+
+    Ruling 1's degenerate rule: a pass that rests on a side whose mean sits
+    inside ±``DEGENERATE_MEAN_ABS`` is one-sided — the z has no opinion on that
+    side at all (the RSI dead zone / log-MACD dead band put every pinned window
+    day at exactly 0.0). An unscored row has no pass to rest on, so it is never
+    degenerate.
+    """
+    if separation is None or mean_peak_z is None or mean_trough_z is None:
+        return False
+    return abs(mean_peak_z) <= DEGENERATE_MEAN_ABS or abs(mean_trough_z) <= DEGENERATE_MEAN_ABS
+
+
 def separation(
     dates: Sequence[date],
     z_values: Sequence[float | None],
     windows: SdcaCycleWindows,
 ) -> SeparationScore:
-    """``mean(z | peaks) - mean(z | troughs)``; higher = z runs higher at tops.
+    """``mean(z | troughs) - mean(z | peaks)``; positive = votes cheap at bottoms.
+
+    Ruling 1 flipped the pre-registered sign: ``composite_risk.py:57`` maps
+    ``+z`` to buy/cheap and the shipped Stage-A objective is ``+(50/3) *
+    (mean z|troughs - mean z|peaks)``, so a leg that votes cheap at the bottoms
+    must score POSITIVE. ``abs()`` is never applied — a mirrored z scores the
+    exact negation.
 
     Null z is skipped (never zero-filled). A window side with no valid z leaves
     ``separation`` ``None`` and records WHY — the staged credit legs (hy_oas /
     ig_oas) start after the last pinned trough window, so they are unscoreable
     by construction rather than silently dropped.
 
-    ``sign_share`` is the share of scored window-days whose z sits on the side
-    that positive separation implies (peak days above zero, trough days below).
-    It separates a consistent vote from one driven by a couple of outliers, and
-    reads ~0.5 for a dead-zone oscillator whose z is mostly zero.
+    The shares are counted per side off the RAW z: ``peak_negative_share`` is the
+    share of peak window days below zero and ``trough_positive_share`` the share
+    of trough window days above zero. They are not collapsible into ``1 - x``
+    because a dead-zone oscillator sits at exactly ``0.0`` (neither below nor
+    above), which ``zero_z_share`` records.
     """
     if len(dates) != len(z_values):
         raise ValueError("dates and z_values must be the same length")
@@ -303,7 +390,10 @@ def separation(
             separation=None,
             mean_peak_z=None,
             mean_trough_z=None,
-            sign_share=None,
+            peak_negative_share=None,
+            trough_positive_share=None,
+            zero_z_share=None,
+            degenerate=False,
             coverage=0.0,
             peak_days=0,
             trough_days=0,
@@ -314,13 +404,21 @@ def separation(
                 "the pins, or the window is inside the z warm-up"
             ),
         )
+    peak_share = sum(1 for v in peak_vals if v < 0.0) / len(peak_vals) if peak_vals else None
+    trough_share = (
+        sum(1 for v in trough_vals if v > 0.0) / len(trough_vals) if trough_vals else None
+    )
+    zero_share = sum(1 for v in (*peak_vals, *trough_vals) if v == 0.0) / scored if scored else None
     if not peak_vals or not trough_vals:
         missing = "trough" if not trough_vals else "peak"
         return SeparationScore(
             separation=None,
             mean_peak_z=(sum(peak_vals) / len(peak_vals)) if peak_vals else None,
             mean_trough_z=(sum(trough_vals) / len(trough_vals)) if trough_vals else None,
-            sign_share=None,
+            peak_negative_share=peak_share,
+            trough_positive_share=trough_share,
+            zero_z_share=zero_share,
+            degenerate=False,
             coverage=coverage,
             peak_days=len(peak_vals),
             trough_days=len(trough_vals),
@@ -333,12 +431,19 @@ def separation(
         )
     mean_peak = sum(peak_vals) / len(peak_vals)
     mean_trough = sum(trough_vals) / len(trough_vals)
-    agree = sum(1 for v in peak_vals if v > 0.0) + sum(1 for v in trough_vals if v < 0.0)
+    separation_value = mean_trough - mean_peak
     return SeparationScore(
-        separation=mean_peak - mean_trough,
+        separation=separation_value,
         mean_peak_z=mean_peak,
         mean_trough_z=mean_trough,
-        sign_share=agree / scored,
+        peak_negative_share=peak_share,
+        trough_positive_share=trough_share,
+        zero_z_share=zero_share,
+        degenerate=row_is_degenerate(
+            separation=separation_value,
+            mean_peak_z=mean_peak,
+            mean_trough_z=mean_trough,
+        ),
         coverage=coverage,
         peak_days=len(peak_vals),
         trough_days=len(trough_vals),
@@ -452,11 +557,39 @@ def _family(name: str) -> str:
 
 
 def best_row(rows: Sequence[GridRow]) -> GridRow | None:
-    """Highest ``separation``; ties break to the SHORTER window (parsimony)."""
+    """Highest ``separation`` (best corrected = cheapest at the pinned bottoms);
+    ties break to the SHORTER window (parsimony)."""
     scored = [r for r in rows if r.separation is not None]
     if not scored:
         return None
     return min(scored, key=lambda r: (-float(r.separation), r.window_days))
+
+
+def degenerate_verdict(rows: Sequence[GridRow]) -> tuple[bool, bool]:
+    """``(degenerate, degenerate_pass)`` for one indicator's grid (Ruling 1).
+
+    ``degenerate``: EVERY scored row is degenerate (a dead-side pass on every
+    window setting). No scored row → ``False`` — an unscoreable leg is listed
+    with its reason, never silently flagged.
+
+    ``degenerate_pass``: ``degenerate`` AND the best row's separation is
+    STRICTLY positive, i.e. a pass that exists only because one side is dead.
+    Such a leg is reported separately and never enters a keep list without an
+    explicit owner look.
+    """
+    scored = [r for r in rows if r.separation is not None]
+    if not scored:
+        return (False, False)
+    degenerate = all(
+        row_is_degenerate(
+            separation=r.separation,
+            mean_peak_z=r.mean_peak_z,
+            mean_trough_z=r.mean_trough_z,
+        )
+        for r in scored
+    )
+    best = best_row(scored)
+    return (degenerate, bool(degenerate and best is not None and float(best.separation) > 0.0))
 
 
 def best_row_in_band(
@@ -493,6 +626,12 @@ def fit_indicator(
     A leg whose staged source is absent, or whose z cannot reach both window
     sides, comes back ``status="unscoreable"`` with a reason — the grid rows are
     still listed so the omission is visible rather than silent.
+
+    ``verdict`` is the Ruling-1 read of the corrected metric and is the ONLY
+    thing Task 2/3 should branch on: ``keep`` (votes cheap at bottoms), ``drop``
+    (votes backwards — no abs(), so a negative separation stays negative),
+    ``degenerate_pass`` (a pass resting on a dead side: listed separately, never
+    a keep without an explicit owner look) or ``unscoreable``.
     """
     grid = indicator_grid(name)
     if not grid:
@@ -515,7 +654,10 @@ def fit_indicator(
                 separation=score.separation,
                 mean_peak_z=score.mean_peak_z,
                 mean_trough_z=score.mean_trough_z,
-                sign_share=score.sign_share,
+                peak_negative_share=score.peak_negative_share,
+                trough_positive_share=score.trough_positive_share,
+                zero_z_share=score.zero_z_share,
+                degenerate=score.degenerate,
                 coverage=score.coverage,
                 z_coverage=_z_coverage(z),
                 peak_days=score.peak_days,
@@ -539,6 +681,9 @@ def fit_indicator(
             best_overall=None,
             best_medium=None,
             best_long=None,
+            degenerate=False,
+            degenerate_pass=False,
+            verdict="unscoreable",
         )
     overall = best_row(rows)
     medium = best_row_in_band(rows, max_window_days=MEDIUM_WINDOW_MAX)
@@ -554,6 +699,7 @@ def fit_indicator(
             f"no grid row in the {' and '.join(absent)} band — "
             f"frozen windows for {name} are {sorted({r.window_days for r in rows})}"
         )
+    degenerate, degenerate_pass = degenerate_verdict(rows)
     return IndicatorFits(
         name=name,
         family=_family(name),
@@ -564,7 +710,19 @@ def fit_indicator(
         best_overall=overall,
         best_medium=medium,
         best_long=long_read,
+        degenerate=degenerate,
+        degenerate_pass=degenerate_pass,
+        verdict=_verdict(overall, degenerate_pass),
     )
+
+
+def _verdict(row: GridRow | None, degenerate_pass: bool) -> str:
+    """Ruling-1 verdict for one indicator: keep / drop / degenerate_pass."""
+    if row is None or row.separation is None:
+        return "unscoreable"
+    if degenerate_pass:
+        return "degenerate_pass"
+    return "keep" if row.separation > 0.0 else "drop"
 
 
 def run_fit(
@@ -592,12 +750,17 @@ def fits_payload(
     *,
     windows_label: str,
 ) -> dict[str, Any]:
+    keep = [name for name, fit in fits.items() if fit.verdict == "keep"]
+    drop = [name for name, fit in fits.items() if fit.verdict == "drop"]
     return {
         "symbol": SYMBOL,
         "calendar": f"{dates[0]}..{dates[-1]} ({len(dates)} daily bars)",
         "windows": windows_label,
-        "metric": "separation = mean(z | peak windows) - mean(z | trough windows)",
-        "metric_read": "higher is better; positive = z runs higher in the pinned peak windows",
+        "metric": METRIC_DEFINITION,
+        "metric_read": METRIC_READ,
+        "abs_forbidden": True,
+        "degenerate_rule": DEGENERATE_LABEL,
+        "degenerate_mean_abs": DEGENERATE_MEAN_ABS,
         "in_sample": True,
         "in_sample_label": IN_SAMPLE_LABEL,
         "tie_break": "higher separation, then the shorter window (parsimony)",
@@ -623,6 +786,21 @@ def fits_payload(
             "valuation": "the selection ANCHOR (rolling90/z1.0), built in Task 2, not a fit candidate",
         },
         "indicators": {name: fit.model_dump(mode="json") for name, fit in fits.items()},
+        "keep": keep,
+        "drop": drop,
+        # Listed SEPARATELY: never inside `keep`, never counted without an
+        # explicit owner look (Ruling 1).
+        "degenerate_passes": [
+            {
+                "name": name,
+                "params": fit.best_overall.params if fit.best_overall else None,
+                "window_days": fit.best_overall.window_days if fit.best_overall else None,
+                "separation": fit.best_overall.separation if fit.best_overall else None,
+            }
+            for name, fit in fits.items()
+            if fit.degenerate_pass
+        ],
+        "degenerate": [name for name, fit in fits.items() if fit.degenerate],
         "unscoreable": [
             {"name": name, "reason": fit.reason}
             for name, fit in fits.items()
@@ -632,6 +810,15 @@ def fits_payload(
 
 
 DEVIATIONS: tuple[str, ...] = (
+    "Ruling 1 (Plan 19): the pre-registered metric sign was a CORRECTNESS BUG and is "
+    "corrected here — separation = mean(z|troughs) - mean(z|peaks), positive = cheap at "
+    "bottoms, abs() forbidden. Evidence: composite_risk.py:57 risk = 50 - composite_z*50/3 "
+    "(+z = buy = cheap) and stage_a.py:88-99 mean_risk(peaks)-mean_risk(troughs) = "
+    "+(50/3)*(mean z|troughs - mean z|peaks). ALL fitted best_* params change under it.",
+    "Ruling 1: `sign_share` is GONE. The single aggregate is not recoverable as `1 - x` "
+    "from raw z (a dead-zone oscillator sits at exactly 0.0, which 1-x would read as a "
+    "perfect vote), so peak_negative_share / trough_positive_share / zero_z_share are all "
+    "counted per side off the raw vectors.",
     "sma_band: the plan's `k in {2, 3}` band multiple does not exist in "
     "SdcaOscillatorSpec; swept `sma_band_min_samples in {30, 60}` (shipped default "
     "30 plus one longer warm-up) as the closest verified analogue. Catalog NOT extended.",
@@ -649,14 +836,20 @@ def _row_text(row: GridRow | None) -> str:
         return "—"
     params = ",".join(f"{k}={v}" for k, v in sorted(row.params.items()))
     sep = "—" if row.separation is None else f"{row.separation:+.4f}"
-    share = "—" if row.sign_share is None else f"{row.sign_share:.3f}"
-    return f"{params} | sep {sep} | sign {share} | cov {row.coverage:.3f} | w {row.window_days}"
+    pk = "—" if row.peak_negative_share is None else f"{row.peak_negative_share:.3f}"
+    tr = "—" if row.trough_positive_share is None else f"{row.trough_positive_share:.3f}"
+    flag = " DEGENERATE" if row.degenerate else ""
+    return (
+        f"{params} | sep {sep} | p<0 {pk} | t>0 {tr} | cov {row.coverage:.3f} "
+        f"| w {row.window_days}{flag}"
+    )
 
 
 def print_fits_table(fits: Mapping[str, IndicatorFits]) -> None:
     print("")
     print(
-        f"{'indicator':<14} {'rows':>4} {'best params':<34} {'w':>5} {'sep':>9} {'sign':>6} {'cov':>6}"
+        f"{'indicator':<14} {'rows':>4} {'best params':<34} {'w':>5} {'sep':>9} "
+        f"{'p<0':>6} {'t>0':>6} {'zero':>6} {'cov':>6}  verdict"
     )
     for name, fit in fits.items():
         row = fit.best_overall
@@ -667,12 +860,23 @@ def print_fits_table(fits: Mapping[str, IndicatorFits]) -> None:
         assert row.separation is not None
         print(
             f"{name:<14} {fit.grid_rows:>4} {params:<34} {row.window_days:>5} "
-            f"{row.separation:>+9.4f} {(row.sign_share or 0.0):>6.3f} {row.coverage:>6.3f}"
+            f"{row.separation:>+9.4f} {(row.peak_negative_share or 0.0):>6.3f} "
+            f"{(row.trough_positive_share or 0.0):>6.3f} {(row.zero_z_share or 0.0):>6.3f} "
+            f"{row.coverage:>6.3f}  {fit.verdict}"
         )
     print("")
     for name, fit in fits.items():
         print(f"{name}: medium {_row_text(fit.best_medium)}")
         print(f"{name}: long   {_row_text(fit.best_long)}")
+    print("")
+    degenerate = [name for name, fit in fits.items() if fit.degenerate]
+    passes = [name for name, fit in fits.items() if fit.degenerate_pass]
+    keep = [name for name, fit in fits.items() if fit.verdict == "keep"]
+    drop = [name for name, fit in fits.items() if fit.verdict == "drop"]
+    print(f"keep: {keep}")
+    print(f"drop: {drop}")
+    print(f"degenerate: {degenerate}   degenerate_pass: {passes}")
+    print(DEGENERATE_LABEL)
     print("")
     print(IN_SAMPLE_LABEL)
 
