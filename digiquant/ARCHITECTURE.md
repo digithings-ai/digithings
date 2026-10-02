@@ -1224,6 +1224,32 @@ masked curve-sim net +279.1% / dd −42.1% / 4210 bars / fill sell days 34);
 the selection marked). Preview serves JSON + chart + a TEMP `page.tsx`
 entry (allowed only on BEATS-BOTH; REVERT-BEFORE-MERGE, uncommitted).
 
+**Reselect promotion branch-side (gold, #4804) — Plan 17, live-path proof.**
+Three corrections ride the promotion branch: (Ruling 4) the entry's
+`risk_model` was `generic_valuation` with 90/1.0 as dead pass-through —
+corrected to `rolling_z` so the reselect rails are live; (Ruling 5) a
+reviewed per-entry `trade_start` override at the `run_and_write` binding
+site (gold `2010-01-01`, BTC/defaults fallback byte-identical, paired pin);
+(Ruling 6) the publish path read `model.coefficients` unconditionally and
+crashed (`AttributeError`) on the first real `RollingZRiskModel` through
+`run_and_write` — provenance now records window/z params on the
+rolling branch only (`getattr` detection; fitted BTC/generic notes
+byte-identical, proven by unmodified-green suites). Live proof (verbatim
+no-push `generate_tearsheets.py --strategy gold_sdca`, 1/1 succeeded):
+Nautilus net +279.1% / dd −42.1%, 4210 bars 2010-01-04→2026-09-29, rails
+rolling90/z1.0, v4 weights exact, fill sell days 34 = 34 (same
+`dca_metrics` fill metric, not rate sign), vs flat +48.46 / vs lump +8.71
+(rounding parity with the curve-sim diagnostic; rate-sign days exact
+2261/1344/605). Known engine artifact, quoted not hidden: buy-fill days
+308 live (Nautilus) vs 428 diagnostic (curve-sim) — units/cost-basis match
+to ~4dp, so execution aggregation, not economics. Preview slug
+`gold_sdca_reselect_live` (TEMP `page.tsx` entry, REVERT-BEFORE-MERGE,
+uncommitted) — a new slug because a Nautilus live-path proof differs in
+kind from the `gold_sdca_v6_reselect` curve-sim selection diagnostic. The
+four Plan-16 disclosures ride along unchanged (selection-on-metric
+optimism; thin +3.85 lump margin with f2 −0.81; f1 zero mask days; #2–#4
+projection tie) plus holdout ABSENT (spent, never re-scored).
+
 ## Secular-leg firing verdict for gold phase-b decision (#4804, Plan 14a Task 3 — NO-GO)
 
 Real-rate leg (DFII10 staged 5940 rows, 2003-01-02→2026-09-29; `real_rate_z` window-1260, no-flip washout, voteless default; 5480 valid z days; full-history deciles 10/25/50/75/90 = -2.115/-1.432/+0.128/+1.070/+1.743, clipped ±3.0) and 200w leg (causal completed-weeks, 1000d SMA, first-valid 2008-11-06, 4500-row series in untracked `digiquant/.scratch/gold_mayer_multiple.json`) fire as follows — judged read-only on the recorded Ruling-3 / Task-2 numbers, no new runs, no weight/window/threshold changes: | event | real-rate z | 200w multiple | — 2011-09 top: z −2.522 (below 10th-pct −2.115 → top-decile rich, rich side passes) / multiple 1.7159 (week-end 2011-09-02, close 183.24 / sma200w 106.7877); 2015-12 bottom: z +1.066 (≈75th-pct 1.070, vs 90th-pct +1.743 → NOT top-decile cheap, misses by 0.677) / multiple 0.7672; 2020-08 high: z −3.000 (clip floor) / multiple 1.4819; 2022-10 dip: z +2.252 / multiple 0.9836; now: z +1.530 (2026-09-29) / multiple 1.4707 (week-end 2026-09-25). Half-a (real-rate) FAILS: the bar needs top-decile cheap spanning the 2015 bottom AND top-decile rich spanning the 2011 top, and the 2015 reading (+1.066) sits at ~75th percentile, not top-decile (≥ +1.743). Half-b (200w) FAILS on selectivity: the 2011 level passes (1.7159 ≥ 1.5) but 349 grind-days sit above 1.5 outside the ±6mo 2011 window (2011-03-06→2012-03-06), i.e. 349/4500 = 7.76% ≥ 5% bar (5% budget = 225d; excess = 124d; all-valid-days >1.5 = 423/4500 = 9.4%; >1.7 outside = 154d, concentrated 2025-09-30→2026-05-14). Verdict: **NO-GO for phase-b engine design** — both halves fail, so no engine extension follows from this plan; COT / Dow-gold / CPI-oil legs stay recon-listed, not tasked.
