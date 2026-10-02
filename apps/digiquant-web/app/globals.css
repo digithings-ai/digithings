@@ -76,7 +76,9 @@ body {
 }
 
 /* Crosshair, hero only: the pointer becomes a crosshair over the hero (QuantField
-   draws the matching lines). Links and buttons keep the kit's pointer. */
+   draws the matching lines). Links and buttons keep the kit's pointer.
+   Full-viewport chart under the fixed nav: TopBand uses -mt + h-[100svh] so the
+   canvas fills the page with no bottom gap; copy is padded below --nav-shell-h. */
 .dq-hero {
   cursor: crosshair;
 }
