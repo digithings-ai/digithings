@@ -6,6 +6,7 @@ import {
   cycleModel,
   interpretBaseline,
   liveFrom,
+  mainChrome,
   postBaseline,
   rowsFor,
   stripRows,
@@ -84,6 +85,10 @@ test("a down read renders an empty live app and invents no thread", async () => 
   expect(body.messages).toEqual([{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }]);
   expect(body.model).toBeUndefined();
   expect(body.tools).toBeUndefined();
+  const chrome = mainChrome(view, down.detail, []);
+  expect(chrome.map((row) => row.slot)).toEqual(["title", "headline", "welcome", "welcome", "thread"]);
+  expect(chrome.map((row) => row.text)).toEqual(["—", "—", "—", "—", "configs unreachable"]);
+  expect(JSON.stringify(chrome)).not.toContain("What should we inspect");
 });
 
 test("the selected deployment configures the live app", () => {
@@ -101,6 +106,13 @@ test("the selected deployment configures the live app", () => {
   expect(view.mcp).toEqual([{ id: "docs", url: "https://mcp.example/docs", on: true }]);
   expect(view.issues).toEqual(["accent contrast"]);
   expect(view.attachments).toBe(false);
+  expect(mainChrome(view, acme.detail, []).map((row) => row.text)).toEqual([
+    "Acme",
+    "acme · digichat · dark",
+    "Hello",
+    "Line one",
+    "",
+  ]);
 });
 
 test("editing a setting updates the live app and a secret never lands in the draft", () => {
