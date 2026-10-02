@@ -6,9 +6,14 @@ import {
   BUILD_START_MS,
   BARS_START_MS,
   BARS_SWEEP_MS,
+  CHART_BUILD_MAX_MS,
   CHART_BUILD_TARGET_MS,
   CHART_INTRO_MS,
+  CHROME_DONE_MS,
   COPY_DONE_MS,
+  HANDOFF_MS,
+  INDICATOR_SWEEP_MS,
+  PHASE_SUM_MS,
   buildProgress,
   columnDelayMs,
   sweepDelayMs,
@@ -41,14 +46,23 @@ describe("hero build clock", () => {
     expect(buildProgress(sweepDelayMs(0.3) + BUILD_RISE_MS / 2, 0.3)).toBeGreaterThan(0.5);
   });
 
-  it("starts the chart phase soon after chrome, not after the full wordmark", () => {
+  it("hands off to axes soon after chrome, not after the full wordmark", () => {
     expect(COPY_DONE_MS).toBeLessThan(BUILD_DONE_MS);
-    expect(COPY_DONE_MS).toBeGreaterThan(700);
+    expect(CHROME_DONE_MS).toBeGreaterThanOrEqual(600);
+    expect(CHROME_DONE_MS).toBeLessThanOrEqual(900);
+    expect(HANDOFF_MS).toBeLessThan(300);
+    expect(COPY_DONE_MS).toBe(CHROME_DONE_MS + HANDOFF_MS);
     expect(CHART_INTRO_MS).toBeGreaterThan(1000);
   });
 
-  it("keeps the chart construct near the 5s target", () => {
-    expect(BARS_START_MS + BARS_SWEEP_MS).toBeLessThanOrEqual(CHART_BUILD_TARGET_MS + 50);
-    expect(BARS_START_MS + BARS_SWEEP_MS).toBeGreaterThanOrEqual(CHART_BUILD_TARGET_MS - 200);
+  it("keeps the chart construct near the 5s target and under the 10s cap", () => {
+    expect(BARS_START_MS).toBeGreaterThanOrEqual(600);
+    expect(BARS_START_MS).toBeLessThanOrEqual(1000);
+    expect(BARS_SWEEP_MS).toBe(2000);
+    expect(INDICATOR_SWEEP_MS).toBe(1200);
+    expect(PHASE_SUM_MS).toBeGreaterThanOrEqual(CHART_BUILD_TARGET_MS - 400);
+    expect(PHASE_SUM_MS).toBeLessThanOrEqual(CHART_BUILD_TARGET_MS + 200);
+    expect(PHASE_SUM_MS).toBeLessThan(CHART_BUILD_MAX_MS);
+    expect(COPY_DONE_MS + BARS_START_MS + BARS_SWEEP_MS).toBeLessThan(CHART_BUILD_MAX_MS);
   });
 });
