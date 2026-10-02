@@ -70,7 +70,7 @@ def home_menu_tree() -> list[str]:
 def home_context_lines(
     settings_text_model: str,
     tts_label: str,
-    banner_density: str,
+    banner_pin: str,
     banner_position: str,
     health: str,
 ) -> list[str]:
@@ -79,7 +79,7 @@ def home_context_lines(
     health_symbol = "■" if healthy else "□"
     return [
         f"▦ stt {settings_text_model} · tts {tts_label}",
-        f"▥ {banner_density} ({banner_position})",
+        f"▥ {banner_pin} ({banner_position})",
         f"{health_symbol} {health}",
     ]
 
@@ -90,7 +90,7 @@ def build_context_lines(
     env: Mapping[str, str],
     probe: object | None = None,
 ) -> list[str]:
-    """Status strip: models, banner density, doctor health. Never raises."""
+    """Status strip: models, banner pin, doctor health. Never raises."""
     from digivoice.settings import load_settings
 
     try:
@@ -106,7 +106,7 @@ def build_context_lines(
         return home_context_lines(
             settings.stt_model,
             tts_label,
-            settings.banner_density,
+            "pin on" if settings.banner_pinned else "pin off",
             settings.banner_position,
             summary,
         )

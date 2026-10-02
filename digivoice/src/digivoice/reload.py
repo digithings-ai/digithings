@@ -159,7 +159,7 @@ def run_reload(
             )
         return CliResult(code=1, stdout=message + "\n", stderr="")
     settings_line = (
-        f"settings ..... ok (banner_density={settings.banner_density}, "
+        f"settings ..... ok (banner_pinned={str(settings.banner_pinned).lower()}, "
         f"live_banner={str(settings.live_banner).lower()})"
     )
     lines.append(settings_line)

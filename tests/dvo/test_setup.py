@@ -41,7 +41,8 @@ def test_setup_print_shows_settings_and_menu(tmp_path: Path) -> None:
     assert result.code == 0
     assert "digivoice setup" in result.stdout
     assert "stt_model" in result.stdout
-    assert "banner_density" in result.stdout
+    assert "banner_density" not in result.stdout
+    assert "banner_position" in result.stdout
     for item in SETUP_MENU:
         assert item.split(" (")[0] in result.stdout
     assert "Right Option" in result.stdout
@@ -97,7 +98,8 @@ def test_setup_public_dict_extends_settings_dump(tmp_path: Path) -> None:
     from digivoice.settings import load_settings
 
     payload = setup_public_dict(load_settings(paths), paths)
-    assert payload["banner_density"] == "retract"
+    assert "banner_density" not in payload
+    assert payload["banner_pinned"] is False
     assert payload["setup_menu"] == list(SETUP_MENU)
 
 
@@ -126,11 +128,12 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
     from digivoice.setup import run_interactive_setup
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
-    # Features → banner_density → full (2=retract|full) → Back → Review & save → Save → Quit
-    fake_in = io.StringIO("3\n6\n2\n8\n5\n1\n7\n")
+    # Features → banner_position → top-left → Back → Review & save → Save → Quit
+    fake_in = io.StringIO("3\n5\n2\n7\n5\n1\n7\n")
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
-    assert load_settings(paths).banner_density == "full"
+    assert load_settings(paths).banner_position == "top-left"
+    assert "banner_density" not in (tmp_path / "settings.json").read_text(encoding="utf-8")
 
 
 def test_update_and_uninstall_are_documented_stubs(tmp_path: Path) -> None:

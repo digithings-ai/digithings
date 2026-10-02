@@ -10,12 +10,12 @@
 --- A binding that does not parse keeps the previous one and prints a warning.
 ---
 --- Status: a custom overlay banner (banner_core.lua) draws one status icon.
---- No status word, pin, button, transcript, or waveform. A click focuses the
---- digivoice terminal when it is already open, and opens it otherwise.
+--- No status word, copy, close, pin button, transcript, or waveform. A click
+--- focuses the digivoice terminal when it is already open, and opens it otherwise.
 --- The cancel bind still cancels a take. Drag moves the icon; release near an anchor snaps.
---- Retract (default) hides the icon when voice is idle. banner_pinned keeps it.
+--- Off hides the icon when voice is idle. banner_pinned keeps it. Density is ignored.
 --- `digivoice banner show` still reveals a status preview with no dictation.
---- Banner enable/position/density/animations/pin live in settings.json
+--- Banner enable/position/animations/pin live in settings.json
 --- (`digivoice settings set banner_pinned true`) and are re-read per take.
 --- Install: see README.md in this directory.
 --- This file is a sample outside the Python package import path.
@@ -111,15 +111,11 @@ local frame_timer = nil
 local hide_timer = nil
 local theme_timer = nil
 local drag_timer = nil
-local hover_timer = nil
-local scroll_tap = nil
 local idle_timer = nil
 local esc_tap = nil
-local hover_seq = 0
 
 -- Forward declarations: defined below their first use site.
 local current_view
-local ensure_scroll_tap
 local ensure_esc_tap
 local write_file
 local end_session
@@ -195,13 +191,6 @@ local function cancel_timer(timer)
   return nil
 end
 
-local function stop_scroll_tap()
-  if scroll_tap then
-    scroll_tap:stop()
-    scroll_tap = nil
-  end
-end
-
 local function cell_color(state, i, t, animate)
   local cfg = core.matrix_for(state)
   return {
@@ -210,13 +199,6 @@ local function cell_color(state, i, t, animate)
     blue = cfg.color.blue,
     alpha = core.dot_alpha(state, i, t, animate),
   }
-end
-
-local function scroll_max(s, box)
-  if s.density == "full" and box.clipped and box.all then
-    return math.max(0, #box.all - #box.lines)
-  end
-  return 0
 end
 
 local function icon_phase_for(s, view)
@@ -243,17 +225,10 @@ local function build_canvas(s, view, box)
   -- must not become the focused window.
   canvas:clickActivating(false)
   canvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
-  -- One window only: banner + controls share this canvas. Never a second
-  -- canvas/window for the buttons. Disable the window shadow when the host
-  -- exposes it so the 18px pills read as chrome of this float unit instead
-  -- of independent floating canvases (mock .float-root, not windows).
+  -- One window only: the icon. Disable the window shadow when the host exposes it.
   pcall(function()
     canvas:shadow(false)
   end)
-
-  -- Banner face stays box.h. The control gutter below (CTRL_GAP + pills) is
-  -- transparent canvas: sibling chrome of the same float unit, never a
-  -- stretch of the banner fill/stroke (mock .banner + .controls-under).
 
   -- Icon only: the background holds the phase. The grid is the status mark.
   canvas:appendElements({
@@ -309,13 +284,12 @@ function rebuild(s)
     return
   end
   local view = current_view(s)
-  local box = core.layout(view, s.kind, s.density, { screen_h = screen:frame().h })
+  local box = core.layout(view)
   s.box = box
   local prev = { x = s.origin.x, y = s.origin.y, w = s.size.w, h = s.size.h }
   local next = core.reanchor(prev, { w = box.w, h = box.h }, s.anchor)
   s.origin = next
   build_canvas(s, view, box)
-  ensure_scroll_tap(s, box)
 end
 
 local function paint_cells(s, view)
@@ -348,13 +322,12 @@ local function render(s)
     return
   end
   local frame = screen:frame()
-  local box = core.layout(view, s.kind, s.density, { screen_h = frame.h })
+  local box = core.layout(view)
   s.box = box
   local theme = detect_theme()
   local signature = table.concat({
     view.state,
     icon_phase_for(s, view),
-    s.density,
     theme,
     tostring(s.config.banner_pinned),
   }, "\0")
@@ -384,7 +357,6 @@ local function render(s)
       canvas[1].phase = icon_phase_for(s, view)
     end
   end
-  ensure_scroll_tap(s, box)
 end
 
 --------------------------------------------------------------------------------
@@ -452,9 +424,7 @@ end
 
 --- Hide the canvas. Takes keep running; previews end. Esc still discards a take.
 local function hide_banner(s)
-  stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
-  hover_timer = cancel_timer(hover_timer)
   delete_canvas()
   if s.kind == "preview" then
     if session == s then
@@ -500,47 +470,6 @@ function finish_click(s, _)
 end
 
 --------------------------------------------------------------------------------
--- full scroll (≤50vh window, no scrollbar): wheel moves the line window
---------------------------------------------------------------------------------
-
-ensure_scroll_tap = function(s, box)
-  local need = s.density == "full" and box.clipped and not s.hidden
-  if not need then
-    stop_scroll_tap()
-    return
-  end
-  if scroll_tap then
-    return
-  end
-  local types = hs.eventtap.event.types
-  local props = hs.eventtap.event.properties
-  if not types or not types.scrollWheel or not props or not props.scrollWheelEventDeltaAxis1 then
-    return
-  end
-  scroll_tap = hs.eventtap.new({ types.scrollWheel }, function(event)
-    if session ~= s or not canvas or s.density ~= "full" or s.hidden then
-      return false
-    end
-    local ok, delta = pcall(event.getProperty, event, props.scrollWheelEventDeltaAxis1)
-    if not ok or type(delta) ~= "number" or delta == 0 then
-      return false
-    end
-    local max = scroll_max(s, s.box or box)
-    if max <= 0 then
-      return false
-    end
-    local step = delta > 0 and -3 or 3
-    local next = math.min(max, math.max(0, (s.scroll or 0) + step))
-    if next == s.scroll then
-      return false
-    end
-    s.scroll = next
-    return true
-  end)
-  scroll_tap:start()
-end
-
---------------------------------------------------------------------------------
 -- session lifecycle
 --------------------------------------------------------------------------------
 
@@ -556,9 +485,7 @@ function end_session(s)
   end
   frame_timer = cancel_timer(frame_timer)
   hide_timer = cancel_timer(hide_timer)
-  stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
-  hover_timer = cancel_timer(hover_timer)
   theme_timer = cancel_timer(theme_timer)
   stop_esc_tap()
   delete_canvas()
@@ -574,7 +501,6 @@ local function begin_session(kind)
     kind = kind,
     start_ms = now_ms(),
     local_state = "loading",
-    density = config.banner_density,
     config = config,
     theme = detect_theme(),
     task = nil,
@@ -583,8 +509,6 @@ local function begin_session(kind)
     origin = nil,
     anchor = nil,
     box = nil,
-    scroll = 0,
-    hover = false,
     hidden = false,
     standby = false,
     preview_text = "",
@@ -634,7 +558,7 @@ local function finish_session(s, exit_code, stdout, stderr)
     s.signature = nil
     render(s)
     -- A pin settles done into the idle icon. Retract hides when the take is done.
-    local wait = core.linger_seconds(s.final.state, s.density, s.config.banner_pinned)
+    local wait = core.linger_seconds(s.final.state, s.config.banner_pinned)
     if wait ~= nil then
       hide_timer = hs.timer.doAfter(wait, function()
         if session ~= s then
@@ -1042,9 +966,7 @@ end
 function M.stop()
   tap:stop()
   idle_timer = cancel_timer(idle_timer)
-  stop_scroll_tap()
   drag_timer = cancel_timer(drag_timer)
-  hover_timer = cancel_timer(hover_timer)
   theme_timer = cancel_timer(theme_timer)
   stop_esc_tap()
   local s = session

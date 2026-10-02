@@ -41,6 +41,7 @@ from digivoice.settings import (
     set_setting,
     settings_path,
     settings_public_dict,
+    visible_setting_keys,
 )
 from digivoice.speak import read_clipboard, read_selection, speak
 from digivoice.status import (
@@ -735,8 +736,8 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         return CliResult(code=0, stdout=f"{settings_path(paths)}\n", stderr="")
     if sub == "get":
         settings = load_settings(paths)
-        if args.key not in VoiceSettings.model_fields:
-            known = ", ".join(sorted(VoiceSettings.model_fields))
+        if args.key not in visible_setting_keys():
+            known = ", ".join(visible_setting_keys())
             return _usage(f"unknown setting {args.key!r}; known: {known}")
         value = getattr(settings, args.key)
         if as_json:
@@ -754,7 +755,7 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         try:
             settings = set_setting(paths, args.key, args.value)
         except KeyError:
-            known = ", ".join(sorted(VoiceSettings.model_fields))
+            known = ", ".join(visible_setting_keys())
             return _usage(f"unknown setting {args.key!r}; known: {known}")
         except (ValueError, Exception) as exc:
             return CliResult(code=2, stdout="", stderr=f"digivoice settings: {exc}\n")

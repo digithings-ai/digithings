@@ -3,14 +3,14 @@
 --- Holds everything the status banner decides:
 ---   * the square status-grid animations (a port of the digichat 5x5 grid states)
 ---   * which state to show (local phase vs the CLI's status.json)
----   * density (retract/full), text wrapping, box size, screen position
+---   * box size and screen position
 ---   * banner settings from settings.json
 ---   * theme chrome (digichat light/dark flips; RYG status colors stay)
----   * drag/snap anchors, hover controls layout, reanchoring
+---   * drag/snap anchors and reanchoring
 --- init.lua only draws what this module computes. The surface is one status icon.
---- No status word, pin, button, transcript, waveform, or fact line.
---- Retract (default) shows the icon while recording, dictating, processing, or a
---- current error or warning, then hides. banner_pinned keeps the idle icon up.
+--- No status word, copy, close, pin button, transcript, waveform, or fact line.
+--- The icon shows while recording, dictating, processing, or a current error or
+--- warning, then hides. banner_pinned keeps the idle icon up. Density is ignored.
 
 local M = {}
 
@@ -36,15 +36,9 @@ M.POSITIONS = {
   ["center"] = true,
 }
 
-M.DENSITIES = {
-  ["retract"] = true,
-  ["full"] = true,
-}
-
 M.DEFAULTS = {
   live_banner = true,
   banner_position = "top-center",
-  banner_density = "retract",
   banner_animations = true,
   banner_pinned = false,
 }
@@ -53,7 +47,6 @@ function M.parse_settings(raw)
   local out = {
     live_banner = M.DEFAULTS.live_banner,
     banner_position = M.DEFAULTS.banner_position,
-    banner_density = M.DEFAULTS.banner_density,
     banner_animations = M.DEFAULTS.banner_animations,
     banner_pinned = M.DEFAULTS.banner_pinned,
   }
@@ -69,21 +62,10 @@ function M.parse_settings(raw)
   if type(raw.banner_position) == "string" and M.POSITIONS[raw.banner_position] then
     out.banner_position = raw.banner_position
   end
-  if type(raw.banner_density) == "string" and M.DENSITIES[raw.banner_density] then
-    out.banner_density = raw.banner_density
-  end
   if type(raw.banner_pinned) == "boolean" then
     out.banner_pinned = raw.banner_pinned
   end
   return out
-end
-
---- Click toggles retract → full → retract (no dedicated expand button).
-function M.next_density(density)
-  if density == "retract" then
-    return "full"
-  end
-  return "retract"
 end
 
 function M.launch_notice(bin)
@@ -199,21 +181,6 @@ local ALWAYS_SHOW = {
   processing = true,
   error = true,
   warning = true,
-}
-
-M.LABELS = {
-  loading = "loading",
-  recording = "recording",
-  transcribing = "transcribing",
-  rewriting = "rewriting",
-  pasting = "pasting",
-  speaking = "speaking",
-  done = "done",
-  cancelled = "cancelled",
-  cancelling = "cancelling",
-  empty = "nothing heard",
-  error = "error",
-  idle = "idle",
 }
 
 function M.icon_phase(state)
@@ -361,9 +328,8 @@ function M.final_view(code, snapshot, session, stdout, stderr, cancelling)
   return { state = "error", text = "", detail = detail }
 end
 
-function M.linger_seconds(state, density, pinned)
-  -- Density no longer decides visibility. banner_pinned is the always-on mode.
-  density = density
+function M.linger_seconds(state, pinned)
+  -- banner_pinned is the always-on mode. There is no full-vs-retract density.
   local phase = M.icon_phase(state)
   if pinned and (phase == "error" or phase == "warning" or phase == "idle") then
     if state == "done" or state == "cancelled" or state == "cancelling" then
@@ -392,24 +358,13 @@ function M.linger_seconds(state, density, pinned)
 end
 
 --------------------------------------------------------------------------------
--- text, layout, position
+-- layout, position
 --------------------------------------------------------------------------------
 
-M.FONT_SIZE = 11
-M.LINE_HEIGHT = 18
 M.PAD = 10
 M.ICON = 18
--- Full hugs content up to this width (no min-width gutter).
-M.WIDTH_EXPANDED = 580
--- Full locks to the longest line, capped in characters.
-M.FULL_MAX_CH = 47
-M.LINES_EXPANDED = 14
 M.MARGIN = 16
 M.SNAP_PX = 36
-M.CTRL_SIZE = 18
-M.CTRL_GAP = 4
--- Conservative average glyph width so our wrapping is never re-wrapped by AppKit.
-M.CHAR_WIDTH = M.FONT_SIZE * 0.6
 
 --- DigiChat light/dark flips. Status (RYG) colors stay; only chrome flips.
 --- Dark ground is the digiquant remock canvas (docs/dashboard-mocks/canvas/mock.css
@@ -438,43 +393,6 @@ function M.theme_colors(theme)
   return M.CHROME.dark
 end
 
---- The banner never draws a word. The icon phase lives on `layout.phase`.
-function M.body_for(view)
-  return ""
-end
-
---- Greedy word wrap to `cols` columns. Hard-splits words longer than a line.
-function M.wrap(text, cols)
-  local lines = {}
-  cols = math.max(8, cols)
-  for paragraph in (tostring(text or "") .. "\n"):gmatch("(.-)\r?\n") do
-    local line = ""
-    for w in paragraph:gmatch("%S+") do
-      local word = w
-      while #word > cols do
-        if line ~= "" then
-          lines[#lines + 1] = line
-          line = ""
-        end
-        lines[#lines + 1] = word:sub(1, cols)
-        word = word:sub(cols + 1)
-      end
-      if line == "" then
-        line = word
-      elseif #line + 1 + #word <= cols then
-        line = line .. " " .. word
-      else
-        lines[#lines + 1] = line
-        line = word
-      end
-    end
-    if line ~= "" then
-      lines[#lines + 1] = line
-    end
-  end
-  return lines
-end
-
 --- Square frame for status-grid cell `i` (0-based, row-major): DigiChat-style
 --- squares, not dots. The grid hugs the top-left with equal padding.
 function M.cell_box(i)
@@ -486,40 +404,8 @@ function M.cell_box(i)
   return { x = cx - side / 2, y = cy - side / 2, w = side, h = side }
 end
 
---- Pad every line to `width` with spaces so all lines share one uniform width.
-function M.pad_lines(lines, width)
-  local out = {}
-  for i, line in ipairs(lines) do
-    local pad = width - #line
-    if pad > 0 then
-      out[i] = line .. string.rep(" ", pad)
-    else
-      out[i] = line
-    end
-  end
-  return out
-end
-
---- Full density caps near half the viewport height (mock: max-height 50vh).
---- The budget is the box inside equal padding — no leftover header row.
-function M.full_max_lines(screen_h)
-  if type(screen_h) ~= "number" or screen_h <= 0 then
-    return M.LINES_EXPANDED
-  end
-  return math.max(1, math.floor((screen_h * 0.5 - M.PAD * 2) / M.LINE_HEIGHT))
-end
-
---- Vertical origin of the transcript so the first line's em-box centers on
---- the status-icon row. A one-line banner then reads as centered.
-function M.text_origin_y()
-  return M.PAD + (M.ICON - M.FONT_SIZE) / 2
-end
-
---- Square icon only. Density and the transcript do not change the box.
-function M.layout(view, kind, density, opts)
-  kind = kind
-  density = density
-  opts = opts or {}
+--- Square icon only. Transcript length and a leftover density do not change the box.
+function M.layout(view)
   local state = ""
   if type(view) == "table" then
     state = view.state or ""
@@ -528,17 +414,10 @@ function M.layout(view, kind, density, opts)
   return {
     w = grid_side,
     h = grid_side,
-    text_x = 0,
-    text_y = M.text_origin_y(),
-    text_w = 0,
-    cols = 0,
     lines = {},
     body = "",
     phase = M.icon_phase(state),
     clipped = false,
-    total = 0,
-    longest = 0,
-    all = {},
     raw = "",
   }
 end
@@ -639,9 +518,8 @@ function M.resolve_saved(saved, frame, size, margin)
   return { x = clamped.x, y = clamped.y, anchor = saved.anchor }
 end
 
---- After a size change (density flip, hover controls), keep the pin so the
---- banner grows outward: center pins keep the center, left pins grow right,
---- right pins grow left, free floats keep their top-left (grid stays put).
+--- Keep the anchor when the box size changes: center stays centered, left grows
+--- right, right grows left, and a free float keeps its top-left.
 function M.reanchor(prev, size, anchor)
   anchor = anchor or "free"
   local cx, cy = prev.x + prev.w / 2, prev.y + prev.h / 2
@@ -670,15 +548,6 @@ function M.reanchor(prev, size, anchor)
     return { x = prev.x + prev.w - size.w, y = y }
   end
   return { x = prev.x, y = prev.y }
-end
-
---- No hover controls. The pin lives in the terminal UI, not on the banner.
-function M.controls_layout(box_w, box_h, density)
-  return { dir = "none", density = density, buttons = {} }
-end
-
-function M.controls_height(density)
-  return 0
 end
 
 return M

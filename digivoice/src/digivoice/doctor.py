@@ -96,7 +96,7 @@ def _settings_check(paths: VoicePaths) -> DoctorCheck:
         status="ok",
         detail=(
             f"valid settings.json ({target}; "
-            f"banner_density={settings.banner_density}, "
+            f"banner_pinned={str(settings.banner_pinned).lower()}, "
             f"banner_position={settings.banner_position}, "
             f"rewrite_enabled={str(settings.rewrite_enabled).lower()})"
         ),

@@ -20,24 +20,18 @@ Do not invent other default binds in this sample. The terminal UI can store anot
 
 Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
-The banner is one status icon. It has no status word, pin, button, transcript, or waveform. A click focuses the digivoice terminal when that UI is already open, and opens it otherwise; it does not stack a terminal and it does not stop a take. Esc is the only take control. Whether the icon stays up is `banner_pinned` in the terminal UI (default off retracts when voice is idle). Drag moves the icon; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`). Chrome follows the system appearance (remock dark ground, ivory light ground). Launch does not draw the banner unless it is pinned. It appears for recording, dictating, processing, a current error or warning, or a pin. `digivoice banner show` reveals a recording icon (not the flag text); Esc on a preview only hides it.
+The banner is one status icon. It has no status word, copy, close, pin button, transcript, or waveform. A click focuses the digivoice terminal when that UI is already open, and opens it otherwise; it does not stack a terminal and it does not stop a take. Esc is the only take control. Whether the icon stays up is `banner_pinned` in the terminal UI (default off retracts when voice is idle). Drag moves the icon; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`). Chrome follows the system appearance (remock dark ground, ivory light ground). Launch does not draw the banner unless it is pinned. It appears for recording, dictating, processing, a current error or warning, or a pin. `digivoice banner show` reveals a recording icon (not the flag text); Esc on a preview only hides it.
 
-| Phase | Animation (digichat 5x5 square grid) | Text shown |
-| --- | --- | --- |
-| recording | red equalizer wave | recording |
-| transcribing / rewriting / pasting / speaking / loading | teal sweep or twinkle | processing |
-| error | red `x` | error |
-| nothing heard | amber `!` | warning |
-| done / cancelled | check or stop square | none (grid only) |
-| pinned, idle | quiet gray grid | none |
+| Phase | Animation (digichat 5x5 square grid) |
+| --- | --- |
+| recording | red equalizer, still |
+| transcribing / rewriting / pasting / speaking / loading | processing grid |
+| error | red mark |
+| nothing heard | amber mark |
+| done / cancelled | settles to idle when pinned, otherwise hides |
+| pinned, idle | quiet gray grid |
 
-No titles, no hints, no transcript, no settings UI on the banner.
-Density comes from settings: **retract** (default) auto-dismisses a few seconds
-after idle/done, **full** stays until collapsed or removed. Neither density
-shows the transcript. The banner reads `status.json` that the CLI writes, so
-the word matches what digivoice is doing.
-
-Click the banner to toggle density (retract → full → retract).
+No titles, no hints, no transcript, no copy, no close, no pin, and no settings UI on the banner. The banner reads `status.json` that the CLI writes and draws only the icon.
 
 There is no digivoice menubar mark — the banner grid alone shows take state. Closing the Terminal leaves Hammerspoon running; **Quit** in the digivoice TUI stops the adapter and quits Hammerspoon.
 
@@ -50,9 +44,8 @@ digivoice settings set live_banner false          # disable the overlay entirely
 digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
                                                   # | middle-left | middle-right | bottom-center
                                                   # | bottom-left | bottom-right | center
-digivoice settings set banner_density full        # retract (hides after a take, default) | full (stays)
 digivoice settings set banner_animations false    # still grid frame (default true)
-digivoice settings set banner_pinned true         # keep the banner up (default false)
+digivoice settings set banner_pinned true         # keep the icon up (default false)
 digivoice settings --json                         # show everything
 ```
 
@@ -63,7 +56,7 @@ digivoice banner show --text "sound check"
 digivoice banner hide   # or: toggle
 ```
 
-An unknown `banner_position` falls back to `top-center`; an unknown `banner_density` falls back to `retract`.
+An unknown `banner_position` falls back to `top-center`. A leftover `banner_density` in an old file is ignored.
 
 ## How stop works
 
