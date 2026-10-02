@@ -1,8 +1,10 @@
-"""TTY settings as a path. Enter opens a folder, a list, or changes a value.
+"""TTY settings as a path. Enter opens a folder or a chooser.
 
-A model row opens the catalog. Size and the recommended flag are on each
-row. A missing file downloads only after confirm. Esc goes up.
-The numbered ``setup`` wizard stays for pipes and agents.
+A value is saved only when that chooser is picked. Enter on the parent
+does not toggle or cycle. After a choice or cancel, the parent stays on
+the row that was opened. A model row opens the catalog. Size and the
+recommended flag are on each row. A missing file downloads only after
+confirm. Esc goes up. The numbered ``setup`` wizard stays for pipes and agents.
 """
 
 from __future__ import annotations
@@ -53,6 +55,15 @@ _PIPER_VOICES: tuple[tuple[str, str, str], ...] = (
     ("en_GB-alba-medium.onnx", "Alba medium", "English"),
 )
 _MODEL_FIELDS = frozenset({"stt_model", "rewrite_model", "tts_voice"})
+_BOOL_FIELDS = frozenset(
+    {
+        "paste_on_stop",
+        "rewrite_enabled",
+        "live_banner",
+        "banner_pinned",
+        "banner_animations",
+    }
+)
 
 
 class TreeRow(BaseModel):
@@ -150,22 +161,26 @@ def rows_at(
             ),
             TreeRow(
                 name="paste",
-                kind="toggle",
-                field="paste_on_stop",
+                kind="pick",
                 value=_on_off(settings.paste_on_stop),
-                explain="Paste the words when dictation stops.",
+                explain="Paste the words when dictation stops. Enter opens on or off.",
             ),
         ]
     if here == "/settings/speech/model":
         return _model_choices("stt_model")
     if here == "/settings/speech/voice":
         return _voice_choices(settings, models_dir)
+    if here == "/settings/speech/paste":
+        return _bool_choices(
+            "paste_on_stop",
+            "Paste the words when dictation stops.",
+            "Leave the words in the banner only.",
+        )
     if here == "/settings/rewrite":
         return [
             TreeRow(
                 name="enabled",
-                kind="toggle",
-                field="rewrite_enabled",
+                kind="pick",
                 value=_on_off(settings.rewrite_enabled),
                 explain="On rewrites with the local model. Off pastes the words as spoken.",
             ),
@@ -182,6 +197,12 @@ def rows_at(
                 explain="On-device model. Enter opens the list. A download asks first.",
             ),
         ]
+    if here == "/settings/rewrite/enabled":
+        return _bool_choices(
+            "rewrite_enabled",
+            "Rewrite with the local model.",
+            "Paste the words as spoken.",
+        )
     if here == "/settings/rewrite/style":
         return _style_choices()
     if here == "/settings/rewrite/model":
@@ -190,40 +211,57 @@ def rows_at(
         return [
             TreeRow(
                 name="show",
-                kind="toggle",
-                field="live_banner",
+                kind="pick",
                 value=_on_off(settings.live_banner),
                 explain="Draw the banner during a take. Off hides it entirely.",
             ),
             TreeRow(
                 name="pin",
-                kind="toggle",
-                field="banner_pinned",
+                kind="pick",
                 value=_on_off(settings.banner_pinned),
                 explain="On keeps the icon visible. Off retracts it when voice is idle.",
             ),
             TreeRow(
                 name="position",
-                kind="cycle",
-                field="banner_position",
+                kind="pick",
                 value=settings.banner_position,
                 explain="Where the banner sits on the screen.",
             ),
             TreeRow(
                 name="density",
-                kind="cycle",
-                field="banner_density",
+                kind="pick",
                 value=settings.banner_density,
                 explain="Stored with the banner. The pin chooses whether the icon stays up.",
             ),
             TreeRow(
                 name="animations",
-                kind="toggle",
-                field="banner_animations",
+                kind="pick",
                 value=_on_off(settings.banner_animations),
                 explain="Animate the banner mark. Off holds a still frame.",
             ),
         ]
+    if here == "/settings/banner/show":
+        return _bool_choices(
+            "live_banner",
+            "Draw the banner during a take.",
+            "Hide the banner entirely.",
+        )
+    if here == "/settings/banner/pin":
+        return _bool_choices(
+            "banner_pinned",
+            "Keep the icon visible.",
+            "Retract the icon when voice is idle.",
+        )
+    if here == "/settings/banner/position":
+        return _named_choices("banner_position", _POSITIONS, "Where the banner sits.")
+    if here == "/settings/banner/density":
+        return _named_choices("banner_density", _DENSITIES, "Stored with the banner.")
+    if here == "/settings/banner/animations":
+        return _bool_choices(
+            "banner_animations",
+            "Animate the banner mark.",
+            "Hold a still frame.",
+        )
     if here == "/settings/hotkeys":
         bindings = settings.hotkey_bindings
         return [
@@ -287,6 +325,20 @@ _STYLE_EXPLAIN: dict[str, str] = {
     "blog": "Readable prose.",
     "none": "Light cleanup only.",
 }
+
+
+def _bool_choices(field: str, on_explain: str, off_explain: str) -> list[TreeRow]:
+    return [
+        TreeRow(name="on", kind="choice", field=field, choice="on", explain=on_explain),
+        TreeRow(name="off", kind="choice", field=field, choice="off", explain=off_explain),
+    ]
+
+
+def _named_choices(field: str, names: tuple[str, ...], explain: str) -> list[TreeRow]:
+    return [
+        TreeRow(name=name, kind="choice", field=field, choice=name, explain=explain)
+        for name in names
+    ]
 
 
 def _style_choices() -> list[TreeRow]:
@@ -370,14 +422,29 @@ def _voice_choices(settings: VoiceSettings, models_dir: Path | None) -> list[Tre
 
 def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int:
     here = _norm(path)
+    current = ""
     if here == "/settings/speech/model":
         current = settings.stt_model
     elif here == "/settings/speech/voice":
         current = settings.tts_voice or "auto"
+    elif here == "/settings/speech/paste":
+        current = _on_off(settings.paste_on_stop)
+    elif here == "/settings/rewrite/enabled":
+        current = _on_off(settings.rewrite_enabled)
     elif here == "/settings/rewrite/model":
         current = settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE
     elif here == "/settings/rewrite/style":
         current = settings.rewrite_preset
+    elif here == "/settings/banner/show":
+        current = _on_off(settings.live_banner)
+    elif here == "/settings/banner/pin":
+        current = _on_off(settings.banner_pinned)
+    elif here == "/settings/banner/position":
+        current = settings.banner_position
+    elif here == "/settings/banner/density":
+        current = settings.banner_density
+    elif here == "/settings/banner/animations":
+        current = _on_off(settings.banner_animations)
     else:
         return 0
     for index, row in enumerate(rows):
@@ -405,6 +472,8 @@ def _changed(settings: VoiceSettings, row: TreeRow, typed: str | None) -> VoiceS
             return None
         if row.field == "tts_voice" and row.choice == "auto":
             data[row.field] = None
+        elif row.field in _BOOL_FIELDS:
+            data[row.field] = row.choice == "on"
         else:
             data[row.field] = row.choice
         return VoiceSettings.model_validate(data)
@@ -491,6 +560,8 @@ def browse_settings(
     settings = load_settings(paths)
     models_dir = Path(paths.models_dir)
     stack = _stack_for(settings, start, models_dir)
+    # Parent screens remember the row that was opened. A redraw does not jump to 0.
+    cursors: dict[str, int] = {}
     while stack:
         path = stack[-1]
         rows = rows_at(settings, path, models_dir)
@@ -504,7 +575,7 @@ def browse_settings(
             stdout=stdout,
             subtitle=path,
             blocks=[row.as_block(path) for row in rows],
-            start_at=_list_cursor(settings, path, rows),
+            start_at=cursors.get(path, _list_cursor(settings, path, rows)),
         )
         if picked is None:
             stack.pop()
@@ -519,6 +590,7 @@ def browse_settings(
             return
         if not isinstance(picked, int) or not 0 <= picked < len(rows):
             continue
+        cursors[path] = picked
         row = rows[picked]
         if row.kind in {"dir", "pick"}:
             stack.append(f"{path}/{row.name}")

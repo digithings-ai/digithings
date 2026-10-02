@@ -67,7 +67,12 @@ _KICKER = "digivoice"
 # Nested home → setup stays on one alternate screen.
 _fullscreen_depth = 0
 
-TUI_FOOTER_HINT = "↑↓ move · enter select · esc back · / path"
+NAV_FOOTER = "↑↓ move · enter select · esc back · click"
+TUI_FOOTER_HINT = NAV_FOOTER
+# Click targets that are not menu rows. Negative so they never match an option.
+HIT_BACK = -1
+HIT_PREV = -2
+HIT_NEXT = -3
 
 Group = tuple[str, int, int]
 
@@ -975,6 +980,7 @@ def _panel_lines(
     lead: Sequence[str] | None = None,
     lead_meta: str | None = None,
     typed: str | None = None,
+    paging: bool = False,
 ) -> tuple[list[str], list[int | None]]:
     lines: list[str] = []
     hits: list[int | None] = []
@@ -1087,17 +1093,21 @@ def _panel_lines(
         current = _option_parts(options[selected])[0]
     else:
         current = title
-    footer_hint = hint or TUI_FOOTER_HINT
+    _ = hint
+    footer_hint = NAV_FOOTER
     full = f"└  {current}  ·  {footer_hint}"
     short = f"└  {footer_hint}"
     footer = full if len(full) <= panel_w else short
     if len(footer) <= panel_w:
-        add(_paint(_fit(footer, panel_w), "rule", ansi))
-        return lines, hits
-    wrapped = wrap_text(footer_hint, max(8, panel_w - 3))
-    add(_paint(_fit(f"└  {wrapped[0]}", panel_w), "rule", ansi))
-    for row in wrapped[1:]:
-        add(_paint(_fit(f"   {row}", panel_w), "rule", ansi))
+        add(_paint(_fit(footer, panel_w), "rule", ansi), HIT_BACK)
+    else:
+        wrapped = wrap_text(footer_hint, max(8, panel_w - 3))
+        add(_paint(_fit(f"└  {wrapped[0]}", panel_w), "rule", ansi), HIT_BACK)
+        for row in wrapped[1:]:
+            add(_paint(_fit(f"   {row}", panel_w), "rule", ansi), HIT_BACK)
+    if paging:
+        add(_paint(_fit("   ← previous", panel_w), "rule", ansi), HIT_PREV)
+        add(_paint(_fit("   → next", panel_w), "rule", ansi), HIT_NEXT)
     return lines, hits
 
 
@@ -1171,6 +1181,7 @@ def render_screen(
     lead: Sequence[str] | None = None,
     lead_meta: str | None = None,
     typed: str | None = None,
+    paging: bool = False,
 ) -> str:
     """One centered frame. `hero` paints the half-block DIGIVOICE wordmark."""
     global _ROW_HITS
@@ -1204,6 +1215,7 @@ def render_screen(
             lead=lead,
             lead_meta=lead_meta,
             typed=typed,
+            paging=paging,
         )
         header_h = rows - len(panel)
         needed = 5 + _HERO_GAP + 1 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
@@ -1421,13 +1433,17 @@ def choose(
 ) -> int | str | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
-    TTY mode paints a step-rail frame and redraws on every key. Space confirms
-    like Enter; Esc/q goes back. `/` starts a slash path; Enter runs it.
-    A shortcut key or a click on a row returns that index. `c` copies when
-    the screen binds it; Command-C / Windows-C does too when the terminal
-    forwards the chord. `hero` paints the DIGIVOICE pixel lockup.
-    Returns None on back. With `paging`, left/right return ``page-prev`` and
-    ``page-next``. A slash path is returned as the string itself.
+    TTY mode paints a step-rail frame and redraws on every key. The footer
+    is always ``↑↓ move · enter select · esc back · click``. Up and down
+    move. Enter selects. Esc goes back. A click on a row selects it. A click
+    on the footer goes back. ``q`` also goes back and is not in the footer.
+    Left and right are page changes only when ``paging`` is set; they are
+    not a second back or select. `/` starts a slash path; Enter runs it.
+    A shortcut key returns that index. `c` copies when the screen binds it;
+    Command-C / Windows-C does too when the terminal forwards the chord.
+    `hero` paints the DIGIVOICE pixel lockup. ``start_at`` is the row to
+    land on. Returns None on back. With `paging`, left/right and the
+    previous/next rows return ``page-prev`` and ``page-next``.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -1483,6 +1499,7 @@ def choose(
                         lead=lead,
                         lead_meta=lead_meta,
                         typed=typed or None,
+                        paging=paging,
                     )
                 )
                 stdout.flush()
@@ -1493,7 +1510,15 @@ def choose(
                     continue
                 if key == "click" and _pointer is not None:
                     hit = hit_at(_pointer[1])
-                    if hit is not None:
+                    if hit is None:
+                        continue
+                    if hit == HIT_BACK:
+                        return None
+                    if hit == HIT_PREV and paging:
+                        return "page-prev"
+                    if hit == HIT_NEXT and paging:
+                        return "page-next"
+                    if hit >= 0:
                         return hit
                     continue
                 if typed:
@@ -1518,13 +1543,13 @@ def choose(
                     selected = (selected - 1) % len(listed)
                 elif key == "down" or key in {"j", "J"}:
                     selected = (selected + 1) % len(listed)
-                elif paging and (key == "left" or key in {"h", "H"}):
+                elif paging and key == "left":
                     return "page-prev"
-                elif paging and (key == "right" or key in {"l", "L"}):
+                elif paging and key == "right":
                     return "page-next"
-                elif key in {"enter", " ", "right"}:
+                elif key in {"enter", " "}:
                     return selected
-                elif key in {"esc", "q", "Q", "left"}:
+                elif key in {"esc", "q", "Q"}:
                     return None
         except (OSError, ValueError):
             return None
@@ -1684,7 +1709,7 @@ def capture_binding(
                     [block.action for block in armed],
                     selected,
                     subtitle=subtitle,
-                    hint="enter saves · esc cancels",
+                    hint=NAV_FOOTER,
                     use_ansi=_use_ansi(),
                     use_screen=_use_screen(),
                     clear=first,
@@ -1745,7 +1770,7 @@ def choose_many(
         checked: set[int] = set(initial or set())
         color = _use_ansi()
         screen = _use_screen()
-        hint = "↑↓ move · space toggle · enter confirm · esc back · q quit"
+        hint = NAV_FOOTER
         first = True
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
@@ -1864,7 +1889,7 @@ def _write_info_frame(
         footer_bits = [footer]
         if less or more:
             footer_bits.append("↑↓ scroll")
-        footer_bits.append("esc back · q quit")
+        footer_bits.append(NAV_FOOTER)
         lines = [
             _paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi),
             _paint(_fit(f"■  {title}", panel_w), "step-on", ansi),
@@ -1940,6 +1965,10 @@ def play_intro(
 
 
 __all__ = [
+    "HIT_BACK",
+    "HIT_NEXT",
+    "HIT_PREV",
+    "NAV_FOOTER",
     "TUI_FOOTER_HINT",
     "_ANSI_CLEAR_EOL",
     "_ANSI_CLEAR_HOME",
