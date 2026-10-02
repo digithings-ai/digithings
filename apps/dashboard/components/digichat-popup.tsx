@@ -61,11 +61,20 @@ type DigichatPopupProps = {
   /** Test override — production omits and reads session + env. */
   tier?: PlanTier;
   config?: DigichatPopupConfig | null;
+  /**
+   * `popup` is the floating launcher. `rail` docks that same launcher in the
+   * desk shell's right column (portal off, sized to the column).
+   */
+  placement?: 'popup' | 'rail';
+  /** Fired when the docked rail panel opens or finishes closing. */
+  onRailOpenChange?: (open: boolean) => void;
 };
 
 export default function DigichatPopup({
   tier: tierOverride,
   config: configOverride,
+  placement = 'popup',
+  onRailOpenChange,
 }: DigichatPopupProps) {
   const sessionTier = usePlanTier();
   const canFxHub = useCanAccessProduct('fx_hub');
@@ -258,15 +267,31 @@ export default function DigichatPopup({
     <div data-digichat-popup="1" aria-live="polite">
       <DigichatLauncher
         ariaLabel="digichat dashboard assistant"
-        onOpenChange={setOpen}
+        portal={placement !== 'rail'}
+        onOpenChange={(next) => {
+          setOpen(next);
+          onRailOpenChange?.(next);
+        }}
         style={
-          {
-            '--digichat-launcher-panel-width':
-              'min(400px, calc(100vw - 2.5rem))',
-            '--digichat-launcher-panel-height':
-              'min(640px, calc(100dvh - 2.5rem))',
-            zIndex: 2147483000,
-          } as CSSProperties
+          placement === 'rail'
+            ? ({
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                '--digichat-launcher-right': '0px',
+                '--digichat-launcher-bottom': '0px',
+                '--digichat-launcher-panel-width': '100%',
+                '--digichat-launcher-panel-height': '100%',
+                zIndex: 2,
+              } as CSSProperties)
+            : ({
+                '--digichat-launcher-panel-width':
+                  'min(400px, calc(100vw - 2.5rem))',
+                '--digichat-launcher-panel-height':
+                  'min(640px, calc(100dvh - 2.5rem))',
+                zIndex: 2147483000,
+              } as CSSProperties)
         }
       >
         {entitled ? (

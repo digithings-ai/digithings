@@ -12,6 +12,7 @@ import {
 import { usePathname } from 'next/navigation';
 import { TabStrip } from '@digithings/ui';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { isDeskShellEnabled } from '@/lib/desk/flag';
 
 export function subpageTabButtonClass(active: boolean): string {
   return `flex items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2 sm:text-sm shrink-0 ${
@@ -119,6 +120,11 @@ export function SubpageStickyTabBar({
   // consumer's own handler. Call sites use `() => setTab(id)`-style handlers;
   // the stub keeps a defensive preventDefault/stopPropagation surface for
   // any future handler that touches the event.
+  // Desk shell: the nested rail owns section nav. Chart interval tabs are not
+  // this strip. Flag default off, so the existing chips stay until the shell
+  // build is on.
+  if (isDeskShellEnabled()) return null;
+
   const activateStripTab = (i: number) => {
     const stub = {
       preventDefault() {},

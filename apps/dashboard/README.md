@@ -391,6 +391,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
 | `NEXT_PUBLIC_DASHBOARD_AUTH`      | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
+| `NEXT_PUBLIC_DESK_SHELL`          | Optional. Set to `1` to enable the one-viewport desk shell. Default off keeps the current scrolling brief. Build-time only. |
 | `NEXT_PUBLIC_DASHBOARD_VERSION`   | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 | `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Optional fallback public Alpaca OAuth client id. Brokers tab prefers `GET /settings/app-urls` (EF `ALPACA_OAUTH_CLIENT_ID`; never the secret). |
 | `NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL` | Optional Functions base; defaults to `$NEXT_PUBLIC_SUPABASE_URL/functions/v1`.                       |
@@ -578,7 +579,8 @@ old app-local `@theme` palette (`--color-bg-primary`, `--color-text-primary`,
 `border-hair`, `text-up` / `text-down`, `font-mono`) resolves to the one canon
 palette. The only app-local custom props left in `globals.css` are non-utility
 depth cues (`--shadow-overlay`) and the next/font family re-declarations that
-route the canon font tokens to the self-hosted Geist Mono face — no color
+route the canon font tokens to the self-hosted Inter (prose, display) and
+JetBrains Mono (chrome, tables, numbers) faces — no color
 palette and no serif display face. Dashboard panels ride the vendored kit
 `Card` (`@digithings/ui/ui`, tonal `--surface` + hairline, radius 0) with
 `data-reveal` as the scroll-reveal hook (wave 2, #4206). See

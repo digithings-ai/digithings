@@ -1,7 +1,7 @@
 import './globals.css';
 import { ReactNode } from 'react';
 import type { Metadata } from 'next';
-import { Geist_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
 import { AuthGate } from '@/lib/auth-gate';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -12,10 +12,16 @@ const THEME_INIT = `(function(){try{var t=localStorage.getItem('dashboard-theme'
 
 // Self-hosted at build time by next/font (served from /dashboard/_next/static/media),
 // so it satisfies the dashboard CSP (font-src 'self' data:) — no fonts.googleapis.com.
-// BLEND v0.1: one mono voice for display, body, and chrome.
-const geistMono = Geist_Mono({
+// Inter for prose and display. JetBrains Mono for chrome, tables, and numbers.
+const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-geist-mono',
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
   display: 'swap',
 });
 
@@ -49,9 +55,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       lang="en"
       // Font variables must live on <html>: globals.css re-declares --font-sans/--font-mono/--font-display
-      // on :root via var(--font-geist-mono), which resolves at the declaring element — variables
-      // scoped to <body> are invisible there and the tokens go invalid app-wide (#1538).
-      className={geistMono.variable}
+      // on :root via var(--font-inter) / var(--font-jetbrains-mono), which resolve at the
+      // declaring element — variables scoped to <body> are invisible there (#1538).
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <head>

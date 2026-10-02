@@ -166,4 +166,13 @@ describe('SubpageStickyTabBar — TabStrip-backed desktop row (button tabs)', ()
     );
     expect(html).not.toContain('role="tablist"');
   });
+
+  it('renders nothing when the desk shell flag is on', () => {
+    vi.stubEnv('NEXT_PUBLIC_DESK_SHELL', '1');
+    const html = renderToStaticMarkup(
+      createElement(SubpageStickyTabBar, { 'aria-label': 'Portfolio sections' }, 'Holdings'),
+    );
+    expect(html).toBe('');
+    vi.unstubAllEnvs();
+  });
 });

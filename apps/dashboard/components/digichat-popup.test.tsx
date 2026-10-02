@@ -157,6 +157,21 @@ describe('DigichatPopup', () => {
     expect(btn?.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('docks the launcher in the desk rail instead of portaling it', () => {
+    act(() => {
+      root.render(
+        createElement(DigichatPopup, {
+          tier: 'desk',
+          config: CFG,
+          placement: 'rail',
+        }),
+      );
+    });
+    const launcher = container.querySelector('.digichat-launcher--contained');
+    expect(launcher).not.toBeNull();
+    expect(container.contains(launcher)).toBe(true);
+  });
+
   it('shows no upgrade CTA for Desk+ (entitled chat, #3662)', () => {
     act(() => {
       root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));

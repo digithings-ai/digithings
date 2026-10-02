@@ -40,8 +40,16 @@ describe('buildCommandItems (F2 palette — static rows only)', () => {
     });
     expect(items.find((i) => i.id === 'go-period')).toBeUndefined();
     expect(items.find((i) => i.id === 'go-house')).toMatchObject({
-      href: '/house?tab=corpus',
+      title: 'house / brief',
+      href: '/',
     });
+    expect(items.find((i) => i.id === 'path-holdings')).toMatchObject({
+      title: 'house / portfolio / holdings',
+      href: '/portfolio',
+    });
+    expect(filterCommandItems(items, [], 'house / portfolio / holdings').some((i) => i.id === 'path-holdings')).toBe(
+      true,
+    );
     expect(items.find((i) => i.id === 'go-attribution')).toMatchObject({
       href: '/portfolio/attribution',
       hint: 'Position decomposition & recommendation quality',
