@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import app, { type Env } from "../index";
-import { curvePoints, pickStrategy } from "./strategies";
+import { curvePoints, pickStrategy, tearsheetCard } from "./strategies";
 
 const ENV: Env = {
   DASHBOARD_DEV_CALLER: "enterprise+12x",
@@ -67,6 +67,24 @@ describe("phase 4 strategies", () => {
     expect(body.data.available).toBe(false);
     expect(body.data.points).toEqual([]);
     expect(body.data.reason).toContain("no dated curve");
+    expect(body.data).toHaveProperty("card");
+  });
+
+  it("projects stored tearsheet metrics and leaves missing figures null", () => {
+    const card = tearsheetCard(
+      { id: "btc_slapper", label: "BTC L/S", symbol: "BTC" },
+      { net_profit_pct: 12.5, max_drawdown_pct: -8, win_rate_pct: null, dca: { vs_lump_pct: 1.2 } },
+    );
+    expect(card).toMatchObject({
+      id: "btc_slapper",
+      name: "BTC L/S",
+      net_profit_pct: 12.5,
+      max_drawdown_pct: -8,
+      win_rate_pct: null,
+      profit_factor: null,
+      vs_lump_pct: 1.2,
+    });
+    expect(tearsheetCard(null, {})).toBeNull();
   });
 
   it("deploy flow is coming soon and does not touch the database", async () => {
