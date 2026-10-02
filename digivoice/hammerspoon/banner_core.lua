@@ -7,9 +7,10 @@
 ---   * banner settings from settings.json
 ---   * theme chrome (digichat light/dark flips; RYG status colors stay)
 ---   * drag/snap anchors, hover controls layout, reanchoring
---- init.lua only draws what this module computes. No chrome: no titles, no hints.
---- The banner is status only: one short word beside the grid. No transcript.
---- It stays hidden until a take, an error, a warning, or the pin (always-show).
+--- init.lua only draws what this module computes. The surface is one status icon.
+--- No status word, pin, button, transcript, waveform, or fact line.
+--- Retract (default) shows the icon while recording, dictating, processing, or a
+--- current error or warning, then hides. banner_pinned keeps the idle icon up.
 
 local M = {}
 
@@ -106,14 +107,6 @@ end
 --------------------------------------------------------------------------------
 
 local GRID = M.GRID
-local CENTER = (GRID - 1) / 2
-
--- Deterministic bit-mixing hash, same as the TSX original. Returns seconds.
-local function hash(n, salt, range)
-  local h = ((n * 374761393) + (salt * 668265263)) & 0xFFFFFFFF
-  h = ((h ~ (h >> 13)) * 1274126177) & 0xFFFFFFFF
-  return ((h ~ (h >> 16)) % range) / 1000
-end
 
 local function glyph(dots)
   local set = {}
@@ -123,59 +116,32 @@ local function glyph(dots)
   return set
 end
 
-local CHECK = glyph({ { 1, 4 }, { 2, 3 }, { 3, 0 }, { 3, 2 }, { 4, 1 } })
 local CROSS =
   glyph({ { 0, 0 }, { 0, 4 }, { 1, 1 }, { 1, 3 }, { 2, 2 }, { 3, 1 }, { 3, 3 }, { 4, 0 }, { 4, 4 } })
 local BANG = glyph({ { 0, 2 }, { 1, 2 }, { 2, 2 }, { 4, 2 } })
 local STOP =
   glyph({ { 1, 1 }, { 1, 2 }, { 1, 3 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 2 }, { 3, 3 } })
 
-local TEAL = { red = 0.08, green = 0.72, blue = 0.65 }
 local RED = { red = 0.94, green = 0.27, blue = 0.27 }
-local GREEN = { red = 0.20, green = 0.78, blue = 0.45 }
 local AMBER = { red = 0.96, green = 0.65, blue = 0.14 }
+local INK = { red = 0.78, green = 0.80, blue = 0.82 }
 local GRAY = { red = 0.62, green = 0.66, blue = 0.68 }
 
--- Matrix states. `wave` = recording, `speak`, `load` family = everything in flight.
+-- Static glyphs. Recording is a mark, not a column wave.
+local RECORD = glyph({ { 1, 2 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 2 }, { 3, 3 } })
+local DICTATE = glyph({ { 1, 1 }, { 1, 3 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 3 } })
+local PROCESS = glyph({ { 0, 2 }, { 1, 1 }, { 1, 3 }, { 2, 0 }, { 2, 4 }, { 3, 1 }, { 3, 3 }, { 4, 2 } })
+
 local MATRIX = {
-  load = {
-    color = TEAL,
-    blink = function(i)
-      return { duration = 0.9 + hash(i, 2, 700), delay = -hash(i, 1, 1200), lo = 0.15 }
+  record = { color = RED, glyph = RECORD },
+  dictate = { color = INK, glyph = DICTATE },
+  process = {
+    color = INK,
+    glyph = PROCESS,
+    blink = function()
+      return { duration = 1.4, delay = 0, lo = 0.35 }
     end,
   },
-  think = {
-    color = TEAL,
-    blink = function(_, row, col)
-      return { duration = 1.2, delay = -(row + col) * 0.09, lo = 0.2 }
-    end,
-  },
-  sync = {
-    color = TEAL,
-    blink = function(_, row, col)
-      local turn = (math.atan(row - CENTER, col - CENTER) + math.pi) / (2 * math.pi)
-      return { duration = 1.3, delay = -turn * 1.3, lo = 0.2 }
-    end,
-  },
-  paste = {
-    color = TEAL,
-    blink = function(_, row)
-      return { duration = 1, delay = -row * 0.12, lo = 0.2 }
-    end,
-  },
-  wave = {
-    color = RED,
-    blink = function(_, _, col)
-      return { duration = 0.7 + hash(col, 4, 500), delay = -hash(col, 5, 900), lo = 0.25 }
-    end,
-  },
-  speak = {
-    color = TEAL,
-    blink = function(_, _, col)
-      return { duration = 0.4 + hash(col, 6, 350), delay = -hash(col, 7, 700), lo = 0.2 }
-    end,
-  },
-  success = { color = GREEN, glyph = CHECK },
   error = {
     color = RED,
     glyph = CROSS,
@@ -190,26 +156,49 @@ local MATRIX = {
       return { duration = 1.6, delay = 0, lo = 0.45 }
     end,
   },
-  stopped = { color = GRAY, glyph = STOP },
-  idle = { color = GRAY, base = 0.35 },
+  idle = { color = GRAY, glyph = STOP, base = 0.35 },
 }
 
 M.MATRIX = MATRIX
 
--- Banner state -> matrix state.
+-- Existing pipeline states only. Dictating is the transcribe step after capture.
 M.STATE_MATRIX = {
-  loading = "load",
-  recording = "wave",
-  transcribing = "think",
-  rewriting = "sync",
-  pasting = "paste",
-  speaking = "speak",
-  done = "success",
-  cancelled = "stopped",
-  cancelling = "stopped",
+  loading = "process",
+  recording = "record",
+  transcribing = "dictate",
+  rewriting = "process",
+  pasting = "process",
+  speaking = "process",
+  done = "idle",
+  cancelled = "idle",
+  cancelling = "idle",
   empty = "warn",
   error = "error",
   idle = "idle",
+}
+
+--- Names drawn as icons. Idle is the calm mark for an always-visible banner.
+M.ICON_PHASE = {
+  recording = "recording",
+  transcribing = "dictating",
+  loading = "processing",
+  rewriting = "processing",
+  pasting = "processing",
+  speaking = "processing",
+  error = "error",
+  empty = "warning",
+  idle = "idle",
+  done = "idle",
+  cancelled = "idle",
+  cancelling = "idle",
+}
+
+local ALWAYS_SHOW = {
+  recording = true,
+  dictating = true,
+  processing = true,
+  error = true,
+  warning = true,
 }
 
 M.LABELS = {
@@ -227,20 +216,37 @@ M.LABELS = {
   idle = "idle",
 }
 
---- One word beside the grid. The transcript never lands on the banner.
-M.STATUS_WORD = {
-  recording = "recording",
-  loading = "processing",
-  transcribing = "processing",
-  rewriting = "processing",
-  pasting = "processing",
-  speaking = "processing",
-  error = "error",
-  empty = "warning",
-}
+function M.icon_phase(state)
+  return M.ICON_PHASE[state] or ""
+end
 
-function M.status_word(state)
-  return M.STATUS_WORD[state] or ""
+--- Recording, dictating, processing, and a current error or warning always draw.
+--- The idle icon draws only while the banner is pinned (always visible).
+function M.should_draw(state, pinned)
+  local phase = M.icon_phase(state)
+  if ALWAYS_SHOW[phase] then
+    return true
+  end
+  if phase == "idle" then
+    return pinned == true
+  end
+  return false
+end
+
+--- Click focuses a digivoice terminal that is already open, otherwise opens one.
+function M.focus_action(already_open)
+  if already_open then
+    return "focus"
+  end
+  return "open"
+end
+
+--- A pid file with one integer means the terminal UI is already up.
+function M.tui_is_open(pid_text)
+  if type(pid_text) ~= "string" then
+    return false
+  end
+  return pid_text:match("^%s*%d+%s*$") ~= nil
 end
 
 function M.matrix_for(state)
@@ -356,29 +362,33 @@ function M.final_view(code, snapshot, session, stdout, stderr, cancelling)
 end
 
 function M.linger_seconds(state, density, pinned)
-  -- A pin keeps an error or a warning up. Done settles to a quiet idle.
-  if pinned and (state == "error" or state == "empty" or state == "idle") then
+  -- Density no longer decides visibility. banner_pinned is the always-on mode.
+  density = density
+  local phase = M.icon_phase(state)
+  if pinned and (phase == "error" or phase == "warning" or phase == "idle") then
+    if state == "done" or state == "cancelled" or state == "cancelling" then
+      return 1.2
+    end
     return nil
   end
-  if pinned and (state == "done" or state == "cancelled" or state == "cancelling") then
-    return 1.2
+  if pinned and (phase == "recording" or phase == "dictating" or phase == "processing") then
+    return nil
   end
   if pinned then
     return nil
   end
-  -- Full density stays until collapsed or removed: no auto-hide timer.
-  if density == "full" then
-    return nil
+  -- Retract: a finished take is not a current update. Error and warning linger
+  -- only while they are still the thing to show.
+  if state == "done" or state == "cancelled" or state == "cancelling" or state == "idle" then
+    return 0
   end
   if state == "error" then
     return 4.0
-  elseif state == "empty" then
-    return 2.0
-  elseif state == "cancelled" then
-    return 1.2
   end
-  -- Retract auto-dismisses a few seconds after idle/done.
-  return 4.0
+  if state == "empty" then
+    return 2.0
+  end
+  return nil
 end
 
 --------------------------------------------------------------------------------
@@ -428,12 +438,9 @@ function M.theme_colors(theme)
   return M.CHROME.dark
 end
 
---- Status word only. Recording, processing, error, and warning. No transcript.
+--- The banner never draws a word. The icon phase lives on `layout.phase`.
 function M.body_for(view)
-  if type(view) ~= "table" then
-    return ""
-  end
-  return M.status_word(view.state)
+  return ""
 end
 
 --- Greedy word wrap to `cols` columns. Hard-splits words longer than a line.
@@ -508,56 +515,30 @@ function M.text_origin_y()
   return M.PAD + (M.ICON - M.FONT_SIZE) / 2
 end
 
---- Box geometry for a view. No chrome: no title, no transcript.
---- A status word sits on the icon row. Idle and done hug the grid.
---- Density no longer widens the box; it only changes how long the banner stays.
+--- Square icon only. Density and the transcript do not change the box.
 function M.layout(view, kind, density, opts)
-  kind = kind -- kind no longer changes geometry; kept for call shape.
+  kind = kind
+  density = density
   opts = opts or {}
-  if density ~= "full" then
-    density = "retract"
+  local state = ""
+  if type(view) == "table" then
+    state = view.state or ""
   end
-  local text_x = M.PAD + M.ICON + 10
-  local text_y = M.text_origin_y()
   local grid_side = M.PAD * 2 + M.ICON
-  local function grid_only()
-    return {
-      w = grid_side,
-      h = grid_side,
-      text_x = text_x,
-      text_y = text_y,
-      text_w = 0,
-      cols = 0,
-      lines = {},
-      body = "",
-      clipped = false,
-      total = 0,
-      longest = 0,
-      all = {},
-      raw = "",
-    }
-  end
-  local body = M.body_for(view)
-  if body == "" then
-    return grid_only()
-  end
-  local longest = math.max(#body, 1)
-  local lines = { body }
-  local width = text_x + longest * M.CHAR_WIDTH + M.PAD
-  local height = math.max(grid_side, M.PAD + M.LINE_HEIGHT + M.PAD)
   return {
-    w = width,
-    h = height,
-    text_x = text_x,
-    text_y = text_y,
-    text_w = width - text_x - M.PAD,
-    cols = longest,
-    lines = lines,
-    body = body,
+    w = grid_side,
+    h = grid_side,
+    text_x = 0,
+    text_y = M.text_origin_y(),
+    text_w = 0,
+    cols = 0,
+    lines = {},
+    body = "",
+    phase = M.icon_phase(state),
     clipped = false,
-    total = 1,
-    longest = longest,
-    all = lines,
+    total = 0,
+    longest = 0,
+    all = {},
     raw = "",
   }
 end
@@ -691,23 +672,13 @@ function M.reanchor(prev, size, anchor)
   return { x = prev.x, y = prev.y }
 end
 
---- Hover control: one pin, centered under the banner. 18px square.
---- Frames are relative to the banner's top-left (y starts below the box).
+--- No hover controls. The pin lives in the terminal UI, not on the banner.
 function M.controls_layout(box_w, box_h, density)
-  local y = box_h + M.CTRL_GAP
-  local x = (box_w - M.CTRL_SIZE) / 2
-  return {
-    dir = "pin",
-    density = density,
-    buttons = {
-      { id = "pin", x = x, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
-    },
-  }
+  return { dir = "none", density = density, buttons = {} }
 end
 
---- Extra canvas height the hover pin needs below the box.
 function M.controls_height(density)
-  return M.CTRL_GAP + M.CTRL_SIZE
+  return 0
 end
 
 return M

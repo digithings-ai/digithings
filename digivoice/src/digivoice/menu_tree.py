@@ -200,7 +200,7 @@ def rows_at(
                 kind="toggle",
                 field="banner_pinned",
                 value=_on_off(settings.banner_pinned),
-                explain="Keep the banner on screen. Off shows it only while a take is active.",
+                explain="On keeps the icon visible. Off retracts it when voice is idle.",
             ),
             TreeRow(
                 name="position",
@@ -214,7 +214,7 @@ def rows_at(
                 kind="cycle",
                 field="banner_density",
                 value=settings.banner_density,
-                explain="Retract hides after a take. Full stays until you collapse it.",
+                explain="Stored with the banner. The pin chooses whether the icon stays up.",
             ),
             TreeRow(
                 name="animations",
