@@ -1,6 +1,6 @@
 # digiquant dashboard
 
-Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). Public path is `/dashboard/` (`basePath`); workspace folder is `apps/dashboard` (npm package `dashboard`). Joins the root npm workspace and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). The served desk is `/app` on `apps/digiquant-web`. This package (npm name `dashboard`, folder `apps/dashboard`) stays in the tree and is no longer a destination: `/dashboard/` redirects to `/app`. Joins the root npm workspace and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
@@ -285,8 +285,8 @@ and the launcher disappears after hydrate (#3561).
 `NEXT_PUBLIC_DIGICHAT_POPUP_MODE` is accepted for back-compat but no longer switches
 to a round ✦ launcher.
 
-**Local dogfood:** digichat on `http://127.0.0.1:3005`, dashboard on
-`http://127.0.0.1:4014/dashboard/` with `.env.local` pointing
+**Local dogfood:** digichat on `http://127.0.0.1:3005`, the desk on
+`http://127.0.0.1:3910/app` with `.env.local` pointing
 `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005` and host `localhost`.
 Desk+ session required (or auth-off enterprise). Production digichat will not
 frame a loopback parent — use the local origin. See `.env.local.example`.
@@ -372,10 +372,12 @@ blocked on K3** (vault + `broker_connections`) — see that function's README.
 
 ## Running
 
+The desk is `apps/digiquant-web` at `http://127.0.0.1:3910/app`. This package is no longer that entry point.
+
 ```bash
 # From repo root
 npm install                                # links workspace packages
-npm --workspace apps/dashboard run dev     # http://127.0.0.1:3001/dashboard/
+npm --workspace apps/digiquant-web run dev:local  # http://127.0.0.1:3910/app
 npm --workspace apps/dashboard run build   # static export (output: 'export')
 npm --workspace apps/dashboard run check:static-export # verify server/client class boundaries
 npm --workspace apps/dashboard run lint
