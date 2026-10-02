@@ -18,6 +18,8 @@ export type BookSeriesPoint = { time: string; value: number };
 
 export type BookViewProps = {
   state: "loading" | "empty" | "live";
+  /** Typed contract or read failure. Figures stay withheld; the text is the error. */
+  notice?: string | null;
   asOf?: string | null;
   windowStart?: string | null;
   windowEnd?: string | null;
@@ -56,7 +58,7 @@ function PlotFrame({ children, startLabel, endLabel }: { children: React.ReactNo
   );
 }
 
-function EmptyPlot({ loading }: { loading: boolean }) {
+function EmptyPlot({ loading, notice }: { loading: boolean; notice?: string | null }) {
   const safe = useMotionSafe();
   return (
     <PlotFrame startLabel="start: --" endLabel="as of: --">
@@ -75,10 +77,14 @@ function EmptyPlot({ loading }: { loading: boolean }) {
       />
       <div className="absolute inset-0 grid place-content-center justify-items-center gap-2 px-4 text-center">
         <span className="border border-hair bg-surface px-3 py-1 text-[0.72rem] tracking-[0.06em] text-ink-soft">
-          {loading ? "[ reading the paper book ]" : "[ live feed not connected in this build ]"}
+          {notice ?? (loading ? "[ reading the paper book ]" : "[ live feed not connected in this build ]")}
         </span>
         <span className="max-w-[34ch] text-[0.68rem] leading-[1.5] text-ink-mute">
-          {loading ? "no figures until the first read settles" : "no figures shown rather than placeholder ones"}
+          {notice
+            ? "no figures shown — the read did not clear"
+            : loading
+              ? "no figures until the first read settles"
+              : "no figures shown rather than placeholder ones"}
           <span aria-hidden="true" className="ms-1 motion-safe:animate-pulse">
             ▌
           </span>
@@ -165,14 +171,16 @@ export function BookView(p: BookViewProps) {
             endLabel={`as of: ${p.asOf ?? p.series[p.series.length - 1].time}`}
           />
         ) : (
-          <EmptyPlot loading={p.state === "loading"} />
+          <EmptyPlot loading={p.state === "loading"} notice={p.notice} />
         )}
       </div>
 
       <div className="border-t border-hair px-3 py-2 text-[0.66rem] leading-[1.5] text-ink-mute">
         {live
           ? `Paper NAV index${bench ? `, benchmark ${bench}` : ""}${window ? `, window ${window}` : ""}. A research portfolio with no real money in it; not a performance claim.`
-          : "A research portfolio, not money. The live feed is not connected in this build."}
+          : p.notice
+            ? "A research portfolio, not money. Figures stay hidden when the read does not clear."
+            : "A research portfolio, not money. The live feed is not connected in this build."}
       </div>
     </div>
   );

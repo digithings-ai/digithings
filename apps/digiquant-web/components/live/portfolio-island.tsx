@@ -18,6 +18,10 @@ export function PortfolioIsland() {
   );
 
   if (live.loading) return <BookView state="loading" />;
+  // A typed accounting-NAV contract error is not an empty book. Surface it and
+  // withhold the series — never a fallback NAV.
+  if (live.navContractError) return <BookView state="empty" notice={live.navContractError} />;
+  if (live.error) return <BookView state="empty" notice={live.error} />;
   if (!live.configured || series.length === 0 || !live.kpis) return <BookView state="empty" />;
 
   const k = live.kpis;
