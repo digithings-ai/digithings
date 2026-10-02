@@ -18,11 +18,14 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/settings.py` | `settings.json` under the data dir; agent-scriptable get/set. |
 | `src/digivoice/menu_tree.py` | TTY `/settings` path. Enter opens a folder or a list. A model list shows size and the recommended row; a missing file downloads only after confirm. Each row is a bold name, a bracketed value, and a gray explanation. |
 | `src/digivoice/setup.py` | TTY opens the `/settings` path. Pipes keep the numbered wizard. `--print` overview and `recommend_models()` hardware stub (#4939 hook). |
-| `src/digivoice/tui.py` | Shared stdlib TUI: alternate-screen frames, step-rail menus, intro build-in, wrapping. |
+| `src/digivoice/tui.py` | Shared menu blocks and the non-TTY numbered prompts. |
+| `src/digivoice/opentui.py` | Replaces a TTY process with the OpenTUI app. |
+| `src/digivoice/tui_bridge.py` | Local JSON screen model the OpenTUI process calls. No network. |
+| `tui/` | OpenTUI (`@opentui/core`) app: `createCliRenderer`, boxes, and text. |
 | `src/digivoice/pixel_hero.py` | 7×10 DIGIVOICE glyph map. The home header paints those glyphs as five half-block rows in `tui.py`. |
 | `src/digivoice/catalog.py` | Suggested local STT ggml + rewrite GGUF list; download + wire into models/. |
 | `src/digivoice/installed_models.py` | Local GGUF and whisper files already installed by LM Studio, Ollama, and MLX Studio. |
-| `src/digivoice/home.py` | Bare-`digivoice` home shell: fullscreen centered menu on a TTY, printed overview otherwise. |
+| `src/digivoice/home.py` | Bare-`digivoice` home: OpenTUI on a TTY, printed overview otherwise. |
 | `src/digivoice/panels.py` | TTY doctor (green ok, red not ok, ready line at the bottom), history browser, and the system pane (reload, reset, restart, update, logs). |
 | `src/digivoice/reload.py` | `reload`: CLI path, settings, Lua adapter tip, bounded Hammerspoon reload; clears stale status on failure. |
 | `src/digivoice/rewrite.py` | Optional local post-STT rewrite (ollama / llama.cpp). llama-cli runs one turn and the banner is stripped. Fail soft. |
@@ -37,6 +40,10 @@ through a `CommandRunner` (argv list, never `shell=True`), except toggle early-s
 `subprocess.Popen` so a stop-file or signal can finalize the wav. `Runtime.runner` is the injection
 point: `None` / `run_command` means the real runner; tests pass a fake so no test needs a microphone,
 sound card, model, or clipboard.
+
+## Terminal UI
+
+A TTY does not draw the Python alternate screen. `opentui.py` replaces the process with `bun digivoice/tui/src/main.js` (the OpenTUI quickstart runtime; `DIGIVOICE_NODE` can point at another binary). That file follows the quickstart: `createCliRenderer` from `@opentui/core`, then `BoxRenderable` and `TextRenderable`. The home header is the five-row half-block DIGIVOICE wordmark (block V, letter gap 2, cube grays 59/102/145/188/231, or matching `38;2` RGB only when `COLORTERM` is `truecolor` or `24bit`). The build runs about 1400ms, then a short glint. The footer is `↑↓ move · enter select · esc back · click`. Esc on home exits 0 and leaves Hammerspoon running. `SIGHUP` does the same. Quit is the action that stops Hammerspoon. Restart confirms, then the OpenTUI process re-execs the Python CLI in place. Update stays on System and shows the reinstall line. A click runs the same action as Enter, including a settings choice. After a choice or a cancelled download, the parent stays on the opened row. The OpenTUI process reads screens from `python -m digivoice.tui_bridge` (stdin JSON, no socket). Pipes and agents stay on the Python CLI. The OpenTUI check is `npm test` in `digivoice/tui`, which runs `bun test` and `createTestRenderer` from `@opentui/core/testing`.
 
 ## Data locations
 

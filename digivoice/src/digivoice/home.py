@@ -1,42 +1,22 @@
 """Bare-`digivoice` app home: status strip plus actions over the commands.
 
-A TTY takes the whole viewport: alternate screen, a centered five-row
-DIGIVOICE half-block wordmark in color-cube grays, status strip, and a
-step-rail menu. Pipes, CI, and agents
-get a printed overview and exit 0 — never a hang. Settings opens the
-/settings path and returns to home. Every entry routes to the handlers
-the subcommands use.
+A TTY replaces this process with the OpenTUI app (five-row DIGIVOICE
+wordmark, status strip, step-rail menu). Pipes, CI, and agents get a
+printed overview and exit 0 — never a hang.
 """
 
 from __future__ import annotations
 
-import os
-import signal
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
-from digivoice.banner_launch import mark_tui_closed, mark_tui_open
-from digivoice.doctor import doctor_checks
-from digivoice.history import read_history
-from digivoice.menu_tree import browse_settings
-from digivoice.nav import QuitRequested, norm_path, section_of
-from digivoice.panels import _UPDATE, browse_history, browse_system, present_doctor, present_logs
-from digivoice.paste import copy_to_clipboard
+from digivoice.opentui import launch_opentui
 from digivoice.paths import resolve_paths
-from digivoice.reload import LaunchReport, ensure_home_control, run_reload, stop_home_control
-from digivoice.runner import CommandRunner, run_command
-from digivoice.settings import default_settings, save_settings
-from digivoice.setup import _install_with_progress
-from digivoice.tui import (
-    MenuBlock,
-    _is_tty,
-    choose,
-    fullscreen_enter,
-    fullscreen_leave,
-    play_intro,
-)
+from digivoice.reload import LaunchReport, ensure_home_control
+from digivoice.runner import CommandRunner
+from digivoice.tui import MenuBlock, _is_tty
 
 HOME_TITLE = "DIGIVOICE"
 HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
@@ -188,11 +168,6 @@ def _context_with_control(context: list[str], summary: str) -> list[str]:
     return [*context, f"▤ {summary}"]
 
 
-def _on_terminal_close(_signum: int, _frame: object) -> None:
-    """The terminal went away. Leave Hammerspoon running."""
-    raise SystemExit(0)
-
-
 def run_home(
     platform: str,
     home: Path,
@@ -223,142 +198,4 @@ def run_home(
         stdout.flush()
         return 0
 
-    runtime = _cli.Runtime(
-        platform=platform, home=home, env=env, probe=_cli.real_probe(env.get("PATH"))
-    )
-
-    def _restart() -> None:
-        stop_home_control(platform, home, env, runner=runner)
-        fullscreen_leave(stdout)
-        os.execv(sys.executable, [sys.executable, *sys.argv])
-
-    def _doctor() -> None:
-        present_doctor(
-            doctor_checks(platform, home, dict(env), runtime.probe),
-            stdout,
-            stdin,
-        )
-
-    def _follow(raw: str) -> None:
-        path = norm_path(raw)
-        kind = section_of(path)
-        if kind == "quit":
-            raise QuitRequested()
-        if kind == "settings":
-            browse_settings(
-                paths,
-                stdin,
-                stdout,
-                install=_install_with_progress,
-                start=path,
-                on_path=_follow,
-            )
-            return
-        if kind in {"history", "history-delete"}:
-            browse_history(
-                paths,
-                platform,
-                runtime.probe,
-                runner,
-                stdin,
-                stdout,
-                on_path=_follow,
-            )
-            return
-        if kind == "system":
-            browse_system(
-                paths,
-                platform,
-                home,
-                env,
-                stdin,
-                stdout,
-                runner=runner,
-                restart=_restart,
-                doctor=_doctor,
-                on_path=_follow,
-            )
-            return
-        if kind == "doctor":
-            _doctor()
-            return
-        if kind == "reload":
-            result = run_reload(platform, home, dict(env), runner=runner)
-            text = result.stdout.strip() or result.stderr.strip() or "reload finished"
-            stdout.write(text + "\n")
-            stdout.flush()
-            return
-        if kind == "reset":
-            save_settings(paths, default_settings())
-            stdout.write("  settings reset\n")
-            stdout.flush()
-            return
-        if kind == "restart":
-            _restart()
-            return
-        if kind == "update":
-            stdout.write(_UPDATE + "\n")
-            stdout.flush()
-            return
-        if kind == "logs":
-            present_logs(paths, stdin, stdout)
-            return
-        if kind == "history-copy":
-            reading = read_history(paths.history_file)
-            if not reading.entries:
-                stdout.write("  no takes yet\n")
-                stdout.flush()
-                return
-            text = reading.entries[-1].text
-            copied = copy_to_clipboard(platform, runtime.probe, runner or run_command, text)
-            stdout.write(f"  {copied.detail}\n")
-            stdout.flush()
-
-    mark_tui_open(paths.data_dir)
-    fullscreen_enter(stdout)
-    previous_hup = signal.getsignal(signal.SIGHUP)
-    signal.signal(signal.SIGHUP, _on_terminal_close)
-    try:
-        play_intro(stdout, "local speech control")
-        home_at = 0
-        while True:
-            context = _context_with_control(
-                build_context_lines(platform, home, env, probe=runtime.probe),
-                report.summary,
-            )
-            picked = choose(
-                "Actions",
-                stdin=stdin,
-                stdout=stdout,
-                subtitle="local speech control",
-                context=context,
-                hero=True,
-                pulse=True,
-                groups=HOME_GROUPS,
-                blocks=HOME_BLOCKS,
-                start_at=home_at,
-            )
-            if isinstance(picked, int):
-                home_at = picked
-            if isinstance(picked, str) and picked.startswith("/"):
-                try:
-                    _follow(picked)
-                except QuitRequested:
-                    stop_home_control(platform, home, env, runner=runner)
-                    return 0
-                continue
-            if picked is None:
-                # Esc leaves the screen. Hammerspoon keeps running.
-                return 0
-            if HOME_MENU[picked] == "Quit":
-                stop_home_control(platform, home, env, runner=runner)
-                return 0
-            try:
-                _follow(HOME_BLOCKS[picked].path)
-            except QuitRequested:
-                stop_home_control(platform, home, env, runner=runner)
-                return 0
-    finally:
-        signal.signal(signal.SIGHUP, previous_hup)
-        fullscreen_leave(stdout)
-        mark_tui_closed(paths.data_dir)
+    return launch_opentui(platform, home, env, start="/")

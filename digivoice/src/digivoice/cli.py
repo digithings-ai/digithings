@@ -15,17 +15,11 @@ from digivoice import history as history_log
 from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
-from digivoice.menu_tree import browse_settings, rows_at
+from digivoice.menu_tree import rows_at
 from digivoice.models import CliResult, PasteResult, VoicePaths
 from digivoice.nav import norm_path, section_of
-from digivoice.panels import (
-    SYSTEM_BLOCKS,
-    browse_history,
-    browse_system,
-    present_doctor,
-    present_logs,
-    restart_digivoice,
-)
+from digivoice.opentui import launch_opentui
+from digivoice.panels import SYSTEM_BLOCKS, restart_digivoice
 from digivoice.paste import copy_to_clipboard, paste
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 from digivoice.probe import CommandProbe, real_probe
@@ -60,7 +54,6 @@ from digivoice.status import (
     write_banner_flag,
 )
 from digivoice.transcribe import transcribe
-from digivoice.tui import fullscreen_enter, fullscreen_leave
 
 
 class UsageError(Exception):
@@ -248,16 +241,17 @@ def _usage(message: str) -> CliResult:
     return CliResult(code=2, stdout="", stderr=f"{message}\n")
 
 
+def _tui(runtime: Runtime, start: str) -> CliResult:
+    """TTY screens are the OpenTUI process. This returns only if it cannot start."""
+    code = launch_opentui(runtime.platform, runtime.home, runtime.env, start=start)
+    return CliResult(code=code, stdout="", stderr="")
+
+
 def _doctor(runtime: Runtime) -> CliResult:
     checks = doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
     report = render_doctor(checks)
     if sys.stdin.isatty():
-        fullscreen_enter(sys.stdout)
-        try:
-            present_doctor(checks, sys.stdout, sys.stdin)
-        finally:
-            fullscreen_leave(sys.stdout)
-        return CliResult(code=0 if report.ok else 1, stdout="", stderr="")
+        return _tui(runtime, "/doctor")
     return CliResult(code=0 if report.ok else 1, stdout=report.text, stderr="")
 
 
@@ -658,19 +652,7 @@ def _history(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         and not getattr(args, "as_json", False)
     )
     if plain and sys.stdin.isatty():
-        fullscreen_enter(sys.stdout)
-        try:
-            browse_history(
-                paths,
-                runtime.platform,
-                runtime.probe,
-                runtime.runner,
-                sys.stdin,
-                sys.stdout,
-            )
-        finally:
-            fullscreen_leave(sys.stdout)
-        return CliResult(code=0, stdout="", stderr="")
+        return _tui(runtime, "/history")
     reading = history_log.read_history(paths.history_file)
     if args.copy_last:
         text = history_log.last_dict_text(paths.history_file)
@@ -773,12 +755,7 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     # show
     settings = load_settings(paths)
     if sys.stdin.isatty() and not as_json:
-        fullscreen_enter(sys.stdout)
-        try:
-            browse_settings(paths, sys.stdin, sys.stdout)
-        finally:
-            fullscreen_leave(sys.stdout)
-        return CliResult(code=0, stdout="", stderr="")
+        return _tui(runtime, "/settings")
     if as_json:
         return CliResult(
             code=0,
@@ -812,30 +789,7 @@ def _system(runtime: Runtime) -> CliResult:
     if not sys.stdin.isatty():
         lines = [f"{block.action}\n{block.path}" for block in SYSTEM_BLOCKS]
         return CliResult(code=0, stdout="\n".join(lines) + "\n", stderr="")
-    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
-
-    def _doctor_panel() -> None:
-        present_doctor(
-            doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe),
-            sys.stdout,
-            sys.stdin,
-        )
-
-    fullscreen_enter(sys.stdout)
-    try:
-        browse_system(
-            paths,
-            runtime.platform,
-            runtime.home,
-            dict(runtime.env),
-            sys.stdin,
-            sys.stdout,
-            runner=runtime.runner,
-            doctor=_doctor_panel,
-        )
-    finally:
-        fullscreen_leave(sys.stdout)
-    return CliResult(code=0, stdout="", stderr="")
+    return _tui(runtime, "/system")
 
 
 def _settings_at(runtime: Runtime, path: str) -> CliResult:
@@ -843,12 +797,7 @@ def _settings_at(runtime: Runtime, path: str) -> CliResult:
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
     normal = norm_path(path)
     if sys.stdin.isatty():
-        fullscreen_enter(sys.stdout)
-        try:
-            browse_settings(paths, sys.stdin, sys.stdout, start=normal)
-        finally:
-            fullscreen_leave(sys.stdout)
-        return CliResult(code=0, stdout="", stderr="")
+        return _tui(runtime, normal)
     settings = load_settings(paths)
     if normal == "/settings":
         rows = rows_at(settings, normal)
@@ -870,12 +819,7 @@ def _settings_at(runtime: Runtime, path: str) -> CliResult:
 def _logs(runtime: Runtime) -> CliResult:
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
     if sys.stdin.isatty():
-        fullscreen_enter(sys.stdout)
-        try:
-            present_logs(paths, sys.stdin, sys.stdout)
-        finally:
-            fullscreen_leave(sys.stdout)
-        return CliResult(code=0, stdout="", stderr="")
+        return _tui(runtime, "/system/logs")
     text = read_system_log(system_log_path(paths)).strip()
     if not text:
         text = "No log yet"
