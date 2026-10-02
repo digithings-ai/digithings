@@ -211,10 +211,36 @@ describe("terminal embed rewrite", () => {
     expect(source).toContain('output: "export"');
     expect(source).toContain("legacyDashboardRedirects()");
     expect(source).toContain('source: "/official-api/:path*"');
-    expect(source).toContain('destination: "http://127.0.0.1:8788/:path*"');
+    expect(source).toContain('const DEFAULT_OFFICIAL_API_ORIGIN = "http://127.0.0.1:8788"');
+    expect(source).toContain("process.env.DIGIQUANT_WEB_OFFICIAL_API_ORIGIN");
+    expect(source).toContain("officialApiRewriteOrigin()");
+    expect(source).not.toContain("8789");
     expect(source).not.toContain("127.0.0.1:3930");
     expect(source).not.toContain("127.0.0.1:4014");
     expect(source).not.toContain('source: "/dashboard');
     expect(source).not.toContain('source: "/app');
+  });
+
+  it("rewrites /official-api to 8788 unless the origin env is set", async () => {
+    const key = "DIGIQUANT_WEB_OFFICIAL_API_ORIGIN";
+    const previous = process.env[key];
+    const { default: config } = await import("../../next.config.mjs");
+    try {
+      delete process.env[key];
+      await expect(config.rewrites()).resolves.toEqual([
+        { source: "/official-api/:path*", destination: "http://127.0.0.1:8788/:path*" },
+      ]);
+      process.env[key] = "  ";
+      await expect(config.rewrites()).resolves.toEqual([
+        { source: "/official-api/:path*", destination: "http://127.0.0.1:8788/:path*" },
+      ]);
+      process.env[key] = "http://127.0.0.1:8791/";
+      await expect(config.rewrites()).resolves.toEqual([
+        { source: "/official-api/:path*", destination: "http://127.0.0.1:8791/:path*" },
+      ]);
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
   });
 });
