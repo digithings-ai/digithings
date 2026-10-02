@@ -4,7 +4,7 @@ import { VelaPane } from "@/components/desk/vela-pane";
 
 export const metadata: Metadata = {
   title: "LuxAlgo charts — digiquant",
-  description: "LuxAlgo Vela candles for BTC, ETH, and SOL from Coinbase.",
+  description: "LuxAlgo Vela workspace. Binance BTCUSDT at 15 minutes, with Coinbase registered.",
 };
 
 export default function ToolsChartsPage() {
