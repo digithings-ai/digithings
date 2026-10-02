@@ -200,6 +200,8 @@ class VoiceSettings(BaseModel):
     banner_density: BannerDensity = "retract"
     # False renders the dot-matrix icon as a still frame instead of animating it.
     banner_animations: bool = True
+    # Pin keeps the status banner on screen. Off shows it only during a take.
+    banner_pinned: bool = False
 
     @field_validator("rewrite_timeout_seconds", mode="before")
     @classmethod
@@ -371,6 +373,7 @@ def format_settings_compact(settings: VoiceSettings, paths: VoicePaths) -> str:
             "■ Banner",
             f"  □ {settings.banner_density} ({settings.banner_position})",
             f"  □ animations ... {str(settings.banner_animations).lower()}",
+            f"  □ pinned ....... {str(settings.banner_pinned).lower()}",
             "",
             "■ Paths",
             f"  □ data ..... {paths.data_dir}",
@@ -402,6 +405,7 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  banner_position:        {settings.banner_position}",
         f"  banner_density:         {settings.banner_density}",
         f"  banner_animations:      {settings.banner_animations}",
+        f"  banner_pinned:          {settings.banner_pinned}",
         "",
         "paths",
         f"  data_dir:       {paths.data_dir}",

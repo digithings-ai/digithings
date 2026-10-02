@@ -317,7 +317,7 @@ end
 local function control_ids(c)
   local ids = {}
   for _, el in ipairs(c.elements) do
-    if el.id == "copy" or el.id == "close" then
+    if el.id == "pin" then
       ids[#ids + 1] = el.id
     end
   end
@@ -395,9 +395,9 @@ function scenarios.dict_banner_recording_then_done()
   eq(c[1].trackMouseEnterExit, true, "background must track hover or controls never show")
   check(c.mouse, "mouse callback registered")
   eq(c[3].type, "rectangle", "status grid is squares, not dots")
-  eq(body_of(c), "", "recording shows the grid, no chrome text")
-  eq(c.frame.w, 10 * 2 + 18, "empty hugs the grid, no min-width gutter")
-  eq(c.frame.x, (1440 - (10 * 2 + 18)) / 2, "top-center x")
+  eq(body_of(c), "recording", "recording is the status word")
+  check(c.frame.w > 10 * 2 + 18 and c.frame.w < 180, "status sits beside the grid")
+  eq(c.frame.x, (1440 - c.frame.w) / 2, "top-center x")
   eq(c.frame.y, 16, "top-center y keeps the edge gap")
   eq(#menubars, 0, "no digivoice menubar mark while recording")
   find_taps()
@@ -407,8 +407,8 @@ function scenarios.dict_banner_recording_then_done()
   write_status("dict", "rewriting", "hello there world", "preset email")
   advance(0.5)
   c = live_canvas()
-  eq(body_of(c), "", "retract stays the grid while a transcript exists")
-  eq(c.frame.w, 10 * 2 + 18, "retract hugs the grid")
+  eq(body_of(c), "processing", "retract shows processing, not the transcript")
+  check(not body_of(c):find("hello", 1, true), "transcript stays off the banner")
   write_status("dict", "done", "Hello there, world.", "pasted into the focused app")
   t:finish(0, "Hello there, world.\n", "")
   advance(1)
@@ -450,7 +450,7 @@ function scenarios.unwritable_cancel_file_never_kills_the_cli()
   eq(press_esc(), false, "Esc is not swallowed when the cancel-file cannot be written")
   eq(tasks[1].killed, false, "CLI not killed (its recorder would be orphaned)")
   eq(tasks[1].terminated, nil, "CLI not terminated (that would paste)")
-  eq(body_of(live_canvas()), "", "still recording, grid only")
+  eq(body_of(live_canvas()), "recording", "still recording")
 end
 
 function scenarios.esc_cancels_during_processing()
@@ -477,10 +477,10 @@ function scenarios.speak_is_not_esc_cancelled()
   write_status("speak", "speaking", "selected reply text", "")
   advance(0.5)
   local c = live_canvas()
-  eq(body_of(c), "", "retract hides the selection")
+  eq(body_of(c), "processing", "speech is a status word, not the selection")
   eq(press_esc(), false, "Esc does not swallow during speech")
   click(nil) -- retract → full
-  eq(body_of(live_canvas()), "selected reply text", "full shows the selection")
+  eq(body_of(live_canvas()), "processing", "full still hides the selection")
   click(nil) -- full → retract, so the take can auto-clear
   tasks[1]:finish(0, "selected reply text\n", "")
   advance(5)
@@ -493,7 +493,7 @@ function scenarios.speak_failure_goes_to_the_banner()
   advance(1)
   local c = live_canvas()
   check(c, "failure stays on the banner")
-  eq(body_of(c), "", "failure stays on the grid, no status sentence")
+  eq(body_of(c), "error", "a failure shows the error word")
   eq(#notifications, 0, "no toast")
 end
 
@@ -504,7 +504,7 @@ function scenarios.error_and_empty_exit_states()
   advance(1)
   local err = live_canvas()
   check(err, "error banner stays")
-  eq(body_of(err), "", "error detail is not a label")
+  eq(body_of(err), "error", "error is a word, not the detail")
   advance(5)
   press_right_option()
   press_right_option()
@@ -513,7 +513,7 @@ function scenarios.error_and_empty_exit_states()
   advance(1)
   local c = live_canvas()
   check(c, "empty banner stays")
-  eq(body_of(c), "", "empty take is grid only")
+  eq(body_of(c), "warning", "an empty take is a warning")
 end
 
 function scenarios.stale_status_is_ignored()
@@ -521,7 +521,8 @@ function scenarios.stale_status_is_ignored()
   clock = clock + 10
   press_right_option()
   local c = live_canvas()
-  eq(body_of(c), "", "stale done must not show text")
+  eq(body_of(c), "recording", "stale transcript is not the banner")
+  check(not body_of(c):find("OLD", 1, true), "old text stays off the banner")
 end
 
 function scenarios.position_setting()
@@ -543,7 +544,8 @@ end
 function scenarios.bad_position_falls_back()
   write(DATA .. "/settings.json", '{"banner_position": "nowhere"}')
   press_right_option()
-  eq(live_canvas().frame.x, (1440 - (10 * 2 + 18)) / 2, "default top-center")
+  local c = live_canvas()
+  eq(c.frame.x, (1440 - c.frame.w) / 2, "default top-center")
 end
 
 function scenarios.banner_disabled()
@@ -586,28 +588,28 @@ function scenarios.click_cycles_density()
   write_status("dict", "rewriting", long, "")
   advance(3)
   local c = live_canvas()
-  eq(c.frame.w, 10 * 2 + 18, "retract hugs the grid")
-  eq(body_of(c), "", "retract hides the transcript")
-  c.mouse(c, "mouseUp") -- retract → full
+  eq(body_of(c), "processing", "status word, not the transcript")
+  check(c.frame.w < 180, "status banner stays small")
+  local width = c.frame.w
+  c.mouse(c, "mouseUp") -- retract → full, size stays
   advance(0.2)
   c = live_canvas()
-  check(c.frame.w > 10 * 2 + 18, "full widens past the grid")
-  check(c.frame.w <= 580, "full respects the expanded cap")
-  check(#body_of(c) > 0, "full shows the transcript at once")
-  check(not body_of(c):find("…", 1, true), "full has no glimpse ellipsis")
+  eq(c.frame.w, width, "density does not widen the status banner")
+  eq(body_of(c), "processing", "full still hides the transcript")
+  check(not body_of(c):find("alpha", 1, true), "transcript never lands on the banner")
   c.mouse(c, "mouseUp") -- full → retract
   advance(0.2)
   c = live_canvas()
-  eq(c.frame.w, 10 * 2 + 18, "retract hugs the grid again")
-  eq(body_of(c), "", "retract is grid only")
+  eq(body_of(c), "processing", "collapse keeps the status word")
+  eq(c.frame.w, width, "collapse keeps the same width")
 end
 
 function scenarios.density_retract_setting_is_grid_only()
   write(DATA .. "/settings.json", '{"banner_density": "retract"}')
   press_right_option()
   local c = live_canvas()
-  eq(c.frame.w, 10 * 2 + 18, "retract hugs the grid")
-  eq(body_of(c), "", "retract shows no text")
+  eq(body_of(c), "recording", "retract shows the status word")
+  check(c.frame.w < 180, "retract stays a small status banner")
 end
 
 function scenarios.density_full_stays_after_done()
@@ -617,32 +619,36 @@ function scenarios.density_full_stays_after_done()
   write_status("dict", "done", "final words", "")
   tasks[1]:finish(0, "final words\n", "")
   advance(1)
-  eq(body_of(live_canvas()), "final words", "final text shown")
+  eq(body_of(live_canvas()), "", "done has no transcript")
   advance(8)
   check(live_canvas(), "full stays: no auto-hide")
-  eq(body_of(live_canvas()), "final words", "text kept")
+  eq(body_of(live_canvas()), "", "still no transcript")
 end
 
 function scenarios.bad_density_falls_back_to_retract()
   write(DATA .. "/settings.json", '{"banner_density": "huge"}')
   press_right_option()
-  eq(live_canvas().frame.w, 10 * 2 + 18, "unknown density retracts to the grid")
+  eq(body_of(live_canvas()), "recording", "unknown density still shows status")
+  check(live_canvas().frame.w < 180, "unknown density stays compact")
 end
 
 function scenarios.home_banner_stands_by_without_blocking_hotkeys()
-  eq(adapter.ensure_banner(), "shown", "standby banner shown")
-  check(live_canvas(), "canvas up")
-  eq(#tasks, 0, "standby starts no CLI")
-  eq(#menubars, 0, "standby does not touch the menubar")
-  eq(adapter.ensure_banner(), "visible", "second call sees the canvas")
+  eq(adapter.ensure_banner(), "armed", "launch does not draw the banner")
+  eq(live_canvas(), nil, "no canvas until a take")
+  eq(#tasks, 0, "arming starts no CLI")
+  eq(#menubars, 0, "arming does not touch the menubar")
+  eq(adapter.ensure_banner(), "armed", "second call still stays hidden")
   press_right_option()
-  eq(#tasks, 1, "dict still starts over standby")
+  eq(#tasks, 1, "dict still starts")
+  check(live_canvas(), "the take shows the banner")
+  eq(body_of(live_canvas()), "recording", "recording status")
   eq(table.concat(tasks[1].args, " "), "dict --toggle --stop-file " .. DATA .. "/dict.stop", "dict args")
   tasks[1]:finish(0, "hello\n", "")
   advance(5)
-  eq(adapter.ensure_banner(), "shown", "banner returns after the take")
+  eq(live_canvas(), nil, "retract hides after the take")
+  eq(adapter.ensure_banner(), "armed", "it does not come back on its own")
   double_tap_left_option()
-  eq(#tasks, 2, "speak still starts over standby")
+  eq(#tasks, 2, "speak still starts")
   eq(table.concat(tasks[2].args, " "), "speak --selection", "speak args")
 end
 
@@ -656,7 +662,7 @@ end
 local function button_frames(c)
   local out = {}
   for _, el in ipairs(c.elements) do
-    if (el.id == "copy" or el.id == "close") and el.type == "rectangle" and el.trackMouseUp then
+    if el.id == "pin" and el.type == "rectangle" and el.trackMouseUp then
       out[#out + 1] = el
     end
   end
@@ -685,7 +691,7 @@ function scenarios.spawn_flag_preview()
   check(c, "preview spawns from the flag")
   eq(#tasks, 0, "no dictation needed to show")
   advance(1)
-  eq(body_of(live_canvas()), "preview words here", "flag text shown")
+  eq(body_of(live_canvas()), "recording", "preview is a status, not the flag text")
   find_taps()
   check(esc_tap.enabled, "Esc armed for the preview")
   eq(press_esc(), true, "Esc hides the preview")
@@ -707,39 +713,25 @@ function scenarios.hover_controls_row()
   eq(plain.frame.h, face_h, "no gutter without hover")
   hover(true)
   local c = live_canvas()
-  local copy, close = button_frame(c, "copy"), button_frame(c, "close")
-  check(copy and close, "hover shows icon-only copy + close")
-  eq(copy.y, close.y, "wider densities row the controls")
-  eq(close.x, copy.x + 18 + 4, "copy sits left of close")
-  eq(copy.x + 18 + 4 + 18, c.frame.w, "row is right-aligned under the banner")
-  eq(copy.w, 18, "icon squares match the grid")
-  -- Single-canvas chrome (mock .float-root): banner face stays box.h, the
-  -- control gutter below is transparent canvas, not a stretched fill.
+  local pin = button_frame(c, "pin")
+  check(pin, "hover shows a pin")
+  eq(pin.w, 18, "pin matches the control size")
+  eq(pin.x, (c.frame.w - 18) / 2, "pin is centered")
   eq(c[1].frame.h, face_h, "banner face keeps box.h on hover")
   eq(c[1].frame.w, face_w, "banner face keeps box.w on hover")
-  eq(copy.y, face_h + 4, "controls sit below with the CTRL_GAP margin")
-  eq(c.frame.h, face_h + 4 + 18, "canvas grows by exactly the row gutter")
-  -- Equal padding: the grid hugs the top-left corner.
+  eq(pin.y, face_h + 4, "pin sits below with the CTRL_GAP margin")
+  eq(c.frame.h, face_h + 4 + 18, "canvas grows by the pin gutter")
   check(math.abs(c[3].frame.x - 10) < 3 and math.abs(c[3].frame.y - 10) < 3, "grid top-left with even pad")
-  check(math.abs(plain[2].frame.y - (10 + (18 - 11) / 2)) < 0.001, "first line centers on the icon row")
-  local rounded, round_cap = false, false
-  for _, el in ipairs(c.elements) do
-    if el.id == "copy" and el.roundedRectRadii then
-      rounded = true
-    end
-    if el.id == "close" and el.strokeCap == "round" then
-      round_cap = true
-    end
-  end
-  check(rounded, "copy uses the DigiChat rounded sheets")
-  check(round_cap, "close uses the DigiChat round-cap mark")
-  click("copy")
-  local clip = io.open(os.getenv("DIGIVOICE_PBCOPY_FILE"), "r")
-  eq(clip:read("*a"), "hover me", "copy puts the banner text on the clipboard")
-  clip:close()
-  check(live_canvas(), "copy does not dismiss")
+  check(math.abs(plain[2].frame.y - (10 + (18 - 11) / 2)) < 0.001, "status word centers on the icon row")
+  eq(body_of(c), "processing", "hover does not reveal the transcript")
+  click("pin")
+  check(live_canvas(), "pin does not dismiss a live take")
+  local saved = io.open(DATA .. "/settings.json", "r")
+  local settings = saved:read("*a")
+  saved:close()
+  check(settings:find('"banner_pinned": true', 1, true), "pin is saved")
   hover(false)
-  eq(#button_frames(live_canvas()), 0, "controls leave with the cursor")
+  eq(#button_frames(live_canvas()), 0, "pin leaves with the cursor")
 end
 
 function scenarios.hover_controls_stack()
@@ -748,11 +740,9 @@ function scenarios.hover_controls_stack()
   advance(0.2)
   hover(true)
   local c = live_canvas()
-  local copy, close = button_frame(c, "copy"), button_frame(c, "close")
-  check(copy and close, "retract shows both controls")
-  eq(copy.x, close.x, "retract stacks the controls")
-  check(close.y > copy.y, "close sits below copy")
-  eq(copy.x, (c.frame.w - 18) / 2, "stack is centered under the banner")
+  local pin = button_frame(c, "pin")
+  check(pin, "retract shows the pin")
+  eq(pin.x, (c.frame.w - 18) / 2, "pin is centered under the banner")
   hover(false)
 end
 
@@ -761,14 +751,16 @@ function scenarios.close_is_instant_hide()
   write_status("dict", "rewriting", "bye for now", "")
   advance(1)
   hover(true)
-  click("close")
-  eq(live_canvas(), nil, "close hides instantly, no reverse animation")
-  check(tasks[1]:isRunning(), "the take keeps running silently")
-  advance(5)
-  eq(live_canvas(), nil, "stays hidden")
+  click("pin")
+  check(tasks[1]:isRunning(), "pin does not stop the take")
+  check(live_canvas(), "a live take stays up when pinned")
+  hover(true)
+  click("pin")
+  check(live_canvas(), "unpin during a take keeps the status up")
+  check(tasks[1]:isRunning(), "the take keeps running")
   tasks[1]:finish(0, "bye for now\n", "")
   advance(5)
-  eq(live_canvas(), nil, "hidden takes never pop back up")
+  eq(live_canvas(), nil, "unpinned retract hides after the take")
 end
 
 function scenarios.drag_snaps_and_persists()
@@ -807,12 +799,10 @@ function scenarios.instant_text_no_typewriter()
   press_right_option()
   write_status("dict", "rewriting", long, "")
   advance(0.2)
-  local shown = body_of(live_canvas())
-  check(#shown > 60, "full shows the transcript at once")
-  check(shown:find("word", 1, true), "transcript is present immediately")
-  check(not shown:find("…", 1, true), "full has no glimpse ellipsis")
+  eq(body_of(live_canvas()), "processing", "status replaces the transcript")
+  check(not body_of(live_canvas()):find("word", 1, true), "transcript stays off the banner")
   advance(0.2)
-  eq(body_of(live_canvas()), shown, "text does not keep revealing")
+  eq(body_of(live_canvas()), "processing", "status does not type on")
 end
 
 function scenarios.full_scroll_caps_and_wheels()
@@ -825,17 +815,9 @@ function scenarios.full_scroll_caps_and_wheels()
   write_status("dict", "rewriting", table.concat(rows, "\n"), "")
   advance(10)
   local c = live_canvas()
-  check(c.frame.h <= 450, "full caps near half the viewport height")
-  local first = body_of(c)
-  check(first:find("line 1", 1, true), "window starts at the top")
-  check(find_scroll_tap(), "wheel armed while full overflows")
-  eq(scroll_wheel(-1), true, "wheel down scrolls")
-  local moved = body_of(live_canvas())
-  check(moved ~= first, "the line window moves")
-  local top = moved:match("^[^\n]*") or ""
-  check(top:find("line 4", 1, true), "top lines scrolled away")
-  scroll_wheel(1)
-  eq(body_of(live_canvas()), first, "wheel up returns to the top")
+  check(c.frame.h < 80, "status banner does not grow with the transcript")
+  eq(body_of(c), "processing", "one status word")
+  eq(find_scroll_tap(), nil, "nothing to scroll")
 end
 
 function scenarios.reanchor_center()
@@ -846,12 +828,13 @@ function scenarios.reanchor_center()
   local cx = c.frame.x + c.frame.w / 2
   local cy = c.frame.y + c.frame.h / 2
   eq(cx, 720, "starts page-centered")
-  write_status("dict", "rewriting", "center pin keeps center on expand", "")
+  write_status("dict", "error", "center pin keeps center on expand", "boom")
   advance(1)
-  click(nil) -- retract → full
+  click(nil) -- retract → full, status word may change width
   c = live_canvas()
-  eq(c.frame.x + c.frame.w / 2, cx, "center x kept while growing outward")
-  eq(c.frame.y + c.frame.h / 2, cy, "center y kept while growing outward")
+  eq(body_of(c), "error", "error is the status")
+  -- recording is 9 letters, error is 5: the box shrinks, center pin holds.
+  eq(c.frame.x + c.frame.w / 2, cx, "center x kept when the status word changes")
 end
 
 function scenarios.theme_chrome_dark()
@@ -863,6 +846,22 @@ function scenarios.theme_chrome_dark()
   local ink = c[2].textColor
   check(math.abs(ink.red - 0xED / 255) < 0.002, "remock dark ink")
   eq(c[3].fillColor.red, 0.94, "recording red stays across themes")
+end
+
+function scenarios.pinned_banner_shows_at_launch()
+  write(DATA .. "/settings.json", '{"banner_pinned": true}')
+  eq(adapter.ensure_banner(), "shown", "a pin draws the banner")
+  check(live_canvas(), "canvas up")
+  eq(body_of(live_canvas()), "", "idle pin has no status word")
+  eq(#tasks, 0, "pin starts no CLI")
+  hover(true)
+  click("pin")
+  eq(live_canvas(), nil, "unpin hides an idle banner")
+  local f = io.open(DATA .. "/settings.json", "r")
+  local text = f:read("*a")
+  f:close()
+  check(text:find("false", 1, true), "unpin is saved")
+  eq(adapter.ensure_banner(), "armed", "it stays hidden after unpin")
 end
 
 local run = scenarios[scenario]

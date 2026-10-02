@@ -1,8 +1,9 @@
 """`digivoice reload` and the bare-`digivoice` Hammerspoon launch.
 
 Reload refreshes local control. Home launch (`ensure_home_control`) opens
-Hammerspoon when it is down and asks the adapter to show the banner (background
-only: no digivoice menubar, no Dock icon, no launch toast). TUI Quit calls
+Hammerspoon when it is down and arms the banner without drawing it (background
+only: no digivoice menubar, no Dock icon, no launch toast). A pin, or a take,
+is what shows the banner. TUI Quit calls
 `stop_home_control` to tear Hammerspoon down; closing the Terminal alone does
 not — HS keeps running. Both start and stop are bounded.
 
@@ -404,6 +405,9 @@ def _ensure_home_control(
         lines.append(f"banner ....... {token}")
         state = "shown" if token == "shown" else "visible"
         return LaunchReport(summary=f"hammerspoon up · banner {state}", lines=lines)
+    if ok and token == "armed":
+        lines.append("banner ....... armed (hidden until a take)")
+        return LaunchReport(summary="hammerspoon up · banner armed", lines=lines)
     if ok and token == "disabled":
         lines.append("banner ....... off (live_banner false)")
         return LaunchReport(summary="hammerspoon up · banner off", lines=lines)

@@ -22,7 +22,6 @@ from digivoice.settings import (
     PRESET_LABELS,
     VoiceSettings,
     cycle_rewrite_timeout,
-    format_rewrite_timeout,
     load_settings,
     save_settings,
 )
@@ -150,10 +149,9 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
             ),
             TreeRow(
                 name="style",
-                kind="cycle",
-                field="rewrite_preset",
+                kind="pick",
                 value=settings.rewrite_preset,
-                explain="How the cleaned-up text should read.",
+                explain="How the cleaned-up text should read. Enter opens the list.",
             ),
             TreeRow(
                 name="model",
@@ -161,48 +159,11 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
                 value=_model_title("rewrite_model", settings.rewrite_model or ""),
                 explain="On-device model. Enter opens the list. A download asks first.",
             ),
-            TreeRow(
-                name="runner",
-                kind="cycle",
-                field="rewrite_runner",
-                value=settings.rewrite_runner,
-                explain="llama.cpp or local ollama on this machine.",
-            ),
-            TreeRow(
-                name="match-app",
-                kind="toggle",
-                field="rewrite_auto_route",
-                value=_on_off(settings.rewrite_auto_route),
-                explain="On uses the front app's style. Off always uses the style above.",
-            ),
-            TreeRow(
-                name="timeout",
-                kind="cycle",
-                field="rewrite_timeout_seconds",
-                value=format_rewrite_timeout(settings.rewrite_timeout_seconds),
-                explain="How long rewrite may run. Off, or 15, 30, or 60 seconds.",
-            ),
-            TreeRow(
-                name="apps",
-                kind="dir",
-                explain="Front-app name to rewrite style. Enter cycles that app's style.",
-            ),
         ]
+    if here == "/settings/rewrite/style":
+        return _style_choices()
     if here == "/settings/rewrite/model":
         return _model_choices("rewrite_model")
-    if here == "/settings/rewrite/apps":
-        rows: list[TreeRow] = []
-        for name in sorted(settings.rewrite_app_routes):
-            rows.append(
-                TreeRow(
-                    name=name,
-                    kind="cycle",
-                    field=name,
-                    value=settings.rewrite_app_routes[name],
-                    explain="When this app is in front, rewrite uses this style.",
-                )
-            )
-        return rows
     if here == "/settings/banner":
         return [
             TreeRow(
@@ -210,7 +171,14 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
                 kind="toggle",
                 field="live_banner",
                 value=_on_off(settings.live_banner),
-                explain="Draw the banner. Off hides it.",
+                explain="Draw the banner during a take. Off hides it entirely.",
+            ),
+            TreeRow(
+                name="pin",
+                kind="toggle",
+                field="banner_pinned",
+                value=_on_off(settings.banner_pinned),
+                explain="Keep the banner on screen. Off shows it only while a take is active.",
             ),
             TreeRow(
                 name="position",
@@ -224,7 +192,7 @@ def rows_at(settings: VoiceSettings, path: str) -> list[TreeRow]:
                 kind="cycle",
                 field="banner_density",
                 value=settings.banner_density,
-                explain="Retract hides until needed. Full stays up.",
+                explain="Retract hides after a take. Full stays until you collapse it.",
             ),
             TreeRow(
                 name="animations",
@@ -282,6 +250,29 @@ def _model_title(field: str, current: str) -> str:
     return current or _short_title(catalog[0].title)
 
 
+_STYLE_EXPLAIN: dict[str, str] = {
+    "email": "Clear greeting, paragraphs, and a sign-off.",
+    "sms": "Short and plain.",
+    "professional": "Polished tone for a post.",
+    "coding": "Structured notes for a coding agent.",
+    "blog": "Readable prose.",
+    "none": "Light cleanup only.",
+}
+
+
+def _style_choices() -> list[TreeRow]:
+    return [
+        TreeRow(
+            name=name,
+            kind="choice",
+            field="rewrite_preset",
+            choice=name,
+            explain=_STYLE_EXPLAIN.get(name, "Rewrite style."),
+        )
+        for name in _PRESETS
+    ]
+
+
 def _model_choices(field: str) -> list[TreeRow]:
     catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
     recommended = DEFAULT_MODEL if field == "stt_model" else LOCAL_REWRITE_MODEL_FILE
@@ -309,6 +300,8 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
         current = settings.stt_model
     elif here == "/settings/rewrite/model":
         current = settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE
+    elif here == "/settings/rewrite/style":
+        current = settings.rewrite_preset
     else:
         return 0
     for index, row in enumerate(rows):
