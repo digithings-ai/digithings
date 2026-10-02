@@ -83,6 +83,17 @@ body {
   cursor: crosshair;
 }
 
+/* Finished Vela chart. Opacity only — the axis is Vela's. */
+.hero-chart {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-chart {
+    opacity: 1;
+    transition: none;
+  }
+}
+
 /* Hero chart construct strokes: draw X L→R, Y B→T, then faint grid over an empty
    Vela plot (series hidden). Timings mirror AXIS_* / GRID_* in lib/hero-build.ts.
    Construction — not a black mask peel over finished candles. */
