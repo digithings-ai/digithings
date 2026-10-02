@@ -1,0 +1,13 @@
+# Copy to .dev.vars (gitignored) for `wrangler dev` against the live house book.
+# Real data: paste the service-role key (read-only reads via PostgREST).
+SUPABASE_SERVICE_ROLE_KEY=
+# Local dev only: caller used when a request carries no x-digi-tier / x-digi-groups
+# (the browser cannot send them). Full access: enterprise+12x. Never set on a deployed worker.
+DASHBOARD_DEV_CALLER=enterprise+12x
+# Allow the local digiquant-app dev server.
+DASHBOARD_API_ALLOWED_ORIGINS=http://localhost:3930,http://127.0.0.1:3930
+# MCP: x-digi-mcp-key must equal this on POST /mcp (unset = deny all).
+MCP_EDGE_KEY=dev-mcp-key
+# Optional twelve-x (FX hub) project; absent = FX reads fail closed.
+TWELVEX_SUPABASE_URL=
+TWELVEX_SUPABASE_SERVICE_KEY=

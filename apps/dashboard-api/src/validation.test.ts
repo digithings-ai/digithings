@@ -73,7 +73,7 @@ import {
 import { benchmarkOverlapMeetsFloor as serverOverlapMeetsFloor } from "./benchmarks";
 import { sortTickerUniverse as clientSortTickerUniverse } from "../../dashboard/lib/benchmark-tickers";
 
-const NO_ENV: Env = {};
+const NO_ENV: Env = { DASHBOARD_DEV_CALLER: "enterprise+12x" }; // builders under test, not the access gate
 const get = (path: string) => new Request(`https://worker${path}`);
 
 async function dataOf(path: string): Promise<{ status: number; data: never; body: Record<string, unknown> }> {
