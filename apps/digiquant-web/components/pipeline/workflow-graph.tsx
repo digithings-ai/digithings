@@ -18,7 +18,6 @@ function NodeBox({ node }: { node: GraphNode }) {
       }
     >
       <span className="block">{node.label}</span>
-      {node.pending ? <span className="mt-1 block text-ink-mute">still to come</span> : null}
     </div>
   );
 }
