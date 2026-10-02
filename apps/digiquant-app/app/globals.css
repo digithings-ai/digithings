@@ -225,3 +225,41 @@ button, input { font-family: var(--mono); letter-spacing: 0; border-radius: 0; }
 .desk-blurb { display: block; color: var(--ink-mute); font-size: 10px; margin-top: 3px; }
 .nav-link.locked .nav-path { color: var(--ink-mute); }
 @media (max-width: 720px) { .desk-pick { padding: 0 6px; } }
+
+/* ---- DataTable v2: sort, filter, click, sticky first column, pager ---- */
+.tbl-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 12px; border-bottom: 1px solid var(--hair); font-size: 10.5px; }
+.tbl-filter { flex: 1; max-width: 240px; background: transparent; border: 0; border-bottom: 1px solid var(--hair-strong); color: var(--ink); font: 11px/1.6 var(--mono); padding: 0; }
+.tbl-filter:focus-visible { outline: 0; border-bottom-color: var(--accent); }
+.th-sort { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
+.th-sort:hover, .th-sort:focus-visible { color: var(--accent); outline: 0; }
+.th-dir { display: inline-block; min-width: 1.2em; font-size: 8px; color: var(--accent); }
+.tbl.clickable tbody tr { cursor: pointer; }
+.tbl.clickable tbody tr:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.tbl.stick1 th:first-child, .tbl.stick1 td:first-child { position: sticky; left: 0; z-index: 1; background: var(--bg); }
+.tbl.stick1 th:first-child { background: var(--wash); z-index: 2; }
+.tbl.stick1 tbody tr:hover td:first-child { background: var(--wash); }
+.tbl-pager { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 4px 12px; border-top: 1px solid var(--hair); font-size: 10.5px; color: var(--ink-mute); }
+.tbl-pager button { background: none; border: 0; padding: 0; color: var(--ink-soft); font: inherit; cursor: pointer; }
+.tbl-pager button:hover:not([disabled]), .tbl-pager button:focus-visible { color: var(--accent); outline: 0; }
+.tbl-pager button[disabled] { color: var(--ink-mute); cursor: default; opacity: 0.5; }
+
+/* ---- Dated charts: range tabs, crosshair, tooltip ---- */
+.rtabs { display: flex; gap: 2px; margin-bottom: 4px; margin-left: -36px; font-size: 10px; }
+.rtabs button { background: none; border: 0; padding: 2px 6px; color: var(--ink-mute); font: inherit; cursor: pointer; }
+.rtabs button:hover, .rtabs button:focus-visible { color: var(--ink); outline: 0; }
+.rtabs button.on { color: var(--accent); box-shadow: inset 0 -1px var(--accent); }
+.chart-plot { position: relative; outline: 0; touch-action: pan-y; }
+.chart-plot:focus-visible { box-shadow: 0 0 0 1px var(--hair-strong); }
+.chart-cross { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--ink-mute); pointer-events: none; }
+.chart-dot { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--ink); pointer-events: none; }
+.chart-tip { position: absolute; top: 2px; transform: translateX(8px); padding: 2px 6px; background: var(--win); border: 1px solid var(--hair-strong); font-size: 10px; white-space: nowrap; pointer-events: none; z-index: 3; }
+.chart-tip.flip { transform: translateX(calc(-100% - 8px)); }
+
+/* ---- Dossier drawer ---- */
+.drawer-wrap { position: fixed; inset: var(--top) 0 0 0; z-index: 60; display: flex; justify-content: flex-end; }
+.drawer-back { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.drawer { position: relative; width: min(520px, 100%); background: var(--win); border-left: 1px solid var(--hair-strong); animation: drawer-in 140ms ease-out; outline: 0; }
+.drawer-x { margin-left: 12px; background: none; border: 0; padding: 0; color: var(--ink-soft); font: inherit; cursor: pointer; }
+.drawer-x:hover, .drawer-x:focus-visible { color: var(--accent); outline: 0; }
+@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }

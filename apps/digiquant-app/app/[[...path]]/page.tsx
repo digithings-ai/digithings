@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { AtomsGallery } from '@/components/AtomsGallery';
 import { BlockGrid } from '@/components/BlockGrid';
 import { Gallery, GroupGallery, PortfolioGallery } from '@/components/Gallery';
 import { GROUP_PAGES } from '@/lib/group-pages';
@@ -14,6 +15,7 @@ export default async function Page({ params }: { params: Promise<{ path?: string
   const full = '/' + path.join('/');
   if (full === '/blocks') return <Gallery />;
   if (full === '/blocks/ui') return <UiFixtures />;
+  if (full === '/blocks/atoms') return <AtomsGallery />;
   if (full === '/blocks/portfolio') return <PortfolioGallery />;
   const grp = full.startsWith('/blocks/') ? full.slice(8) : null;
   if (grp && grp in GROUP_PAGES) return <GroupGallery group={grp} />;

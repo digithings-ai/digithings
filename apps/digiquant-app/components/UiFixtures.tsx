@@ -1,3 +1,5 @@
+'use client';
+
 import { KpiGrid, Sparkline } from './atoms';
 import { DataTable } from './DataTable';
 import { Badge, BulletList, Button, KvList, MetaStrip, PageBand, Prose, SoonBar, StateBlock, Tabs } from './ui';

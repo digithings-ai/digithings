@@ -8,7 +8,7 @@ export type NavNode = {
   label: string;
   status?: 'wip' | 'soon';
   children?: NavNode[];
-  /** Set from the access manifest when the caller can see but not open the page: the tag to show ("pro", "12x"). */
+  /** Set from the access manifest when the caller can see but not open the page: the tag to show ("brief", "12x"). */
   lock?: string;
 };
 
