@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { readDeskBlock } from "../read-block";
+import { DeskPane, usePaneFocus } from "./pane";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
 export const PORTFOLIO_PATHS = [
@@ -86,6 +87,8 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
     path: "",
     reads: {},
   });
+  const blocks = portfolioBlocks(path);
+  const panes = usePaneFocus(blocks.map((block) => block.id));
   const controlled = reads !== undefined;
   const shown = controlled ? reads : fetched.path === path ? fetched.reads : {};
 
@@ -110,27 +113,25 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
 
   return (
     <div className="grid h-full min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-1 p-1">
-      {portfolioBlocks(path).map((block) => {
+      {blocks.map((block) => {
         const view = visibleRead(shown[block.id]);
         return (
-          <section
+          <div
             key={block.id}
-            aria-label={block.title}
+            className="min-h-0 min-w-0"
             style={{ gridColumn: `${block.x} / span ${block.w}`, gridRow: `${block.y} / span ${block.h}` }}
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-hair bg-surface"
           >
-            <h2 className="m-0 shrink-0 border-b border-hair px-2 py-1 text-[0.65rem] font-normal text-ink-mute">
-              {block.title}
-            </h2>
-            <p
-              className={`m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-2 py-1 text-[0.7rem] leading-[1.45] ${tone[view.status]}`}
-            >
-              {view.lines.join("\n")}
-            </p>
-            <p className="m-0 shrink-0 truncate border-t border-hair px-2 py-0.5 text-[0.6rem] text-ink-mute">
-              {view.asOf ? `as of ${view.asOf}` : block.route}
-            </p>
-          </section>
+            <DeskPane
+              title={block.title}
+              route={block.route}
+              asOf={view.asOf}
+              lines={view.lines}
+              tone={tone[view.status]}
+              focused={panes.focus === block.id}
+              onFocus={() => panes.focusAt(block.id)}
+              onNext={panes.next}
+            />
+          </div>
         );
       })}
     </div>

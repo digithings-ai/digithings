@@ -8,15 +8,14 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
+import { PaneFrame, useFocusedPane } from "./pane";
+import { strategyBlocks } from "./shape";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
 const INK = "#e7e1d6";
 const DIM = "#8a8175";
-const LINE = "#3a342c";
-const GOLD = "#d4b483";
 const BAD = "#c47a6a";
-const OK = "#7d9a78";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -329,72 +328,9 @@ export function strategyBlockBody(id: string, data: unknown, result: ReadResult)
   return paint(id, data) ?? textBody(result);
 }
 
-function linesOf(body: StrategyBlockBody): string[] {
-  switch (body.type) {
-    case "text":
-      return body.lines;
-    case "empty":
-      return body.why ? [body.title, body.why] : [body.title];
-    case "kpis": {
-      const lines = body.notice ? [body.notice] : [];
-      for (const item of body.items) lines.push(`${item.label}  ${item.value}`);
-      return lines;
-    }
-    case "table": {
-      const shown = body.rows.slice(0, 8);
-      const lines = shown.map((row) => body.head.map((label, i) => `${label} ${row[i] ?? DASH}`).join("  "));
-      if (body.rows.length > shown.length) lines.push(`… ${body.rows.length - shown.length} more`);
-      return lines.length ? lines : [EMPTY_READ];
-    }
-    case "fields": {
-      const lines: string[] = [];
-      if (body.notice) lines.push(body.notice);
-      if (body.lead) lines.push(body.lead);
-      if (body.lede) lines.push(body.lede);
-      for (const item of body.rows) lines.push(`${item.label}  ${item.value}`);
-      return lines.length ? lines : [EMPTY_READ];
-    }
-    case "steps":
-      return body.steps.flatMap((step, i) => {
-        const line = `${i + 1}. ${step.label}  ${step.meta}`;
-        return step.detail ? [line, `   ${step.detail}`] : [line];
-      });
-    case "track": {
-      const lines: string[] = [];
-      if (body.headline) lines.push(body.headline);
-      if (body.why) lines.push(body.why);
-      for (const item of body.rows) lines.push(`${item.label}  ${item.value}`);
-      const shown = body.points.slice(-8);
-      const hidden = body.points.length - shown.length;
-      if (hidden > 0) lines.push(`… ${hidden} earlier`);
-      for (const point of shown) lines.push(`${point.date}  ${point.value}`);
-      return lines.length ? lines : [EMPTY_READ];
-    }
-    default: {
-      const exhaustive: never = body;
-      return [String(exhaustive)];
-    }
-  }
-}
-
-function blockLines(id: string, loaded: Loaded): string[] {
-  const body = strategyBlockBody(id, loaded.data, loaded.result);
-  const head =
-    body.type === "text"
-      ? []
-      : loaded.result.lines.filter((line) => line.startsWith("source  ") || line.startsWith("marks  "));
-  return [...head, ...linesOf(body)].slice(0, 14);
-}
-
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
   if (status === "empty" || status === "loading") return DIM;
-  return BAD;
-};
-
-const border = (status: ReadResult["status"] | "loading") => {
-  if (status === "ok") return OK;
-  if (status === "empty" || status === "loading") return LINE;
   return BAD;
 };
 
@@ -446,33 +382,50 @@ export function StrategiesPages({ path, api = API }: { path: string; api?: strin
   if (!STRATEGY_PATHS.has(path)) return null;
   const reads = state.path === path ? state.reads : {};
   const layout = layoutFor(path);
+  return <StrategiesDesk path={path} reads={reads} layout={layout} />;
+}
 
+function StrategiesDesk({
+  path,
+  reads,
+  layout,
+}: {
+  path: string;
+  reads: Record<string, Loaded>;
+  layout: ReturnType<typeof layoutFor>;
+}) {
+  const [focus, setFocus] = useFocusedPane(layout.length, path);
   return (
     <box width="100%" height="100%" position="relative" overflow="hidden">
-      {layout.map((placement) => {
+      {layout.map((placement, index) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
         const read = reads[placement.id];
         const status = read?.result.status ?? "loading";
-        const lines = read ? blockLines(placement.id, read) : ["loading…"];
+        const structured = read
+          ? strategyBlockBody(placement.id, read.data, read.result)
+          : ({ type: "text", lines: ["loading…"] } satisfies StrategyBlockBody);
+        const provenance =
+          structured.type === "text"
+            ? []
+            : (read?.result.lines.filter((line) => line.startsWith("source  ") || line.startsWith("marks  ")) ?? []);
         return (
           <box
-            key={placement.id}
+            key={`${path}:${placement.id}`}
             position="absolute"
             left={share(placement.x - 1, COLS)}
             top={share(placement.y - 1, ROWS)}
             width={share(placement.w, COLS)}
             height={share(placement.h, ROWS)}
-            border
-            borderColor={border(status)}
-            title={def.title}
-            titleColor={DIM}
-            bottomTitle={read?.result.asOf ? `as of ${read.result.asOf}` : def.route}
-            overflow="hidden"
-            paddingLeft={1}
-            paddingRight={1}
+            onMouseDown={() => setFocus(index)}
           >
-            <text fg={tone(status)}>{lines.join("\n")}</text>
+            <PaneFrame
+              title={def.title}
+              status={read?.result.asOf ? `as of ${read.result.asOf}` : def.route}
+              focused={index === focus}
+              blocks={strategyBlocks(structured, provenance)}
+              ink={tone(status)}
+            />
           </box>
         );
       })}

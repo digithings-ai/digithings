@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockDef } from "../../../../../clients/digiquant-tui/src/catalog";
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { readOfficial } from "../read-block";
+import { DeskPane, usePaneFocus } from "./pane";
 
 const FX_BLOCK_IDS = [
   "fx-summary",
@@ -409,7 +410,17 @@ export function fxTone(result: ReadResult | null, lines: string[]): ReadResult["
 
 type Loaded = { result: ReadResult; data: unknown };
 
-function FxRead({ def }: { def: BlockDef }) {
+function FxRead({
+  def,
+  focused,
+  onFocus,
+  onNext,
+}: {
+  def: BlockDef;
+  focused: boolean;
+  onFocus: () => void;
+  onNext: () => void;
+}) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {
@@ -427,28 +438,44 @@ function FxRead({ def }: { def: BlockDef }) {
   const lines = loaded ? fxBlockLines(def.id, loaded.result, loaded.data) : ["loading…"];
   const status = fxTone(loaded?.result ?? null, lines);
   return (
-    <section aria-label={def.title} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-hair bg-surface">
-      <h2 className="m-0 shrink-0 border-b border-hair px-2 py-1 text-[0.65rem] font-normal text-ink-mute">{def.title}</h2>
-      <p className={`m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-2 py-1 text-[0.7rem] leading-[1.45] ${tone[status]}`}>
-        {lines.slice(0, 14).join("\n")}
-      </p>
-      <p className="m-0 shrink-0 truncate border-t border-hair px-2 py-0.5 text-[0.6rem] text-ink-mute">
-        {loaded?.result.asOf ? `as of ${loaded.result.asOf}` : def.route}
-      </p>
-    </section>
+    <DeskPane
+      title={def.title}
+      route={def.route}
+      asOf={loaded?.result.asOf ?? null}
+      lines={lines}
+      tone={tone[status]}
+      focused={focused}
+      onFocus={onFocus}
+      onNext={onNext}
+    />
   );
 }
 
-function FxBlock({ id }: { id: string }) {
+function FxBlock({
+  id,
+  focused,
+  onFocus,
+  onNext,
+}: {
+  id: string;
+  focused: boolean;
+  onFocus: () => void;
+  onNext: () => void;
+}) {
   const def = BLOCKS[id];
   if (!def) return null;
-  return <FxRead key={`${def.route}:${def.kind}`} def={def} />;
+  return <FxRead key={`${def.route}:${def.kind}`} def={def} focused={focused} onFocus={onFocus} onNext={onNext} />;
 }
 
 /** FX hub, ideas, watch, rates, and settings. One block per catalog route. */
 export function FxDesk({ path }: { path: string }) {
   if (!isFxPath(path)) return null;
+  return <FxLayout path={path} />;
+}
+
+function FxLayout({ path }: { path: string }) {
   const layout = layoutFor(path);
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
   return (
     <div className="grid h-full min-h-0 grid-cols-12 grid-rows-12 gap-1 p-1">
       {layout.map((placement) => (
@@ -457,7 +484,12 @@ export function FxDesk({ path }: { path: string }) {
           className="min-h-0 min-w-0"
           style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
         >
-          <FxBlock id={placement.id} />
+          <FxBlock
+            id={placement.id}
+            focused={panes.focus === placement.id}
+            onFocus={() => panes.focusAt(placement.id)}
+            onNext={panes.next}
+          />
         </div>
       ))}
     </div>
