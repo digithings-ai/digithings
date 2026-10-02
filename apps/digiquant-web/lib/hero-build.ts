@@ -38,6 +38,9 @@ export const COPY_DONE_MS = CHROME_DONE_MS + HANDOFF_MS;
 export const CHART_BUILD_TARGET_MS = 5000;
 export const CHART_BUILD_MAX_MS = 10000;
 
+/** The hero chart fades in as one finished frame. It does not build bar by bar. */
+export const HERO_FADE_MS = 700;
+
 /**
  * Axes then grid (~0.8s): X L→R, Y B→T (overlaps end of X), then faint grid.
  * Times are relative to construct t0 (axes start), not first paint.
@@ -321,4 +324,70 @@ export function revealStroke(stroke: HeroStroke, bars: readonly HeroBar[], index
     out.push(point);
   }
   return out;
+}
+
+/** Fixed plot: first bar on the left, one bar of pad on the right. */
+export function candleSweepRange(
+  first: number,
+  last: number,
+  barMs: number,
+): { from: number; to: number } {
+  return { from: first, to: last + barMs };
+}
+
+export type LockedDomain = {
+  priceMin: number;
+  priceMax: number;
+  volumeMax: number;
+};
+
+/** Y extremes of the complete series, including the overlay on the finished chart. */
+export function finalSeriesDomain(bars: readonly HeroBar[], overlay?: HeroOverlay): LockedDomain {
+  let priceMin = Number.POSITIVE_INFINITY;
+  let priceMax = Number.NEGATIVE_INFINITY;
+  let volumeMax = 0;
+  const consider = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    if (value < priceMin) priceMin = value;
+    if (value > priceMax) priceMax = value;
+  };
+  for (const bar of bars) {
+    consider(bar.low);
+    consider(bar.high);
+    if (bar.volume != null && bar.volume > volumeMax) volumeMax = bar.volume;
+  }
+  if (overlay && bars.length > 0) {
+    for (const stroke of heroIndicatorStrokes(bars, overlay)) {
+      for (const point of stroke.points) consider(point.price);
+    }
+  }
+  if (priceMin === Number.POSITIVE_INFINITY || priceMax === Number.NEGATIVE_INFINITY) {
+    return { priceMin: 0, priceMax: 1, volumeMax };
+  }
+  return { priceMin, priceMax, volumeMax };
+}
+
+export function revealYDomain(
+  bars: readonly HeroBar[],
+  revealedCount: number,
+  overlay?: HeroOverlay,
+): LockedDomain {
+  void revealedCount;
+  return finalSeriesDomain(bars, overlay);
+}
+
+export function paddedPriceWindow(
+  domain: LockedDomain,
+  margins: { top: number; bottom: number } = { top: 10, bottom: 10 },
+): { min: number; max: number } {
+  const { priceMin: min, priceMax: max } = domain;
+  if (!(max > min)) {
+    const pad = Math.abs(min) * 0.1 || 1;
+    return { min: min - pad, max: max + pad };
+  }
+  const content = Math.max(0.1, 1 - (margins.top + margins.bottom) / 100);
+  const above = margins.top / 100 / content;
+  const below = margins.bottom / 100 / content;
+  const span = max - min;
+  return { min: min - span * below, max: max + span * above };
 }
