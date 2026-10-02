@@ -51,7 +51,7 @@ function renderInScroller(): HTMLElement {
 }
 
 describe('DeskChart', () => {
-  it('constructs Vela with DigiQuant candle colors', async () => {
+  it('constructs Vela with digiquant candle colors', async () => {
     act(() => {
       root!.render(createElement(DeskChart, { bars: BARS, timeframe: '1d' }));
     });

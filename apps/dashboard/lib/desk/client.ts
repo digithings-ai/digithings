@@ -1,10 +1,10 @@
 /**
  * Desk reads for digiquant panes.
  *
- * {@link DigiCon} is the digiquant type for one read: dashboard-api envelope
- * fields (`data`, `as_of`, `retrieval_pin`, `provenance`). Market closes stay
- * on `lib/market-data.ts`. Allowlisted table rows use the same type with
- * provenance left null. Failures throw {@link ApiError}. Missing numbers stay null.
+ * {@link DigiquantRead} is one dashboard-api envelope (`data`, `as_of`,
+ * `retrieval_pin`, `provenance`). Market closes stay on `lib/market-data.ts`.
+ * Allowlisted table rows use the same type with provenance left null.
+ * Failures throw {@link ApiError}. Missing numbers stay null.
  */
 import {
   ApiError,
@@ -15,14 +15,14 @@ import {
 import type { ApiEnvelope, BriefApiData, PerformanceApiData, PortfolioApiData } from '@/lib/api-types';
 import { DESK_ENDPOINTS, DESK_TABLES, type DeskTableName } from './paths';
 
-export type DigiConProvenance = NonNullable<ApiEnvelope<unknown>['provenance']>;
+export type DeskProvenance = NonNullable<ApiEnvelope<unknown>['provenance']>;
 
 /** One digiquant dashboard-api read. Not a package and not a route prefix. */
-export interface DigiCon<T> {
+export interface DigiquantRead<T> {
   data: T;
   as_of: string | null;
   retrieval_pin: string | null;
-  provenance: DigiConProvenance | null;
+  provenance: DeskProvenance | null;
 }
 
 export interface DeskQuery {
@@ -50,7 +50,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function readProvenance(value: unknown): DigiConProvenance | null {
+function readProvenance(value: unknown): DeskProvenance | null {
   const rec = asRecord(value);
   if (rec === null) return null;
   return {
@@ -66,7 +66,7 @@ function readProvenance(value: unknown): DigiConProvenance | null {
 export async function readEnvelope<T>(
   path: string,
   query?: Record<string, string>,
-): Promise<DigiCon<T>> {
+): Promise<DigiquantRead<T>> {
   const body = await apiGet<unknown>(path, query);
   const rec = asRecord(body);
   if (rec === null || !('data' in rec)) {
@@ -83,7 +83,7 @@ export async function readEnvelope<T>(
   };
 }
 
-export function getPortfolio(query?: DeskQuery): Promise<DigiCon<PortfolioApiData>> {
+export function getPortfolio(query?: DeskQuery): Promise<DigiquantRead<PortfolioApiData>> {
   return readEnvelope(DESK_ENDPOINTS.portfolio, queryParams(query));
 }
 
@@ -109,7 +109,7 @@ export interface AllocationsApiData {
 
 export function getAllocations(
   query?: DeskQuery & { includeMarks?: boolean },
-): Promise<DigiCon<AllocationsApiData>> {
+): Promise<DigiquantRead<AllocationsApiData>> {
   const includeMarks = query?.includeMarks !== false;
   return readEnvelope(
     DESK_ENDPOINTS.allocations,
@@ -119,7 +119,7 @@ export function getAllocations(
 
 export function getBrief(
   query?: DeskQuery & { overlay?: 'auto' | 'off' },
-): Promise<DigiCon<BriefApiData>> {
+): Promise<DigiquantRead<BriefApiData>> {
   return readEnvelope(
     DESK_ENDPOINTS.brief,
     queryParams(query, { overlay: query?.overlay ?? 'auto' }),
@@ -128,7 +128,7 @@ export function getBrief(
 
 export function getPerformance(
   query?: DeskQuery & { benchmark?: string; window?: 'inception' | '1y' | '6m' | '3m' },
-): Promise<DigiCon<PerformanceApiData>> {
+): Promise<DigiquantRead<PerformanceApiData>> {
   return readEnvelope(
     DESK_ENDPOINTS.performance,
     queryParams(query, {
@@ -153,7 +153,7 @@ export interface NavSeriesApiData {
 
 export function getNavSeries(
   query?: Pick<DeskQuery, 'retrievalPin'> & { from?: string; to?: string },
-): Promise<DigiCon<NavSeriesApiData>> {
+): Promise<DigiquantRead<NavSeriesApiData>> {
   const extra: Record<string, string> = {};
   if (query?.from !== undefined) extra.from = query.from;
   if (query?.to !== undefined) extra.to = query.to;
@@ -176,7 +176,7 @@ export interface KpisLiveApiData {
   universe: string[];
 }
 
-export interface KpisLiveRead extends DigiCon<KpisLiveApiData> {
+export interface KpisLiveRead extends DigiquantRead<KpisLiveApiData> {
   badge: typeof KPIS_LIVE_BADGE;
 }
 
@@ -202,7 +202,7 @@ export interface BenchmarksApiData {
 
 export function getBenchmarks(
   query?: Pick<DeskQuery, 'retrievalPin'> & { tickers?: string; from?: string; to?: string },
-): Promise<DigiCon<BenchmarksApiData>> {
+): Promise<DigiquantRead<BenchmarksApiData>> {
   const extra: Record<string, string> = {};
   if (query?.tickers !== undefined) extra.tickers = query.tickers;
   if (query?.from !== undefined) extra.from = query.from;
@@ -230,7 +230,7 @@ export interface LedgerApiData {
 
 export function getLedger(
   query?: DeskQuery & { ticker?: string; limit?: number; cursor?: string },
-): Promise<DigiCon<LedgerApiData>> {
+): Promise<DigiquantRead<LedgerApiData>> {
   const extra: Record<string, string> = {};
   if (query?.ticker !== undefined) extra.ticker = query.ticker;
   if (query?.limit !== undefined) extra.limit = String(query.limit);
@@ -250,7 +250,7 @@ export function isDeskTable(table: string): table is DeskTableName {
 export async function getTable<T>(
   table: string,
   read: TableRead = {},
-): Promise<DigiCon<T[]>> {
+): Promise<DigiquantRead<T[]>> {
   if (!isDeskTable(table)) {
     throw new ApiError(404, 'not_found', `table ${table} is not on the dashboard allowlist`);
   }

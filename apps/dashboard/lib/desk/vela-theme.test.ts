@@ -8,7 +8,7 @@ import {
 } from './vela-theme';
 
 describe('deskVelaOptions', () => {
-  it('paints candles DigiQuant teal and red, not a stock theme name', () => {
+  it('paints candles digiquant teal and red, not a stock theme name', () => {
     const options = deskVelaOptions(
       [{ t: 1, o: 1, h: 2, l: 0.5, c: 1.5 }],
       '1d',
