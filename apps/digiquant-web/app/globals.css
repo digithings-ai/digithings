@@ -83,49 +83,67 @@ body {
   cursor: crosshair;
 }
 
-/* Hero chart construct: black gutters peel to reveal axes before grid + L→R bars.
-   Timings mirror AXIS_X_MS / AXIS_Y_MS in lib/hero-build.ts (64px right axis, 22px time). */
-.hero-axis-mask {
+/* Hero chart construct strokes: draw X L→R, Y B→T, then faint grid over an empty
+   Vela plot (series hidden). Timings mirror AXIS_* / GRID_* in lib/hero-build.ts.
+   Construction — not a black mask peel over finished candles. */
+.hero-construct {
   position: absolute;
   inset: 0;
   z-index: 1;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  transition: opacity 180ms ease, visibility 180ms ease;
+  overflow: visible;
+  transition: opacity 160ms ease, visibility 160ms ease;
 }
-.hero-axis-mask[data-phase="done"] {
+.hero-construct[data-phase="done"],
+.hero-construct[data-phase="armed"] {
+  /* armed: strokes parked; done: remove overlay so Vela axes/grid own the frame */
+}
+.hero-construct[data-phase="done"] {
   opacity: 0;
   visibility: hidden;
 }
-.hero-axis-mask__x {
-  position: absolute;
-  left: 0;
-  right: 64px;
-  bottom: 0;
-  height: 22px;
-  background: #000;
-  transform: translateX(0);
-  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+.hero-construct__x,
+.hero-construct__y {
+  fill: none;
+  stroke: #5a6570;
+  stroke-width: 0.35;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
 }
-.hero-axis-mask__y {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 22px;
-  width: 64px;
-  background: #000;
-  transform: translateY(0);
-  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+.hero-construct__x {
+  stroke-dasharray: 90;
+  stroke-dashoffset: 90;
+  transition: stroke-dashoffset 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.hero-axis-mask[data-phase="x"] .hero-axis-mask__x,
-.hero-axis-mask[data-phase="xy"] .hero-axis-mask__x,
-.hero-axis-mask[data-phase="grid"] .hero-axis-mask__x,
-.hero-axis-mask[data-phase="done"] .hero-axis-mask__x {
-  transform: translateX(100%);
+.hero-construct__y {
+  stroke-dasharray: 92;
+  stroke-dashoffset: 92;
+  transition: stroke-dashoffset 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.hero-axis-mask[data-phase="xy"] .hero-axis-mask__y,
-.hero-axis-mask[data-phase="grid"] .hero-axis-mask__y,
-.hero-axis-mask[data-phase="done"] .hero-axis-mask__y {
-  transform: translateY(-100%);
+.hero-construct__grid {
+  fill: none;
+  stroke: #1a1f24;
+  stroke-width: 0.2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.hero-construct[data-phase="x"] .hero-construct__x,
+.hero-construct[data-phase="xy"] .hero-construct__x,
+.hero-construct[data-phase="grid"] .hero-construct__x,
+.hero-construct[data-phase="done"] .hero-construct__x {
+  stroke-dashoffset: 0;
+}
+.hero-construct[data-phase="xy"] .hero-construct__y,
+.hero-construct[data-phase="grid"] .hero-construct__y,
+.hero-construct[data-phase="done"] .hero-construct__y {
+  stroke-dashoffset: 0;
+}
+.hero-construct[data-phase="grid"] .hero-construct__grid,
+.hero-construct[data-phase="done"] .hero-construct__grid {
+  opacity: 1;
 }
 
 /* web-theme.css sets the body to --font-mono; prose is sans here, and mono is

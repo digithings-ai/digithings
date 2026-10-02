@@ -6,23 +6,24 @@ import {
   AXIS_Y_START_MS,
   BARS_START_MS,
   BARS_SWEEP_MS,
+  CHART_BUILD_MAX_MS,
   CHART_INTRO_MS,
   COPY_DONE_MS,
   GRID_START_MS,
   INDICATOR_START_MS,
-  INDICATOR_STAGGER_MS,
 } from "@/lib/hero-build";
 import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
-
-const CHART_FADE_MS = 220;
 
 /** Hero backdrop: a LuxAlgo Vela chart (the live backbone, not a demo).
  *
  *  Sequence (reduced motion skips staging):
- *  1. Logo + copy + buttons settle first (`COPY_DONE_MS` — short handoff).
- *  2. X-axis reveals L→R, right Y-axis B→T, then grid.
- *  3. Candles + volume construct L→R together via bar replay (~5s total chart phase).
- *  4. Indicators stream once bars are underway.
+ *  1. Mount Vela at t≈0 (plot rect real; series+volume hidden; grid off).
+ *  2. Chrome settles (~0.7s); handoff <300ms into construct strokes.
+ *  3. SVG strokes: X L→R, right Y B→T, then faint grid (~0.8s). Construction,
+ *     not a black mask peel over a finished chart. No host opacity fade.
+ *  4. Enable Vela grid/candles; replay bars so volume rises with each candle (~2s).
+ *  5. Indicators added at bars start so replay reveals them L→R with the sweep.
+ *  Hard 10s cap from first paint force-finishes the chart.
  *
  *  Wheel: keep chart zoom-out while the gesture is live; after zoom settle (or
  *  once the zoom-out budget is spent) release so the page scrolls past the
@@ -49,35 +50,57 @@ const THEME = {
 const WHEEL_IDLE_MS = 140;
 const ZOOM_OUT_BUDGET = 720;
 
-const GRID_OFF = {
+const CANDLES_HIDDEN = {
+  candles: {
+    bodyVisible: false,
+    wickVisible: false,
+    borderVisible: false,
+  },
   grid: {
     vertLines: { visible: false },
     horzLines: { visible: false },
   },
 } as const;
 
-const GRID_ON = {
+const CANDLES_VISIBLE = {
+  candles: {
+    bodyVisible: true,
+    wickVisible: true,
+    borderVisible: true,
+  },
   grid: {
     vertLines: { visible: true },
     horzLines: { visible: true },
   },
 } as const;
 
+const GRID_LINES_H = [18, 36, 54, 72] as const;
+const GRID_LINES_V = [16, 32, 48, 64, 80] as const;
+
 export function QuantField() {
   const ref = useRef<HTMLDivElement>(null);
-  const maskRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<SVGSVGElement>(null);
   const [caption, setCaption] = useState("LuxAlgo Vela");
 
   useEffect(() => {
     const host = ref.current;
-    const mask = maskRef.current;
+    const overlay = overlayRef.current;
     if (!host) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const product = HERO_PRODUCTS[Math.floor(Math.random() * HERO_PRODUCTS.length)] ?? HERO_PRODUCTS[0];
     const picked = CYCLE[Math.floor(Math.random() * CYCLE.length)] ?? CYCLE[0];
     let dead = false;
     let chart: Vela | null = null;
-    let overlay: IndicatorHandle | null = null;
+    let overlayInd: IndicatorHandle | null = null;
+    let sma: IndicatorHandle | null = null;
+    let ema: IndicatorHandle | null = null;
+    let finished = false;
+    let axesStarted = false;
+    let barsStarted = false;
+    let axesComplete = false;
+    let chromeReady = reduced;
+    let chartReady = false;
+    let hasBars = false;
     const timers: Array<ReturnType<typeof setTimeout>> = [];
     const later = (ms: number, fn: () => void) => {
       const id = setTimeout(() => {
@@ -87,8 +110,7 @@ export function QuantField() {
       return id;
     };
 
-    host.style.opacity = reduced ? "1" : "0";
-    if (mask) mask.dataset.phase = reduced ? "done" : "armed";
+    if (overlay) overlay.dataset.phase = reduced ? "done" : "armed";
 
     let pageUnlocked = false;
     let zoomOutUsed = 0;
@@ -135,106 +157,137 @@ export function QuantField() {
     const label = (name: string) =>
       `LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${name}`;
 
-    const fadeIn = () => {
-      host.style.transition = `opacity ${CHART_FADE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-      void host.offsetWidth;
-      host.style.opacity = "1";
-      chart?.resize();
-      requestAnimationFrame(() => {
-        if (!dead) chart?.resize();
-      });
-    };
-
-    const stageIndicators = (baseDelay: number) => {
-      later(baseDelay + INDICATOR_START_MS, () => {
-        chart?.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
-      });
-      later(baseDelay + INDICATOR_START_MS + INDICATOR_STAGGER_MS, () => {
-        chart?.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
-      });
-      later(baseDelay + INDICATOR_START_MS + INDICATOR_STAGGER_MS * 2, () => {
-        overlay = chart?.addNativeIndicator(picked.type) ?? null;
-        setCaption(label(picked.label));
-      });
-    };
-
-    const runAxisGridThenBars = async () => {
-      if (!chart || dead) return;
-
+    const applySafe = (config: unknown) => {
       try {
-        chart.renderer.applyConfig(GRID_OFF);
+        chart?.renderer.applyConfig(config);
       } catch {
         /* renderer without rich config — keep going */
       }
+    };
 
-      await chart.ready().catch(() => undefined);
-      if (dead) return;
+    const addIndicators = () => {
+      if (!chart || sma) return;
+      sma = chart.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
+      ema = chart.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
+      overlayInd = chart.addNativeIndicator(picked.type);
+      setCaption(label(picked.label));
+    };
+
+    const showComplete = () => {
+      if (finished || dead) return;
+      finished = true;
+      barsStarted = true;
+      if (overlay) overlay.dataset.phase = "done";
+      applySafe(CANDLES_VISIBLE);
+      try {
+        chart?.renderer.set({ theme: THEME });
+      } catch {
+        /* ignore */
+      }
+      try {
+        chart?.replay.stop();
+      } catch {
+        /* ignore */
+      }
+      addIndicators();
+      chart?.resize();
+    };
+
+    const restoreTheme = () => {
+      try {
+        chart?.renderer.set({ theme: THEME });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const startBars = () => {
+      if (!chart || dead || finished || barsStarted) return;
+      barsStarted = true;
+      applySafe(CANDLES_VISIBLE);
+      restoreTheme();
+      if (overlay) overlay.dataset.phase = "done";
+
+      later(INDICATOR_START_MS, () => {
+        addIndicators();
+      });
 
       const bounds = chart.replay.bounds;
-      let usedReplay = false;
-
       if (bounds) {
-        try {
-          await chart.replay.start({ from: bounds.first });
-          usedReplay = !dead && chart.replay.state.active;
-        } catch {
-          usedReplay = false;
-        }
+        void (async () => {
+          try {
+            if (!chart || dead || finished) return;
+            const already = chart.replay.state.active;
+            if (!already) {
+              await chart.replay.start({ from: bounds.first });
+            }
+            if (dead || finished || !chart) return;
+            const remaining = Math.max(1, chart.replay.state.remaining || 240);
+            const interval = Math.max(8, Math.round(BARS_SWEEP_MS / remaining));
+            chart.replay.play(interval);
+            chart.on("replay:end", () => {
+              /* full history restored; live resumes */
+            });
+          } catch {
+            // Fallback: Vela intro grow (volume may not sync per-bar).
+            try {
+              chart?.renderer.set({
+                animations: { intro: { style: "grow", duration: CHART_INTRO_MS } },
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+        })();
+        return;
       }
 
-      if (dead) return;
-      fadeIn();
+      try {
+        chart.renderer.set({
+          animations: { intro: { style: "grow", duration: CHART_INTRO_MS } },
+        });
+      } catch {
+        /* ignore */
+      }
+    };
 
-      if (mask) {
-        mask.dataset.phase = "x";
+    const runAxesThenBars = () => {
+      if (!chart || dead || axesStarted) return;
+      axesStarted = true;
+
+      applySafe(CANDLES_HIDDEN);
+
+      // Prefetch replay to the first bar so the plot stays empty during strokes.
+      const bounds = chart.replay.bounds;
+      if (bounds && hasBars) {
+        void chart.replay.start({ from: bounds.first }).catch(() => undefined);
+      }
+
+      if (overlay) {
+        overlay.dataset.phase = "x";
         later(AXIS_Y_START_MS, () => {
-          if (mask) mask.dataset.phase = "xy";
+          if (overlay && !finished) overlay.dataset.phase = "xy";
         });
         later(GRID_START_MS, () => {
-          if (mask) mask.dataset.phase = "grid";
-          try {
-            chart?.renderer.applyConfig(GRID_ON);
-          } catch {
-            /* ignore */
-          }
-        });
-        later(BARS_START_MS, () => {
-          if (mask) mask.dataset.phase = "done";
-        });
-      } else {
-        later(GRID_START_MS, () => {
-          try {
-            chart?.renderer.applyConfig(GRID_ON);
-          } catch {
-            /* ignore */
-          }
+          if (overlay && !finished) overlay.dataset.phase = "grid";
         });
       }
 
       later(BARS_START_MS, () => {
-        if (!chart || dead) return;
-
-        if (usedReplay) {
-          const remaining = Math.max(1, chart.replay.state.remaining || 240);
-          const interval = Math.max(8, Math.round(BARS_SWEEP_MS / remaining));
-          chart.replay.play(interval);
-          stageIndicators(0);
-          chart.on("replay:end", () => {
-            /* full history restored; live resumes */
-          });
-          return;
+        if (dead || finished) return;
+        axesComplete = true;
+        if (hasBars) {
+          startBars();
+        } else {
+          // Axes ran on an empty plot; candles wait for bars (10s cap still applies).
+          if (overlay) overlay.dataset.phase = "done";
         }
-
-        // Fallback: Vela intro grow (volume may not sync per-bar).
-        try {
-          chart.renderer.set({
-            animations: { intro: { style: "grow", duration: CHART_INTRO_MS } },
-          });
-        } catch {
-          /* ignore */
-        }
-        stageIndicators(Math.round(CHART_INTRO_MS * 0.22));
       });
+    };
+
+    const tryStartAxes = () => {
+      if (reduced) return;
+      if (chromeReady && chartReady) runAxesThenBars();
     };
 
     const mountChart = async () => {
@@ -249,7 +302,7 @@ export function QuantField() {
         timeframe: "1",
         bars: 300,
         live: !reduced,
-        theme: THEME,
+        theme: { ...THEME, gridColor: "transparent" },
         upColor: UP,
         downColor: DOWN,
         volume: true,
@@ -265,29 +318,66 @@ export function QuantField() {
       });
       host.style.touchAction = "pan-y";
       chart.data.registerProvider("coinbase", new CoinbaseProvider());
+      applySafe(CANDLES_HIDDEN);
+
+      chart.on("load:end", (ev) => {
+        if (dead) return;
+        hasBars = (ev?.bars ?? 0) > 0;
+        if (!hasBars && axesComplete && !finished) {
+          setCaption("LuxAlgo Vela · chart unavailable");
+        }
+        if (hasBars && axesComplete && !finished && !barsStarted) {
+          startBars();
+        }
+      });
 
       if (reduced) {
-        chart.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
-        chart.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
-        overlay = chart.addNativeIndicator(picked.type);
-        setCaption(label(picked.label));
-        host.style.opacity = "1";
-        if (mask) mask.dataset.phase = "done";
+        await chart.ready().catch(() => undefined);
+        if (dead) return;
+        hasBars = Boolean(chart.replay.bounds);
+        applySafe(CANDLES_VISIBLE);
+        try {
+          chart.renderer.set({ theme: THEME });
+        } catch {
+          /* ignore */
+        }
+        addIndicators();
+        if (!hasBars) setCaption("LuxAlgo Vela · chart unavailable");
+        if (overlay) overlay.dataset.phase = "done";
+        finished = true;
         return;
       }
 
-      await runAxisGridThenBars();
+      await chart.ready().catch(() => undefined);
+      if (dead) return;
+      hasBars = Boolean(chart.replay.bounds);
+      chartReady = true;
+      chart.resize();
+      tryStartAxes();
     };
 
-    const startDelay = reduced ? 0 : COPY_DONE_MS;
-    later(startDelay, () => {
-      void mountChart().catch(() => {
-        if (!dead) {
-          host.style.opacity = "1";
-          if (mask) mask.dataset.phase = "done";
-          setCaption("LuxAlgo Vela · chart unavailable");
-        }
+    // Mount immediately so the plot rect is real during chrome (plan: do not wait on wordmark).
+    void mountChart().catch(() => {
+      if (!dead) {
+        chartReady = true;
+        if (overlay) overlay.dataset.phase = "done";
+        setCaption("LuxAlgo Vela · chart unavailable");
+        tryStartAxes();
+      }
+    });
+
+    if (!reduced) {
+      later(COPY_DONE_MS, () => {
+        chromeReady = true;
+        tryStartAxes();
       });
+    }
+
+    later(CHART_BUILD_MAX_MS, () => {
+      if (!hasBars && chart) {
+        setCaption("LuxAlgo Vela · chart unavailable");
+      }
+      showComplete();
     });
 
     return () => {
@@ -300,7 +390,9 @@ export function QuantField() {
       } catch {
         /* ignore */
       }
-      overlay?.remove();
+      overlayInd?.remove();
+      sma?.remove();
+      ema?.remove();
       chart?.destroy();
     };
   }, []);
@@ -313,15 +405,37 @@ export function QuantField() {
           aria-label={caption}
           className="absolute inset-0 h-full w-full [transform:translateZ(0)]"
         />
-        <div
-          ref={maskRef}
-          className="hero-axis-mask"
+        <svg
+          ref={overlayRef}
+          className="hero-construct"
           data-phase="armed"
           aria-hidden="true"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
         >
-          <div className="hero-axis-mask__x" />
-          <div className="hero-axis-mask__y" />
-        </div>
+          {GRID_LINES_H.map((y) => (
+            <line
+              key={`h${y}`}
+              className="hero-construct__grid"
+              x1="2"
+              y1={y}
+              x2="92"
+              y2={y}
+            />
+          ))}
+          {GRID_LINES_V.map((x) => (
+            <line
+              key={`v${x}`}
+              className="hero-construct__grid"
+              x1={x}
+              y1="4"
+              x2={x}
+              y2="96"
+            />
+          ))}
+          <line className="hero-construct__x" x1="2" y1="96" x2="92" y2="96" />
+          <line className="hero-construct__y" x1="92" y1="96" x2="92" y2="4" />
+        </svg>
       </div>
       <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>
     </>
