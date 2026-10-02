@@ -22,6 +22,8 @@ import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
  *  3. SVG strokes: X L→R, right Y B→T, then faint grid (~0.8s). Construction,
  *     not a black mask peel over a finished chart. No host opacity fade.
  *  4. Enable Vela grid/candles; replay bars so volume rises with each candle (~2s).
+ *     Viewport is left-anchored (fixed past `from`, growing `to`) so candles fill
+ *     L→R in time — not Vela's default right-pinned view (which looks RTL).
  *  5. Indicators added at bars start so replay reveals them L→R with the sweep.
  *  Hard 10s cap from first paint force-finishes the chart.
  *
@@ -201,6 +203,25 @@ export function QuantField() {
       }
     };
 
+    /** Keep the viewport left-anchored while replay reveals bars.
+     *  Vela defaults to rightOffset near the latest bar, which makes early
+     *  candles cluster on the right and shove history left (RTL). Instead pin
+     *  `from` at the oldest revealed time and grow `to` with the cursor so
+     *  past stays left and new candles/volume/indicators appear on the right. */
+    const leftAnchorVisible = (cursorTime: number, firstTime: number) => {
+      if (!chart || dead || finished) return;
+      const from = firstTime;
+      // One-bar pad keeps a non-zero span on the first step and a sliver of
+      // empty future on the right so the newest candle is not glued to the edge.
+      const barMs = 60_000; // hero timeframe is 1m
+      const to = Math.max(cursorTime + barMs, from + barMs);
+      try {
+        chart.setVisibleRange({ from, to });
+      } catch {
+        /* renderer without range control — keep going */
+      }
+    };
+
     const startBars = () => {
       if (!chart || dead || finished || barsStarted) return;
       barsStarted = true;
@@ -214,19 +235,31 @@ export function QuantField() {
 
       const bounds = chart.replay.bounds;
       if (bounds) {
+        const firstTime = bounds.first;
         void (async () => {
           try {
             if (!chart || dead || finished) return;
             const already = chart.replay.state.active;
             if (!already) {
-              await chart.replay.start({ from: bounds.first });
+              await chart.replay.start({ from: firstTime });
             }
             if (dead || finished || !chart) return;
+
+            const anchorFromStep = (ev: { cursorTime: number }) => {
+              leftAnchorVisible(ev.cursorTime, firstTime);
+            };
+            chart.on("replay:step", anchorFromStep);
+            chart.on("replay:start", anchorFromStep);
+            // Seed immediately so the first revealed bar(s) paint on the left,
+            // not clustered at the default right edge before the first step.
+            const cursor = chart.replay.state.cursorTime ?? firstTime;
+            leftAnchorVisible(cursor, firstTime);
+
             const remaining = Math.max(1, chart.replay.state.remaining || 240);
             const interval = Math.max(8, Math.round(BARS_SWEEP_MS / remaining));
             chart.replay.play(interval);
             chart.on("replay:end", () => {
-              /* full history restored; live resumes */
+              /* full history restored; live resumes — leave default view */
             });
           } catch {
             // Fallback: Vela intro grow (volume may not sync per-bar).
