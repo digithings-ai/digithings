@@ -1,6 +1,6 @@
 import { ContactMailto, CtaLink } from "@digithings/ui";
 import { Badge } from "@digithings/ui/ui";
-import { PRICING_TIERS, type PricingTier } from "../../app/_pricing";
+import { PRICING_FAQ, PRICING_TIERS, type PricingTier } from "../../app/_pricing";
 
 const REPO = "https://github.com/digithings-ai/digithings";
 const LOUD = "h-auto w-full px-[1rem] py-[0.7rem] font-mono text-[0.8rem] no-underline";
@@ -27,6 +27,7 @@ function Cta({ tier }: { tier: PricingTier }) {
  *  approved copy; the self-hosted cell carries the one loud action. */
 export function PricingStrip() {
   return (
+    <>
     <ul
       aria-label="Pricing tiers"
       className="m-0 grid list-none gap-0 grid-cols-[minmax(0,1fr)] border-x border-t border-hair p-0 min-[860px]:grid-cols-3"
@@ -40,7 +41,7 @@ export function PricingStrip() {
         >
           <div className="flex min-h-[1.5rem] items-center justify-between gap-2 font-mono text-[0.68rem] text-ink-mute">
             <span>[ {tier.name.toLowerCase()} ]</span>
-            {tier.id === "managed" ? <Badge variant="neutral">in development</Badge> : null}
+            {tier.id === "managed" ? <Badge variant="neutral">Coming soon</Badge> : null}
           </div>
           <p className="m-0 mt-[0.9rem] font-mono text-[1.35rem] leading-none text-ink">
             {tier.price}
@@ -63,5 +64,14 @@ export function PricingStrip() {
         </li>
       ))}
     </ul>
+    <dl className="m-0 mt-4 grid gap-4 border border-hair p-[1.3rem]">
+      {PRICING_FAQ.map((row) => (
+        <div key={row.q}>
+          <dt className="font-mono text-[0.72rem] text-ink">{row.q}</dt>
+          <dd className="m-0 mt-1 text-[0.8125rem] leading-[1.55] text-ink-soft">{row.a}</dd>
+        </div>
+      ))}
+    </dl>
+    </>
   );
 }
