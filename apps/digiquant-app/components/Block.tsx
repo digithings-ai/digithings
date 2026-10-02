@@ -32,7 +32,7 @@ export function Block<T>({ no, label, route, asOf, children }: {
   const stamp = env ? (asOf?.(env.data) ?? env.as_of) : null;
   return (
     <Window no={no} label={label} right={stamp ? `as of ${stamp}` : route}>
-      {err ? <StateBlock kind="error" title="Withheld." why={`${route}: ${err}`} />
+      {err ? <StateBlock kind="error" title="Withheld." why={err.startsWith(route) ? err : `${route}: ${err}`} />
         : !env ? <p className="note mute">loading…</p>
         : <Guard key={env.as_of ?? route} route={route}>{children(env.data, env)}</Guard>}
     </Window>

@@ -15,18 +15,32 @@ const SPAN: Record<number, string> = {
   12: 'col-span-12',
 };
 
+/** Desktop row tracks that fill one 12-row viewport. Narrow view stacks. */
+const ROW: Record<string, string> = {
+  decision: 'md:row-span-3',
+  signals: 'md:row-span-3',
+  allocation: 'md:row-span-3',
+  movers: 'md:row-span-3',
+  breaks: 'md:row-span-3',
+  'gloomberg-quotes': 'md:row-span-2',
+  'gloomberg-tape': 'md:row-span-2',
+  luxalgo: 'md:row-span-2',
+  run: 'md:row-span-2',
+};
+
 /**
  * Temporary frame until Slice A's `PaneFrame` mounts these models.
  * Shows the chrome path. Does not add fullscreen, drag, or a KPI hero.
  */
 export function BriefPaneFrame({ pane, children }: { pane: BriefPaneView; children: ReactNode }) {
   const span = SPAN[pane.columns ?? 12] ?? 'col-span-12';
+  const row = ROW[pane.id] ?? '';
   return (
     <section
       data-testid={`brief-pane-${pane.id}`}
       data-chrome-path={pane.chromePath}
       data-pane-state={pane.state}
-      className={`flex min-h-0 flex-col overflow-hidden border border-hair bg-surface ${span}`}
+      className={`flex min-h-[11rem] min-w-0 flex-col overflow-hidden border border-hair bg-surface md:min-h-0 ${span} ${row}`}
     >
       <header className="flex items-baseline gap-2 border-b border-hair px-3 py-2">
         <span className="font-mono text-[10px] text-ink-mute">{pane.eyebrow}</span>
@@ -53,7 +67,7 @@ export function BriefDeskView({
     <div
       data-testid="brief-desk"
       data-retrieval-pin={retrievalPin ?? undefined}
-      className="grid h-full min-h-0 flex-1 grid-cols-12 content-start gap-px overflow-hidden bg-hair"
+      className="grid min-h-0 flex-1 grid-cols-12 content-start gap-px bg-hair md:h-full md:grid-rows-12 md:overflow-hidden"
     >
       {panes.map((pane) => (
         <BriefPaneFrame key={pane.id} pane={pane}>

@@ -103,7 +103,7 @@ export function CardRail({
   };
 
   return (
-    <div className={cn("grid gap-3", className)} data-card-rail="">
+    <div className={cn("grid min-w-0 gap-3", className)} data-card-rail="">
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">{header}</div>
         <div className="flex shrink-0 gap-[0.4rem]">
@@ -125,7 +125,7 @@ export function CardRail({
           </IconButton>
         </div>
       </div>
-      <div className={FADE}>
+      <div className={cn("min-w-0", FADE)}>
         <div
           ref={trackRef}
           role="list"

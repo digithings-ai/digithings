@@ -101,18 +101,43 @@ async function failText(res: Response, route: string): Promise<string> {
   return `${route} failed (${res.status})${detail}`;
 }
 
+/**
+ * Secretless worker doubles. Same markers as the homepage official-api client:
+ * stub NAV 99.909 / 204.04, the paired return series, and `legacy_estimate`.
+ * A hit is withheld. It is never painted as the house book.
+ */
+export function isStubEnvelope(body: unknown): boolean {
+  const text = JSON.stringify(body ?? null);
+  if (text.includes('"legacy_estimate"')) return true;
+  if (text.includes('99.909') || text.includes('204.04') || text.includes('204.040')) return true;
+  if (text.includes('103.040192') || text.includes('104.44808') || text.includes('3.040191838399986')) return true;
+  if (text.includes('"close":500') && text.includes('2026-08-20') && text.includes('"close":515')) return true;
+  return false;
+}
+
+export const STUB_READ = 'The official API returned a stub envelope, not a house-book read.';
+
+async function read(route: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${base()}${route}`, init);
+  } catch {
+    throw new Error(`${route}: the official API could not be reached.`);
+  }
+}
+
 export async function dqGet<T>(route: string): Promise<Envelope<T>> {
-  const res = await fetch(`${base()}${route}`);
+  const res = await read(route);
   if (!res.ok) throw new Error(await failText(res, route));
   const body: unknown = await res.json();
   if (!body || typeof body !== 'object' || (body as { data?: unknown }).data == null) throw new Error(`${route} returned no data`);
+  if (isStubEnvelope(body)) throw new Error(STUB_READ);
   const env = body as Envelope<T>;
   return { ...env, retrieval_pin: env.retrieval_pin ?? null };
 }
 
 /** Write route (PUT/POST/DELETE). Throws with the route and status; never pretends a write succeeded. */
 export async function dqSend<T = unknown>(method: 'PUT' | 'POST' | 'DELETE', route: string, body?: unknown): Promise<T | null> {
-  const res = await fetch(`${base()}${route}`, {
+  const res = await read(route, {
     method,
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),

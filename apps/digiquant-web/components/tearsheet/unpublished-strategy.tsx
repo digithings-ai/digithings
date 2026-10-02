@@ -13,7 +13,7 @@ export function UnpublishedStrategyCard({ id, label, symbol }: { id: string; lab
     <CtaLink
       href={`/strategies/${id}/`}
       variant="ghost"
-      className="flex h-auto min-h-full w-full flex-col items-stretch gap-3 border border-hair bg-surface p-4 text-start no-underline hover:bg-surface-2"
+      className="flex h-auto min-h-full w-full min-w-0 flex-col items-stretch gap-3 overflow-hidden border border-hair bg-surface p-4 text-start whitespace-normal no-underline hover:bg-surface-2"
     >
       <span className="font-display text-[1.05rem] font-medium leading-tight text-ink">
         {strategyDisplayName(id, label)}
