@@ -168,4 +168,4 @@ export type RtCurve = {
   spreads?: { label: string; bp: number | null; day_bp?: number | null }[];
 };
 
-/** rates-theses reuses GET /theses?desk=rates with the existing Theses shape (lib/dq-api.ts). */
+/** GET /rates/theses — twelve-x theses, Theses shape (lib/dq-api.ts). */
