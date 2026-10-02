@@ -134,6 +134,13 @@ export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyBu
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
 export {
+  ChatPlayback,
+  type ChatPlaybackProps,
+  type ChatPlaybackStep,
+  type ChatPlaybackTool,
+  type ChatPlaybackTable,
+} from "./components/chat/ChatPlayback";
+export {
   ChatWidgetFrame,
   ChatWidgetButton,
   type ChatWidgetFrameProps,
@@ -208,6 +215,10 @@ export {
 // finance-composites family (#1450)
 export {
   StockTicker,
+  MarketBar,
+  type MarketBarProps,
+  type MarketBarCell,
+  type MarketBarStatus,
   OrderBook,
   SortableTable,
   PerformanceDashboard,
@@ -235,6 +246,9 @@ export {
   BentoCell,
   CardRail,
   ProductFrame,
+  type CardRailProps,
+  MediaFrame,
+  type MediaFrameProps,
   FeatureCell,
   TestimonialWall,
   ModuleGrid,
@@ -245,7 +259,6 @@ export {
   type ModuleGridProps,
   type TreemapRect,
   type TreemapMins,
-  type CardRailProps,
   type OdometerStat,
   type DotMatrixStatProps,
   type BentoSpan,
@@ -266,6 +279,11 @@ export {
   tabId,
   tabPanelId,
   ToastStack,
+  HorizontalScrollTrack,
+  HorizontalTrackStepper,
+  useHorizontalTrack,
+  type HorizontalScrollTrackProps,
+  type HorizontalTrackState,
   type PipelineProps,
   type PipelineColumn,
   type PipelineNode,

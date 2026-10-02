@@ -50,7 +50,7 @@ describe("tearsheet chips on the vendored kit Badge (wave 2 T3)", () => {
     expect(backtest).toContain('data-slot="badge"');
     expect(backtest).toContain("Backtest only");
     expect(backtest).toContain(
-      'title="Illustrative Nautilus backtest — not a live trading strategy"',
+      'title="Illustrative backtest — not a live trading strategy"',
     );
     expect(backtest).toContain('aria-label="Backtest only"');
     expect(backtest).toContain("text-ink-soft");
