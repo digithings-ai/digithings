@@ -4,7 +4,7 @@ import test from "node:test"
 import { createTestRenderer } from "@opentui/core/testing"
 
 import { FOOTER, heroOffset, mountDigivoice, onHangup, optionBinding, statusParts } from "../src/app.js"
-import { BUILD_MS, SHADES, letterGap, wordmarkLines } from "../src/hero.js"
+import { BUILD_MS, LIT_SHADE, REST_SHADE, SHADES, letterGap, wordmarkLines } from "../src/hero.js"
 
 const HOME_ROWS = [
   { action: "History", path: "/history", meta: "", kind: "dir", name: "History" },
@@ -140,10 +140,82 @@ test("wordmark is five rows with gap 2 and one color mode", () => {
     assert.equal(cell.color.cube, undefined)
     assert.ok(SHADES.some((shade) => shade.rgb === cell.color.rgb))
   }
-  const early = wordmarkLines("DIGIVOICE", { cols: 120, tMs: 200, truecolor: false })
-  const earlyOn = early.lines.flat().filter((cell) => cell.ch !== " ").length
-  const fullOn = cube.lines.flat().filter((cell) => cell.ch !== " ").length
-  assert.ok(earlyOn < fullOn)
+  const later = wordmarkLines("DIGIVOICE", { cols: 120, tMs: 2000, truecolor: false })
+  const shape = (drawn) => drawn.lines.map((row) => row.map((cell) => cell.ch).join("")).join("\n")
+  assert.equal(shape(later), shape(cube))
+})
+
+function brightKey(cubes) {
+  return cubes
+    .filter((cube) => cube.bright)
+    .map((cube) => `${cube.x},${cube.y}`)
+    .sort()
+    .join("|")
+}
+
+function assertBottomUp(cubes) {
+  const columns = new Map()
+  for (const cube of cubes) {
+    if (!columns.has(cube.x)) columns.set(cube.x, [])
+    columns.get(cube.x).push(cube)
+  }
+  for (const column of columns.values()) {
+    column.sort((a, b) => b.y - a.y)
+    let seenGray = false
+    for (const cube of column) {
+      if (!cube.bright) seenGray = true
+      else assert.equal(seenGray, false)
+    }
+  }
+}
+
+test("voice levels brighten letter cubes from the bottom and leave the gaps dark", () => {
+  assert.notEqual(REST_SHADE.rgb, LIT_SHADE.rgb)
+  assert.notEqual(REST_SHADE.rgb, 255)
+  const samples = []
+  for (let tMs = 0; tMs <= 4000; tMs += 80) {
+    samples.push(wordmarkLines("DIGIVOICE", { cols: 120, tMs, truecolor: false }))
+  }
+  const shape = (drawn) => drawn.lines.map((row) => row.map((cell) => cell.ch).join("")).join("\n")
+  for (const sample of samples) {
+    assert.equal(shape(sample), shape(samples[0]))
+    assert.ok(sample.cubes.length > 0)
+    assertBottomUp(sample.cubes)
+    const gapCubes = sample.cubes.filter((cube) => cube.x === 7 || cube.x === 8)
+    assert.equal(gapCubes.length, 0)
+    for (const cell of sample.lines.flat()) {
+      if (cell.ch === " ") {
+        assert.equal(cell.color, null)
+        continue
+      }
+      assert.ok(cell.color.cube === REST_SHADE.cube || cell.color.cube === LIT_SHADE.cube)
+    }
+    for (const cube of sample.cubes) {
+      const row = sample.lines[Math.floor(cube.y / 2)]
+      assert.notEqual(row[cube.x].ch, " ")
+    }
+  }
+  const mixed = samples.filter((sample) => {
+    const bright = sample.cubes.filter((cube) => cube.bright).length
+    return bright > 0 && bright < sample.cubes.length
+  })
+  assert.ok(mixed.length >= 2)
+  const changed = mixed.some((sample, index) =>
+    mixed.slice(index + 1).some((other) => brightKey(other.cubes) !== brightKey(sample.cubes)),
+  )
+  assert.equal(changed, true)
+  const uneven = mixed.some((sample) => {
+    const columns = new Map()
+    for (const cube of sample.cubes) {
+      if (!columns.has(cube.x)) columns.set(cube.x, { bright: 0, total: 0 })
+      const column = columns.get(cube.x)
+      column.total += 1
+      if (cube.bright) column.bright += 1
+    }
+    const fracs = [...columns.values()].map((column) => column.bright / column.total)
+    return new Set(fracs).size > 1
+  })
+  assert.equal(uneven, true)
 })
 
 test("home pins the hero and esc does not quit", async () => {

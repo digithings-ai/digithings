@@ -11,7 +11,7 @@ import {
   fg,
 } from "@opentui/core"
 
-import { BUILD_MS, HERO_GAP, wordmarkLines } from "./hero.js"
+import { HERO_GAP, wordmarkLines } from "./hero.js"
 
 export const FOOTER = "↑↓ move · enter select · esc back · click"
 export const HOTKEY_PROMPT = "input new hotkey"
@@ -1310,26 +1310,16 @@ export function mountDigivoice(renderer, session, options = {}) {
     return processParsedKey(parsed)
   }
   keyInput.on("keypress", onKey)
+  shadowBox.opacity = 1
   paintHero()
   if (animate) {
     engine.attach(renderer)
     engineAttached = true
-    shadowBox.opacity = 1
-    const shadowTimeline = createTimeline({ loop: true, duration: 2800 })
-    shadowTimeline.add(shadowBox, {
-      opacity: 0.2,
-      duration: 1400,
-      ease: "linear",
-      alternate: true,
-      loop: true,
-    })
-    timelines.push(shadowTimeline)
   }
   const timer = animate
     ? setInterval(() => {
         tMs += 80
         paintHero()
-        if (tMs >= BUILD_MS + 1800) tMs = BUILD_MS
       }, 80)
     : null
 
