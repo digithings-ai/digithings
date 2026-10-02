@@ -115,13 +115,19 @@ export function parseManifest(body: unknown): Manifest | null {
   };
 }
 
+/** `/settings` is not an OpenTUI page. `/fx/settings` stays. */
+function hiddenFromRail(path: string): boolean {
+  return path === "/settings" || path.startsWith("/settings/");
+}
+
 /**
  * Desk pages → folder groups. A page is a child when its parent path is also
  * a page; otherwise it is top-level, grouped under its first segment when it
  * has two (`/tools/charts` → "tools").
  */
 export function navFromDesk(desk: ManifestDesk): NavGroup[] {
-  const paths = new Set(desk.pages.map((page) => page.path));
+  const pages = desk.pages.filter((page) => !hiddenFromRail(page.path));
+  const paths = new Set(pages.map((page) => page.path));
   const node = (page: ManifestPage): NavNode => ({
     path: page.path,
     label: page.label,
@@ -130,11 +136,11 @@ export function navFromDesk(desk: ManifestDesk): NavGroup[] {
   });
   const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
   const tops: NavNode[] = [];
-  for (const page of desk.pages) {
+  for (const page of pages) {
     const parent = parentOf(page.path);
     if (parent && paths.has(parent)) continue;
     const item = node(page);
-    const kids = desk.pages.filter((child) => parentOf(child.path) === page.path).map(node);
+    const kids = pages.filter((child) => parentOf(child.path) === page.path).map(node);
     if (kids.length) item.children = kids;
     tops.push(item);
   }

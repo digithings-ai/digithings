@@ -3,6 +3,11 @@ import { useKeyboard, useRenderer } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
 import { BLOCKS, PAGES, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
 import { COLS, ROWS, nudge, type Layout } from "./grid";
+import { BriefPage } from "./pages/brief";
+import { FxDesk, isFxPath } from "./pages/fx";
+import { PipelinePage } from "./pages/pipeline";
+import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
+import { StrategiesPages } from "./pages/strategies";
 import { readBlock, type ReadResult } from "./read";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
@@ -20,12 +25,30 @@ type Key = { name?: string; shift?: boolean; sequence?: string };
 
 const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
 
+const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
+
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
   if (status === "empty") return DIM;
   if (status === "loading") return DIM;
   return BAD;
 };
+
+/** Dedicated pages paint themselves. Any other path keeps the catalog grid. */
+function isCatalogPath(path: string): boolean {
+  if (path === "/brief" || path === "/pipeline") return false;
+  if (isPortfolioPath(path) || STRATEGY_PATHS.has(path) || isFxPath(path)) return false;
+  return true;
+}
+
+function mountedView(path: string) {
+  if (path === "/brief") return <BriefPage />;
+  if (isPortfolioPath(path)) return <PortfolioPages path={path} api={API} />;
+  if (path === "/pipeline") return <PipelinePage api={API} />;
+  if (STRATEGY_PATHS.has(path)) return <StrategiesPages path={path} api={API} />;
+  if (isFxPath(path)) return <FxDesk path={path} api={API} />;
+  return null;
+}
 
 export function App() {
   const renderer = useRenderer();
@@ -42,12 +65,14 @@ export function App() {
   const layoutRef = useRef(layout);
   const focusRef = useRef(focus);
   const modeRef = useRef(mode);
+  const catalogRef = useRef(true);
   pageRef.current = pageIndex;
   layoutRef.current = layout;
   focusRef.current = focus;
   modeRef.current = mode;
 
   const page = PAGES[pageIndex];
+  catalogRef.current = isCatalogPath(page.path);
   const aligned = layoutMatchesPage(page.path, layout);
   const shown = aligned ? layout : layoutFor(page.path);
   const shownReads = aligned ? reads : {};
@@ -68,6 +93,7 @@ export function App() {
   };
 
   useEffect(() => {
+    if (!isCatalogPath(page.path)) return;
     const placements = layoutFor(page.path);
     setLayout(placements);
     setFocus(-1);
@@ -129,6 +155,7 @@ export function App() {
       return;
     }
     if (name === "tab") {
+      if (!catalogRef.current) return;
       const n = layoutRef.current.length;
       setFocus((f) => {
         if (key.shift) return f <= 0 ? -1 : f - 1;
@@ -140,9 +167,9 @@ export function App() {
     const dx = name === "left" || name === "h" ? -1 : name === "right" || name === "l" ? 1 : 0;
     const dy = name === "up" || name === "k" ? -1 : name === "down" || name === "j" ? 1 : 0;
     if (dx === 0 && dy === 0) return;
-    if (focusRef.current < 0) {
+    if (focusRef.current < 0 || !catalogRef.current) {
       if (dy === 0) {
-        if (dx > 0 && layoutRef.current.length) setFocus(0);
+        if (dx > 0 && catalogRef.current && layoutRef.current.length) setFocus(0);
         return;
       }
       openPage(pageRef.current + dy);
@@ -172,9 +199,11 @@ export function App() {
     setDraft("");
   };
 
-  const selected = shownFocus >= 0 ? shown[shownFocus] : undefined;
+  const catalog = isCatalogPath(page.path);
+  const view = catalog ? null : mountedView(page.path);
+  const selected = catalog && shownFocus >= 0 ? shown[shownFocus] : undefined;
   const footer = [
-    selected ? "tab block   arrows move   shift+arrows resize" : "↑↓ page   → block",
+    catalog ? (selected ? "tab block   arrows move   shift+arrows resize" : "↑↓ page   → block") : "↑↓ page",
     "/ path",
     "q quit",
     selected ? `${selected.id} ${selected.x},${selected.y} ${selected.w}×${selected.h}` : page.path,
@@ -203,7 +232,7 @@ export function App() {
           })}
         </box>
         <box flexGrow={1} position="relative" overflow="hidden">
-          {shown.map((placement, i) => {
+          {view ?? shown.map((placement, i) => {
             const def = BLOCKS[placement.id];
             const read = shownReads[placement.id];
             const status = read?.status ?? "loading";
