@@ -84,6 +84,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from collections.abc import Collection, Sequence
 from datetime import date, timedelta
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -753,6 +754,479 @@ def split_sample_check(
     )
 
 
+# ======================= Plan 21: long-first period model (additive) =========
+#
+# The period model is rebuilt **long-first**: a *small* secular window set is the
+# primary regime and medium windows are layered on gradually afterwards. Two
+# additive functions land here. The Plan-20 machinery above is untouched — the
+# every-swing-pivot discovery it contains is the record of the earlier attempt,
+# and pivot DENSITY is exactly what kept exposure pinned (~55%) regardless of
+# window width.
+
+
+class HitTest(BaseModel):
+    """Did this window actually catch a move, and how big was the best one?
+
+    A window that covered nothing but decoration is decoration, so the verdict
+    carries the **observed** largest move rather than only a boolean: an
+    abandoned window can then be read — ``max_move_pct`` says what the window
+    actually contained, and ``min_move_pct`` says what it would have needed.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    window: str = Field(..., min_length=1, description="Name of the window that was tested")
+    kind: CycleKind = Field(
+        ...,
+        description=(
+            "Window kind: a peak is a sell zone, a trough a buy zone, so the same "
+            "threshold is read against the regime the window was drawn for"
+        ),
+    )
+    bars: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "In-calendar bars the window actually covers; a window hanging off the "
+            "calendar has 0 and cannot be hit"
+        ),
+    )
+    min_move_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "The threshold applied, passed by the caller (frozen: 15.0 long, 10.0 "
+            "medium) — never defaulted here, so no call can silently pick its own bar"
+        ),
+    )
+    max_move_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "Largest peak-to-trough move inside the window as a percent, in whichever "
+            "direction it ran; 0.0 when the window has fewer than two in-calendar bars"
+        ),
+    )
+    direction: Literal["up", "down", "flat"] = Field(
+        ...,
+        description=(
+            "Which way the observed move ran: 'up', 'down', or 'flat' when the window "
+            "contains no move at all"
+        ),
+    )
+    hit: bool = Field(
+        ...,
+        description="True when max_move_pct >= min_move_pct, i.e. the window caught something",
+    )
+
+
+class LongTermSelection(BaseModel):
+    """The selected secular window set, or the stated reason there isn't one.
+
+    Both ``peak_days_pct`` and ``trough_days_pct`` are reported so the cap that
+    shaped the set can be checked on the record rather than inferred from the
+    window count. ``selected is False`` with empty window lists is the *only*
+    failure shape: the minima are never relaxed to manufacture a set.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    half_width_days: int = Field(
+        ...,
+        ge=1,
+        description=(
+            "Half-width every emitted window uses, derived from the tightest frozen "
+            "long grid member rather than hand-picked per series"
+        ),
+    )
+    calendar_days: int = Field(
+        ..., ge=2, description="Bars in the price calendar the day shares are measured against"
+    )
+    max_peak_days_pct: float = Field(
+        ...,
+        ge=0.0,
+        le=100.0,
+        description=(
+            "Cap on how much of the calendar each kind's windows may cover; it is "
+            "named for peaks because peak windows are the flat time that bounds "
+            "exposure, and it is applied to troughs as well so both kinds stay small"
+        ),
+    )
+    peak_days: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Calendar days the selected peak windows cover in total (overlap charged "
+            "once); 0.0 when nothing was selected"
+        ),
+    )
+    peak_days_pct: float = Field(
+        ...,
+        ge=0.0,
+        description="peak_days as a percent of calendar_days — the cap, measured",
+    )
+    trough_days: int = Field(
+        ...,
+        ge=0,
+        description="Calendar days the selected trough windows cover in total (overlap charged once)",
+    )
+    trough_days_pct: float = Field(
+        ...,
+        ge=0.0,
+        description="trough_days as a percent of calendar_days — the cap, measured",
+    )
+    peak_pins: tuple[date, ...] = Field(
+        ...,
+        description="Every detected long-horizon peak pivot, ascending, before the cap truncated it",
+    )
+    trough_pins: tuple[date, ...] = Field(
+        ...,
+        description="Every detected long-horizon trough pivot, ascending, before the cap truncated it",
+    )
+    peak_prominence_pct: tuple[float, ...] = Field(
+        ...,
+        description="Prominence of each selected peak, index-aligned with `peaks`",
+    )
+    trough_prominence_pct: tuple[float, ...] = Field(
+        ...,
+        description="Prominence of each selected trough, index-aligned with `troughs`",
+    )
+    peaks: tuple[CycleWindow, ...] = Field(
+        ..., description="Selected peak (sell-zone) windows, chronological"
+    )
+    troughs: tuple[CycleWindow, ...] = Field(
+        ..., description="Selected trough (buy-zone) windows, chronological"
+    )
+    selected: bool = Field(
+        ...,
+        description=(
+            "True when min_peaks / min_troughs were met after truncation; False means "
+            "no window set exists for this series"
+        ),
+    )
+    reason: str | None = Field(
+        ...,
+        description="Why no window set was derived (with the counts that failed), else None",
+    )
+
+    @property
+    def windows(self) -> tuple[CycleWindow, ...]:
+        """Every selected window, chronological — what ``score_periods`` consumes."""
+        return tuple(sorted((*self.peaks, *self.troughs), key=_window_order))
+
+    @property
+    def n_peaks(self) -> int:
+        return len(self.peaks)
+
+    @property
+    def n_troughs(self) -> int:
+        return len(self.troughs)
+
+
+def _window_span(dates: Sequence[date], window: CycleWindow) -> tuple[int, int]:
+    """In-calendar ``[lo, hi)`` index span of one window; empty when ``hi <= lo``."""
+    return bisect_left(dates, window.start), bisect_right(dates, window.end)
+
+
+def _max_move_pct(closes: Sequence[float]) -> tuple[float, Literal["up", "down", "flat"]]:
+    """Largest percent move between any two closes, and the direction it ran.
+
+    Measured from the *earlier* close to the later one and returned unsigned, so a
+    fall counts exactly as much as a rise of the same size and the verdict never
+    depends on which end of the window the move started at. One pass: the largest
+    rise available at each bar is measured from the lowest close before it, the
+    largest fall from the highest.
+    """
+    if len(closes) < 2:
+        return 0.0, "flat"
+    best = 0.0
+    direction: Literal["up", "down", "flat"] = "flat"
+    low = high = closes[0]
+    for close in closes[1:]:
+        rise = 100.0 * (close - low) / low
+        fall = 100.0 * (high - close) / high
+        if rise > best:
+            best, direction = rise, "up"
+        if fall > best:
+            best, direction = fall, "down"
+        low = min(low, close)
+        high = max(high, close)
+    return best, direction
+
+
+def window_is_hit(
+    dates: Sequence[date],
+    prices: Sequence[float],
+    window: CycleWindow,
+    *,
+    min_move_pct: float,
+) -> HitTest:
+    """Did ``window`` contain a real move of at least ``min_move_pct``?
+
+    A window is only worth trading if it *caught* something, so this asks the
+    price series directly: restricted to the window's in-calendar bars, the
+    largest peak-to-trough move in either direction, as a percent of the earlier
+    close. ``max_move_pct`` carries that observation, which is what lets an
+    abandoned window quote what it actually contained instead of merely failing.
+
+    ``min_move_pct`` has no default on purpose — the thresholds are frozen
+    (15.0 long, 10.0 medium) and belong to the caller's regime, so no call can
+    quietly pick its own bar. The comparison is inclusive, so a move of exactly
+    the threshold is a hit. A window overlapping fewer than two bars has no move
+    to measure and can never be hit. Raises ``ValueError`` for misaligned inputs,
+    a negative threshold, or a non-positive close (a percent move is undefined
+    from zero).
+    """
+    if len(dates) != len(prices):
+        raise ValueError("window_is_hit requires dates and prices of the same length")
+    if min_move_pct < 0.0:
+        raise ValueError(f"window_is_hit requires min_move_pct >= 0, got {min_move_pct}")
+
+    lo, hi = _window_span(dates, window)
+    closes = [float(prices[i]) for i in range(lo, hi)]
+    if any(close <= 0.0 for close in closes):
+        raise ValueError("window_is_hit requires positive closes to measure a move percent")
+
+    max_move, direction = _max_move_pct(closes)
+    return HitTest(
+        window=window.name,
+        kind=window.kind,
+        bars=len(closes),
+        min_move_pct=min_move_pct,
+        max_move_pct=max_move,
+        direction=direction,
+        hit=max_move >= min_move_pct,
+    )
+
+
+def _prominence_pct(
+    prices: Sequence[float],
+    index: int,
+    bound: int,
+    *,
+    peak: bool,
+) -> float:
+    """Percent move from one pivot's own close to the extreme that follows it.
+
+    Bounded by the **next opposite-kind pin** (or the final bar when there is
+    none), because the leg to the next corner is what gives the corner its
+    significance: a pivot whose follow-through never arrives has nothing to
+    catch. A corner therefore ranks above a shallow one from the same history
+    rather than being kept for being first or for merely existing.
+    """
+    here = float(prices[index])
+    later = [float(price) for price in prices[index : bound + 1]]
+    if not later:
+        return 0.0
+    if peak:
+        return max(0.0, 100.0 * (here - min(later)) / here)
+    return max(0.0, 100.0 * (max(later) - here) / here)
+
+
+def _ranked_pivots(
+    dates: Sequence[date],
+    prices: Sequence[float],
+    pins: Sequence[date],
+    *,
+    peak: bool,
+) -> tuple[tuple[date, float], ...]:
+    """Every pin with its prominence, in rank order: prominence desc, then date asc.
+
+    The date tie-break is what makes the ranking a *total* order — an equal-
+    prominence pivot keeps the earlier one, so the same series can only ever
+    select the same set.
+    """
+    index_of = {day: i for i, day in enumerate(dates)}
+    opposite = [index_of[day] for day in pins]
+    ranked: list[tuple[date, float]] = []
+    for pin in pins:
+        own = index_of[pin]
+        later = [i for i in opposite if i > own]
+        bound = min(later) if later else len(prices) - 1
+        ranked.append((pin, _prominence_pct(prices, own, bound, peak=peak)))
+    return tuple(sorted(ranked, key=lambda item: (-item[1], item[0])))
+
+
+def _covered_days(windows: Sequence[CycleWindow], *, first_day: date, last_day: date) -> int:
+    """Calendar days the windows cover in total, overlap charged once, in-calendar only."""
+    covered: set[int] = set()
+    for window in windows:
+        covered.update(
+            range(
+                max(window.start, first_day).toordinal(),
+                min(window.end, last_day).toordinal() + 1,
+            )
+        )
+    return len(covered)
+
+
+def _truncate_to_day_cap(
+    ranked: Sequence[tuple[date, float]],
+    *,
+    half_width_days: int,
+    budget_days: int,
+    first_day: date,
+    last_day: date,
+) -> tuple[tuple[date, float], ...]:
+    """Keep the most prominent pivots while their windows stay inside a day budget.
+
+    Walked in rank order, so prominence decides and the date only breaks ties. A
+    window is charged only for the calendar days it *adds*: overlapping windows
+    share days, and exposure is paid once. Days falling outside the price
+    calendar are charged to nobody — they are not bars, so they cannot be the
+    flat time a peak window is capping.
+
+    A pivot that does not fit is skipped rather than ending the walk, because
+    stopping early would let window width stand in for prominence.
+    """
+    offset = timedelta(days=half_width_days)
+    covered: set[int] = set()
+    kept: list[tuple[date, float]] = []
+    for pin, prominence in ranked:
+        days = set(
+            range(
+                max(pin - offset, first_day).toordinal(),
+                min(pin + offset, last_day).toordinal() + 1,
+            )
+        )
+        if len(covered | days) > budget_days:
+            continue
+        covered |= days
+        kept.append((pin, prominence))
+    return tuple(sorted(kept))
+
+
+def select_long_term_periods(
+    dates: Sequence[date],
+    prices: Sequence[float],
+    *,
+    max_peak_days_pct: float = 25.0,
+    min_peaks: int = MIN_PEAKS,
+    min_troughs: int = MIN_TROUGHS,
+) -> LongTermSelection:
+    """Select a SMALL secular window set: prominence-ranked pivots under a day cap.
+
+    **Why not every pivot.** The Plan-20 record is the argument: period sets built
+    from every swing pivot pinned exposure near 55% no matter how wide the windows
+    were, because *pivot density* — not window width — decided how much time was
+    left flat. Ranking by prominence and then truncating on **covered days** attacks
+    that directly. Peak windows are the flat time that bounds exposure, so capping
+    them at ``max_peak_days_pct`` of the calendar is what makes the frozen 70%
+    floor reachable rather than pinned. The same share is applied to the trough
+    windows: keeping every trough would reintroduce exactly the density the cap
+    exists to remove, so the parameter is named for peaks because peaks are what
+    bounds exposure, not because the two kinds are exempt from the cap.
+
+    **The order.** Pivots come from ``detect_pivots`` on the frozen long horizon —
+    the derivation is this module's own, reused unmodified, never a hand-entered
+    pin. Each is then ranked by prominence (the move to its next opposite-kind
+    corner) with the earlier date breaking ties, and the walk takes them in that
+    order until the day budget is spent. Window width is the tightest frozen long
+    grid member; the cap, not the width, is what makes the set small, so the
+    narrowest grid member keeps as much real structure as the cap allows.
+
+    **No relaxed minimum.** When the detected pivots — or what survives the cap —
+    cannot meet ``min_peaks`` / ``min_troughs``, the result is ``selected is False``
+    with empty window lists and a ``reason`` carrying the counts. The minima are
+    never lowered to manufacture a set; a series with no secular structure yields no
+    window set at all.
+
+    Deterministic: same series in, same set out, every time. As with every function
+    here, the pivots are read off the same history the windows are derived from, so
+    the result is a description of that history, never a forecast.
+    """
+    if not 0.0 <= max_peak_days_pct <= 100.0:
+        raise ValueError(f"max_peak_days_pct must be within [0, 100], got {max_peak_days_pct}")
+    if min_peaks < 1:
+        raise ValueError(f"select_long_term_periods requires min_peaks >= 1, got {min_peaks}")
+    if min_troughs < 1:
+        raise ValueError(f"select_long_term_periods requires min_troughs >= 1, got {min_troughs}")
+
+    horizon = PeriodHorizon.long()
+    half_width = min(horizon.half_widths)
+    peak_pins, trough_pins = detect_pivots(dates, prices, horizon)
+
+    budget_days = int(len(dates) * max_peak_days_pct / 100.0)
+    ranked_peaks = _ranked_pivots(dates, prices, peak_pins, peak=True)
+    ranked_troughs = _ranked_pivots(dates, prices, trough_pins, peak=False)
+    kept_peaks = _truncate_to_day_cap(
+        ranked_peaks,
+        half_width_days=half_width,
+        budget_days=budget_days,
+        first_day=dates[0],
+        last_day=dates[-1],
+    )
+    kept_troughs = _truncate_to_day_cap(
+        ranked_troughs,
+        half_width_days=half_width,
+        budget_days=budget_days,
+        first_day=dates[0],
+        last_day=dates[-1],
+    )
+
+    if len(kept_peaks) < min_peaks or len(kept_troughs) < min_troughs:
+        return LongTermSelection(
+            half_width_days=half_width,
+            calendar_days=len(dates),
+            max_peak_days_pct=max_peak_days_pct,
+            peak_days=0,
+            peak_days_pct=0.0,
+            trough_days=0,
+            trough_days_pct=0.0,
+            peak_pins=peak_pins,
+            trough_pins=trough_pins,
+            peak_prominence_pct=(),
+            trough_prominence_pct=(),
+            peaks=(),
+            troughs=(),
+            selected=False,
+            reason=(
+                f"no long-term window set: the {max_peak_days_pct:.1f}% peak-day cap kept "
+                f"{len(kept_peaks)} peak / {len(kept_troughs)} trough windows from "
+                f"{len(peak_pins)} / {len(trough_pins)} detected long-horizon pivots, "
+                f"below min_peaks={min_peaks} / min_troughs={min_troughs} "
+                f"(minimums are never relaxed)"
+            ),
+        )
+
+    def emit(
+        kept: Sequence[tuple[date, float]], kind: CycleKind
+    ) -> tuple[tuple[CycleWindow, ...], tuple[float, ...]]:
+        offset = timedelta(days=half_width)
+        windows = tuple(
+            CycleWindow(
+                name=f"long_{kind}_{pin:%Y%m%d}_pm{half_width}",
+                kind=kind,
+                start=pin - offset,
+                end=pin + offset,
+            )
+            for pin, _prominence in kept
+        )
+        return windows, tuple(prominence for _pin, prominence in kept)
+
+    peaks, peak_prominence = emit(kept_peaks, CycleKind.PEAK)
+    troughs, trough_prominence = emit(kept_troughs, CycleKind.TROUGH)
+    peak_days = _covered_days(peaks, first_day=dates[0], last_day=dates[-1])
+    trough_days = _covered_days(troughs, first_day=dates[0], last_day=dates[-1])
+    return LongTermSelection(
+        half_width_days=half_width,
+        calendar_days=len(dates),
+        max_peak_days_pct=max_peak_days_pct,
+        peak_days=peak_days,
+        peak_days_pct=100.0 * peak_days / len(dates),
+        trough_days=trough_days,
+        trough_days_pct=100.0 * trough_days / len(dates),
+        peak_pins=peak_pins,
+        trough_pins=trough_pins,
+        peak_prominence_pct=peak_prominence,
+        trough_prominence_pct=trough_prominence,
+        peaks=peaks,
+        troughs=troughs,
+        selected=True,
+        reason=None,
+    )
+
+
 __all__ = [
     "DEFAULT_INITIAL_CASH",
     "EXPOSURE_FLOOR_PCT",
@@ -760,6 +1234,8 @@ __all__ = [
     "MEDIUM_HALF_WIDTHS",
     "MIN_PEAKS",
     "MIN_TROUGHS",
+    "HitTest",
+    "LongTermSelection",
     "PeriodCandidate",
     "PeriodEdge",
     "PeriodEdges",
@@ -774,5 +1250,7 @@ __all__ = [
     "optimize_periods",
     "rank_period_scores",
     "score_periods",
+    "select_long_term_periods",
     "split_sample_check",
+    "window_is_hit",
 ]

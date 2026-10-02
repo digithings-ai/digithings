@@ -39,6 +39,8 @@ from digiquant.strategies.sdca.period_optimize import (
     EXPOSURE_FLOOR_PCT,
     MIN_PEAKS,
     MIN_TROUGHS,
+    HitTest,
+    LongTermSelection,
     PeriodCandidate,
     PeriodHorizon,
     PeriodOptimizationResult,
@@ -51,7 +53,9 @@ from digiquant.strategies.sdca.period_optimize import (
     optimize_periods,
     rank_period_scores,
     score_periods,
+    select_long_term_periods,
     split_sample_check,
+    window_is_hit,
 )
 
 pytestmark = pytest.mark.unit
@@ -651,3 +655,298 @@ def test_split_sample_validates_its_inputs() -> None:
         split_sample_check(dates[:5], prices[:5], PeriodHorizon.medium())
     with pytest.raises(ValueError, match="at least"):
         split_sample_check(dates[:20], prices[:20], PeriodHorizon.medium())
+
+
+# ============================================== Plan 21 Task 1: long-first
+#
+# The period model is rebuilt long-first: a SMALL secular window set is the
+# primary regime, and medium windows are only later layered on (Task 2). Two
+# functions land here, both additive:
+#
+# - ``window_is_hit`` — did a window actually *catch* a move? A window that
+#   covered nothing but decoration is abandoned, and the verdict quotes the
+#   observed move so the abandonment can be read rather than trusted.
+# - ``select_long_term_periods`` — prominence-ranked cycle pivots, truncated so
+#   peak windows stay within a share of the calendar. Peak windows are the flat
+#   time that bounds exposure, so that cap is what makes the exposure floor
+#   reachable instead of pinned by pivot density.
+#
+# The pins below assert the CONSTRAINTS, not merely that a value came back: the
+# day cap must hold on the returned set, the cap must be the reason the set is
+# small, and a minimum that cannot be met must produce a reason, never a
+# silently relaxed threshold.
+
+
+def _closes(values: list[float]) -> tuple[list[date], list[float]]:
+    """A price calendar carrying exactly the given closes."""
+    return _calendar(len(values)), [float(v) for v in values]
+
+
+def _whole_calendar_window(dates: list[date], kind: CycleKind = CycleKind.PEAK) -> CycleWindow:
+    return CycleWindow(name="w", kind=kind, start=dates[0], end=dates[-1])
+
+
+# ------------------------------------------------------------- the hit test
+
+
+def test_a_window_holding_a_twenty_percent_drop_is_hit_at_the_fifteen_percent_threshold() -> None:
+    """A real 20% fall clears the frozen 15.0% long-horizon move threshold."""
+    dates, prices = _closes([200.0, 200.0, 160.0, 160.0])
+    verdict = window_is_hit(dates, prices, _whole_calendar_window(dates), min_move_pct=15.0)
+    assert isinstance(verdict, HitTest)
+    assert verdict.hit is True
+    assert verdict.max_move_pct == pytest.approx(20.0)
+    assert verdict.direction == "down"
+    assert verdict.min_move_pct == 15.0
+
+
+def test_a_window_holding_only_a_three_percent_move_is_not_hit() -> None:
+    """The same threshold rejects drift: decoration is not a caught move."""
+    dates, prices = _closes([100.0, 100.0, 103.0, 103.0])
+    window = _whole_calendar_window(dates)
+    verdict = window_is_hit(dates, prices, window, min_move_pct=15.0)
+    assert verdict.hit is False
+    assert verdict.max_move_pct == pytest.approx(3.0)
+    assert verdict.direction == "up"
+    # The verdict carries the regime it was drawn for, so a sell zone and a buy
+    # zone are never mistaken for one another downstream.
+    assert verdict.kind == CycleKind.PEAK
+    trough = CycleWindow(name="w", kind=CycleKind.TROUGH, start=dates[0], end=dates[-1])
+    assert window_is_hit(dates, prices, trough, min_move_pct=15.0).kind == CycleKind.TROUGH
+
+
+def test_the_threshold_is_inclusive_in_both_move_directions() -> None:
+    """Both directions count, and exactly-at-threshold is a hit.
+
+    The boundary is pinned against the *observed* move rather than a rounded
+    literal, so the ``>=`` comparison is exercised without a float-literal
+    accident deciding the outcome.
+    """
+    up_dates, up = _closes([100.0, 100.0, 120.0, 120.0])
+    rise = window_is_hit(up_dates, up, _whole_calendar_window(up_dates), min_move_pct=15.0)
+    assert rise.hit is True and rise.direction == "up"
+
+    dn_dates, dn = _closes([120.0, 120.0, 96.0, 96.0])
+    fall = window_is_hit(dn_dates, dn, _whole_calendar_window(dn_dates), min_move_pct=15.0)
+    assert fall.hit is True and fall.direction == "down"
+    assert fall.max_move_pct == pytest.approx(20.0)
+
+    for observed in (rise.max_move_pct, fall.max_move_pct):
+        dates, prices = _closes([100.0, 100.0, 100.0 + observed])
+        window = _whole_calendar_window(dates)
+        at = window_is_hit(dates, prices, window, min_move_pct=observed)
+        assert at.hit is True, f"a move of exactly {observed}% must be a hit"
+        above = window_is_hit(dates, prices, window, min_move_pct=observed + 1e-9)
+        assert above.hit is False, "a threshold above the observed move must not be a hit"
+
+
+def test_an_abandoned_window_quotes_the_move_it_actually_contained() -> None:
+    """The verdict carries the observed move, so an abandonment can be read."""
+    dates, prices = _closes([100.0, 101.0, 102.0, 101.5, 100.5])
+    verdict = window_is_hit(dates, prices, _whole_calendar_window(dates), min_move_pct=15.0)
+    assert verdict.hit is False
+    assert verdict.max_move_pct == pytest.approx(2.0)
+    assert verdict.bars == len(dates)
+    # Same window, looser threshold: the verdict flips on the recorded move only.
+    assert window_is_hit(dates, prices, _whole_calendar_window(dates), min_move_pct=2.0).hit is True
+
+
+def test_a_window_barely_touching_the_calendar_has_no_move_to_quote() -> None:
+    dates, prices = _up_heavy()
+    edge = CycleWindow(name="edge", kind=CycleKind.TROUGH, start=dates[0], end=dates[0])
+    verdict = window_is_hit(dates, prices, edge, min_move_pct=15.0)
+    assert verdict.bars == 1
+    assert verdict.max_move_pct == 0.0
+    assert verdict.hit is False
+    assert verdict.direction == "flat"
+    off = CycleWindow(name="off", kind=CycleKind.PEAK, start=dates[-1], end=dates[-1])
+    assert window_is_hit(dates, prices, off, min_move_pct=15.0).bars == 1
+
+
+def test_hit_test_validates_its_inputs() -> None:
+    dates, prices = _closes([200.0, 160.0])
+    window = _whole_calendar_window(dates)
+    with pytest.raises(ValueError, match="min_move_pct"):
+        window_is_hit(dates, prices, window, min_move_pct=-1.0)
+    with pytest.raises(ValueError, match="same length"):
+        window_is_hit(dates, prices[:-1], window, min_move_pct=15.0)
+    with pytest.raises(ValueError, match="positive"):
+        window_is_hit(dates, [200.0, 0.0], window, min_move_pct=15.0)
+
+
+# -------------------------------------------------- the long-term selection
+
+
+def _secular_three_cycles() -> tuple[list[date], list[float]]:
+    """Three secular cycles wide enough that the day cap is what limits the set.
+
+    1894 bars with pins 568 bars apart, so the three 121-day peak windows are
+    disjoint and cost 363 days of a 473-day budget (25% of the calendar) — while
+    a fourth would cost 484 and breach the cap outright. The set is small
+    because the cap made it small, not because the series was thin.
+    """
+    return _zigzag(380, 190, 3, tail_up=190)
+
+
+def test_three_secular_cycles_select_three_peaks_and_three_troughs_within_the_day_cap() -> None:
+    """Pin: the constraint HOLDS on the returned set, not merely that it returned."""
+    dates, prices = _secular_three_cycles()
+    selection = select_long_term_periods(dates, prices)
+    assert isinstance(selection, LongTermSelection)
+    assert selection.selected is True
+    assert selection.n_peaks == 3
+    assert selection.n_troughs == 3
+    assert selection.peak_pins == tuple(dates[pin] for pin in (379, 947, 1515))
+    assert selection.trough_pins == tuple(dates[pin] for pin in (568, 1136, 1704))
+    # The cap, asserted on the numbers the model reports and recomputed here.
+    assert selection.peak_days_pct <= selection.max_peak_days_pct == 25.0
+    assert selection.trough_days_pct <= selection.max_peak_days_pct
+    budget = len(dates) * selection.max_peak_days_pct // 100
+    assert selection.peak_days <= budget
+    # And the cap is BINDING here: one more window would not have fit.
+    window_days = (selection.peaks[0].end - selection.peaks[0].start).days + 1
+    assert selection.peak_days + window_days > budget
+    # Every window is centred on its own detected pin, at the derived half-width.
+    assert [window.kind for window in selection.peaks] == [CycleKind.PEAK] * 3
+    assert [window.kind for window in selection.troughs] == [CycleKind.TROUGH] * 3
+    for window in selection.windows:
+        centre = window.start + timedelta(days=selection.half_width_days)
+        assert centre in selection.peak_pins or centre in selection.trough_pins
+
+
+def test_the_day_cap_truncates_a_denser_series_to_a_small_set() -> None:
+    """Six detected secular peaks, three kept: the cap is the mechanism."""
+    dates, prices = _zigzag(200, 100, 6, tail_up=100)
+    selection = select_long_term_periods(dates, prices)
+    assert selection.selected is True
+    assert len(selection.peak_pins) == 6 > selection.n_peaks == 3
+    assert len(selection.trough_pins) == 6 > selection.n_troughs == 3
+    assert selection.peak_days_pct <= 25.0
+    assert selection.trough_days_pct <= 25.0
+    assert selection.n_peaks >= MIN_PEAKS and selection.n_troughs >= MIN_TROUGHS
+    # Kept in prominence-then-date order, reported chronologically.
+    kept = [window.start + timedelta(days=selection.half_width_days) for window in selection.peaks]
+    assert kept == sorted(kept)
+    assert set(kept) <= set(selection.peak_pins)
+
+
+def _ramped_series(spec: list[tuple[float, float, int]]) -> tuple[list[date], list[float]]:
+    """Concat straight ``(from, to, bars)`` ramps, each corner emitted once."""
+    prices: list[float] = []
+    for index, (start, end, bars) in enumerate(spec):
+        ramp = _leg(start, end, bars)
+        prices.extend(ramp if index == 0 else ramp[1:])
+    return _calendar(len(prices)), prices
+
+
+def test_prominence_ranks_the_selection_and_date_breaks_its_ties() -> None:
+    """The weakest corner is the EARLIEST peak, so date order alone would fail.
+
+    A 561-bar series whose budget admits exactly one window per kind: the first
+    peak rises only 23.1% before its trough while the second rises 44.4%, so the
+    prominent one survives and the earlier one is dropped. The two troughs are
+    exactly tied, so the earlier date wins there — ranking and tie-break in one
+    fixture.
+    """
+    dates, prices = _ramped_series(
+        [
+            (100.0, 130.0, 161),
+            (130.0, 100.0, 81),
+            (100.0, 180.0, 161),
+            (180.0, 100.0, 81),
+            (100.0, 180.0, 81),
+        ]
+    )
+    selection = select_long_term_periods(dates, prices, min_peaks=1, min_troughs=1)
+    assert selection.selected is True
+    assert selection.peak_pins == (dates[160], dates[400])
+    assert selection.n_peaks == 1
+    assert selection.peaks[0].start + timedelta(days=selection.half_width_days) == dates[400]
+    assert selection.peak_prominence_pct == pytest.approx((44.444444,))
+    assert selection.trough_pins == (dates[240], dates[480])
+    assert selection.n_troughs == 1
+    assert selection.troughs[0].start + timedelta(days=selection.half_width_days) == dates[240]
+
+
+def test_a_series_with_too_few_pivots_is_refused_with_a_reason_and_never_relaxed() -> None:
+    """No structure is not a licence to lower the minimum (pin: never a relaxed minimum)."""
+    dates = _calendar(200)
+    flat = [_LOW] * 200
+    selection = select_long_term_periods(dates, flat)
+    assert selection.selected is False
+    assert selection.n_peaks == 0 and selection.n_troughs == 0
+    assert selection.windows == ()
+    assert selection.reason is not None
+    assert "min_peaks" in selection.reason and "min_troughs" in selection.reason
+
+
+def test_truncation_that_breaks_a_minimum_refuses_rather_than_reporting_a_short_set() -> None:
+    """The same refusal when the cap, not the series, is what broke the minimum."""
+    dates, prices = _ramped_series(
+        [
+            (100.0, 130.0, 161),
+            (130.0, 100.0, 81),
+            (100.0, 180.0, 161),
+            (180.0, 100.0, 81),
+            (100.0, 180.0, 81),
+        ]
+    )
+    relaxed = select_long_term_periods(dates, prices, min_peaks=1, min_troughs=1)
+    assert relaxed.selected is True and relaxed.n_peaks == 1
+    strict = select_long_term_periods(dates, prices)
+    assert strict.selected is False
+    assert strict.n_peaks < MIN_PEAKS
+    assert strict.reason is not None and "min_peaks" in strict.reason
+    assert strict.peak_pins == relaxed.peak_pins, "the same pivots were detected either way"
+
+
+def test_selection_is_deterministic_across_repeated_calls() -> None:
+    for series in (_secular_three_cycles(), _up_heavy(), _zigzag(200, 100, 6, tail_up=100)):
+        first = select_long_term_periods(*series)
+        second = select_long_term_periods(*series)
+        assert first == second
+
+
+def test_selection_is_deterministic_when_the_input_order_of_pivots_cannot_leak_in() -> None:
+    """Detection is index-order, so a re-run of the same series is the same set."""
+    dates, prices = _zigzag(200, 100, 6, tail_up=100)
+    forward = select_long_term_periods(dates, prices)
+    again = select_long_term_periods(dates, prices)
+    assert forward.windows == again.windows
+    assert forward.peak_prominence_pct == again.peak_prominence_pct
+
+
+def test_the_selection_models_are_frozen_strict_and_described() -> None:
+    dates, prices = _secular_three_cycles()
+    selection = select_long_term_periods(dates, prices)
+    assert selection.half_width_days == min(PeriodHorizon.long().half_widths)
+    with pytest.raises(Exception, match="frozen|immutable"):
+        selection.n_peaks = 9  # type: ignore[misc]
+    with pytest.raises(Exception, match="frozen|immutable"):
+        selection.peaks = ()  # type: ignore[misc]
+    for model in (HitTest, LongTermSelection):
+        for name, field in model.model_fields.items():
+            assert field.description, f"{model.__name__}.{name} has no description"
+
+
+def test_selection_validates_its_inputs() -> None:
+    dates, prices = _secular_three_cycles()
+    for bad in (-1.0, 101.0):
+        with pytest.raises(ValueError, match="max_peak_days_pct"):
+            select_long_term_periods(dates, prices, max_peak_days_pct=bad)
+    with pytest.raises(ValueError, match="min_peaks"):
+        select_long_term_periods(dates, prices, min_peaks=0)
+    with pytest.raises(ValueError, match="min_troughs"):
+        select_long_term_periods(dates, prices, min_troughs=0)
+    with pytest.raises(ValueError, match="same length"):
+        select_long_term_periods(dates[:10], prices)
+    with pytest.raises(ValueError, match="at least"):
+        select_long_term_periods(dates[:5], prices[:5])
+
+
+def test_the_long_first_surface_is_exported() -> None:
+    from digiquant.strategies.sdca import period_optimize
+
+    for name in ("HitTest", "LongTermSelection", "window_is_hit", "select_long_term_periods"):
+        assert name in period_optimize.__all__, f"{name} is missing from __all__"
+        assert hasattr(period_optimize, name)
