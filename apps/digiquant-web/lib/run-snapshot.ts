@@ -1,7 +1,7 @@
 import raw from "@/app/_latest-run.json";
-import { PIPELINE_STAGES } from "@/app/_stages";
+import { PIPELINE_STAGES, type StageName } from "@/app/_stages";
 
-export type StageName = (typeof PIPELINE_STAGES)[number];
+export type { StageName };
 export type StageStatus = "recorded" | "not-recorded";
 
 export interface StageSnapshot {

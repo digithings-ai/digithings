@@ -32,10 +32,9 @@ describe("official API reads", () => {
   it("treats stub NAV figures and legacy_estimate as empty", () => {
     expect(isStubPayload(STUB_PORTFOLIO)).toBe(true);
     expect(isStubPayload(STUB_BRIEF)).toBe(true);
-    expect(classifyOfficialRead(200, STUB_PORTFOLIO).ok).toBe(false);
-    if (!classifyOfficialRead(200, STUB_PORTFOLIO).ok) {
-      expect(classifyOfficialRead(200, STUB_PORTFOLIO).reason).toContain("stub");
-    }
+    const stub = classifyOfficialRead(200, STUB_PORTFOLIO);
+    expect(stub.ok).toBe(false);
+    if (!stub.ok) expect(stub.reason).toContain("stub");
   });
 
   it("treats 502 withheld envelopes as empty", () => {
