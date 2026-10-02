@@ -201,4 +201,14 @@ function M.matches(spec, keycode, flags)
   return M.flags_match(spec, flags)
 end
 
+--- True when hotkey.capture says the field is open. The event tap then
+--- returns the key to the terminal instead of starting a take.
+function M.suspended(text)
+  if type(text) ~= "string" then
+    return false
+  end
+  local name = trim(text):lower()
+  return name == "1" or name == "true" or name == "on"
+end
+
 return M

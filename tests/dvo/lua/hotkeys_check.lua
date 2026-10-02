@@ -72,4 +72,11 @@ eq(flat.dictation, "ctrl+shift+space", "flat settings")
 check(hotkeys.bindings_from_settings({ banner_pinned = true }) == nil, "no binds means keep previous")
 check(hotkeys.bindings_from_settings(nil) == nil, "missing file")
 
+check(hotkeys.suspended("1"), "capture flag suspends hotkeys")
+check(hotkeys.suspended("1\n"), "capture flag ignores trailing newline")
+check(hotkeys.suspended("true"), "capture flag accepts true")
+check(not hotkeys.suspended(""), "empty flag keeps hotkeys armed")
+check(not hotkeys.suspended("0"), "zero keeps hotkeys armed")
+check(not hotkeys.suspended(nil), "a missing flag keeps hotkeys armed")
+
 print("PASS hotkeys")

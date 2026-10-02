@@ -1,11 +1,15 @@
 """Hotkey names. The same rules as ``hammerspoon/hotkeys.lua``.
 
 A string that does not parse is not stored. The caller keeps the previous bind.
+A name another role already arms is not stored either. While the field is open,
+``hotkey.capture`` tells the event tap to pass keys through.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+import os
+from pathlib import Path
+from typing import Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict
 
@@ -149,3 +153,58 @@ def binding_warning(role: str, text: str, previous: str) -> str | None:
     if parse_binding(text) is not None:
         return None
     return f"{role} binding '{text}' is not a key; keeping {previous}"
+
+
+def same_binding(left: BindingSpec, right: BindingSpec) -> bool:
+    """True when two names arm the same key, modifiers, and double-tap."""
+    return (
+        left.keycode == right.keycode
+        and left.kind == right.kind
+        and left.ctrl == right.ctrl
+        and left.shift == right.shift
+        and left.alt == right.alt
+        and left.cmd == right.cmd
+        and left.double == right.double
+    )
+
+
+def binding_conflict(role: str, text: str, current: Mapping[str, str]) -> str | None:
+    """None when ``text`` is free, or it is already this role's bind.
+
+    An unparseable name is None here. ``binding_warning`` covers that.
+    A different role that already arms the same key is named in the sentence.
+    """
+    spec = parse_binding(text)
+    if spec is None:
+        return None
+    for other in ("dictation", "speak", "cancel"):
+        if other == role:
+            continue
+        owned = parse_binding(str(current.get(other, "")))
+        if owned is not None and same_binding(spec, owned):
+            previous = current.get(role, "")
+            return f"{role} binding '{text}' is already {other}; keeping {previous}"
+    return None
+
+
+CAPTURE_FLAG_NAME = "hotkey.capture"
+
+
+def capture_flag_path(data_dir: str | Path) -> Path:
+    """File the event tap reads. ``1`` means the hotkey field is open."""
+    return Path(data_dir) / CAPTURE_FLAG_NAME
+
+
+def set_hotkey_capture(data_dir: str | Path, active: bool) -> None:
+    """Write or remove the capture flag. A disk error does not raise."""
+    target = capture_flag_path(data_dir)
+    try:
+        if not active:
+            target.unlink(missing_ok=True)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temp = target.with_name(f".{target.name}.tmp")
+        temp.write_text("1\n", encoding="utf-8")
+        os.replace(temp, target)
+    except OSError:
+        return

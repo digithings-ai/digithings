@@ -476,6 +476,78 @@ test("a hotkey is stored only when enter locks it in", async () => {
   }
 })
 
+test("capturing a hotkey suspends digivoice shortcuts", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const hotkeyRows = [
+    {
+      action: "dictation",
+      name: "dictation",
+      path: "/settings/hotkeys/dictation",
+      meta: "Right Option",
+      kind: "capture",
+    },
+  ]
+  const api = session({
+    rows(request) {
+      if (request.path === "/settings") {
+        return {
+          path: "/settings",
+          rows: [{ action: "hotkeys", name: "hotkeys", path: "/settings/hotkeys", meta: "", kind: "dir" }],
+        }
+      }
+      return { path: "/settings/hotkeys", rows: hotkeyRows }
+    },
+    apply(request) {
+      return {
+        saved: true,
+        path: "/settings/hotkeys",
+        rows: hotkeyRows.map((row) => ({ ...row, meta: request.text })),
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("│ /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/hotkeys"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/dictation") && value.includes("Right Option"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("input new hotkey"))
+    const opened = api.calls.filter((call) => call.op === "hotkey-capture")
+    assert.equal(opened.at(-1).active, true)
+    setup.renderer.keyInput.processParsedKey({
+      name: "k",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      option: false,
+      super: true,
+      sequence: "k",
+      number: false,
+      raw: "",
+      eventType: "press",
+      source: "raw",
+    })
+    await setup.waitForFrame((value) => {
+      const line = value.split("\n").find((row) => row.includes("/dictation"))
+      return Boolean(line && line.includes("cmd+k"))
+    })
+    assert.ok(!api.calls.some((call) => call.op === "apply"))
+    setup.mockInput.pressEscape()
+    await settle(setup)
+    const cancelled = setup.captureCharFrame()
+    assert.match(cancelled, /Right Option/)
+    assert.doesNotMatch(cancelled, /input new hotkey/)
+    assert.equal(api.calls.filter((call) => call.op === "hotkey-capture").at(-1).active, false)
+    assert.ok(!api.calls.some((call) => call.op === "apply"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
 test("an unparseable hotkey keeps the previous binding", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const hotkeyRows = [
