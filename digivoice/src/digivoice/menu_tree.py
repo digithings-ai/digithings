@@ -232,21 +232,21 @@ def rows_at(
                 kind="capture",
                 field="dictation",
                 value=bindings.dictation,
-                explain="Starts and stops dictation. Enter, then type the key.",
+                explain="Starts and stops dictation. Press the key, or type its name.",
             ),
             TreeRow(
                 name="speak",
                 kind="capture",
                 field="speak",
                 value=bindings.speak,
-                explain="Speaks the selection. Enter, then type the key.",
+                explain="Speaks the selection. Press the key, or type its name.",
             ),
             TreeRow(
                 name="cancel",
                 kind="capture",
                 field="cancel",
                 value=bindings.cancel,
-                explain="Discards the active take. Enter, then type the key.",
+                explain="Discards the active take. Press the key, or type its name.",
             ),
         ]
     return []

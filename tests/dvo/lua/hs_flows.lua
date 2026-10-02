@@ -234,6 +234,7 @@ local function flags_event(keycode, alt)
   return {
     getFlags = function() return { alt = alt } end,
     getKeyCode = function() return keycode end,
+    getType = function() return "flagsChanged" end,
   }
 end
 
@@ -241,6 +242,7 @@ local function key_event(keycode, flags)
   return {
     getFlags = function() return flags or {} end,
     getKeyCode = function() return keycode end,
+    getType = function() return "keyDown" end,
   }
 end
 
@@ -253,9 +255,22 @@ end
 local flags_tap, esc_tap
 local function find_taps()
   for _, t in ipairs(taps) do
-    if t.types[1] == "flagsChanged" then flags_tap = t end
-    if t.types[1] == "keyDown" then esc_tap = t end
+    if t.types[1] == "flagsChanged" then
+      flags_tap = t
+      -- The hotkey tap also listens for keyDown. That is the cancel key.
+      if t.types[2] == "keyDown" then
+        esc_tap = t
+      end
+    end
+    if t.types[1] == "keyDown" then
+      esc_tap = t
+    end
   end
+end
+
+local function press_chord(keycode, flags)
+  find_taps()
+  return flags_tap.fn(key_event(keycode, flags))
 end
 
 local function press_right_option()
@@ -419,7 +434,7 @@ function scenarios.dict_banner_recording_then_done()
   eq(live_canvas(), nil, "retract hides when the take is done")
   eq(#menubars, 0, "still no digivoice menubar after take")
   find_taps()
-  eq(esc_tap.enabled, false, "Esc tap released")
+  eq(press_esc(), false, "Esc passes through after the take")
 end
 
 function scenarios.esc_cancels_and_swallows()
@@ -850,6 +865,76 @@ function scenarios.pinned_banner_shows_at_launch()
   local text = f:read("*a")
   f:close()
   check(text:find("true", 1, true), "the pin setting stays in the terminal UI")
+end
+
+function scenarios.remapped_hotkeys_replace_the_defaults()
+  write(DATA .. "/settings.json", '{"dictation":"ctrl+shift+space","speak":"ctrl+shift+s","cancel":"ctrl+shift+x"}')
+  press_right_option()
+  eq(#tasks, 0, "Right Option is not dictation after a remap")
+  double_tap_left_option()
+  eq(#tasks, 0, "Left Option is not speak after a remap")
+  eq(press_esc(), false, "plain Esc is not cancel after a remap")
+  eq(press_chord(49, { ctrl = true, shift = true }), true, "ctrl+shift+space is swallowed")
+  eq(#tasks, 1, "ctrl+shift+space starts dictation")
+  eq(tasks[1].args[1], "dict", "dictation command")
+  eq(press_esc(), false, "Esc does not cancel the remapped take")
+  check(not exists(DATA .. "/dict.cancel"), "Esc wrote no cancel-file")
+  eq(press_chord(7, { ctrl = true, shift = true }), true, "ctrl+shift+x cancels")
+  check(exists(DATA .. "/dict.cancel"), "cancel-file from the saved bind")
+  tasks[1]:finish(3, "", "")
+  advance(0.2)
+  press_chord(1, { ctrl = true, shift = true })
+  eq(#tasks, 2, "ctrl+shift+s speaks")
+  eq(tasks[2].args[1], "speak", "speak command")
+end
+
+function scenarios.bad_binding_keeps_the_previous_and_rereads()
+  local lines = {}
+  local real_print = print
+  print = function(msg)
+    lines[#lines + 1] = tostring(msg)
+    real_print(msg)
+  end
+  write(DATA .. "/settings.json", '{"dictation":"!!!"}')
+  press_right_option()
+  eq(#tasks, 1, "bad dictation keeps Right Option")
+  local saw = false
+  for _, line in ipairs(lines) do
+    if line:find("!!!", 1, true) and line:find("Right Option", 1, true) then
+      saw = true
+    end
+  end
+  check(saw, "warning names the bad binding and the one kept")
+  press_right_option()
+  check(exists(DATA .. "/dict.stop"), "the tap still accepts the next key")
+  tasks[1]:finish(0, "ok\n", "")
+  advance(0.2)
+  write(DATA .. "/settings.json", '{"dictation":"ctrl+shift+space"}')
+  press_right_option()
+  eq(#tasks, 1, "a saved remap drops Right Option on the next key")
+  press_chord(49, { ctrl = true, shift = true })
+  eq(#tasks, 2, "the next key uses the new bind without a reload")
+end
+
+function scenarios.hotkey_tap_survives_a_bad_event()
+  find_taps()
+  flags_tap.fn({
+    getType = function() error("bad event") end,
+    getKeyCode = function() return 0 end,
+    getFlags = function() return {} end,
+  })
+  press_right_option()
+  eq(#tasks, 1, "the tap still accepts the next key")
+end
+
+function scenarios.reload_reads_saved_hotkeys()
+  write(DATA .. "/settings.json", '{"dictation":"ctrl+shift+space","speak":"Double-tap Left Option","cancel":"Esc"}')
+  adapter.start()
+  press_right_option()
+  eq(#tasks, 0, "reload dropped Right Option")
+  press_chord(49, { ctrl = true, shift = true })
+  eq(#tasks, 1, "reload armed the saved dictation bind")
+  eq(tasks[1].args[1], "dict", "still dictation")
 end
 
 local run = scenarios[scenario]

@@ -71,7 +71,13 @@ def test_banner_core_checks() -> None:
 
 
 @needs_lua
-@pytest.mark.parametrize("name", ["init.lua", "banner_core.lua"])
+def test_hotkey_binding_checks() -> None:
+    out = _lua(str(LUA_DIR / "hotkeys_check.lua"), env_extra={"ADAPTER_DIR": str(ADAPTER)})
+    assert "PASS hotkeys" in out
+
+
+@needs_lua
+@pytest.mark.parametrize("name", ["init.lua", "banner_core.lua", "hotkeys.lua"])
 def test_adapter_sources_compile(name: str) -> None:
     assert LUA is not None
     proc = subprocess.run(

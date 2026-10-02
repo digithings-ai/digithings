@@ -148,6 +148,97 @@ def _modify_other_key(payload: str) -> str:
     return "esc"
 
 
+# Kitty / xterm modifier parameter is 1 + bitfield (shift 1, alt 2, ctrl 4, cmd 8).
+_CHORD_MOD_BITS = (("ctrl", 4), ("shift", 1), ("alt", 2), ("cmd", 8))
+_KITTY_PUSH = "\x1b[>1u"
+_KITTY_POP = "\x1b[<u"
+_MODIFY_PUSH = "\x1b[>4;2m"
+_MODIFY_POP = "\x1b[>4;0m"
+
+
+def _key_token(code: int) -> str | None:
+    """Name a key for a chord. Letters stay lowercase."""
+    if code == 32:
+        return "space"
+    if code == 9:
+        return "tab"
+    if code in {10, 13}:
+        return "enter"
+    if code == 27:
+        return "esc"
+    if code == 127:
+        return "delete"
+    if 33 <= code < 127:
+        return chr(code).lower()
+    return None
+
+
+def chord_from_code(mods: int, code: int) -> str | None:
+    """Turn a Kitty/xterm modifier number and code point into a binding.
+
+    Shift alone on a letter is the typed character, so ``Right Option`` can
+    still be entered by hand. ``ctrl``, ``alt``, or ``cmd`` make a chord
+    (``ctrl+shift+space``).
+    """
+    if mods < 1:
+        return None
+    bits = mods - 1
+    ctrl = bool(bits & 4)
+    alt = bool(bits & 2)
+    cmd = bool(bits & 8)
+    shift = bool(bits & 1)
+    if not ctrl and not alt and not cmd:
+        if code == 32:
+            return " "
+        if 33 <= code < 127:
+            char = chr(code)
+            if shift and char.isalpha():
+                return char.upper()
+            return char
+        if code in {10, 13}:
+            return "enter"
+        if code == 27:
+            return "esc"
+        if code == 9:
+            return "tab"
+        if code == 127:
+            return "\x7f"
+        return None
+    key = _key_token(code)
+    if key is None:
+        return None
+    prefix = [name for name, bit in _CHORD_MOD_BITS if bits & bit]
+    return "+".join([*prefix, key])
+
+
+def chord_from_kitty(payload: str) -> str | None:
+    """CSI u payload ``code;mods`` (no trailing ``u``)."""
+    head = payload.split(":", 1)[0]
+    if head.endswith("u"):
+        head = head[:-1]
+    parts = head.split(";")
+    try:
+        code = int(parts[0])
+        mods = int(parts[1]) if len(parts) > 1 else 1
+    except ValueError:
+        return None
+    return chord_from_code(mods, code)
+
+
+def chord_from_modify_other(payload: str) -> str | None:
+    """xterm ``27;mod;code`` (optional trailing ``~``)."""
+    body = payload[:-1] if payload.endswith("~") else payload
+    parts = body.split(";")
+    if len(parts) < 3:
+        return None
+    try:
+        mods = int(parts[1])
+        code = int(parts[2])
+    except ValueError:
+        return None
+    return chord_from_code(mods, code)
+
+
 def mouse_action(body: str, *, pressed: bool) -> str:
     """Left press is ``click``. Motion and other buttons stay ``mouse``."""
     parts = body.split(";")
@@ -1471,6 +1562,75 @@ def choose(
     return index if 0 <= index < len(listed) else None
 
 
+def _ctrl_byte(first: str) -> str | None:
+    """A raw control byte is ``ctrl+letter`` (NUL is ``ctrl+space``)."""
+    if first == "\x00":
+        return "ctrl+space"
+    if "\x01" <= first <= "\x1a":
+        return "ctrl+" + chr(ord(first) + 96)
+    return None
+
+
+def _read_csi(fd: int) -> str | None:
+    """Bytes after CSI ``[``, including the final byte, or None on a short read."""
+    peek = _read_byte(fd, 0.04)
+    if peek is None:
+        return None
+    if "@" <= peek <= "~":
+        return peek
+    body = [peek]
+    while True:
+        ch = _read_byte(fd, 0.04)
+        if ch is None:
+            return None
+        body.append(ch)
+        if "@" <= ch <= "~":
+            return "".join(body)
+        if len(body) > 16:
+            return None
+
+
+def _read_capture_key(fd: int) -> str | None:
+    """One capture key. Chords keep their modifiers. Ctrl-C is a chord, not a signal.
+
+    Menus keep :func:`_read_key_on_fd`. This reader is only the hotkey row.
+    """
+    first_b = os.read(fd, 1)
+    if not first_b:
+        return None
+    first = first_b.decode("latin-1")
+    if first == "\x1b":
+        second = _read_byte(fd, 0.04)
+        if second is None:
+            return "esc"
+        if second == "[":
+            joined = _read_csi(fd)
+            if joined is None:
+                return "esc"
+            if joined.startswith("<") and joined[-1] in "Mm":
+                packed = joined[1:-1]
+                cell = parse_sgr_mouse(packed)
+                if cell is not None:
+                    _note_pointer(cell)
+                    return mouse_action(packed, pressed=joined[-1] == "M")
+                return "esc"
+            if joined.endswith("u") and ";" in joined:
+                return chord_from_kitty(joined[:-1]) or "esc"
+            if joined.startswith("27;") and joined.endswith("~"):
+                return chord_from_modify_other(joined[:-1]) or "esc"
+            return _arrow_name(joined[-1])
+        if second == "O":
+            third = _read_byte(fd, 0.04)
+            return "esc" if third is None else _arrow_name(third)
+        return "esc"
+    if first in {"\r", "\n"}:
+        return "enter"
+    chord = _ctrl_byte(first)
+    if chord is not None:
+        return chord
+    return first
+
+
 def capture_binding(
     title: str,
     blocks: Sequence[MenuBlock],
@@ -1481,8 +1641,9 @@ def capture_binding(
 ) -> str | None:
     """Read a hotkey for one row. Esc cancels. Enter saves typed text.
 
-    The capture loop is only this row: Esc returns to the caller, and a
-    click does not leave the screen or swallow later menus. Non-TTY reads
+    A pressed chord (modifiers included) is the binding. Typed names still
+    work: ``Right Option``, ``Double-tap Left Option``, ``Esc``,
+    ``ctrl+shift+space``. The capture loop is only this row. Non-TTY reads
     one line so a pipe cannot hang.
     """
     stdin = stdin or sys.stdin
@@ -1508,8 +1669,11 @@ def capture_binding(
     try:
         _set_menu_raw(fd)
         _cursor(stdout, False)
+        if _use_screen():
+            stdout.write(_KITTY_PUSH + _MODIFY_PUSH)
+            stdout.flush()
         while True:
-            preview = typed or "type a key, then enter"
+            preview = typed or "press a key, or type its name"
             armed = [
                 block.model_copy(update={"meta": preview}) if index == selected else block
                 for index, block in enumerate(shown)
@@ -1531,7 +1695,7 @@ def capture_binding(
             )
             stdout.flush()
             first = False
-            key = _read_key_on_fd(fd)
+            key = _read_capture_key(fd)
             if key is None or key in {"mouse", "click"}:
                 continue
             if key == "esc":
@@ -1549,6 +1713,12 @@ def capture_binding(
     except (OSError, ValueError):
         return None
     finally:
+        if _use_screen():
+            try:
+                stdout.write(_KITTY_POP + _MODIFY_POP)
+                stdout.flush()
+            except (OSError, ValueError):
+                pass
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
         _cursor(stdout, True)
 
