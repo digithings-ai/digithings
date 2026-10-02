@@ -46,7 +46,7 @@ import {
   hasSupabaseEnv,
   type SupabaseSource,
 } from "./supabase";
-import { MCP_PATH, handleMcp } from "./mcp";
+import { MCP_PATH, STANDALONE_PATHS, handleMcp, secretlessStubLane } from "./mcp";
 import { buildProvenance, errorResponse } from "./errors";
 import { buildRegistry, userIdFor } from "./routes";
 import type { Method } from "./routes/registry";
@@ -164,10 +164,14 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
   if (request.method !== "GET") return routeWrite(request, env, path);
   if (request.method === "GET" && path !== "/access/manifest") {
-    // Same policy as the app: a governed data route is served only if the caller's manifest grants it.
-    const manifest = buildManifest(callerFor(request, env));
-    if (routeVerdict(manifest, path) === "forbidden") {
-      return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: manifest.caller.tier });
+    // Secretless stub lane keeps the contracted doubles (200 §1). An identified
+    // caller, including explicit free, is still refused when the manifest says so.
+    const stubContract = secretlessStubLane(request, env) && STANDALONE_PATHS.has(path);
+    if (!stubContract) {
+      const manifest = buildManifest(callerFor(request, env));
+      if (routeVerdict(manifest, path) === "forbidden") {
+        return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: manifest.caller.tier });
+      }
     }
   }
   if (request.method === "GET" && path === "/access/manifest") {
@@ -194,8 +198,9 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === "GET" && path.startsWith("/v1/tables/")) {
     // Raw tables carry paid-tier data (ledger, attribution, trace): brief and above only.
+    // With no Supabase and no caller, fail closed as upstream_empty (502) instead of 403.
     const caller = callerFor(request, env);
-    if (!tierAtLeast(caller, "brief")) {
+    if (!secretlessStubLane(request, env) && !tierAtLeast(caller, "brief")) {
       return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: caller.tier });
     }
     try {
