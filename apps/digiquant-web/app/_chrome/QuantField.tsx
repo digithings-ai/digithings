@@ -156,6 +156,11 @@ export function QuantField() {
       // Force style flush before opacity so the transition runs.
       void host.offsetWidth;
       host.style.opacity = "1";
+      // Full-viewport host — remeasure after layout so candles fill the hero.
+      chart.resize();
+      requestAnimationFrame(() => {
+        if (!dead) chart?.resize();
+      });
 
       later(Math.round(CHART_INTRO_MS * 0.28), () => {
         chart?.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
@@ -194,7 +199,7 @@ export function QuantField() {
       <div
         ref={ref}
         aria-label={caption}
-        className="absolute inset-0 -z-10 h-full w-full [transform:translateZ(0)]"
+        className="absolute inset-0 -z-10 h-full min-h-full w-full [transform:translateZ(0)]"
       />
       <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>
     </>
