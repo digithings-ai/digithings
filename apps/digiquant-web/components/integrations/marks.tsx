@@ -30,7 +30,7 @@ export function integrationHref(id: IntegrationId): string {
  *  apps/dashboard/components/gloomberb-mark.tsx. */
 function GloombergMark({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" focusable="false">
+    <svg width={size} height={size} viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" focusable="false" className="shrink-0" style={{ width: size, height: size }}>
       <g transform="translate(256 248) scale(1.15) translate(-256 -248)">
         <rect x="168" y="130" width="14" height="236" rx="7" />
         <rect x="143.5" y="173" width="63" height="150" rx="8" />
@@ -62,7 +62,7 @@ export function IntegrationMark({ id, size = 20 }: { id: IntegrationId; size?: n
   }
   if (id === "coinbase") {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" className="shrink-0" style={{ width: size, height: size }}>
         <path d={siCoinbase.path} />
       </svg>
     );

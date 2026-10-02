@@ -12,6 +12,8 @@
 @import "@digithings/ui/styles/marquee.css";
 @import "@digithings/ui/styles/data-layout.css";
 @import "@digithings/ui/styles/chat-widgets.css";
+@import "@digithings/ui/styles/chat-aui.css";
+@import "@digithings/ui/styles/chat-digichat.css";
 /* finance-tearsheet family: .ts-* grammar incl. the @media print export grammar
    (self-layering, imported plainly). Kept for the tearsheet routes. */
 @import "@digithings/ui/styles/finance-tearsheet.css";
@@ -73,6 +75,13 @@
 html,
 body {
   background: var(--bg);
+}
+
+/* The thread group slot is `aui_message-group`. An arbitrary Tailwind variant
+   cannot quote that underscore (it becomes a space and the stylesheet fails
+   to parse), so the gap lives here. */
+.scripted-digichat [data-slot="aui_message-group"] {
+  row-gap: 0.75rem;
 }
 
 /* Crosshair, hero only: the pointer becomes a crosshair over the hero (QuantField

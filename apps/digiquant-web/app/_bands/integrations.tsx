@@ -1,13 +1,12 @@
 import { CtaLink } from "@digithings/ui";
 import { IntegrationMark, integrationHref, type IntegrationId } from "@/components/integrations/marks";
-import { LocalLuxalgoWorkflow } from "@/components/luxalgo/local-luxalgo-workflow";
 import { Band } from "../_chrome/Band";
 import { MCP_TOOLS } from "../_mcp";
 
 const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
 
 const CARD =
-  "flex h-auto min-h-full w-full min-w-0 flex-col items-stretch gap-3 overflow-hidden border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
+  "flex h-auto min-h-full w-full min-w-0 shrink flex-col items-stretch gap-3 overflow-hidden border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
 
 const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
   {
@@ -21,7 +20,7 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
     id: "luxalgo",
     name: "LuxAlgo",
     role: "Vela backbone · live signals",
-    line: "The live chart is the hero. Library lookup runs through the local gateway below when that gateway is up.",
+    line: "The live chart is the hero. LuxAlgo Vela is the live signal backbone on that chart.",
     fact: `${toolCount("luxalgo_")} MCP tools · live on hero`,
   },
   {
@@ -48,8 +47,7 @@ const SECONDARY: { id: IntegrationId; name: string; role: string }[] = [
 /** Integrations: the only band that names partners. The three architectural drivers lead,
  *  digithings follows as the platform under the agents and chat, brokers and feeds sit
  *  last and quiet. Showcase only: nothing here places an order. LuxAlgo Vela is the live
- *  price backbone on the hero. The panel under the cards is the local library lookup,
- *  which stays honest when the loopback gateway is down. */
+ *  price backbone on the hero. */
 export function IntegrationsBand() {
   return (
     <Band
@@ -58,7 +56,7 @@ export function IntegrationsBand() {
       title="What the engine is built on"
       takeaway="Three integrations drive digiquant: Gloomberg for data, LuxAlgo Vela for live signals, NautilusTrader for the engine. digithings runs the agents and the chat around them."
     >
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-5">
         <ul aria-label="Architectural drivers" className="m-0 grid min-w-0 list-none gap-4 overflow-x-clip p-0 md:grid-cols-3">
           {DRIVERS.map((d) => (
             <li key={d.id} className="min-w-0">
@@ -77,11 +75,9 @@ export function IntegrationsBand() {
           ))}
         </ul>
 
-        <LocalLuxalgoWorkflow />
-
-        <div className="grid min-w-0 gap-4 overflow-x-clip border border-hair p-[1.3rem] md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <CtaLink href={integrationHref("digithings")} external variant="ghost" className="h-auto min-w-0 items-center justify-start gap-3 overflow-hidden p-0 text-start whitespace-normal no-underline">
-            <span className="text-ink">
+        <div className="grid min-w-0 items-start gap-4 overflow-x-clip border border-hair p-[1.3rem] md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-center md:gap-8">
+          <CtaLink href={integrationHref("digithings")} external variant="ghost" className="h-auto w-full min-w-0 shrink items-center justify-start gap-3 self-center overflow-hidden p-0 text-start whitespace-normal no-underline hover:bg-transparent">
+            <span className="shrink-0 text-ink">
               <IntegrationMark id="digithings" size={32} />
             </span>
             <span className="min-w-0">
@@ -91,29 +87,35 @@ export function IntegrationsBand() {
               </span>
             </span>
           </CtaLink>
-          <dl className="m-0 grid gap-1 font-mono text-[0.72rem]">
+          <dl className="m-0 grid min-w-0 gap-y-2 font-mono text-[0.72rem] leading-[1.45] sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-4">
             {DIGITHINGS.map((row) => (
-              <div key={row.label} className="grid min-w-0 grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-3">
+              <div key={row.label} className="grid min-w-0 gap-y-0.5 sm:col-span-2 sm:grid-cols-subgrid sm:items-baseline">
                 <dt className="text-ink">{row.label}</dt>
-                <dd className="m-0 text-ink-soft">{row.line}</dd>
+                <dd className="m-0 min-w-0 text-ink-soft">{row.line}</dd>
               </div>
             ))}
           </dl>
         </div>
 
-        <p className="m-0 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[0.66rem] text-ink-mute">
-          <span>also connected</span>
-          {SECONDARY.map((s) => (
-            <span key={s.id} className="flex items-center gap-1.5">
-              <IntegrationMark id={s.id} size={14} />
-              {s.name} · {s.role}
-            </span>
-          ))}
-        </p>
-        <p className="m-0 font-mono text-[0.66rem] text-ink-mute">
-          This site only shows them: it places no orders and there is no live trading. The hero chart is live LuxAlgo Vela on the
-          public Coinbase feed. Names and marks belong to their owners; listing one implies no affiliation.
-        </p>
+        <div className="flex min-w-0 flex-col gap-2">
+          <p className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[0.68rem] leading-none text-ink-mute">
+            <span>also connected</span>
+            {SECONDARY.map((s) => (
+              <span key={s.id} className="inline-flex max-w-full min-w-0 items-center gap-1.5">
+                <span className="inline-flex shrink-0 items-center text-ink">
+                  <IntegrationMark id={s.id} size={16} />
+                </span>
+                <span className="min-w-0">
+                  {s.name} · {s.role}
+                </span>
+              </span>
+            ))}
+          </p>
+          <p className="m-0 max-w-[var(--measure-prose)] font-mono text-[0.66rem] leading-[1.55] text-ink-mute">
+            This site only shows them: it places no orders and there is no live trading. The hero chart is live LuxAlgo Vela on the
+            public Coinbase feed. Names and marks belong to their owners; listing one implies no affiliation.
+          </p>
+        </div>
       </div>
     </Band>
   );
