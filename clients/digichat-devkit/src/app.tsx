@@ -7,6 +7,7 @@ import {
   blankDraft,
   chatBody,
   liveFrom,
+  mainChrome,
   postBaseline,
   rowsFor,
   selectEntry,
@@ -17,6 +18,7 @@ import {
   typeInto,
   type ChatTurn,
   type Draft,
+  type LiveView,
   type SettingRow,
   type StripRow,
 } from "./live";
@@ -63,8 +65,8 @@ function groupAt(rows: SettingRow[], index: number): string {
   return "Deployments";
 }
 
-function welcomeText(title: string | null, body: string | null): string {
-  return [title, body].filter((line): line is string => Boolean(line)).join("\n");
+function welcomeText(title: string | null): string {
+  return title ?? "";
 }
 
 export function App() {
@@ -135,7 +137,7 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const greeting = turns.length === 0 ? welcomeText(view.welcomeTitle, view.welcomeBody) : "";
+  const greeting = turns.length === 0 ? welcomeText(view.welcomeTitle) : "";
   useEffect(() => {
     setReveal(0);
   }, [greeting]);
@@ -348,21 +350,7 @@ export function App() {
           </box>
         </box>
         <box flexGrow={1} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1}>
-          {view.title ? (
-            <box height={1} backgroundColor={BG}>
-              <text fg={accent}>{view.title}</text>
-            </box>
-          ) : null}
-          {view.headline !== "—" ? (
-            <box height={1} backgroundColor={BG}>
-              <text fg={INK}>{view.headline}</text>
-            </box>
-          ) : null}
-          {view.modelLine !== "—" ? (
-            <box height={1} backgroundColor={BG}>
-              <text fg={view.modelLine === "no default model" ? MUTE : SOFT}>{view.modelLine}</text>
-            </box>
-          ) : null}
+          <ChromeRows view={view} detail={read.detail} turns={turns} reveal={reveal} blink={blink} accent={accent} />
           {view.gate ? (
             <box height={1} backgroundColor={BG}>
               <text fg={MUTE}>{`· gate ${view.gate}`}</text>
@@ -378,21 +366,13 @@ export function App() {
               <text fg={MUTE}>{`· ${issue}`}</text>
             </box>
           ))}
-          <box flexGrow={1} flexDirection="column" backgroundColor={BG} overflow="hidden">
+          <box flexGrow={1} border borderColor={HAIR} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1} overflow="hidden">
             {turns.map((turn) => (
               <TurnLine key={turn.id} turn={turn} accent={accent} alignRight={view.alignRight} />
             ))}
-            {greeting ? (
-              <text fg={INK}>
-                {greeting.slice(0, reveal)}
-                {reveal < greeting.length && blink ? "█" : ""}
-              </text>
-            ) : turns.length === 0 ? (
+            {turns.length === 0 && !view.configured ? (
               <text fg={MUTE}>{`${GLYPH.system} ${read.detail}`}</text>
             ) : null}
-            {view.suggestions.map((item) => (
-              <text key={item} fg={MUTE}>{`${GLYPH.system} ${item}`}</text>
-            ))}
           </box>
           {shownStrip.map((row, index) => (
             <box key={`${stripStart + index}`} height={1} flexDirection="row" backgroundColor={BG}>
@@ -416,6 +396,55 @@ export function App() {
         <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
+    </box>
+  );
+}
+
+function ChromeRows({
+  view,
+  detail,
+  turns,
+  reveal,
+  blink,
+  accent,
+}: {
+  view: LiveView;
+  detail: string;
+  turns: ChatTurn[];
+  reveal: number;
+  blink: boolean;
+  accent: string;
+}) {
+  const chrome = mainChrome(view, detail, turns);
+  const title = chrome.find((row) => row.slot === "title")?.text ?? "—";
+  const headline = chrome.find((row) => row.slot === "headline")?.text ?? "—";
+  const welcome = chrome.filter((row) => row.slot === "welcome");
+  const welcomeTitle = welcome[0]?.text ?? "—";
+  const welcomeShown = welcomeTitle === "—" ? welcomeTitle : welcomeTitle.slice(0, reveal);
+  const welcomeBody = welcome[1]?.text ?? "—";
+  const titleDone = welcomeTitle === "—" || reveal >= welcomeTitle.length;
+  return (
+    <box flexDirection="column" backgroundColor={BG}>
+      <box height={1} flexDirection="row" backgroundColor={BG}>
+        <text fg={MUTE}>title  </text>
+        <text fg={title === "—" ? MUTE : accent}>{title}</text>
+      </box>
+      <box height={1} backgroundColor={BG}>
+        <text fg={headline === "—" ? MUTE : INK}>{headline}</text>
+      </box>
+      <box height={1} flexDirection="row" backgroundColor={BG}>
+        <text fg={MUTE}>welcome  </text>
+        <text fg={view.welcomeTitle ? INK : MUTE}>{welcomeShown}</text>
+        {view.welcomeTitle && reveal < view.welcomeTitle.length && blink ? <text fg={INK}>█</text> : null}
+      </box>
+      <box height={1} backgroundColor={BG}>
+        <text fg={view.welcomeBody && titleDone ? SOFT : MUTE}>{titleDone ? welcomeBody : "—"}</text>
+      </box>
+      {view.suggestions.map((item) => (
+        <box key={item} height={1} backgroundColor={BG}>
+          <text fg={MUTE}>{`${GLYPH.system} ${item}`}</text>
+        </box>
+      ))}
     </box>
   );
 }

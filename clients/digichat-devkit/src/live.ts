@@ -175,6 +175,26 @@ function mcpOf(panes: PaneModel[]): LiveMcp[] {
   return servers;
 }
 
+export type ChromeSlot = "title" | "headline" | "welcome" | "thread";
+
+export type ChromeRow = { slot: ChromeSlot; text: string };
+
+/** App chrome that stays on screen when a deployment is missing. Empty thread text is not a chat. */
+export function mainChrome(view: LiveView, detail: string, turns: ChatTurn[]): ChromeRow[] {
+  const rows: ChromeRow[] = [
+    { slot: "title", text: view.title ?? DASH },
+    { slot: "headline", text: view.headline },
+    { slot: "welcome", text: view.welcomeTitle ?? DASH },
+    { slot: "welcome", text: view.welcomeBody ?? DASH },
+  ];
+  if (turns.length === 0) {
+    rows.push({ slot: "thread", text: view.configured ? "" : detail });
+    return rows;
+  }
+  for (const turn of turns) rows.push({ slot: "thread", text: turn.text });
+  return rows;
+}
+
 /** The configured app. Strings come from the selected deployment and local edits. */
 export function liveFrom(read: KitRead, draft: Draft): LiveView {
   const panes = panesFor(read, draft);
