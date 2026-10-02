@@ -77,6 +77,28 @@ def test_wordmark_has_no_particle_field() -> None:
     assert not any("·" in row for row in plain)
 
 
+def test_hero_band_is_a_voice_field_behind_the_lockup() -> None:
+    """Tall home: waveform blocks and the mono fact line sit around DIGIVOICE."""
+    frame = _frame()
+    assert "local speech  /  on this mac  /  no cloud" in frame
+    assert "░" in frame or "▒" in frame
+    assert "▀███▀" in frame
+    assert "38;2;" not in frame
+
+
+def test_hero_field_keeps_moving_after_the_build() -> None:
+    early = _frame(t_ms=1600)
+    later = _frame(t_ms=2800)
+    assert "▀███▀" in early and "▀███▀" in later
+    assert early != later
+
+
+def test_hero_wordmark_builds_in_over_the_first_second() -> None:
+    bare = _frame(t_ms=0)
+    done = _frame(t_ms=1600)
+    assert done.count("█") > bare.count("█")
+
+
 def test_wordmark_builds_in() -> None:
     bare = render_wordmark_lines("DIGIVOICE", cols=120, frac=0, ansi=False)
     full = render_wordmark_lines("DIGIVOICE", cols=120, frac=1, ansi=False)
