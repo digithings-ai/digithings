@@ -12,6 +12,7 @@ import {
   takePendingForceTool,
 } from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
+import { clearEmbedSession } from "@/lib/embed-session";
 import {
   resetLiveTrialUnlockedForTests,
   writeTrialUnlocked,
@@ -668,6 +669,10 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
 
   beforeEach(() => {
     takePendingForceTool(host);
+    // The restore effect calls setMessages when a prior test left a transcript
+    // in localStorage. Empty that record so an editLastUser no-op is not
+    // charged for the restore.
+    clearEmbedSession(host);
     vi.clearAllMocks();
   });
 
