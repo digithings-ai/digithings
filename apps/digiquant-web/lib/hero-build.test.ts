@@ -17,6 +17,8 @@ import {
   INDICATOR_SWEEP_MS,
   PHASE_SUM_MS,
   buildProgress,
+  candleSweepClip,
+  candleSweepRange,
   columnDelayMs,
   heroIndicatorStrokes,
   revealStroke,
@@ -41,6 +43,32 @@ describe("hero build clock", () => {
     expect(buildProgress(0, 0.5)).toBe(0);
     expect(buildProgress(BUILD_DONE_MS, 1)).toBe(1);
     expect(buildProgress(BUILD_DONE_MS + 5000, 0)).toBe(1);
+  });
+
+  it("pins the candle frame so a playhead zoom or right-to-left window fails", () => {
+    const barMs = 60_000;
+    const first = 1_700_000_000_000;
+    const last = first + 180 * barMs;
+    const cursor = first + 12 * barMs;
+    const frame = candleSweepRange(first, last, barMs);
+    const followCursor = { from: first, to: cursor + barMs };
+    const rightToLeft = { from: last - (cursor - first), to: last + barMs };
+    expect(frame).not.toEqual(followCursor);
+    expect(frame).not.toEqual(rightToLeft);
+    expect(frame.from).toBe(first);
+    expect(frame.to).toBe(last + barMs);
+    const shown = (cursor - frame.from) / (frame.to - frame.from);
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(0.15);
+    expect(frame.from).toBeLessThan(rightToLeft.from);
+  });
+
+  it("uncovers candles from the left edge and keeps the right side hidden", () => {
+    expect(candleSweepClip(0)).toBe("inset(0 100% 0 0)");
+    expect(candleSweepClip(BARS_SWEEP_MS / 2)).toBe("inset(0 50% 0 0)");
+    expect(candleSweepClip(BARS_SWEEP_MS / 2)).not.toBe("inset(0 0 0 50%)");
+    expect(candleSweepClip(BARS_SWEEP_MS)).toBe("");
+    expect(candleSweepClip(BARS_SWEEP_MS + 400)).toBe("");
   });
 
   it("builds left to right at any moment", () => {

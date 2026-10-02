@@ -7,7 +7,8 @@ import {
   AXIS_Y_MS,
   AXIS_Y_START_MS,
   BARS_START_MS,
-  BARS_SWEEP_MS,
+  candleHiddenRightPercent,
+  candleSweepRange,
   CHART_BUILD_MAX_MS,
   COPY_DONE_MS,
   EMA_COLOR,
@@ -34,8 +35,8 @@ import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
  *     does not wait on BUILD_DONE_MS.
  *  2. At COPY_DONE_MS, construct strokes: X left→right, right Y bottom→top, then
  *     the grid. Series and volume stay hidden. Not a clip over finished candles.
- *  3. Candles and volume then sweep left→right together (replay; bar i's volume
- *     is added with bar i).
+ *  3. Candles and volume then sweep left→right together on a fixed full-span
+ *     frame (the playhead does not drag the right edge).
  *  4. SMA 20, EMA 50, and one overlay travel left→right after that sweep, then
  *     hand off to the same native studies.
  *  Reduced motion skips the sweeps. A failed feed still lets chrome finish and
@@ -121,6 +122,7 @@ function lineLength(el: SVGLineElement): number {
 export function QuantField() {
   const ref = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const coverRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<SVGSVGElement>(null);
   const xRef = useRef<SVGLineElement>(null);
   const yRef = useRef<SVGLineElement>(null);
@@ -243,6 +245,7 @@ export function QuantField() {
       } else {
         unavailable();
       }
+      if (coverRef.current) coverRef.current.style.width = "0%";
       try {
         chart?.replay.stop();
       } catch {
@@ -331,11 +334,11 @@ export function QuantField() {
       runIndicatorSweep();
     };
 
-    const leftAnchor = (cursorTime: number, firstTime: number) => {
-      if (!chart || dead || finished) return;
-      const to = Math.max(cursorTime + BAR_MS, firstTime + BAR_MS);
+    const pinSweepFrame = () => {
+      const bounds = chart?.replay.bounds;
+      if (!chart || !bounds) return;
       try {
-        chart.setVisibleRange({ from: firstTime, to });
+        chart.setVisibleRange(candleSweepRange(bounds.first, bounds.last, BAR_MS));
       } catch {
         /* renderer without range control */
       }
@@ -356,54 +359,43 @@ export function QuantField() {
         maybeIndicators();
         return;
       }
-      const firstTime = bounds.first;
-      void (async () => {
-        try {
-          if (!chart || dead || finished) return;
-          if (!chart.replay.state.active) await chart.replay.start({ from: firstTime });
-          if (dead || finished || !chart) return;
-          if (!volumeHandle) volumeHandle = chart.addNativeIndicator("volume");
-          applySafe(CANDLES_VISIBLE);
-          theme(THEME);
-          revealHost();
-          overlay.dataset.phase = "done";
-          setCaption(`${baseCaption} · volume`);
-          const anchor = (ev: { cursorTime: number }) => leftAnchor(ev.cursorTime, firstTime);
-          chart.on("replay:step", anchor);
-          chart.on("replay:start", anchor);
-          const cursor = chart.replay.state.cursorTime ?? firstTime;
-          leftAnchor(cursor, firstTime);
-          if (!chart.replay.state.active) {
-            replayEnded = true;
-            try {
-              chart.setVisibleRange({ from: bounds.first, to: bounds.last + BAR_MS });
-            } catch {
-              /* ignore */
-            }
-            maybeIndicators();
+      try {
+        if (!volumeHandle) volumeHandle = chart.addNativeIndicator("volume");
+        applySafe(CANDLES_VISIBLE);
+        theme(THEME);
+        revealHost();
+        overlay.dataset.phase = "done";
+        setCaption(`${baseCaption} · volume`);
+        pinSweepFrame();
+        const started = performance.now();
+        const paintCover = (elapsed: number) => {
+          const cover = coverRef.current;
+          if (!cover) return false;
+          const hidden = candleHiddenRightPercent(elapsed);
+          cover.style.width = `${hidden}%`;
+          return hidden > 0;
+        };
+        const tick = (now: number) => {
+          if (dead || finished) return;
+          if (paintCover(now - started)) {
+            raf = requestAnimationFrame(tick);
             return;
           }
-          chart.on("replay:end", () => {
-            replayEnded = true;
-            try {
-              chart?.setVisibleRange({ from: bounds.first, to: bounds.last + BAR_MS });
-            } catch {
-              /* ignore */
-            }
-            maybeIndicators();
-          });
-          const remaining = Math.max(1, chart.replay.state.remaining || 240);
-          const interval = Math.max(4, BARS_SWEEP_MS / remaining);
-          chart.replay.play(interval);
-        } catch {
+          pinSweepFrame();
           replayEnded = true;
-          revealHost();
-          applySafe(CANDLES_VISIBLE);
-          theme(THEME);
-          overlay.dataset.phase = "done";
           maybeIndicators();
-        }
-      })();
+        };
+        paintCover(0);
+        raf = requestAnimationFrame(tick);
+      } catch {
+        if (coverRef.current) coverRef.current.style.width = "0%";
+        replayEnded = true;
+        revealHost();
+        applySafe(CANDLES_VISIBLE);
+        theme(THEME);
+        overlay.dataset.phase = "done";
+        maybeIndicators();
+      }
     };
 
     const placeLines = () => {
@@ -655,6 +647,12 @@ export function QuantField() {
           <line ref={xRef} className="hero-construct__x" />
           <line ref={yRef} className="hero-construct__y" />
         </svg>
+        <div
+          ref={coverRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 z-20"
+          style={{ width: "0%", background: "var(--bg)" }}
+        />
       </div>
       <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>
     </>

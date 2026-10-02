@@ -53,6 +53,34 @@ export const BARS_START_MS = GRID_START_MS + GRID_MS;
 export const BARS_SWEEP_MS = 2000;
 
 /**
+ * Fixed plot for the candle sweep. The left edge is the first bar and the right
+ * edge is one bar past the last. The playhead is not an input: a window that
+ * ends on the cursor fills the plot at once, and a window that opens on the
+ * last bar runs right to left.
+ */
+export function candleSweepRange(
+  first: number,
+  last: number,
+  barMs: number,
+): { from: number; to: number } {
+  return { from: first, to: last + barMs };
+}
+
+/** Percent of the plot still covered on the right. 100 at the start, 0 when the sweep is done. */
+export function candleHiddenRightPercent(elapsedMs: number, sweepMs: number = BARS_SWEEP_MS): number {
+  if (!(sweepMs > 0) || elapsedMs >= sweepMs) return 0;
+  const hidden = (1 - Math.min(1, Math.max(0, elapsedMs / sweepMs))) * 100;
+  return hidden <= 0 ? 0 : hidden;
+}
+
+/** Right-edge inset that uncovers the plot from the left. Empty when the sweep is done. */
+export function candleSweepClip(elapsedMs: number, sweepMs: number = BARS_SWEEP_MS): string {
+  const hiddenRight = candleHiddenRightPercent(elapsedMs, sweepMs);
+  if (hiddenRight <= 0) return "";
+  return `inset(0 ${hiddenRight}% 0 0)`;
+}
+
+/**
  * Indicators start when the candle sweep ends (it has already begun) and travel
  * L→R on their own pass. Abutting the candle sweep — no gap, no silence pad.
  */
