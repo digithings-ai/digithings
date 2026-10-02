@@ -3,11 +3,10 @@ import { Badge } from "@digithings/ui/ui";
 import { WorkflowGraph, type GraphStep } from "@/components/pipeline/workflow-graph";
 import { Band } from "../_chrome/Band";
 
-type WorkflowStatus = "done" | "in development";
-
 type Workflow = {
   name: string;
-  status: WorkflowStatus;
+  /** Only the unfinished workflows carry a badge. */
+  status?: "in development";
   body: string;
   later?: string;
   graph: readonly GraphStep[];
@@ -18,7 +17,6 @@ type Workflow = {
 const WORKFLOWS: readonly Workflow[] = [
   {
     name: "Research",
-    status: "done",
     body: "digiquant baseline research. Theme-delegated sub-agents search the web and read a custom knowledge base, including the 12x terminal. It runs on digithings, on digigraph and the digithings infrastructure.",
     graph: [
       { nodes: [{ label: "Theme" }] },
@@ -30,7 +28,6 @@ const WORKFLOWS: readonly Workflow[] = [
   },
   {
     name: "Investment portfolio",
-    status: "done",
     body: "digiquant baseline portfolio. Thesis generation, then stock analysis, then deliberation with portfolio management and the investment preferences.",
     graph: [
       { nodes: [{ label: "Thesis generation" }] },
@@ -78,9 +75,8 @@ export function PipelineBand() {
     <Band
       id="pipeline"
       plain
-      status="two done"
       title="Agent orchestration"
-      takeaway="Workflows, graphs, and orchestrations. Research and the investment portfolio run. Strategy building and trade setups are in development. Each card is a picture of that graph, not a live run. None of them places an order."
+      takeaway="Workflows, graphs, and orchestrations. Research and the investment portfolio run. Each card is a picture of that graph, not a live run. None of them places an order."
     >
       <DeckStack
         className="[--deck-top:calc(var(--nav-shell-h,62px)+0.75rem)]"
@@ -97,13 +93,12 @@ export function PipelineBand() {
               <h3 className="m-0 font-display text-[1.65rem] font-medium leading-tight tracking-[-0.02em] text-ink">
                 {workflow.name}
               </h3>
-              <Badge variant={workflow.status === "done" ? "accent" : "neutral"}>{workflow.status}</Badge>
+              {workflow.status ? <Badge variant="neutral">{workflow.status}</Badge> : null}
             </div>
             <p className="m-0 max-w-[62ch] text-[0.9375rem] leading-[1.6] text-ink-soft">{workflow.body}</p>
             <WorkflowGraph label={`${workflow.name} orchestration`} steps={workflow.graph} />
             {workflow.later ? (
               <p className="m-0 max-w-[62ch] border-t border-hair pt-3 text-[0.9375rem] leading-[1.6] text-ink-soft">
-                <span className="mb-1 block font-mono text-[0.68rem] text-ink-mute">Still to come</span>
                 {workflow.later}
               </p>
             ) : null}

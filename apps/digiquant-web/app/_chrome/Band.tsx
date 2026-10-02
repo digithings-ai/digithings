@@ -14,7 +14,7 @@ export function Band({
   id,
   title,
   takeaway,
-  status = "placeholder",
+  status,
   fill = false,
   plain = false,
   children,
@@ -41,7 +41,7 @@ export function Band({
               <span aria-hidden="true" className="section-eyebrow__tick" />
               {pad2(index + 1)} / {label}
             </p>
-            <Badge variant="neutral">{status}</Badge>
+            {status ? <Badge variant="neutral">{status}</Badge> : null}
             <Button
               type="button"
               variant="ghost"
