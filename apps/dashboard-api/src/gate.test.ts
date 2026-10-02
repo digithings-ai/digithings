@@ -18,14 +18,14 @@ const names = async (h: Record<string, string>) => {
 };
 
 describe("HTTP gate", () => {
-  it("free caller: open routes serve, pro routes are 403 forbidden", async () => {
+  it("free caller: open routes serve, brief routes are 403 forbidden", async () => {
     expect((await get("/brief")).status).toBe(200);
     const res = await get("/performance");
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("forbidden");
   });
-  it("pro caller reaches pro routes", async () => {
-    expect((await get("/performance", { "x-digi-tier": "pro" })).status).toBe(200);
+  it("brief caller reaches brief routes", async () => {
+    expect((await get("/performance", { "x-digi-tier": "brief" })).status).toBe(200);
   });
   it("healthz and the manifest stay open", async () => {
     expect((await get("/healthz")).status).toBe(200);
@@ -34,12 +34,12 @@ describe("HTTP gate", () => {
 });
 
 describe("MCP gate", () => {
-  it("free caller sees only granted tools; pro sees more", async () => {
+  it("free caller sees only granted tools; brief sees more", async () => {
     const free = await names({});
     expect(free).toContain("get_brief");
     expect(free).toContain("get_access_manifest");
     expect(free).not.toContain("get_performance");
-    expect(await names({ "x-digi-tier": "pro" })).toContain("get_performance");
+    expect(await names({ "x-digi-tier": "brief" })).toContain("get_performance");
   });
   it("calling a withheld tool is refused, not served", async () => {
     const res = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_performance", arguments: {} } });
@@ -52,19 +52,36 @@ describe("MCP gate", () => {
   });
 });
 
+describe("edge identity key", () => {
+  const E: Env = { MCP_EDGE_KEY: KEY, DASHBOARD_EDGE_KEY: "edge" };
+  const call = (h: Record<string, string>) => app.fetch(new Request("https://x/performance", { headers: h }), E);
+  it("ignores identity headers without the edge key (falls to free)", async () => {
+    expect((await call({ "x-digi-tier": "enterprise" })).status).toBe(403);
+  });
+  it("honours them with the edge key", async () => {
+    expect((await call({ "x-digi-tier": "brief", "x-digi-edge-key": "edge" })).status).toBe(200);
+  });
+});
+
+describe("raw tables are brief+", () => {
+  it("free caller is 403", async () => {
+    expect((await get("/v1/tables/positions?select=*")).status).toBe(403);
+  });
+});
+
 describe("helpers", () => {
   it("template routes match one segment", () => {
     expect(routeMatches("/fx/pairs/{pair}/path", "/fx/pairs/USDJPY/path")).toBe(true);
     expect(routeMatches("/fx/pairs/{pair}/path", "/fx/pairs/path")).toBe(false);
   });
   it("fx routes are forbidden without the 12x group", () => {
-    expect(routeVerdict(buildManifest({ tier: "max", groups: [] }), "/fx/summary")).toBe("forbidden");
+    expect(routeVerdict(buildManifest({ tier: "enterprise", groups: [] }), "/fx/summary")).toBe("forbidden");
     expect(routeVerdict(buildManifest({ tier: "free", groups: ["12x"] }), "/fx/summary")).toBe("allowed");
     expect(routeVerdict(buildManifest({ tier: "free", groups: [] }), "/v1/tables/x")).toBe("ungoverned");
   });
   it("dev caller applies only when no identity headers are sent", () => {
-    const env = { DASHBOARD_DEV_CALLER: "max+12x" };
-    expect(callerFor(new Request("https://x/"), env)).toEqual({ tier: "max", groups: ["12x"] });
+    const env = { DASHBOARD_DEV_CALLER: "enterprise+12x" };
+    expect(callerFor(new Request("https://x/"), env)).toEqual({ tier: "enterprise", groups: ["12x"] });
     expect(callerFor(new Request("https://x/", { headers: { "x-digi-tier": "free" } }), env)).toEqual({ tier: "free", groups: [] });
     expect(callerFor(new Request("https://x/"), {})).toEqual({ tier: "free", groups: [] });
   });
