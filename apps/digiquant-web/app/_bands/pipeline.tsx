@@ -3,7 +3,6 @@ import { ExecutionCard, StageCard } from "@/components/pipeline/StageCard";
 import { StageRunway } from "@/components/pipeline/StageRunway";
 import { getLatestRun } from "@/lib/run-snapshot";
 import { Band } from "../_chrome/Band";
-import { ResearchRunsPlaceholder } from "../_placeholders";
 import { EXECUTION_STAGE, PIPELINE_STAGES } from "../_stages";
 
 /** The pipeline band, straight after the dashboard. Stages sit side by side on desktop (a snap row
@@ -35,7 +34,13 @@ export function PipelineBand() {
             <span className="ms-auto hidden sm:inline">metadata only · captured {latest.capturedAt.slice(0, 10)}</span>
           </div>
         }
-        outro={<ResearchRunsPlaceholder />}
+        outro={
+          <p className="m-0 border border-hair px-3 py-2 font-mono text-[0.72rem] leading-[1.55] text-ink-soft">
+            {snap
+              ? `Recorded run ${snap.runDate}. The cards above are that capture.`
+              : `${latest.reason ?? "No run was captured for this build."} Source: ${latest.source}.`}
+          </p>
+        }
       >
         {PIPELINE_STAGES.map((name, i) => (
           <li key={name} className="flex min-w-0 snap-start">
