@@ -12,6 +12,19 @@
 | `config/litellm.cheaperinference.yaml` | Hosted Cheaper Inference overlay — merged over `litellm.yaml` when `CHEAPERINFERENCE_API_KEY` is set (merge via `scripts/merge_litellm_cheaperinference.py` / stack boot), otherwise not loaded. |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
 
+Per-model metadata (price, context window, modalities, tool-call / structured-output
+/ reasoning / vision capability) is **not** hand-listed anywhere — it comes from
+[`docs/MODEL_CATALOG.md`](../docs/MODEL_CATALOG.md), a vendored models.dev snapshot
+(`config/model-catalog.json`, plus a generated TypeScript module for digichat).
+Refresh it with `make model-catalog`; CI runs `make model-catalog-check` as a
+drift guard. `tests/config/test_model_catalog.py` validates the ids pinned here
+against it — **strictly** for `config/byok-providers.json` `fallbackModels` (they
+are user-visible digichat options) and **advisorily** for the `litellm*.yaml`
+routes, because models.dev is a curated database rather than a live route
+registry and does not carry our `:free` / `:cloud` route spellings. Read the
+"what this is **not** authoritative for" section before treating a miss as a bug
+or a hit as proof a route exists.
+
 ## Caching (two layers)
 
 1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage. **BYOK requests must not share this cache:** digillm sends `extra_body.cache = {no-cache: true, no-store: true}` on the proxy path (#3605).
