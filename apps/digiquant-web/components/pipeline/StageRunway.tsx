@@ -78,16 +78,16 @@ export function StageRunway({
   }, []);
 
   return (
-    <div ref={runway} className="lg:h-[calc(100svh+130svh)] lg:overflow-x-clip">
+    <div ref={runway} className="min-w-0 lg:h-[calc(100svh+130svh)] lg:overflow-x-clip">
       <div
         ref={stage}
-        className="flex flex-col gap-3 lg:sticky lg:top-[var(--nav-shell-h,62px)] lg:min-h-[calc(100svh-var(--nav-shell-h,62px))] lg:justify-center"
+        className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-[var(--nav-shell-h,62px)] lg:min-h-[calc(100svh-var(--nav-shell-h,62px))] lg:justify-center"
       >
         {intro}
         <ol
           ref={list}
           aria-label={label}
-          className="m-0 grid list-none auto-cols-[min(70vw,15rem)] grid-flow-col gap-2 overflow-x-auto p-0 snap-x lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-[repeat(6,minmax(0,1fr))_minmax(0,0.6fr)] lg:overflow-visible"
+          className="m-0 grid min-w-0 list-none auto-cols-[min(70vw,15rem)] grid-flow-col gap-2 overflow-x-auto p-0 snap-x lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-[repeat(6,minmax(0,1fr))_minmax(0,0.6fr)] lg:overflow-visible"
         >
           {children}
         </ol>

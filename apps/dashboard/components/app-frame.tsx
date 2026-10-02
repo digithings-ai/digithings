@@ -8,6 +8,7 @@ import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
 import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
 import DbUnavailable from '@/components/db-unavailable';
+import { deskShellEnabled } from '@/components/desk/panes/brief';
 import { useDashboard } from '@/lib/dashboard-context';
 import { isDbExempt } from '@/lib/nav';
 
@@ -27,7 +28,11 @@ export default function AppFrame({ children }: { children: ReactNode }) {
   // not allowlisted, swap the page for the standardized card. The shell itself
   // (Sidebar, MobileAppBar, CommandPalette) stays mounted in every case, so the
   // app still opens and the owner can navigate to System/Settings.
-  const gated = dbStatus !== 'ok' && !isDbExempt(pathname);
+  // The brief desk paints each pane's own empty or error state. A down API
+  // must not replace that grid with the full-page card.
+  const deskHome =
+    deskShellEnabled() && ((pathname ?? '').replace(/\/+$/, '') || '/') === '/';
+  const gated = dbStatus !== 'ok' && !isDbExempt(pathname) && !deskHome;
 
   return (
     <div className="flex min-h-screen">
