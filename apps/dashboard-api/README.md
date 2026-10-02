@@ -57,6 +57,27 @@ is served only if the caller's manifest grants it (403 `forbidden`, MCP
 MCP-only client sees the same desks and tiers as the app. `get_access_manifest`
 is the discovery tool.
 
+Tiers, lowest to highest: `free | brief | desk | studio | enterprise`.
+`12x` is the app-facing group name; the edge maps the product grant `fx_hub`
+to it. Local dev: `DASHBOARD_DEV_CALLER=enterprise+12x`.
+
+MCP tools are generated from the catalog: one per GET route (the original
+eight names kept, plus `get_access_manifest`); `{param}` routes take the
+param as a tool argument.
+
+### Route modules and writes
+
+Domains register routes in `src/routes/` (`Registry`; `{param}` templates;
+exact beats template); `index.ts` consults it for paths the legacy table does
+not serve. PUT/POST/DELETE exist only for registered routes and need
+`x-digi-user` (401 `unauthorized` otherwise) plus a catalog route the caller's
+manifest grants (403). No auth/session logic in the worker.
+
+`src/table-read.ts`: `tableRead()` / `twelvexRead()` return the standard
+envelope over PostgREST and fail closed (`upstream_empty`) on missing env,
+upstream errors or empty rows. twelve-x uses optional `TWELVEX_SUPABASE_URL` /
+`TWELVEX_SUPABASE_SERVICE_KEY` secrets.
+
 Canonical serving path is the `/dashboard-api/*` mount on the digithings-stack
 worker (#4687) — the standalone deploy below stays until cutover.
 Deploy is via [`.github/workflows/deploy-dashboard-api.yml`](../../.github/workflows/deploy-dashboard-api.yml)

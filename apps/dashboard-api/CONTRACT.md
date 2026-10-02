@@ -388,7 +388,7 @@ Which desks, pages, blocks and data routes the caller may see. The single
 source of entitlements: the dashboard builds its sidebar, page guards and
 locked-block states from this response only.
 
-Caller identity comes from edge-injected `x-digi-tier` (`free|pro|max`) and
+Caller identity comes from edge-injected `x-digi-tier` (`free|brief|desk|studio|enterprise`, rank order) and
 `x-digi-groups` (comma-separated). Absent/unknown → `free`, no groups (fail
 closed). The worker does not authenticate; only expose behind the edge.
 
@@ -397,12 +397,14 @@ closed). The worker does not authenticate; only expose behind the edge.
 - `Page`: `{ path, label, status?, access, reason?, blocks: Block[] }`
 - `Block`: `{ id, route, access, reason? }`
 - `access` is `granted` or `locked`. Locked nodes are shown with `reason`
-  (e.g. `Requires pro`, `Requires the 12x group`); a lock on a desk or page
+  (e.g. `Requires brief`, `Requires the 12x group`); a lock on a desk or page
   cascades to everything beneath it. Nodes gated `hidden` are omitted.
 - `routes`: de-duplicated data routes of every granted block (no query strings).
 
-Policy lives in `src/access.ts` (`DESKS`); `baseline` is open with pro/max
-parts, `fx` requires the `12x` group.
+Policy lives in `src/access.ts` (`DESKS`); `baseline` is open with brief/desk
+parts, `fx` requires the `12x` group. `12x` is the app-facing group name; the edge maps the
+product grant `fx_hub` (client_product_grants.product_key) to group `12x` when it injects
+`x-digi-groups`. The worker never sees product keys.
 
 ## 7. Generic table reads
 
