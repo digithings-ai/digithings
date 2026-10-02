@@ -17,12 +17,20 @@ const names = async (h: Record<string, string>) => {
   return j.result.tools.map((t) => t.name);
 };
 
+const FREE = { "x-digi-tier": "free" };
+
 describe("HTTP gate", () => {
   it("free caller: open routes serve, brief routes are 403 forbidden", async () => {
-    expect((await get("/brief")).status).toBe(200);
-    const res = await get("/performance");
+    expect((await get("/brief", FREE)).status).toBe(200);
+    const res = await get("/performance", FREE);
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+  });
+  it("secretless anonymous caller gets the stub lane, not a free-tier 403", async () => {
+    expect((await get("/performance")).status).toBe(200);
+    const tables = await get("/v1/tables/positions?select=*");
+    expect(tables.status).toBe(502);
+    expect(((await tables.json()) as { error: { code: string } }).error.code).toBe("upstream_empty");
   });
   it("brief caller reaches brief routes", async () => {
     expect((await get("/performance", { "x-digi-tier": "brief" })).status).toBe(200);
@@ -35,14 +43,25 @@ describe("HTTP gate", () => {
 
 describe("MCP gate", () => {
   it("free caller sees only granted tools; brief sees more", async () => {
-    const free = await names({});
+    const free = await names(FREE);
     expect(free).toContain("get_brief");
     expect(free).toContain("get_access_manifest");
     expect(free).not.toContain("get_performance");
+    const stub = await names({});
+    expect(stub).toEqual([
+      "get_portfolio",
+      "get_allocations",
+      "get_nav_series",
+      "get_brief",
+      "get_performance",
+      "get_kpis_live",
+      "get_benchmarks",
+      "get_ledger",
+    ]);
     expect(await names({ "x-digi-tier": "brief" })).toContain("get_performance");
   });
   it("calling a withheld tool is refused, not served", async () => {
-    const res = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_performance", arguments: {} } });
+    const res = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_performance", arguments: {} } }, FREE);
     const j = (await res.json()) as { error?: { code: number; message: string } };
     expect(j.error?.code).toBe(-32003);
   });
@@ -65,7 +84,7 @@ describe("edge identity key", () => {
 
 describe("raw tables are brief+", () => {
   it("free caller is 403", async () => {
-    expect((await get("/v1/tables/positions?select=*")).status).toBe(403);
+    expect((await get("/v1/tables/positions?select=*", FREE)).status).toBe(403);
   });
 });
 

@@ -15,12 +15,13 @@
  * `wrangler dev` only. No Python/FastMCP; this is a TS worker.
  */
 
-import { buildManifest, callerFor, governedRoutes, routeVerdict, type Manifest } from './access';
+import { anonymousCaller, buildManifest, callerFor, governedRoutes, routeVerdict, type Manifest } from './access';
+import { hasSupabaseEnv, type SupabaseEnv } from './supabase';
 
 export const MCP_PATH = '/mcp';
 export const MCP_KEY_HEADER = 'x-digi-mcp-key';
 
-export interface McpEnv {
+export interface McpEnv extends SupabaseEnv {
   MCP_EDGE_KEY?: string;
   DASHBOARD_DEV_CALLER?: string;
 }
@@ -157,6 +158,24 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
   ...generatedTools(new Set(CURATED_TOOLS.map((t) => t.path))),
 ];
 
+/**
+ * The original eight dashboard tools. The folded stack worker exposes this
+ * list — not `MCP_TOOLS`, and not the digiquant server manifest.
+ */
+export const STANDALONE_MCP_TOOLS: readonly McpToolDef[] = CURATED_TOOLS.filter(
+  (t) => t.path !== '/access/manifest',
+);
+
+export const STANDALONE_PATHS: ReadonlySet<string> = new Set(STANDALONE_MCP_TOOLS.map((t) => t.path));
+
+/**
+ * No Supabase and no caller identity. Contracted routes keep their stub
+ * envelopes; an identified caller (including explicit `free`) stays gated.
+ */
+export function secretlessStubLane(request: Request, env: McpEnv): boolean {
+  return anonymousCaller(request, env) && !hasSupabaseEnv(env);
+}
+
 /** Concrete route path for a call, or an error message when a path argument is missing. */
 function resolvePath(tool: McpToolDef, args: Record<string, unknown>): { path: string } | { error: string } {
   let missing: string | null = null;
@@ -211,6 +230,7 @@ async function handleOne(
   dispatch: (req: Request) => Promise<Response>,
   m: Manifest,
   identity: Record<string, string>,
+  stub: boolean,
 ): Promise<Record<string, unknown>> {
   const req = (raw ?? {}) as JsonRpcRequest;
   const id: JsonRpcId = req.id ?? null;
@@ -222,7 +242,7 @@ async function handleOne(
       jsonrpc: '2.0',
       id,
       result: {
-        tools: MCP_TOOLS.filter((t) => toolAllowed(t, m)).map((t) => ({
+        tools: (stub ? STANDALONE_MCP_TOOLS : MCP_TOOLS.filter((t) => toolAllowed(t, m))).map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
@@ -243,7 +263,8 @@ async function handleOne(
     if (typeof args !== 'object' || Array.isArray(args)) {
       return { jsonrpc: '2.0', id, error: { code: -32602, message: 'arguments must be an object' } };
     }
-    if (!toolAllowed(tool, m)) {
+    const standalone = STANDALONE_MCP_TOOLS.some((t) => t.name === tool.name);
+    if (!(stub && standalone) && !toolAllowed(tool, m)) {
       return { jsonrpc: '2.0', id, error: { code: -32003, message: `forbidden: ${tool.name} is not available to this caller (tier ${m.caller.tier})` } };
     }
     // Shared service layer: run the worker's own route handler (identity forwarded, so the HTTP gate agrees).
@@ -281,6 +302,7 @@ export async function handleMcp(
     return new Response('dashboard-api: unauthorized', { status: 401 });
   }
   const m = buildManifest(callerFor(request, env));
+  const stub = secretlessStubLane(request, env);
   const identity: Record<string, string> = {};
   for (const h of ['x-digi-tier', 'x-digi-groups']) {
     const v = request.headers.get(h);
@@ -295,8 +317,8 @@ export async function handleMcp(
   if (Array.isArray(body)) {
     if (body.length === 0) return rpcError(null, -32600, 'invalid request');
     const out = [];
-    for (const item of body) out.push(await handleOne(item, dispatch, m, identity));
+    for (const item of body) out.push(await handleOne(item, dispatch, m, identity, stub));
     return Response.json(out);
   }
-  return Response.json(await handleOne(body, dispatch, m, identity));
+  return Response.json(await handleOne(body, dispatch, m, identity, stub));
 }

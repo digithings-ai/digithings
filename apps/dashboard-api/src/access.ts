@@ -156,6 +156,16 @@ export function callerFor(request: Request, env: { DASHBOARD_DEV_CALLER?: string
   return parseCaller(h);
 }
 
+/**
+ * Secretless stub lane: no edge identity and no dev impersonation.
+ * An explicit `x-digi-tier` (including `free`) is a real caller and stays gated.
+ */
+export function anonymousCaller(request: Request, env: { DASHBOARD_DEV_CALLER?: string }): boolean {
+  if (devCaller(env.DASHBOARD_DEV_CALLER)) return false;
+  const h = request.headers;
+  return h.get("x-digi-tier") === null && h.get("x-digi-groups") === null;
+}
+
 export const tierAtLeast = (c: Caller, t: Tier): boolean => TIER_RANK[c.tier] >= TIER_RANK[t];
 
 /** Fail closed: unknown/absent tier → free, no groups. */
