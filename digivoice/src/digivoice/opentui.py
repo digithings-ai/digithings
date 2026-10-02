@@ -30,6 +30,9 @@ def _tui_runtime(env: Mapping[str, str]) -> str:
     home_bun = Path.home() / ".bun" / "bin" / "bun"
     if home_bun.is_file():
         return str(home_bun)
+    local_bun = Path.home() / ".local" / "bin" / "bun"
+    if local_bun.is_file():
+        return str(local_bun)
     return shutil.which("node") or "node"
 
 

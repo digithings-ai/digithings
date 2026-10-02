@@ -35,6 +35,25 @@ class CliResult(BaseModel):
     stderr: str
 
 
+InstallStatus = Literal["present", "installed", "failed"]
+
+
+class InstallStep(BaseModel):
+    """One piece of a local digivoice install. Never a cloud STT or TTS host."""
+
+    id: str
+    status: InstallStatus
+    detail: str
+
+
+class InstallReport(BaseModel):
+    steps: list[InstallStep] = Field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return all(step.status != "failed" for step in self.steps)
+
+
 class HistoryEntry(BaseModel):
     """One JSONL line. `ts` is ISO-8601 UTC; `wav` is null when there is no file."""
 

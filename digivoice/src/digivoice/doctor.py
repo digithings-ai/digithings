@@ -11,6 +11,7 @@ from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
     DEFAULT_MODEL,
     linux_data_dir,
+    local_bin,
     mac_data_dir,
     piper_fallback,
     resolve_paths,
@@ -176,6 +177,16 @@ def _rewrite_check(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
     return DoctorCheck(id="rewrite", status=status, detail=detail)
 
 
+def _whisper_binary(home: Path, probe: CommandProbe) -> str | None:
+    found = probe.lookup("whisper-cli")
+    if found:
+        return found
+    fallback = str(local_bin(home) / "whisper-cli")
+    if probe.executable(fallback):
+        return fallback
+    return None
+
+
 def doctor_checks(
     platform: str,
     home: Path,
@@ -192,7 +203,7 @@ def doctor_checks(
     return [
         _tool(
             "whisper-cli",
-            probe.lookup("whisper-cli"),
+            _whisper_binary(home, probe),
             "not on PATH (whisper.cpp binary name is whisper-cli)",
         ),
         _tool("piper", piper, f"not on PATH and not executable at {piper_home}"),
