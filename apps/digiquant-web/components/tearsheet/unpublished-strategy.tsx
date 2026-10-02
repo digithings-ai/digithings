@@ -1,4 +1,5 @@
 import { CtaLink } from "@digithings/ui";
+import { AssetLogoFor } from "./asset-logo";
 import { ALLOCATED_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, VS_LUMP_KPI_LABEL } from "./dca";
 import { strategyDisplayName } from "./strategy-names";
 
@@ -13,19 +14,22 @@ export function UnpublishedStrategyCard({ id, label, symbol }: { id: string; lab
     <CtaLink
       href={`/strategies/${id}/`}
       variant="ghost"
-      className="flex h-auto min-h-full w-full min-w-0 flex-col items-stretch gap-3 overflow-hidden border border-hair bg-surface p-4 text-start whitespace-normal no-underline hover:bg-surface-2"
+      className="flex h-full w-full min-w-0 flex-col items-stretch justify-start gap-0 overflow-hidden bg-surface p-0 text-start font-normal whitespace-normal no-underline hover:bg-surface-2"
     >
-      <span className="font-display text-[1.05rem] font-medium leading-tight text-ink">
-        {strategyDisplayName(id, label)}
+      <span className="flex items-center gap-2 px-3 py-2">
+        <AssetLogoFor strategy={id} symbol={symbol} size={24} />
+        <span className="min-w-0">
+          <span className="block font-mono text-[0.95rem] font-medium leading-tight tracking-[-0.01em] text-ink">
+            {strategyDisplayName(id, label)}
+          </span>
+          <span className="block font-mono text-[0.68rem] text-ink-mute">{symbol} · unpublished</span>
+        </span>
       </span>
-      <span className="font-mono text-[0.66rem] text-ink-mute">
-        {symbol} · unpublished
-      </span>
-      <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-2">
+      <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-hair px-3 py-2">
         {labels.map((name) => (
           <div key={name}>
-            <dt className="font-mono text-[0.6rem] uppercase tracking-wide text-ink-mute">{name}</dt>
-            <dd className="m-0 font-mono text-[0.85rem] text-ink-soft">—</dd>
+            <dt className="font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">{name}</dt>
+            <dd className="m-0 font-mono text-[0.9rem] leading-none text-ink">—</dd>
           </div>
         ))}
       </dl>

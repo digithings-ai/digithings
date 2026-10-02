@@ -6,14 +6,17 @@ import { MCP_COMMAND, MCP_INSTALL_COMMAND } from "../_mcp";
 
 function Step({ n, label, children }: { n: string; label: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-[0.7rem] border-b border-hair p-[1.3rem] text-left last:border-b-0 lg:border-b-0 lg:border-e lg:last:border-e-0">
-      <p className="m-0 font-mono text-[0.68rem] leading-[1.5] text-ink-mute">
+    <div className="flex min-w-0 flex-col border-b border-hair text-left last:border-b-0 lg:border-b-0 lg:border-e lg:last:border-e-0">
+      <p className="m-0 border-b border-hair px-3 py-1.5 font-mono text-[0.64rem] leading-none tracking-[0.04em] text-ink-mute">
         [ {n} ] {label}
       </p>
-      {children}
+      <div className="p-2">{children}</div>
     </div>
   );
 }
+
+const COMMAND =
+  "max-w-none [&_[role=tab]]:pb-1 [&_[role=tab]]:text-[0.68rem] [&_[role=tablist]]:gap-x-4 [&_.copy-cmd]:gap-3 [&_.copy-cmd]:px-3 [&_.copy-cmd]:py-2 [&_.copy-cmd]:text-[0.72rem]";
 
 export function StartBand() {
   return (
@@ -24,18 +27,18 @@ export function StartBand() {
             <CopyCommand
               samples={[{ label: "install", protocol: "pip", code: MCP_INSTALL_COMMAND }]}
               ariaLabel="Install command"
-              className="max-w-none"
+              className={COMMAND}
             />
           </Step>
           <Step n="02" label="then run the local MCP server">
             <CopyCommand
               samples={[{ label: "stdio", protocol: "python -m", code: MCP_COMMAND }]}
               ariaLabel="Local MCP run command"
-              className="max-w-none"
+              className={COMMAND}
             />
           </Step>
         </div>
-        <div className="mt-4">
+        <div className="mt-2">
           <PricingStrip />
         </div>
       </>
