@@ -4,9 +4,9 @@ settings validity, hotkey docs, and the Hammerspoon adapter."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
-from digivoice.catalog import stt_model_path
 from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
     DEFAULT_MODEL,
@@ -20,6 +20,7 @@ from digivoice.probe import CommandProbe
 from digivoice.rewrite import rewrite_doctor_detail
 from digivoice.runner import run_command
 from digivoice.settings import HOTKEYS_DOCS, VoiceSettings, load_settings, settings_path
+from digivoice.transcribe import model_file
 
 _REQUIRED = frozenset({"whisper-cli", "piper", "capture", "models"})
 
@@ -30,30 +31,37 @@ def _tool(check_id: str, found: str | None, missing: str) -> DoctorCheck:
     return DoctorCheck(id=check_id, status="missing", detail=missing)
 
 
-def _models(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
+def _models(
+    paths: VoicePaths,
+    probe: CommandProbe,
+    *,
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> DoctorCheck:
     models_dir = paths.models_dir
     try:
         settings = load_settings(paths)
         model_id = settings.stt_model
     except Exception:
         model_id = DEFAULT_MODEL
-    model_path = str(stt_model_path(models_dir, model_id))
-    if not probe.is_dir(models_dir):
+    resolved = model_file(paths, model_id, home=home, env=env)
+    model_path = str(resolved)
+    if probe.is_file(model_path) or resolved.is_file():
+        return DoctorCheck(
+            id="models",
+            status="ok",
+            detail=f"{model_id} at {model_path}",
+        )
+    if not probe.is_dir(models_dir) and not Path(models_dir).is_dir():
         return DoctorCheck(
             id="models",
             status="missing",
             detail=f"model {model_id}: directory missing: {models_dir}",
         )
-    if not probe.is_file(model_path):
-        return DoctorCheck(
-            id="models",
-            status="missing",
-            detail=f"model {model_id} missing: {model_path}",
-        )
     return DoctorCheck(
         id="models",
-        status="ok",
-        detail=f"{model_id} at {model_path}",
+        status="missing",
+        detail=f"model {model_id} is not installed locally: {model_path}",
     )
 
 
@@ -210,7 +218,7 @@ def doctor_checks(
         _tool("sox", sox, "not on PATH"),
         _tool("ffmpeg", ffmpeg, "not on PATH"),
         _tool("capture", sox or ffmpeg, "need sox or ffmpeg for microphone capture"),
-        _models(paths, probe),
+        _models(paths, probe, home=home, env=env),
         _settings_check(paths),
         _hotkeys_check(),
         _hammerspoon_check(home, paths, probe),

@@ -23,6 +23,21 @@ PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
 PLAY_TIMEOUT = 300.0
 COPY_SELECTION_SCRIPT = 'tell application "System Events" to keystroke "c" using command down'
+# Same argv rule as paste: bundle id and name follow `-e`, with no leading dash.
+ACTIVATE_AND_COPY_SCRIPT = """on run argv
+  set targetId to item 1 of argv
+  set targetName to item 2 of argv
+  tell application "System Events"
+    if targetId is not "" then
+      set proc to first process whose bundle identifier is targetId
+    else
+      set proc to first process whose name is targetName
+    end if
+    set frontmost of proc to true
+  end tell
+  delay 0.2
+  tell application "System Events" to keystroke "c" using command down
+end run"""
 READ_SOURCE_TIMEOUT = 5.0
 # Accessibility query for the focused element's selected text. Static script, no
 # user text interpolated: every external binary goes through CommandRunner argv.
@@ -106,21 +121,25 @@ def _settings_voice(paths: VoicePaths) -> Path | None:
     return Path(paths.models_dir) / name
 
 
+def _voice_present(probe: CommandProbe, voice: Path) -> bool:
+    return probe.is_file(str(voice)) or voice.is_file()
+
+
 def resolve_voice(paths: VoicePaths, env: Mapping[str, str], probe: CommandProbe) -> Path:
-    """Prefer DIGIVOICE_PIPER_VOICE, then the saved voice, else the first *.onnx."""
+    """Saved voice on disk, then DIGIVOICE_PIPER_VOICE when that file exists, else first *.onnx.
+
+    A stale env path must not fail the take while another installed voice is on disk.
+    """
+    saved = _settings_voice(paths)
+    if saved is not None and _voice_present(probe, saved):
+        return saved
     override = (env.get(PIPER_VOICE_ENV) or "").strip()
     if override:
         voice = Path(override).expanduser()
-        if not probe.is_file(str(voice)):
-            raise SpeakError(
-                f"Piper voice missing: {voice} (set {PIPER_VOICE_ENV} to a .onnx path)"
-            )
-        return voice
-    saved = _settings_voice(paths)
-    if saved is not None and probe.is_file(str(saved)):
-        return saved
+        if _voice_present(probe, voice):
+            return voice
     models = Path(paths.models_dir)
-    if probe.is_dir(str(models)):
+    if probe.is_dir(str(models)) or models.is_dir():
         onnx_files = sorted(p for p in models.glob("*.onnx") if p.is_file())
         if onnx_files:
             return onnx_files[0]
@@ -254,7 +273,8 @@ def read_selection(
     2. Ghostty's selection pasteboard, when Ghostty is frontmost (Ghostty's
        copy-on-select writes the highlight there instead of the general clipboard);
     3. Cmd+C via osascript, which only counts as a selection when the clipboard
-       *changes*.
+       *changes*. When a focus target was captured, that keystroke is sent to
+       that app (activate, then Command-C), not to whoever is frontmost now.
 
     An unchanged clipboard (including leftover dictation paste) is treated as
     empty selection — never as coding-reply readout.
@@ -283,7 +303,12 @@ def read_selection(
             before: str | None = read_clipboard(platform, probe, runner)
         except SpeakError:
             before = None
-        typed = runner([osascript, "-e", COPY_SELECTION_SCRIPT], timeout=READ_SOURCE_TIMEOUT)
+        copy_argv = (
+            [osascript, "-e", ACTIVATE_AND_COPY_SCRIPT, focus.bundle_id, focus.name]
+            if known and focus is not None
+            else [osascript, "-e", COPY_SELECTION_SCRIPT]
+        )
+        typed = runner(copy_argv, timeout=READ_SOURCE_TIMEOUT)
         if typed.code != 0:
             reason = error_tail(typed.stderr) or f"exit {typed.code}"
             raise SpeakError(f"could not copy selection ({reason})")

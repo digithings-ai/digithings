@@ -9,10 +9,12 @@ multilingual catalog models use `-l auto`.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from digivoice.catalog import stt_language, stt_model_path
 from digivoice.errors import EmptyTranscriptError, TranscribeError
+from digivoice.installed_models import find_local_weight
 from digivoice.models import Transcript
 from digivoice.paths import DEFAULT_MODEL, VoicePaths, local_bin
 from digivoice.probe import CommandProbe
@@ -66,8 +68,22 @@ def clean_transcript(raw: str) -> str:
     return " ".join(without_markers.split())
 
 
-def model_file(paths: VoicePaths, model_id: str | None = None) -> Path:
-    return stt_model_path(paths.models_dir, model_id)
+def model_file(
+    paths: VoicePaths,
+    model_id: str | None = None,
+    *,
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """Weights for this model. models_dir first, then a copy already installed locally."""
+    chosen = stt_model_path(paths.models_dir, model_id)
+    if chosen.is_file() or home is None:
+        return chosen
+    raw = (model_id or "").strip()
+    if raw and Path(raw).expanduser().is_absolute():
+        return chosen
+    found = find_local_weight(home, env, chosen.name)
+    return found if found is not None else chosen
 
 
 def transcribe(
@@ -77,6 +93,7 @@ def transcribe(
     wav_path: str,
     model_id: str | None = None,
     home: Path | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> Transcript:
     """Run whisper-cli over `wav_path` and return the transcript text."""
     binary = select_whisper(probe, home)
@@ -86,9 +103,9 @@ def transcribe(
             "whisper-cpp also accepted)"
         )
     chosen = model_id or DEFAULT_MODEL
-    model = model_file(paths, chosen)
+    model = model_file(paths, chosen, home=home, env=env)
     if not model.is_file():
-        raise TranscribeError(f"model {chosen} missing: {model}")
+        raise TranscribeError(f"model {chosen} is not installed locally: {model}")
     argv = whisper_argv(binary, model, Path(wav_path), language=stt_language(chosen))
     result = runner(argv, timeout=TRANSCRIBE_TIMEOUT)
     if result.code != 0:

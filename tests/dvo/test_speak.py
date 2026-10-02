@@ -137,6 +137,30 @@ def test_resolve_voice_uses_env_then_models_dir(tmp_path: Path) -> None:
     assert resolve_voice(paths, {"DIGIVOICE_PIPER_VOICE": str(other)}, probe2) == other
 
 
+def test_resolve_voice_saved_file_beats_a_missing_env_override(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    amy = models / "en_US-amy-medium.onnx"
+    amy.write_bytes(b"a")
+    save_settings(paths, VoiceSettings(tts_voice="en_US-amy-medium.onnx"))
+    missing = tmp_path / "missing-lessac.onnx"
+    probe = FakeProbe(files={str(amy)}, directories={str(models)})
+    chosen = resolve_voice(paths, {"DIGIVOICE_PIPER_VOICE": str(missing)}, probe)
+    assert chosen == amy
+
+
+def test_resolve_voice_missing_env_falls_through_to_models_dir(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    voice = models / "en_US-amy-medium.onnx"
+    voice.write_bytes(b"a")
+    missing = tmp_path / "missing-lessac.onnx"
+    probe = FakeProbe(directories={str(models)}, files={str(voice)})
+    assert resolve_voice(paths, {"DIGIVOICE_PIPER_VOICE": str(missing)}, probe) == voice
+
+
 def test_resolve_voice_missing_fails(tmp_path: Path) -> None:
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
     with pytest.raises(SpeakError, match="no Piper voice"):
@@ -322,6 +346,29 @@ def _ax_frontmost_dispatch(*, ax_stdout: str = "", ax_code: int = 0, frontmost: 
         return FakeReply()
 
     return _respond
+
+
+def test_read_selection_copy_targets_the_captured_app() -> None:
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    pastes = iter(["leftover dictation", "selected sentence"])
+
+    def pbpaste_reply(_call: object) -> FakeReply:
+        return FakeReply(stdout=next(pastes))
+
+    runner = FakeRunner(
+        {
+            "osascript": FakeReply(stdout="missing value"),
+            "pbpaste": pbpaste_reply,
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner, focus) == "selected sentence"
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    assert typed.argv[3:] == ["com.apple.TextEdit", "TextEdit"]
+    assert "-" not in typed.argv[3:]
+    script = typed.argv[2]
+    assert "set frontmost of proc to true" in script
+    assert 'keystroke "c"' in script
+    assert "frontmost is true" not in script
 
 
 def test_read_selection_uses_the_captured_app() -> None:

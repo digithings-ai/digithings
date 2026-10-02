@@ -230,6 +230,54 @@ def test_dict_without_capture_tools_fails_soft(tmp_path: Path) -> None:
     assert not (tmp_path / "history.jsonl").exists()
 
 
+@pytest.mark.parametrize(
+    ("model_id", "root"),
+    [
+        ("ggml-tiny.en", "models"),
+        ("ggml-small.en", ".lmstudio"),
+        ("ggml-tiny", ".ollama"),
+    ],
+)
+def test_dict_finishes_for_each_installed_local_model(
+    tmp_path: Path, model_id: str, root: str
+) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(stt_model=model_id))
+    if root == "models":
+        weight = Path(paths.models_dir) / f"{model_id}.bin"
+    elif root == ".lmstudio":
+        weight = tmp_path / ".lmstudio" / "models" / "whisper" / f"{model_id}.bin"
+    else:
+        weight = tmp_path / ".ollama" / "models" / f"{model_id}.bin"
+    weight.parent.mkdir(parents=True, exist_ok=True)
+    weight.write_bytes(b"fake weights")
+    runner = FakeRunner({"sox": writes_wav(), "whisper-cli": FakeReply(stdout=TRANSCRIPT)})
+    runtime = _dict_runtime(tmp_path, runner=runner)
+    result = run(["dict", "--hold"], runtime)
+    assert result.code == 0
+    assert result.stdout == f"{TRANSCRIPT}\n"
+    call = next(item for item in runner.calls if item.program == "whisper-cli")
+    assert call.argv[call.argv.index("-m") + 1] == str(weight)
+    lines = (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["text"] == TRANSCRIPT
+
+
+def test_dict_missing_model_logs_the_error(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(stt_model="ggml-small.en"))
+    runtime = _dict_runtime(tmp_path)
+    result = run(["dict", "--hold"], runtime)
+    assert result.code == 1
+    assert "ggml-small.en" in result.stderr
+    assert "not installed locally" in result.stderr
+    log = (tmp_path / "system.log").read_text(encoding="utf-8")
+    assert "error" in log
+    assert "ggml-small.en" in log
+    assert "not installed locally" in log
+    assert not (tmp_path / "history.jsonl").exists()
+
+
 def test_dict_keeps_the_wav_when_whisper_fails(tmp_path: Path) -> None:
     runner = FakeRunner(
         {"sox": writes_wav(), "whisper-cli": FakeReply(code=1, stderr="failed to open wav")}

@@ -215,6 +215,31 @@ def _starts_with_gguf(path: Path) -> bool:
         return False
 
 
+def find_local_weight(
+    home: Path,
+    env: Mapping[str, str] | None,
+    filename: str,
+) -> Path | None:
+    """Return a file with this name under an install root.
+
+    The model list hides catalog filenames so the same weights are not shown
+    twice. A take still has to open that copy when it is the one on disk.
+    """
+    name = Path(filename).name
+    if not name or name in {".", ".."} or name.startswith("."):
+        return None
+    for _source, root in install_roots(home, env):
+        if not root.is_dir():
+            continue
+        try:
+            matches = [path for path in root.rglob(name) if path.is_file() and path.name == name]
+        except OSError:
+            continue
+        if matches:
+            return matches[0]
+    return None
+
+
 def _remember(path: Path, seen: set[str]) -> str | None:
     try:
         resolved = str(path.expanduser().resolve())
@@ -227,6 +252,7 @@ def _remember(path: Path, seen: set[str]) -> str | None:
 
 
 __all__ = [
+    "find_local_weight",
     "InstalledModel",
     "default_finder",
     "discover_installed_models",
