@@ -6,6 +6,8 @@ import logging
 
 import pytest
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
+from digisearch.indexes.backends.backend_errors import SearchBackendError
+from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 pytestmark = pytest.mark.unit
 
@@ -114,7 +116,7 @@ class _EmbeddingModelMismatchError(Exception):
     _BACKEND_ERRORS member -- that is exactly why it used to escape."""
 
 
-def _patch_legs(monkeypatch: pytest.MonkeyPatch, **behaviour: str | Exception) -> None:
+def _patch_legs(monkeypatch: pytest.MonkeyPatch, **behaviour: str | BaseException) -> None:
     """Make `_query_single_index` succeed ('ok') or raise, per index name."""
     from digisearch.search import _stub
 
@@ -216,6 +218,45 @@ def test_one_surviving_leg_keeps_its_results_ordered_by_rrf(
 
     assert sorted(r.chunk.id for r in resp.results) == ["a-1", "c-1"]
     assert [r.rank for r in resp.results] == [1, 2]
+
+
+def test_authoritative_backend_error_still_aborts_the_fanout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M1: isolation must not swallow an authoritative-index failure.
+
+    ``_vectorize_backend`` deliberately keeps ``VectorizeBackendError`` out of
+    ``_BACKEND_ERRORS`` so a configured, failing remote index is never answered
+    from a different corpus with no error surfaced. Degrading such a leg would
+    hand back the *other* index's hits, which is exactly the thing that
+    invariant exists to prevent. Contrast: the same error on a single index
+    raises today, and must keep raising.
+    """
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    _patch_legs(
+        monkeypatch,
+        occ_help="ok",
+        occ_tickets=VectorizeBackendError("remote index is authoritative and down"),
+    )
+    from digisearch.search._stub import query_index
+
+    with pytest.raises(VectorizeBackendError):
+        query_index(Query(text="alpha", top_k=10), index_name="occ_help,occ_tickets")
+
+
+def test_search_backend_error_also_aborts_the_fanout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    _patch_legs(
+        monkeypatch,
+        a="ok",
+        b=SearchBackendError("this corpus is authoritative"),
+    )
+    from digisearch.search._stub import query_index
+
+    with pytest.raises(SearchBackendError):
+        query_index(Query(text="alpha", top_k=10), index_name="a,b")
 
 
 def test_base_exceptions_are_not_swallowed(

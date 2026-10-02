@@ -335,12 +335,21 @@ def _query_fanout_leg(
     under a different embedder than the one now configured) degrades one leg
     instead of aborting the whole query.
 
+    ``SearchBackendError`` / ``VectorizeBackendError`` are the deliberate
+    exception: they assert that *this* index is authoritative and its failure
+    must reach the caller rather than be answered from somewhere else (see
+    ``_vectorize_backend``). Dropping such a leg would quietly return the other
+    index's hits, so they propagate and abort the fan-out as before.
+
     The error is logged with the index name and returned rather than raised, so
     a dropped leg is visible in the service log instead of surfacing only as an
     opaque tool failure at the caller.
     """
     try:
         return _query_single_index(query, name), None
+    except (SearchBackendError, VectorizeBackendError):
+        # Authoritative-index failure: never silently answered from another leg.
+        raise
     except Exception as exc:
         logger.exception(
             "fan-out leg failed; index dropped from this query",
@@ -366,6 +375,10 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     leg fails the first exception is re-raised, because an empty response from
     a fan-out would otherwise read downstream as "this index has no matching
     rows" — a confident wrong answer rather than a visible failure.
+
+    ``SearchBackendError`` / ``VectorizeBackendError`` are exempt: they mark an
+    authoritative index whose failure must reach the caller, so they abort the
+    fan-out instead of degrading to the surviving legs.
 
     Every index on a fan-out should still share one ``DIGISEARCH_EMBEDDING_PROVIDER``;
     isolation contains the damage of a mismatch, it does not make the mismatched
