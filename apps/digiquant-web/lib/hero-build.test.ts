@@ -4,8 +4,11 @@ import {
   BUILD_DONE_MS,
   BUILD_RISE_MS,
   BUILD_START_MS,
-  COPY_DONE_MS,
+  BARS_START_MS,
+  BARS_SWEEP_MS,
+  CHART_BUILD_TARGET_MS,
   CHART_INTRO_MS,
+  COPY_DONE_MS,
   buildProgress,
   columnDelayMs,
   sweepDelayMs,
@@ -37,10 +40,15 @@ describe("hero build clock", () => {
     expect(b).toBeGreaterThanOrEqual(c);
     expect(buildProgress(sweepDelayMs(0.3) + BUILD_RISE_MS / 2, 0.3)).toBeGreaterThan(0.5);
   });
-});
 
-  it("starts the chart phase after the wordmark has finished", () => {
-    expect(COPY_DONE_MS).toBeGreaterThan(BUILD_DONE_MS);
+  it("starts the chart phase soon after chrome, not after the full wordmark", () => {
+    expect(COPY_DONE_MS).toBeLessThan(BUILD_DONE_MS);
+    expect(COPY_DONE_MS).toBeGreaterThan(700);
     expect(CHART_INTRO_MS).toBeGreaterThan(1000);
   });
 
+  it("keeps the chart construct near the 5s target", () => {
+    expect(BARS_START_MS + BARS_SWEEP_MS).toBeLessThanOrEqual(CHART_BUILD_TARGET_MS + 50);
+    expect(BARS_START_MS + BARS_SWEEP_MS).toBeGreaterThanOrEqual(CHART_BUILD_TARGET_MS - 200);
+  });
+});
