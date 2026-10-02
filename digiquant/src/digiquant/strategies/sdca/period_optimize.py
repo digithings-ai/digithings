@@ -826,6 +826,115 @@ class HitTest(BaseModel):
     )
 
 
+class DroppedWindow(BaseModel):
+    """A prominence-ranked long pin the hit test refused, and what it held.
+
+    A pin whose own window caught less than the frozen long bar is not worth
+    trading, so it is skipped before it consumes any day budget — which is what
+    lets the next pin that did catch something take its place. The record keeps
+    the prominence it was ranked by *and* the move it actually contained, so an
+    abandoned window is readable rather than merely absent: a reader can see the
+    ranking that wanted it and the bar it missed.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    pin: date = Field(..., description="Date of the detected pivot the window was centred on")
+    kind: CycleKind = Field(..., description="Peak (sell zone) or trough (buy zone), as detected")
+    prominence_pct: float = Field(
+        ...,
+        ge=0.0,
+        description="Prominence the pin was ranked by, as a percent, before the day budget",
+    )
+    observed_move_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "Largest peak-to-trough move the pin's own window actually contained, as a "
+            "percent — what it had to beat `required_move_pct` and did not"
+        ),
+    )
+    required_move_pct: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "The frozen bar the window was held to (LONG_MIN_MOVE_PCT, 15.0), carried so "
+            "the record is self-describing"
+        ),
+    )
+    bars: int = Field(
+        ...,
+        ge=0,
+        description="In-calendar bars the window covered; a window hanging off the calendar has 0",
+    )
+    reason: str = Field(
+        ...,
+        min_length=1,
+        description="Why the pin was dropped, quoting the move it contained and the bar it needed",
+    )
+
+
+class CoverageSegment(BaseModel):
+    """One calendar segment between consecutive selected trough windows.
+
+    Actions are emitted at window ENTERS, so calendar holding no selected trough
+    window is flat by construction. This is the measurement of that: the two
+    bounding trough pins, the stretch of calendar between the two trough
+    *windows* that neither of them covers, and what (if anything) was done about
+    it. A stretch shorter than one window width cannot have held a whole
+    window-shaped opportunity, so it is reported as covered.
+
+    The repair Ruling 2 asks for is attempted and its verdict carried here —
+    including the verdict that refuses it, because "the day cap is what blocks
+    coverage" is the finding, and a segment that could not be repaired must say
+    so rather than vanish.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    start: date = Field(..., description="The earlier selected trough pin bounding this segment")
+    end: date = Field(..., description="The later selected trough pin bounding this segment")
+    gap_start: date = Field(
+        ...,
+        description="First calendar day no selected trough window covers, inside the segment",
+    )
+    gap_end: date = Field(
+        ...,
+        description="Last calendar day no selected trough window covers, inside the segment",
+    )
+    gap_days: int = Field(
+        ...,
+        ge=0,
+        description="Length of that uncovered stretch in calendar days — the flat run it implies",
+    )
+    covered: bool = Field(
+        ...,
+        description=(
+            "True when the stretch is shorter than one trough window (2 * half_width + 1 days), "
+            "so no whole window-shaped opportunity went by unselected"
+        ),
+    )
+    repaired: bool = Field(
+        ...,
+        description="True when a selected peak was swapped out for a hit trough in this segment",
+    )
+    swapped_out_peak: date | None = Field(
+        ...,
+        description="Pin of the selected peak given up for a trough, if a repair was applied",
+    )
+    swapped_in_trough: date | None = Field(
+        ...,
+        description="Pin of the hit trough brought into this segment, if a repair was applied",
+    )
+    reason: str | None = Field(
+        ...,
+        description=(
+            "Why the segment is not covered (no hit trough available, or the per-kind day cap "
+            "refused to fund one, or no selected peak to give up); None when it is covered"
+        ),
+    )
+
+
 class LongTermSelection(BaseModel):
     """The selected secular window set, or the stated reason there isn't one.
 
@@ -898,6 +1007,31 @@ class LongTermSelection(BaseModel):
         ...,
         description="Prominence of each selected trough, index-aligned with `troughs`",
     )
+    dropped_windows: tuple[DroppedWindow, ...] = Field(
+        ...,
+        description=(
+            "Prominence-ranked long pins the frozen hit test refused, chronological. They were "
+            "skipped BEFORE the day budget, so their budget went to a pin that was hit"
+        ),
+    )
+    peak_hit_tests: tuple[HitTest, ...] = Field(
+        ...,
+        description=(
+            "Hit verdict for each selected peak window, index-aligned with `peaks` — a kept "
+            "window's observed move is on the record, not just its presence"
+        ),
+    )
+    trough_hit_tests: tuple[HitTest, ...] = Field(
+        ...,
+        description="Hit verdict for each selected trough window, index-aligned with `troughs`",
+    )
+    coverage_segments: tuple[CoverageSegment, ...] = Field(
+        ...,
+        description=(
+            "Every calendar segment between consecutive selected trough windows, in order, with "
+            "its uncovered gap and — where a repair was refused — what blocked it"
+        ),
+    )
     peaks: tuple[CycleWindow, ...] = Field(
         ..., description="Selected peak (sell-zone) windows, chronological"
     )
@@ -928,6 +1062,20 @@ class LongTermSelection(BaseModel):
     @property
     def n_troughs(self) -> int:
         return len(self.troughs)
+
+    @property
+    def uncovered_segments(self) -> tuple[CoverageSegment, ...]:
+        """Segments with no selected trough window in them, in order."""
+        return tuple(segment for segment in self.coverage_segments if not segment.covered)
+
+    @property
+    def coverage_complete(self) -> bool:
+        """Did every segment between selected trough windows hold a selected trough?
+
+        True for the refusal shape and for a set with fewer than two troughs: there
+        is nothing between them to be uncovered.
+        """
+        return not self.uncovered_segments
 
 
 def _window_span(dates: Sequence[date], window: CycleWindow) -> tuple[int, int]:
@@ -1459,6 +1607,42 @@ def select_long_term_periods(
     corner) with the earlier date breaking ties, and the walk takes them in that
     order until the day budget is spent.
 
+    **The long side is hit-tested too (Ruling 2).** Every prominence-ranked
+    candidate — peak and trough alike — is measured against the frozen
+    ``LONG_MIN_MOVE_PCT`` BEFORE it is charged any day budget. The hit test
+    belonged to the medium overlay alone, which meant a long window that caught
+    9.25% of move was kept while the owner's "abandon windows that do not get
+    hit" was never applied to the primary regime. Gating first means an unhit pin
+    is skipped rather than spending budget, so the freed days admit the next
+    prominence-ranked pin that *did* catch a move. Each skip is recorded in
+    ``dropped_windows`` with the prominence that wanted it and the move its own
+    window contained, and every kept window's verdict travels in
+    ``peak_hit_tests`` / ``trough_hit_tests``.
+
+    **Coverage is measured, and the repair is attempted.** Actions are emitted at
+    window ENTERS, so calendar holding no selected trough window is flat by
+    construction; on GLD one such stretch ran 3063 days. Every calendar segment
+    between consecutive selected trough windows is therefore measured, and a
+    stretch at least one trough window wide — long enough that a whole
+    window-shaped opportunity went by unselected — is reported as uncovered in
+    ``coverage_segments``. Ruling 2 asks for the worst offending segment to be
+    repaired by swapping its lowest-prominence selected PEAK for the best HIT
+    trough available there, and that repair is attempted with the per-kind day cap
+    and both minima intact.
+
+    **Why the repair is never admissible today.** It is not a tuning accident:
+    ``_truncate_to_day_cap`` keeps every window that fits, so its kept set is
+    addition-maximal. A candidate it skipped had ``covered_then | days`` over
+    budget, and the covered set only grows, so putting that window back breaches
+    the very cap the walk enforced; and the two kinds are capped independently,
+    so giving up a peak frees no trough budget. The attempt is therefore made and
+    its **verdict recorded** — ``day cap``, ``no hit trough``, or ``min_peaks`` —
+    because "the frozen day cap is what blocks coverage" is the finding a reader
+    needs, and a segment that could not be repaired must say so rather than
+    disappear. Widening the trough share of the cap, or funding the repair from a
+    dropped trough instead of a dropped peak, is an owner decision this function
+    does not make for itself.
+
     **The width (Ruling 1).** ``half_width_days`` defaults to the tightest frozen
     long grid member, and the default is *behaviour-preserving*: it is the width
     this function always used. The parameter exists because widening is qualitative
@@ -1503,19 +1687,75 @@ def select_long_term_periods(
     horizon = PeriodHorizon.long()
     half_width = min(horizon.half_widths) if half_width_days is None else half_width_days
     peak_pins, trough_pins = detect_pivots(dates, prices, horizon)
+    offset = timedelta(days=half_width)
+
+    def window_for(pin: date, kind: CycleKind) -> CycleWindow:
+        return CycleWindow(
+            name=f"long_{kind}_{pin:%Y%m%d}_pm{half_width}",
+            kind=kind,
+            start=pin - offset,
+            end=pin + offset,
+        )
+
+    def hit_gate(
+        ranked: Sequence[tuple[date, float]], kind: CycleKind
+    ) -> tuple[list[tuple[date, float, HitTest]], list[tuple[date, float, HitTest]]]:
+        """Split ranked candidates into the ones that were hit and the ones that were not.
+
+        The frozen bar, applied before any day budget is charged: that is what lets
+        an unhit pin's share of the budget go to the next pin that did catch a move.
+        """
+        hit: list[tuple[date, float, HitTest]] = []
+        missed: list[tuple[date, float, HitTest]] = []
+        for pin, prominence in ranked:
+            verdict = window_is_hit(
+                dates, prices, window_for(pin, kind), min_move_pct=LONG_MIN_MOVE_PCT
+            )
+            (hit if verdict.hit else missed).append((pin, prominence, verdict))
+        return hit, missed
 
     budget_days = int(len(dates) * max_peak_days_pct / 100.0)
     ranked_peaks = _ranked_pivots(dates, prices, peak_pins, peak=True)
     ranked_troughs = _ranked_pivots(dates, prices, trough_pins, peak=False)
+    hit_peaks, missed_peaks = hit_gate(ranked_peaks, CycleKind.PEAK)
+    hit_troughs, missed_troughs = hit_gate(ranked_troughs, CycleKind.TROUGH)
+    verdict_of = {
+        pin: verdict for group in (hit_peaks, hit_troughs) for pin, _prominence, verdict in group
+    }
+    dropped_windows = tuple(
+        sorted(
+            (
+                DroppedWindow(
+                    pin=pin,
+                    kind=kind,
+                    prominence_pct=prominence,
+                    observed_move_pct=verdict.max_move_pct,
+                    required_move_pct=LONG_MIN_MOVE_PCT,
+                    bars=verdict.bars,
+                    reason=(
+                        f"unhit: its own window contained {verdict.max_move_pct:.2f}% of move, "
+                        f"under the frozen {LONG_MIN_MOVE_PCT:.1f}% long bar, so it was skipped "
+                        f"before it could spend any of the {max_peak_days_pct:.1f}% day budget"
+                    ),
+                )
+                for kind, group in (
+                    (CycleKind.PEAK, missed_peaks),
+                    (CycleKind.TROUGH, missed_troughs),
+                )
+                for pin, prominence, verdict in group
+            ),
+            key=lambda window: window.pin,
+        )
+    )
     kept_peaks = _truncate_to_day_cap(
-        ranked_peaks,
+        [(pin, prominence) for pin, prominence, _verdict in hit_peaks],
         half_width_days=half_width,
         budget_days=budget_days,
         first_day=dates[0],
         last_day=dates[-1],
     )
     kept_troughs = _truncate_to_day_cap(
-        ranked_troughs,
+        [(pin, prominence) for pin, prominence, _verdict in hit_troughs],
         half_width_days=half_width,
         budget_days=budget_days,
         first_day=dates[0],
@@ -1535,6 +1775,10 @@ def select_long_term_periods(
             trough_pins=trough_pins,
             peak_prominence_pct=(),
             trough_prominence_pct=(),
+            dropped_windows=dropped_windows,
+            peak_hit_tests=(),
+            trough_hit_tests=(),
+            coverage_segments=(),
             peaks=(),
             troughs=(),
             selected=False,
@@ -1544,23 +1788,180 @@ def select_long_term_periods(
                 f"{len(peak_pins)} / {len(trough_pins)} detected long-horizon pivots, "
                 f"below min_peaks={min_peaks} / min_troughs={min_troughs} "
                 f"(minimums are never relaxed)"
+                + (
+                    f"; the frozen hit test had already dropped {len(dropped_windows)} of those "
+                    f"pins for containing less than {LONG_MIN_MOVE_PCT:.1f}% of move"
+                    if dropped_windows
+                    else ""
+                )
             ),
         )
 
     def emit(
         kept: Sequence[tuple[date, float]], kind: CycleKind
     ) -> tuple[tuple[CycleWindow, ...], tuple[float, ...]]:
-        offset = timedelta(days=half_width)
-        windows = tuple(
-            CycleWindow(
-                name=f"long_{kind}_{pin:%Y%m%d}_pm{half_width}",
-                kind=kind,
-                start=pin - offset,
-                end=pin + offset,
-            )
-            for pin, _prominence in kept
-        )
+        windows = tuple(window_for(pin, kind) for pin, _prominence in kept)
         return windows, tuple(prominence for _pin, prominence in kept)
+
+    # ---- coverage: every calendar segment between consecutive selected trough windows.
+    window_days = 2 * half_width + 1
+
+    def spans(trough_pins_kept: Sequence[date]) -> list[tuple[date, date, date, date, int]]:
+        """``(earlier pin, later pin, gap start, gap end, gap days)`` per segment."""
+        out: list[tuple[date, date, date, date, int]] = []
+        for earlier, later in zip(trough_pins_kept, trough_pins_kept[1:], strict=False):
+            gap_start = max(window_for(earlier, CycleKind.TROUGH).end, dates[0]) + timedelta(days=1)
+            gap_end = min(window_for(later, CycleKind.TROUGH).start, dates[-1]) - timedelta(days=1)
+            gap_days = 0 if gap_end < gap_start else (gap_end - gap_start).days + 1
+            out.append((earlier, later, gap_start, gap_end, gap_days))
+        return out
+
+    kept_peak_pins = [pin for pin, _prominence in kept_peaks]
+    kept_trough_pins = [pin for pin, _prominence in kept_troughs]
+    verdicts: dict[tuple[date, date], CoverageSegment] = {}
+    origins: dict[tuple[date, date], tuple[date, date]] = {}
+    blocked: set[tuple[date, date]] = set()
+
+    def record(
+        span: tuple[date, date],
+        gap_start: date,
+        gap_end: date,
+        gap_days: int,
+        *,
+        covered: bool,
+        reason: str | None,
+    ) -> None:
+        origin = origins.get(span)
+        verdicts[span] = CoverageSegment(
+            start=span[0],
+            end=span[1],
+            gap_start=gap_start,
+            gap_end=gap_end,
+            gap_days=gap_days,
+            covered=covered,
+            repaired=origin is not None,
+            swapped_out_peak=origin[1] if origin is not None else None,
+            swapped_in_trough=origin[0] if origin is not None else None,
+            reason=reason,
+        )
+
+    # Each pass either gives up a selected peak or records a segment as blocked, so
+    # the loop runs out of both: no repair can repeat on a peak that is already gone,
+    # and a blocked segment is never retried.
+    while True:
+        outstanding = [
+            span
+            for span in spans(kept_trough_pins)
+            if span[4] >= window_days and (span[0], span[1]) not in blocked
+        ]
+        if not outstanding:
+            break
+        # Worst-offending segment first: the longest flat run, earliest on a tie.
+        earlier, later, gap_start, gap_end, gap_days = max(
+            outstanding, key=lambda span: (span[4], -span[0].toordinal())
+        )
+        span = (earlier, later)
+        available = [
+            (pin, prominence)
+            for pin, prominence, _verdict in hit_troughs
+            if earlier <= pin <= later and pin not in kept_trough_pins
+        ]
+        give_up = [(pin, prominence) for pin, prominence in kept_peaks if earlier <= pin <= later]
+        if not available:
+            record(
+                span,
+                gap_start,
+                gap_end,
+                gap_days,
+                covered=False,
+                reason=(
+                    "uncovered: no hit trough candidate sits in this segment, so there is "
+                    "nothing to swap a peak for and no window may be invented"
+                ),
+            )
+            blocked.add(span)
+            continue
+        if not give_up:
+            record(
+                span,
+                gap_start,
+                gap_end,
+                gap_days,
+                covered=False,
+                reason="uncovered: no selected peak sits in this segment to give up for a trough",
+            )
+            blocked.add(span)
+            continue
+        lowest_peak = min(give_up, key=lambda item: (item[1], item[0]))
+        if len(kept_peak_pins) - 1 < min_peaks:
+            record(
+                span,
+                gap_start,
+                gap_end,
+                gap_days,
+                covered=False,
+                reason=(
+                    f"uncovered: giving up a peak here would leave {len(kept_peak_pins) - 1} "
+                    f"peak windows, under min_peaks={min_peaks}, which is never relaxed"
+                ),
+            )
+            blocked.add(span)
+            continue
+        fitted: tuple[date, float] | None = None
+        would_need = 0
+        for pin, prominence in available:  # prominence desc, so the best candidate first
+            trough_days = _covered_days(
+                [window_for(kept, CycleKind.TROUGH) for kept in (*kept_trough_pins, pin)],
+                first_day=dates[0],
+                last_day=dates[-1],
+            )
+            if trough_days <= budget_days:
+                fitted = (pin, prominence)
+                break
+            would_need = max(would_need, trough_days)
+        if fitted is None:
+            record(
+                span,
+                gap_start,
+                gap_end,
+                gap_days,
+                covered=False,
+                reason=(
+                    f"uncovered: the {max_peak_days_pct:.1f}% per-kind day cap cannot fund "
+                    f"another trough window here (it would need {would_need} of the "
+                    f"{budget_days} trough days the cap allows), and the two kinds are capped "
+                    f"independently, so giving up a peak frees no trough budget"
+                ),
+            )
+            blocked.add(span)
+            continue
+        kept_peaks = tuple(item for item in kept_peaks if item[0] != lowest_peak[0])
+        kept_troughs = tuple(sorted((*kept_troughs, fitted)))
+        kept_peak_pins = [pin for pin, _prominence in kept_peaks]
+        kept_trough_pins = [pin for pin, _prominence in kept_troughs]
+        # The span no longer exists once the trough is in; both spans it became carry
+        # the swap that created them.
+        origins[(earlier, fitted[0])] = (fitted[0], lowest_peak[0])
+        origins[(fitted[0], later)] = (fitted[0], lowest_peak[0])
+
+    # Report the FINAL trough set: a span a repair split is gone from the set, and both
+    # spans it became carry the swap through ``origins``. Every uncovered span has a
+    # recorded verdict already — the loop above blocks or repairs each one — so the
+    # fallback only ever fills in the covered segments, and the uncovered branch in it
+    # is a guard rather than an expectation.
+    final_spans = spans(kept_trough_pins)
+    for earlier, later, gap_start, gap_end, gap_days in final_spans:
+        if (earlier, later) not in verdicts:
+            covered = gap_days < window_days
+            record(
+                (earlier, later),
+                gap_start,
+                gap_end,
+                gap_days,
+                covered=covered,
+                reason=None if covered else "uncovered: no repair was attempted",
+            )
+    coverage_segments = tuple(verdicts[(earlier, later)] for earlier, later, *_rest in final_spans)
 
     peaks, peak_prominence = emit(kept_peaks, CycleKind.PEAK)
     troughs, trough_prominence = emit(kept_troughs, CycleKind.TROUGH)
@@ -1578,6 +1979,10 @@ def select_long_term_periods(
         trough_pins=trough_pins,
         peak_prominence_pct=peak_prominence,
         trough_prominence_pct=trough_prominence,
+        dropped_windows=dropped_windows,
+        peak_hit_tests=tuple(verdict_of[pin] for pin, _prominence in kept_peaks),
+        trough_hit_tests=tuple(verdict_of[pin] for pin, _prominence in kept_troughs),
+        coverage_segments=coverage_segments,
         peaks=peaks,
         troughs=troughs,
         selected=True,
@@ -1594,6 +1999,8 @@ __all__ = [
     "MEDIUM_MIN_MOVE_PCT",
     "MIN_PEAKS",
     "MIN_TROUGHS",
+    "CoverageSegment",
+    "DroppedWindow",
     "HitTest",
     "LongTermSelection",
     "OverlayGrade",

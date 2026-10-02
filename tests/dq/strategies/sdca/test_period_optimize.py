@@ -38,8 +38,10 @@ from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, Sdca
 from digiquant.strategies.sdca.period_optimize import (
     EXPOSURE_FLOOR_PCT,
     LONG_HALF_WIDTHS,
+    LONG_MIN_MOVE_PCT,
     MIN_PEAKS,
     MIN_TROUGHS,
+    CoverageSegment,
     HitTest,
     LongTermSelection,
     OverlayGrade,
@@ -983,8 +985,21 @@ def test_the_default_half_width_reproduces_the_pre_change_selection_exactly() ->
     selection = select_long_term_periods(dates, prices)
     assert _PRE_CHANGE_HALF_WIDTH == 60
     assert selection.half_width_days == _PRE_CHANGE_HALF_WIDTH
-    # Captured from the pre-change implementation on this exact fixture.
-    assert selection.model_dump(exclude={"peak_days_pct", "trough_days_pct"}) == {
+    # Captured from the pre-change implementation on this exact fixture. The four
+    # Ruling-2 fields are excluded and pinned separately by the Task-3b pins: this
+    # fixture's selection is unchanged by them, but the coverage report on it is not
+    # empty (its trough windows sit 447 days apart), so the fields cannot ride in a
+    # literal that is about the windows themselves.
+    assert selection.model_dump(
+        exclude={
+            "peak_days_pct",
+            "trough_days_pct",
+            "dropped_windows",
+            "peak_hit_tests",
+            "trough_hit_tests",
+            "coverage_segments",
+        }
+    ) == {
         "half_width_days": 60,
         "calendar_days": 1894,
         "max_peak_days_pct": 25.0,
@@ -1129,15 +1144,33 @@ def test_a_wide_half_width_can_refuse_by_dropping_below_the_frozen_minima() -> N
 
 
 def test_a_narrower_half_width_keeps_more_real_structure_under_the_same_cap() -> None:
-    """Width is the lever the cap trades against; the cap itself never moves."""
-    dates, prices = _secular_three_cycles()
-    narrow = select_long_term_periods(dates, prices, half_width_days=30)
+    """Width is the lever the cap trades against; the cap itself never moves.
+
+    Two regimes, because Ruling 2 made the hit test part of long selection. Where a
+    narrow window still catches a move, it costs fewer days and so buys more of the
+    detected structure under the same cap (``_up_heavy``: 3 windows at 60d, 6 at 30d).
+    Where it does not — these secular legs rise 380 bars, so a +-30d window at the peak
+    sees about 4% of move — every candidate misses the frozen 15.0% bar and the
+    selection refuses rather than shipping decoration. Both are the same cap, doing the
+    same job.
+    """
+    dates, prices = _up_heavy()
     default = select_long_term_periods(dates, prices)
+    narrow = select_long_term_periods(dates, prices, half_width_days=30)
     assert narrow.half_width_days == 30
-    assert narrow.n_peaks == default.n_peaks == 3
-    assert narrow.peak_days == 183 < default.peak_days == 363
-    assert narrow.peak_days_pct < default.peak_days_pct
-    assert narrow.max_peak_days_pct == default.max_peak_days_pct
+    assert narrow.selected is True, narrow.reason
+    assert narrow.n_peaks == default.n_peaks + 3 == 6
+    assert narrow.troughs and narrow.peak_days_pct <= narrow.max_peak_days_pct
+    assert narrow.max_peak_days_pct == default.max_peak_days_pct == 25.0
+    assert narrow.dropped_windows == ()
+
+    secular_dates, secular_prices = _secular_three_cycles()
+    refused = select_long_term_periods(secular_dates, secular_prices, half_width_days=30)
+    assert refused.selected is False
+    assert refused.windows == ()
+    assert refused.dropped_windows, "the drops are what the refusal rests on"
+    assert all(window.required_move_pct == LONG_MIN_MOVE_PCT for window in refused.dropped_windows)
+    assert "hit test" in (refused.reason or "")
 
 
 def test_selection_rejects_a_non_positive_half_width() -> None:
@@ -1164,6 +1197,402 @@ def test_a_calendar_too_short_to_index_fails_cleanly_never_with_indexerror() -> 
     # reported by the detector's own message.
     with pytest.raises(ValueError, match="at least"):
         select_long_term_periods(_calendar(2), [_LOW, _HIGH])
+
+
+# ============ Plan 21 Task 3b: the long-side hit test + coverage constraint (Ruling 2)
+#
+# Task-3 review found the real mechanism and corrected the framing twice. The long
+# set was wrong in two separate ways, and both are pinned here:
+#
+# - **The hit test only gated MEDIUM additions.** A long window that caught 9.25%
+#   of move was kept, so the owner's "identify and abandon windows that do not get
+#   hit" was never applied to the primary regime at all. Every prominence-ranked
+#   long candidate is now hit-tested at the frozen ``LONG_MIN_MOVE_PCT`` BEFORE it
+#   consumes its per-kind day budget: an unhit pin is skipped, its budget stays
+#   available to the next pin that did catch a move, and the drop is recorded with
+#   the move that pin's window actually contained.
+# - **Coverage.** Actions are emitted at window ENTERS, so any stretch of calendar
+#   holding no selected trough window is flat by construction — on GLD one such
+#   stretch ran 3063 days. The selection now measures every calendar segment
+#   between consecutive selected trough windows and records the ones that are
+#   uncovered, with their dates and their gap length, rather than emitting a set
+#   whose holes have to be discovered from a tearsheet.
+#
+# The repair Ruling 2 asks for — swap the lowest-prominence selected PEAK in the
+# segment for the best hit trough available there — is attempted and its verdict
+# recorded, and it is never admissible. The reason is structural, not a tuning
+# accident: ``_truncate_to_day_cap`` walks the ranked candidates and keeps every
+# window that fits, so the kept set is **addition-maximal**. A candidate it skipped
+# had ``covered_then | days`` over budget, and the covered set only grows, so
+# re-adding it breaches the very per-kind cap the walk enforced. Giving up a PEAK
+# cannot help either, because the two kinds are capped independently. So a segment
+# that HAS a hit trough available is recorded as blocked by the day cap — the
+# constraint that actually binds — and never quietly left unreported.
+
+
+def _prominent_but_unhit() -> tuple[list[date], list[float]]:
+    """A high-prominence peak pin whose own window caught only 11.11% of move.
+
+    The first peak pin's prominence (40.0%, the fall to the next trough) is measured
+    over a 301-bar leg, far longer than its own 121-day window, so the window sees
+    only the last fifth of the rise into the pin and the first slice of the fall out
+    of it: 11.11% in total, under the frozen 15.0% bar. It is the
+    second-most-prominent pin on the series and it is not worth trading, so the hit
+    test has to drop it and hand its budget to the next pin that did catch
+    something. The legs behind it are 121 bars, so those windows do clear the bar.
+    """
+    return _ramped_series(
+        [
+            (100.0, 200.0, 301),
+            (200.0, 120.0, 301),
+            (120.0, 240.0, 121),
+            (240.0, 100.0, 121),
+            (100.0, 180.0, 121),
+            (180.0, 130.0, 121),
+            (130.0, 210.0, 121),
+            (210.0, 160.0, 121),
+        ]
+    )
+
+
+def _scattered_secular_set() -> tuple[list[date], list[float]]:
+    """Ten secular cycles at VARYING amplitude, so the cap keeps a scattered subset.
+
+    Every cycle is 181 bars up and 181 down with a different high/low pair, so
+    prominence differs cycle to cycle and the day cap keeps the prominent pins
+    rather than the early ones. The kept troughs therefore sit far apart while
+    unselected HIT troughs exist between them — the synthetic twin of the GLD
+    coverage hole, and the fixture the repair attempt is pinned on.
+    """
+    pairs = (
+        (200.0, 120.0),
+        (150.0, 105.0),
+        (240.0, 130.0),
+        (170.0, 110.0),
+        (230.0, 125.0),
+        (160.0, 115.0),
+        (250.0, 135.0),
+        (180.0, 108.0),
+        (210.0, 122.0),
+        (165.0, 112.0),
+    )
+    prices = [pairs[0][0]]
+    for high, low in pairs:
+        if prices[-1] != low:
+            prices.extend(_leg(prices[-1], low, 181)[1:])
+        prices.extend(_leg(low, high, 181)[1:])
+    prices.extend(_leg(prices[-1], 140.0, 121)[1:])
+    return _calendar(len(prices)), prices
+
+
+def _centres(selection: LongTermSelection, windows: tuple[CycleWindow, ...]) -> tuple[date, ...]:
+    """The pins a set of emitted windows is centred on, chronological."""
+    offset = timedelta(days=selection.half_width_days)
+    return tuple(window.start + offset for window in windows)
+
+
+def _kept_verdict(name: str, kind: CycleKind, max_move_pct: float, direction: str) -> HitTest:
+    """The verdict a kept window must carry: hit, at the frozen long bar."""
+    return HitTest(
+        window=name,
+        kind=kind,
+        bars=121,
+        min_move_pct=LONG_MIN_MOVE_PCT,
+        max_move_pct=max_move_pct,
+        direction=direction,
+        hit=True,
+    )
+
+
+def _kept_segment(start: date, end: date) -> CoverageSegment:
+    """A covered segment between two selected trough windows, nothing to report."""
+    gap_start, gap_end = start + timedelta(days=61), end - timedelta(days=61)
+    return CoverageSegment(
+        start=start,
+        end=end,
+        gap_start=gap_start,
+        gap_end=gap_end,
+        gap_days=(gap_end - gap_start).days + 1,
+        covered=True,
+        repaired=False,
+        swapped_out_peak=None,
+        swapped_in_trough=None,
+        reason=None,
+    )
+
+
+def test_an_unhit_prominent_long_candidate_is_dropped_for_the_next_hit_pin() -> None:
+    """The long side abandons what it did not catch, and the budget is not wasted."""
+    dates, prices = _prominent_but_unhit()
+    unhit_pin, promoted_pin = dates[300], dates[960]
+    peak_pins, _trough_pins = detect_pivots(dates, prices, PeriodHorizon.long())
+    assert unhit_pin in peak_pins and promoted_pin in peak_pins
+
+    selection = select_long_term_periods(dates, prices)
+    assert selection.selected is True, selection.reason
+    kept_peaks = _centres(selection, selection.peaks)
+    # Pre-change the cap's second slot went to the unhit pin; now it goes to the
+    # next pin that cleared the frozen bar. Same count, a different window.
+    assert kept_peaks == (dates[720], promoted_pin)
+    assert kept_peaks != (unhit_pin, dates[720])
+    assert set(kept_peaks) <= set(selection.peak_pins)
+
+    dropped = {window.pin: window for window in selection.dropped_windows}
+    assert unhit_pin in dropped, "the drop must be recorded, not silent"
+    record = dropped[unhit_pin]
+    assert record.kind == CycleKind.PEAK
+    assert record.prominence_pct == pytest.approx(40.0)
+    assert record.observed_move_pct == pytest.approx(100.0 * (200.0 - 180.0) / 180.0)
+    assert record.required_move_pct == LONG_MIN_MOVE_PCT == 15.0
+    assert record.observed_move_pct < record.required_move_pct
+    assert record.bars > 0
+    assert f"{LONG_MIN_MOVE_PCT:.1f}" in record.reason
+    assert f"{record.observed_move_pct:.2f}" in record.reason
+
+
+def test_the_hit_verdicts_for_the_kept_windows_travel_with_the_selection() -> None:
+    """A kept window's verdict is re-readable, not merely implied by its presence."""
+    dates, prices = _prominent_but_unhit()
+    selection = select_long_term_periods(dates, prices)
+    for windows, verdicts in (
+        (selection.peaks, selection.peak_hit_tests),
+        (selection.troughs, selection.trough_hit_tests),
+    ):
+        assert len(verdicts) == len(windows)
+        assert verdicts == tuple(
+            window_is_hit(dates, prices, window, min_move_pct=LONG_MIN_MOVE_PCT)
+            for window in windows
+        )
+        for window, verdict in zip(windows, verdicts, strict=True):
+            assert verdict.window == window.name
+            assert verdict.kind == window.kind
+            assert verdict.hit is True, "nothing unhit may survive into a kept window"
+            assert verdict.min_move_pct == LONG_MIN_MOVE_PCT
+
+
+def test_a_series_needing_neither_a_drop_nor_a_repair_is_field_for_field_unchanged() -> None:
+    """Ruling 2 is additive: a set that needs neither is exactly what it was.
+
+    ``_up_heavy`` is the fixture for it — no candidate misses the frozen bar, and its
+    selected trough windows are 17 days apart (far inside one window width), so
+    nothing is uncovered and no repair is attempted. The dict below was captured
+    from the pre-change implementation on this exact fixture: it is that output, field
+    for field, so a refactor that quietly moves the new rules onto a set that needed
+    neither fails here instead of being noticed by a rerun nobody diffs.
+    """
+    dates, prices = _up_heavy()
+    selection = select_long_term_periods(dates, prices)
+    # The two new rules are inert on this fixture, so they are compared as models
+    # (the four excluded fields below) while every pre-change field is compared
+    # straight out of ``model_dump``.
+    assert selection.model_dump(
+        exclude={"dropped_windows", "peak_hit_tests", "trough_hit_tests", "coverage_segments"}
+    ) == {
+        "half_width_days": 60,
+        "calendar_days": 1686,
+        "max_peak_days_pct": 25.0,
+        "peak_days": 363,
+        "peak_days_pct": 21.530249110320284,
+        "trough_days": 363,
+        "trough_days_pct": 21.530249110320284,
+        "peak_pins": (
+            date(2020, 4, 19),
+            date(2020, 9, 4),
+            date(2021, 1, 20),
+            date(2021, 6, 7),
+            date(2021, 10, 23),
+            date(2022, 3, 10),
+            date(2022, 7, 26),
+            date(2022, 12, 11),
+            date(2023, 4, 28),
+            date(2023, 9, 13),
+            date(2024, 1, 29),
+            date(2024, 6, 15),
+        ),
+        "trough_pins": (
+            date(2020, 5, 18),
+            date(2020, 10, 3),
+            date(2021, 2, 18),
+            date(2021, 7, 6),
+            date(2021, 11, 21),
+            date(2022, 4, 8),
+            date(2022, 8, 24),
+            date(2023, 1, 9),
+            date(2023, 5, 27),
+            date(2023, 10, 12),
+            date(2024, 2, 27),
+            date(2024, 7, 14),
+        ),
+        "peak_prominence_pct": (50.0, 50.0, 50.0),
+        "trough_prominence_pct": (100.0, 100.0, 100.0),
+        "peaks": (
+            {
+                "name": "long_peak_20200419_pm60",
+                "kind": CycleKind.PEAK,
+                "start": date(2020, 2, 19),
+                "end": date(2020, 6, 18),
+            },
+            {
+                "name": "long_peak_20200904_pm60",
+                "kind": CycleKind.PEAK,
+                "start": date(2020, 7, 6),
+                "end": date(2020, 11, 3),
+            },
+            {
+                "name": "long_peak_20210120_pm60",
+                "kind": CycleKind.PEAK,
+                "start": date(2020, 11, 21),
+                "end": date(2021, 3, 21),
+            },
+        ),
+        "troughs": (
+            {
+                "name": "long_trough_20200518_pm60",
+                "kind": CycleKind.TROUGH,
+                "start": date(2020, 3, 19),
+                "end": date(2020, 7, 17),
+            },
+            {
+                "name": "long_trough_20201003_pm60",
+                "kind": CycleKind.TROUGH,
+                "start": date(2020, 8, 4),
+                "end": date(2020, 12, 2),
+            },
+            {
+                "name": "long_trough_20210218_pm60",
+                "kind": CycleKind.TROUGH,
+                "start": date(2020, 12, 20),
+                "end": date(2021, 4, 19),
+            },
+        ),
+        "selected": True,
+        "reason": None,
+    }
+    # The two new rules, both inert on this fixture: nothing dropped, both segments
+    # covered, and every kept window's verdict read off its own bars.
+    assert selection.dropped_windows == ()
+    assert selection.peak_hit_tests == (
+        _kept_verdict("long_peak_20200419_pm60", CycleKind.PEAK, 50.0, "down"),
+        _kept_verdict("long_peak_20200904_pm60", CycleKind.PEAK, 50.0, "down"),
+        _kept_verdict("long_peak_20210120_pm60", CycleKind.PEAK, 50.0, "down"),
+    )
+    assert selection.trough_hit_tests == (
+        _kept_verdict("long_trough_20200518_pm60", CycleKind.TROUGH, 55.04587155963304, "up"),
+        _kept_verdict("long_trough_20201003_pm60", CycleKind.TROUGH, 55.04587155963304, "up"),
+        _kept_verdict("long_trough_20210218_pm60", CycleKind.TROUGH, 55.04587155963304, "up"),
+    )
+    assert selection.coverage_segments == (
+        _kept_segment(date(2020, 5, 18), date(2020, 10, 3)),
+        _kept_segment(date(2020, 10, 3), date(2021, 2, 18)),
+    )
+    assert selection.coverage_complete is True
+    assert selection.uncovered_segments == ()
+
+
+def test_an_uncovered_segment_is_recorded_with_its_dates_and_gap_length() -> None:
+    """A calendar stretch holding no trough window is named, not left to be found."""
+    dates, prices = _scattered_secular_set()
+    selection = select_long_term_periods(dates, prices)
+    assert selection.selected is True, selection.reason
+    kept_troughs = _centres(selection, selection.troughs)
+    segments = selection.coverage_segments
+    # One segment per consecutive pair of selected trough windows, in order.
+    assert [(segment.start, segment.end) for segment in segments] == list(
+        zip(kept_troughs, kept_troughs[1:], strict=False)
+    )
+    assert segments, "the fixture keeps several troughs, so it has segments to report"
+    uncovered = selection.uncovered_segments
+    assert uncovered, "the scattered set leaves gaps a trough window could have filled"
+    assert selection.coverage_complete is False
+    for segment in uncovered:
+        # The gap is the calendar between the two trough WINDOWS, quoted in days.
+        assert segment.gap_start == segment.start + timedelta(days=61)
+        assert segment.gap_end == segment.end - timedelta(days=61)
+        assert segment.gap_days == (segment.gap_end - segment.gap_start).days + 1
+        # Shorter than one window width, the stretch cannot have held a whole
+        # window-shaped opportunity, so it is not a hole worth reporting.
+        assert segment.gap_days >= 2 * selection.half_width_days + 1
+        assert segment.covered is False
+        assert segment.repaired is False
+        assert segment.swapped_in_trough is None
+        assert segment.reason
+
+
+def test_a_segment_with_a_hit_trough_records_the_day_cap_that_blocks_the_repair() -> None:
+    """The repair is attempted, and the verdict names the constraint that binds.
+
+    Ruling 2's swap — the lowest-prominence selected peak out, the best hit trough
+    available in that segment in — is refused here by the per-kind day cap, and the
+    segment says so. It cannot be otherwise: ``_truncate_to_day_cap`` keeps every
+    window that fits, so its kept set is addition-maximal and re-adding any skipped
+    candidate breaches the cap it enforced, and the two kinds are capped
+    independently, so giving up a peak frees no trough budget. The verdict is
+    reported rather than swallowed, because "the day cap is what blocks coverage" is
+    the finding.
+    """
+    dates, prices = _scattered_secular_set()
+    selection = select_long_term_periods(dates, prices)
+    blocked_by_cap = [
+        segment for segment in selection.uncovered_segments if "day cap" in (segment.reason or "")
+    ]
+    starved = [
+        segment
+        for segment in selection.uncovered_segments
+        if "no hit trough" in (segment.reason or "")
+    ]
+    assert blocked_by_cap, "at least one uncovered segment has a hit trough available to try"
+    assert starved, "at least one uncovered segment has nothing to swap in"
+    for segment in blocked_by_cap:
+        # A selected peak was there to give up — the day cap is what stopped it.
+        assert segment.swapped_out_peak is None
+        assert f"{selection.max_peak_days_pct:.1f}%" in (segment.reason or "")
+    # And the refusal held: nothing about the set broke on the way there.
+    budget = len(dates) * selection.max_peak_days_pct // 100
+    assert selection.peak_days <= budget
+    assert selection.trough_days <= budget
+
+
+def test_the_per_kind_day_cap_and_both_minima_hold_on_every_returned_set() -> None:
+    """What a swap must never break, asserted on every fixture that returns a set.
+
+    Ruling 2 requires the cap and both minima to still hold after a swap. No swap is
+    admissible (see the cap pin above), so what is pinned here is the invariant
+    itself: no returned set breaches the per-kind day cap and none is short of either
+    minimum. A refusal stays a refusal — the minima are never relaxed to manufacture a
+    set, and hit-testing candidates never becomes a licence to ship a short one.
+    """
+    fixtures = (
+        _prominent_but_unhit(),
+        _scattered_secular_set(),
+        _secular_three_cycles(),
+        _up_heavy(),
+        _zigzag(200, 100, 6, tail_up=100),
+    )
+    for dates, prices in fixtures:
+        selection = select_long_term_periods(dates, prices)
+        assert selection.selected is True, selection.reason
+        budget = len(dates) * selection.max_peak_days_pct // 100
+        assert selection.peak_days <= budget
+        assert selection.trough_days <= budget
+        assert selection.peak_days_pct <= selection.max_peak_days_pct
+        assert selection.trough_days_pct <= selection.max_peak_days_pct
+        assert selection.n_peaks >= MIN_PEAKS
+        assert selection.n_troughs >= MIN_TROUGHS
+        assert len(selection.peak_hit_tests) == selection.n_peaks
+        assert len(selection.trough_hit_tests) == selection.n_troughs
+        assert len(selection.coverage_segments) == max(0, selection.n_troughs - 1)
+    # A hit test that removes too many windows refuses rather than shipping a short set.
+    refused = select_long_term_periods(*_secular_three_cycles(), max_peak_days_pct=5.0)
+    assert refused.selected is False
+    assert refused.windows == ()
+
+
+def test_the_coverage_report_holds_no_segment_when_there_is_nothing_between_two_troughs() -> None:
+    """One selected trough cannot straddle itself, so no segment is invented."""
+    dates, prices = _prominent_but_unhit()
+    selection = select_long_term_periods(dates, prices)
+    assert selection.n_troughs == 2
+    assert len(selection.coverage_segments) == selection.n_troughs - 1
 
 
 # ==================================== Plan 21 Task 2: the graded medium overlay
