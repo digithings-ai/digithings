@@ -209,6 +209,7 @@ describe("terminal embed rewrite", () => {
 
   it("keeps the static export and serves the terminal on this site", () => {
     expect(source).toContain('output: "export"');
+    expect(source).toContain("legacyDashboardRedirects()");
     expect(source).toContain('source: "/official-api/:path*"');
     expect(source).toContain('destination: "http://127.0.0.1:8788/:path*"');
     expect(source).not.toContain("127.0.0.1:3930");

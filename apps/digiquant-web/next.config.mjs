@@ -1,3 +1,5 @@
+import { legacyDashboardRedirects } from "./lib/legacy-dashboard.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "export",
@@ -11,9 +13,13 @@ const nextConfig = {
   // Dev-only same-origin proxy. Static export ignores rewrites.
   // /official-api → the dashboard API. Production calls NEXT_PUBLIC_DASHBOARD_API_URL.
   // /app is this site's terminal (the OpenTUI desk pages). It is not a proxy.
-  // /dashboard is not proxied. That path used to be the brief desk.
+  // /dashboard is not proxied. redirects() sends it to the desk. Static export
+  // ignores that function; public/_redirects carries the same map on Pages.
   async rewrites() {
     return [{ source: "/official-api/:path*", destination: "http://127.0.0.1:8788/:path*" }];
+  },
+  async redirects() {
+    return legacyDashboardRedirects();
   },
 };
 

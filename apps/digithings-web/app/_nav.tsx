@@ -69,7 +69,7 @@ export const DT_SITEMAP: { label: string; links: NavLink[] }[] = [
     links: [
       { label: "digichat", href: "/chat" },
       { label: "digiquant", href: "https://digiquant.io", external: true },
-      { label: "dashboard", href: "https://digiquant.io/dashboard/", external: true },
+      { label: "dashboard", href: "https://digiquant.io/app", external: true },
     ],
   },
   {
