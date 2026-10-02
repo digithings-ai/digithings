@@ -46,7 +46,6 @@ export const NAV: NavGroup[] = [
     title: 'tools',
     items: [
       { path: '/tools/terminal', label: 'Terminal', status: 'soon' },
-      { path: '/tools/luxalgo', label: 'LuxAlgo', status: 'soon' },
       { path: '/tools/charts', label: 'Charts', status: 'wip' },
       { path: '/tools/chat', label: 'digichat', status: 'wip' },
       {
