@@ -9,7 +9,7 @@ export function TearsheetsBand() {
     <Band
       id="tearsheets"
       title="Tearsheets"
-      takeaway="Every strategy ends in a backtest tearsheet, as the dashboard lists them. Results are in-sample and illustrative."
+      takeaway="The tape is the live price feed. Each strategy ends in a backtest tearsheet. Unpublished statistics stay an em dash."
       status="backtest only"
     >
       <div className="flex flex-col gap-4">

@@ -1,22 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DocumentFrame, PageTitle } from "@digithings/ui";
 import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
+import { TearsheetView } from "@/components/tearsheet/tearsheet-view";
+import { PUBLISHED_STRATEGIES } from "@/components/tearsheet/published";
 
-// Static export needs the route list (and per-route metadata) at build time,
-// while the tearsheet DATA is read live from Supabase (#1069). The published set
-// is the three Slappers plus btc_sdca (DCA). Slugs stay code ids; public names
-// are asset-then-type.
-const PUBLISHED: Record<string, { label: string; symbol: string }> = {
-  btc_slapper: { label: "BTC L/S", symbol: "BTC-USD" },
-  eth_slapper: { label: "ETH L/S", symbol: "ETH-USD" },
-  sol_slapper: { label: "SOL L/S", symbol: "SOL-USD" },
-  btc_sdca: { label: "BTC-SDCA", symbol: "BTC-USD" },
-};
+const PUBLISHED = Object.fromEntries(PUBLISHED_STRATEGIES.map((s) => [s.id, s]));
 
 export const dynamicParams = false;
 export function generateStaticParams() {
-  return Object.keys(PUBLISHED).map((id) => ({ id }));
+  return PUBLISHED_STRATEGIES.map((s) => ({ id: s.id }));
 }
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -35,12 +27,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function TearsheetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!(id in PUBLISHED)) notFound();
-
   return (
     <main id="main" tabIndex={-1}>
-      <DocumentFrame>
-        <PageTitle title={strategyDisplayName(id, PUBLISHED[id].label)}>placeholder</PageTitle>
-      </DocumentFrame>
+      <TearsheetView slug={id} />
     </main>
   );
 }
