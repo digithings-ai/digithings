@@ -14,8 +14,8 @@
  * that edge — never expose the worker directly with this route enabled.
  */
 
-export type Tier = "free" | "pro" | "max";
-const TIER_RANK: Record<Tier, number> = { free: 0, pro: 1, max: 2 };
+export type Tier = "free" | "brief" | "desk" | "studio" | "enterprise";
+const TIER_RANK: Record<Tier, number> = { free: 0, brief: 1, desk: 2, studio: 3, enterprise: 4 };
 
 export interface Caller {
   tier: Tier;
@@ -39,7 +39,7 @@ interface PageDef extends Gate { path: string; label: string; status?: "wip" | "
 interface DeskDef extends Gate { id: string; label: string; blurb: string; pages: PageDef[] }
 
 const b = (id: string, route: string, gate: Gate = {}): BlockDef => ({ id, route, ...gate });
-const PRO: Gate = { tier: "pro" };
+const PRO: Gate = { tier: "brief" };
 
 export const DESKS: DeskDef[] = [
   {
@@ -77,7 +77,7 @@ export const DESKS: DeskDef[] = [
       },
       { path: "/strategies", label: "Strategies", status: "wip", ...PRO, blocks: [b("st-kpis", "/strategies/summary"), b("st-catalog", "/strategies"), b("st-deployments", "/strategies/deployments")] },
       { path: "/strategies/detail", label: "Detail", status: "wip", ...PRO, blocks: [b("st-overview", "/strategies/default"), b("st-parameters", "/strategies/default/parameters"), b("st-track-record", "/strategies/default/performance"), b("st-runs", "/strategies/default/runs")] },
-      { path: "/strategies/deploy", label: "Deploy", status: "wip", tier: "max", blocks: [b("st-targets", "/strategies/targets"), b("st-deploy-flow", "/strategies/deploy-flow"), b("st-deploy-draft", "/strategies/default/deploy-draft")] },
+      { path: "/strategies/deploy", label: "Deploy", status: "wip", tier: "desk", blocks: [b("st-targets", "/strategies/targets"), b("st-deploy-flow", "/strategies/deploy-flow"), b("st-deploy-draft", "/strategies/default/deploy-draft")] },
       // Coming soon: listed in the sidebar, no blocks until built.
       { path: "/tools/terminal", label: "Terminal", status: "soon", blocks: [] },
       { path: "/tools/luxalgo", label: "LuxAlgo", status: "soon", blocks: [] },
@@ -107,10 +107,10 @@ export interface PageEntry { path: string; label: string; status?: "wip" | "soon
 export interface DeskEntry { id: string; label: string; blurb: string; access: Access; reason?: string; pages: PageEntry[] }
 export interface Manifest { caller: Caller; desks: DeskEntry[] }
 
-const isTier = (v: string): v is Tier => v === "free" || v === "pro" || v === "max";
+const isTier = (v: string): v is Tier => Object.hasOwn(TIER_RANK, v);
 
 /**
- * Local-dev impersonation (`DASHBOARD_DEV_CALLER=max+12x` in .dev.vars): used only
+ * Local-dev impersonation (`DASHBOARD_DEV_CALLER=enterprise+12x` in .dev.vars): used only
  * when the request carries no identity headers at all. Never set it on a deployed worker.
  */
 export function devCaller(spec: string | undefined): Caller | null {
@@ -120,12 +120,26 @@ export function devCaller(spec: string | undefined): Caller | null {
   return { tier, groups: parts.filter((p) => !isTier(p)) };
 }
 
-/** Caller for a request: edge headers win; else the dev override; else fail closed. */
-export function callerFor(request: Request, env: { DASHBOARD_DEV_CALLER?: string }): Caller {
+/**
+ * Are the identity headers (`x-digi-tier|groups|user`) from the edge? When
+ * `DASHBOARD_EDGE_KEY` is set they are honoured only with a matching
+ * `x-digi-edge-key`; otherwise a direct caller could claim any tier. Unset keeps
+ * the headers trusted (local dev / tests): a deployed worker MUST set it.
+ */
+export function identityTrusted(request: Request, env: { DASHBOARD_EDGE_KEY?: string }): boolean {
+  const key = (env.DASHBOARD_EDGE_KEY ?? "").trim();
+  return key === "" || request.headers.get("x-digi-edge-key") === key;
+}
+
+/** Caller for a request: trusted edge headers win; else the dev override; else fail closed. */
+export function callerFor(request: Request, env: { DASHBOARD_DEV_CALLER?: string; DASHBOARD_EDGE_KEY?: string }): Caller {
   const h = request.headers;
+  if (!identityTrusted(request, env)) return devCaller(env.DASHBOARD_DEV_CALLER) ?? { tier: "free", groups: [] };
   if (h.get("x-digi-tier") === null && h.get("x-digi-groups") === null) return devCaller(env.DASHBOARD_DEV_CALLER) ?? parseCaller(h);
   return parseCaller(h);
 }
+
+export const tierAtLeast = (c: Caller, t: Tier): boolean => TIER_RANK[c.tier] >= TIER_RANK[t];
 
 /** Fail closed: unknown/absent tier → free, no groups. */
 export function parseCaller(headers: { get(name: string): string | null }): Caller {
