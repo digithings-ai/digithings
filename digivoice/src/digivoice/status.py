@@ -24,6 +24,7 @@ from pydantic import BaseModel, ValidationError
 from digivoice.models import VoicePaths
 
 STATUS_FILE_NAME = "status.json"
+SYSTEM_LOG_NAME = "system.log"
 BANNER_FLAG_NAME = "banner.show"
 DEFAULT_CANCEL_FILE_NAME = "dict.cancel"
 # Exit code of `dict` for a cancelled take. Not 0 (nothing was produced) and not 1
@@ -60,6 +61,33 @@ class StatusSnapshot(BaseModel):
 
 def status_path(paths: VoicePaths) -> Path:
     return Path(paths.data_dir) / STATUS_FILE_NAME
+
+
+def system_log_path(paths: VoicePaths) -> Path:
+    """Plain text log beside status.json. Not a logging framework."""
+    return Path(paths.data_dir) / SYSTEM_LOG_NAME
+
+
+def append_system_log(path: str | Path, line: str) -> None:
+    """Append one line. Fails soft, same as a status write."""
+    text = line.strip()
+    if not text:
+        return
+    target = Path(path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    except OSError:
+        return
+
+
+def read_system_log(path: str | Path) -> str:
+    """The whole log, or empty when the file is missing."""
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def banner_flag_path(paths: VoicePaths) -> Path:
@@ -140,6 +168,12 @@ class StatusReporter:
                 temp.unlink(missing_ok=True)
             except OSError:
                 pass
+        if state in {"error", "empty"}:
+            note = detail or text or state
+            append_system_log(
+                self._path.with_name(SYSTEM_LOG_NAME),
+                f"{snapshot.updated_ms} {state} {note}",
+            )
 
 
 class CancelToken:

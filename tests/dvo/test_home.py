@@ -144,6 +144,11 @@ def test_quit_and_slash_paths_map_without_a_tty(tmp_path: Path) -> None:
     system = run(["system"], runtime)
     assert "/doctor" in system.stdout
     assert "/reload" in system.stdout
+    assert "/system/logs" in system.stdout
+    (tmp_path / "system.log").write_text("1000 error boom\n", encoding="utf-8")
+    logs = run(["/system/logs"], runtime)
+    assert logs.code == 0
+    assert "boom" in logs.stdout
     reset = run(["reset"], runtime)
     assert reset.stdout == "settings reset\n"
     missing = run(["/history/delete"], runtime)
