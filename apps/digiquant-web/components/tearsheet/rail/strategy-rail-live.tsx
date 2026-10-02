@@ -1,20 +1,21 @@
 "use client";
-/** Tearsheets band piece: a kit CardRail of live StrategyCards from the
- *  existing strategy seam (Supabase `strategy_tearsheets`). Nothing renders
- *  from fixtures: loading and empty both show the labelled skeleton rail. */
+/** Tearsheets band piece: a kit CardRail when the live store returns strategies.
+ *  Until then, the known routes render with every statistic as an em dash. */
 import { useEffect, useMemo, useState } from "react";
 import { CardRail } from "@digithings/ui";
 import { Badge } from "@digithings/ui/ui";
 import { fetchStrategyIndex } from "@/lib/live/strategies";
 import { BacktestOnlyChip } from "../honesty";
+import { PUBLISHED_STRATEGIES } from "../published";
 import { cagrPctFromGrowth } from "../stats";
 import { StrategyCard } from "../strategy-card";
 import { type StrategyIndexEntry } from "../types";
-import { StrategyRailSkeleton } from "./strategy-rail-skeleton";
+import { UnpublishedStrategyCard } from "../unpublished-strategy";
 
 export function StrategyRailLive() {
-  // null until the first fetch settles, so server HTML and first client render agree.
-  const [strategies, setStrategies] = useState<StrategyIndexEntry[] | null>(null);
+  // Unconfigured builds render the dash cards immediately, so server HTML and
+  // the first client paint agree. A configured read starts empty of numbers.
+  const [strategies, setStrategies] = useState<StrategyIndexEntry[] | null>([]);
 
   useEffect(() => {
     let alive = true;
@@ -49,19 +50,24 @@ export function StrategyRailLive() {
     </div>
   );
 
-  if (strategies === null) {
+  if (strategies === null || sorted.length === 0) {
+    const message =
+      strategies === null
+        ? "Reading published tearsheets. Statistics stay an em dash until that read returns."
+        : "The official API has not published strategy statistics. They stay an em dash.";
     return (
       <div className="grid gap-4">
         {chips}
-        <StrategyRailSkeleton message="Loading published strategies…" />
-      </div>
-    );
-  }
-  if (sorted.length === 0) {
-    return (
-      <div className="grid gap-4">
-        {chips}
-        <StrategyRailSkeleton message="no strategies published in this build" />
+        <p role="status" className="m-0 font-mono text-[0.72rem] text-ink-soft">
+          {message}
+        </p>
+        <ul aria-label="Unpublished strategies" className="m-0 grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-4">
+          {PUBLISHED_STRATEGIES.map((s) => (
+            <li key={s.id} className="min-w-0">
+              <UnpublishedStrategyCard id={s.id} label={s.label} symbol={s.symbol} />
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }

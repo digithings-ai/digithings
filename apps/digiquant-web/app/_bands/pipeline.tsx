@@ -1,17 +1,58 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Badge } from "@digithings/ui/ui";
 import { ExecutionCard, StageCard } from "@/components/pipeline/StageCard";
 import { StageRunway } from "@/components/pipeline/StageRunway";
-import { getLatestRun } from "@/lib/run-snapshot";
+import { officialGet, PIPELINE_ROUTE, runFromDocuments } from "@/lib/official-api";
+import type { RunSnapshot } from "@/lib/run-snapshot";
 import { Band } from "../_chrome/Band";
-import { ResearchRunsPlaceholder } from "../_placeholders";
 import { EXECUTION_STAGE, PIPELINE_STAGES } from "../_stages";
 
-/** The pipeline band, straight after the dashboard. Stages sit side by side on desktop (a snap row
- *  on narrow screens) and slide in one by one as you scroll through the pinned band. The strip above
- *  the cards says what the data is: a recorded run (date, run type) or that none was captured. */
+const SOURCE = "dashboard-api GET /v1/tables/documents";
+
+interface RunRead {
+  snapshot: RunSnapshot | null;
+  reason: string;
+}
+
+const READING: RunRead = {
+  snapshot: null,
+  reason: "Reading the latest run from the official API.",
+};
+
+/** The pipeline band. Stage cards plus the latest documents read from the official API. */
 export function PipelineBand() {
-  const latest = getLatestRun();
-  const snap = latest.snapshot;
+  const [run, setRun] = useState<RunRead>(READING);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const read = await officialGet(PIPELINE_ROUTE, {
+        select: "document_key,title,run_type,date",
+        order: "date.desc",
+        limit: "1000",
+      });
+      if (!alive) return;
+      if (!read.ok) {
+        setRun({ snapshot: null, reason: read.reason });
+        return;
+      }
+      const rows = Array.isArray(read.body) ? read.body : [];
+      const snapshot = runFromDocuments(rows);
+      setRun({
+        snapshot,
+        reason: snapshot
+          ? `Recorded run ${snapshot.runDate}. The cards above are that capture.`
+          : "The official API returned no documents for the latest run.",
+      });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const snap = run.snapshot;
   const total = PIPELINE_STAGES.length + 1;
   const badge = snap ? `recorded · ${snap.runDate} · ${snap.runType ?? "run type unknown"}` : "no recorded run";
 
@@ -32,10 +73,14 @@ export function PipelineBand() {
             <span className="text-ink-soft">
               {snap ? "a recorded run, not live" : "no run was captured for this build; the cards show the pipeline's structure"}
             </span>
-            <span className="ms-auto hidden sm:inline">metadata only · captured {latest.capturedAt.slice(0, 10)}</span>
+            <span className="ms-auto hidden sm:inline">{SOURCE}</span>
           </div>
         }
-        outro={<ResearchRunsPlaceholder />}
+        outro={
+          <p className="m-0 border border-hair px-3 py-2 font-mono text-[0.72rem] leading-[1.55] text-ink-soft">
+            {run.reason} Source: {SOURCE}.
+          </p>
+        }
       >
         {PIPELINE_STAGES.map((name, i) => (
           <li key={name} className="flex min-w-0 snap-start">
