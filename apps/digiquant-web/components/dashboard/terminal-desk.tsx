@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { toneClass } from "@digithings/ui";
-import { useLivePortfolio } from "@/lib/live/useLivePortfolio";
+import { useOfficialDesk } from "@/components/dashboard/use-official-desk";
 import styles from "./terminal-desk.module.css";
 import { bookModel, EM, figSignedPct, type DeskModel, type DrawdownRead } from "./terminal-book";
 
@@ -193,8 +193,8 @@ export function DeskView({ model }: { model: DeskModel }) {
   );
 }
 
-/** Portfolio windows from the public house-book read. Missing figures stay an em dash. */
+/** Portfolio windows from the official API. Stub, withheld, and missing figures stay an em dash. */
 export function TerminalDesk() {
-  const live = useLivePortfolio();
+  const live = useOfficialDesk();
   return <DeskView model={bookModel(live)} />;
 }

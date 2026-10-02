@@ -74,7 +74,6 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
-import { isSupabaseConfigured } from "@/lib/live/supabaseClient";
 import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, isValuationOnlyIndex } from "./dca";
 import { BacktestOnlyChip } from "./honesty";
 
@@ -180,7 +179,7 @@ function PrintHeading({ children }: { children: string }) {
 export function TearsheetView({ slug }: { slug: string }) {
   const [data, setData] = useState<TearsheetData | null>(null);
   const [err, setErr] = useState<string | null>(
-    isSupabaseConfigured() ? null : "The live store is not connected in this build.",
+    "The official API has not published this tearsheet.",
   );
   const [scaleOverride, setScaleOverride] = useState<ChartScale | null>(null);
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
@@ -196,13 +195,14 @@ export function TearsheetView({ slug }: { slug: string }) {
   const printTitleRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
     let alive = true;
     fetchTearsheet(slug)
       .then((d) => {
         if (!alive) return;
-        if (d) setData(d);
-        else setErr("Could not load tearsheet data — the live store returned nothing.");
+        if (d) {
+          setErr(null);
+          setData(d);
+        } else setErr("The official API has not published this tearsheet.");
       })
       .catch((e: unknown) => {
         if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);

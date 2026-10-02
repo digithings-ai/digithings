@@ -150,7 +150,7 @@ export function bookModel(live: BookInput): DeskModel {
   const reason = !live.configured
     ? "House book read is not connected in this build."
     : reading
-      ? "Reading the house book."
+      ? "Reading the official API."
       : live.error
         ? live.error
         : live.navContractError

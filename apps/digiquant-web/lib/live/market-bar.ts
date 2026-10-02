@@ -17,6 +17,7 @@
  * the first render is `{cells: [], status: "connecting"}`.
  */
 import { useEffect, useState } from "react";
+import { officialGet, tapeFromBenchmarks } from "@/lib/official-api";
 import { fetchBenchmarkHistory, seedWindowStart } from "./market-data";
 import { num } from "./quote-transforms";
 
@@ -345,10 +346,25 @@ export function createCryptoFeed(opts: CryptoFeedOptions): CryptoFeed {
 
 const INITIAL: MarketBarState = { cells: [], status: "connecting", asOf: null };
 
-async function loadEquityCells(): Promise<MarketCell[]> {
+const TAPE_TICKERS = [...CRYPTO_PRODUCTS, ...EQUITY_SYMBOLS].join(",");
+
+/** Catalog closes from GET /benchmarks. Stub series are dropped. Empty means the API did not expose that symbol. */
+async function loadOfficialCloses(): Promise<MarketCell[]> {
+  const read = await officialGet("/benchmarks", { tickers: TAPE_TICKERS });
+  if (!read.ok) return [];
+  const series = tapeFromBenchmarks(read.body);
+  if (series == null) return [];
+  return series.flatMap((row) => {
+    const cell = equityCell(row.symbol, row.points);
+    if (!cell) return [];
+    return [{ ...cell, stamp: formatCloseStamp(cell.asOf) }];
+  });
+}
+
+async function loadEquityCells(skip: ReadonlySet<string>): Promise<MarketCell[]> {
   const from = seedWindowStart();
   const out = await Promise.all(
-    EQUITY_SYMBOLS.map(async (s) => equityCell(s, await fetchBenchmarkHistory(s, from))),
+    EQUITY_SYMBOLS.filter((s) => !skip.has(s)).map(async (s) => equityCell(s, await fetchBenchmarkHistory(s, from))),
   );
   return out.filter((c): c is MarketCell => c !== null);
 }
@@ -356,12 +372,19 @@ async function loadEquityCells(): Promise<MarketCell[]> {
 export function useMarketBar(): MarketBarState {
   const [crypto, setCrypto] = useState<MarketBarState>(INITIAL);
   const [equities, setEquities] = useState<MarketCell[]>([]);
+  const [official, setOfficial] = useState<MarketCell[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadEquityCells()
+    void loadOfficialCloses()
       .then((cells) => {
-        if (!cancelled) setEquities(cells);
+        if (cancelled) return;
+        setOfficial(cells);
+        const skip = new Set(cells.map((c) => c.symbol));
+        return loadEquityCells(skip);
+      })
+      .then((cells) => {
+        if (!cancelled && cells) setEquities(cells);
       })
       .catch(() => {
         /* equities stay omitted */
@@ -389,5 +412,10 @@ export function useMarketBar(): MarketBarState {
     };
   }, []);
 
-  return { cells: [...crypto.cells, ...equities], status: crypto.status, asOf: crypto.asOf };
+  const covered = new Set(official.map((c) => c.symbol));
+  return {
+    cells: [...official, ...crypto.cells.filter((c) => !covered.has(c.symbol)), ...equities],
+    status: crypto.status,
+    asOf: crypto.asOf,
+  };
 }
