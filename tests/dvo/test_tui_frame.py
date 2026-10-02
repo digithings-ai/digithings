@@ -54,6 +54,24 @@ def test_wordmark_is_one_foreground_color() -> None:
     assert "\x1b[" in joined
 
 
+def test_wordmark_v_is_the_version3_block_letter() -> None:
+    """The home V is the centered half-block from f62e5982d, not the pointed landing V."""
+    rows = render_wordmark_lines("DIGIVOICE", cols=120, ansi=False)
+    assert rows[-1].split()[4] == "▀███▀"
+
+
+def test_selected_row_is_brackets_with_a_star() -> None:
+    """Selection is a bold ``[*]``. The row is not a teal bar."""
+    plain = _frame()
+    doctor = next(line for line in plain.splitlines() if "Doctor" in line)
+    assert "[*]" in doctor
+    colored = _frame(use_ansi=True)
+    assert "38;2;61;214;196" not in colored
+    colored_doctor = next(line for line in colored.splitlines() if "Doctor" in line)
+    assert "\x1b[1m[*]" in colored_doctor
+    assert "\x1b[7" not in colored_doctor
+
+
 def test_wordmark_has_no_particle_field() -> None:
     plain = render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=False)
     assert not any("·" in row for row in plain)
@@ -79,9 +97,9 @@ def test_home_frame_is_centered_half_block() -> None:
         assert item.split(" (")[0] in frame
     doctor = next(line for line in frame.splitlines() if "Doctor" in line)
     settings = next(line for line in frame.splitlines() if "Settings" in line)
-    assert "■" in doctor
-    assert "□" in settings
-    assert "■" not in settings
+    assert "[*]" in doctor
+    assert "[ ]" in settings
+    assert "[*]" not in settings
     lines = frame.replace("\r\n", "\n").splitlines()
     letter_rows = [i for i, line in enumerate(lines) if any(ch in line for ch in "▀▄█")]
     assert letter_rows
