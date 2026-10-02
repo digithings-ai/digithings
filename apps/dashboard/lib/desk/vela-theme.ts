@@ -8,12 +8,12 @@
  */
 import type { VelaSpikeBar } from '@/components/research/VelaSpikeChart';
 
-export const DIGIQUANT_UP = '#3dd6c4';
-export const DIGIQUANT_DOWN = '#e5533e';
-export const DIGIQUANT_WARN = '#e0b341';
+export const DIGIQUANT_UP = '#3dd6c4'; // canon-allow: Vela up, chart-colors dark fallback
+export const DIGIQUANT_DOWN = '#e5533e'; // canon-allow: Vela down, chart-colors dark fallback
+export const DIGIQUANT_WARN = '#e0b341'; // canon-allow: Vela warn, chart-colors dark fallback
 
 /** App canvas fallback when a token has not resolved yet (`--bg` dark). */
-export const DIGIQUANT_CANVAS = '#0A0E0C';
+export const DIGIQUANT_CANVAS = '#0A0E0C'; // canon-allow: canvas before --bg resolves
 
 export const DESK_CHART_FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 

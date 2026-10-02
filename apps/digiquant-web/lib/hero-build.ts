@@ -95,14 +95,14 @@ export type HeroStroke = { color: string; points: HeroPoint[] };
 export type HeroOverlay = "bollinger-bands" | "vwap" | "supertrend";
 
 /** Match the native inputs QuantField adds when the sweep hands off. */
-export const SMA_COLOR = "#E8F7FF";
-export const EMA_COLOR = "#F5C16C";
+export const SMA_COLOR = "#E8F7FF"; // canon-allow: hero SMA stroke
+export const EMA_COLOR = "#F5C16C"; // canon-allow: hero EMA stroke
 export const SMA_LENGTH = 20;
 export const EMA_LENGTH = 50;
-const BB_BASIS = "#ff9800";
-const BB_BAND = "#5b9cf6";
+const BB_BASIS = "#ff9800"; // canon-allow: hero Bollinger basis
+const BB_BAND = "#5b9cf6"; // canon-allow: hero Bollinger band
 const LINE_UP = "#089981";
-const LINE_DOWN = "#f23645";
+const LINE_DOWN = "#f23645"; // canon-allow: hero line down
 
 function finiteRun(bars: readonly HeroBar[], values: readonly number[]): HeroPoint[][] {
   const runs: HeroPoint[][] = [];
@@ -282,7 +282,13 @@ function supertrendStrokes(bars: readonly HeroBar[]): HeroStroke[] {
 /** Native-indicator inputs that match `heroIndicatorStrokes` for this overlay. */
 export function heroOverlayInputs(overlay: HeroOverlay): Record<string, number | string | boolean> {
   if (overlay === "bollinger-bands") {
-    return { length: SMA_LENGTH, mult: 2, basisColor: BB_BASIS, color: BB_BAND, fillColor: "rgba(0,0,0,0)" };
+    return {
+      length: SMA_LENGTH,
+      mult: 2,
+      basisColor: BB_BASIS,
+      color: BB_BAND,
+      fillColor: "rgba(0,0,0,0)", // canon-allow: transparent band fill
+    };
   }
   if (overlay === "supertrend") {
     return { atrLength: 10, mult: 3, upColor: LINE_UP, downColor: LINE_DOWN };
