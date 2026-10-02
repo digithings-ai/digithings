@@ -378,6 +378,14 @@ export function mountDigivoice(renderer, session, options = {}) {
     else node.parent.remove(node)
   }
 
+  function armCapture(active) {
+    try {
+      session.call({ op: "hotkey-capture", active: Boolean(active) })
+    } catch {
+      /* the field still opens when the flag cannot be written */
+    }
+  }
+
   function releaseHotkeyField() {
     const field = hotkeyInput
     hotkeyInput = null
@@ -461,6 +469,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     const path = screen.path
     capture = null
     releaseHotkeyField()
+    armCapture(false)
     if (!text) {
       renderList()
       return
@@ -560,7 +569,10 @@ export function mountDigivoice(renderer, session, options = {}) {
       }
       block.onMouseUp = () => {
         if (finished || working || !screen) return
-        if (capture && index !== screen.selected) capture = null
+        if (capture && index !== screen.selected) {
+          capture = null
+          armCapture(false)
+        }
         screen.selected = index
         chooseCurrent()
       }
@@ -644,6 +656,7 @@ export function mountDigivoice(renderer, session, options = {}) {
 
   async function persistSettings() {
     capture = null
+    armCapture(false)
     await session.call({ op: "save" })
   }
 
@@ -651,6 +664,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     if (finished || !screen || working) return
     if (capture) {
       capture = null
+      armCapture(false)
       renderList()
       return
     }
@@ -1016,6 +1030,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     if (!row) return
     if (row.kind === "capture") {
       capture = {}
+      armCapture(true)
       renderList()
       return
     }
@@ -1079,6 +1094,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       if (name === "escape") {
         if (typeof key.stopPropagation === "function") key.stopPropagation()
         capture = null
+        armCapture(false)
         renderList()
         return
       }
@@ -1162,6 +1178,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       return restarting
     },
     destroy() {
+      armCapture(false)
       if (timer) clearInterval(timer)
       keyInput.processParsedKey = processParsedKey
       keyInput.off("keypress", onKey)

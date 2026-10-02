@@ -100,6 +100,7 @@ local STOP_FILE = DATA_DIR .. "/dict.stop"
 local CANCEL_FILE = DATA_DIR .. "/dict.cancel"
 local STATUS_FILE = DATA_DIR .. "/status.json"
 local SETTINGS_FILE = DATA_DIR .. "/settings.json"
+local CAPTURE_FILE = DATA_DIR .. "/hotkey.capture"
 local POS_FILE = DATA_DIR .. "/banner_pos.json"
 local FLAG_FILE = DATA_DIR .. "/banner.show"
 
@@ -941,14 +942,35 @@ local function handle_hotkey(event)
   return false
 end
 
+--- Body of hotkey.capture, or "" when the field is closed or the read fails.
+local function capture_flag()
+  local ok, text = pcall(function()
+    local f = io.open(CAPTURE_FILE, "r")
+    if not f then
+      return ""
+    end
+    local body = f:read("*a") or ""
+    f:close()
+    return body
+  end)
+  if not ok or type(text) ~= "string" then
+    return ""
+  end
+  return text
+end
+
 -- flagsChanged is types[1] so existing tests still find this tap.
 -- keyDown is the same tap: one listener, replaced when a remap is saved.
+-- While the hotkey field is open, the key is returned to the terminal.
 local tap = hs.eventtap.new({
   hs.eventtap.event.types.flagsChanged,
   hs.eventtap.event.types.keyDown,
 }, function(event)
   local ok, result = pcall(function()
     refresh_hotkeys()
+    if hotkeys.suspended(capture_flag()) then
+      return false
+    end
     return handle_hotkey(event)
   end)
   if not ok then

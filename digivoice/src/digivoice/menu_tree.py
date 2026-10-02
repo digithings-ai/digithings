@@ -17,7 +17,7 @@ from typing import TextIO
 
 from pydantic import BaseModel, ConfigDict
 
-from digivoice.bindings import binding_warning, parse_binding
+from digivoice.bindings import binding_conflict, binding_warning, parse_binding, set_hotkey_capture
 from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, CatalogModel
 from digivoice.installed_models import InstalledModel, discover_installed_models
 from digivoice.models import VoicePaths
@@ -634,16 +634,27 @@ def browse_settings(
             stack.append(f"{path}/{row.name}")
             continue
         if row.kind == "capture":
-            bound = capture_binding(
-                title,
-                [item.as_block(path) for item in rows],
-                picked,
-                stdin,
-                stdout,
-                subtitle=path,
-            )
+            set_hotkey_capture(paths.data_dir, True)
+            try:
+                bound = capture_binding(
+                    title,
+                    [item.as_block(path) for item in rows],
+                    picked,
+                    stdin,
+                    stdout,
+                    subtitle=path,
+                )
+            finally:
+                set_hotkey_capture(paths.data_dir, False)
             previous = str(getattr(settings.hotkey_bindings, row.field))
+            current = {
+                "dictation": settings.hotkey_bindings.dictation,
+                "speak": settings.hotkey_bindings.speak,
+                "cancel": settings.hotkey_bindings.cancel,
+            }
             warning = binding_warning(row.field, bound, previous) if bound else None
+            if warning is None and bound:
+                warning = binding_conflict(row.field, bound, current)
             if warning:
                 stdout.write(f"  {warning}\n")
                 stdout.flush()

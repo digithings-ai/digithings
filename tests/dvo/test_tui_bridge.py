@@ -219,6 +219,71 @@ def test_option_lock_in_reloads_hammerspoon(tmp_path: Path) -> None:
     assert [call.argv for call in runner.calls] == [["hs", "-c", "hs.reload()"]]
 
 
+def test_duplicate_hotkey_is_refused_and_does_not_reload(tmp_path: Path) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    hs = bindir / "hs"
+    hs.write_text("#!/bin/sh\n", encoding="utf-8")
+    hs.chmod(0o755)
+    env = {"DIGIVOICE_DATA_DIR": str(tmp_path), "PATH": str(bindir)}
+    runner = FakeRunner()
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/hotkeys"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=runner,
+    )["rows"]
+    index = next(i for i, row in enumerate(rows) if row["name"] == "dictation")
+    before = load_settings(resolve_paths("linux", tmp_path, env)).hotkey_bindings.dictation
+    refused = dispatch(
+        {"op": "apply", "path": "/settings/hotkeys", "index": index, "text": "Esc"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=runner,
+    )
+    assert refused["saved"] is False
+    assert "already cancel" in refused["note"]
+    paths = resolve_paths("linux", tmp_path, env)
+    assert load_settings(paths).hotkey_bindings.dictation == before
+    assert runner.calls == []
+    kept = dispatch(
+        {"op": "apply", "path": "/settings/hotkeys", "index": index, "text": "Right Option"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=runner,
+    )
+    assert kept["saved"] is True
+    assert [call.argv for call in runner.calls] == [["hs", "-c", "hs.reload()"]]
+
+
+def test_hotkey_capture_flag_tracks_the_field(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    opened = dispatch(
+        {"op": "hotkey-capture", "active": True},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert opened["active"] is True
+    flag = tmp_path / "hotkey.capture"
+    assert flag.read_text(encoding="utf-8") == "1\n"
+    closed = dispatch(
+        {"op": "hotkey-capture", "active": False},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert closed["active"] is False
+    assert not flag.exists()
+    dispatch({"op": "boot"}, platform="linux", home=tmp_path, env=env)
+    flag.write_text("1\n", encoding="utf-8")
+    dispatch({"op": "close"}, platform="linux", home=tmp_path, env=env)
+    assert not flag.exists()
+
+
 def test_bridge_history_row_is_the_timestamp(tmp_path: Path) -> None:
     env = _env(tmp_path)
     paths = resolve_paths("linux", tmp_path, env)

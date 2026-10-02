@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from digivoice.bindings import binding_warning
+from digivoice.bindings import binding_conflict, binding_warning, set_hotkey_capture
 from digivoice.catalog import install_catalog_model
 from digivoice.doctor import doctor_checks
 from digivoice.history import delete_entry, read_history
@@ -199,6 +199,7 @@ def dispatch(
     op = str(req.get("op") or "boot")
     footer = NAV_FOOTER
     if op == "boot":
+        set_hotkey_capture(paths.data_dir, False)
         start = norm_path(str(req.get("start") or env.get("DIGIVOICE_TUI_START") or "/"))
         looked = real_probe(env.get("PATH", ""))
         context = build_context_lines(platform, home, env, probe=looked)
@@ -282,7 +283,11 @@ def dispatch(
     if op == "quit":
         report = stop_home_control(platform, home, env, runner=run_command)
         return {"footer": footer, "exit": 0, "stopped": True, "note": report.summary}
+    if op == "hotkey-capture":
+        set_hotkey_capture(paths.data_dir, bool(req.get("active")))
+        return {"footer": footer, "active": bool(req.get("active"))}
     if op == "close":
+        set_hotkey_capture(paths.data_dir, False)
         return {"footer": footer, "exit": 0, "stopped": False}
     return {"footer": footer, "error": f"unknown op {op}"}
 
@@ -366,7 +371,16 @@ def _apply(
             return {"capture": True, "name": row.name}
         cleaned = text.strip()
         previous = str(getattr(settings.hotkey_bindings, row.field))
+        # Enter closed the field. Clear the flag before a reload arms the new bind.
+        set_hotkey_capture(paths.data_dir, False)
+        current = {
+            "dictation": settings.hotkey_bindings.dictation,
+            "speak": settings.hotkey_bindings.speak,
+            "cancel": settings.hotkey_bindings.cancel,
+        }
         warning = binding_warning(row.field, cleaned, previous)
+        if warning is None:
+            warning = binding_conflict(row.field, cleaned, current)
         if warning:
             return {
                 "saved": False,

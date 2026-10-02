@@ -276,16 +276,27 @@ def test_hotkey_is_stored_only_when_enter_locks_it_in(tmp_path: Path) -> None:
 def test_unparseable_hotkey_keeps_the_previous_binding(tmp_path: Path) -> None:
     """Enter on garbage warns and does not write. Esc after a save leaves that save."""
     paths = _paths(tmp_path)
-    browse_settings(paths, io.StringIO("4\n1\nEsc\n\n\n"), io.StringIO())
-    assert load_settings(paths).hotkey_bindings.dictation == "Esc"
+    browse_settings(paths, io.StringIO("4\n1\nTab\n\n\n"), io.StringIO())
+    assert load_settings(paths).hotkey_bindings.dictation == "Tab"
     before = (tmp_path / "settings.json").read_text(encoding="utf-8")
     browse_settings(paths, io.StringIO("4\n1\n\n\n"), io.StringIO())
     warned = io.StringIO()
     browse_settings(paths, io.StringIO("4\n1\nnot-a-key\n\n\n"), warned)
-    assert load_settings(paths).hotkey_bindings.dictation == "Esc"
+    assert load_settings(paths).hotkey_bindings.dictation == "Tab"
     assert (tmp_path / "settings.json").read_text(encoding="utf-8") == before
     assert "not a key" in warned.getvalue()
-    assert "keeping Esc" in warned.getvalue()
+    assert "keeping Tab" in warned.getvalue()
+    assert not (tmp_path / "hotkey.capture").exists()
+
+
+def test_duplicate_hotkey_names_the_role_and_does_not_write(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    warned = io.StringIO()
+    browse_settings(paths, io.StringIO("4\n1\nEsc\n\n\n"), warned)
+    assert load_settings(paths).hotkey_bindings.dictation == "Right Option"
+    assert "already cancel" in warned.getvalue()
+    assert not (tmp_path / "settings.json").exists()
+    assert not (tmp_path / "hotkey.capture").exists()
 
 
 def test_hotkey_capture_persists_and_blank_cancels(tmp_path: Path) -> None:
