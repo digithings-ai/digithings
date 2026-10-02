@@ -279,7 +279,79 @@ def test_run_and_write_windows_engine_bars_to_trade_start(
     assert payload["period_start"] >= "2018-01-01"
 
 
-def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
+def test_run_and_write_per_entry_trade_start_gold_override_btc_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per-entry trade_start override, Ruling 5 (#4804): gold resolves its
+    entry-level 2010-01-01 window while BTC entries without the key fall back
+    to defaults (2018-01-01) byte-identically.
+
+    Mirrors the sell_mask BTC-None paired pattern: the gold arm proves the
+    override takes effect (engine bars start 2010, strictly before the
+    default), the BTC arm proves the fallback is undisturbed.
+    """
+    import digiquant.strategies.sdca.providers as providers_mod
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2009, 6, 1), 3400
+    _daily_ohlcv(start, days, close0=100.0, symbol="GLD-USD").write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    output = tmp_path / "out"
+    captured: dict[str, object] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured[strategy] = ohlcv["timestamp"].min()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    class _StubRiskModel:
+        def __init__(self) -> None:
+            from types import SimpleNamespace
+
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        return _StubRiskModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    settings = gts.load_settings()
+    assert settings["strategies"]["gold_sdca"].get("trade_start") == "2010-01-01"
+    assert "trade_start" not in settings["strategies"]["btc_sdca"]
+
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+    assert btc_entry is not None
+    assert str(captured["gold_sdca"])[:10] == "2010-01-01"
+    assert str(captured["gold_sdca"])[:10] < "2018-01-01"
+    assert str(captured["btc_sdca"])[:10] == "2018-01-01"
+
+
+def test_run_and_write_gold_sdca_dispatches_rolling_z_offline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Gold live-path plumbing (#4804): entry-driven dispatch, no live fit.
@@ -287,7 +359,8 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     Canned ``gold_sdca``-shaped run through ``run_and_write`` with the rails
     seam stubbed (assert dispatch *name*, not fit values) and only a UUP
     sibling staged: uup must survive the drop-guard while the unstaged m2 leg
-    is zeroed, and provenance must name uup + the generic risk model.
+    is zeroed, and provenance must name uup + the rolling-z risk model
+    (Ruling 4: the reselect rides rolling90/z1.0 rails, not generic trend).
     """
     from types import SimpleNamespace
 
@@ -360,7 +433,7 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     assert entry is not None
     assert entry["kind"] == "dca"
     # Rails dispatch reads the entry's risk_model (no live fit in tests).
-    assert resolved_names == ["generic_valuation"]
+    assert resolved_names == ["rolling_z"]
     # Drop-guard: staged uup survives, unstaged m2 is zeroed.
     published = settings["strategies"]["gold_sdca"]["sdca"]["indicator_weights"]
     assert published["uup"] == 0.5
@@ -371,7 +444,7 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     payload = json.loads((output / "gold_sdca.json").read_text())
     notes = " ".join(payload["notes"])
     assert "uup:0.5" in notes
-    assert "risk_model=generic_valuation" in notes
+    assert "risk_model=rolling_z" in notes
     assert "Preset gold_reselect" in notes
     assert "Coefficients" in notes
     assert payload["dca"] is not None
@@ -633,7 +706,7 @@ def test_run_and_write_gold_sell_mask_threads_veto_offline(
     assert captured["gold_sdca"]["sell_dates"] == expected_days
     assert isinstance(captured["gold_sdca"]["sell_dates"], frozenset)
     # Window/z thread through to the selector at reselect defaults.
-    gold_resolve = [kw for name, kw in resolve_calls if name == "generic_valuation"]
+    gold_resolve = [kw for name, kw in resolve_calls if name == "rolling_z"]
     assert gold_resolve and gold_resolve[0].get("rolling_window") == 90
     assert gold_resolve[0].get("rolling_z") == 1.0
     # Provenance names the mask-day count.

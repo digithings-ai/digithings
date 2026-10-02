@@ -59,9 +59,10 @@
       "label": "GLD-SDCA",
       "kind": "dca",
       "strategy_type": "sdca",
+      "trade_start": "2010-01-01",
       "sdca": {
         "preset": "gold_reselect",
-        "risk_model": "generic_valuation",
+        "risk_model": "rolling_z",
         "rolling_window": 90,
         "rolling_z": 1.0,
         "long_only": false,

@@ -768,9 +768,12 @@ def run_and_write(
 
     d = settings["defaults"]
     initial_capital = float(d["initial_capital"])
-    trade_start = d.get("trade_start") or ""
-    family = strategy_type_of(settings, strategy)
     entry = settings["strategies"][strategy]
+    # Per-entry trade_start override (Ruling 5, #4804): an entry-level window
+    # wins (gold resolves 2010-01-01); entries without the key fall back to
+    # defaults (BTC resolves identically).
+    trade_start = entry.get("trade_start") or d.get("trade_start") or ""
+    family = strategy_type_of(settings, strategy)
 
     calibration: dict | None = None
     provenance_notes: list[str] = []
