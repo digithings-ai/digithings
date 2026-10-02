@@ -15,6 +15,8 @@ from digivoice.menu_tree import browse_settings, rows_at
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, load_settings
 from digivoice.tui import (
+    HIT_BACK,
+    NAV_FOOTER,
     MenuBlock,
     capture_binding,
     choose,
@@ -56,16 +58,54 @@ def test_every_row_explains_itself() -> None:
             assert f"[{row.value}]" in row.label()
 
 
-def test_browse_toggles_paste(tmp_path: Path) -> None:
+def test_toggle_opens_a_chooser_and_saves_only_the_pick(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    browse_settings(paths, io.StringIO("1\n3\n\n\n"), io.StringIO())
+    browse_settings(paths, io.StringIO("1\n3\n\n\n\n"), io.StringIO())
+    assert load_settings(paths).paste_on_stop is True
+    browse_settings(paths, io.StringIO("1\n3\n2\n\n\n"), io.StringIO())
     assert load_settings(paths).paste_on_stop is False
 
 
-def test_browse_cycles_banner_density(tmp_path: Path) -> None:
+def test_cycle_opens_a_chooser_and_saves_only_the_pick(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    browse_settings(paths, io.StringIO("3\n4\n\n\n"), io.StringIO())
+    browse_settings(paths, io.StringIO("3\n4\n\n\n\n"), io.StringIO())
+    assert load_settings(paths).banner_density == "retract"
+    browse_settings(paths, io.StringIO("3\n4\n2\n\n\n"), io.StringIO())
     assert load_settings(paths).banner_density == "full"
+
+
+def test_option_rows_are_choosers_not_toggles() -> None:
+    rows = _walk(VoiceSettings())
+    assert rows
+    assert all(row.kind not in {"toggle", "cycle"} for row in rows)
+    assert [row.choice for row in rows_at(VoiceSettings(), "/settings/banner/pin")] == [
+        "on",
+        "off",
+    ]
+    assert [row.choice for row in rows_at(VoiceSettings(), "/settings/banner/position")][:2] == [
+        "top-center",
+        "top-left",
+    ]
+
+
+def test_returning_lands_on_the_same_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[int] = []
+    real = choose
+
+    def wrapped(
+        title: str,
+        stdin: io.TextIO | None = None,
+        stdout: io.TextIO | None = None,
+        **kwargs: object,
+    ) -> int | str | None:
+        start = kwargs.get("start_at", 0)
+        seen.append(start if isinstance(start, int) else 0)
+        return real(title, stdin=stdin, stdout=stdout, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("digivoice.menu_tree.choose", wrapped)
+    browse_settings(_paths(tmp_path), io.StringIO("1\n3\n\n\n\n"), io.StringIO())
+    # settings, speech, paste chooser, speech again (paste is row 2), settings.
+    assert seen[3] == 2
 
 
 def test_rewrite_is_enabled_style_and_model() -> None:
@@ -87,10 +127,10 @@ def test_rewrite_is_enabled_style_and_model() -> None:
     assert "apps" not in names
 
 
-def test_banner_pin_is_a_toggle() -> None:
+def test_banner_pin_is_a_chooser() -> None:
     rows = rows_at(VoiceSettings(), "/settings/banner")
     assert [row.name for row in rows][:2] == ["show", "pin"]
-    assert rows[1].field == "banner_pinned"
+    assert rows[1].kind == "pick"
     assert rows[1].value == "off"
 
 
@@ -299,3 +339,62 @@ def test_click_on_the_voice_row_selects_it(monkeypatch: pytest.MonkeyPatch) -> N
         tty.close()
         os.close(master)
     assert picked == voice_index
+
+
+def test_footer_is_the_standard_controls() -> None:
+    frame = render_screen("settings", ["one", "two"], 0, cols=80, rows=24, use_ansi=False)
+    assert NAV_FOOTER in frame
+    assert "q quit" not in frame
+    assert "← →" not in frame
+
+
+def test_click_selects_a_row_and_back_leaves(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("digivoice.tui._term_size", lambda: (80, 24))
+    blocks = [
+        MenuBlock(action="alpha", path="/settings/speech"),
+        MenuBlock(action="beta", path="/settings/rewrite"),
+    ]
+    render_screen(
+        "settings",
+        [block.action for block in blocks],
+        0,
+        subtitle="/settings",
+        cols=80,
+        rows=24,
+        use_ansi=True,
+        use_screen=True,
+        clear=True,
+        blocks=blocks,
+        truecolor=False,
+    )
+    hits = row_hits()
+    beta = next(index for index, hit in enumerate(hits) if hit == 1)
+    back = next(index for index, hit in enumerate(hits) if hit == HIT_BACK)
+
+    def run(sequence: bytes) -> int | str | None:
+        master, slave = pty.openpty()
+
+        def feed() -> None:
+            time.sleep(0.2)
+            os.write(master, sequence)
+
+        threading.Thread(target=feed, daemon=True).start()
+        raw = os.fdopen(slave, "rb+", buffering=0)
+        tty_io = io.TextIOWrapper(raw, encoding="utf-8", newline="\n", write_through=True)
+        try:
+            return choose(
+                "settings",
+                stdin=tty_io,
+                stdout=tty_io,
+                subtitle="/settings",
+                blocks=blocks,
+            )
+        finally:
+            tty_io.close()
+            os.close(master)
+
+    assert run(f"\x1b[<0;2;{beta + 1}M".encode()) == 1
+    assert run(f"\x1b[<0;2;{back + 1}M".encode()) is None
+    assert run(b"\x1b") is None

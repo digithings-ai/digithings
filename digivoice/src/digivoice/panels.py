@@ -26,6 +26,7 @@ from digivoice.settings import default_settings, save_settings
 from digivoice.status import read_system_log, system_log_path
 from digivoice.tui import (
     _ANSI_RESET,
+    NAV_FOOTER,
     MenuBlock,
     _compose,
     _is_tty,
@@ -201,7 +202,7 @@ def _paint_block(stdout: TextIO, title: str, body: list[str], *, color: bool) ->
             chunks = wrap_text(entry, inner)
         for chunk in chunks:
             lines.append(_fit_visible("│  " + chunk, panel_w))
-    lines.append(_fit_visible("└  esc back", panel_w))
+    lines.append(_fit_visible("└  " + NAV_FOOTER, panel_w))
     frame = _compose(
         [],
         lines,
@@ -256,7 +257,10 @@ def present_doctor(
     frame = _paint_block(stdout, "Doctor", body, color=paint)
     if _is_tty(stdin):
         try:
-            _read_key(stdin)
+            while True:
+                key = _read_key(stdin)
+                if key in {None, "esc", "q", "Q"}:
+                    break
         except (OSError, ValueError):
             pass
     return frame
@@ -320,19 +324,23 @@ def browse_history(
         )
         return
     page = 0
+    history_at = 0
     while ordered:
         pages = max(1, (len(ordered) + _PAGE - 1) // _PAGE)
         page = min(page, pages - 1)
         visible = ordered[page * _PAGE : (page + 1) * _PAGE]
+        page_label = f"/history  {page + 1}/{pages}" if pages > 1 else "/history"
         picked = choose(
             "History",
             stdin=stdin,
             stdout=stdout,
-            subtitle="/history",
-            hint=f"{page + 1}/{pages}  ← →",
-            paging=True,
+            subtitle=page_label,
+            paging=pages > 1,
             blocks=_history_blocks(visible),
+            start_at=history_at,
         )
+        if isinstance(picked, int):
+            history_at = picked
         if picked is None:
             return
         if isinstance(picked, str) and picked.startswith("/"):
@@ -342,9 +350,11 @@ def browse_history(
             return
         if picked == "page-prev":
             page = max(0, page - 1)
+            history_at = 0
             continue
         if picked == "page-next":
             page = min(pages - 1, page + 1)
+            history_at = 0
             continue
         if not isinstance(picked, int) or not 0 <= picked < len(visible):
             continue
@@ -427,6 +437,7 @@ def browse_system(
     """Doctor, reload, reset, restart, update, and logs. Esc returns to home."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
+    system_at = 0
     while True:
         picked = choose(
             "System",
@@ -434,7 +445,10 @@ def browse_system(
             stdout=stdout,
             subtitle="/system",
             blocks=SYSTEM_BLOCKS,
+            start_at=system_at,
         )
+        if isinstance(picked, int):
+            system_at = picked
         if picked is None:
             return
         if isinstance(picked, str) and picked.startswith("/"):

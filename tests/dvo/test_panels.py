@@ -83,6 +83,27 @@ def test_doctor_says_ready_when_required_checks_pass() -> None:
     assert "\x1b[32m" in frame
 
 
+def test_esc_backs_out_of_history_system_and_logs(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    browse_history(paths, "linux", FakeProbe(), FakeRunner({}), io.StringIO("\n"), io.StringIO())
+    browse_system(
+        paths,
+        "linux",
+        tmp_path,
+        {"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        io.StringIO("\n"),
+        io.StringIO(),
+    )
+    browse_system(
+        paths,
+        "linux",
+        tmp_path,
+        {"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        io.StringIO("6\n\n"),
+        io.StringIO(),
+    )
+
+
 def test_empty_history_stays_on_a_menu(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     out = io.StringIO()

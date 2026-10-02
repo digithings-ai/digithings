@@ -140,7 +140,8 @@ def test_quit_and_slash_paths_map_without_a_tty(tmp_path: Path) -> None:
     assert "Whisper" in doctor.stdout or "whisper" in doctor.stdout
     pin = run(["/settings/banner/pin"], runtime)
     assert pin.code == 0
-    assert pin.stdout.strip() == "off"
+    assert "on  /settings/banner/pin/on" in pin.stdout
+    assert "off  /settings/banner/pin/off" in pin.stdout
     system = run(["system"], runtime)
     assert "/doctor" in system.stdout
     assert "/reload" in system.stdout

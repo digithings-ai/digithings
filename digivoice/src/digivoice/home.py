@@ -320,6 +320,7 @@ def run_home(
     signal.signal(signal.SIGHUP, _on_terminal_close)
     try:
         play_intro(stdout, "local speech control")
+        home_at = 0
         while True:
             context = _context_with_control(
                 build_context_lines(platform, home, env, probe=runtime.probe),
@@ -335,7 +336,10 @@ def run_home(
                 pulse=True,
                 groups=HOME_GROUPS,
                 blocks=HOME_BLOCKS,
+                start_at=home_at,
             )
+            if isinstance(picked, int):
+                home_at = picked
             if isinstance(picked, str) and picked.startswith("/"):
                 try:
                     _follow(picked)
