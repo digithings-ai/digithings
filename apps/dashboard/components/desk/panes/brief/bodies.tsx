@@ -9,7 +9,6 @@ import type { BriefPaneView } from './model';
 import {
   GLOOMBERG_NO_CLOSES,
   GLOOMBERG_NO_TAPE,
-  GLOOMBERG_PLACEHOLDER,
 } from './format';
 
 function toneClass(tone: 'up' | 'down' | 'flat'): string {
@@ -174,9 +173,8 @@ export function BriefPaneContent({
     case 'gloomberg-quotes':
       return (
         <div className="px-3 py-3 text-xs">
-          <p data-testid="gloomberg-placeholder">{GLOOMBERG_PLACEHOLDER}</p>
           {pane.state !== 'ready' ? (
-            <p className="mt-2 text-ink-mute">{GLOOMBERG_NO_CLOSES}</p>
+            <p className="text-ink-mute">{GLOOMBERG_NO_CLOSES}</p>
           ) : null}
           <DeskState state={pane.state} errorMessage={pane.errorMessage}>
             <BriefTable>
@@ -202,8 +200,7 @@ export function BriefPaneContent({
     case 'gloomberg-tape':
       return (
         <div className="px-3 py-3 text-xs">
-          <p>{GLOOMBERG_PLACEHOLDER}</p>
-          <p data-testid="gloomberg-tape-empty" className="mt-2 text-ink-mute">
+          <p data-testid="gloomberg-tape-empty" className="text-ink-mute">
             {GLOOMBERG_NO_TAPE}
           </p>
           <DeskState state={pane.state} errorMessage={pane.errorMessage} />

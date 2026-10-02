@@ -1,7 +1,6 @@
 /** Fail closed. A missing figure is an em dash, never zero and never a guess. */
 export const EM_DASH = '—';
 
-export const GLOOMBERG_PLACEHOLDER = 'Layout placeholder. Not a Gloomberg feed.';
 export const GLOOMBERG_NO_CLOSES =
   'The quote strip stays in the brief layout. This state does not print closes.';
 export const GLOOMBERG_NO_TAPE = 'No tape headlines.';

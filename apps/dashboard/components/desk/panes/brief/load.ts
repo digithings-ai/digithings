@@ -15,6 +15,7 @@ import {
   type ThesisTableRow,
 } from '@/lib/desk/digiquant';
 import type { MoverClose } from '@/lib/desk/movers';
+import { isStubEnvelope, STUB_READ } from '@/lib/desk/stub-envelope';
 import { focusSymbol, type BriefSnapshot, type RouteHit } from './model';
 
 function isNotFound(err: unknown): boolean {
@@ -23,6 +24,9 @@ function isNotFound(err: unknown): boolean {
 
 export function paneErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
+  if (err instanceof TypeError && /failed to fetch/i.test(err.message)) {
+    return 'The official API could not be reached.';
+  }
   if (err instanceof Error && err.message.trim()) return err.message;
   return 'The read failed.';
 }
@@ -40,7 +44,10 @@ async function settle<T>(
 function hit<T>(
   result: { ok: true; value: T } | { ok: false; error: unknown },
 ): RouteHit<T> {
-  if (result.ok) return { status: 'ok', data: result.value };
+  if (result.ok) {
+    if (isStubEnvelope(result.value)) return { status: 'error', message: STUB_READ };
+    return { status: 'ok', data: result.value };
+  }
   if (isNotFound(result.error)) return { status: 'empty' };
   return { status: 'error', message: paneErrorMessage(result.error) };
 }
@@ -76,7 +83,7 @@ export async function loadBriefSnapshot(timeframe: VelaTimeframe): Promise<Brief
   const allocations = hit(allocationsR);
   const runHealth = hit(runR);
 
-  const bookDate = briefR.ok ? briefR.value.data.book_as_of : null;
+  const bookDate = brief.status === 'ok' ? brief.data?.data.book_as_of ?? null : null;
   let thesesSkipped = true;
   let theses: RouteHit<ThesisTableRow[]> = { status: 'ok', data: [] };
   if (bookDate) {
@@ -104,11 +111,11 @@ export async function loadBriefSnapshot(timeframe: VelaTimeframe): Promise<Brief
   }
 
   let closes: MoverClose[] = [];
-  if (allocationsR.ok) {
-    const tickers = allocationsR.value.data.rows
+  if (allocations.status === 'ok' && allocations.data) {
+    const tickers = allocations.data.data.rows
       .map((row) => row.ticker.trim().toUpperCase())
       .filter((ticker) => ticker.length > 0 && !isCashTicker(ticker));
-    const asOf = allocationsR.value.data.book_as_of ?? bookDate;
+    const asOf = allocations.data.data.book_as_of ?? bookDate;
     const from = asOf ? shiftUtcDate(asOf, -14) : null;
     if (tickers.length > 0 && asOf && from) {
       const rows = await fetchMarketCloses(tickers, from, asOf);
@@ -116,7 +123,7 @@ export async function loadBriefSnapshot(timeframe: VelaTimeframe): Promise<Brief
     }
   }
 
-  const symbol = portfolioR.ok ? focusSymbol(portfolioR.value.data.positions) : null;
+  const symbol = portfolio.status === 'ok' && portfolio.data ? focusSymbol(portfolio.data.data.positions) : null;
   let chart: BriefSnapshot['chart'] = {
     status: 'empty',
     symbol,

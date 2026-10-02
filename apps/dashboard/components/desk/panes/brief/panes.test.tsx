@@ -164,7 +164,8 @@ describe('Brief panes', () => {
     expect(dbc?.[0]).not.toContain('0.00%');
     expect(html).not.toContain('not today');
 
-    expect(html).toContain('Layout placeholder. Not a Gloomberg feed.');
+    expect(html).not.toContain('Layout placeholder');
+    expect(html).toContain('House marks from the book. Not a Gloomberg feed.');
     expect(html).toContain('No tape headlines.');
     expect(html).not.toContain('Revision breadth');
     expect(html).toContain('No series is drawn in this state.');

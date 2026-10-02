@@ -7,7 +7,7 @@ import { MCP_TOOLS } from "../_mcp";
 const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
 
 const CARD =
-  "flex h-auto min-h-full w-full flex-col items-stretch gap-3 border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal no-underline hover:bg-surface-2";
+  "flex h-auto min-h-full w-full min-w-0 flex-col items-stretch gap-3 overflow-hidden border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
 
 const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
   {
@@ -58,8 +58,8 @@ export function IntegrationsBand() {
       title="What the engine is built on"
       takeaway="Three integrations drive digiquant: Gloomberg for data, LuxAlgo Vela for live signals, NautilusTrader for the engine. digithings runs the agents and the chat around them."
     >
-      <div className="flex flex-col gap-4">
-        <ul aria-label="Architectural drivers" className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">
+      <div className="flex min-w-0 flex-col gap-4">
+        <ul aria-label="Architectural drivers" className="m-0 grid min-w-0 list-none gap-4 overflow-x-clip p-0 md:grid-cols-3">
           {DRIVERS.map((d) => (
             <li key={d.id} className="min-w-0">
               <CtaLink href={integrationHref(d.id)} external variant="ghost" className={CARD}>
@@ -79,8 +79,8 @@ export function IntegrationsBand() {
 
         <LocalLuxalgoWorkflow />
 
-        <div className="grid gap-4 border border-hair p-[1.3rem] md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <CtaLink href={integrationHref("digithings")} external variant="ghost" className="h-auto items-center justify-start gap-3 p-0 text-start no-underline">
+        <div className="grid min-w-0 gap-4 overflow-x-clip border border-hair p-[1.3rem] md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <CtaLink href={integrationHref("digithings")} external variant="ghost" className="h-auto min-w-0 items-center justify-start gap-3 overflow-hidden p-0 text-start whitespace-normal no-underline">
             <span className="text-ink">
               <IntegrationMark id="digithings" size={32} />
             </span>
@@ -93,7 +93,7 @@ export function IntegrationsBand() {
           </CtaLink>
           <dl className="m-0 grid gap-1 font-mono text-[0.72rem]">
             {DIGITHINGS.map((row) => (
-              <div key={row.label} className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-3">
+              <div key={row.label} className="grid min-w-0 grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-3">
                 <dt className="text-ink">{row.label}</dt>
                 <dd className="m-0 text-ink-soft">{row.line}</dd>
               </div>

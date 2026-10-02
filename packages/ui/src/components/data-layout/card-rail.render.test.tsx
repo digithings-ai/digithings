@@ -19,6 +19,7 @@ describe("CardRail", () => {
     expect(html).toContain('aria-label="Strategy tearsheets"');
     expect(html).toContain("snap-x");
     expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("min-w-0");
     expect(html.match(/role="listitem"/g)?.length).toBe(3);
     expect(html.indexOf("Card A")).toBeLessThan(html.indexOf("Card B"));
     expect(html.indexOf("Card B")).toBeLessThan(html.indexOf("Card C"));

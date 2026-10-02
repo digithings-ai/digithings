@@ -22,7 +22,7 @@ import { loadBriefSnapshot } from './load';
 
 const briefData = {
   book_as_of: '2026-09-30',
-  nav_tip: { date: '2026-09-30', nav: null, contract: 'legacy_estimate' },
+  nav_tip: { date: '2026-09-30', nav: null, contract: 'finalized_accounting' },
   day_return_pct: null,
   since_inception_pct: null,
   since_inception_start_date: null,
@@ -141,5 +141,62 @@ describe('loadBriefSnapshot', () => {
     expect(tables).not.toContain('theses');
     expect(bars.fetchVelaBars).not.toHaveBeenCalled();
     expect(snapshot.chart.symbol).toBeNull();
+  });
+
+  it('withholds a stub NAV envelope instead of painting it', async () => {
+    digiquant.getBrief.mockResolvedValue({
+      data: {
+        ...briefData,
+        nav_tip: { date: '2026-08-28', nav: 204.04, contract: 'finalized_accounting' },
+        since_inception_pct: 3.040191838399986,
+      },
+      asOf: '2026-08-28',
+      retrievalPin: null,
+      provenance: null,
+    });
+    digiquant.getPortfolio.mockResolvedValue({
+      data: {
+        book_as_of: '2026-09-24',
+        nav_tip: { date: '2026-09-24', nav: 99.909, contract: 'legacy_estimate' },
+        positions: [],
+      },
+      asOf: null,
+      retrievalPin: null,
+      provenance: null,
+    });
+    digiquant.getAllocations.mockResolvedValue({
+      data: { book_as_of: '2026-09-24', rows: [], contract: 'legacy_estimate' },
+      asOf: null,
+      retrievalPin: null,
+      provenance: null,
+    });
+    digiquant.getTable.mockResolvedValue([]);
+    market.fetchMarketCloses.mockResolvedValue([]);
+
+    const snapshot = await loadBriefSnapshot('1d');
+
+    expect(snapshot.brief.status).toBe('error');
+    expect(snapshot.brief.message).toContain('stub envelope');
+    expect(snapshot.portfolio.status).toBe('error');
+    expect(snapshot.allocations.status).toBe('error');
+    expect(snapshot.thesesSkipped).toBe(true);
+    expect(snapshot.chart.symbol).toBeNull();
+    expect(bars.fetchVelaBars).not.toHaveBeenCalled();
+    expect(market.fetchMarketCloses).not.toHaveBeenCalled();
+  });
+
+  it('names an unreachable API instead of the browser fetch error', async () => {
+    const down = new TypeError('Failed to fetch');
+    digiquant.getBrief.mockRejectedValue(down);
+    digiquant.getPortfolio.mockRejectedValue(down);
+    digiquant.getAllocations.mockRejectedValue(down);
+    digiquant.getTable.mockRejectedValue(down);
+
+    const snapshot = await loadBriefSnapshot('1d');
+
+    expect(snapshot.brief.status).toBe('error');
+    expect(snapshot.brief.message).toBe('The official API could not be reached.');
+    expect(snapshot.portfolio.message).toBe('The official API could not be reached.');
+    expect(snapshot.runHealth.message).toBe('The official API could not be reached.');
   });
 });
