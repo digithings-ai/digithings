@@ -8,10 +8,12 @@
 ---   * theme chrome (digichat light/dark flips; RYG status colors stay)
 ---   * drag/snap anchors and reanchoring
 --- init.lua only draws what this module computes. The surface is one status icon.
---- No status word, copy, close, pin button, transcript, waveform, or fact line.
+--- No status word, copy, close, pin button, transcript, or fact line.
+--- Recording is a level meter on that same grid. The other marks stay and move.
 --- The icon shows for recording, dictating, processing, a current error, or a
 --- current warning. Pending, idle, and nothing-to-show hide it. banner_pinned
---- keeps the idle icon up. Density is ignored.
+--- keeps the idle icon up. Density is ignored. banner_animations false holds
+--- one frame.
 
 local M = {}
 
@@ -109,37 +111,178 @@ local RED = { red = 0.94, green = 0.27, blue = 0.27 }
 local AMBER = { red = 0.96, green = 0.65, blue = 0.14 }
 local INK = { red = 0.78, green = 0.80, blue = 0.82 }
 local GRAY = { red = 0.62, green = 0.66, blue = 0.68 }
+local DIM = 0.15
 
--- Static glyphs. Recording is a mark, not a column wave.
-local RECORD = glyph({ { 1, 2 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 2 }, { 3, 3 } })
+-- The marks stay on the grid. Recording is the level meter below.
 local DICTATE = glyph({ { 1, 1 }, { 1, 3 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 3 } })
-local PROCESS = glyph({ { 0, 2 }, { 1, 1 }, { 1, 3 }, { 2, 0 }, { 2, 4 }, { 3, 1 }, { 3, 3 }, { 4, 2 } })
+-- Diamond, clockwise from the top, so a highlight can chase the outline.
+local RING_RC = {
+  { 0, 2 },
+  { 1, 3 },
+  { 2, 4 },
+  { 3, 3 },
+  { 4, 2 },
+  { 3, 1 },
+  { 2, 0 },
+  { 1, 1 },
+}
+local PROCESS = glyph(RING_RC)
+local RING = {}
+local RING_AT = {}
+for n, rc in ipairs(RING_RC) do
+  local cell = rc[1] * GRID + rc[2]
+  RING[n] = cell
+  RING_AT[cell] = n - 1
+end
+
+local function clamp01(x)
+  if x < 0 then
+    return 0
+  end
+  if x > 1 then
+    return 1
+  end
+  return x
+end
+
+-- Stable 0..1 mix. Columns do not share a phase, and tests can replay a frame.
+local function hash01(n)
+  local x = (n * 1103515245 + 12345) % 2147483648
+  return x / 2147483648
+end
+
+local function meter_level(col, t)
+  local period_a = 0.42 + hash01(col * 17 + 3) * 0.36
+  local period_b = 0.28 + hash01(col * 29 + 11) * 0.22
+  local wobble = 0.5 + 0.5 * math.sin((t / period_a + hash01(col * 13 + 5)) * (2 * math.pi))
+  local flutter = 0.5 + 0.5 * math.sin((t / period_b + hash01(col * 19 + 7)) * (2 * math.pi))
+  local flow = 0.5 + 0.5 * math.sin((t / 1.35 - col * 0.22) * (2 * math.pi))
+  return clamp01(0.08 + 0.92 * (0.46 * wobble + 0.24 * flutter + 0.30 * flow))
+end
+
+-- Row 0 is the top of the icon. A bar fills upward from row 4.
+local function meter_alpha(row, col, t)
+  local covered = meter_level(col, t) * GRID - (GRID - 1 - row)
+  if covered >= 1 then
+    return 1
+  end
+  if covered <= 0 then
+    return 0.10
+  end
+  return 0.10 + 0.90 * covered
+end
+
+local function sweep_glyph(mark, i, col, t, period)
+  if not mark[i] then
+    return DIM
+  end
+  local pos = (t / period) % 1 * (GRID - 1)
+  local d = math.abs(col - pos)
+  local peak = math.exp(-(d * d) / 0.42)
+  return 0.32 + 0.68 * peak
+end
+
+local function chase(i, t, period)
+  local idx = RING_AT[i]
+  if idx == nil then
+    return DIM
+  end
+  local n = #RING
+  local head = (t / period) % 1 * n
+  local dist = math.abs(idx - head)
+  if dist > n / 2 then
+    dist = n - dist
+  end
+  local peak = math.max(0, 1 - dist / 1.65)
+  return 0.34 + 0.66 * peak
+end
+
+local function ripple_glyph(mark, i, row, col, t, period)
+  if not mark[i] then
+    return DIM
+  end
+  local dist = math.max(math.abs(row - 2), math.abs(col - 2))
+  local x = (t / period - dist * 0.18) % 1
+  local f = 0.5 * (1 + math.cos(2 * math.pi * x))
+  return 0.30 + 0.70 * f
+end
+
+local function warn_motion(i, row, _, t)
+  if not BANG[i] then
+    return DIM
+  end
+  local cycle = (t / 1.15) % 1
+  if row == 4 then
+    local f = 0
+    if cycle >= 0.58 then
+      local u = (cycle - 0.58) / 0.42
+      f = math.sin(math.pi * math.min(1, u))
+    end
+    return 0.25 + 0.75 * f
+  end
+  local head = 2
+  if cycle < 0.58 then
+    head = (cycle / 0.58) * 2
+  end
+  local d = math.abs(row - head)
+  local peak = math.max(0, 1 - d / 1.05)
+  return 0.34 + 0.66 * peak
+end
+
+local function idle_motion(i, row, col, t)
+  if not STOP[i] then
+    return DIM
+  end
+  local dist = math.abs(row - 2) + math.abs(col - 2)
+  local x = (t / 2.6 - dist * 0.07) % 1
+  local f = 0.5 * (1 + math.cos(2 * math.pi * x))
+  return 0.20 + 0.42 * f
+end
 
 local MATRIX = {
-  record = { color = RED, glyph = RECORD },
-  dictate = { color = INK, glyph = DICTATE },
+  record = {
+    color = RED,
+    meter = true,
+    motion = function(_, row, col, t)
+      return meter_alpha(row, col, t)
+    end,
+  },
+  dictate = {
+    color = INK,
+    glyph = DICTATE,
+    motion = function(i, _, col, t)
+      return sweep_glyph(DICTATE, i, col, t, 0.9)
+    end,
+  },
   process = {
     color = INK,
     glyph = PROCESS,
-    blink = function()
-      return { duration = 1.4, delay = 0, lo = 0.35 }
+    motion = function(i, _, _, t)
+      return chase(i, t, 1.15)
     end,
   },
   error = {
     color = RED,
     glyph = CROSS,
-    blink = function()
-      return { duration = 1.1, delay = 0, lo = 0.4 }
+    motion = function(i, row, col, t)
+      return ripple_glyph(CROSS, i, row, col, t, 1.05)
     end,
   },
   warn = {
     color = AMBER,
     glyph = BANG,
-    blink = function()
-      return { duration = 1.6, delay = 0, lo = 0.45 }
+    motion = function(i, row, col, t)
+      return warn_motion(i, row, col, t)
     end,
   },
-  idle = { color = GRAY, glyph = STOP, base = 0.35 },
+  idle = {
+    color = GRAY,
+    glyph = STOP,
+    base = 0.35,
+    motion = function(i, row, col, t)
+      return idle_motion(i, row, col, t)
+    end,
+  },
 }
 
 M.MATRIX = MATRIX
@@ -271,21 +414,32 @@ function M.matrix_for(state)
   return MATRIX[M.STATE_MATRIX[state] or "load"]
 end
 
---- Opacity of dot `i` (0-based, row-major) at time `t` seconds.
---- With animations off the same function is frozen at t = 0 (a still frame).
+local function glyph_alpha(cfg, i)
+  local on = (cfg.glyph == nil) or (cfg.glyph[i] == true)
+  if on then
+    return cfg.base or 1
+  end
+  return cfg.dim or DIM
+end
+
+--- Opacity of cell `i` (0-based, row-major) at time `t` seconds.
+--- Animations off holds one frame: the meter at t = 0, or the full mark.
 function M.dot_alpha(state, i, t, animate)
   local cfg = M.matrix_for(state)
-  local row, col = i // GRID, i % GRID
-  local on = (cfg.glyph == nil) or (cfg.glyph[i] == true)
-  local hi = on and (cfg.base or 1) or (cfg.dim or 0.15)
-  local blink = on and cfg.blink and cfg.blink(i, row, col) or nil
-  if not blink then
-    return hi
+  if type(cfg) ~= "table" then
+    return 0
   end
-  local now = animate and t or 0
-  local x = ((now - blink.delay) / blink.duration) % 1
-  local f = 0.5 * (1 + math.cos(2 * math.pi * x))
-  return blink.lo + (hi - blink.lo) * f
+  local row, col = i // GRID, i % GRID
+  if not animate then
+    if cfg.meter then
+      return meter_alpha(row, col, 0)
+    end
+    return glyph_alpha(cfg, i)
+  end
+  if cfg.motion then
+    return cfg.motion(i, row, col, t or 0)
+  end
+  return glyph_alpha(cfg, i)
 end
 
 --------------------------------------------------------------------------------

@@ -66,18 +66,164 @@ for state in pairs(core.STATE_MATRIX) do
   end
 end
 
--- recording is a still icon; processing may blink. Animations off freezes every state.
-local moving = false
-for i = 0, 24 do
-  if core.dot_alpha("recording", i, 0, true) ~= core.dot_alpha("recording", i, 0.3, true) then
-    moving = true
+-- Every pipeline state moves. Animations off holds one frame.
+local function frame_key(state, t, animate)
+  local parts = {}
+  for i = 0, 24 do
+    parts[#parts + 1] = string.format("%.3f", core.dot_alpha(state, i, t, animate))
   end
-  eq(core.dot_alpha("recording", i, 0, false), core.dot_alpha("recording", i, 9.9, false), "still frame")
+  return table.concat(parts, ",")
 end
-check(not moving, "recording icon is still")
-check(core.dot_alpha("rewriting", 2, 0, true) ~= core.dot_alpha("rewriting", 2, 0.7, true), "processing icon blinks")
-eq(core.dot_alpha("error", 0, 0, true), 1, "error glyph dot on")
-eq(core.dot_alpha("error", 1, 0, true), 0.15, "error glyph dot off")
+
+for state in pairs(core.STATE_MATRIX) do
+  local seen = {}
+  for _, t in ipairs({ 0, 0.17, 0.33, 0.5, 0.8, 1.1, 1.6, 2.2 }) do
+    seen[frame_key(state, t, true)] = true
+  end
+  local n = 0
+  for _ in pairs(seen) do
+    n = n + 1
+  end
+  check(n > 1, state .. " moves")
+  for i = 0, 24 do
+    eq(
+      core.dot_alpha(state, i, 0, false),
+      core.dot_alpha(state, i, 9.9, false),
+      state .. " still when animations are off"
+    )
+  end
+end
+
+-- Recording is a level meter: bars grow upward and do not share one height.
+local function column_energy(col, t)
+  local sum = 0
+  for row = 0, 4 do
+    sum = sum + core.dot_alpha("recording", row * 5 + col, t, true)
+  end
+  return sum
+end
+
+for _, t in ipairs({ 0, 0.4, 0.9, 1.5 }) do
+  for col = 0, 4 do
+    local prev = -1
+    for row = 0, 4 do
+      local a = core.dot_alpha("recording", row * 5 + col, t, true)
+      check(a + 1e-9 >= prev, "recording bar grows downward")
+      prev = a
+    end
+  end
+  eq(
+    core.dot_alpha("recording", 0, t, false),
+    core.dot_alpha("recording", 0, 0, true),
+    "animations off freezes the meter"
+  )
+end
+
+local rose, fell = false, false
+local tallest = {}
+for col = 0, 4 do
+  local prev
+  for step = 0, 20 do
+    local energy = column_energy(col, step * 0.12)
+    if prev then
+      if energy > prev + 0.02 then
+        rose = true
+      end
+      if energy < prev - 0.02 then
+        fell = true
+      end
+    end
+    prev = energy
+  end
+end
+check(rose and fell, "recording bars rise and fall")
+for step = 0, 16 do
+  local best, who = -1, -1
+  local t = step * 0.15
+  for col = 0, 4 do
+    local energy = column_energy(col, t)
+    if energy > best then
+      best, who = energy, col
+    end
+  end
+  tallest[who] = true
+end
+local peaks = 0
+for _ in pairs(tallest) do
+  peaks = peaks + 1
+end
+check(peaks > 1, "the tall bar moves across the meter")
+
+-- The other marks keep their shape and each move differently.
+local function gaps_stay_dim(state)
+  for i = 0, 24 do
+    if core.dot_alpha(state, i, 0, false) <= 0.15 then
+      for _, t in ipairs({ 0.2, 0.7, 1.4 }) do
+        eq(core.dot_alpha(state, i, t, true), 0.15, state .. " keeps empty cells dim")
+      end
+    end
+  end
+end
+
+for _, state in ipairs({ "transcribing", "rewriting", "error", "warning", "idle" }) do
+  gaps_stay_dim(state)
+end
+eq(core.dot_alpha("error", 0, 3, false), 1, "error still frame is the mark")
+eq(core.dot_alpha("error", 1, 3, false), 0.15, "error still frame keeps the gap")
+eq(core.dot_alpha("transcribing", 11, 3, false), 1, "dictating still frame is the mark")
+eq(core.dot_alpha("rewriting", 2, 3, false), 1, "processing still frame is the ring")
+eq(core.dot_alpha("warning", 2, 3, false), 1, "warning still frame is the mark")
+eq(core.dot_alpha("idle", 12, 3, false), 0.35, "idle still frame is the quiet square")
+
+local left_then_right = false
+local right_then_left = false
+if core.dot_alpha("transcribing", 11, 0, true) > core.dot_alpha("transcribing", 13, 0, true) + 0.05 then
+  left_then_right = true
+end
+if core.dot_alpha("transcribing", 13, 0.68, true) > core.dot_alpha("transcribing", 11, 0.68, true) + 0.05 then
+  right_then_left = true
+end
+check(left_then_right and right_then_left, "dictating sweep crosses the mark")
+
+local hottest = {}
+local ring = { 2, 8, 14, 18, 22, 16, 10, 6 }
+for step = 0, 8 do
+  local best, who = -1, -1
+  for _, cell in ipairs(ring) do
+    local a = core.dot_alpha("rewriting", cell, step * 0.14, true)
+    if a > best then
+      best, who = a, cell
+    end
+  end
+  hottest[who] = true
+end
+local heads = 0
+for _ in pairs(hottest) do
+  heads = heads + 1
+end
+check(heads > 1, "processing highlight chases the ring")
+eq(frame_key("loading", 0.4, true), frame_key("rewriting", 0.4, true), "loading uses the processing chase")
+eq(frame_key("pasting", 0.4, true), frame_key("speaking", 0.4, true), "paste and speech share the chase")
+
+check(
+  core.dot_alpha("error", 12, 0, true) ~= core.dot_alpha("error", 0, 0, true),
+  "error ripple is brighter at the center first"
+)
+check(
+  core.dot_alpha("error", 12, 0, true) ~= core.dot_alpha("error", 12, 0.45, true),
+  "error ripple moves"
+)
+check(core.dot_alpha("warning", 2, 0, true) > core.dot_alpha("warning", 22, 0, true), "warning stem leads")
+check(core.dot_alpha("warning", 22, 0.92, true) > core.dot_alpha("warning", 2, 0.92, true), "warning dot flashes")
+check(core.dot_alpha("idle", 12, 0, true) ~= core.dot_alpha("idle", 12, 1.3, true), "idle square breathes")
+check(core.dot_alpha("idle", 12, 0, true) ~= core.dot_alpha("idle", 6, 0, true), "idle center leads the edge")
+
+local signatures = {}
+for _, state in ipairs({ "recording", "transcribing", "rewriting", "error", "warning", "idle" }) do
+  local key = frame_key(state, 0.63, true)
+  check(signatures[key] == nil, state .. " motion is its own")
+  signatures[key] = state
+end
 
 -- view merge
 local session = { kind = "dict", start_ms = 1000 }
