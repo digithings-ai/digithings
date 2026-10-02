@@ -26,8 +26,9 @@ describe("scheduled", () => {
 
     await worker.scheduled(
       {
-        // smoke-site stays workflow_dispatch. research-metrics is a container job.
-        cron: "17 6 * * *",
+        // token-canary stays workflow_dispatch. smoke-site is a probe and
+        // treats HTTP 403 as a warning, so it cannot prove a dispatch failure.
+        cron: "41 6 * * *",
         scheduledTime: Date.UTC(2026, 8, 4, 6, 17),
       } as ScheduledController,
       env,
@@ -36,6 +37,88 @@ describe("scheduled", () => {
 
     expect(pending).toHaveLength(1);
     await expect(pending[0]).rejects.toThrow(/HTTP 403/);
+  });
+
+  it("dispatches Monday house-run-09 to digiquant-runner", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const pending: Promise<unknown>[] = [];
+    const scheduledTime = Date.UTC(2026, 9, 5, 9, 17);
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    await worker.scheduled(
+      { cron: "17 9 * * MON", scheduledTime } as ScheduledController,
+      env,
+      executionContext(pending),
+    );
+    await Promise.all(pending);
+
+    expect(githubFetch).not.toHaveBeenCalled();
+    expect(runnerFetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not dispatch disabled daily house-run retries", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const runnerFetch = vi.fn();
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    for (const cron of ["17 10 * * *", "17 11 * * *", "17 12 * * *"]) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        { cron, scheduledTime: Date.UTC(2026, 9, 5, 10, 17) } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+      expect(pending).toHaveLength(0);
+    }
+
+    expect(githubFetch).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
+  });
+
+  it("dispatches checkpoint-archive to digiquant-runner", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-archive", status: "accepted" }, { status: 202 }),
+    );
+    const pending: Promise<unknown>[] = [];
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    await worker.scheduled(
+      { cron: "30 13 * * *", scheduledTime: Date.UTC(2026, 9, 5, 13, 30) } as ScheduledController,
+      env,
+      executionContext(pending),
+    );
+    await Promise.all(pending);
+
+    expect(githubFetch).not.toHaveBeenCalled();
+    expect(runnerFetch).toHaveBeenCalledOnce();
   });
 });
 
@@ -99,6 +182,137 @@ describe("POST /kick", () => {
     expect(body.runs).toEqual([
       { job_id: "prices-at-open-13", run_id: "run-open", status: "accepted" },
     ]);
+  });
+
+  it("strips privileged house args from a kick without force", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.UTC(2026, 8, 30, 10, 0));
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "17 9 * * MON",
+        args: {
+          refresh_scope: "all",
+          dry_run: "true",
+          resume_run_id: "prior-run",
+          run_date: "2026-09-29",
+        },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({
+      refresh_scope: "none",
+      run_date: "2026-09-30",
+    });
+  });
+
+  it("keeps privileged house args and marks a forced kick", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.UTC(2026, 8, 30, 10, 0));
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "17 9 * * MON",
+        force: true,
+        args: {
+          refresh_scope: "all",
+          dry_run: "true",
+          resume_run_id: "prior-run",
+          run_date: "2026-09-29",
+        },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({
+      refresh_scope: "all",
+      dry_run: "true",
+      resume_run_id: "prior-run",
+      run_date: "2026-09-29",
+      force: "true",
+    });
+  });
+
+  it("kick without force strips dry_run", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-archive", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "30 13 * * *",
+        args: { dry_run: "true" },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args).toEqual({});
+  });
+
+  it("kick with force keeps dry_run true", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-archive", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({
+        cron: "30 13 * * *",
+        force: true,
+        args: { dry_run: "true" },
+      }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
+    expect(body.args.dry_run).toBe("true");
   });
 });
 

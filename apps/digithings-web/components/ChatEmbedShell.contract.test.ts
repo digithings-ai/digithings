@@ -81,11 +81,19 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
     expect(src).toContain("opacity: embedReady ? 1 : 0");
-    // Curated per-host copy rides into the iframe URL.
-    expect(src).toContain("Ask about digithings");
-    expect(src).toContain("Ask about Online Compliance Center");
+    // Curated per-host copy rides into the iframe URL. The strings themselves
+    // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
+    // same conversation with the same welcome — assert both halves: the URL
+    // wiring here, and that the shell still reads its copy from the shared
+    // record rather than keeping a private copy that could drift.
     expect(src).toContain('url.searchParams.set("welcome"');
     expect(src).toContain('url.searchParams.set("suggestions"');
+    expect(src).toContain('from "@/lib/embedCopy"');
+
+    const copyPath = fileURLToPath(new URL("../lib/embedCopy.ts", import.meta.url));
+    const copy = readFileSync(copyPath, "utf8");
+    expect(copy).toContain("Ask about digithings");
+    expect(copy).toContain("Ask about Online Compliance Center");
   });
 
   it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {

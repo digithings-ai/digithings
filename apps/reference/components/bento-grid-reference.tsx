@@ -28,7 +28,7 @@ const CELLS: Cell[] = [
   { id: "digichat", span: "unit", blurb: "The terminal, inhabited." },
   { id: "digiquant", span: "wide", blurb: "NautilusTrader quant — research that ends in an order." },
   { id: "digivault", span: "unit", blurb: "Obsidian-style markdown vault." },
-  { id: "digismith", span: "unit", blurb: "Tracing across the graph." },
+  { id: "digitrace", span: "unit", blurb: "Tracing across the graph." },
 ];
 
 export function BentoGridReference() {

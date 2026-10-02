@@ -23,7 +23,7 @@ jobs:
     outputs:
       digibase: ${{ steps.filter.outputs.digibase }}
       digikey: ${{ steps.filter.outputs.digikey }}
-      digismith: ${{ steps.filter.outputs.digismith }}
+      digitrace: ${{ steps.filter.outputs.digitrace }}
       digivault: ${{ steps.filter.outputs.digivault }}
       digiclaw: ${{ steps.filter.outputs.digiclaw }}
       digivoice: ${{ steps.filter.outputs.digivoice }}
@@ -60,10 +60,10 @@ jobs:
               - 'digikey/**'
               - 'tests/dk/**'
               - '.github/workflows/test-digikey.yml'
-            digismith:
-              - 'digismith/**'
+            digitrace:
+              - 'digitrace/**'
               - 'tests/dsm/**'
-              - '.github/workflows/test-digismith.yml'
+              - '.github/workflows/test-digitrace.yml'
             digivault:
               - 'digivault/**'
               - 'tests/dv/**'
@@ -127,6 +127,9 @@ jobs:
               - 'apps/reference/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
+              - 'apps/digitrace-langfuse/**'
+              - 'Dockerfile.digitrace-langfuse-web'
+              - 'Dockerfile.digitrace-langfuse-worker'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -176,7 +179,7 @@ jobs:
               - 'digigraph/**'
               - 'digiquant/**'
               - 'digisearch/**'
-              - 'digismith/**'
+              - 'digitrace/**'
               - 'digivault/**'
               - 'tests/**'
               - 'scripts/**'
@@ -191,9 +194,7 @@ jobs:
               - 'release-please-config.json'
               - 'apps/digichat/package.json'
               - 'package-lock.json'
-              - '.github/workflows/release-please-digichat.yml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
-              - '.github/workflows/db-migrate.yml'
               - '.github/workflows/pipeline-digiquant.yml'
               - '.github/workflows/deploy-digithings-cloudflare.yml'
               - '.github/workflows/deploy-digiquant-cloudflare.yml'
@@ -259,10 +260,10 @@ jobs:
     if: needs.changes.outputs.digikey == 'true'
     uses: ./.github/workflows/test-digikey.yml
 
-  digismith:
+  digitrace:
     needs: changes
-    if: needs.changes.outputs.digismith == 'true'
-    uses: ./.github/workflows/test-digismith.yml
+    if: needs.changes.outputs.digitrace == 'true'
+    uses: ./.github/workflows/test-digitrace.yml
 
   digivault:
     needs: changes
@@ -414,7 +415,7 @@ jobs:
         run: |
           uv run --frozen --no-sync ruff check \
             digibase/src digiclaw/src digigraph/src digiquant/src \
-            digisearch/src digismith/src tests
+            digisearch/src digitrace/src tests
 
       - name: Pytest (scripts + config + agents + integration hops + baseline)
         # tests/config/ carries the house-model / LiteLLM-config contract
@@ -619,7 +620,7 @@ jobs:
       - frontend-canon
       - digibase
       - digikey
-      - digismith
+      - digitrace
       - digivault
       - digiclaw
       - digivoice

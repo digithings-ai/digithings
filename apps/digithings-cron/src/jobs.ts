@@ -2,7 +2,7 @@
  * Typed job map for digithings-cron.
  * Each enabled job.cron must appear in wrangler.toml [triggers] crons.
  */
-export type JobKind = "workflow_dispatch" | "repository_dispatch" | "container";
+export type JobKind = "workflow_dispatch" | "repository_dispatch" | "container" | "probe";
 
 export type Job = {
   id: string;
@@ -22,6 +22,8 @@ export type Job = {
   timeoutSeconds?: number;
   /** Image pin. Phase 1 jobs use "main". */
   codeRef?: "main";
+  /** Set when kind is "probe". Worker fetch; does not start the container. */
+  probe?: "site" | "stack";
 };
 
 const DIGITHINGS = "digithings-ai/digithings" as const;
@@ -52,20 +54,23 @@ function wd(
   };
 }
 
-function rd(
+/** Probe job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+function pj(
   id: string,
   cron: string,
-  repo: Job["repo"],
-  event_type: string,
+  workflow: string,
+  probe: "site" | "stack",
   opts: { enabled?: boolean } = {},
 ): Job {
   return {
     id,
     cron,
-    repo,
-    kind: "repository_dispatch",
-    event_type,
+    repo: DIGITHINGS,
+    kind: "probe",
+    workflow,
+    ref: DEVELOP,
     enabled: opts.enabled ?? true,
+    probe,
   };
 }
 
@@ -80,6 +85,7 @@ function cj(
   opts: {
     inputs?: Record<string, string>;
     etOpenGate?: boolean;
+    enabled?: boolean;
   } = {},
 ): Job {
   return {
@@ -91,7 +97,7 @@ function cj(
     inputs: opts.inputs,
     ref: DEVELOP,
     etOpenGate: opts.etOpenGate,
-    enabled: true,
+    enabled: opts.enabled ?? true,
     command,
     concurrency,
     timeoutSeconds,
@@ -101,6 +107,8 @@ function cj(
 
 /** All org production clocks. Source of truth alongside wrangler [triggers]. */
 export const JOBS: readonly Job[] = [
+  // Resumed 2026-10-01: DigiQuant pipeline clocks live again (Human Gate unlock
+  // reversing #4917). House-run is weekly Monday morning only (cost lock).
   // --- digithings: digiquant prices + market-data (container, #4761) ---
   // inputs stay for the GITHUB_OVERRIDE_JOBS workflow_dispatch path only.
   cj(
@@ -156,6 +164,16 @@ export const JOBS: readonly Job[] = [
     "market-data-refresh",
     1800,
   ),
+  // --- digithings: checkpoint archive (container, #4761 Phase 4) ---
+  // Clock is digithings-cron → digiquant-runner. GHA keeps workflow_dispatch only.
+  cj(
+    "checkpoint-archive",
+    "30 13 * * *",
+    "pipeline-checkpoint-archive.yml",
+    "checkpoint-archive",
+    "checkpoint-archive",
+    3600,
+  ),
   cj(
     "market-data-refresh-evening",
     "30 21 * * *",
@@ -165,16 +183,47 @@ export const JOBS: readonly Job[] = [
     1800,
   ),
 
-  // --- digithings: house-run via repository_dispatch digiquant-baseline ---
-  // Research/portfolio retries run every day; ordinary source cadence decides
-  // refresh. Manual workflow_dispatch still owns explicit refresh_scope.
-  rd("house-run-09", "17 9 * * *", DIGITHINGS, "digiquant-baseline"),
-  rd("house-run-10", "17 10 * * *", DIGITHINGS, "digiquant-baseline"),
-  rd("house-run-11", "17 11 * * *", DIGITHINGS, "digiquant-baseline"),
-  rd("house-run-12", "17 12 * * *", DIGITHINGS, "digiquant-baseline"),
+  // --- digithings: house-run (container, #4761) ---
+  // Live cadence: weekly Monday morning only (cost lock 2026-10-01).
+  cj(
+    "house-run-09",
+    "17 9 * * MON",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+  ),
+  // Daily 10/11/12 retries stay off (weekly Mon lock 2026-10-01).
+  cj(
+    "house-run-10",
+    "17 10 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+    { enabled: false },
+  ),
+  cj(
+    "house-run-11",
+    "17 11 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+    { enabled: false },
+  ),
+  cj(
+    "house-run-12",
+    "17 12 * * *",
+    "pipeline-digiquant.yml",
+    "house-run",
+    "digiquant-pipeline",
+    14400,
+    { enabled: false },
+  ),
 
   // Phase 2 (#4761). Probe CLIs are on main, so this cutover stays codeRef main.
-  // Do not point the container at develop. House-run stays repository_dispatch.
+  // Do not point the container at develop.
   cj(
     "research-metrics",
     "5 22 * * *",
@@ -207,18 +256,14 @@ export const JOBS: readonly Job[] = [
     "execution-cron-check",
     600,
   ),
-
-  // --- digithings: ops / agent / smoke (off-grid minutes) ---
-  wd(
-    "continuous-improvement",
-    "8 22 * * SUN",
-    DIGITHINGS,
-    "pipeline-continuous-improvement.yml",
-  ),
+  wd("continuous-improvement", "8 22 * * SUN", DIGITHINGS, "pipeline-continuous-improvement.yml"),
   wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml"),
   wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
-  // dry_run must be false: workflow defaults dispatch to dry_run=true and only
-  // forced live on the old GHA schedule event.
+
+  // --- digithings: ops / agent / smoke (off-grid minutes) ---
+  // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
+  // only; clocks live here. dry_run must be false: workflow defaults dispatch
+  // to dry_run=true and only forced live on the old GHA schedule event.
   wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
   }),
@@ -231,18 +276,20 @@ export const JOBS: readonly Job[] = [
     DIGITHINGS,
     "project-enforce-assignment.yml",
   ),
-  wd("smoke-stack", "27 7 * * *", DIGITHINGS, "smoke-stack.yml"),
+  pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
   wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
   wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
-  wd("smoke-site", "17 6 * * *", DIGITHINGS, "smoke-site.yml"),
+  pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
 
-  // --- twelve-x (FX Hub); schedule removal is a follow-up in that repo ---
+  // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
+  // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
+  // Add a twelve-x wd() row only with a known cron from that repo.
   wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
-  // Weekday FX Hub clock; house-run-12 is daily (`17 12 * * *`) and separate.
+  // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
   wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
   wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
@@ -267,11 +314,19 @@ export const JOBS: readonly Job[] = [
   wd("twelve-x-archive-maintenance", "30 2 * * *", TWELVE_X, "archive_maintenance.yml", {
     inputs: { dry_run: "false", dump_before_prune: "true" },
   }),
+  // Prior GHA was `0 9 * * 1` (Mon 09:00 UTC). Minute :08 is the house off-grid
+  // offset (same as twelve-x-market-context-weekly) and does not collide with
+  // house-run-09 at 09:17 (`17 9 * * MON`) or project-enforce-assignment at 09:23.
+  // days input omitted — workflow default 14.
+  wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml"),
 ];
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */
-export function jobsForCron(cron: string): Job[] {
-  return JOBS.filter((j) => j.enabled && j.cron === cron);
+export function jobsForCron(
+  cron: string,
+  opts: { includeDisabled?: boolean } = {},
+): Job[] {
+  return JOBS.filter((j) => (opts.includeDisabled || j.enabled) && j.cron === cron);
 }
 
 /** Unique cron expressions for enabled jobs (wrangler [triggers] must match). */

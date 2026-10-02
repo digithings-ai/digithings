@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Reveal } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
+import {
+  CtaLink,
+  DocumentFrame,
+  GlyphList,
+  GlyphRow,
+  PageTitle,
+  Prose,
+  Section,
+} from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
-import { Mono, PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -14,75 +19,39 @@ export const metadata: Metadata = {
     "already run — not to replace it.",
 };
 
-// /about — the positioning page. Every claim here is a property of the repo that
-// a reader can check: the licence (root LICENSE, MIT), the module count (the
-// shared modules registry in @digithings/ui — four core plus five support are
-// shipping; digistore and digilink carry tier: "roadmap", so the lede says
-// "nine shipping … plus two more marked roadmap" rather than the flat "eleven"
-// the homepage uses. A page whose thesis is that every claim is checkable
-// cannot fold two unbuilt modules into a headline count), the
-// single compose file (root docker-compose.yml), provider credentials the stack
-// does not persist, and the traceability surfaces (X-Request-ID middleware in
-// digibase.http, the JSONL audit trail written by each service's audit_log() and
-// redacted through digibase.audit, digismith spans). No adjectives standing in
-// for evidence — where a boundary exists, /security states it.
-//
-// "Bring your own tokens" says the stack PERSISTS no provider credentials, and
-// that they are "supplied per request or read from your own environment". It
-// deliberately does NOT say every provider key you hand it is forwarded on the
-// request, because that is not true today: digigraph/llm_auth.py's
-// push_byok_header() wires X-BYOK-Key through to the client for provider
-// "openai" and "openrouter" only. With provider "anthropic" the key is accepted,
-// parked on a contextvar, and the call still runs on the env-configured
-// credentials (llm_auth.py:92-96 — no set_byok branch). Fixing that path is
-// tracked on its own branch; until it lands, this copy must not promise it.
-// Page grammar is the site's own: .section / .wrap / .section-head / .kicker,
-// DtNav + DtFooter, no new CSS families.
+// /about — the positioning page, kept short for clients: four checkable
+// properties and the dependencies the code actually imports. How each control
+// works, and where it stops, is /security's job; this page links there.
 
-// The four properties of the repository as a whole. Each one is a fact with a
-// filename behind it, named in the body copy so it stays checkable.
-const POSITION: { title: string; body: string }[] = [
+const PROPERTIES: { label: string; body: string }[] = [
   {
-    title: "MIT, and public",
-    body:
-      "The whole repository is MIT-licensed and readable without an account — the " +
-      "orchestration graph, the quant engine wiring, the auth service, the tests, the CI. " +
-      "No open-core teaser with the useful half held back.",
+    label: "MIT, and public",
+    body: "The whole repository — services, tests and CI — is open to read without an account.",
   },
   {
-    title: "Self-hostable anywhere",
-    body:
-      "One docker-compose.yml runs the stack on a laptop, a VM, or a cluster. Every service " +
-      "binds loopback by default, so nothing is on a public interface until you decide to put " +
-      "it there.",
+    label: "Self-hostable anywhere",
+    body: "One compose file runs the stack on a laptop, a VM or a cluster.",
   },
   {
-    title: "Bring your own tokens",
-    body:
-      "Anthropic, OpenAI, or anything LiteLLM speaks. The stack persists no provider credentials — " +
-      "they are supplied per request or read from your own environment — so the model provider, the " +
-      "budget, and the data boundary stay yours.",
+    label: "Bring your own keys",
+    body: "Use any provider LiteLLM speaks. The stack never stores your provider credentials.",
   },
   {
-    title: "A glass box, not a black box",
+    label: "A glass box",
     body:
-      "A correlation ID enters at the edge and rides every hop; workflow steps land in a local " +
-      "JSONL audit trail — appended, never rewritten — and in digismith spans. You can read what " +
-      "the system did, step by step, after the fact.",
+      "Every request carries one id through every service, and each step lands in an audit log " +
+      "you keep.",
   },
 ];
 
-// What the stack composes with, rather than competes against. These are the
-// dependencies the code actually imports — the same seven the homepage's
-// #integrations section names, sourced from the root CLAUDE.md non-negotiables.
-const COMPOSES_WITH: { name: string; role: string }[] = [
-  { name: "LangGraph", role: "supervisor + sub-graph orchestration" },
-  { name: "NautilusTrader", role: "every backtest and optimise path" },
-  { name: "Polars", role: "dataframes by rule; pandas only at the Nautilus and yfinance edges" },
-  { name: "Pydantic v2", role: "typed models at every boundary" },
-  { name: "LiteLLM", role: "provider routing and response caching" },
-  { name: "MCP", role: "every capability exposed as a discoverable tool" },
-  { name: "Docker", role: "one compose file for the whole topology" },
+const COMPOSES_WITH: { label: string; body: string }[] = [
+  { label: "LangGraph", body: "orchestration" },
+  { label: "NautilusTrader", body: "backtests and optimisation" },
+  { label: "Polars", body: "dataframes" },
+  { label: "Pydantic v2", body: "typed models at every boundary" },
+  { label: "LiteLLM", body: "provider routing and caching" },
+  { label: "MCP", body: "every capability as a discoverable tool" },
+  { label: "Docker", body: "one compose file for the whole topology" },
 ];
 
 export default function AboutPage() {
@@ -91,147 +60,58 @@ export default function AboutPage() {
       <DtNav />
 
       <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
-        <PageHead
-          kicker={"// about"}
-          title={
-            <>
-              Infrastructure, <em>not a product.</em>
-            </>
-          }
-        >
-          digithings is an open-source, modular AI infrastructure repository. Nine shipping modules
-          — orchestration, quant research, retrieval, chat, auth, tracing, heartbeat and audit,
-          a markdown vault, and the shared library the rest sit on — plus two more marked roadmap in the registry rather
-          than quietly counted as built. You run them on your own
-          hardware, against your own provider keys, with every step of every run readable
-          afterwards. It is a set of parts you assemble, not a platform you move into.
-        </PageHead>
+        <DocumentFrame>
+          <div className="px-[var(--page-pad)] py-[var(--page-step)]">
+            <PageTitle path="about" title="Infrastructure, not a product.">
+              digithings is open-source, modular AI infrastructure: parts you run on your own
+              hardware with your own keys, instead of a platform you have to move into.
+            </PageTitle>
+          </div>
 
-        <section className="section">
-          <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// four properties"}</span>
-              <h2>What that means, concretely.</h2>
-              <p>
-                Four claims, each one checkable against the repository rather than against a
-                brochure.
-              </p>
-            </Reveal>
-            <div className="grid gap-[1.1rem] sm:grid-cols-2">
-              {POSITION.map((p) => (
-                <Reveal key={p.title} className="mod-card">
-                  <h3>{p.title}</h3>
-                  <p className="text-[0.92rem] leading-[1.65] text-ink-soft">{p.body}</p>
-                </Reveal>
+          <Section id="properties" title="Four properties" lede="Each one you can check in the repository.">
+            <GlyphList>
+              {PROPERTIES.map((r) => (
+                <GlyphRow key={r.label} label={r.label}>
+                  {r.body}
+                </GlyphRow>
               ))}
-            </div>
-          </div>
-        </section>
+            </GlyphList>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// compatibility"}</span>
-              <h2>It plugs into what you already run.</h2>
-              <p>
-                Compatibility is a design goal, not a migration story. digithings is not a
-                replacement for your orchestration framework, your data stack, your model provider,
-                or your execution venue — it is the wiring between them, and it uses the same tools
-                you would have reached for.
-              </p>
-            </Reveal>
-            <ul className="m-0 grid list-none gap-0 p-0">
-              {COMPOSES_WITH.map((c) => (
-                <li
-                  key={c.name}
-                  className="flex flex-wrap items-baseline gap-x-[1rem] gap-y-[0.2rem] border-t border-hair py-[0.85rem] last:border-b"
-                >
-                  <span className="font-mono text-[0.92rem] text-ink">{c.name}</span>
-                  <span className="text-[0.88rem] text-ink-mute">{c.role}</span>
-                </li>
+          <Section
+            id="compatibility"
+            title="Built to compose"
+            lede="The tools the code is built on. Take one piece and leave the rest."
+          >
+            <GlyphList>
+              {COMPOSES_WITH.map((r) => (
+                <GlyphRow key={r.label} label={r.label}>
+                  {r.body}
+                </GlyphRow>
               ))}
-            </ul>
-            <p className="mt-[1.6rem] max-w-[62ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              The corollary is that you can take a piece and leave the rest. The vector store and
-              the LLM provider are both behind interfaces; swapping one is a configuration change,
-              not a fork.
-            </p>
-          </div>
-        </section>
-
-        <section className="section">
-          <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// the glass box"}</span>
-              <h2>Traceable by construction.</h2>
-              <p>
-                &ldquo;Explainable&rdquo; is a claim about a model. This is a claim about a system:
-                the path a request took through it is recorded, and you own the recording.
-              </p>
-            </Reveal>
-            <div className="grid gap-[1.1rem] md:grid-cols-3">
-              <Reveal className="mod-card">
-                <h3>One id, every hop</h3>
-                <p className="text-[0.92rem] leading-[1.65] text-ink-soft">
-                  All six FastAPI services install the shared <Mono>X-Request-ID</Mono> middleware
-                  from <Mono>digibase.http</Mono>. The id is read from the request or generated,
-                  attached to every log record, forwarded on outbound service-to-service calls, and
-                  echoed on the response — so one identifier stitches a whole run together.
+            </GlyphList>
+            <div className="mt-[1.6rem]">
+              <Prose>
+                <p>
+                  Where the stack stops short, it says so. <a href="/security#limits">The security
+                  page lists the limits</a>.
                 </p>
-              </Reveal>
-              <Reveal className="mod-card">
-                <h3>An audit trail on disk</h3>
-                <p className="text-[0.92rem] leading-[1.65] text-ink-soft">
-                  Workflow events are appended to a local JSONL audit log, redacted on the way in.
-                  It is a file you own on a host you control — not a retention policy you agreed to.
-                </p>
-              </Reveal>
-              <Reveal className="mod-card">
-                <h3>Tools you can enumerate</h3>
-                <p className="text-[0.92rem] leading-[1.65] text-ink-soft">
-                  Capabilities are exposed as MCP tools with typed Pydantic schemas, so the set of
-                  actions an agent can take is a list you can read — not an emergent property of a
-                  prompt.
-                </p>
-              </Reveal>
+              </Prose>
             </div>
-            <p className="mt-[1.8rem] max-w-[64ch] text-[0.95rem] leading-[1.7] text-ink-soft">
-              Where that recording has gaps — and it does — they are written down. The audit log is
-              per-host with no signed chain, redaction is name-based rather than content-based, and
-              live-trading adapters are stubs behind a review gate rather than a runtime interlock.{" "}
-              <Link className="text-accent [text-underline-offset:2px] hover:text-ink" href="/security">
-                The security page states each limit
-              </Link>
-              .
-            </p>
-          </div>
-        </section>
+          </Section>
 
-        <section className="section section-alt">
-          <div className="wrap">
-            <Reveal className="section-head">
-              <span className="kicker">{"// read the source"}</span>
-              <h2>Start where you like.</h2>
-              <p>
-                The API reference is written from the codebase and merged with the same module data
-                this site is built on. The repository is the rest of the answer.
-              </p>
-            </Reveal>
-            <div className="flex flex-wrap gap-[0.8rem]">
-              <Link className={buttonVariants({ variant: "default" })} href="/docs">
-                Read the docs <span aria-hidden="true">→</span>
-              </Link>
-              <a
-                className={buttonVariants({ variant: "ghost" })}
-                href="https://github.com/digithings-ai/digithings"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+          <Section id="source" title="Read the source">
+            <div className="flex flex-wrap items-center gap-[0.8rem]">
+              <CtaLink href="/docs">Read the docs</CtaLink>
+              <CtaLink href="https://github.com/digithings-ai/digithings" external variant="ghost">
                 Browse the repository
-              </a>
+              </CtaLink>
+              <CtaLink href="/security#shipping" variant="ghost">
+                How it is tested
+              </CtaLink>
             </div>
-          </div>
-        </section>
+          </Section>
+        </DocumentFrame>
       </main>
 
       <DtFooter />

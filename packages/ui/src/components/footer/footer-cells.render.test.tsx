@@ -26,15 +26,15 @@ describe("FooterCells", () => {
 
   it("draws the table in hairlines, never bands", () => {
     const html = renderToStaticMarkup(<FooterCells cells={CELLS} />);
-    expect(html).toContain("border-t border-hair");
+    expect(html).toContain("border-t border-l border-hair");
     expect(html).toContain("lg:grid-cols-5");
-    expect(html).toContain("lg:border-l");
+    expect(html).toContain("border-r border-b border-hair");
     expect(html).not.toMatch(/text-(emerald|sky|amber|rose|violet|fuchsia|blue|green|red)-/);
   });
 
   it("renders an optional mono note per cell", () => {
     const html = renderToStaticMarkup(<FooterCells cells={CELLS} />);
-    expect(html).toContain("v2.3.1");
+    expect(html).toContain("[v2.3.1]");
     expect(html).toContain("text-[var(--type-meta)]");
   });
 
@@ -52,6 +52,6 @@ describe("FooterCells", () => {
 
   it("omits the legal strip when there is nothing to put in it", () => {
     const html = renderToStaticMarkup(<FooterCells cells={CELLS} />);
-    expect(html).not.toContain("underline-offset-[3px]");
+    expect(html).not.toContain("footer-legal");
   });
 });

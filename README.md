@@ -49,7 +49,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digisearch** | RAG + document search; Azure/Chroma backends | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
-| **digismith** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
+| **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
 | **digiclaw** | Heartbeat, audit, MCP skill → digigraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
@@ -106,7 +106,7 @@ curl -s -X POST http://127.0.0.1:8000/workflow \
 | digigraph | 8000 | Orchestration, chat API |
 | digiquant | 8001 | Backtest, optimize, MCP |
 | digisearch| 8002 | Document search, RAG |
-| digismith | 8003 | Observability status API |
+| digitrace | 8003 | Observability status API |
 | LiteLLM   | 4000 | LLM routing       |
 | digikey   | 8005 | API keys + JWT exchange |
 | digivault | 8004 | Markdown vault management (profile `digivault`) |
@@ -133,7 +133,7 @@ digithings/
 ├── digisearch/   # RAG, document search, ingestion
 ├── digichat/     # Next.js BFF + chat UI
 ├── digikey/      # API keys + JWT
-├── digismith/    # Tracing helpers + status API
+├── digitrace/    # Tracing helpers + status API
 ├── digiclaw/     # Heartbeat, audit, MCP skill
 ├── digibase/     # Shared HTTP/audit library
 ├── config/       # LiteLLM, model modes

@@ -17,7 +17,7 @@ A digithings Project that indexes the digithings ecosystem's own documentation â
 
 ## Reindex
 
-A GitHub Action at [`.github/workflows/docs-reindex-guide.yml`](../../../.github/workflows/docs-reindex-guide.yml) triggers on pushes to `develop` that touch any tracked source file. It invokes [`scripts/reindex_digithings_guide.py`](../../../scripts/reindex_digithings_guide.py), which today does a dry-run (resolves the glob set and chunks in-process via the digisearch stub backend) and will call a service-less ingest entry point once that lands in digisearch.
+The former `docs-reindex-guide.yml` workflow was removed in the strict-essentials cut. Run [`scripts/reindex_digithings_guide.py`](../../../scripts/reindex_digithings_guide.py) locally when comparing the legacy guide; it currently does a dry-run (resolves the glob set and chunks in-process via the digisearch stub backend) and will call a service-less ingest entry point once that lands in digisearch.
 
 ## Convention note
 

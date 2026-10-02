@@ -84,7 +84,7 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 |---|---|
 | `main` | Releases only. Never push directly. |
 | `develop` | Cross-cutting work: tooling, CI, docs, the client pilot, research, releases. |
-| `module/<component>` | Focused session on a single module (`digigraph`, `digiquant`, `digichat`, `digisearch`, `digikey`, `digismith`, `digiclaw`, `digibase`). |
+| `module/<component>` | Focused session on a single module (`digigraph`, `digiquant`, `digichat`, `digisearch`, `digikey`, `digitrace`, `digiclaw`, `digibase`). |
 | `task/<N>-<slug>` | Individual backlog task. Auto-created by `make task ISSUE=N`. |
 
 **Rules:**

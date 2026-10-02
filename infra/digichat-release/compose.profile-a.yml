@@ -2,7 +2,7 @@
 #
 # Services: digichat (GHCR) + digichat-db + digikey (+ blocklist Redis) +
 # digigraph + LiteLLM + digivault. Does NOT start digiquant / digisearch /
-# digismith / heartbeat / observability.
+# digitrace / heartbeat / observability.
 #
 # All digithings images pull from GHCR (no local Dockerfile build):
 #   digichat  → ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}
@@ -147,11 +147,11 @@ services:
       - path: .env.profile-a
         required: false
     environment:
-      # Profile A: digivault on; digiquant / digismith HTTP off (chat-only).
+      # Profile A: digivault on; digiquant / digitrace HTTP off (chat-only).
       DIGIVAULT_URL: ${DIGIVAULT_URL:-http://digivault:8004}
       DIGIQUANT_URL: ${DIGIQUANT_URL:-}
       DIGISEARCH_URL: ${DIGISEARCH_URL:-}
-      DIGISMITH_URL: ${DIGISMITH_URL:-}
+      DIGITRACE_URL: ${DIGITRACE_URL:-}
       DIGIKEY_JWKS_URL: ${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://digikey:8005}
       DIGIKEY_AUDIENCE: ${DIGIKEY_AUDIENCE:-digi-ecosystem}

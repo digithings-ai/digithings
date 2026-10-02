@@ -68,7 +68,7 @@ GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do n
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
 
 ---
 
@@ -100,7 +100,7 @@ Every Digi product, module, package, and service name is **always lowercase** in
 | digiquant | DigiQuant, Digiquant |
 | digisearch | DigiSearch, Digisearch |
 | digikey | DigiKey, Digikey |
-| digismith | DigiSmith, Digismith |
+| digitrace | DigiTrace, Digitrace |
 | digiclaw | DigiClaw, Digiclaw |
 | digibase | DigiBase, Digibase |
 | digiskills | DigiSkills, Digiskills |
@@ -414,7 +414,7 @@ Copy config once per session if missing: `cp .env.example .env` (set `GROQ_API_K
 ### Running services without Docker
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digismith :8003, LiteLLM :4000
+PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digitrace :8003, LiteLLM :4000
 PATH="$PWD/.venv/bin:$PATH" ./scripts/stop_stack_local.sh
 ```
 
@@ -444,6 +444,32 @@ PATH="$PWD/.venv/bin:$PATH" python -m digikey.cli issue-key --tenant default --l
 Standard commands are also documented in root `README.md` and `Makefile`.
 
 ---
+
+## Origin iteration, GitHub promotion
+
+digithings and twelve-x are inbound Origin mirrors (`chrizefan/digithings`, `chrizefan/twelve-x`). GitHub stays the public face and the release host. Agent iterations stay off GitHub.
+
+On a clone, `origin` is `https://origin.cursor.com/chrizefan/<repo>.git` and `github` is the GitHub URL. One-time: `origin auth login`, then `origin repo set-origin-remote`, then point `origin`'s push URL at `chrizefan/<repo>` if the command wrote `digithings-ai/<repo>` (that path is not the mirror).
+
+| Branch | Publish with | Lands on |
+|---|---|---|
+| `origin/<slug>` | `origin push local` | Origin only |
+| `task/<N>-slug`, `module/*`, `develop`, `main`, `release/*` | `git push origin` or `git push github` | GitHub, mirrored back to Origin |
+
+`git push` of any other name, including a push of `origin/<slug>` to `origin` or `github`, writes through to GitHub. Do not open a pull request from an `origin/<slug>` branch. Review starts at promotion:
+
+```bash
+git fetch origin develop
+git switch -c origin/<slug> origin/develop
+# edit, commit
+origin push local
+
+# when the slice is ready for GitHub
+git switch -c task/<N>-<slug> origin/<slug>
+git push -u origin HEAD
+```
+
+Releases, release-please, GitHub Actions, and Cloudflare Pages stay on GitHub. Do not detach the mirror.
 
 ## Branching model
 
@@ -479,12 +505,14 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 
+**PR titles into `develop` are linted.** Use Conventional Commits with a **required scope** (e.g. `feat(digillm): …`, `ci(root): …`). Scope allow-list and exemptions (release-please, develop→main promote) are in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml); short contributor note in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Liveness vs status
 
 - `GET /healthz` — liveness probe, auth-exempt, always `{"ok": true}`, no downstream checks
-- `GET /v1/status` (digismith) — operator diagnostic, may report config/versions; not for load balancers
+- `GET /v1/status` (digitrace) — operator diagnostic, may report config/versions; not for load balancers
 
 ---
 

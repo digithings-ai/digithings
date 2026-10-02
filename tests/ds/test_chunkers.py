@@ -325,13 +325,25 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 126 for merge of #4849 (luxalgo wave-2, +3) and
     #4856 (twin-identity priority note, +1) prose — fixture prose only;
     RecursiveChunker unchanged.
+    Re-recorded at count 127 for #4756 (MultilingualEmbedder provider-table
+    row + DIGISEARCH_EMBEDDING_PROVIDER multilingual value in ARCHITECTURE.md)
+    — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for this module/digisearch <-
+    develop sync: merged ARCHITECTURE.md carries both #4756 multilingual-embedder
+    prose and the #4929 digismith→digitrace rename — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for #4756 (model-id provider
+    value in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
+    rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
+    prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 126
+    assert len(chunks) == 127
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -340,8 +352,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "7e6b7b2044358888",
         "cea76b9e90df056e",
         "a08e55912a60920e",
-        "bea0bf0dc35372d3",
-        "0a3a7b984057149d",
+        "e673e138be63fb36",
+        "2d89279e6be2ef3c",
         "27f0ca91eb93d7e1",
         "ac22aad7e50a19a8",
         "d85a3755cd5e8708",
@@ -391,7 +403,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "c5776a6b47ee3e04",
         "3aed1b59bbde9920",
         "cfa29423e1c162b3",
-        "c251b0318ab387f5",
+        "6a63644b4172ab06",
         "ededb80c2b37cacb",
         "ee316e7423bacefa",
         "f5694c994b90e40c",
@@ -403,8 +415,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "9fdf82f0c003a7a4",
         "9ebbe22f37b1ac89",
         "75aa00c56fa87d4c",
-        "ff55f4563a262e29",
-        "b89e580a2d68a708",
+        "acc08c97a5620aaf",
+        "2da9a534085afc86",
         "d040c14d01f65a04",
         "3021ca751898fc7b",
         "ef1849e4569e10b8",
@@ -433,14 +445,14 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "ac5eea8b8b2f7820",
         "d3566df46fb1e726",
         "c0e9eb6706ab60cc",
-        "676a486feb21ee54",
+        "e33ebeedada29ae9",
         "c68c6371a8457ff8",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
         "8200c214c753f6dd",
         "2c221fc487c50f69",
         "a261a5a8ca75360c",
-        "1d3c907bfabf6dce",
+        "4bbb6da734e96059",
         "70c3d41e152ffa11",
         "81d310410772fb3e",
         "7b96f76f75a29985",
@@ -449,8 +461,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
         "3a05c94596483aed",
-        "0f567a2b684efdf4",
-        "5668e90c11bf9127",
+        "9c818ae221f9e5fd",
+        "954c318c778a99e7",
+        "828033af601c3c57",
         "05bb8905105bc94e",
         "d922a9899a8996a2",
         "166b840aa01714e1",

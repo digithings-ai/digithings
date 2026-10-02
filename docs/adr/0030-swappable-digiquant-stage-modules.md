@@ -83,6 +83,7 @@ Org clocks (`apps/digithings-cron/src/jobs.ts`) dispatch these twelve-x workflow
 | `twelve-x-session-catchup` | `session_catchup.yml` | Weekday catch-up |
 | `twelve-x-performance-eval` | `performance_eval.yml` | Idea / consensus evaluation |
 | `twelve-x-archive-maintenance` | `archive_maintenance.yml` | Archive prune (not a stage) |
+| `twelve-x-digisearch-parity` | `digisearch_parity_check.yml` | Weekly digisearch parity check (Mon 09:08 UTC) |
 
 The hub's "How it works" copy locks the daily run to seven steps. This ADR maps them onto stages. The mapping is a reading of that copy, not a verified split inside the producer:
 

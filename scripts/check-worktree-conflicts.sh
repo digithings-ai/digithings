@@ -19,7 +19,7 @@ ISSUE="${1:-}"
 [[ -z "$ISSUE" ]] && { echo "Usage: scripts/check-worktree-conflicts.sh ISSUE_NUMBER" >&2; exit 0; }
 ISSUE="${ISSUE#\#}"
 
-COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digivault digikey digichat"
+COMPONENTS="digigraph digiquant digisearch digitrace digiclaw digibase digivault digikey digichat"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

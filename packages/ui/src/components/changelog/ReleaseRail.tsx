@@ -46,11 +46,11 @@ export function ReleaseRail({ items, className }: ReleaseRailProps) {
             >
               {item.version}
             </a>
-            <span className="font-mono text-[var(--type-meta)] tracking-[0.02em] text-ink-mute">
+            <span className="font-mono text-[length:var(--type-meta)] tracking-[0.02em] text-ink-mute">
               <time dateTime={item.date}>{item.date}</time>
               {item.tag ? ` · ${item.tag}` : ""}
             </span>
-            <span className="font-mono text-[var(--type-meta)] tracking-[0.02em] text-ink-mute">
+            <span className="font-mono text-[length:var(--type-meta)] tracking-[0.02em] text-ink-mute">
               {item.product}
             </span>
           </div>

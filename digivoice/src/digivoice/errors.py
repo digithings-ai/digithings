@@ -13,3 +13,15 @@ class CaptureError(VoiceError):
 
 class TranscribeError(VoiceError):
     """whisper-cli was missing, errored, or recognized no speech."""
+
+
+class EmptyTranscriptError(TranscribeError):
+    """whisper-cli ran but recognized no speech (silence or a blank-audio marker)."""
+
+
+class CancelledError(VoiceError):
+    """The user cancelled the take (Esc / cancel-file). Nothing is saved or pasted."""
+
+
+class SpeakError(VoiceError):
+    """Piper was missing, the voice file was missing, or playback failed."""

@@ -6,7 +6,7 @@ name: "Test: digiclaw"
 # 5 passed from the lock.
 #
 # The four hand-ordered `pip install -e` lines collapse into one sync: the lock
-# already records that digiclaw needs digibase, digikey and digismith, so the
+# already records that digiclaw needs digibase, digikey and digitrace, so the
 # install order no longer has to be spelled out and kept correct by hand.
 on:
   workflow_call:

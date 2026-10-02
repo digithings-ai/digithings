@@ -28,7 +28,7 @@ INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
 RUNNER_COMMANDS = REPO_ROOT / "apps" / "digiquant-runner" / "commands.json"
-# Phase 2 (#4761): these clocks are cj() container jobs. House-run stays rd().
+# Phase 2 (#4761): these clocks are cj() container jobs. Phase 3 moves house-run to cj().
 PHASE2_CONTAINER_JOBS = ("onchain", "tearsheets", "research-metrics", "execution-cron-check")
 NOTIFY_FRAGMENT = (
     REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "pipeline-olympus-notify.env.yml"
@@ -89,7 +89,7 @@ class TestExecutionCronSpecIsProbeOnly:
         assert crons == ["15 12 * * *"]
         house_crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert house_crons == [
-            "17 9 * * *",
+            "17 9 * * MON",
             "17 10 * * *",
             "17 11 * * *",
             "17 12 * * *",
@@ -106,7 +106,10 @@ class TestExecutionCronSpecIsProbeOnly:
         for job_id in PHASE2_CONTAINER_JOBS:
             assert re.search(rf'cj\(\s*"{job_id}"\s*,', text), job_id
             assert not re.search(rf'wd\(\s*"{job_id}"\s*,', text), job_id
-        assert re.search(r'rd\(\s*"house-run-09"\s*,', text)
+        for hour in (9, 10, 11, 12):
+            job_id = f"house-run-{hour:02d}"
+            assert re.search(rf'cj\(\s*"{job_id}"\s*,', text), job_id
+            assert not re.search(rf'rd\(\s*"{job_id}"\s*,', text), job_id
         jobs = _worker_jobs()
         assert jobs["onchain"] == "40 22 * * *"
         assert jobs["tearsheets"] == "12 0 * * *"
@@ -182,7 +185,7 @@ class TestHouseScheduleRetriesOffPeak:
         jobs = _worker_jobs()
         crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert crons == [
-            "17 9 * * *",
+            "17 9 * * MON",
             "17 10 * * *",
             "17 11 * * *",
             "17 12 * * *",
@@ -191,6 +194,8 @@ class TestHouseScheduleRetriesOffPeak:
         for cron in crons:
             minute, _hour, *_rest = cron.split()
             assert minute != "0", cron
+        assert crons[0].endswith(" * * MON"), crons[0]
+        for cron in crons[1:]:
             assert cron.endswith(" * * *"), cron
 
     def test_house_pipeline_has_no_sunday_forced_refresh(self) -> None:
