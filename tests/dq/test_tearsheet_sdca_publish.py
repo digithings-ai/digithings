@@ -372,7 +372,7 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     notes = " ".join(payload["notes"])
     assert "uup:0.5" in notes
     assert "risk_model=generic_valuation" in notes
-    assert "Preset gold_optimized" in notes
+    assert "Preset gold_reselect" in notes
     assert "Coefficients" in notes
     assert payload["dca"] is not None
     assert payload["kind"] == "dca"
@@ -519,7 +519,13 @@ def test_run_and_write_gold_sell_mask_threads_veto_offline(
     cache.mkdir()
     start, days = date(2020, 1, 1), 300
     step_at = 280
-    gld_closes = [100.0 if i < step_at else 200.0 for i in range(days)]
+    # Drifted (not flat) closes with the 2x jump preserved: the promoted
+    # entry carries nonzero oscillator weights, and flat stretches give
+    # zero-variance windows → non-finite extras → risk-index rejection.
+    # Drift keeps every window finite; the jump still drives the m-leg.
+    gld_closes = [
+        (100.0 * (1.001**i)) if i < step_at else (200.0 * (1.001**i)) for i in range(days)
+    ]
     gld_dates = [start + timedelta(days=i) for i in range(days)]
     pl.DataFrame(
         {
