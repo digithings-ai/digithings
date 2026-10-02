@@ -133,6 +133,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `AzureAISearchBackend` (`query_azure`) | Implemented | `indexes/backends/azure_search.py` |
 | `VectorizeBackend` (Cloudflare Vectorize v2 REST) | Implemented | `indexes/backends/vectorize.py` |
 | `MiniLMEmbedder` (local ONNX, 384-dim) | Implemented | `embedding/providers/minilm.py` |
+| `MultilingualEmbedder` (local quantized ONNX, 384-dim, 50+ langs) | Implemented | `embedding/providers/multilingual.py` |
 | `HippoRAGBackend`, `PageIndexBackend` | Experimental stubs | `indexes/backends/` |
 | `HybridSearcher` (RRF fusion) | Implemented | `search/hybrid.py` |
 | `Reranker` (Cohere, BGE) | Implemented | `search/reranker.py` |
@@ -2037,7 +2038,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_SYNTHESIS_MODEL` | _(unset)_ | digillm model id for Phase B web-research synthesis (`source=web\|auto` turns only). Unset ⇒ every web turn fails hard with `WebResearchError`, never an uncited answer; no new port/service (#4064) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
-| `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |
+| `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` \| model id (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) — explicit provider or model (fails loud if unloadable) |
 | `DIGISEARCH_EMBED_CACHE` | `1` | Wrap BatchEmbedder in EmbeddingCache |
 | `DIGISEARCH_EMBED_BATCH_SIZE` | `100` | BatchEmbedder batch size |
 | `DIGISEARCH_EMBEDDING_MODEL` | _(unset)_ | Active embedding model id (OpenAI model or versioning) |

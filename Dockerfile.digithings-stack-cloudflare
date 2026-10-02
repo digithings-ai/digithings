@@ -81,7 +81,12 @@ RUN uv pip install --system -e "./digiclaw"
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
-RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search]"
+RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search,embedding-multilingual]"
+# ^ embedding-multilingual (onnxruntime + tokenizers + numpy, CPU-only) powers
+# the multilingual ticket/docs indexes for the OCC chat (#4756). Model weights
+# (~120 MB Xenova quantized ONNX) download on first embed; bake them with
+# scripts/download_multilingual_model.py + DIGISEARCH_MULTILINGUAL_MODEL_DIR
+# to avoid runtime HF Hub egress on the critical path.
 
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
@@ -98,6 +103,12 @@ COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheape
 # Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
 # deps `mcp` + `httpx` already present via digigraph[mcp]).
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
+# occ_tickets seed ingester (supervisord oneshot seed_chroma.sh calls
+# `python3 -m scripts.build_occ_tickets_seed --ingest /seed/occ_tickets.jsonl`).
+# Both files land under /app/scripts, where WORKDIR /app makes `scripts` an
+# importable namespace package so the sibling import resolves.
+COPY scripts/index_occ_tickets.py /app/scripts/index_occ_tickets.py
+COPY scripts/build_occ_tickets_seed.py /app/scripts/build_occ_tickets_seed.py
 COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 # SearXNG config — the SAME file docker-compose.yml mounts into the dev
@@ -132,6 +143,9 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # 403s the container) + wikipedia — no market/news coverage. The explicit
 # `engines: [{name: bing, disabled: false}, {name: mojeek, disabled: false}]`
 # override makes them active. See #4297.
+# Rebuild marker v14 (2026-10-01): installs digisearch[embedding-multilingual]
+# (onnxruntime + tokenizers + numpy) for the multilingual OCC ticket/docs
+# indexes (#4756). Full rebuild required (wrangler caches by Dockerfile hash).
 # Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
 # in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
 # :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so

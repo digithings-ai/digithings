@@ -313,13 +313,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 120 for the develop merge-forward (promotion #4745
     prep): merged ARCHITECTURE.md carries both #4717 and #4711 prose —
     fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 121 for the OCC carve-out onto main (#4987): the
+    merged `digisearch/ARCHITECTURE.md` carries the ticket-index and
+    multilingual-provider prose, which adds one chunk (longest chunk stays
+    1994 <= 2000) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 120
+    assert len(chunks) == 121
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -328,8 +332,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "7e6b7b2044358888",
         "cea76b9e90df056e",
         "a08e55912a60920e",
-        "bea0bf0dc35372d3",
-        "0a3a7b984057149d",
+        "e673e138be63fb36",
+        "2b2c106d4b437cb0",
         "27f0ca91eb93d7e1",
         "5fc146dcd98ed469",
         "6bb725ee96409565",
@@ -431,8 +435,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "a3987db99f2b72c5",
         "9496728548f7cd2a",
         "3a05c94596483aed",
-        "0f567a2b684efdf4",
-        "5668e90c11bf9127",
+        "9c818ae221f9e5fd",
+        "954c318c778a99e7",
+        "828033af601c3c57",
         "05bb8905105bc94e",
         "d922a9899a8996a2",
         "166b840aa01714e1",

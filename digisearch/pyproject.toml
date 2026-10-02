@@ -45,6 +45,10 @@ server = [
 ]
 chroma = ["chromadb>=0.4"]
 embedding = ["openai>=1.0"]
+# Small multilingual ONNX path (#4756): paraphrase-multilingual-MiniLM-L12-v2
+# via onnxruntime + tokenizers, model files fetched from HuggingFace Hub on
+# first use. CPU-only, no torch, no third-party embedding API.
+embedding-multilingual = ["onnxruntime>=1.17", "tokenizers>=0.21", "huggingface_hub>=0.20", "numpy>=1.24"]
 # BGE cross-encoder path (Reranker provider=bge). Kept separate from [embedding]
 # so OpenAI-only consumers are not forced to pull sentence-transformers (#2441).
 rerank = ["sentence-transformers>=3.0"]
@@ -90,6 +94,7 @@ all = [
     "digisearch[server]",
     "digisearch[chroma]",
     "digisearch[embedding]",
+    "digisearch[embedding-multilingual]",
     "digisearch[rerank]",
     "digisearch[azure]",
     "digisearch[ingestion]",
