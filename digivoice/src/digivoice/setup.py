@@ -6,7 +6,8 @@ Hotkeys (docs) / Review & save / Doctor / Quit, per
 without a TTY via `digivoice setup --print` (or
 `DIGIVOICE_SETUP_NONINTERACTIVE=1`).
 
-Speech stays local: nothing here calls cloud STT/TTS or downloads weights.
+Speech stays local: nothing here calls cloud STT/TTS. Post-process install
+fetches the shipped local GGUF into the models dir when the user asks.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import sys
 from typing import Any, TextIO
 
 from digivoice.models import VoicePaths
+from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE, install_local_rewrite_model
 from digivoice.settings import (
     HOTKEYS_DOCS,
     PRESET_LABELS,
@@ -24,6 +26,8 @@ from digivoice.settings import (
     RewritePreset,
     RewriteRunnerKind,
     VoiceSettings,
+    cycle_rewrite_timeout,
+    format_rewrite_timeout,
     format_settings_text,
     load_settings,
     save_settings,
@@ -140,7 +144,7 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
     """Current settings + wizard menu tree. No prompts; used by --print."""
     lines = [
         "┌─ digivoice setup ──────────────────────────────────────┐",
-        "│  DigiVoice · local speech config                       │",
+        "│  digivoice · local speech config                       │",
         f"│  settings: {settings_path(paths)}".ljust(56) + "│",
         "│  ↑↓ move · Enter select · Esc back · q quit            │",
         "└────────────────────────────────────────────────────────┘",
@@ -156,12 +160,13 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  tts_voice ............... {settings.tts_voice or '(auto / DIGIVOICE_PIPER_VOICE)'}",
         "",
         "— Post-process —",
+        "  Clean up after dictation rewrites the words when on; off pastes them as spoken.",
         f"  rewrite_enabled ......... {str(settings.rewrite_enabled).lower()}",
         f"  rewrite_preset .......... {settings.rewrite_preset}",
-        f"  rewrite_model ........... {settings.rewrite_model or '(unset)'}",
+        f"  rewrite_model ........... {settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE}",
         f"  rewrite_runner .......... {settings.rewrite_runner}",
         f"  rewrite_auto_route ...... {str(settings.rewrite_auto_route).lower()}",
-        f"  rewrite_timeout_seconds . {settings.rewrite_timeout_seconds}",
+        f"  rewrite_timeout_seconds . {format_rewrite_timeout(settings.rewrite_timeout_seconds)}",
         f"  rewrite_app_routes ...... {len(settings.rewrite_app_routes)} fragment→preset entries",
         "",
         "— Features —",
@@ -219,6 +224,7 @@ __all__ = [
     "choose",
     "choose_many",
     "pixel_wordmark",
+    "postprocess_menu_options",
     "recommend_models",
     "render_setup_overview",
     "run_interactive_setup",
@@ -313,30 +319,91 @@ def _edit_models(
                 working["tts_voice"] = value or None
 
 
+def postprocess_menu_options(working: dict[str, Any]) -> list[str]:
+    """Literal on/off copy for the post-process pane (TTY and numbered prompts)."""
+    enabled = "on" if working["rewrite_enabled"] else "off"
+    timeout = format_rewrite_timeout(working.get("rewrite_timeout_seconds"))
+    model = working.get("rewrite_model") or LOCAL_REWRITE_MODEL_FILE
+    auto = "on" if working["rewrite_auto_route"] else "off"
+    return [
+        (
+            f"Clean up after dictation [{enabled}] "
+            "(on: rewrite the words after whisper; off: paste them as spoken)"
+        ),
+        f"Rewrite style [{working['rewrite_preset']}] (how the rewrite should read)",
+        f"On-device rewrite model [{model}] (local file installed with digivoice)",
+        (
+            f"Run on this machine [{working['rewrite_runner']}] "
+            "(llama.cpp GGUF or local ollama — never a cloud URL)"
+        ),
+        (
+            f"Match style to the front app [{auto}] "
+            "(on: Mail→email, Messages→SMS; off: always use Rewrite style)"
+        ),
+        f"Give up after [{timeout}] (off: no extra time cap; on: 15, 30, or 60 seconds)",
+        (
+            f"App → style list [{len(working['rewrite_app_routes'])} apps] "
+            "(which apps pick which rewrite style)"
+        ),
+        "Back",
+    ]
+
+
+def _pick_local_rewrite_model(
+    working: dict[str, Any],
+    paths: VoicePaths | None,
+    stdin: TextIO | None,
+    stdout: TextIO | None,
+) -> None:
+    labels = [
+        f"{LOCAL_REWRITE_MODEL_FILE} (shipped local, multilingual)",
+        "Install shipped model now",
+        "Back",
+    ]
+    sel = choose("On-device rewrite model", labels, stdin, stdout)
+    if sel is None or sel == 2:
+        return
+    if sel == 0:
+        working["rewrite_model"] = LOCAL_REWRITE_MODEL_FILE
+        working["rewrite_runner"] = "llama.cpp"
+        return
+    if paths is None:
+        working["rewrite_model"] = LOCAL_REWRITE_MODEL_FILE
+        return
+    try:
+        install_local_rewrite_model(paths)
+    except (OSError, ValueError) as exc:
+        out = stdout or sys.stdout
+        out.write(f"  could not install local model: {exc}\n")
+        return
+    working["rewrite_model"] = LOCAL_REWRITE_MODEL_FILE
+    working["rewrite_runner"] = "llama.cpp"
+
+
 def _edit_postprocess(
     working: dict[str, Any],
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
+    paths: VoicePaths | None = None,
 ) -> None:
     stdout = stdout or sys.stdout
     while True:
-        options = [
-            f"Rewrite enabled [{str(working['rewrite_enabled']).lower()}]",
-            f"Preset / task mode [{working['rewrite_preset']}]",
-            f"Local rewrite model [{working['rewrite_model'] or '(unset)'}]",
-            f"Runner [{working['rewrite_runner']}]  (auto | ollama | llama.cpp)",
-            f"Auto-route from focused app [{str(working['rewrite_auto_route']).lower()}]",
-            f"Timeout seconds [{working['rewrite_timeout_seconds']}]",
-            f"App→preset routes [{len(working['rewrite_app_routes'])} entries]",
-            "Back",
-        ]
+        options = postprocess_menu_options(working)
         picked = choose("— Post-process (rewrite + auto-route) —", options, stdin, stdout)
         if picked is None or picked == len(options) - 1:
             return
         if picked == 0:
-            value = _prompt_bool("rewrite_enabled", working["rewrite_enabled"], stdin, stdout)
+            value = choose(
+                "Clean up after dictation",
+                [
+                    "on (rewrite the words after whisper)",
+                    "off (paste them as spoken)",
+                ],
+                stdin,
+                stdout,
+            )
             if value is not None:
-                working["rewrite_enabled"] = value
+                working["rewrite_enabled"] = value == 0
         elif picked == 1:
             value = _prompt_literal(
                 "rewrite_preset",
@@ -348,9 +415,7 @@ def _edit_postprocess(
             if value is not None:
                 working["rewrite_preset"] = value
         elif picked == 2:
-            value = _prompt_text("rewrite_model", working["rewrite_model"], stdin, stdout)
-            if value is not None:
-                working["rewrite_model"] = value or None
+            _pick_local_rewrite_model(working, paths, stdin, stdout)
         elif picked == 3:
             value = _prompt_literal(
                 "rewrite_runner",
@@ -362,25 +427,21 @@ def _edit_postprocess(
             if value is not None:
                 working["rewrite_runner"] = value
         elif picked == 4:
-            value = _prompt_bool("rewrite_auto_route", working["rewrite_auto_route"], stdin, stdout)
+            value = choose(
+                "Match style to the front app",
+                [
+                    "on (Mail→email, Messages→SMS, Terminal→coding)",
+                    "off (always use Rewrite style)",
+                ],
+                stdin,
+                stdout,
+            )
             if value is not None:
-                working["rewrite_auto_route"] = value
+                working["rewrite_auto_route"] = value == 0
         elif picked == 5:
-            stdout.write("  Timeout seconds (seconds, float)\n")
-            stdout.flush()
-            stdin = stdin or sys.stdin
-            try:
-                raw = stdin.readline()
-            except (OSError, ValueError):
-                continue
-            if not raw:
-                continue
-            raw = raw.strip()
-            if raw:
-                try:
-                    working["rewrite_timeout_seconds"] = float(raw)
-                except ValueError:
-                    stdout.write("  not a number — kept current value\n")
+            working["rewrite_timeout_seconds"] = cycle_rewrite_timeout(
+                working.get("rewrite_timeout_seconds")
+            )
         elif picked == 6:
             stdout.write(
                 "  rewrite_app_routes is a JSON object of fragment→preset "
@@ -515,7 +576,7 @@ def run_interactive_setup(
         if not tty:
             # Byte-stable banner for agents/pipes/tests. TTY frames redraw in place.
             stdout.write("┌─ digivoice setup ──────────────────────────────────────┐\n")
-            stdout.write("│  DigiVoice · local speech config                       │\n")
+            stdout.write("│  digivoice · local speech config                       │\n")
             stdout.write("│  ↑↓ move · Enter select · Esc back · q quit            │\n")
             stdout.write("└────────────────────────────────────────────────────────┘\n")
             stdout.flush()
@@ -551,7 +612,7 @@ def run_interactive_setup(
                 dirty = dirty or json.dumps(working, sort_keys=True) != before
             elif section.startswith("Post-process"):
                 before = json.dumps(working, sort_keys=True)
-                _edit_postprocess(working, stdin, stdout)
+                _edit_postprocess(working, stdin, stdout, paths)
                 dirty = dirty or json.dumps(working, sort_keys=True) != before
             elif section.startswith("Features"):
                 before = json.dumps(working, sort_keys=True)

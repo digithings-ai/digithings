@@ -1,6 +1,6 @@
-# DigiVoice `setup` wizard — CLI mock (CHR-860 / #4953)
+# digivoice `setup` wizard — CLI mock (CHR-860 / #4953)
 
-ASCII/TTY mock of the interactive config spine. Pixel language: DigiVoice banner /
+ASCII/TTY mock of the interactive config spine. Pixel language: digivoice banner /
 digithings.ai top bar (text only here). Agents use `digivoice setup --print` or
 `DIGIVOICE_SETUP_NONINTERACTIVE=1` (no TTY).
 
@@ -10,7 +10,7 @@ digithings.ai top bar (text only here). Agents use `digivoice setup --print` or
 $ digivoice setup
 
 ┌─ digivoice setup ──────────────────────────────────────┐
-│  DigiVoice · local speech config                       │
+│  digivoice · local speech config                       │
 │  settings: ~/Library/Application Support/digivoice/…   │
 │  ↑↓ move · Enter select · Esc back · q quit            │
 └────────────────────────────────────────────────────────┘
@@ -35,7 +35,7 @@ $ digivoice setup
 │  rewrite_model ........... (unset)                      │
 │  rewrite_runner .......... auto                         │
 │  rewrite_auto_route ...... false                        │
-│  rewrite_timeout_seconds . 30.0                         │
+│  rewrite_timeout_seconds . off                          │
 └────────────────────────────────────────────────────────┘
   ▶ Edit stt_model
     Edit tts_voice

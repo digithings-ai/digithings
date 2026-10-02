@@ -8,11 +8,17 @@ from pathlib import Path
 import pytest
 from digivoice.cli import Runtime, run
 from digivoice.paths import resolve_paths
-from digivoice.settings import settings_path
+from digivoice.settings import (
+    default_settings,
+    load_settings,
+    settings_path,
+)
 from digivoice.setup import (
     SETUP_MENU,
+    postprocess_menu_options,
     recommend_models,
     render_setup_overview,
+    run_interactive_setup,
     setup_public_dict,
 )
 
@@ -207,8 +213,33 @@ def test_setup_print_includes_detection_and_postprocess(tmp_path: Path) -> None:
         "rewrite_timeout_seconds",
     ):
         assert key in result.stdout
+    assert "off" in result.stdout
+    assert "rewrite the words" in result.stdout.casefold() or "as spoken" in result.stdout
 
 
 def test_setup_menu_contains_postprocess() -> None:
     assert "Post-process (rewrite + auto-route)" in list(SETUP_MENU)
     assert "Features (paste, banner, detection)" in list(SETUP_MENU)
+
+
+def test_postprocess_menu_copy_is_literal() -> None:
+    options = postprocess_menu_options(default_settings().model_dump(mode="json"))
+    joined = "\n".join(options)
+    assert "Clean up after dictation" in joined
+    assert "as spoken" in joined or "rewrite the words" in joined.casefold()
+    assert "Give up after" in joined
+    assert "off" in joined
+    assert "Timeout seconds" not in joined
+    assert "openrouter" not in joined.casefold()
+    assert "On-device rewrite model" in joined
+
+
+def test_interactive_timeout_cycles_presets(tmp_path: Path) -> None:
+    import io
+
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    # Post-process → Give up after (cycles off→15) → Back → Review & save → Save → Quit
+    fake_in = io.StringIO("2\n6\n8\n5\n1\n7\n")
+    code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
+    assert code == 0
+    assert load_settings(paths).rewrite_timeout_seconds == 15.0

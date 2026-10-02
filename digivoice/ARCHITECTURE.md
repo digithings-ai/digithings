@@ -80,10 +80,10 @@ commands write.
 | `cancel [--cancel-file PATH]` | 0 | Create the cancel-file; a running `dict` discards its take. |
 | `status` | 0 shown, 1 none yet | Print the `status.json` the banner reads. |
 | `banner show [--text T]` / `hide` / `toggle` | 0 | Write the `banner.show` spawn flag the adapter polls; shows a preview without dictation. |
-| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. Detection flags (`word_detection`, `spelling_detection`) default off; stubs only, not wired to STT yet. |
+| `settings` / `setup` [`get`/`set`/`path`] [`--json`] | 0 / 2 | `settings` shows or changes settings.json. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys docs / Hardware stub / Review & save / Doctor / Quit); `--print` or `DIGIVOICE_SETUP_NONINTERACTIVE=1` prints values + menu tree with no prompts (exit 0, also when stdin is not a TTY); `--json` dumps settings + menu + hardware stub. Detection flags (`word_detection`, `spelling_detection`) default off; stubs only, not wired to STT yet. Rewrite timeout is off by default and cycles 15/30/60s only. Post-process models are the shipped local GGUF only. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
-| bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle glint), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit stops the adapter and quits Hammerspoon; closing the Terminal alone leaves HS running. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
+| bare `digivoice` (no args) | 0 | TTY: fullscreen home, content centered. DIGIVOICE half-block wordmark (build-in, idle teal particles + glint — landing chrome, not a rainbow title), status strip (models / banner / health / control), step-rail actions (doctor, settings, history, reload, update, uninstall, setup wizard submenu, quit). On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and shows the banner (`M.ensure_banner`) unless a take is in progress or `live_banner` is false. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit stops the adapter and quits Hammerspoon; closing the Terminal alone leaves HS running. Setup returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
 | unknown / bad flags | 2 | Usage on stderr. |
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
@@ -98,7 +98,14 @@ commands write.
    `-m <models_dir>/ggml-base.en.bin -f <wav> -l en -nt`. stdout is the transcript; the
    banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
    collapsed into one line.
-3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local ollama / llama.cpp with a preset (email / SMS / professional / coding / blog). Auto-route from the focused app when enabled (match table is `rewrite_app_routes` in settings, not hard-coded paths). Fail soft — raw transcript on error. Disabled by default. `--no-rewrite` skips.
+3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local llama.cpp (or
+   local ollama) with a preset (email / SMS / professional / coding / blog). The
+   model is the shipped GGUF `qwen2.5-1.5b-instruct-q4_k_m.gguf` under the models
+   dir (multilingual). URLs, OpenRouter, and ollama registry tags are rejected.
+   Auto-route from the focused app when enabled (match table is `rewrite_app_routes`
+   in settings). Timeout is off by default; when enabled it cycles 15 / 30 / 60
+   seconds only. Fail soft — raw transcript on error. Disabled by default.
+   `--no-rewrite` skips.
 4. **History** (`history.py`). One JSON object appended to `history.jsonl` (rewritten text when applied).
 5. **Paste** (`paste.py`). darwin only, and never fatal. Skipped when `paste_on_stop` is false.
 
@@ -211,7 +218,7 @@ Always informational:
 | `history` | JSONL path and whether the file exists |
 | `paths` | Active data directory, macOS models path, Linux models path, recordings directory |
 | `tcc` | Mic and Accessibility are not probed; see `hammerspoon/README.md` |
-| `rewrite` | Disabled by default (info). When enabled: ok if local runner+model ready, else missing (dict still uses raw transcript) |
+| `rewrite` | Disabled by default (info). Always names the shipped local GGUF (`qwen2.5-1.5b-instruct-q4_k_m.gguf`) and reports when that file is not installed. When rewrite is enabled: ok if local runner+GGUF ready, else missing (dict still uses raw transcript). Cloud / URL models are not a doctor path. |
 | `detection` | Always info (never required). `word_detection` / `spelling_detection` default off; stubs only, STT still uses whisper |
 | `interrupt` | Documents paste-on-stop + new-take behavior, and Esc / `digivoice cancel` discard |
 
@@ -250,7 +257,7 @@ See `hammerspoon/README.md` for install and Mic + Accessibility TCC.
 ## Out of this package
 
 - Cloud STT/TTS or cloud rewrite backends
-- Bundled rewrite GGUF weights (wiring + doctor + presets ship; download separately under the models dir)
+- OpenRouter / user-hosted URL rewrite models (blocked; post-process is the shipped local GGUF)
 - Super Whisper
 - A required OpenCode plugin
 - Hammerspoon as a Python dependency (sample adapter only)

@@ -4,19 +4,26 @@ Runs after whisper and before history/paste. Disabled by default. Fail soft:
 any runner/model/timeout error returns the raw transcript unchanged.
 
 Pluggable runners: ollama CLI, llama.cpp (llama-cli / main), auto-detect.
-Weights are not bundled — place a GGUF under the models dir or pull an Ollama
-tag; doctor reports when rewrite is enabled but the runner/model is missing.
+Post-process models are local GGUF files installed with digivoice under the
+models dir — never a cloud host, URL, or ollama registry tag.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
+from urllib.request import urlopen
 
 from digivoice.models import CheckStatus, RewriteResult, VoicePaths
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
-from digivoice.settings import VoiceSettings
+from digivoice.settings import (
+    LOCAL_REWRITE_MODEL_FILE,
+    VoiceSettings,
+    is_local_rewrite_model,
+    is_remote_rewrite_model,
+)
 
 PRESET_PROMPTS: dict[str, str] = {
     "email": (
@@ -47,6 +54,10 @@ PRESET_PROMPTS: dict[str, str] = {
 }
 
 REWRITE_TIMEOUT_DEFAULT = 30.0
+LOCAL_REWRITE_MODEL_URL = (
+    "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+    "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+)
 
 
 class LocalRewriteRunner(Protocol):
@@ -56,7 +67,7 @@ class LocalRewriteRunner(Protocol):
 
     def available(self) -> bool: ...
 
-    def rewrite(self, system: str, user: str, *, timeout: float) -> str: ...
+    def rewrite(self, system: str, user: str, *, timeout: float | None) -> str: ...
 
 
 class OllamaRewriteRunner:
@@ -77,7 +88,7 @@ class OllamaRewriteRunner:
     def available(self) -> bool:
         return self._probe.lookup("ollama") is not None and bool(self._model)
 
-    def rewrite(self, system: str, user: str, *, timeout: float) -> str:
+    def rewrite(self, system: str, user: str, *, timeout: float | None) -> str:
         binary = self._probe.lookup("ollama")
         if not binary:
             raise RuntimeError("ollama not on PATH")
@@ -125,7 +136,7 @@ class LlamaCppRewriteRunner:
             return False
         return self._binary() is not None
 
-    def rewrite(self, system: str, user: str, *, timeout: float) -> str:
+    def rewrite(self, system: str, user: str, *, timeout: float | None) -> str:
         binary = self._binary()
         if not binary:
             raise RuntimeError("llama-cli / llama-completion not on PATH")
@@ -151,28 +162,43 @@ class LlamaCppRewriteRunner:
 
 
 def resolve_rewrite_model_path(paths: VoicePaths, settings: VoiceSettings) -> str | None:
-    """Absolute GGUF path or Ollama tag. None when unset."""
-    if settings.rewrite_model:
-        candidate = Path(settings.rewrite_model).expanduser()
-        if (
-            candidate.is_absolute()
-            or "/" in settings.rewrite_model
-            or settings.rewrite_model.endswith((".gguf", ".bin"))
-        ):
-            # Prefer absolute / relative file paths under models dir.
-            if not candidate.is_absolute():
-                under = Path(paths.models_dir) / settings.rewrite_model
-                return str(under)
-            return str(candidate)
-        # Bare ollama tag like "qwen2.5:3b".
-        return settings.rewrite_model
-    # Convention: first *.gguf under models/.
-    models = Path(paths.models_dir)
-    if models.is_dir():
-        ggufs = sorted(models.glob("*.gguf"))
-        if ggufs:
-            return str(ggufs[0])
-    return None
+    """Absolute GGUF path under models_dir. None when remote or outside the dir."""
+    raw = (settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE).strip()
+    if not raw or is_remote_rewrite_model(raw):
+        return None
+    if not is_local_rewrite_model(raw, paths.models_dir):
+        return None
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path(paths.models_dir) / raw
+    root = Path(paths.models_dir).expanduser().resolve()
+    try:
+        candidate.expanduser().resolve().relative_to(root)
+    except ValueError:
+        return None
+    return str(candidate)
+
+
+def _fetch_url(url: str, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    with urlopen(url, timeout=60) as response:
+        tmp.write_bytes(response.read())
+    tmp.replace(dest)
+
+
+def install_local_rewrite_model(
+    paths: VoicePaths,
+    fetch: Callable[[str, Path], None] | None = None,
+) -> str:
+    """Place the shipped multilingual GGUF under models_dir. Idempotent."""
+    dest = Path(paths.models_dir) / LOCAL_REWRITE_MODEL_FILE
+    if dest.is_file():
+        return str(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    worker = fetch or _fetch_url
+    worker(LOCAL_REWRITE_MODEL_URL, dest)
+    return str(dest)
 
 
 def pick_runner(
@@ -190,16 +216,12 @@ def pick_runner(
             model if model and (model.endswith(".gguf") or Path(model).is_file()) else (model or "")
         )
         return LlamaCppRewriteRunner(probe, runner, path)
-    # auto: prefer ollama when on PATH and model looks like a tag; else llama.cpp for GGUF.
-    if model and not model.endswith(".gguf") and "/" not in model and probe.lookup("ollama"):
-        return OllamaRewriteRunner(probe, runner, model)
+    # auto: local GGUF via llama.cpp. ollama only when explicitly selected.
     if model and (model.endswith(".gguf") or Path(model).is_file()):
         llama = LlamaCppRewriteRunner(probe, runner, model)
         if llama.available() or kind == "auto":
             return llama
-    if probe.lookup("ollama") and model:
-        return OllamaRewriteRunner(probe, runner, model)
-    if model:
+    if kind == "auto" and model:
         return LlamaCppRewriteRunner(probe, runner, model)
     return None
 
@@ -291,7 +313,7 @@ def rewrite_transcript(
             detail="rewrite runner/model unavailable; using raw transcript",
             app_name=app_name,
         )
-    timeout = float(settings.rewrite_timeout_seconds or REWRITE_TIMEOUT_DEFAULT)
+    timeout = settings.rewrite_timeout_seconds
     try:
         rewritten = local.rewrite(system, stripped, timeout=timeout)
     except Exception as exc:
@@ -335,18 +357,28 @@ def rewrite_doctor_detail(
     """
     model = resolve_rewrite_model_path(paths, settings)
     local = pick_runner(paths, settings, probe, runner)
+    expected = Path(paths.models_dir) / LOCAL_REWRITE_MODEL_FILE
+    present = expected.is_file()
+    missing_note = (
+        f" local rewrite model not installed: {expected} "
+        f"(copy {LOCAL_REWRITE_MODEL_FILE} into models/ or run setup → "
+        "Post-process → On-device rewrite model)."
+    )
     if not settings.rewrite_enabled:
-        hint = model or f"no GGUF under {paths.models_dir} and rewrite_model unset"
+        hint = model or str(expected)
+        extra = missing_note if not present else ""
         return (
             "info",
-            f"disabled (default). model={hint}. enable with: digivoice settings set rewrite_enabled true",
+            f"disabled (default). model={hint}.{extra} enable with: "
+            "digivoice settings set rewrite_enabled true",
         )
-    if local is None or not local.available():
+    if not present or local is None or not local.available():
         return (
             "missing",
             (
-                "enabled but runner/model not ready. Install ollama or llama-cli, "
-                f"place a GGUF under {paths.models_dir}/ or set rewrite_model. "
+                "enabled but local rewrite model/runner not ready. "
+                f"{LOCAL_REWRITE_MODEL_FILE} should live at {expected}. "
+                "Install llama-cli and the shipped GGUF (setup → Post-process). "
                 "dict still pastes the raw transcript."
             ),
         )
@@ -359,11 +391,16 @@ def rewrite_doctor_detail(
 
 # Re-export Mapping for type checkers that import from this module's callers.
 __all__ = [
+    "LOCAL_REWRITE_MODEL_FILE",
+    "LOCAL_REWRITE_MODEL_URL",
     "LocalRewriteRunner",
     "LlamaCppRewriteRunner",
     "OllamaRewriteRunner",
     "PRESET_PROMPTS",
     "focused_app_name",
+    "install_local_rewrite_model",
+    "is_local_rewrite_model",
+    "is_remote_rewrite_model",
     "pick_runner",
     "preset_for_app",
     "resolve_preset",

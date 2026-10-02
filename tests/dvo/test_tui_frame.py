@@ -44,6 +44,23 @@ def test_wordmark_glint_changes_with_phase() -> None:
     assert "\x1b[" in first[0]
 
 
+def test_wordmark_uses_teal_not_rainbow() -> None:
+    """Landing chrome: one teal accent, not a multicolored DIGIVOICE title."""
+    joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, phase=0, ansi=True))
+    assert "38;2;61;214;196" in joined
+    for rgb in ("229;183;101", "226;112;138", "217;122;90", "90;163;196"):
+        assert f"38;2;{rgb}" not in joined, rgb
+
+
+def test_idle_header_has_moving_teal_particles() -> None:
+    """Landing-style stray particles stay after the build-in and drift with phase."""
+    still = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, frac=1, phase=0, ansi=True))
+    later = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, frac=1, phase=4, ansi=True))
+    assert "·" in still
+    assert "38;2;61;214;196" in still
+    assert still != later
+
+
 def test_wordmark_builds_in() -> None:
     bare = render_wordmark_lines("DIGIVOICE", cols=120, frac=0, ansi=False)
     full = render_wordmark_lines("DIGIVOICE", cols=120, frac=1, ansi=False)

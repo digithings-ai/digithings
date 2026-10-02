@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.models import DoctorReport
+from digivoice.paths import resolve_paths
+from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE
 
 from tests.dvo.fakes import FakeProbe
 
@@ -99,8 +101,27 @@ def test_rewrite_and_interrupt_are_informational_when_disabled() -> None:
     assert "digivoice cancel" in _check(report, "interrupt")
 
 
+def test_doctor_documents_missing_local_rewrite_model(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    probe = FakeProbe(
+        commands={
+            "whisper-cli": "/usr/bin/whisper-cli",
+            "piper": "/usr/bin/piper",
+            "sox": "/usr/bin/sox",
+        },
+        directories={paths.models_dir},
+        files={f"{paths.models_dir}/ggml-base.en.bin"},
+    )
+    report = render_doctor(
+        doctor_checks("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)}, probe)
+    )
+    detail = next(c for c in report.checks if c.id == "rewrite").detail
+    assert LOCAL_REWRITE_MODEL_FILE in detail
+    assert "missing" in detail.casefold() or "not installed" in detail.casefold()
+    assert "openrouter" not in detail.casefold()
+
+
 def test_detection_check_is_info_and_never_blocks_ok(tmp_path: Path) -> None:
-    from digivoice.paths import resolve_paths
     from digivoice.settings import VoiceSettings, save_settings
 
     report = _report(_ready())

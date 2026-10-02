@@ -9,8 +9,13 @@ from digivoice.cli import Runtime, run
 from digivoice.models import VoicePaths
 from digivoice.paths import resolve_paths
 from digivoice.rewrite import (
+    LOCAL_REWRITE_MODEL_FILE,
+    install_local_rewrite_model,
+    is_local_rewrite_model,
+    is_remote_rewrite_model,
     preset_for_app,
     resolve_preset,
+    resolve_rewrite_model_path,
     rewrite_transcript,
 )
 from digivoice.settings import DEFAULT_REWRITE_APP_ROUTES, VoiceSettings, save_settings
@@ -87,6 +92,85 @@ def test_rewrite_disabled_returns_raw(tmp_path: Path) -> None:
     assert result.applied is False
     assert result.text == TRANSCRIPT
     assert "disabled" in result.detail
+
+
+def test_remote_rewrite_models_are_rejected() -> None:
+    models_dir = "/tmp/digivoice-models"
+    assert is_remote_rewrite_model("https://openrouter.ai/qwen")
+    assert is_remote_rewrite_model("http://localhost:8080/model.gguf")
+    assert is_remote_rewrite_model("openrouter/free")
+    assert is_remote_rewrite_model("qwen2.5:3b")
+    assert is_remote_rewrite_model("ollama.com/library/qwen")
+    assert not is_local_rewrite_model("qwen2.5:3b", models_dir)
+    assert is_local_rewrite_model("qwen2.5-1.5b-instruct-q4_k_m.gguf", models_dir)
+    assert not is_local_rewrite_model("/opt/other/model.gguf", models_dir)
+    assert not is_local_rewrite_model("../escape.gguf", models_dir)
+
+
+def test_resolve_rewrite_model_stays_under_models_dir(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    models = Path(paths.models_dir)
+    models.mkdir()
+    local = models / LOCAL_REWRITE_MODEL_FILE
+    local.write_bytes(b"fake-gguf")
+    found = resolve_rewrite_model_path(paths, VoiceSettings(rewrite_model=LOCAL_REWRITE_MODEL_FILE))
+    assert found == str(local)
+    remote = resolve_rewrite_model_path(
+        paths,
+        VoiceSettings.model_construct(rewrite_model="https://example.com/model.gguf"),
+    )
+    assert remote is None
+    outside = resolve_rewrite_model_path(
+        paths, VoiceSettings.model_construct(rewrite_model="/etc/passwd.gguf")
+    )
+    assert outside is None
+
+
+def test_rewrite_timeout_off_passes_none(tmp_path: Path) -> None:
+    class CaptureTimeout:
+        name = "fake"
+
+        def available(self) -> bool:
+            return True
+
+        def rewrite(self, system: str, user: str, *, timeout: float | None) -> str:
+            self.timeout = timeout
+            return "ok"
+
+    fake = CaptureTimeout()
+    result = rewrite_transcript(
+        TRANSCRIPT,
+        paths=_paths(tmp_path),
+        settings=VoiceSettings(rewrite_enabled=True, rewrite_timeout_seconds=None),
+        probe=FakeProbe(),
+        runner=FakeRunner(),
+        rewrite_runner=fake,
+    )
+    assert result.applied is True
+    assert fake.timeout is None
+
+
+def test_rewrite_timeout_preset_is_passed_through(tmp_path: Path) -> None:
+    class CaptureTimeout:
+        name = "fake"
+
+        def available(self) -> bool:
+            return True
+
+        def rewrite(self, system: str, user: str, *, timeout: float | None) -> str:
+            self.timeout = timeout
+            return "ok"
+
+    fake = CaptureTimeout()
+    rewrite_transcript(
+        TRANSCRIPT,
+        paths=_paths(tmp_path),
+        settings=VoiceSettings(rewrite_enabled=True, rewrite_timeout_seconds=15.0),
+        probe=FakeProbe(),
+        runner=FakeRunner(),
+        rewrite_runner=fake,
+    )
+    assert fake.timeout == 15.0
 
 
 def test_rewrite_applies_with_fake_runner(tmp_path: Path) -> None:
@@ -188,3 +272,27 @@ def test_dict_no_rewrite_flag(tmp_path: Path) -> None:
     assert result.code == 0
     assert result.stdout == f"{TRANSCRIPT}\n"
     assert fake.calls == []
+
+
+def test_install_local_rewrite_model_uses_fetcher(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    target = Path(paths.models_dir) / LOCAL_REWRITE_MODEL_FILE
+
+    def fetch(url: str, dest: Path) -> None:
+        assert "huggingface" in url or dest.name.endswith(".gguf")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"gguf-bytes")
+
+    installed = install_local_rewrite_model(paths, fetch=fetch)
+    assert installed == str(target)
+    assert target.read_bytes() == b"gguf-bytes"
+    # Second call does not fetch again.
+    calls = {"n": 0}
+
+    def boom(url: str, dest: Path) -> None:
+        calls["n"] += 1
+        raise AssertionError("should not fetch when present")
+
+    again = install_local_rewrite_model(paths, fetch=boom)
+    assert again == str(target)
+    assert calls["n"] == 0
