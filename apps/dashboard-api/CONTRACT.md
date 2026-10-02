@@ -382,6 +382,30 @@ without fill price or cost basis. `cumulative_return_since_event_pct` is
 post-event drift and must not be presented as trade return. Empty range →
 success with `"events": []` plus honest `provenance`.
 
+### 6.9 `GET /access/manifest`
+
+Which desks, pages, blocks and data routes the caller may see. The single
+source of entitlements: the dashboard builds its sidebar, page guards and
+locked-block states from this response only.
+
+Caller identity comes from edge-injected `x-digi-tier` (`free|brief|desk|studio|enterprise`, rank order) and
+`x-digi-groups` (comma-separated). Absent/unknown → `free`, no groups (fail
+closed). The worker does not authenticate; only expose behind the edge.
+
+`data`: `{ caller: {tier, groups}, desks: Desk[], routes: string[] }`
+- `Desk`: `{ id, label, blurb, access, reason?, pages: Page[] }`
+- `Page`: `{ path, label, status?, access, reason?, blocks: Block[] }`
+- `Block`: `{ id, route, access, reason? }`
+- `access` is `granted` or `locked`. Locked nodes are shown with `reason`
+  (e.g. `Requires brief`, `Requires the 12x group`); a lock on a desk or page
+  cascades to everything beneath it. Nodes gated `hidden` are omitted.
+- `routes`: de-duplicated data routes of every granted block (no query strings).
+
+Policy lives in `src/access.ts` (`DESKS`); `baseline` is open with brief/desk
+parts, `fx` requires the `12x` group. `12x` is the app-facing group name; the edge maps the
+product grant `fx_hub` (client_product_grants.product_key) to group `12x` when it injects
+`x-digi-groups`. The worker never sees product keys.
+
 ## 7. Generic table reads
 
 `GET /v1/tables/:table` serves the dashboard's long-tail direct reads
