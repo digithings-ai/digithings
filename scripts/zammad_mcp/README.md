@@ -12,7 +12,7 @@ search, retrieval, and a status report. No writes, by design.
 | `get_ticket(ticket_id)` | One ticket with its articles; takes the internal id (`231`) or the displayed ticket number (`#28312`), and resolves a number through search when the id lookup 404s. Relation names resolved via `expand=true`. Adds best-effort `Owner:` (id resolved to display name via `resolve_user`) and `Category:` (`open`\|`closed`\|`pending` from state types); raw values shown / line omitted when resolution fails |
 | `list_tickets(page=1, per_page=50)` | Browse the visible tickets page by page, newest updated first (the Zammad list API is id-ordered; this tool re-sorts by `updated_at`). Use it when keyword search misses: tickets mix German and English and search is a literal substring match, so read titles in their original language and pull threads with `get_ticket`; covers the 500 most recently updated visible tickets |
 | `ticket_report(since_days=None, group_by=None)` | Status report over the visible scan (up to 500 tickets): unresolved vs closed, by state/group/priority, updated in the last 7 days by default. `since_days` keeps only tickets updated in the window (client-side filter); `group_by` (`state`\|`group`\|`priority`) appends a top-values section. "Closed" here is the cheap name heuristic (states *named* `closed`/`merged`); for type-derived open/closed counts use `aggregate_tickets` |
-| `aggregate_tickets(group_by="customer", metric="count", since_days=None, top_n=5)` | Windowed ranking for analytics questions. `group_by`: `customer`\|`owner`\|`state`\|`group`\|`priority`\|`title`. `metric`: `count`\|`open_count`\|`closed_count`, where open/closed derives from the cached state-type ids (custom open-type states such as `gelöst von Dev` count as open — never the state *named* `open`). Window is `created_at` within `since_days`, fetched in one call (limit 500). Counting/delegation reuses the generic `digisearch.core.tables` ops (`group_count`, `enrich_rows`). Owner logins are UUIDs — names resolve automatically; automation accounts (`jirasync@sitaas.de`, `-`, `auto`) are excluded from owner rankings and footnoted. Customers render masked (see Privacy) |
+| `aggregate_tickets(group_by="customer", metric="count", since_days=None, top_n=5)` | Windowed ranking for analytics questions. `group_by`: `customer`\|`owner`\|`state`\|`group`\|`priority`\|`title`. `metric`: `count`\|`open_count`\|`closed_count`, where open/closed derives from the cached state-type ids (custom open-type states such as `gelöst von Dev` count as open — never the state *named* `open`). Window is `created_at` within `since_days`, fetched in one call (limit 500). Counting/delegation reuses the generic `digisearch.core.tables` ops (`group_count`, `enrich_rows`). Owner logins are UUIDs — names resolve automatically; automation accounts (`jirasync@sitaas.de`, `-`, `auto`) are excluded from owner rankings and footnoted. Customers render in full (name/email + id, see Privacy) |
 
 ## Analytics workflows (per question class)
 
@@ -39,7 +39,7 @@ Each row is the tool sequence the model should run; field syntax is concrete.
 - **`owner_id` handling:** integer owner ids resolve to `firstname lastname` (fallback: login) via the cached `resolve_user`; non-integer lookups fail closed. In aggregate output, owner UUIDs resolve automatically and unresolvable values fall back to the raw string — one bad owner never fails the ranking.
 - **Category semantics:** `state_category` and `Category:` derive from `get_state_types()` (`{lower_name: state_type_id}`, cached, merged over a known-state table when the states endpoint is unreachable). Closed-type = Zammad closed/merged type names; pending = type ids 3/4; everything else is open. Instance custom states classify by type: `gelöst von Dev` is open-type, `warten auf Kunden` / `warten auf Dev` are pending-type. `ticket_report`'s closed count is the cheaper *name* heuristic instead (`closed`/`merged` names only).
 - **Automation accounts:** `jirasync@sitaas.de`, `-`, `auto` are excluded from `owner` rankings (pre-filter on raw values, post-filter on resolved names) and listed in the output footnote.
-- **Privacy (unchanged):** internal articles omitted (count noted), customer emails masked (`k***@domain`, including inside aggregate output), no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
+- **Privacy (demo mode, #4944):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output), no masking; no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
 - **Caps:** window fetch and report scan cover at most 500 tickets each; keyword fallback uses at most `MAX_KEYWORD_TERMS=10` terms (German + English stopwords dropped).
 
 Every request is a GET. The token only ever leaves this process as the
@@ -120,12 +120,96 @@ environment, and the Worker secret is deliberately not forwarded there); the
 server still authenticates to Zammad with its own environment (no Zammad token
 in the tenant entry).
 
+## Ticket search index (`occ_tickets`)
+
+Separate from the `occ_help` docs corpus, `scripts/index_occ_tickets.py`
+backfills every visible ticket (GET-only) plus its articles — one Chunk per
+article, full non-anonymized metadata (`ticket_id`, `customer_id`, state,
+group, priority, dates) — into the `occ_tickets` digisearch index using the
+small multilingual ONNX provider (`digisearch[embedding-multilingual]`), so
+English queries match German/Spanish ticket text.
+
+```bash
+ZAMMAD_API_TOKEN=... CHROMA_PATH=/path/to/chroma \
+  python -m scripts.index_occ_tickets [--dry-run]
+```
+
+The script pins `DIGISEARCH_EMBEDDING_PROVIDER` to the model id
+(`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) for the
+indexing call (scoped + restored) so the backend stamps and queries the
+collection with the same model that produced the vectors — and aborts
+loud if the var is pre-set to anything else. It then re-opens the
+collection to verify the model stamp. Never query `occ_tickets` with the
+`occ_help` provider or vice versa.
+
+### Production: committed snapshot, not a boot-time backfill
+
+`/data` on the Cloudflare Container is **ephemeral**, so `seed_chroma.sh`
+re-ingests `digithings_docs` and `occ_help` from `/seed` on every cold boot.
+`occ_tickets` has to be refilled the same way or the OCC fan-out queries an
+empty index after each restart. The demo ships a committed point-in-time
+snapshot instead of a live crawl on every boot:
+
+- payload: `apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl`
+  → `/seed/occ_tickets.jsonl`, one JSON object per ticket article
+  (`id`, `doc_id`, `content`, `metadata`), built by
+  `scripts/build_occ_tickets_seed.py` from the same
+  `build_ticket_chunks` a live backfill uses — so a snapshot is
+  byte-identical to what a live backfill writes.
+- refresh: `ZAMMAD_API_TOKEN=... python -m scripts.build_occ_tickets_seed`
+  rebuilds the file in place; commit the diff.
+- ingest: `seed_chroma.sh` (marker `SEED_VER="v5"`) runs
+  `python -m scripts.build_occ_tickets_seed --ingest /seed/occ_tickets.jsonl`,
+  which uses the same `multilingual_index()` helper as the live backfill —
+  provider pinned to the model id, collection stamp verified afterwards.
+  A missing payload warns and is skipped rather than blocking digisearch;
+  OCC then degrades to `occ_help` docs only.
+
+This is a snapshot, not a sync: refresh it deliberately. Demo mode means the
+payload carries real customer names/emails — see [Privacy &
+exposure](#privacy--exposure) below.
+
+## Serving tickets in OCC chat (multi-index fan-out)
+
+`query_index` accepts a comma-separated index list
+(`"occ_help,occ_tickets"`), fans out to each index, and merges with RRF —
+so the OCC tenant serves docs plus tickets with no routing-code changes:
+set the tenant's `digisearchIndex` to the comma pair (tenant map,
+`occ-embed.yaml`) after both indexes are (re)built with the multilingual
+model. All embeddings — ingest and query — must set
+`DIGISEARCH_EMBEDDING_PROVIDER` to the model id
+(`Xenova/paraphrase-multilingual-MiniLM-L12-v2`); same 384 dims across models
+means a mismatch retrieves silently wrong results (MiniLM vectors are not
+interchangeable with multilingual ones).
+
+## Docs rescrape + redeploy runbook (operator)
+
+1. Rescrape docs with the multilingual model: run `scripts/docs_onboard`
+   against a digisearch with `DIGISEARCH_EMBEDDING_PROVIDER` set to the model id
+   (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`)
+   (the `/ingest` path resolves the provider from env — no code change).
+   Replace the `occ_help` collection in place for the demo (delete +
+   re-ingest under the same name); Chroma refuses cross-model writes via
+   its model stamp, so a stale collection fails loud, not silent.
+2. Refresh tickets: rebuild the committed snapshot and commit it —
+   `ZAMMAD_API_TOKEN=... python -m scripts.build_occ_tickets_seed` (see
+   [Production: committed snapshot](#production-committed-snapshot-not-a-boot-time-backfill)).
+   No live backfill is needed at deploy time; the container re-ingests the
+   committed payload on each cold boot.
+3. Evaluate: run the gold queries in `tests/scripts/data/` against the
+   live indexes; proceed past the agreed recall bar only.
+4. Rebuild + redeploy the stack image (the marker `v5` seed also carries
+   `occ_tickets`) and flip the tenant map to `"occ_help,occ_tickets"`;
+   rollback is a redeploy of the previous image + tenant map.
+
 ## Privacy & exposure
 
-The OCC embed is anonymous and ungated, so the formatters are conservative:
+Demo mode (#4944): the OCC embed shows full customer names/emails and all
+articles, so the formatters are explicit:
 
-- internal articles (`internal: true`) are not returned — `get_ticket` notes how many were omitted
-- customer emails are masked (`k***@domain`)
+- internal articles (`internal: true`) are returned, tagged `[internal]`
+- customer names/emails are shown in full (`Customer:` lines, aggregate
+  rankings as `name/email (id N)`)
 
 The MCP transport itself carries no auth of its own: `tokenEnv` / `authHeader`
 carry the Zammad token outbound to Zammad, they are not an auth boundary for the

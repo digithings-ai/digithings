@@ -207,7 +207,7 @@ def test_format_search_results_lists_tickets():
     assert "#28312" in out
     assert "[open]" in out
     assert "group: Sitaas" in out
-    assert "customer: j***@example.test" in out
+    assert "customer: jane.doe@example.test" in out
 
 
 def test_format_ticket_line_resolves_dict_relations_and_dashes():
@@ -235,7 +235,7 @@ def test_format_ticket_detail_includes_articles():
     assert "Resolution steps" in out
 
 
-def test_format_ticket_detail_omits_internal_notes():
+def test_format_ticket_detail_includes_internal_notes():
     articles = [
         {
             "id": 1,
@@ -254,15 +254,17 @@ def test_format_ticket_detail_omits_internal_notes():
     ]
     out = formatting.format_ticket_detail(TICKET, articles)
     assert "customer-visible reply" in out
-    assert "internal-only note body" not in out
-    assert "Articles (1)" in out
-    assert "... 1 internal note(s) omitted" in out
+    assert "internal-only note body" in out
+    assert "[internal]" in out
+    assert "Articles (2)" in out
+    assert "internal note(s) omitted" not in out
+    assert "***" not in out
+    assert "jane.doe@example.test" in out
 
 
-def test_format_ticket_line_masks_customer_email():
+def test_format_ticket_line_shows_customer_email_in_full():
     line = formatting.format_ticket_line({"id": 1, "customer": "jane.doe@example.test"})
-    assert "j***@example.test" in line
-    assert "jane.doe" not in line
+    assert "jane.doe@example.test" in line
 
 
 def test_format_ticket_detail_truncates_long_bodies():
@@ -823,7 +825,10 @@ def test_resolve_user_returns_full_name_and_caches():
 
 def test_resolve_user_falls_back_to_login_for_automation_accounts():
     cases = [
-        ({"id": 9, "firstname": "", "lastname": "", "login": "jirasync@sitaas.de"}, "jirasync@sitaas.de"),
+        (
+            {"id": 9, "firstname": "", "lastname": "", "login": "jirasync@sitaas.de"},
+            "jirasync@sitaas.de",
+        ),
         ({"id": 10, "login": "-"}, "-"),
         ({"id": 11, "login": "auto-close"}, "auto-close"),
     ]
@@ -952,13 +957,12 @@ def test_aggregate_empty_rows():
     assert aggregate([], group_by="customer") == []
 
 
-def test_format_aggregate_renders_ranked_lines_and_masks_customers():
+def test_format_aggregate_renders_ranked_lines_with_full_customers():
     rows = [{"value": "jane.doe@example.test", "count": 3}, {"value": "7", "count": 1}]
     out = formatting.format_aggregate(rows, "customer", "count", 4, since_days=7)
     assert "Top customer by count (created in the last 7 day(s); 4 ticket(s) scanned):" in out
-    assert "1. j***@example.test — 3" in out
+    assert "1. jane.doe@example.test — 3" in out
     assert "2. 7 — 1" in out
-    assert "jane.doe@example.test" not in out
 
 
 def test_format_aggregate_empty_and_owner_footnote():
@@ -1127,9 +1131,7 @@ def test_build_query_open_derives_from_live_state_cache(monkeypatch):
 def test_build_query_closed_pending_and_rejections(monkeypatch):
     monkeypatch.setattr(client_module, "_state_types_cache", None)
     client, _ = make_client([TICKET])
-    assert (
-        client.build_query(state_category="closed") == "(state.name:closed OR state.name:merged)"
-    )
+    assert client.build_query(state_category="closed") == "(state.name:closed OR state.name:merged)"
     pending = client.build_query(state_category="pending")
     assert "warten auf Kunden" in pending and "state.name:closed" not in pending
     with pytest.raises(ZammadError, match="state_category"):
@@ -1267,10 +1269,10 @@ def test_server_search_passes_category_and_window(monkeypatch):
         server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     )
     out = server.search_tickets("", state_category="closed")
-    assert out.splitlines()[0] == 'Found 1 ticket(s) for: "(state.name:closed OR state.name:merged)"'
-    search_call = next(
-        call for call in transport.calls if call["url"].endswith("/tickets/search")
+    assert (
+        out.splitlines()[0] == 'Found 1 ticket(s) for: "(state.name:closed OR state.name:merged)"'
     )
+    search_call = next(call for call in transport.calls if call["url"].endswith("/tickets/search"))
     assert search_call["params"]["query"] == "(state.name:closed OR state.name:merged)"
     assert "state_category" in server.search_tickets("", state_category="bogus")
     assert "non-empty" in server.search_tickets("")
@@ -1300,17 +1302,18 @@ def test_is_automation_login_flags_service_accounts():
     assert is_automation_login("") is False
 
 
-def test_mask_customer_format_and_fallback():
+def test_display_customer_format_and_fallback():
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
-    assert server._mask_customer("max@example.test", 98) == "m***@example.test (id 98)"
-    assert server._mask_customer("jane.doe@example.test", 7) == "j***@example.test (id 7)"
-    assert "jane.doe" not in server._mask_customer("jane.doe@example.test", 7)
-    assert server._mask_customer(None, 7) == "(id 7)"
-    assert server._mask_customer("", 7) == "(id 7)"
-    assert server._mask_customer("Ada Lovelace", 5) == "(id 5)"
-    assert server._mask_customer("not-an-email", 5) == "(id 5)"
+    assert server._display_customer("max@example.test", 98) == "max@example.test (id 98)"
+    assert server._display_customer("jane.doe@example.test", 7) == "jane.doe@example.test (id 7)"
+    assert server._display_customer(None, 7) == "(id 7)"
+    assert server._display_customer("", 7) == "(id 7)"
+    assert server._display_customer("Ada Lovelace", 5) == "Ada Lovelace (id 5)"
+    assert server._display_customer("not-an-email", 5) == "not-an-email (id 5)"
+    assert server._display_customer("jane.doe@example.test", "?") == "jane.doe@example.test (id ?)"
+    assert server._display_customer("jane.doe@example.test", None) == "jane.doe@example.test"
 
 
 def test_aggregate_customer_branch_drops_automation_pre_and_post_rank():
@@ -1325,15 +1328,15 @@ def test_aggregate_customer_branch_drops_automation_pre_and_post_rank():
         {"id": 6, "customer_id": 12, "customer": "auto-close", "state": "open"},
     ]
     names = {
-        "7": "j***@example.test (id 7)",
-        "jane.doe@example.test": "j***@example.test (id 7)",
+        "7": "jane.doe@example.test (id 7)",
+        "jane.doe@example.test": "jane.doe@example.test (id 7)",
         "9": "jirasync@sitaas.de",
         "10": "-",
         "11": "auto-x",
         "12": "auto-close",
     }
     out = aggregate(rows, group_by="customer", customer_names=names)
-    assert out == [{"value": "7", "count": 2, "name": "j***@example.test (id 7)"}]
+    assert out == [{"value": "7", "count": 2, "name": "jane.doe@example.test (id 7)"}]
 
 
 def test_aggregate_customer_post_rank_drops_resolved_automation():
@@ -1343,19 +1346,19 @@ def test_aggregate_customer_post_rank_drops_resolved_automation():
         {"id": 1, "customer_id": 7, "state": "open"},
         {"id": 2, "customer_id": 9, "state": "open"},
     ]
-    names = {"7": "j***@example.test (id 7)", "9": "jirasync@sitaas.de"}
+    names = {"7": "jane.doe@example.test (id 7)", "9": "jirasync@sitaas.de"}
     out = aggregate(rows, group_by="customer", customer_names=names)
-    assert out == [{"value": "7", "count": 1, "name": "j***@example.test (id 7)"}]
+    assert out == [{"value": "7", "count": 1, "name": "jane.doe@example.test (id 7)"}]
 
 
-def test_format_aggregate_customer_renders_masked_id_display():
+def test_format_aggregate_customer_renders_full_id_display():
     ranked = [
-        {"value": "7", "count": 2, "name": "j***@example.test (id 7)"},
-        {"value": "9", "count": 1, "name": "(id 9)"},
+        {"value": "7", "count": 2, "name": "jane.doe@example.test (id 7)"},
+        {"value": "9", "count": 1, "name": "Hans Müller (id 9)"},
     ]
     out = formatting.format_aggregate(ranked, "customer", "count", 3)
-    assert "1. j***@example.test (id 7) — 2" in out
-    assert "2. (id 9) — 1" in out
+    assert "1. jane.doe@example.test (id 7) — 2" in out
+    assert "2. Hans Müller (id 9) — 1" in out
     assert "excluded from customer rankings" in out
 
 
@@ -1385,7 +1388,7 @@ class CustomerAggregateTransport:
         raise AssertionError(f"unexpected url {url}")
 
 
-def test_server_aggregate_customer_masks_names_and_bounds_user_lookups(monkeypatch):
+def test_server_aggregate_customer_shows_full_names_and_bounds_user_lookups(monkeypatch):
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
@@ -1395,8 +1398,7 @@ def test_server_aggregate_customer_masks_names_and_bounds_user_lookups(monkeypat
         server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     )
     out = server.aggregate_tickets(group_by="customer", metric="count", top_n=5)
-    assert "1. j***@example.test (id 7) — 2" in out
-    assert "jane.doe@example.test" not in out
+    assert "1. jane.doe@example.test (id 7) — 2" in out
     assert " (id 9)" not in out
     assert "excluded from customer rankings" in out
     user_calls = [call for call in transport.calls if "/api/v1/users/" in call["url"]]
