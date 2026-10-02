@@ -39,6 +39,8 @@ def test_every_row_explains_itself() -> None:
         assert row.explain
         assert "(" not in row.explain
         assert row.explain in row.label()
+        if row.value:
+            assert f"[{row.value}]" in row.label()
 
 
 def test_browse_toggles_paste(tmp_path: Path) -> None:
