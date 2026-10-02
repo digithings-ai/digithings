@@ -9,8 +9,9 @@
 ---   * drag/snap anchors and reanchoring
 --- init.lua only draws what this module computes. The surface is one status icon.
 --- No status word, copy, close, pin button, transcript, waveform, or fact line.
---- The icon shows while recording, dictating, processing, or a current error or
---- warning, then hides. banner_pinned keeps the idle icon up. Density is ignored.
+--- The icon shows for recording, dictating, processing, a current error, or a
+--- current warning. Pending, idle, and nothing-to-show hide it. banner_pinned
+--- keeps the idle icon up. Density is ignored.
 
 local M = {}
 
@@ -154,7 +155,9 @@ M.STATE_MATRIX = {
   done = "idle",
   cancelled = "idle",
   cancelling = "idle",
-  empty = "warn",
+  empty = "idle",
+  pending = "idle",
+  warning = "warn",
   error = "error",
   idle = "idle",
 }
@@ -168,7 +171,9 @@ M.ICON_PHASE = {
   pasting = "processing",
   speaking = "processing",
   error = "error",
-  empty = "warning",
+  warning = "warning",
+  empty = "",
+  pending = "",
   idle = "idle",
   done = "idle",
   cancelled = "idle",
@@ -187,9 +192,12 @@ function M.icon_phase(state)
   return M.ICON_PHASE[state] or ""
 end
 
---- Recording, dictating, processing, and a current error or warning always draw.
---- The idle icon draws only while the banner is pinned (always visible).
-function M.should_draw(state, pinned)
+--- Recording, dictating, processing, and a current error or warning draw.
+--- Pending, idle, empty, and a finished take hide. Pin keeps the idle icon.
+function M.should_draw(state, pinned, pending)
+  if pending == true or state == "pending" or state == "empty" then
+    return false
+  end
   local phase = M.icon_phase(state)
   if ALWAYS_SHOW[phase] then
     return true
@@ -198,6 +206,49 @@ function M.should_draw(state, pinned)
     return pinned == true
   end
   return false
+end
+
+--- One rule for every banner path. `pending` hides even a pinned idle icon.
+local PATH_STATE = {
+  launch = "idle",
+  pin_on = "idle",
+  pin_off = "idle",
+  show = "recording",
+  hide = "idle",
+  toggle = "recording",
+  take_start = "pending",
+  recording = "recording",
+  transcribing = "transcribing",
+  loading = "loading",
+  rewriting = "rewriting",
+  pasting = "pasting",
+  speaking = "speaking",
+  empty = "empty",
+  error = "error",
+  warning = "warning",
+  take_end = "done",
+  pending = "pending",
+}
+
+function M.route_banner(path, opts)
+  opts = opts or {}
+  if path == "hide" then
+    return false
+  end
+  if path == "toggle" and opts.showing == true then
+    return false
+  end
+  local pinned = opts.pinned == true
+  if path == "pin_on" then
+    pinned = true
+  elseif path == "pin_off" then
+    pinned = false
+  end
+  local pending = opts.pending == true or path == "pending" or path == "take_start"
+  if path == "show" or path == "toggle" then
+    pending = opts.pending == true
+  end
+  return M.should_draw(PATH_STATE[path] or path, pinned, pending)
 end
 
 --- Click focuses a digivoice terminal that is already open, otherwise opens one.
@@ -348,11 +399,11 @@ function M.linger_seconds(state, pinned)
   if state == "done" or state == "cancelled" or state == "cancelling" or state == "idle" then
     return 0
   end
-  if state == "error" then
+  if state == "error" or state == "warning" then
     return 4.0
   end
-  if state == "empty" then
-    return 2.0
+  if state == "empty" or state == "pending" then
+    return 0
   end
   return nil
 end

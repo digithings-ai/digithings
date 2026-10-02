@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from digivoice.cli import Runtime, run
 from digivoice.errors import SpeakError
+from digivoice.focus import FocusTarget
 from digivoice.history import append_entry, dict_entry
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, save_settings
@@ -321,6 +322,21 @@ def _ax_frontmost_dispatch(*, ax_stdout: str = "", ax_code: int = 0, frontmost: 
         return FakeReply()
 
     return _respond
+
+
+def test_read_selection_uses_the_captured_app() -> None:
+    focus = FocusTarget(name="Ghostty", bundle_id="com.mitchellh.ghostty")
+    runner = FakeRunner(
+        {
+            "osascript": FakeReply(stdout="missing value"),
+            "pbpaste": FakeReply(stdout="ghostty highlight"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner, focus) == "ghostty highlight"
+    ax = runner.calls[0]
+    assert "AXSelectedText" in " ".join(ax.argv)
+    assert ax.argv[-2:] == ["com.mitchellh.ghostty", "Ghostty"]
+    assert not any("frontmost is true" in " ".join(call.argv) for call in runner.calls[1:])
 
 
 def test_read_selection_darwin_ax_selected_text_wins_without_copy() -> None:

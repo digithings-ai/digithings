@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 from digivoice.cli import Runtime, main, run
 from digivoice.history import append_entry, dict_entry
+from digivoice.paths import resolve_paths
 from digivoice.probe import real_probe
+from digivoice.settings import VoiceSettings, save_settings
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner, writes_wav
 
@@ -140,6 +142,61 @@ def test_dict_keeps_stdout_clean_when_paste_is_denied(tmp_path: Path) -> None:
     assert "Accessibility" in result.stderr
     # Dictation still recorded its history entry.
     assert len((tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_dict_paste_on_stop_false_does_not_paste(tmp_path: Path) -> None:
+    paths = resolve_paths("darwin", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(paste_on_stop=False))
+    runner = FakeRunner(
+        {
+            "sox": writes_wav(),
+            "whisper-cli": FakeReply(stdout=TRANSCRIPT),
+            "pbcopy": FakeReply(),
+            "osascript": FakeReply(),
+        }
+    )
+    runtime = _dict_runtime(
+        tmp_path,
+        platform="darwin",
+        runner=runner,
+        commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+    )
+    result = run(["dict"], runtime)
+    assert result.code == 0
+    assert "paste_on_stop=false" in result.stderr
+    assert "pbcopy" not in runner.programs
+    assert "osascript" not in runner.programs
+
+
+def test_dict_pastes_into_the_captured_app(tmp_path: Path) -> None:
+    def osascript(_call: object) -> FakeReply:
+        return FakeReply()
+
+    runner = FakeRunner(
+        {
+            "sox": writes_wav(),
+            "whisper-cli": FakeReply(stdout=TRANSCRIPT),
+            "pbcopy": FakeReply(),
+            "osascript": osascript,
+        }
+    )
+    runtime = _dict_runtime(
+        tmp_path,
+        platform="darwin",
+        runner=runner,
+        commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+    )
+    result = run(
+        ["dict", "--focus-name", "Notes", "--focus-bundle", "com.apple.Notes"],
+        runtime,
+    )
+    assert result.code == 0
+    assert "pasted into Notes" in result.stderr
+    typed = next(call for call in runner.calls if call.program == "osascript")
+    assert typed.argv[-2:] == ["com.apple.Notes", "Notes"]
+    assert TRANSCRIPT not in " ".join(typed.argv)
+    copied = next(call for call in runner.calls if call.program == "pbcopy")
+    assert copied.stdin == TRANSCRIPT
 
 
 def test_dict_no_paste_skips_the_clipboard(tmp_path: Path) -> None:
