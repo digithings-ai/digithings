@@ -319,7 +319,9 @@ test("restart confirms before it asks to re-exec", async () => {
       return { restart: true }
     },
     update() {
-      return { note: "digivoice update is not wired yet" }
+      return {
+        note: "digivoice update\nadapter  installed  ~/.hammerspoon/digivoice",
+      }
     },
   })
   try {
@@ -336,8 +338,10 @@ test("restart confirms before it asks to re-exec", async () => {
     await setup.waitForFrame((value) => value.includes("Update"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("not wired yet"))
-    assert.match(setup.captureCharFrame(), /\[\*\] Update/)
+    await setup.waitForFrame((value) => value.includes("~/.hammerspoon/digivoice"))
+    const updated = setup.captureCharFrame()
+    assert.match(updated, /digivoice update/)
+    assert.match(updated, /\[\*\] Update/)
     setup.mockInput.pressArrow("up")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("Back") && value.includes("[*] Restart"))
@@ -347,6 +351,44 @@ test("restart confirms before it asks to re-exec", async () => {
     assert.equal(app.restarting, true)
     assert.ok(api.calls.some((call) => call.op === "restart"))
     assert.ok(!api.calls.some((call) => call.op === "quit"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a failed update stays on the row", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    system() {
+      return {
+        title: "System",
+        path: "/system",
+        rows: [
+          { action: "Update", path: "/system/update", meta: "", kind: "dir", name: "Update" },
+        ],
+      }
+    },
+    update() {
+      throw new Error("update broke")
+    },
+  })
+  try {
+    const app = mountDigivoice(setup.renderer, api, {
+      truecolor: false,
+      tMs: BUILD_MS,
+      animate: false,
+      cols: 100,
+    })
+    await setup.waitForFrame((value) => value.includes("[*] History"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("[*] Update"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("update broke"))
+    assert.match(setup.captureCharFrame(), /\[\*\] Update/)
+    assert.equal(app.restarting, false)
     app.destroy()
   } finally {
     setup.renderer.destroy()

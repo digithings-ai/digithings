@@ -54,6 +54,18 @@ class InstallReport(BaseModel):
         return all(step.status != "failed" for step in self.steps)
 
 
+class InstallStamp(BaseModel):
+    """Versions `digivoice install` last wrote. Update refreshes a step that differs."""
+
+    bun: str = ""
+    opentui: str = ""
+    whisper: str = ""
+    piper: str = ""
+    sox: str = ""
+    stt: str = ""
+    voice: str = ""
+
+
 class HistoryEntry(BaseModel):
     """One JSONL line. `ts` is ISO-8601 UTC; `wav` is null when there is no file."""
 

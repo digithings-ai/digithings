@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,17 +13,19 @@ from digivoice.catalog import install_catalog_model
 from digivoice.doctor import doctor_checks
 from digivoice.history import delete_entry, read_history
 from digivoice.home import HOME_BLOCKS, build_context_lines
+from digivoice.install import FetchFn, render_install, run_install
 from digivoice.installed_models import discover_installed_models
 from digivoice.menu_tree import TreeRow, _changed, _missing_catalog, rows_at
 from digivoice.models import HistoryEntry
 from digivoice.nav import norm_path
 from digivoice.opentui import NAV_FOOTER
-from digivoice.panels import _UPDATE, SYSTEM_BLOCKS
+from digivoice.opentui import tui_root as package_tui_root
+from digivoice.panels import SYSTEM_BLOCKS
 from digivoice.paste import copy_to_clipboard
 from digivoice.paths import resolve_paths
-from digivoice.probe import real_probe
+from digivoice.probe import CommandProbe, real_probe
 from digivoice.reload import run_reload, stop_home_control
-from digivoice.runner import run_command
+from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import default_settings, load_settings, save_settings
 from digivoice.status import read_system_log, system_log_path
 
@@ -96,8 +99,50 @@ def _take(paths: Any, page: int, index: int) -> HistoryEntry | None:
     return visible[index]
 
 
+def _update_note(
+    platform_name: str,
+    home: Path,
+    env: dict[str, str],
+    paths: Any,
+    *,
+    probe: CommandProbe | None,
+    runner: CommandRunner | None,
+    fetch: FetchFn | None,
+    machine: str | None,
+    adapter_source: Path | None,
+    tui_root: Path | None,
+) -> str:
+    """Run the local update. A failure is the note, not a raised error."""
+    try:
+        report = run_install(
+            home=home,
+            platform=platform_name,
+            machine=machine or platform.machine(),
+            probe=probe or real_probe(env.get("PATH", "")),
+            runner=runner or run_command,
+            models_dir=Path(paths.models_dir),
+            tui_root=tui_root if tui_root is not None else package_tui_root(),
+            fetch=fetch,
+            refresh=True,
+            adapter_source=adapter_source,
+        )
+    except Exception as exc:
+        return str(exc).strip() or exc.__class__.__name__
+    return render_install(report, heading="digivoice update").strip()
+
+
 def dispatch(
-    req: dict[str, Any], *, platform: str, home: Path, env: dict[str, str]
+    req: dict[str, Any],
+    *,
+    platform: str,
+    home: Path,
+    env: dict[str, str],
+    probe: CommandProbe | None = None,
+    runner: CommandRunner | None = None,
+    fetch: FetchFn | None = None,
+    machine: str | None = None,
+    adapter_source: Path | None = None,
+    tui_root: Path | None = None,
 ) -> dict[str, Any]:
     """One screen request. Missing apps and unknown ops return data, not a traceback."""
     paths = resolve_paths(platform, home, env)
@@ -179,7 +224,21 @@ def dispatch(
     if op == "restart":
         return {"footer": footer, "restart": True}
     if op == "update":
-        return {"footer": footer, "note": _UPDATE}
+        return {
+            "footer": footer,
+            "note": _update_note(
+                platform,
+                home,
+                env,
+                paths,
+                probe=probe,
+                runner=runner,
+                fetch=fetch,
+                machine=machine,
+                adapter_source=adapter_source,
+                tui_root=tui_root,
+            ),
+        }
     if op == "quit":
         report = stop_home_control(platform, home, env, runner=run_command)
         return {"footer": footer, "exit": 0, "stopped": True, "note": report.summary}

@@ -136,11 +136,24 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
     assert "banner_density" not in (tmp_path / "settings.json").read_text(encoding="utf-8")
 
 
-def test_update_and_uninstall_are_documented_stubs(tmp_path: Path) -> None:
+def test_update_refreshes_and_uninstall_stays_a_stub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from digivoice.models import InstallReport, InstallStep
+
+    seen: dict[str, object] = {}
+
+    def fake_run_install(**kwargs: object) -> InstallReport:
+        seen.update(kwargs)
+        return InstallReport(steps=[InstallStep(id="adapter", status="present", detail="adapter")])
+
+    monkeypatch.setattr("digivoice.cli.run_install", fake_run_install)
     runtime = _runtime(tmp_path)
     update = run(["update"], runtime)
     assert update.code == 0
-    assert "not wired yet" in update.stdout
+    assert seen["refresh"] is True
+    assert update.stdout.startswith("digivoice update\n")
+    assert "not wired yet" not in update.stdout
     uninstall = run(["uninstall"], runtime)
     assert uninstall.code == 0
     assert "not wired yet" in uninstall.stdout

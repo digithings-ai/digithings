@@ -8,6 +8,7 @@ System holds doctor, reload, reset, restart, update, and logs.
 from __future__ import annotations
 
 import os
+import platform
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -16,10 +17,12 @@ from typing import TextIO
 
 from digivoice.doctor import doctor_ready
 from digivoice.history import delete_entry, read_history
+from digivoice.install import FetchFn, render_install, run_install
 from digivoice.models import DoctorCheck, HistoryEntry, VoicePaths
 from digivoice.nav import section_of
+from digivoice.opentui import tui_root as package_tui_root
 from digivoice.paste import copy_to_clipboard
-from digivoice.probe import CommandProbe
+from digivoice.probe import CommandProbe, real_probe
 from digivoice.reload import run_reload
 from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import default_settings, save_settings
@@ -50,7 +53,7 @@ SYSTEM_BLOCKS: tuple[MenuBlock, ...] = (
     MenuBlock(action="Reload", path="/reload"),
     MenuBlock(action="Reset", path="/reset"),
     MenuBlock(action="Restart", path="/restart"),
-    MenuBlock(action="Update", path="/update"),
+    MenuBlock(action="Update", path="/system/update"),
     MenuBlock(action="Logs", path="/system/logs"),
 )
 SYSTEM_MENU = tuple(block.action for block in SYSTEM_BLOCKS)
@@ -102,10 +105,6 @@ _SUMMARY: dict[tuple[str, str], str] = {
 
 _READY = "All set. Local speech is ready."
 _NOT_READY = "Not ready. The red rows need a fix."
-_UPDATE = (
-    "digivoice update is not wired yet. Reinstall with "
-    "uv tool install --reinstall --editable ./digivoice"
-)
 
 
 def _color_word(status: str, *, color: bool) -> str:
@@ -421,6 +420,39 @@ def restart_digivoice() -> None:
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
+def _run_update(
+    platform_name: str,
+    home: Path,
+    env: Mapping[str, str],
+    paths: VoicePaths,
+    *,
+    runner: CommandRunner | None,
+    probe: CommandProbe | None,
+    fetch: FetchFn | None,
+    machine: str | None,
+    adapter_source: Path | None,
+    tui_root: Path | None,
+) -> str:
+    """Refresh the local install. A failed step is a report, not a crash."""
+    try:
+        report = run_install(
+            home=home,
+            platform=platform_name,
+            machine=machine or platform.machine(),
+            probe=probe or real_probe(env.get("PATH", "")),
+            runner=runner or run_command,
+            models_dir=Path(paths.models_dir),
+            tui_root=tui_root if tui_root is not None else package_tui_root(),
+            fetch=fetch,
+            refresh=True,
+            adapter_source=adapter_source,
+        )
+    except Exception as exc:
+        detail = str(exc).strip() or exc.__class__.__name__
+        return f"digivoice update\n{detail}\n"
+    return render_install(report, heading="digivoice update")
+
+
 def browse_system(
     paths: VoicePaths,
     platform: str,
@@ -433,6 +465,11 @@ def browse_system(
     restart: Callable[[], None] | None = None,
     doctor: Callable[[], None] | None = None,
     on_path: Callable[[str], None] | None = None,
+    probe: CommandProbe | None = None,
+    fetch: FetchFn | None = None,
+    machine: str | None = None,
+    adapter_source: Path | None = None,
+    tui_root: Path | None = None,
 ) -> None:
     """Doctor, reload, reset, restart, update, and logs. Esc returns to home."""
     stdin = stdin or sys.stdin
@@ -500,7 +537,20 @@ def browse_system(
                     return
                 restart_digivoice()
         elif picked == 4:
-            stdout.write(_UPDATE + "\n")
+            stdout.write(
+                _run_update(
+                    platform,
+                    home,
+                    env,
+                    paths,
+                    runner=runner,
+                    probe=probe,
+                    fetch=fetch,
+                    machine=machine,
+                    adapter_source=adapter_source,
+                    tui_root=tui_root,
+                )
+            )
             stdout.flush()
         elif picked == 5:
             present_logs(paths, stdin, stdout)

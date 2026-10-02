@@ -107,11 +107,21 @@ digivoice doctor
 result: ok
 ```
 
-## Thin stubs
+## Update and uninstall
+
+`digivoice update` runs the same local install as `digivoice install`, refreshing a step that is missing or older than its pin, then copies the Hammerspoon lua into `~/.hammerspoon/digivoice` and reloads. `uninstall` is still a stub.
 
 ```
 $ digivoice update
-digivoice update: not wired yet — reinstall via uv / brew when available
+digivoice update
+bun  present  ~/.local/bin/bun
+opentui  present  digivoice/tui/node_modules/@opentui/core
+whisper-cli  present  ~/.local/bin/whisper-cli
+piper  present  ~/.local/bin/piper
+sox  present  /usr/bin/sox
+stt  present  ~/.local/share/digivoice/models/ggml-base.en.bin
+voice  present  ~/.local/share/digivoice/models/en_US-lessac-medium.onnx
+adapter  installed  ~/.hammerspoon/digivoice — hammerspoon .. reloaded
 
 $ digivoice uninstall
 digivoice uninstall: not wired yet — remove uv tool + data dir manually

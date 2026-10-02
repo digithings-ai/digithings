@@ -145,7 +145,7 @@ def render_home_overview(
         "History, Settings, System, and Quit. Doctor lives under System.",
         "Enter opens a folder or a list. Esc goes up.",
         "Each path is a command: digivoice /history, digivoice /doctor, digivoice /quit.",
-        "System is /doctor, /reload, /reset, /restart, /update.",
+        "System is /doctor, /reload, /reset, /restart, /system/update.",
         "Closing the terminal leaves digivoice running. Quit stops it.",
         "",
         "— Settings (current) —",

@@ -24,7 +24,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `tui/` | OpenTUI (`@opentui/core`) app: `createCliRenderer`, boxes, and text. |
 | `src/digivoice/pixel_hero.py` | 7×10 DIGIVOICE glyph map. The home header paints those glyphs as five half-block rows in `tui.py`. |
 | `src/digivoice/catalog.py` | Suggested local STT ggml + rewrite GGUF list; download + wire into models/. |
-| `src/digivoice/install.py` | `digivoice install`: bun, OpenTUI, whisper-cli, Piper, sox, and the default local models. Fetch and runner are injected. No cloud STT/TTS. |
+| `src/digivoice/install.py` | `digivoice install` and `digivoice update`: bun, OpenTUI, whisper-cli, Piper, sox, the default local models, and the Hammerspoon adapter at `~/.hammerspoon/digivoice`. Fetch and runner are injected. No cloud STT/TTS. |
 | `src/digivoice/installed_models.py` | Local GGUF and whisper files already installed by LM Studio, Ollama, and MLX Studio. |
 | `src/digivoice/home.py` | Bare-`digivoice` home: OpenTUI on a TTY, printed overview otherwise. |
 | `src/digivoice/panels.py` | TTY doctor (green ok, red not ok, ready line at the bottom), history browser, and the system pane (reload, reset, restart, update, logs). |
@@ -98,8 +98,9 @@ commands write.
 | `reset` | 0 | Restore settings defaults. History and models stay. `digivoice /reset` is the same command. |
 | `restart` | 0 | Stop Hammerspoon, then replace this process with a fresh digivoice. |
 | `system` | 0 | TTY: Doctor, Reload, Reset, Restart, Update, Logs (`/system/logs`). Otherwise print those slash paths. Logs shows the whole `system.log` in the data directory (beside `status.json`). A take appends one line when it reaches `error` or `empty`. A missing file stays on the page as "No log yet". Reset confirm is still the first choice on that dialog. |
-| `install` | 0 every step present or installed, 1 any step failed | Fetch bun 1.4.2, `bun install` `@opentui/core` in `digivoice/tui`, whisper-cli, Piper, sox, `ggml-base.en.bin`, and `en_US-lessac-medium`. A failed step does not stop the rest. No rewrite GGUF and no cloud STT/TTS. |
-| `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
+| `install` | 0 every step present or installed, 1 any step failed | Fetch bun 1.4.2, `bun install` `@opentui/core` in `digivoice/tui`, whisper-cli, Piper, sox, `ggml-base.en.bin`, and `en_US-lessac-medium`, then copy the Hammerspoon lua into `~/.hammerspoon/digivoice` and `hs.reload()`. A failed step does not stop the rest. No rewrite GGUF and no cloud STT/TTS. |
+| `update` | 0 every step present or installed, 1 any step failed | Same steps as `install` with refresh. A step already at its pin stays. A missing or older step is fetched again. The adapter is copied either way, then `hs.reload()`. The TUI shows that report and stays on the Update row. |
+| `uninstall` | 0 | Thin stub: not wired yet (remove the tool install and the data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
 | bare `digivoice` (no args) | 0 | TTY: fullscreen home. Centered DIGIVOICE half-block wordmark (five rows, xterm cube grays or truecolor, block V) that builds in place, then a short glint, a blank gap, status strip (models / banner / health / control), step-rail actions. The selected row is `[*]` in the terminal foreground; other rows are `[ ]`. Home is History, Settings, System, Quit. Doctor is inside System. On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and arms the banner (`M.ensure_banner` returns `armed`) without drawing it unless `banner_pinned` is true or a take is in progress. `live_banner` false skips the overlay. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit and `digivoice quit` stop the adapter and quit Hammerspoon. Esc and closing the Terminal leave it running. Every row is a block: action, then a gray shortcut, slash path, and metadata. Typing `/` runs that path (`/doctor`, `/settings/banner/pin`, `/quit`). History shows the text with the timestamp in gray underneath; Copy is `c` and Delete is `d`, or a click. Settings returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
 | unknown / bad flags | 2 | Usage on stderr. |
@@ -109,9 +110,13 @@ commands write.
 
 ## Install
 
-`digivoice install` brings in the local pieces required to run. It does not call a cloud STT or TTS service, and it does not download a rewrite GGUF (rewrite stays off). Issue #4969 is the SHA-safe Hammerspoon adapter hold; it does not add an Otter model pack, and this command does not fetch Otter. Tests pass a fake `fetch` and a fake runner. They do not download weights and they do not run this command against the network.
+`digivoice install` brings in the local pieces required to run. `digivoice update` and System → Update (`/system/update`, also `/update`) call the same function with refresh. It does not call a cloud STT or TTS service, and it does not download a rewrite GGUF (rewrite stays off). Issue #4969 is the SHA-safe Hammerspoon adapter hold; it does not add an Otter model pack, and this command does not fetch Otter. Tests pass a fake `fetch` and a fake runner and a home under tmp. They do not download weights, they do not run this command against the network, and they do not write a real home directory.
 
 Each step is `present`, `installed`, or `failed`. Later steps still run after a failure. The process exits 1 when any step failed. Archives that contain `..` or an absolute path are rejected. Tar extraction uses `filter="data"`.
+
+A step that already exists is `present` and is not stamped. The versions this command itself writes live in `~/.local/share/digivoice/vendor/install.json`. Update re-fetches a step when its file is missing or that stamp differs from the pin. A matching stamp stays `present`. Sox that was already on `PATH` (stamp not `brew`) is left alone. Sox or macOS whisper-cli that this command installed with Homebrew is `brew upgrade` on update.
+
+The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any sibling `*.lua` from `digivoice/hammerspoon` into `~/.hammerspoon/digivoice`. A symlink that already points at this checkout is left in place. A real directory is replaced in place, and lua this checkout no longer ships is deleted, so an old copy or close control cannot remain. Then it runs `hs -c hs.reload()`, the same call as System Reload. `hs` absent is a skip, not an error. A failed reload marks the adapter step failed after the files are written.
 
 | Step | Fresh install |
 | --- | --- |
@@ -122,6 +127,7 @@ Each step is `present`, `installed`, or `failed`. Later steps still run after a 
 | sox | Already on `PATH`, otherwise `brew install sox`. Missing Homebrew fails that step. |
 | stt | `ggml-base.en.bin` from `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin` into the models directory. |
 | voice | `en_US-lessac-medium.onnx` and `en_US-lessac-medium.onnx.json` from `https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/`. |
+| adapter | Current `digivoice/hammerspoon/*.lua` into `~/.hammerspoon/digivoice`, then `hs.reload()`. The overlay stays the status icon only: no copy, no close, no pin button. It retracts when idle or pending. |
 
 ## dict
 
