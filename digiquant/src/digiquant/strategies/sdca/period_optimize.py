@@ -21,16 +21,27 @@ sides. Real DCA still drips, never buys all-in at one close.
 inventing peak/trough dates, and this module obeys that literally: candidate
 windows come from *pivots the price series produced itself*.
 
-    A bar is a **peak** when its close is the maximum of its ±c-day
-    confirmation neighbourhood and is strictly greater than at least one bar in
-    that neighbourhood (a flat plateau carries no price information, so it is
-    not a peak); **trough** symmetrically. The confirmation width ``c`` is
+    A bar is a **peak** when its close attains the maximum of its ±c-day
+    confirmation neighbourhood, at least one bar in that neighbourhood is
+    strictly below it, and it is the **first** bar of that neighbourhood to
+    attain that maximum; **trough** symmetrically. The confirmation width ``c`` is
     ``max(2, min(half_widths) // 3)`` — a turn must dominate a third of the
     shortest window the horizon can express, so a pivot is never noise finer
     than the horizon's own resolution. Both neighbours must exist, so the first
-    and last bars are never pivots. Because a pivot must be a *strict* extreme,
-    every detected pivot is unique in its neighbourhood: discovery is
-    deterministic and a flat plateau yields nothing at all.
+    and last bars are never pivots.
+
+    **A flat plateau yields exactly one pin** (Ruling 2). The corner is the
+    information, so the pin is the *first* bar that attains the top (the bottom,
+    for a trough) and the plateau's later bars are never counted again. Without
+    that rule every bar of a flat top was its own pivot, so a single real corner
+    on a two-bar plateau could satisfy ``MIN_PEAKS = 2`` by itself — and real
+    closes do go flat, so a series carrying plateaus was inflating its pivot
+    count rather than reporting structure. Two consequences, both intended: a
+    wholly flat series
+    attains neither a strict maximum nor a strict minimum, so it yields no pivot
+    at all; and two turns closer together than ``c`` bars cannot both be pinned
+    (the first one owns its neighbourhood), so detected pins are more than ``c``
+    bars apart. Discovery is deterministic.
 
 Every detected pivot is then emitted as a ``CycleWindow`` at **each** candidate
 half-width, so one detected corner yields one candidate per width and the
@@ -331,9 +342,15 @@ def confirmation_days(horizon: PeriodHorizon) -> int:
 def _pivot_indexes(prices: Sequence[float], confirm: int) -> tuple[list[int], list[int]]:
     """Peak / trough pivot indexes from the price series alone.
 
-    A peak is the first bar attaining the maximum of its ±``confirm`` window that
-    is also strictly greater than at least one bar in it (a plateau therefore
-    yields no pivot); a trough is symmetric. Both neighbours must exist.
+    A peak is the **first** bar of its ±``confirm`` neighbourhood to attain that
+    neighbourhood's maximum, and at least one bar in it must be strictly lower; a
+    trough is the symmetric rule (first to attain the minimum, at least one bar
+    strictly higher). Both neighbours must exist, so the first and last bars are
+    never pivots.
+
+    Requiring the *first* attainment is what keeps a flat plateau to a single
+    pin: every later bar of the plateau attains the same extreme, so an earlier
+    bar of its own neighbourhood is equal to it, which rejects it.
     """
     n = len(prices)
     peaks: list[int] = []
@@ -341,9 +358,13 @@ def _pivot_indexes(prices: Sequence[float], confirm: int) -> tuple[list[int], li
     for index in range(confirm, n - confirm):
         window = prices[index - confirm : index + confirm + 1]
         here = prices[index]
-        if here == max(window) and any(p < here for p in window):
+        # ``window.index(here) == confirm`` reads "no earlier bar of this
+        # neighbourhood attains the same value" — the first-attaining rule.
+        if here == max(window) and any(p < here for p in window) and window.index(here) == confirm:
             peaks.append(index)
-        elif here == min(window) and any(p > here for p in window):
+        elif (
+            here == min(window) and any(p > here for p in window) and window.index(here) == confirm
+        ):
             troughs.append(index)
     return peaks, troughs
 
@@ -367,9 +388,10 @@ def detect_pivots(
 
     This is the derivation rule of ``cycle_windows.py`` made callable — see the
     module docstring for why the confirmation width is derived rather than
-    hand-picked, and why a strict extreme is required. Exposed separately so the
-    pins can be read without the per-width window sets (the optimizer reports
-    them as ``PeriodOptimizationResult.peak_pins`` / ``trough_pins``).
+    hand-picked, and why a flat plateau yields exactly one pin (Ruling 2). Exposed
+    separately so the pins can be read without the per-width window sets (the
+    optimizer reports them as ``PeriodOptimizationResult.peak_pins`` /
+    ``trough_pins``).
     """
     confirm = confirmation_days(horizon)
     _check_calendar(dates, prices, confirm)

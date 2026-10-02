@@ -14,6 +14,13 @@ The pins that matter here, in order of importance:
   come from the price series' own corners; ``confirmation_days`` pins the
   detector's rule, and a flat series has no corners, so it yields no candidates
   at all.
+- **Ruling 2 (unique pivots).** A flat plateau yields exactly **one** pin — the
+  first bar that attains the top (the bottom, for a trough). Without that rule
+  every bar of a flat top was its own pivot, so one real corner on a two-bar
+  plateau could satisfy the frozen ``min_peaks = 2`` minimum by itself, and real
+  closes do go flat. Pinned on a rise→flat→fall fixture (one peak pin) and its
+  inverse (one trough pin), plus plateau-length invariance: the pin neither moves
+  nor multiplies.
 - **Ruling 1.** Every window emits *both* edge dates into the buy/sell sets — a
   window converted to dates without an exit is held to end-of-history, after
   which every candidate saturates exposure (~100%) and the frozen 70% floor
@@ -30,6 +37,8 @@ import pytest
 from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, SdcaCycleWindows
 from digiquant.strategies.sdca.period_optimize import (
     EXPOSURE_FLOOR_PCT,
+    MIN_PEAKS,
+    MIN_TROUGHS,
     PeriodCandidate,
     PeriodHorizon,
     PeriodOptimizationResult,
@@ -59,10 +68,11 @@ def _calendar(n: int) -> list[date]:
 def _leg(start_price: float, end_price: float, bars: int) -> list[float]:
     """``bars`` closes on a straight line, endpoints inclusive.
 
-    The last close is *forced* onto ``end_price``: a straight-line ramp otherwise
-    lands a few ULPs short of it, which would turn the corner into two pivots (a
-    near-equal minimum one bar earlier) and the pivot detector — correctly — would
-    read both. Exact corners keep the fixture's structure unambiguous.
+    The last close is *forced* onto ``end_price``: a straight-line ramp lands a
+    few ULPs short of its endpoint, so the corner's bar index would then depend on
+    floating-point rounding — and these fixtures assert corner *indexes*
+    (``test_detected_pins_are_exactly_the_zigzag_corners``). Forcing the endpoint
+    keeps the arithmetic and the fixture's structure in agreement.
     """
     step = (end_price - start_price) / (bars - 1)
     prices = [start_price + step * i for i in range(bars)]
@@ -83,11 +93,11 @@ def _zigzag(
     extrema and the pivot detector has nothing else to find. Each falling leg
     contributes its *interior* points only — both of its endpoints are corners and
     are emitted exactly once — so every corner is a single bar at ``_LOW`` or
-    ``_HIGH``. Two bars at the same corner price would be a plateau, and a
-    plateau carries no pivot. ``tail_up`` appends a final rising leg whose top is
-    never reached, which leaves a *trailing trough* whose exit edge would fall
-    past the final bar — the Ruling 1 truncation case. A cycle is
-    ``up_days + down_days - 2`` bars.
+    ``_HIGH``. Two bars at the same corner price would be a plateau, and a plateau
+    pins at its *first* bar (Ruling 2), which would move the corner by a bar.
+    ``tail_up`` appends a final rising leg whose top is never reached, which
+    leaves a *trailing trough* whose exit edge would fall past the final bar — the
+    Ruling 1 truncation case. A cycle is ``up_days + down_days - 2`` bars.
     """
     prices: list[float] = []
     for _ in range(cycles):
@@ -254,6 +264,63 @@ def test_discovery_rejects_misaligned_inputs() -> None:
     dates, prices = _up_heavy()
     with pytest.raises(ValueError, match="same length"):
         discover_candidate_periods(dates[:10], prices, PeriodHorizon.medium())
+
+
+# ---------------------------------------------- Ruling 2: unique pivots
+
+
+def _top_with_flat_bars(flat_bars: int) -> tuple[list[date], list[float]]:
+    """Rise → ``flat_bars`` equal closes at the top → fall.
+
+    ``flat_bars=0`` is the single-bar corner every other fixture has; anything
+    above it makes the top a *plateau* — one price level attained by several
+    consecutive bars, which is what a real flat top looks like. The corner sits at
+    bar 10 either way (the last rising bar is the first bar at ``_HIGH``).
+    """
+    prices = [*_leg(_LOW, _HIGH, 11), *[_HIGH] * flat_bars, *_leg(_HIGH, _LOW, 11)[1:]]
+    return _calendar(len(prices)), prices
+
+
+def _bottom_with_flat_bars(flat_bars: int) -> tuple[list[date], list[float]]:
+    """The inverse of ``_top_with_flat_bars``: fall → flat bottom → rise."""
+    prices = [*_leg(_HIGH, _LOW, 11), *[_LOW] * flat_bars, *_leg(_LOW, _HIGH, 11)[1:]]
+    return _calendar(len(prices)), prices
+
+
+def test_a_flat_top_pins_once_at_the_first_attaining_bar() -> None:
+    """Ruling 2: a plateau is one pin, at the first bar that attains the top."""
+    dates, prices = _top_with_flat_bars(5)
+    confirm = confirmation_days(PeriodHorizon.medium())
+    top = 10
+    plateau = prices[top : top + confirm + 1]
+    assert len(plateau) == confirm + 1 and set(plateau) == {_HIGH}, "fixture needs a real plateau"
+    peaks, troughs = detect_pivots(dates, prices, PeriodHorizon.medium())
+    assert peaks == (dates[top],), f"expected one peak pin, got {peaks}"
+    assert troughs == ()
+    # The ruling's motivation: one real corner must not be able to satisfy the
+    # frozen two-peak minimum on its own, by counting each plateau bar as a pin.
+    assert len(peaks) == 1 < MIN_PEAKS
+
+
+def test_a_flat_bottom_pins_once_at_the_first_attaining_bar() -> None:
+    """Symmetric: a flat bottom is one trough pin, and invents no peak."""
+    dates, prices = _bottom_with_flat_bars(5)
+    confirm = confirmation_days(PeriodHorizon.medium())
+    bottom = 10
+    plateau = prices[bottom : bottom + confirm + 1]
+    assert len(plateau) == confirm + 1 and set(plateau) == {_LOW}, "fixture needs a real plateau"
+    peaks, troughs = detect_pivots(dates, prices, PeriodHorizon.medium())
+    assert troughs == (dates[bottom],), f"expected one trough pin, got {troughs}"
+    assert len(troughs) == 1 < MIN_TROUGHS
+    assert peaks == ()
+
+
+@pytest.mark.parametrize("flat_bars", [0, 1, 2, 5, 9])
+def test_the_plateau_length_neither_moves_nor_multiplies_the_pin(flat_bars: int) -> None:
+    """One pin either way, on the same bar — the plateau is not the pivot's location."""
+    dates, prices = _top_with_flat_bars(flat_bars)
+    peaks, _ = detect_pivots(dates, prices, PeriodHorizon.medium())
+    assert peaks == (dates[10],), f"flat_bars={flat_bars} gave {peaks}"
 
 
 # ------------------------------------------------------- Ruling 1: the edges
