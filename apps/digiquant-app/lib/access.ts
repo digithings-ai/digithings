@@ -10,10 +10,24 @@ export type PageEntry = { path: string; label: string; status?: 'wip' | 'soon'; 
 export type DeskEntry = { id: string; label: string; blurb: string; access: Access; reason?: string; pages: PageEntry[] };
 export type Manifest = { caller: { tier: string; groups: string[] }; desks: DeskEntry[]; routes: string[] };
 
-/** Short tag for a locked node: "Requires pro" → "pro", "Requires the 12x group" → "12x". */
+/** Real tier ladder, lowest to highest. Group `12x` = product `fx_hub`. */
+export const TIERS = ['free', 'brief', 'desk', 'studio', 'enterprise'] as const;
+export type Tier = (typeof TIERS)[number];
+export const isTier = (s: string): s is Tier => (TIERS as readonly string[]).includes(s);
+/** True when `have` is at or above `need`; unknown tiers fail closed. */
+export const tierAtLeast = (have: string, need: string): boolean => isTier(have) && isTier(need) && TIERS.indexOf(have) >= TIERS.indexOf(need);
+
+/** Short tag for a locked node: "Requires desk" / "Requires the desk tier" → "desk", "Requires the 12x group" → "12x". */
 export function lockTag(reason?: string): string {
-  const m = reason?.match(/^Requires (?:the )?(\S+)/);
-  return m ? m[1] : 'locked';
+  const m = reason?.match(/^Requires (?:the |a |an )?(\S+)/i);
+  const t = m?.[1].replace(/[.,;:]+$/, '').toLowerCase();
+  return t || 'locked';
+}
+
+/** Natural title text for a lock tag: "desk" → "Requires the desk tier", "12x" → "Requires the 12x group". */
+export function lockTitle(tag: string): string {
+  if (isTier(tag)) return `Requires the ${tag} tier`;
+  return tag === 'locked' ? 'Locked' : `Requires the ${tag} group`;
 }
 
 /** First desk (preferring `prefer`) that lists this path. */
