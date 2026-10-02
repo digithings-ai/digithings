@@ -23,6 +23,8 @@ export const SHADES = [
   { step: 0.82, rgb: 215, cube: 188 },
   { step: 1, rgb: 255, cube: 231 },
 ]
+export const REST_SHADE = SHADES[1]
+export const LIT_SHADE = SHADES[SHADES.length - 1]
 
 export function letterGap(cols, letters) {
   for (const gap of [2, 1, 0]) {
@@ -48,66 +50,70 @@ function gridFor(word, gap) {
   return rows
 }
 
-function filled(grid) {
-  const cells = []
-  grid.forEach((row, y) => {
-    row.forEach((on, x) => {
-      if (on) cells.push([x, y])
+function levelFrac(x, tMs) {
+  const t = Math.max(0, Number.isFinite(tMs) ? tMs : 0)
+  const slow = Math.sin(t / 380 + x * 0.73)
+  const fast = Math.sin(t / 170 + x * 1.37)
+  return (slow * 0.65 + fast * 0.35 + 1) / 2
+}
+
+function voiceCubes(grid, tMs) {
+  const cubes = []
+  const width = grid[0].length
+  for (let x = 0; x < width; x += 1) {
+    const ys = []
+    for (let y = 0; y < grid.length; y += 1) {
+      if (grid[y][x]) ys.push(y)
+    }
+    ys.sort((a, b) => b - a)
+    const reach = levelFrac(x, tMs) * ys.length
+    ys.forEach((y, index) => {
+      cubes.push({ x, y, bright: index < reach })
     })
-  })
-  return cells
+  }
+  return cubes
 }
 
-function litSet(cells, frac) {
-  if (frac >= 1) return new Set(cells.map(([x, y]) => `${x},${y}`))
-  const ordered = [...cells].sort((a, b) => ((a[0] * 13 + a[1] * 7) % 97) - ((b[0] * 13 + b[1] * 7) % 97))
-  let count = Math.floor(ordered.length * frac)
-  if (frac > 0 && count === 0 && ordered.length) count = 1
-  return new Set(ordered.slice(0, count).map(([x, y]) => `${x},${y}`))
-}
-
-function shadeFor(x, y, tMs) {
-  const glint = tMs >= BUILD_MS && (x * 13 + y * 7 + Math.floor(tMs / 180)) % 17 === 0
-  if (glint) return SHADES[SHADES.length - 1]
-  return SHADES[(x + y) % SHADES.length]
+function colorOf(bright, truecolor) {
+  const shade = bright ? LIT_SHADE : REST_SHADE
+  return truecolor ? { rgb: shade.rgb } : { cube: shade.cube }
 }
 
 /**
  * Five half-block rows. `truecolor` picks RGB; otherwise the cube index.
- * A cell never carries both.
+ * A cell never carries both. Letter cubes rest gray and brighten from the
+ * bottom of each column while a level rises and falls. Gaps stay empty.
  */
 export function wordmarkLines(word = "DIGIVOICE", { cols = 100, tMs = BUILD_MS, truecolor = false } = {}) {
   const letters = word.toUpperCase()
   const gap = letterGap(cols, Math.max(1, letters.length))
   const grid = gridFor(letters, gap)
-  const frac = tMs >= BUILD_MS ? 1 : Math.max(0, tMs) / BUILD_MS
-  const lit = litSet(filled(grid), frac)
+  const cubes = voiceCubes(grid, tMs)
+  const brightAt = new Map(cubes.map((cube) => [`${cube.x},${cube.y}`, cube.bright]))
   const lines = []
   for (let y = 0; y < 10; y += 2) {
     const cells = []
     for (let x = 0; x < grid[0].length; x += 1) {
-      const top = lit.has(`${x},${y}`)
-      const bot = lit.has(`${x},${y + 1}`)
-      if (!top && !bot) {
+      const topOn = grid[y][x]
+      const botOn = grid[y + 1][x]
+      if (!topOn && !botOn) {
         cells.push({ ch: " ", color: null })
         continue
       }
       let ch = "▄"
-      let sy = y + 1
-      if (top && bot) {
+      let bright = brightAt.get(`${x},${y + 1}`) === true
+      if (topOn && botOn) {
         ch = "█"
-        sy = y
-      } else if (top) {
+        bright = brightAt.get(`${x},${y}`) === true && brightAt.get(`${x},${y + 1}`) === true
+      } else if (topOn) {
         ch = "▀"
-        sy = y
+        bright = brightAt.get(`${x},${y}`) === true
       }
-      const shade = shadeFor(x, sy, tMs)
-      const color = truecolor ? { rgb: shade.rgb } : { cube: shade.cube }
-      cells.push({ ch, color })
+      cells.push({ ch, color: colorOf(bright, truecolor) })
     }
     lines.push(cells)
   }
-  return { lines, gap, rows: lines.length }
+  return { lines, gap, rows: lines.length, cubes }
 }
 
 export function wordmarkText(word, options) {
