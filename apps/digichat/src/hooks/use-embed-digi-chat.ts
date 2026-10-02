@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
 import { buildProductRuntimeAdapters } from "@/components/stock/product-shell";
@@ -19,6 +19,7 @@ import {
   messageActivities,
 } from "@/lib/chat-activity";
 import { conversationIdFromParts } from "@/lib/ui-stream-parts";
+import { clearEmbedSession, readEmbedSession, writeEmbedSession } from "@/lib/embed-session";
 import {
   setPendingForceTool,
   setPendingTurnMode,
@@ -82,10 +83,12 @@ function conversationStorageKey(host: string): string {
 /** The upstream conversation id for this embed host, when one has been established. */
 export function readEmbedConversationId(embedHost: string): string | null {
   try {
-    return window.sessionStorage.getItem(conversationStorageKey(embedHost));
+    const fromTab = window.sessionStorage.getItem(conversationStorageKey(embedHost));
+    if (fromTab) return fromTab;
   } catch {
-    return null;
+    /* sessionStorage unavailable — fall through to the cross-iframe record */
   }
+  return readEmbedSession(embedHost)?.conversationId ?? null;
 }
 
 type TracePartData = {
@@ -362,14 +365,8 @@ export function useEmbedDigiChat({
           if (proof) {
             headers["X-Embed-Plan-Proof"] = proof;
           }
-          try {
-            const conversationId = window.sessionStorage.getItem(
-              conversationStorageKey(resolvedHost),
-            );
-            if (conversationId) headers["X-External-Conversation"] = conversationId;
-          } catch {
-            /* sessionStorage unavailable */
-          }
+          const conversationId = readEmbedConversationId(resolvedHost);
+          if (conversationId) headers["X-External-Conversation"] = conversationId;
           return {
             body: {
               ...(typeof body === "object" && body !== null ? body : {}),
@@ -416,6 +413,24 @@ export function useEmbedDigiChat({
   );
   const runtime = useAISDKRuntime(chat, runtimeAdapters ? { adapters: runtimeAdapters } : undefined);
   const { messages, sendMessage, status, error, regenerate, setMessages, stop } = chat;
+  const restoredRef = useRef(false);
+
+  // Restore the landing transcript before paint so fullscreen /chat continues
+  // the same session. localStorage is shared by every iframe of this origin;
+  // sessionStorage is not.
+  useLayoutEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const saved = readEmbedSession(embedHost);
+    if (!saved || saved.messages.length === 0) return;
+    setMessages(saved.messages);
+    if (!saved.conversationId) return;
+    try {
+      window.sessionStorage.setItem(conversationStorageKey(embedHost), saved.conversationId);
+    } catch {
+      /* sessionStorage unavailable — send still reads the local record */
+    }
+  }, [embedHost, setMessages]);
 
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -427,6 +442,17 @@ export function useEmbedDigiChat({
     } catch {
       /* ignore */
     }
+  }, [messages, embedHost]);
+
+  useEffect(() => {
+    if (!restoredRef.current || messages.length === 0) return;
+    let conversationId: string | null = null;
+    try {
+      conversationId = window.sessionStorage.getItem(conversationStorageKey(embedHost));
+    } catch {
+      conversationId = null;
+    }
+    writeEmbedSession(embedHost, conversationId, messages);
   }, [messages, embedHost]);
 
   const busy = status === "streaming" || status === "submitted";
@@ -470,6 +496,7 @@ export function useEmbedDigiChat({
     } catch {
       /* sessionStorage unavailable */
     }
+    clearEmbedSession(embedHost);
   }, [setMessages, embedHost]);
 
   const armRegenerate = useCallback(() => {
