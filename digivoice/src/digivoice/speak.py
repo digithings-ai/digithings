@@ -16,6 +16,7 @@ from digivoice.models import SpeakResult, VoicePaths
 from digivoice.paths import piper_fallback
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
+from digivoice.settings import load_settings
 
 PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
@@ -65,8 +66,22 @@ def select_piper(probe: CommandProbe, home: Path) -> str | None:
     return None
 
 
+def _settings_voice(paths: VoicePaths) -> Path | None:
+    """Saved TUI voice, as a file under models_dir. None when unset or auto."""
+    chosen = (load_settings(paths).tts_voice or "").strip()
+    if not chosen or chosen.casefold() in {"auto", "none", "null"}:
+        return None
+    voice = Path(chosen).expanduser()
+    if voice.is_absolute():
+        return voice
+    name = voice.name
+    if not name.endswith(".onnx"):
+        name = f"{name}.onnx"
+    return Path(paths.models_dir) / name
+
+
 def resolve_voice(paths: VoicePaths, env: Mapping[str, str], probe: CommandProbe) -> Path:
-    """Prefer DIGIVOICE_PIPER_VOICE; else the first *.onnx under models_dir."""
+    """Prefer DIGIVOICE_PIPER_VOICE, then the saved voice, else the first *.onnx."""
     override = (env.get(PIPER_VOICE_ENV) or "").strip()
     if override:
         voice = Path(override).expanduser()
@@ -75,6 +90,9 @@ def resolve_voice(paths: VoicePaths, env: Mapping[str, str], probe: CommandProbe
                 f"Piper voice missing: {voice} (set {PIPER_VOICE_ENV} to a .onnx path)"
             )
         return voice
+    saved = _settings_voice(paths)
+    if saved is not None and probe.is_file(str(saved)):
+        return saved
     models = Path(paths.models_dir)
     if probe.is_dir(str(models)):
         onnx_files = sorted(p for p in models.glob("*.onnx") if p.is_file())

@@ -1436,7 +1436,7 @@ def choose(
                 elif key in {"esc", "q", "Q", "left"}:
                     return None
         except (OSError, ValueError):
-            pass
+            return None
         finally:
             _note_pointer(None)
             if mouse_on:
@@ -1447,6 +1447,7 @@ def choose(
                     pass
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
+        return None
     _write_numbered(stdout, title, listed, blocks, paging=paging)
     try:
         raw = stdin.readline()
@@ -1468,6 +1469,88 @@ def choose(
     except ValueError:
         return None
     return index if 0 <= index < len(listed) else None
+
+
+def capture_binding(
+    title: str,
+    blocks: Sequence[MenuBlock],
+    selected: int,
+    stdin: TextIO | None = None,
+    stdout: TextIO | None = None,
+    subtitle: str | None = None,
+) -> str | None:
+    """Read a hotkey for one row. Esc cancels. Enter saves typed text.
+
+    The capture loop is only this row: Esc returns to the caller, and a
+    click does not leave the screen or swallow later menus. Non-TTY reads
+    one line so a pipe cannot hang.
+    """
+    stdin = stdin or sys.stdin
+    stdout = stdout or sys.stdout
+    shown = list(blocks)
+    if not shown or not 0 <= selected < len(shown):
+        return None
+    if not _is_tty(stdin):
+        stdout.write("  hotkey (blank cancels)\n")
+        stdout.flush()
+        try:
+            raw = stdin.readline()
+        except (OSError, ValueError):
+            return None
+        if not raw:
+            return None
+        text = raw.strip()
+        return text or None
+    fd = stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    typed = ""
+    first = True
+    try:
+        _set_menu_raw(fd)
+        _cursor(stdout, False)
+        while True:
+            preview = typed or "type a key, then enter"
+            armed = [
+                block.model_copy(update={"meta": preview}) if index == selected else block
+                for index, block in enumerate(shown)
+            ]
+            stdout.write(
+                render_screen(
+                    title,
+                    [block.action for block in armed],
+                    selected,
+                    subtitle=subtitle,
+                    hint="enter saves · esc cancels",
+                    use_ansi=_use_ansi(),
+                    use_screen=_use_screen(),
+                    clear=first,
+                    redraw=not first,
+                    truecolor=_truecolor(),
+                    blocks=armed,
+                )
+            )
+            stdout.flush()
+            first = False
+            key = _read_key_on_fd(fd)
+            if key is None or key in {"mouse", "click"}:
+                continue
+            if key == "esc":
+                return None
+            if key == "enter":
+                return typed.strip() or None
+            if key in {"\x7f", "\x08"}:
+                typed = typed[:-1]
+                continue
+            if len(key) == 1 and key.isprintable():
+                typed += key
+                continue
+            if not typed:
+                return key
+    except (OSError, ValueError):
+        return None
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        _cursor(stdout, True)
 
 
 def choose_many(

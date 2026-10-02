@@ -253,7 +253,7 @@ def run_home(
                 on_path=_follow,
             )
             return
-        if kind == "history":
+        if kind in {"history", "history-delete"}:
             browse_history(
                 paths,
                 platform,

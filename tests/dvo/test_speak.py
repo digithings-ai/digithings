@@ -10,6 +10,7 @@ from digivoice.cli import Runtime, run
 from digivoice.errors import SpeakError
 from digivoice.history import append_entry, dict_entry
 from digivoice.paths import resolve_paths
+from digivoice.settings import VoiceSettings, save_settings
 from digivoice.speak import (
     piper_argv,
     play_argv,
@@ -106,6 +107,19 @@ def test_select_piper_prefers_path_then_fallback() -> None:
     assert select_piper(probe2, Path("/home/chris")) == str(
         Path("/home/chris") / ".local" / "bin" / "piper"
     )
+
+
+def test_resolve_voice_prefers_saved_voice_over_the_first_file(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    first = models / "en_US-amy-medium.onnx"
+    chosen = models / "en_US-lessac-medium.onnx"
+    first.write_bytes(b"a")
+    chosen.write_bytes(b"b")
+    save_settings(paths, VoiceSettings(tts_voice="en_US-lessac-medium.onnx"))
+    probe = FakeProbe(files={str(first), str(chosen)}, directories={str(models)})
+    assert resolve_voice(paths, {}, probe) == chosen
 
 
 def test_resolve_voice_uses_env_then_models_dir(tmp_path: Path) -> None:
