@@ -37,7 +37,9 @@ Set secrets from this directory with wrangler secret put (never echo values).
 weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
 `house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
 `checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.
-GHA `schedule:` stays off — this Worker is the SSOT. Path A traps
+GHA `schedule:` stays off — this Worker is the SSOT. Leftover sweep after
+#4970: develop YAML has zero `on.schedule` keys; `digisearch_parity` is
+not a workflow in this repo. Path A traps
 (`agent-pr-finalizer`, `agent-backlog-snapshot`, `refresh-repo-activity`,
 `project-enforce-assignment`) are live `workflow_dispatch` jobs; their
 YAML is dispatch-only. twelve-x-new-york is weekday-only
