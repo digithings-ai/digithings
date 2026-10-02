@@ -4,6 +4,8 @@ import {
   BUILD_DONE_MS,
   BUILD_RISE_MS,
   BUILD_START_MS,
+  COPY_DONE_MS,
+  CHART_INTRO_MS,
   buildProgress,
   columnDelayMs,
   sweepDelayMs,
@@ -36,3 +38,9 @@ describe("hero build clock", () => {
     expect(buildProgress(sweepDelayMs(0.3) + BUILD_RISE_MS / 2, 0.3)).toBeGreaterThan(0.5);
   });
 });
+
+  it("starts the chart phase after the wordmark has finished", () => {
+    expect(COPY_DONE_MS).toBeGreaterThan(BUILD_DONE_MS);
+    expect(CHART_INTRO_MS).toBeGreaterThan(1000);
+  });
+

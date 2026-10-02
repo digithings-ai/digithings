@@ -11,9 +11,8 @@ function rise(step: number): CSSProperties {
   return { "--rise": step } as CSSProperties;
 }
 
-/** Hero: the wordmark over a live candlestick chart (a labelled simulation when the
- *  feed is unreachable), with a crosshair and OHLC readout over the whole hero (and only the hero). One line on what
- *  digiquant does, one on where the product lives, two actions. */
+/** Hero: logo + copy + buttons settle first; then the live Vela chart builds in behind
+ *  (see QuantField / hero-build clock). Crosshair + OHLC over the hero only. */
 export function TopBand() {
   return (
     <section id="top" aria-labelledby="top-h" className="dq-hero relative isolate z-10 overflow-hidden border-b border-hair">

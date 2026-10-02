@@ -2,17 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { IndicatorHandle, Vela } from "@luxalgo/vela";
-import { BUILD_DONE_MS } from "@/lib/hero-build";
+import {
+  CHART_INTRO_MS,
+  COPY_DONE_MS,
+  INDICATOR_STAGGER_MS,
+} from "@/lib/hero-build";
 import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
 
 /** Hero backdrop: a LuxAlgo Vela chart (the live backbone, not a demo).
  *
- *  One random BTC, ETH or SOL product + one overlay load per reload (no timed
- *  cycling). Candles reveal progressively left→right on the wordmark clock.
+ *  Sequence (reduced motion skips staging):
+ *  1. Logo + copy + buttons settle first (`COPY_DONE_MS`).
+ *  2. Chart fades in and Vela intro-grows candles L→R.
+ *  3. SMA → EMA → overlay mount on a stagger so the graph constructs itself.
+ *
  *  Wheel: keep chart zoom-out while the gesture is live; after zoom settle (or
  *  once the zoom-out budget is spent) release so the page scrolls past the
- *  landing. Hover crosshair + horizontal drag still work. Axis stays auto.
- *  Reduced motion skips the sweep. */
+ *  landing. Hover crosshair + horizontal drag still work. */
 
 const UP = "#3DFF9A";
 const DOWN = "#FF5C6C";
@@ -32,11 +38,10 @@ const THEME = {
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
-/** Idle gap after the last zoom wheel before we treat the zoom as settled. */
 const WHEEL_IDLE_MS = 140;
-/** Cumulative vertical deltaY spent on zoom-out before we force page unlock
- *  (covers continuous trackpad flicks that never idle mid-gesture). */
 const ZOOM_OUT_BUDGET = 720;
+/** Soft fade of the chart host once the copy phase ends. */
+const CHART_FADE_MS = 520;
 
 export function QuantField() {
   const ref = useRef<HTMLDivElement>(null);
@@ -51,26 +56,32 @@ export function QuantField() {
     let dead = false;
     let chart: Vela | null = null;
     let overlay: IndicatorHandle | null = null;
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    const later = (ms: number, fn: () => void) => {
+      const id = setTimeout(() => {
+        if (!dead) fn();
+      }, ms);
+      timers.push(id);
+      return id;
+    };
 
-    // Page-scroll release state for the hero wheel (Vela always preventDefaults).
+    // Hold the chart invisible until the copy phase finishes.
+    host.style.opacity = reduced ? "1" : "0";
+
     let pageUnlocked = false;
     let zoomOutUsed = 0;
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
-
     const atPageTop = () => window.scrollY <= 1;
 
     const onWheelCapture = (e: WheelEvent) => {
-      // Horizontal / shift pan stays on the chart.
       if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
 
       if (pageUnlocked) {
         if (atPageTop() && e.deltaY < 0) {
-          // Back at the top scrolling up — allow zoom-in again.
           pageUnlocked = false;
           zoomOutUsed = 0;
           return;
         }
-        // Block Vela so it cannot preventDefault; page scrolls normally.
         e.stopImmediatePropagation();
         return;
       }
@@ -90,11 +101,9 @@ export function QuantField() {
         }
       }
 
-      // Still in the zoom phase — let Vela handle this event.
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
         idleTimer = null;
-        // After zoom settle at the top, next wheel scrolls the page.
         if (!dead && atPageTop() && zoomOutUsed > 0) pageUnlocked = true;
       }, WHEEL_IDLE_MS);
     };
@@ -104,12 +113,13 @@ export function QuantField() {
     const label = (name: string) =>
       `LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${name}`;
 
-    void (async () => {
+    const mountChart = async () => {
       const [{ Vela: VelaChart }, { CoinbaseProvider }] = await Promise.all([
         import("@luxalgo/vela"),
         import("@luxalgo/vela/providers/coinbase"),
       ]);
       if (dead) return;
+
       chart = new VelaChart(host, {
         symbol: `coinbase:${product}`,
         timeframe: "1",
@@ -120,29 +130,59 @@ export function QuantField() {
         downColor: DOWN,
         volume: true,
         drawings: false,
-        animations: reduced ? false : { intro: { style: "grow", duration: BUILD_DONE_MS } },
+        animations: reduced
+          ? false
+          : {
+              intro: { style: "grow", duration: CHART_INTRO_MS },
+              zoom: true,
+              pan: true,
+              autoscale: true,
+            },
       });
-      // Vela sets touch-action:none on attach; restore vertical page pan for touch.
       host.style.touchAction = "pan-y";
       chart.data.registerProvider("coinbase", new CoinbaseProvider());
-      chart.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
-      chart.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
-      overlay = chart.addNativeIndicator(picked.type);
-      setCaption(label(picked.label));
-      if (!reduced) {
-        // Progressive L→R reveal on the wordmark clock; hover + h-drag stay live.
-        host.animate(
-          [{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)" }],
-          { duration: BUILD_DONE_MS, easing: "ease-out" },
-        );
+
+      if (reduced) {
+        chart.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
+        chart.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
+        overlay = chart.addNativeIndicator(picked.type);
+        setCaption(label(picked.label));
+        host.style.opacity = "1";
+        return;
       }
-    })().catch(() => {
-      if (!dead) setCaption("LuxAlgo Vela · chart unavailable");
+
+      // Fade the live chart in, then stage indicators over the intro.
+      host.style.transition = `opacity ${CHART_FADE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      // Force style flush before opacity so the transition runs.
+      void host.offsetWidth;
+      host.style.opacity = "1";
+
+      later(Math.round(CHART_INTRO_MS * 0.28), () => {
+        chart?.addNativeIndicator("sma", { inputs: { length: 20, color: "#E8F7FF" } });
+      });
+      later(Math.round(CHART_INTRO_MS * 0.28) + INDICATOR_STAGGER_MS, () => {
+        chart?.addNativeIndicator("ema", { inputs: { length: 50, color: "#F5C16C" } });
+      });
+      later(Math.round(CHART_INTRO_MS * 0.28) + INDICATOR_STAGGER_MS * 2, () => {
+        overlay = chart?.addNativeIndicator(picked.type) ?? null;
+        setCaption(label(picked.label));
+      });
+    };
+
+    const startDelay = reduced ? 0 : COPY_DONE_MS;
+    later(startDelay, () => {
+      void mountChart().catch(() => {
+        if (!dead) {
+          host.style.opacity = "1";
+          setCaption("LuxAlgo Vela · chart unavailable");
+        }
+      });
     });
 
     return () => {
       dead = true;
       if (idleTimer) clearTimeout(idleTimer);
+      for (const id of timers) clearTimeout(id);
       host.removeEventListener("wheel", onWheelCapture, { capture: true });
       overlay?.remove();
       chart?.destroy();
@@ -151,7 +191,11 @@ export function QuantField() {
 
   return (
     <>
-      <div ref={ref} aria-label={caption} className="absolute inset-0 -z-10 h-full w-full [transform:translateZ(0)]" />
+      <div
+        ref={ref}
+        aria-label={caption}
+        className="absolute inset-0 -z-10 h-full w-full [transform:translateZ(0)]"
+      />
       <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">{caption}</p>
     </>
   );
