@@ -1664,12 +1664,13 @@ def capture_binding(
     stdout: TextIO | None = None,
     subtitle: str | None = None,
 ) -> str | None:
-    """Read a hotkey for one row. Esc cancels. Enter saves typed text.
+    """Read a hotkey for one row. Esc cancels. Enter locks the binding in.
 
-    A pressed chord (modifiers included) is the binding. Typed names still
-    work: ``Right Option``, ``Double-tap Left Option``, ``Esc``,
-    ``ctrl+shift+space``. The capture loop is only this row. Non-TTY reads
-    one line so a pipe cannot hang.
+    Nothing is returned until Enter, so a press alone is not saved. A pressed
+    chord fills the field and still waits. Typed names work the same way:
+    ``Right Option``, ``Double-tap Left Option``, ``Esc``, ``ctrl+shift+space``.
+    Blank Enter cancels. The capture loop is only this row. Non-TTY reads one
+    line so a pipe cannot hang.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -1677,7 +1678,7 @@ def capture_binding(
     if not shown or not 0 <= selected < len(shown):
         return None
     if not _is_tty(stdin):
-        stdout.write("  hotkey (blank cancels)\n")
+        stdout.write("input new hotkey\n")
         stdout.flush()
         try:
             raw = stdin.readline()
@@ -1698,7 +1699,7 @@ def capture_binding(
             stdout.write(_KITTY_PUSH + _MODIFY_PUSH)
             stdout.flush()
         while True:
-            preview = typed or "press a key, or type its name"
+            preview = "input new hotkey" if not typed else f"input new hotkey  {typed}"
             armed = [
                 block.model_copy(update={"meta": preview}) if index == selected else block
                 for index, block in enumerate(shown)
@@ -1733,8 +1734,8 @@ def capture_binding(
             if len(key) == 1 and key.isprintable():
                 typed += key
                 continue
-            if not typed:
-                return key
+            # A pressed chord fills the field. Enter still has to lock it in.
+            typed = key
     except (OSError, ValueError):
         return None
     finally:

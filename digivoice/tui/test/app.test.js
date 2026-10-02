@@ -13,6 +13,8 @@ const HOME_ROWS = [
   { action: "Quit", path: "/quit", meta: "", kind: "dir", name: "Quit" },
 ]
 
+const STATUS = "ggml-base.en · paste · ok"
+
 function session(extra = {}) {
   const calls = []
   return {
@@ -24,6 +26,7 @@ function session(extra = {}) {
         return {
           footer: FOOTER,
           context: ["▦ stt ggml-base.en"],
+          status: STATUS,
           start: "/",
           home: HOME_ROWS,
           screen: { title: "Actions", path: "/", rows: HOME_ROWS },
@@ -31,6 +34,10 @@ function session(extra = {}) {
       }
       if (request.op === "quit") return { exit: 0, stopped: true }
       if (request.op === "close") return { exit: 0, stopped: false }
+      if (request.op === "save") return { saved: true }
+      if (request.op === "reload") return { note: "reloaded" }
+      if (request.op === "reset") return { note: "settings reset" }
+      if (request.op === "restart") return { restart: true }
       if (request.op === "rows") {
         return {
           path: request.path,
@@ -60,6 +67,21 @@ function session(extra = {}) {
   }
 }
 
+function mount(setup, api, extra = {}) {
+  return mountDigivoice(setup.renderer, api, {
+    truecolor: false,
+    tMs: BUILD_MS,
+    animate: false,
+    cols: 100,
+    ...extra,
+  })
+}
+
+async function settle(setup) {
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  await setup.renderOnce()
+}
+
 test("wordmark is five rows with gap 2 and one color mode", () => {
   assert.equal(letterGap(120, 9), 2)
   const cube = wordmarkLines("DIGIVOICE", { cols: 120, tMs: BUILD_MS, truecolor: false })
@@ -84,31 +106,30 @@ test("wordmark is five rows with gap 2 and one color mode", () => {
   assert.ok(earlyOn < fullOn)
 })
 
-test("home shows the footer and selection, and esc does not quit", async () => {
+test("home pins the hero and esc does not quit", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session()
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    const frame = await setup.waitForFrame((value) => value.includes("History") && value.includes(FOOTER))
-    assert.match(frame, /\[\*\] History/)
-    assert.match(frame, /\[ \] Settings/)
+    const app = mount(setup, api)
+    const frame = await setup.waitForFrame(
+      (value) => value.includes("[*] /history") && value.includes(FOOTER) && value.includes(STATUS),
+    )
     const lines = frame.split("\n")
-    const historyAt = lines.findIndex((line) => line.includes("[*] History"))
-    assert.ok(historyAt > 4, "the hero sits above the menu, not on the first row")
-    assert.ok(lines[historyAt + 1].includes("/history"))
-    const settingsAt = lines.findIndex((line) => line.includes("[ ] Settings"))
-    assert.ok(lines[settingsAt + 1].includes("/settings"))
-    const glyphAt = lines.findIndex((line) => /[█▀▄]/.test(line))
-    assert.ok(glyphAt > 0, "the wordmark is not pinned to the top row")
-    assert.doesNotMatch(frame, /teal|waveform/i)
+    assert.equal(lines.findIndex((line) => /[█▀▄]/.test(line)), 0)
+    assert.match(lines[5], /ggml-base\.en/)
+    assert.match(frame, /\/digivoice/)
+    assert.match(frame, /\[ \] \/settings/)
+    assert.match(frame, /\[ \] \/system/)
+    assert.match(frame, /\[ \] \/quit/)
+    assert.doesNotMatch(frame, /History/)
+    const historyAt = lines.findIndex((line) => line.includes("[*] /history"))
+    assert.equal((lines[historyAt].match(/\/history/g) || []).length, 1)
+    const footerAt = lines.findIndex((line) => line.includes(FOOTER))
+    assert.ok(footerAt > 40, "the footer stays at the bottom")
+    assert.ok(footerAt > historyAt)
     setup.mockInput.pressArrow("down")
     await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /\[\*\] Settings/)
+    assert.match(setup.captureCharFrame(), /\[\*\] \/settings/)
     setup.mockInput.pressEscape()
     assert.equal(await app.done, 0)
     assert.equal(app.exitCode, 0)
@@ -124,17 +145,12 @@ test("a click opens settings", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session()
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: true,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api, { truecolor: true })
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     const lines = setup.captureCharFrame().split("\n")
-    const settingsRow = lines.findIndex((line) => line.includes("Settings"))
+    const settingsRow = lines.findIndex((line) => line.includes("/settings"))
     assert.ok(settingsRow >= 0)
-    const settingsCol = lines[settingsRow].indexOf("Settings")
+    const settingsCol = lines[settingsRow].indexOf("/settings")
     await setup.mockMouse.click(settingsCol, settingsRow)
     await setup.waitForFrame((value) => value.includes("Tiny") && value.includes("English"))
     assert.equal((setup.captureCharFrame().match(/English/g) || []).length, 1)
@@ -148,13 +164,8 @@ test("enter on quit asks the bridge to stop", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session()
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
@@ -203,26 +214,23 @@ test("a settings choice returns to the same row", async () => {
     },
   })
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("speech"))
+    await setup.waitForFrame((value) => value.includes("/speech"))
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("paste"))
+    await setup.waitForFrame((value) => value.includes("/paste"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("[*] on"))
+    await setup.waitForFrame((value) => value.includes("[*] /on"))
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("[*] paste"))
-    assert.match(setup.captureCharFrame(), /\[\*\] paste/)
-    assert.doesNotMatch(setup.captureCharFrame(), /\[\*\] model/)
+    await setup.waitForFrame((value) => value.includes("[*] /paste"))
+    const frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] \/paste/)
+    assert.match(frame, /on/)
+    assert.doesNotMatch(frame, /\[\*\] \/model/)
     app.destroy()
   } finally {
     setup.renderer.destroy()
@@ -273,25 +281,19 @@ test("esc from a download confirm returns to that model", async () => {
     },
   })
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("speech"))
+    await setup.waitForFrame((value) => value.includes("/speech"))
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("model"))
+    await setup.waitForFrame((value) => value.includes("/model"))
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("[*] Tiny"))
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("Download"))
     setup.mockInput.pressEscape()
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    await setup.renderOnce()
+    await settle(setup)
     const frame = setup.captureCharFrame()
     assert.match(frame, /\[\*\] Tiny/)
     assert.equal((frame.match(/English/g) || []).length, 1)
@@ -302,7 +304,180 @@ test("esc from a download confirm returns to that model", async () => {
   }
 })
 
-test("restart confirms before it asks to re-exec", async () => {
+test("leaving settings writes settings before the screen changes", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    rows(request) {
+      if (request.path === "/settings") {
+        return {
+          path: "/settings",
+          rows: [{ action: "speech", name: "speech", path: "/settings/speech", meta: "", kind: "dir" }],
+        }
+      }
+      return {
+        path: request.path,
+        rows: [{ action: "paste", name: "paste", path: `${request.path}/paste`, meta: "on", kind: "pick" }],
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/speech"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/paste"))
+    setup.mockInput.pressEscape()
+    await settle(setup)
+    assert.ok(!api.calls.some((call) => call.op === "save"))
+    assert.match(setup.captureCharFrame(), /\/settings/)
+    setup.mockInput.pressEscape()
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("[*] /settings") && value.includes("/digivoice"))
+    const saveAt = api.calls.findIndex((call) => call.op === "save")
+    assert.ok(saveAt > api.calls.findIndex((call) => call.op === "rows"))
+    assert.equal(api.calls.filter((call) => call.op === "save").length, 1)
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a hotkey is stored only when enter locks it in", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const hotkeyRows = [
+    {
+      action: "dictation",
+      name: "dictation",
+      path: "/settings/hotkeys/dictation",
+      meta: "Right Option",
+      kind: "capture",
+    },
+    {
+      action: "speak",
+      name: "speak",
+      path: "/settings/hotkeys/speak",
+      meta: "Double-tap Left Option",
+      kind: "capture",
+    },
+  ]
+  const api = session({
+    rows(request) {
+      if (request.path === "/settings") {
+        return {
+          path: "/settings",
+          rows: [{ action: "hotkeys", name: "hotkeys", path: "/settings/hotkeys", meta: "", kind: "dir" }],
+        }
+      }
+      return { path: "/settings/hotkeys", rows: hotkeyRows }
+    },
+    apply(request) {
+      return {
+        saved: true,
+        path: "/settings/hotkeys",
+        rows: hotkeyRows.map((row) =>
+          row.name === "dictation" ? { ...row, meta: request.text } : row,
+        ),
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/hotkeys"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/dictation") && value.includes("Right Option"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("input new hotkey"))
+    setup.mockInput.pressKey("f")
+    await setup.waitForFrame((value) => value.includes("input new hotkey") && value.includes("f"))
+    assert.ok(!api.calls.some((call) => call.op === "apply"))
+    setup.mockInput.pressEscape()
+    await settle(setup)
+    const cancelled = setup.captureCharFrame()
+    assert.match(cancelled, /Right Option/)
+    assert.doesNotMatch(cancelled, /input new hotkey/)
+    assert.ok(!api.calls.some((call) => call.op === "apply"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("input new hotkey"))
+    setup.mockInput.pressKey("f")
+    setup.mockInput.pressKey("5")
+    await setup.waitForFrame((value) => /input new hotkey\s+f5/.test(value))
+    assert.ok(!api.calls.some((call) => call.op === "apply"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("f5") && !value.includes("input new hotkey"))
+    const locked = api.calls.filter((call) => call.op === "apply")
+    assert.equal(locked.length, 1)
+    assert.equal(locked[0].text, "f5")
+    const lines = setup.captureCharFrame().split("\n")
+    const at = lines.findIndex((line) => line.includes("[*] /dictation"))
+    assert.ok(at >= 0)
+    assert.match(lines[at + 1], /f5/)
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("an unparseable hotkey keeps the previous binding", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const hotkeyRows = [
+    {
+      action: "dictation",
+      name: "dictation",
+      path: "/settings/hotkeys/dictation",
+      meta: "Right Option",
+      kind: "capture",
+    },
+  ]
+  const api = session({
+    rows(request) {
+      if (request.path === "/settings") {
+        return {
+          path: "/settings",
+          rows: [{ action: "hotkeys", name: "hotkeys", path: "/settings/hotkeys", meta: "", kind: "dir" }],
+        }
+      }
+      return { path: "/settings/hotkeys", rows: hotkeyRows }
+    },
+    apply() {
+      return {
+        saved: false,
+        note: "dictation binding 'not-a-key' is not a key; keeping Right Option",
+        rows: hotkeyRows,
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/hotkeys"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/dictation") && value.includes("Right Option"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("input new hotkey"))
+    setup.mockInput.pressKey("x")
+    await setup.waitForFrame((value) => /input new hotkey\s+x/.test(value))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("not a key") && value.includes("Right Option"))
+    const frame = setup.captureCharFrame()
+    assert.match(frame, /\[\*\] \/dictation/)
+    assert.doesNotMatch(frame, /input new hotkey/)
+    const lines = frame.split("\n")
+    const at = lines.findIndex((line) => line.includes("[*] /dictation"))
+    assert.match(lines[at + 1], /Right Option/)
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("reload reset restart and update stay in the page", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     system() {
@@ -310,43 +485,68 @@ test("restart confirms before it asks to re-exec", async () => {
         title: "System",
         path: "/system",
         rows: [
+          { action: "Reload", path: "/reload", meta: "", kind: "dir", name: "Reload" },
+          { action: "Reset", path: "/reset", meta: "", kind: "dir", name: "Reset" },
           { action: "Restart", path: "/restart", meta: "", kind: "dir", name: "Restart" },
           { action: "Update", path: "/update", meta: "", kind: "dir", name: "Update" },
         ],
       }
     },
-    restart() {
-      return { restart: true }
-    },
     update() {
+      return { note: "digivoice update\nadapter installed ~/.hammerspoon/digivoice" }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("[*] /reload"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("reloading"))
+    await settle(setup)
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("reloaded"))
+    assert.match(setup.captureCharFrame().split("\n")[5], /ggml-base\.en/)
+    setup.mockInput.pressEscape()
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("/reset"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("resetting"))
+    await settle(setup)
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("[*] /history") && value.includes("/digivoice"))
+    assert.ok(api.calls.some((call) => call.op === "reset"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("restart paints then re-execs", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    system() {
       return {
-        note: "digivoice update\nadapter  installed  ~/.hammerspoon/digivoice",
+        title: "System",
+        path: "/system",
+        rows: [{ action: "Restart", path: "/restart", meta: "", kind: "dir", name: "Restart" }],
       }
     },
   })
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("Update"))
-    setup.mockInput.pressArrow("down")
+    await setup.waitForFrame((value) => value.includes("[*] /restart"))
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("~/.hammerspoon/digivoice"))
-    const updated = setup.captureCharFrame()
-    assert.match(updated, /digivoice update/)
-    assert.match(updated, /\[\*\] Update/)
-    setup.mockInput.pressArrow("up")
-    setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("Back") && value.includes("[*] Restart"))
-    assert.ok(!api.calls.some((call) => call.op === "restart"))
-    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("restarting"))
+    await settle(setup)
+    await settle(setup)
     assert.equal(await app.done, 0)
     assert.equal(app.restarting, true)
     assert.ok(api.calls.some((call) => call.op === "restart"))
@@ -357,16 +557,52 @@ test("restart confirms before it asks to re-exec", async () => {
   }
 })
 
-test("a failed update stays on the row", async () => {
+test("update progress stays off the status line and then restarts", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     system() {
       return {
         title: "System",
         path: "/system",
-        rows: [
-          { action: "Update", path: "/system/update", meta: "", kind: "dir", name: "Update" },
-        ],
+        rows: [{ action: "Update", path: "/system/update", meta: "", kind: "dir", name: "Update" }],
+      }
+    },
+    update() {
+      return { note: "digivoice update\nadapter installed ~/.hammerspoon/digivoice" }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("[*] /update"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("updating"))
+    await settle(setup)
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("digivoice update"))
+    const lines = setup.captureCharFrame().split("\n")
+    assert.match(lines[5], /ggml-base\.en/)
+    assert.doesNotMatch(lines[5], /hammerspoon|digivoice update/)
+    assert.equal(await app.done, 0)
+    assert.equal(app.restarting, true)
+    assert.ok(api.calls.some((call) => call.op === "restart"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a failed update stays in the page", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    system() {
+      return {
+        title: "System",
+        path: "/system",
+        rows: [{ action: "Update", path: "/system/update", meta: "", kind: "dir", name: "Update" }],
       }
     },
     update() {
@@ -374,59 +610,77 @@ test("a failed update stays on the row", async () => {
     },
   })
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("[*] Update"))
+    await setup.waitForFrame((value) => value.includes("[*] /update"))
     setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("updating"))
+    await settle(setup)
+    await settle(setup)
     await setup.waitForFrame((value) => value.includes("update broke"))
-    assert.match(setup.captureCharFrame(), /\[\*\] Update/)
+    const lines = setup.captureCharFrame().split("\n")
+    assert.match(lines[5], /ggml-base\.en/)
+    assert.doesNotMatch(lines[5], /update broke/)
     assert.equal(app.restarting, false)
+    assert.ok(!api.calls.some((call) => call.op === "restart"))
     app.destroy()
   } finally {
     setup.renderer.destroy()
   }
 })
 
-test("history, settings, system, logs, and doctor keep the bracketed row", async () => {
+test("history logs and doctor stay inside the page", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     history() {
       return {
-        title: "History",
+        title: "/digivoice/history",
         path: "/history",
         paging: false,
         rows: [
           {
-            action: "ship it",
+            action: "2026-10-02T12:00:00Z",
             path: "/history",
-            meta: "2026-10-02T12:00:00Z",
+            text: "ship it",
+            meta: "",
             kind: "take",
             index: 0,
           },
         ],
       }
     },
+    "history-copy"() {
+      return { note: "copied" }
+    },
+    "history-delete"() {
+      return { rows: [], page: 1, pages: 1, paging: false, note: "deleted" }
+    },
     doctor() {
       return {
-        title: "Doctor",
+        title: "doctor",
         path: "/doctor",
         ok: true,
-        rows: [{ action: "whisper-cli", path: "/doctor", meta: "ok", kind: "note" }],
+        rows: [
+          { action: "whisper-cli", path: "", meta: "ok", detail: "Whisper is installed", kind: "check" },
+        ],
       }
     },
     logs() {
       return {
-        title: "Logs",
+        title: "/system/logs",
         path: "/system/logs",
-        rows: [{ action: "ready", path: "/system/logs", meta: "", kind: "note" }],
+        rows: [
+          {
+            action: "ready and the rest of this log line",
+            text: "ready and the rest of this log line",
+            path: "/system/logs",
+            meta: "system.log",
+            kind: "log",
+          },
+        ],
       }
     },
     system() {
@@ -442,68 +696,74 @@ test("history, settings, system, logs, and doctor keep the bracketed row", async
     rows(request) {
       return {
         path: request.path,
-        rows: [
-          {
-            action: "speech",
-            path: "/settings/speech",
-            meta: "",
-            kind: "dir",
-            name: "speech",
-          },
-        ],
+        rows: [{ action: "speech", path: "/settings/speech", meta: "", kind: "dir", name: "speech" }],
       }
     },
   })
   try {
-    const app = mountDigivoice(setup.renderer, api, {
-      truecolor: false,
-      tMs: BUILD_MS,
-      animate: false,
-      cols: 100,
-    })
-    await setup.waitForFrame((value) => value.includes("[*] History"))
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("ship it"))
+    await setup.waitForFrame((value) => value.includes("2026-10-02T12:00:00Z") && value.includes("ship it"))
     let frame = setup.captureCharFrame()
-    assert.match(frame, /\[\*\] ship it/)
-    assert.match(frame, /\/history/)
-    assert.match(frame, /2026-10-02T12:00:00Z/)
+    assert.match(frame, /\/digivoice\/history/)
+    const takeLine = frame.split("\n").find((line) => line.includes("2026-10-02T12:00:00Z"))
+    assert.ok(takeLine.includes("ship it"))
+    assert.doesNotMatch(frame, /Back/)
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/copy"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /ship it/)
+    assert.doesNotMatch(frame, /Back/)
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("copied"))
+    setup.mockInput.pressKey("d")
+    await setup.waitForFrame((value) => value.includes("/digivoice/history") && !value.includes("/copy"))
+    assert.doesNotMatch(setup.captureCharFrame(), /Back/)
     setup.mockInput.pressEscape()
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    await setup.renderOnce()
-    await setup.waitForFrame((value) => value.includes("[*] History") && value.includes("/history"))
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("[*] /history"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("paste") || value.includes("speech"))
+    await setup.waitForFrame((value) => value.includes("/speech"))
     frame = setup.captureCharFrame()
-    assert.match(frame, /\[\*\] speech/)
-    assert.match(frame, /\/settings\/speech/)
+    assert.match(frame, /\/settings/)
+    assert.match(frame, /\[\*\] \/speech/)
+    assert.doesNotMatch(frame, /\/settings\/speech/)
     setup.mockInput.pressEscape()
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    await setup.renderOnce()
-    await setup.waitForFrame((value) => value.includes("[ ] System"))
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("[ ] /system"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("[*] Doctor"))
+    await setup.waitForFrame((value) => value.includes("[*] /doctor"))
     frame = setup.captureCharFrame()
-    assert.match(frame, /\[\*\] Doctor/)
-    assert.match(frame, /\/doctor/)
+    assert.match(frame, /\/system/)
+    assert.match(frame, /\[\*\] \/doctor/)
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("whisper-cli"))
     frame = setup.captureCharFrame()
-    assert.match(frame, /\[\*\] whisper-cli/)
-    assert.match(frame, /\/doctor/)
+    assert.match(frame, /\bdoctor\b/)
+    assert.match(frame, /whisper-cli/)
+    assert.match(frame, /Whisper is installed/)
     assert.match(frame, /\bok\b/)
+    assert.doesNotMatch(frame, /\[\*\] whisper-cli/)
+    assert.doesNotMatch(frame, /\/doctor/)
     setup.mockInput.pressEscape()
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    await setup.renderOnce()
-    await setup.waitForFrame((value) => value.includes("Logs"))
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("/logs"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("ready"))
     frame = setup.captureCharFrame()
-    assert.match(frame, /\[\*\] ready/)
     assert.match(frame, /\/system\/logs/)
+    const logLine = frame.split("\n").find((line) => line.includes("ready"))
+    assert.ok(logLine)
+    assert.equal((logLine.match(/\n/g) || []).length, 0)
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("system.log"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /ready and the rest of this log line/)
+    assert.match(frame, /system\.log/)
     app.destroy()
   } finally {
     setup.renderer.destroy()

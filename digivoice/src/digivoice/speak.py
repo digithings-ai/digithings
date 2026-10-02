@@ -205,8 +205,9 @@ def _ax_selected_text(osascript: str, runner: CommandRunner) -> str | None:
 
 def _ax_in_target(osascript: str, runner: CommandRunner, focus: FocusTarget) -> str | None:
     """Selected text in the captured app, or None when that app has none."""
+    # Same argv rule as paste: `-` after `-e` is the bundle id, not end of options.
     result = runner(
-        [osascript, "-e", AX_TARGET_SCRIPT, "-", focus.bundle_id, focus.name],
+        [osascript, "-e", AX_TARGET_SCRIPT, focus.bundle_id, focus.name],
         timeout=READ_SOURCE_TIMEOUT,
     )
     if result.code != 0:

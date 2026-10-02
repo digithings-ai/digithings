@@ -52,9 +52,14 @@ def test_paste_activates_the_app_that_had_focus() -> None:
     copied, typed = runner.calls
     assert copied.stdin == TEXT
     assert TEXT not in " ".join(typed.argv)
-    assert typed.argv[0] == "/usr/bin/osascript"
-    assert typed.argv[2] == ACTIVATE_AND_PASTE_SCRIPT
-    assert typed.argv[-2:] == ["com.apple.TextEdit", "TextEdit"]
+    assert typed.argv == [
+        "/usr/bin/osascript",
+        "-e",
+        ACTIVATE_AND_PASTE_SCRIPT,
+        "com.apple.TextEdit",
+        "TextEdit",
+    ]
+    assert "-" not in typed.argv
     assert "keystroke" in ACTIVATE_AND_PASTE_SCRIPT
     assert "frontmost" in ACTIVATE_AND_PASTE_SCRIPT
 

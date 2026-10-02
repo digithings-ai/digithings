@@ -335,7 +335,8 @@ def test_read_selection_uses_the_captured_app() -> None:
     assert read_selection("darwin", _darwin_probe(), runner, focus) == "ghostty highlight"
     ax = runner.calls[0]
     assert "AXSelectedText" in " ".join(ax.argv)
-    assert ax.argv[-2:] == ["com.mitchellh.ghostty", "Ghostty"]
+    assert ax.argv[3:] == ["com.mitchellh.ghostty", "Ghostty"]
+    assert "-" not in ax.argv[3:]
     assert not any("frontmost is true" in " ".join(call.argv) for call in runner.calls[1:])
 
 

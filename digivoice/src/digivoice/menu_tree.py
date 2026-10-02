@@ -17,6 +17,7 @@ from typing import TextIO
 
 from pydantic import BaseModel, ConfigDict
 
+from digivoice.bindings import binding_warning, parse_binding
 from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, CatalogModel
 from digivoice.installed_models import InstalledModel, discover_installed_models
 from digivoice.models import VoicePaths
@@ -511,8 +512,11 @@ def _changed(settings: VoiceSettings, row: TreeRow, typed: str | None) -> VoiceS
     if row.kind == "capture":
         if typed is None or not typed.strip():
             return None
+        cleaned = typed.strip()
+        if parse_binding(cleaned) is None:
+            return None
         bindings = dict(data.get("hotkey_bindings") or {})
-        bindings[row.field] = typed.strip()
+        bindings[row.field] = cleaned
         data["hotkey_bindings"] = bindings
         return VoiceSettings.model_validate(data)
     if row.kind == "toggle":
@@ -637,6 +641,12 @@ def browse_settings(
                 stdout,
                 subtitle=path,
             )
+            previous = str(getattr(settings.hotkey_bindings, row.field))
+            warning = binding_warning(row.field, bound, previous) if bound else None
+            if warning:
+                stdout.write(f"  {warning}\n")
+                stdout.flush()
+                continue
             nxt = _changed(settings, row, bound)
             if nxt is None:
                 continue

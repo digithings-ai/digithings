@@ -9,7 +9,14 @@ from pathlib import Path
 
 import pytest
 from digivoice.cli import Runtime, run
-from digivoice.home import HOME_BLOCKS, HOME_MENU, home_menu_tree, render_home_overview, run_home
+from digivoice.home import (
+    HOME_BLOCKS,
+    HOME_MENU,
+    format_status_line,
+    home_menu_tree,
+    render_home_overview,
+    run_home,
+)
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
 
@@ -19,6 +26,19 @@ pytestmark = pytest.mark.unit
 def _runtime(tmp_path: Path, **env: str) -> Runtime:
     merged = {"DIGIVOICE_DATA_DIR": str(tmp_path), **env}
     return Runtime(platform="linux", home=tmp_path, env=merged, probe=FakeProbe())
+
+
+def test_status_line_names_the_model_and_settings_that_are_on() -> None:
+    line = format_status_line(
+        "ggml-base.en",
+        paste=True,
+        rewrite=False,
+        banner=True,
+        pin=False,
+        summary="ok (4/4 ready)",
+    )
+    assert line == "ggml-base.en · paste · banner · ok (4/4 ready)"
+    assert "\n" not in line
 
 
 def test_bare_non_tty_prints_home_overview(tmp_path: Path) -> None:
