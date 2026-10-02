@@ -100,7 +100,7 @@ Open `http://127.0.0.1:3920/brief.html`. Hard-refresh. Read `CLAUDE-HANDOFF.md` 
 | `packages/ui` | Kit. `TabStrip` (do not use it for section nav after lock 2), finance tearsheet CSS, gloomberb mark URL. |
 | `apps/dashboard/components/research/VelaSpikeChart.tsx` | Only Vela mount. `theme: 'dark'`, no custom bull/bear colors. Route `app/research/vela-spike/page.tsx`. |
 
-The handoff said “DigiCon.” That was a typo for **digiquant**. The data plane is the digiquant dashboard API in §4 (`apps/dashboard-api`), the market-data worker, and allowlisted table reads. Do not search for a DigiCon package, host, or route. Slices B–D do not wait on a renamed service.
+The desk data plane is **digiquant**: the dashboard API in §4 (`apps/dashboard-api`), the market-data worker, and allowlisted table reads. Slices B–D call those routes. There is no second data service to wait on.
 
 `apps/dashboard` has no `AGENTS.md` or `ARCHITECTURE.md`. Read this plan, `apps/dashboard/README.md`, `apps/dashboard/lib/TABLES.md`, `apps/dashboard/lib/CHARTS.md`, and `apps/dashboard-api/CONTRACT.md` before editing.
 
@@ -642,7 +642,7 @@ These do not block writing the plan. They block the seats named.
 5. **Verbatim comments file** cited by the handoff is not in the repo. If Message D has a lock missing from §0, send it before slice A merges.
 6. **Gloomberg / LuxAlgo.** Agree the quote board stays a labeled placeholder and the chart is Vela on digiquant bars, not a live vendor embed.
 
-Resolved: “DigiCon” was a typo for digiquant. §4 is the data plane. Slices B–D do not wait on a name.
+Resolved: the data plane is digiquant (§4). Slices B–D do not wait on a second service name.
 
 No Human Gate box in the PR template applies to this docs PR. Implement slices that touch brokers, auth, or a new hostname still stop.
 
