@@ -9,10 +9,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from digivoice.bindings import binding_warning
 from digivoice.catalog import install_catalog_model
 from digivoice.doctor import doctor_checks
 from digivoice.history import delete_entry, read_history
-from digivoice.home import HOME_BLOCKS, build_context_lines
+from digivoice.home import HOME_BLOCKS, build_context_lines, build_status_line
 from digivoice.install import FetchFn, render_install, run_install
 from digivoice.installed_models import discover_installed_models
 from digivoice.menu_tree import TreeRow, _changed, _missing_catalog, rows_at
@@ -20,7 +21,7 @@ from digivoice.models import HistoryEntry
 from digivoice.nav import norm_path
 from digivoice.opentui import NAV_FOOTER
 from digivoice.opentui import tui_root as package_tui_root
-from digivoice.panels import SYSTEM_BLOCKS
+from digivoice.panels import SYSTEM_BLOCKS, doctor_summary
 from digivoice.paste import copy_to_clipboard
 from digivoice.paths import resolve_paths
 from digivoice.probe import CommandProbe, real_probe
@@ -30,6 +31,8 @@ from digivoice.settings import default_settings, load_settings, save_settings
 from digivoice.status import read_system_log, system_log_path
 
 _PAGE = 8
+_DOCTOR_SKIP = frozenset({"tcc", "interrupt", "paths", "detection", "history"})
+_DOCTOR_WIDTH = 60
 
 
 def _row(row: TreeRow, path: str) -> dict[str, str]:
@@ -59,30 +62,30 @@ def _history_page(paths: Any, page: int) -> dict[str, Any]:
     ordered = list(reversed(read_history(paths.history_file).entries))
     if not ordered:
         return {
-            "title": "History",
+            "title": "/digivoice/history",
             "path": "/history",
             "page": 1,
             "pages": 1,
             "paging": False,
-            "rows": [{"action": "No takes yet", "path": "/history", "meta": "", "kind": "note"}],
+            "rows": [{"action": "No takes yet", "path": "", "meta": "", "kind": "note"}],
         }
     pages = max(1, (len(ordered) + _PAGE - 1) // _PAGE)
     page = min(max(0, page), pages - 1)
     visible = ordered[page * _PAGE : (page + 1) * _PAGE]
     rows = [
         {
-            "action": entry.text,
+            "action": entry.ts,
             "path": "/history",
-            "meta": entry.ts,
+            "meta": "",
+            "text": entry.text,
             "kind": "take",
             "index": index,
         }
         for index, entry in enumerate(visible)
     ]
-    label = f"/history  {page + 1}/{pages}" if pages > 1 else "/history"
     return {
-        "title": "History",
-        "path": label,
+        "title": "/digivoice/history",
+        "path": "/history",
         "page": page + 1,
         "pages": pages,
         "paging": pages > 1,
@@ -97,6 +100,53 @@ def _take(paths: Any, page: int, index: int) -> HistoryEntry | None:
     if not 0 <= index < len(visible):
         return None
     return visible[index]
+
+
+def _clip_detail(text: str) -> str:
+    if len(text) <= _DOCTOR_WIDTH:
+        return text
+    return text[: _DOCTOR_WIDTH - 1] + "…"
+
+
+def _doctor_page(platform: str, home: Path, env: dict[str, str]) -> dict[str, Any]:
+    """Live checks for the doctor page. Long always-info stubs stay off the screen."""
+    checks = doctor_checks(platform, home, env, real_probe(env.get("PATH", "")))
+    rows = [
+        {
+            "action": check.id,
+            "path": "",
+            "meta": check.status,
+            "detail": _clip_detail(doctor_summary(check)),
+            "kind": "check",
+        }
+        for check in checks
+        if check.id not in _DOCTOR_SKIP
+    ]
+    required = {"whisper-cli", "piper", "capture", "models"}
+    ok = all(check.status != "missing" for check in checks if check.id in required)
+    return {"title": "doctor", "path": "/doctor", "rows": rows, "ok": ok}
+
+
+def _logs_page(paths: Any) -> dict[str, Any]:
+    log_path = system_log_path(paths)
+    text = read_system_log(log_path).strip()
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        rows: list[dict[str, str]] = [
+            {"action": "No log yet", "path": "", "meta": "", "kind": "note"}
+        ]
+    else:
+        rows = [
+            {
+                "action": line,
+                "path": "/system/logs",
+                "meta": log_path.name,
+                "text": line,
+                "kind": "log",
+            }
+            for line in lines
+        ]
+    return {"title": "/system/logs", "path": "/system/logs", "rows": rows}
 
 
 def _update_note(
@@ -150,10 +200,13 @@ def dispatch(
     footer = NAV_FOOTER
     if op == "boot":
         start = norm_path(str(req.get("start") or env.get("DIGIVOICE_TUI_START") or "/"))
-        context = build_context_lines(platform, home, env, probe=real_probe(env.get("PATH", "")))
+        looked = real_probe(env.get("PATH", ""))
+        context = build_context_lines(platform, home, env, probe=looked)
+        status = build_status_line(platform, home, env, probe=looked)
         return {
             "footer": footer,
             "context": context,
+            "status": status,
             "start": start,
             "home": [_row_block(block) for block in HOME_BLOCKS],
             "screen": _open_path(paths, platform, home, env, start),
@@ -194,26 +247,12 @@ def dispatch(
             "rows": [_row_block(block) for block in SYSTEM_BLOCKS],
         }
     if op == "doctor":
-        checks = doctor_checks(platform, home, env, real_probe(env.get("PATH", "")))
-        rows = [
-            {"action": check.detail, "path": "/doctor", "meta": check.status, "kind": "note"}
-            for check in checks
-        ]
-        required = {"whisper-cli", "piper", "capture", "models"}
-        ok = all(check.status != "missing" for check in checks if check.id in required)
-        return {"footer": footer, "title": "Doctor", "path": "/doctor", "rows": rows, "ok": ok}
+        return {**_doctor_page(platform, home, env), "footer": footer}
     if op == "logs":
-        text = read_system_log(system_log_path(paths)).strip()
-        lines = [line for line in text.splitlines() if line.strip()] or ["No log yet"]
-        return {
-            "footer": footer,
-            "title": "Logs",
-            "path": "/system/logs",
-            "rows": [
-                {"action": line, "path": "/system/logs", "meta": "", "kind": "note"}
-                for line in lines
-            ],
-        }
+        return {**_logs_page(paths), "footer": footer}
+    if op == "save":
+        save_settings(paths, load_settings(paths))
+        return {"footer": footer, "saved": True}
     if op == "reload":
         result = run_reload(platform, home, env, runner=run_command)
         note = result.stdout.strip() or result.stderr.strip() or "reload finished"
@@ -316,9 +355,18 @@ def _apply(paths: Any, req: dict[str, Any]) -> dict[str, Any]:
         text = req.get("text")
         if not isinstance(text, str) or not text.strip():
             return {"capture": True, "name": row.name}
-        nxt = _changed(settings, row, text.strip())
+        cleaned = text.strip()
+        previous = str(getattr(settings.hotkey_bindings, row.field))
+        warning = binding_warning(row.field, cleaned, previous)
+        if warning:
+            return {
+                "saved": False,
+                "note": warning,
+                "rows": _settings_rows(paths, path),
+            }
+        nxt = _changed(settings, row, cleaned)
         if nxt is None:
-            return {"note": "binding unchanged"}
+            return {"note": "binding unchanged", "saved": False}
         save_settings(paths, nxt)
         return {"saved": True, "rows": _settings_rows(paths, path)}
     if row.kind != "choice":

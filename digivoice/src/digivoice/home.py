@@ -14,8 +14,10 @@ from typing import TextIO
 
 from digivoice.opentui import launch_opentui
 from digivoice.paths import resolve_paths
+from digivoice.probe import real_probe
 from digivoice.reload import LaunchReport, ensure_home_control
 from digivoice.runner import CommandRunner
+from digivoice.settings import load_settings
 from digivoice.tui import MenuBlock, _is_tty
 
 HOME_TITLE = "DIGIVOICE"
@@ -92,6 +94,55 @@ def build_context_lines(
         )
     except Exception:
         return ["▦ (unavailable)", "▥ (unavailable)", "□ unknown"]
+
+
+def format_status_line(
+    model: str,
+    *,
+    paste: bool,
+    rewrite: bool,
+    banner: bool,
+    pin: bool,
+    summary: str,
+) -> str:
+    """One line: selected model, settings that are on, doctor summary."""
+    flags = [
+        name
+        for name, enabled in (
+            ("paste", paste),
+            ("rewrite", rewrite),
+            ("banner", banner),
+            ("pin", pin),
+        )
+        if enabled
+    ]
+    parts = [model.strip() or "model", *flags, summary.strip()]
+    return " · ".join(part for part in parts if part)
+
+
+def build_status_line(
+    platform: str,
+    home: Path,
+    env: Mapping[str, str],
+    probe: object | None = None,
+) -> str:
+    """Status line for the pinned frame. Never raises."""
+    try:
+        paths = resolve_paths(platform, home, env)
+        settings = load_settings(paths)
+        if probe is None:
+            probe = real_probe(env.get("PATH", ""))
+        _ok, summary = summarize_health(platform, home, dict(env), probe)
+        return format_status_line(
+            settings.stt_model,
+            paste=settings.paste_on_stop,
+            rewrite=settings.rewrite_enabled,
+            banner=settings.live_banner,
+            pin=settings.banner_pinned,
+            summary=summary,
+        )
+    except Exception:
+        return "unavailable"
 
 
 def summarize_health(

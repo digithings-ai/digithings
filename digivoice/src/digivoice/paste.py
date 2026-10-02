@@ -36,8 +36,10 @@ EMPTY_TEXT_DETAIL = "nothing to paste (empty text)"
 
 
 def _paste_argv(osascript: str, focus: FocusTarget | None) -> list[str]:
+    # `osascript -e` does not treat a later `-` as end of options. That dash
+    # became AppleScript argv item 1, so Command-V never reached the focused app.
     if focus is not None and focus.known:
-        return [osascript, "-e", ACTIVATE_AND_PASTE_SCRIPT, "-", focus.bundle_id, focus.name]
+        return [osascript, "-e", ACTIVATE_AND_PASTE_SCRIPT, focus.bundle_id, focus.name]
     return [osascript, "-e", KEYSTROKE_SCRIPT]
 
 

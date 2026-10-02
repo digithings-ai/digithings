@@ -193,7 +193,8 @@ def test_dict_pastes_into_the_captured_app(tmp_path: Path) -> None:
     assert result.code == 0
     assert "pasted into Notes" in result.stderr
     typed = next(call for call in runner.calls if call.program == "osascript")
-    assert typed.argv[-2:] == ["com.apple.Notes", "Notes"]
+    assert typed.argv[3:] == ["com.apple.Notes", "Notes"]
+    assert "-" not in typed.argv[3:]
     assert TRANSCRIPT not in " ".join(typed.argv)
     copied = next(call for call in runner.calls if call.program == "pbcopy")
     assert copied.stdin == TRANSCRIPT

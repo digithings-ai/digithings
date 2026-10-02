@@ -217,27 +217,75 @@ def test_pressed_chord_is_ctrl_shift_space() -> None:
     assert chord_from_code(5, ord("c")) == "ctrl+c"
 
 
-def test_capture_records_the_pressed_chord(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Kitty CSI u keeps modifiers. Typed names stay on the non-TTY path."""
+def _capture_keys(payload: bytes, monkeypatch: pytest.MonkeyPatch) -> tuple[str | None, str]:
+    """Drive the hotkey field with bytes. stdout is a buffer so the prompt is visible."""
     monkeypatch.setenv("TERM", "xterm-256color")
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setattr("digivoice.tui._term_size", lambda: (80, 24))
     block = MenuBlock(action="dictation", path="/settings/hotkeys", meta="Right Option")
     master, slave = pty.openpty()
+    painted = io.StringIO()
 
     def feed() -> None:
         time.sleep(0.2)
-        os.write(master, b"\x1b[32;6u")
+        os.write(master, payload)
 
     threading.Thread(target=feed, daemon=True).start()
     raw = os.fdopen(slave, "rb+", buffering=0)
     tty_io = io.TextIOWrapper(raw, encoding="utf-8", newline="\n", write_through=True)
     try:
-        saved = capture_binding("hotkeys", [block], 0, stdin=tty_io, stdout=tty_io)
+        saved = capture_binding("hotkeys", [block], 0, stdin=tty_io, stdout=painted)
     finally:
         tty_io.close()
         os.close(master)
+    return saved, painted.getvalue()
+
+
+def test_capture_records_the_pressed_chord(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pressed chord fills the field. Enter locks it in."""
+    saved, painted = _capture_keys(b"\x1b[32;6u\r", monkeypatch)
     assert saved == "ctrl+shift+space"
+    assert "input new hotkey" in painted
+
+
+def test_hotkey_field_waits_for_enter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Esc keeps the previous binding. Enter is what returns the new one."""
+    cancelled, painted = _capture_keys(b"a\x1b", monkeypatch)
+    assert cancelled is None
+    assert "input new hotkey" in painted
+    chord, _painted = _capture_keys(b"\x1b[32;6u\x1b", monkeypatch)
+    assert chord is None
+    typed, _again = _capture_keys(b"f5\r", monkeypatch)
+    assert typed == "f5"
+
+
+def test_hotkey_is_stored_only_when_enter_locks_it_in(tmp_path: Path) -> None:
+    """Blank (Esc on a pipe) keeps the previous bind. Enter stores a real key."""
+    paths = _paths(tmp_path)
+    browse_settings(paths, io.StringIO("4\n1\n\n"), io.StringIO())
+    assert load_settings(paths).hotkey_bindings.dictation == "Right Option"
+    assert not (tmp_path / "settings.json").is_file()
+    browse_settings(paths, io.StringIO("4\n1\nctrl+shift+space\n\n\n"), io.StringIO())
+    saved = load_settings(paths)
+    assert saved.hotkey_bindings.dictation == "ctrl+shift+space"
+    assert saved.hotkey_bindings.speak == "Double-tap Left Option"
+    text = (tmp_path / "settings.json").read_text(encoding="utf-8")
+    assert "ctrl+shift+space" in text
+
+
+def test_unparseable_hotkey_keeps_the_previous_binding(tmp_path: Path) -> None:
+    """Enter on garbage warns and does not write. Esc after a save leaves that save."""
+    paths = _paths(tmp_path)
+    browse_settings(paths, io.StringIO("4\n1\nEsc\n\n\n"), io.StringIO())
+    assert load_settings(paths).hotkey_bindings.dictation == "Esc"
+    before = (tmp_path / "settings.json").read_text(encoding="utf-8")
+    browse_settings(paths, io.StringIO("4\n1\n\n\n"), io.StringIO())
+    warned = io.StringIO()
+    browse_settings(paths, io.StringIO("4\n1\nnot-a-key\n\n\n"), warned)
+    assert load_settings(paths).hotkey_bindings.dictation == "Esc"
+    assert (tmp_path / "settings.json").read_text(encoding="utf-8") == before
+    assert "not a key" in warned.getvalue()
+    assert "keeping Esc" in warned.getvalue()
 
 
 def test_hotkey_capture_persists_and_blank_cancels(tmp_path: Path) -> None:
