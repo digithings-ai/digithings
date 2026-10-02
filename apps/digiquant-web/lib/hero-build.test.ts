@@ -24,6 +24,8 @@ import {
   AXIS_X_MS,
   AXIS_Y_MS,
   AXIS_Y_START_MS,
+  axisFrameKeepsAxes,
+  heroAxisFrame,
   candleSweepClip,
   candleSweepRange,
   columnDelayMs,
@@ -40,7 +42,7 @@ import {
 } from "./hero-build";
 
 describe("hero build clock", () => {
-  it("fades the finished chart in instead of building it", () => {
+  it("keeps a fade budget under the build cap", () => {
     expect(HERO_FADE_MS).toBeGreaterThan(200);
     expect(HERO_FADE_MS).toBeLessThan(1200);
     expect(HERO_FADE_MS).toBeLessThan(CHART_BUILD_MAX_MS);
@@ -152,6 +154,33 @@ describe("hero build clock", () => {
     expect(HANDOFF_MS).toBeLessThan(300);
     expect(COPY_DONE_MS).toBe(CHROME_DONE_MS + HANDOFF_MS);
     expect(CHART_INTRO_MS).toBeGreaterThan(1000);
+  });
+
+  it("keeps the axis frame mounted from the first stroke through the candle reveal", () => {
+    expect(heroAxisFrame(-1)).toBe("off");
+    expect(heroAxisFrame(0)).toBe("x");
+    expect(heroAxisFrame(AXIS_Y_START_MS)).toBe("xy");
+    expect(heroAxisFrame(BARS_START_MS)).toBe("plot");
+    let seenX = false;
+    for (let elapsed = 0; elapsed <= BARS_SWEEP_MS + VOLUME_LAG_MS; elapsed += 40) {
+      const frame = heroAxisFrame(elapsed);
+      if (frame === "x") seenX = true;
+      if (seenX) expect(axisFrameKeepsAxes(frame)).toBe(true);
+      expect(frame).not.toBe("off");
+    }
+    expect(seenX).toBe(true);
+    expect(axisFrameKeepsAxes(heroAxisFrame(BARS_START_MS))).toBe(true);
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const field = readFileSync(path.join(here, "../app/_chrome/QuantField.tsx"), "utf8");
+    const runAxes = field.slice(field.indexOf("const runAxes"), field.indexOf("let pageUnlocked"));
+    expect(runAxes.length).toBeGreaterThan(40);
+    expect(runAxes).not.toContain('dataset.phase = "done"');
+    expect(runAxes).not.toContain('dataset.phase = "x"');
+    expect(runAxes).not.toContain("HIDDEN_THEME");
+    const startBars = field.slice(field.indexOf("const startBars"), field.indexOf("const presentFrame"));
+    expect(startBars.length).toBeGreaterThan(40);
+    expect(startBars).not.toContain("resize()");
+    expect(startBars).not.toContain('style.opacity = "0"');
   });
 
   it("keeps the chart construct near the 5s target and under the 10s cap", () => {
