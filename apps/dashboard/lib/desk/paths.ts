@@ -1,13 +1,13 @@
 /**
- * Chrome path → DigiCon endpoint.
+ * Chrome path → dashboard-api endpoint.
  *
- * DigiCon, in this repo, is `apps/dashboard-api`, the market-data worker,
- * and `GET /v1/tables/:table`. There is no DigiCon package. Chrome may say
- * `/book` or `/movers`; the client still calls `GET /portfolio` or derives
- * movers. Do not add those routes.
+ * DigiCon is the digiquant type for one of these reads (see `client.ts`).
+ * The reads are dashboard-api, market closes, and
+ * `GET /v1/tables/:table`. Chrome may say `/book` or `/movers`; the client
+ * still calls `GET /portfolio` or derives movers. Do not add those routes.
  */
 
-export const DIGICON_ENDPOINTS = {
+export const DESK_ENDPOINTS = {
   portfolio: '/portfolio',
   allocations: '/allocations',
   brief: '/brief',
@@ -18,10 +18,10 @@ export const DIGICON_ENDPOINTS = {
   ledger: '/ledger',
 } as const;
 
-export type DigiconEndpoint = (typeof DIGICON_ENDPOINTS)[keyof typeof DIGICON_ENDPOINTS];
+export type DeskEndpoint = (typeof DESK_ENDPOINTS)[keyof typeof DESK_ENDPOINTS];
 
 /** Allowlist from dashboard-api CONTRACT §7. Unknown names are not a route. */
-export const DIGICON_TABLES = [
+export const DESK_TABLES = [
   'daily_snapshots',
   'positions',
   'instruments',
@@ -40,7 +40,7 @@ export const DIGICON_TABLES = [
   'public_daily_realized_attribution',
 ] as const;
 
-export type DigiconTable = (typeof DIGICON_TABLES)[number];
+export type DeskTableName = (typeof DESK_TABLES)[number];
 
 export function tableEndpoint(table: string): string {
   return `/v1/tables/${table}`;
@@ -69,21 +69,21 @@ export interface DeskPathEntry {
   also?: readonly string[];
   mode: DeskPathMode;
   client: DeskClientName;
-  tables?: readonly DigiconTable[];
+  tables?: readonly DeskTableName[];
 }
 
 export const DESK_PATHS: readonly DeskPathEntry[] = [
   {
     chromePath: '/house/brief',
     pane: 'Decision',
-    endpoint: DIGICON_ENDPOINTS.brief,
+    endpoint: DESK_ENDPOINTS.brief,
     mode: 'live+stub',
     client: 'getBrief',
   },
   {
     chromePath: '/house/brief/book',
     pane: 'Book allocation',
-    endpoint: DIGICON_ENDPOINTS.portfolio,
+    endpoint: DESK_ENDPOINTS.portfolio,
     mode: 'live+stub',
     client: 'getPortfolio',
   },
@@ -91,7 +91,7 @@ export const DESK_PATHS: readonly DeskPathEntry[] = [
     chromePath: '/house/brief/movers',
     pane: 'Movers',
     endpoint: null,
-    also: [DIGICON_ENDPOINTS.allocations, '/v1/market/closes'],
+    also: [DESK_ENDPOINTS.allocations, '/v1/market/closes'],
     mode: 'client-derived',
     client: 'deriveMovers',
   },
@@ -136,14 +136,14 @@ export const DESK_PATHS: readonly DeskPathEntry[] = [
   {
     chromePath: '/house/portfolio/holdings',
     pane: 'Positions',
-    endpoint: DIGICON_ENDPOINTS.allocations,
+    endpoint: DESK_ENDPOINTS.allocations,
     mode: 'live+stub',
     client: 'getAllocations',
   },
   {
     chromePath: '/house/portfolio/holdings/:ticker',
     pane: 'Symbol',
-    endpoint: DIGICON_ENDPOINTS.allocations,
+    endpoint: DESK_ENDPOINTS.allocations,
     mode: 'live',
     client: 'getAllocations',
   },
@@ -158,15 +158,15 @@ export const DESK_PATHS: readonly DeskPathEntry[] = [
   {
     chromePath: '/house/portfolio/tearsheet',
     pane: 'Tearsheet',
-    endpoint: DIGICON_ENDPOINTS.performance,
-    also: [DIGICON_ENDPOINTS.navSeries],
+    endpoint: DESK_ENDPOINTS.performance,
+    also: [DESK_ENDPOINTS.navSeries],
     mode: 'live+stub',
     client: 'getPerformance',
   },
   {
     chromePath: '/house/portfolio/ledger',
     pane: 'Fills',
-    endpoint: DIGICON_ENDPOINTS.ledger,
+    endpoint: DESK_ENDPOINTS.ledger,
     mode: 'live+stub',
     client: 'getLedger',
   },

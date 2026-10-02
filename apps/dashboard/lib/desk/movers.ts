@@ -3,7 +3,7 @@
  * marks plus market closes. A missing mark is an em dash, never a made-up percent.
  */
 import { fetchMarketCloses, type MarketClose } from '@/lib/market-data';
-import { getAllocations } from './digicon';
+import { getAllocations } from './client';
 
 export const MISSING_MARK = '—';
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-client';
 import {
   KPIS_LIVE_BADGE,
-  digiconFailure,
+  deskFailure,
   getAllocations,
   getBenchmarks,
   getBrief,
@@ -12,7 +12,7 @@ import {
   getPerformance,
   getPortfolio,
   getTable,
-} from './digicon';
+} from './client';
 
 const BASE = 'https://api.test';
 
@@ -36,7 +36,7 @@ afterEach(() => {
   delete process.env.NEXT_PUBLIC_DASHBOARD_API_URL;
 });
 
-describe('DigiCon getters', () => {
+describe('desk reads', () => {
   it('calls the contracted paths and keeps nulls null', async () => {
     process.env.NEXT_PUBLIC_DASHBOARD_API_URL = BASE;
     const fetchMock = vi.fn(async (url: unknown) => {
@@ -107,8 +107,8 @@ describe('DigiCon getters', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(502);
     expect((err as ApiError).code).toBe('upstream_empty');
-    expect(digiconFailure(err)).toEqual({ state: 'error', errorMessage: 'upstream empty' });
-    expect(digiconFailure(err).errorMessage).not.toBe('0');
+    expect(deskFailure(err)).toEqual({ state: 'error', errorMessage: 'upstream empty' });
+    expect(deskFailure(err).errorMessage).not.toBe('0');
   });
 
   it('badges live KPIs as live marks', async () => {
