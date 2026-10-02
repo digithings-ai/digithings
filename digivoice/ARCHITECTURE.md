@@ -24,6 +24,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `tui/` | OpenTUI (`@opentui/core`) app: `createCliRenderer`, boxes, and text. |
 | `src/digivoice/pixel_hero.py` | 7×10 DIGIVOICE glyph map. The home header paints those glyphs as five half-block rows in `tui.py`. |
 | `src/digivoice/catalog.py` | Suggested local STT ggml + rewrite GGUF list; download + wire into models/. |
+| `src/digivoice/install.py` | `digivoice install`: bun, OpenTUI, whisper-cli, Piper, sox, and the default local models. Fetch and runner are injected. No cloud STT/TTS. |
 | `src/digivoice/installed_models.py` | Local GGUF and whisper files already installed by LM Studio, Ollama, and MLX Studio. |
 | `src/digivoice/home.py` | Bare-`digivoice` home: OpenTUI on a TTY, printed overview otherwise. |
 | `src/digivoice/panels.py` | TTY doctor (green ok, red not ok, ready line at the bottom), history browser, and the system pane (reload, reset, restart, update, logs). |
@@ -97,6 +98,7 @@ commands write.
 | `reset` | 0 | Restore settings defaults. History and models stay. `digivoice /reset` is the same command. |
 | `restart` | 0 | Stop Hammerspoon, then replace this process with a fresh digivoice. |
 | `system` | 0 | TTY: Doctor, Reload, Reset, Restart, Update, Logs (`/system/logs`). Otherwise print those slash paths. Logs shows the whole `system.log` in the data directory (beside `status.json`). A take appends one line when it reaches `error` or `empty`. A missing file stays on the page as "No log yet". Reset confirm is still the first choice on that dialog. |
+| `install` | 0 every step present or installed, 1 any step failed | Fetch bun 1.4.2, `bun install` `@opentui/core` in `digivoice/tui`, whisper-cli, Piper, sox, `ggml-base.en.bin`, and `en_US-lessac-medium`. A failed step does not stop the rest. No rewrite GGUF and no cloud STT/TTS. |
 | `update` / `uninstall` | 0 | Thin stubs: not wired yet (reinstall via uv / brew; remove tool + data dir manually). |
 | `reload [--json]` | 0 refreshed, 1 settings invalid or Hammerspoon reload failed | Re-resolve CLI path, validate settings, check the installed Lua adapter (symlink realpath proves the tip), `hs -c hs.reload()` with an 8s timeout; on failure clear stale `status.json`. `hs` absent is a skip, not an error. |
 | bare `digivoice` (no args) | 0 | TTY: fullscreen home. Centered DIGIVOICE half-block wordmark (five rows, xterm cube grays or truecolor, block V) that builds in place, then a short glint, a blank gap, status strip (models / banner / health / control), step-rail actions. The selected row is `[*]` in the terminal foreground; other rows are `[ ]`. Home is History, Settings, System, Quit. Doctor is inside System. On macOS the same launch opens Hammerspoon if it is down (background-only: hide Dock icon, no digivoice menubar, no launch toast), loads `require("digivoice")` when the adapter is installed, and arms the banner (`M.ensure_banner` returns `armed`) without drawing it unless `banner_pinned` is true or a take is in progress. `live_banner` false skips the overlay. A running Hammerspoon is reloaded once when this launch added the require line, or when the loaded adapter has no `ensure_banner`; a take is never reloaded. Budget 4s; failure is a status line, not a hang. TUI Quit and `digivoice quit` stop the adapter and quit Hammerspoon. Esc and closing the Terminal leave it running. Every row is a block: action, then a gray shortcut, slash path, and metadata. Typing `/` runs that path (`/doctor`, `/settings/banner/pin`, `/quit`). History shows the text with the timestamp in gray underneath; Copy is `c` and Delete is `d`, or a click. Settings returns to home. No TTY: print the home overview (including that control line) and exit 0. `--help` / `-h` / `help` still show argparse help. |
@@ -104,6 +106,22 @@ commands write.
 
 `--hold` and `--toggle` cannot be combined. `speak` takes text or exactly one of
 `--clipboard` / `--selection` / `--clipboard-or-history`.
+
+## Install
+
+`digivoice install` brings in the local pieces required to run. It does not call a cloud STT or TTS service, and it does not download a rewrite GGUF (rewrite stays off). Issue #4969 is the SHA-safe Hammerspoon adapter hold; it does not add an Otter model pack, and this command does not fetch Otter. Tests pass a fake `fetch` and a fake runner. They do not download weights and they do not run this command against the network.
+
+Each step is `present`, `installed`, or `failed`. Later steps still run after a failure. The process exits 1 when any step failed. Archives that contain `..` or an absolute path are rejected. Tar extraction uses `filter="data"`.
+
+| Step | Fresh install |
+| --- | --- |
+| bun | `bun` 1.4.2 zip into `~/.local/bin/bun`: `bun-darwin-aarch64`, `bun-darwin-x64`, `bun-linux-aarch64`, `bun-linux-x64` from `https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/`. |
+| opentui | `bun --cwd digivoice/tui install` for `@opentui/core`. |
+| whisper-cli | Linux: whisper.cpp `v1.9.2` `whisper-bin-ubuntu-x64.tar.gz` or `whisper-bin-ubuntu-arm64.tar.gz` from `https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/`, extracted under `~/.local/share/digivoice/vendor/whisper`, then `~/.local/bin/whisper-cli` points at that binary so the sibling libraries stay beside it. macOS has no official CLI build: `brew install whisper-cpp`. Missing Homebrew fails that step with that reason. |
+| piper | Piper `2023.11.14-2` tarball (`piper_linux_x86_64`, `piper_linux_aarch64`, `piper_macos_x64`, `piper_macos_aarch64`) from `https://github.com/rhasspy/piper/releases/download/2023.11.14-2/`, under `vendor/piper`, with `~/.local/bin/piper` pointing at the binary. |
+| sox | Already on `PATH`, otherwise `brew install sox`. Missing Homebrew fails that step. |
+| stt | `ggml-base.en.bin` from `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin` into the models directory. |
+| voice | `en_US-lessac-medium.onnx` and `en_US-lessac-medium.onnx.json` from `https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/`. |
 
 ## dict
 

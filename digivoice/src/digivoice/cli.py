@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -16,10 +17,11 @@ from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
 from digivoice.focus import FocusTarget, capture_frontmost, focus_target
+from digivoice.install import render_install, run_install
 from digivoice.menu_tree import rows_at
 from digivoice.models import CliResult, PasteResult, VoicePaths
 from digivoice.nav import norm_path, section_of
-from digivoice.opentui import launch_opentui
+from digivoice.opentui import launch_opentui, tui_root
 from digivoice.panels import SYSTEM_BLOCKS, restart_digivoice
 from digivoice.paste import copy_to_clipboard, paste
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
@@ -239,6 +241,10 @@ def build_parser() -> _Parser:
         dest="print_only",
         help="Print current settings + menu tree (no prompts; same as env noninteractive)",
     )
+    sub.add_parser(
+        "install",
+        help="Install bun, OpenTUI, whisper-cli, Piper, sox, and the default local models",
+    )
     sub.add_parser("update", help="Reinstall hint (not wired yet)")
     sub.add_parser("uninstall", help="Removal hint (not wired yet)")
     sub.add_parser("quit", help="Stop digivoice and quit Hammerspoon")
@@ -366,6 +372,21 @@ def _home(runtime: Runtime) -> CliResult:
     return CliResult(code=code, stdout="", stderr="")
 
 
+def _install(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    report = run_install(
+        home=runtime.home,
+        platform=runtime.platform,
+        machine=platform.machine(),
+        probe=runtime.probe,
+        runner=runtime.runner or run_command,
+        models_dir=Path(paths.models_dir),
+        tui_root=tui_root(),
+    )
+    code = 0 if report.ok else 1
+    return CliResult(code=code, stdout=render_install(report), stderr="")
+
+
 def _update() -> CliResult:
     return CliResult(
         code=0,
@@ -473,7 +494,12 @@ def _dict_take(
     reporter.update("transcribing")
     try:
         transcript = transcribe(
-            paths, runtime.probe, stage_runner, recording.wav_path, model_id=settings.stt_model
+            paths,
+            runtime.probe,
+            stage_runner,
+            recording.wav_path,
+            model_id=settings.stt_model,
+            home=runtime.home,
         )
     except VoiceError as exc:
         if cancel.requested():
@@ -944,6 +970,8 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         return _restart(runtime)
     if command == "system":
         return _system(runtime)
+    if command == "install":
+        return _install(runtime)
     if command == "update":
         return _update()
     if command == "uninstall":

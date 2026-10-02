@@ -16,6 +16,8 @@ Dictation and speech are live: microphone → wav → `whisper-cli` with `ggml-b
 - `sox` or `ffmpeg` for microphone capture; `afplay` (macOS) or `aplay`/`ffplay` (Linux) for playback
 - Default dictation model `ggml-base.en` (snappy push-to-talk), stored as `ggml-base.en.bin`
 
+`digivoice install` fetches that local set: bun and the OpenTUI packages, whisper-cli, Piper, sox, `ggml-base.en.bin`, and the Lessac voice. It does not download a rewrite model and it does not call a cloud STT or TTS service. A failed step does not stop the rest; the command exits 1 when any step failed.
+
 Linux runs `doctor`, `dict`, `speak`, and `history` with a sound card and ALSA. Paste is skipped there — the transcript is on stdout. A Linux box with no microphone fails with a message and exit 1 instead of hanging.
 
 ## Paths

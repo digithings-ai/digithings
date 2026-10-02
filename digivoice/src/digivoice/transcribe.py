@@ -14,7 +14,7 @@ from pathlib import Path
 from digivoice.catalog import stt_language, stt_model_path
 from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import Transcript
-from digivoice.paths import DEFAULT_MODEL, VoicePaths
+from digivoice.paths import DEFAULT_MODEL, VoicePaths, local_bin
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
 
@@ -46,11 +46,16 @@ def whisper_argv(binary: str, model: Path, wav: Path, *, language: str = LANGUAG
     ]
 
 
-def select_whisper(probe: CommandProbe) -> str | None:
+def select_whisper(probe: CommandProbe, home: Path | None = None) -> str | None:
     for name in WHISPER_BINARIES:
         found = probe.lookup(name)
         if found:
             return found
+    if home is None:
+        return None
+    fallback = local_bin(home) / "whisper-cli"
+    if probe.executable(str(fallback)):
+        return str(fallback)
     return None
 
 
@@ -71,9 +76,10 @@ def transcribe(
     runner: CommandRunner,
     wav_path: str,
     model_id: str | None = None,
+    home: Path | None = None,
 ) -> Transcript:
     """Run whisper-cli over `wav_path` and return the transcript text."""
-    binary = select_whisper(probe)
+    binary = select_whisper(probe, home)
     if binary is None:
         raise TranscribeError(
             "whisper-cli not on PATH (whisper.cpp binary name is whisper-cli, "
