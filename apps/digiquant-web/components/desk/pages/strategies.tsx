@@ -9,7 +9,9 @@
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
+import { strategyBlocks } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
+import { DeskPane, usePaneFocus } from "./pane";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -326,126 +328,6 @@ export function strategyBlockBody(id: string, data: unknown, result: ReadResult)
   return paint(id, data) ?? textBody(result);
 }
 
-function Body({ body }: { body: StrategyBlockBody }) {
-  switch (body.type) {
-    case "text":
-      return <p className="m-0 whitespace-pre-wrap">{body.lines.join("\n")}</p>;
-    case "empty":
-      return (
-        <>
-          <p className="m-0">{body.title}</p>
-          {body.why ? <p className="m-0">{body.why}</p> : null}
-        </>
-      );
-    case "kpis":
-      return (
-        <>
-          {body.notice ? <p className="m-0 mb-1 text-ink-mute">{body.notice}</p> : null}
-          <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
-            {body.items.map((item) => (
-              <div key={item.label}>
-                <dt className="text-ink-mute">{item.label}</dt>
-                <dd className="m-0">{item.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      );
-    case "table":
-      return (
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr>
-              {body.head.map((label) => (
-                <th key={label} className="border-b border-hair px-1 py-0.5 font-normal text-ink-mute">
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {body.rows.map((row, index) => (
-              <tr key={`${row[0] ?? "row"}-${index}`}>
-                {row.map((value, cellIndex) => (
-                  <td key={body.head[cellIndex] ?? cellIndex} className="px-1 py-0.5 align-top">
-                    {value}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
-    case "fields":
-      return (
-        <>
-          {body.notice ? <p className="m-0 mb-1 text-ink-mute">{body.notice}</p> : null}
-          {body.lead ? <p className="m-0">{body.lead}</p> : null}
-          {body.lede ? <p className="m-0 mb-1">{body.lede}</p> : null}
-          <dl className="m-0">
-            {body.rows.map((item) => (
-              <div key={item.label} className="flex gap-2">
-                <dt className="text-ink-mute">{item.label}</dt>
-                <dd className="m-0">{item.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      );
-    case "steps":
-      return (
-        <ol className="m-0 list-none p-0">
-          {body.steps.map((step, index) => (
-            <li key={step.label} className="mb-1">
-              <p className="m-0">
-                {index + 1}. {step.label} {step.meta}
-              </p>
-              {step.detail ? <p className="m-0 text-ink-mute">{step.detail}</p> : null}
-            </li>
-          ))}
-        </ol>
-      );
-    case "track":
-      return (
-        <>
-          {body.headline ? <p className="m-0">{body.headline}</p> : null}
-          {body.why ? <p className="m-0 mb-1 text-ink-mute">{body.why}</p> : null}
-          {body.rows.length ? (
-            <dl className="m-0 mb-1">
-              {body.rows.map((item) => (
-                <div key={item.label} className="flex gap-2">
-                  <dt className="text-ink-mute">{item.label}</dt>
-                  <dd className="m-0">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-          {body.points.length ? (
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr>
-                  <th className="border-b border-hair px-1 py-0.5 font-normal text-ink-mute">Date</th>
-                  <th className="border-b border-hair px-1 py-0.5 font-normal text-ink-mute">Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {body.points.map((point) => (
-                  <tr key={point.date}>
-                    <td className="px-1 py-0.5">{point.date}</td>
-                    <td className="px-1 py-0.5">{point.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-        </>
-      );
-    default: {
-      const exhaustive: never = body;
-      return <p className="m-0">{String(exhaustive)}</p>;
-    }
-  }
-}
 
 export function StrategiesPages({ path }: { path: string }) {
   const [state, setState] = useState<{ path: string; reads: Record<string, OfficialRead> }>({ path: "", reads: {} });
@@ -474,7 +356,19 @@ export function StrategiesPages({ path }: { path: string }) {
   if (!STRATEGY_PATHS.has(path)) return null;
   const reads = state.path === path ? state.reads : {};
   const layout = layoutFor(path);
+  return <StrategiesDesk path={path} reads={reads} layout={layout} />;
+}
 
+function StrategiesDesk({
+  path,
+  reads,
+  layout,
+}: {
+  path: string;
+  reads: Record<string, OfficialRead>;
+  layout: ReturnType<typeof layoutFor>;
+}) {
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
   return (
     <div className="grid min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-1 p-1">
       {layout.map((placement) => {
@@ -485,27 +379,27 @@ export function StrategiesPages({ path }: { path: string }) {
         const body = read
           ? strategyBlockBody(placement.id, read.data, read.result)
           : ({ type: "text", lines: ["loading…"] } satisfies StrategyBlockBody);
-        const head =
+        const provenance =
           body.type === "text"
             ? []
             : (read?.result.lines.filter((line) => line.startsWith("source  ") || line.startsWith("marks  ")) ?? []);
         return (
-          <section
-            key={placement.id}
-            aria-label={def.title}
-            data-route={def.route}
+          <div
+            key={`${path}:${placement.id}`}
+            className="min-h-0 min-w-0"
             style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-hair bg-surface"
           >
-            <h2 className="m-0 shrink-0 border-b border-hair px-2 py-1 text-[0.65rem] font-normal text-ink-mute">{def.title}</h2>
-            <div className={`m-0 min-h-0 flex-1 overflow-auto px-2 py-1 text-[0.7rem] leading-[1.45] ${tone[status]}`}>
-              {head.length ? <p className="m-0 mb-1 whitespace-pre-wrap text-ink-mute">{head.join("\n")}</p> : null}
-              <Body body={body} />
-            </div>
-            <p className="m-0 shrink-0 truncate border-t border-hair px-2 py-0.5 text-[0.6rem] text-ink-mute">
-              {read?.result.asOf ? `as of ${read.result.asOf}` : def.route}
-            </p>
-          </section>
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={read?.result.asOf ?? null}
+              blocks={strategyBlocks(body, provenance)}
+              tone={tone[status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
+              onNext={panes.next}
+            />
+          </div>
         );
       })}
     </div>

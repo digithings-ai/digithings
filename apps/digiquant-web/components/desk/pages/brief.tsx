@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { readDeskBlock } from "../read-block";
+import { DeskPane, usePaneFocus } from "./pane";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
@@ -32,6 +33,7 @@ function shown(read: ReadResult | undefined): Shown {
 export function BriefPage() {
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
   const layout = layoutFor(PATH);
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -58,20 +60,22 @@ export function BriefPage() {
         if (!def) return null;
         const view = shown(reads[placement.id]);
         return (
-          <section
+          <div
             key={placement.id}
-            aria-label={def.title}
+            className="min-h-0 min-w-0"
             style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
-            className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-hair bg-surface"
           >
-            <h2 className="m-0 shrink-0 border-b border-hair px-2 py-1 text-[0.65rem] font-normal text-ink-mute">{def.title}</h2>
-            <p className={`m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-2 py-1 text-[0.7rem] leading-[1.45] ${tone[view.status]}`}>
-              {view.lines.join("\n")}
-            </p>
-            <p className="m-0 shrink-0 truncate border-t border-hair px-2 py-0.5 text-[0.6rem] text-ink-mute">
-              {view.asOf ? `as of ${view.asOf}` : def.route}
-            </p>
-          </section>
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              lines={view.lines}
+              tone={tone[view.status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
+              onNext={panes.next}
+            />
+          </div>
         );
       })}
     </div>
