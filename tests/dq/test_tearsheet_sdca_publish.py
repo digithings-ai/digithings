@@ -863,3 +863,94 @@ def test_run_and_write_gold_sell_mask_unreadable_dfii10_fail_closed(
     assert "sell_dates" not in btc_cal
     assert set(btc_cal) == set(gold_cal) - {"sell_dates"}
     assert "mask_unavailable" not in btc_notes
+
+
+def test_run_and_write_rolling_z_provenance_records_window_z_without_coefficients(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parameter-free provenance, Ruling 6 (#4804): REAL RollingZRiskModel through run_and_write.
+
+    First real rolling model through the publish path (research built it via
+    run_gold_curve_search; every unit pin stubs resolve). The gold arm builds
+    a REAL RollingZRiskModel from the resolve kwargs — rails + index
+    materialize for real — so provenance must record the window/z params
+    instead of crashing on the fit-model assumption, and must NOT fabricate
+    a Coefficients note. The paired BTC arm (fitted stub carrying
+    .coefficients) proves fitted-model provenance is byte-unchanged.
+    """
+    from types import SimpleNamespace
+
+    import digiquant.strategies.sdca.providers as providers_mod
+    from digiquant.strategies.sdca.rolling_z import RollingZRiskModel
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2020, 1, 1), 300
+    _daily_ohlcv(start, days, close0=2500.0, symbol="GLD-USD").write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    uup_dates = [start + timedelta(days=i) for i in range(days)]
+    pl.DataFrame({"date": uup_dates, "value": [28.0 * (1.0005**i) for i in range(days)]}).write_csv(
+        cache / "UUP.csv"
+    )
+    output = tmp_path / "out"
+
+    class _StubFittedModel:
+        """Fitted-model shape (btc_power_law / generic_valuation): carries .coefficients."""
+
+        def __init__(self) -> None:
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        if name == "rolling_z":
+            return RollingZRiskModel(
+                kwargs["dates"],
+                kwargs["price"],
+                window=int(kwargs["rolling_window"]),
+                z=float(kwargs["rolling_z"]),
+            )
+        return _StubFittedModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        assert Path(calibration["risk_path"]).exists()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    settings = gts.load_settings()
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+    gold_notes = " ".join(json.loads((output / "gold_sdca.json").read_text())["notes"])
+    assert "risk_model=rolling_z" in gold_notes
+    assert "window=90" in gold_notes
+    assert "z=1.0" in gold_notes
+    assert "Coefficients" not in gold_notes
+
+    # PAIRED fitted-path assert: BTC provenance byte-unchanged.
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert btc_entry is not None
+    btc_notes = " ".join(json.loads((output / "btc_sdca.json").read_text())["notes"])
+    assert f"Coefficients {start} → {start + timedelta(days=days - 1)} ({days} rows)" in btc_notes
+    assert "Preset btc_optimized" in btc_notes

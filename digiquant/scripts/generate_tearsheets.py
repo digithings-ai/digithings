@@ -857,7 +857,7 @@ def run_and_write(
             risk_model=model,
         )
         sdca_index = index
-        coefficients = model.coefficients
+        coefficients = getattr(model, "coefficients", None)
         calibration = {
             "risk_path": str(tmp_risk),
             "curve_nodes": preset.curve_nodes,
@@ -974,10 +974,18 @@ def run_and_write(
                 + ", ".join(dropped_this_run)
                 + " (missing source series)."
             )
-        provenance_notes.append(
-            f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
-            f"({coefficients.fit_rows} rows). Preset {preset_name}."
-        )
+        if coefficients is not None:
+            provenance_notes.append(
+                f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
+                f"({coefficients.fit_rows} rows). Preset {preset_name}."
+            )
+        else:
+            # Parameter-free model (rolling_z, Ruling 6 #4804): no fit, so no
+            # Coefficients note — record the rail params instead.
+            provenance_notes.append(
+                f"Rolling-z rails (no fit): window={model.window}, z={model.z}. "
+                f"Preset {preset_name}."
+            )
         provenance_notes.append(
             "Nautilus venue: spot CurrencyPair + CASH (remaining cash / remaining "
             "holdings). Engine bars from trade_start; risk index uses the full "
