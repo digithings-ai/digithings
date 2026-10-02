@@ -19,6 +19,7 @@ from digivoice.pixel_hero import (
     render_pixel_hero,
     word_cells,
 )
+
 from digivoice.tui import render_screen, render_wordmark_lines
 
 pytestmark = pytest.mark.unit
