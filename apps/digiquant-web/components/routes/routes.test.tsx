@@ -31,7 +31,7 @@ describe("linked routes", () => {
     const detail = renderToStaticMarkup(await TearsheetPage({ params: Promise.resolve({ id: "btc_slapper" }) }));
     expect(detail).toContain("CAGR");
     expect(detail).toContain("—");
-    expect(detail).toContain("not connected");
+    expect(detail).toContain("official API");
     expect(detail).not.toContain(">placeholder<");
   });
 });
