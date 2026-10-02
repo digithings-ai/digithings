@@ -20,27 +20,16 @@ export const metadata: Metadata = {
     "how to ask a privacy question.",
 };
 
-const EFFECTIVE_DATE = "August 5, 2026";
+const EFFECTIVE_DATE = "October 2, 2026";
 
-// /legal/privacy, rebuilt on the document grammar (D1, #4429): one framed
-// column, a hairline between sections, the `[*]` row grammar. Four sections —
-// the notice, the optional chat, browser storage, and questions — no card
-// grid, no alternating bands.
-//
-// The facts here are the point of the page, so the copy is the checked copy,
-// not marketing: only `digichat:provider` and `digichat:model` are written to
-// storage (lib/providerSettings.ts), a provider key lives in memory for the tab
-// and is never persisted, a key left by an earlier build is purged from local
-// and session storage on load (components/LegacyByokPurge.tsx, #2348), and the
-// provider list is the five functions/api/byok/test.ts validates
-// (openrouter, openai, anthropic, gemini, xai). EFFECTIVE_DATE is unchanged:
-// the data flows did not change, only a description of them.
-//
-// Two mechanism claims were tightened to match the code as it is now, since the
-// old /api/chat Pages Function is retired (a 410 stub): key forwarding is
-// attributed to "our backend" rather than that Function, and the chat
-// rate-limit counter is the chat backend's in-process window
-// (digichat/lib/bff-rate-limit.ts) rather than Cloudflare KV.
+// Facts checked against the live chat frame, not the retired Pages Function:
+// ungated embed is free_then_byok (no key → digigraph on the operator model;
+// x-byok-key forwards a visitor key). Theme is dt-theme in this site's
+// localStorage. Provider/model is the digichat cookie digichat_byok_pref
+// (one year). The key stays in memory. The embed session
+// (digichat_embed_session:) keeps up to 40 messages for 24 hours so fullscreen
+// continues the same thread. A one-shot digichat:handoff prompt expires in
+// five minutes. Legacy keys are still purged on load.
 
 export default function PrivacyPage() {
   return (
@@ -90,26 +79,26 @@ export default function PrivacyPage() {
           <Section
             id="optional-chat"
             title="Optional chat"
-            lede="The chat is optional and runs against the provider you choose."
+            lede="The chat is optional. Without a key of your own, the thread goes to digigraph on the operator's model."
           >
             <GlyphList>
               <GlyphRow label="Messages">
-                When you use digichat, your message and the recent conversation are sent through our
-                backend to the selected model provider. The provider processes that content under
-                its own terms and privacy policy. Do not submit confidential, personal, or regulated
-                information that you do not want processed by that provider.
+                Without a key of your own, your message and the recent conversation are sent to
+                digigraph and answered on the operator&rsquo;s model. If you supply a key, that
+                request is forwarded to OpenRouter, OpenAI, Anthropic, Google, or xAI, according to
+                your selection. Do not submit confidential, personal, or regulated information you
+                do not want processed that way.
               </GlyphRow>
               <GlyphRow label="Documentation search">
-                Questions about digithings may also be sent to our hosted documentation search so the
-                assistant can retrieve relevant public project documentation. Search results are
-                then included in the request sent to the model provider.
+                The assistant can call a documentation search. When it does, the question goes to
+                our hosted search and the results are included in the model request. Not every reply
+                uses that tool.
               </GlyphRow>
               <GlyphRow label="Provider keys">
                 If you bring your own key, it stays in memory for the current tab. It is never
-                written to local storage or any other browser storage, and it is gone when you close
-                or refresh the tab. Each chat or key-test request sends it to our backend, which
-                forwards it to OpenRouter, OpenAI, Anthropic, Google, or xAI, according to your
-                selection. We do not write the key to an application database.
+                written to local storage, cookies, or an application database, and it is gone when
+                you close or refresh the tab. Each chat or key-test request sends it to our backend,
+                which forwards it to the provider you selected.
               </GlyphRow>
               <GlyphRow label="Abuse prevention">
                 Chat requests are rate-limited by IP address in one-minute windows, using a
@@ -127,22 +116,23 @@ export default function PrivacyPage() {
           >
             <Prose>
               <p>
-                The site stores a small number of preferences in your browser using local storage:
-                your colour theme and, if you choose to configure chat, your selected provider and
-                model. Those values remain until you remove them through your browser or clear them
-                in chat settings. An older version of this site also stored a provider key; that
-                legacy entry is no longer read and is deleted from local and session storage when a
-                page loads.
+                This site stores your colour theme in local storage (<Mono>dt-theme</Mono>) until
+                you clear it. Scroll position for a visit is kept in session storage and disappears
+                when the tab closes. An older build stored a provider key; that entry is no longer
+                read and is deleted from local and session storage when a page loads.
               </p>
               <p>
-                Chat messages, and any provider key you entered, remain in the current page&rsquo;s
-                memory and disappear when that page is closed or refreshed.
+                The chat frame, which may be a different origin from this page, stores the current
+                conversation in its own local storage (<Mono>digichat_embed_session:</Mono>) for up
+                to 24 hours and at most 40 messages, so opening the full chat page continues the
+                same session. It also stores a web-search on/off flag and a free-turn counter. Your
+                selected provider and model are a cookie on that origin (<Mono>digichat_byok_pref</Mono>),
+                kept for one year. The key itself is not in that cookie.
               </p>
               <p>
-                When the homepage opens a conversation in the full chat page, it temporarily puts
-                that conversation in local storage. The chat page reads and deletes it once. If the
-                stored handoff is more than five minutes old when read, it is discarded; if the chat
-                page never opens, it remains until you clear the site&rsquo;s local data.
+                A prompt that opens chat from a module card is written once to this site&rsquo;s
+                local storage (<Mono>digichat:handoff</Mono>). The chat frame reads it and deletes
+                it. If it is more than five minutes old, it is discarded.
               </p>
             </Prose>
           </Section>

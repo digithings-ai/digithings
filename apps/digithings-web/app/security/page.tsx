@@ -49,14 +49,15 @@ const IDENTITY: { term: string; body: string }[] = [
     term: "Revocation",
     body:
       "With Redis configured, a revoked key is blocked on its next request. Without it, issued " +
-      "tokens stay valid until they expire.",
+      "tokens stay valid until they expire. SECURITY.md still calls revocation a roadmap item; " +
+      "trust this page until that file is updated.",
   },
 ];
 
 const TRACEABILITY: { term: string; body: string }[] = [
   {
     term: "A request id on every hop",
-    body: "Each request carries one id across every service call and into every log line.",
+    body: "Each request carries one id across service calls. That id is recorded on the request log.",
   },
   {
     term: "An audit trail on your host",
@@ -74,8 +75,8 @@ const PIPELINE: { term: string; body: string }[] = [
   {
     term: "Secret scanning",
     body:
-      "Every code pull request is scanned for leaked secrets, and the full history on every push " +
-      "to the release branches. A finding fails the build.",
+      "Every pull request is scanned for leaked secrets, and the full history on every push to " +
+      "develop and main. A finding fails the build.",
   },
   {
     term: "Dependency audits",

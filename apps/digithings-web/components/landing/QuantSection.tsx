@@ -530,7 +530,11 @@ export function QuantSection({ className }: { className?: string }) {
                 </a>
               </h2>
               <p className="m-0 max-w-[var(--measure-prose)] text-[0.92rem] leading-[1.6] text-ink-soft">
-                A hedge fund in a glass box you own.
+                Quant research you can read end to end, on hardware you run.
+              </p>
+              <p className="m-0 max-w-[var(--measure-prose)] text-[0.78rem] leading-[1.55] text-ink-mute">
+                Published figures are a record from the API. They are not a forecast, and this is
+                not a fund.
               </p>
             </div>
 

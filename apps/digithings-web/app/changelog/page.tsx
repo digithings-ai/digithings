@@ -14,7 +14,7 @@ import releases from "@digithings/design/releases.json";
 export const metadata: Metadata = {
   title: "changelog — tagged frontend releases",
   description:
-    "Tagged digichat and digiskills releases from the digithings repository. Dates and titles come from the shipped CHANGELOG files, not a marketing rewrite.",
+    "Tagged digichat and digiskills releases. Each row is a short note from that version's changelog, not the full file.",
 };
 
 // /changelog — the release rows on the document grammar (D1, #4429): one framed
@@ -59,7 +59,7 @@ export default function ChangelogPage() {
           <Section
             id="releases"
             title="Releases"
-            lede="Newest first, taken directly from each package's CHANGELOG. The rest of the stack ships continuously without a version tag."
+            lede="Newest first. Each row is a tagged GitHub release, with a short note from that version's changelog — not the full file. The rest of the stack ships continuously without a version tag."
           >
             <ReleaseRail items={ENTRIES} />
             <div className="mt-[1.6rem]">
