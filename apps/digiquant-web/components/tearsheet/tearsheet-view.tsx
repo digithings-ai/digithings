@@ -150,14 +150,14 @@ function TearsheetUnavailable({ slug, message }: { slug: string; message: string
           </div>
         </div>
       </header>
-      <dl className="m-0 grid grid-cols-2 gap-3 border border-hair p-4 sm:grid-cols-3">
+      <dl className="m-0 grid grid-cols-2 gap-px border border-hair bg-hair sm:grid-cols-3">
         {(dca
           ? [TOTAL_RETURN_KPI_LABEL, "Max DD", VS_LUMP_KPI_LABEL, ALLOCATED_KPI_LABEL]
           : ["CAGR", "Max DD", "Profit factor", "Win rate", "Avg trade", "Trades"]
         ).map((label) => (
-          <div key={label}>
-            <dt className="font-mono text-[0.65rem] uppercase tracking-wide text-ink-mute">{label}</dt>
-            <dd className="m-0 font-mono text-ink">—</dd>
+          <div key={label} className="bg-surface px-3 py-2">
+            <dt className="font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">{label}</dt>
+            <dd className="m-0 mt-1 font-mono text-[0.9rem] leading-none text-ink">—</dd>
           </div>
         ))}
       </dl>

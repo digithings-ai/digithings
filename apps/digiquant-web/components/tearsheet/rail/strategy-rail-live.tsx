@@ -42,7 +42,7 @@ export function StrategyRailLive() {
   );
 
   const chips = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       <Badge variant="outline" className="text-ink-soft">
         backtest · illustrative, in-sample
       </Badge>
@@ -56,14 +56,19 @@ export function StrategyRailLive() {
         ? "Reading published tearsheets. Statistics stay an em dash until that read returns."
         : "The official API has not published strategy statistics. They stay an em dash.";
     return (
-      <div className="grid gap-4">
-        {chips}
-        <p role="status" className="m-0 font-mono text-[0.72rem] text-ink-soft">
-          {message}
-        </p>
-        <ul aria-label="Unpublished strategies" className="m-0 grid list-none gap-4 p-0 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {chips}
+          <p role="status" className="m-0 font-mono text-[0.66rem] leading-[1.4] text-ink-mute">
+            {message}
+          </p>
+        </div>
+        <ul
+          aria-label="Unpublished strategies"
+          className="m-0 grid list-none gap-px border border-hair bg-hair p-0 md:grid-cols-2 xl:grid-cols-4"
+        >
           {PUBLISHED_STRATEGIES.map((s) => (
-            <li key={s.id} className="min-w-0">
+            <li key={s.id} className="min-w-0 bg-surface">
               <UnpublishedStrategyCard id={s.id} label={s.label} symbol={s.symbol} />
             </li>
           ))}
@@ -76,14 +81,15 @@ export function StrategyRailLive() {
     <CardRail
       ariaLabel="Strategy tearsheets"
       header={chips}
-      itemClassName="w-[min(82vw,20rem)]"
+      className="gap-2 [&_.snap-x]:gap-3 [&_.snap-x]:py-2"
+      itemClassName="w-[min(82vw,18.5rem)]"
       prevLabel="Previous tearsheet"
       nextLabel="Next tearsheet"
     >
       {sorted.map((e) => (
-        <div key={e.strategy} className="flex h-full flex-col gap-2">
+        <div key={e.strategy} className="flex h-full flex-col gap-1">
           <StrategyCard e={e} />
-          <p className="m-0 font-mono text-[0.65rem] text-ink-mute">
+          <p className="m-0 font-mono text-[0.62rem] leading-[1.35] text-ink-mute">
             in-sample {e.period_start} → {e.period_end} · not a forecast
           </p>
         </div>

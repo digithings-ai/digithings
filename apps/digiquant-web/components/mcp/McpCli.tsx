@@ -20,8 +20,12 @@ const PROMPT = (
   </span>
 );
 
+/** Pane scroller only: thin ink-mute thumb, no track paint. Not the page scrollbar. */
+const PANE_SCROLL =
+  "[scrollbar-width:thin] [scrollbar-color:color-mix(in_srgb,var(--ink-mute)_50%,transparent)_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:bg-transparent [&::-webkit-scrollbar-track]:border-0 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:border-0 [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--ink-mute)_50%,transparent)] [&::-webkit-scrollbar-corner]:bg-transparent";
+
 function Pane({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`min-w-0 overflow-y-auto ${className}`}>{children}</div>;
+  return <div className={`min-w-0 overflow-y-auto ${PANE_SCROLL} ${className}`}>{children}</div>;
 }
 
 function ToolList({

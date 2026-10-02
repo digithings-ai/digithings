@@ -83,17 +83,18 @@ export function PipelineBand() {
         }
       >
         {PIPELINE_STAGES.map((name, i) => (
-          <li key={name} className="flex min-w-0 snap-start">
+          <li key={name} className="flex min-w-0">
             <StageCard
               index={i}
               total={total}
               name={name}
               hasRun={snap !== null}
+              runDate={snap?.runDate ?? null}
               recorded={snap?.stages.find((s) => s.name === name)}
             />
           </li>
         ))}
-        <li className="flex min-w-0 snap-start">
+        <li className="flex min-w-0">
           <ExecutionCard index={PIPELINE_STAGES.length} total={total} status={EXECUTION_STAGE.status} />
         </li>
       </StageRunway>
