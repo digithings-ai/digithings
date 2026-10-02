@@ -180,6 +180,45 @@ def test_bridge_hotkey_apply_writes_the_binding(tmp_path: Path) -> None:
     assert load_settings(paths).hotkey_bindings.dictation == "ctrl+shift+space"
 
 
+def test_option_lock_in_reloads_hammerspoon(tmp_path: Path) -> None:
+    """A bare Option name is Right Option, and Enter asks Hammerspoon to reload."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    hs = bindir / "hs"
+    hs.write_text("#!/bin/sh\n", encoding="utf-8")
+    hs.chmod(0o755)
+    env = {"DIGIVOICE_DATA_DIR": str(tmp_path), "PATH": str(bindir)}
+    runner = FakeRunner()
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/hotkeys"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=runner,
+    )["rows"]
+    index = next(i for i, row in enumerate(rows) if row["name"] == "dictation")
+    refused = dispatch(
+        {"op": "apply", "path": "/settings/hotkeys", "index": index, "text": "not-a-key"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=runner,
+    )
+    assert refused["saved"] is False
+    assert runner.calls == []
+    saved = dispatch(
+        {"op": "apply", "path": "/settings/hotkeys", "index": index, "text": "option"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=runner,
+    )
+    assert saved["saved"] is True
+    paths = resolve_paths("linux", tmp_path, env)
+    assert load_settings(paths).hotkey_bindings.dictation == "option"
+    assert [call.argv for call in runner.calls] == [["hs", "-c", "hs.reload()"]]
+
+
 def test_bridge_history_row_is_the_timestamp(tmp_path: Path) -> None:
     env = _env(tmp_path)
     paths = resolve_paths("linux", tmp_path, env)

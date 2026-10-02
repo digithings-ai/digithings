@@ -110,6 +110,8 @@ def parse_binding(text: str) -> BindingSpec | None:
         return BindingSpec(keycode=58, kind="flags", alt=True, double=True)
     if name in {"esc", "escape"}:
         return BindingSpec(keycode=53, kind="key")
+    if name in {"option", "alt", "opt"}:
+        return BindingSpec(keycode=61, kind="flags", alt=True)
     ctrl = shift = alt = cmd = double = False
     key: str | None = None
     for token in _split_plus(name):

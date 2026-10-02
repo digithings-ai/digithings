@@ -27,3 +27,13 @@ def test_garbage_is_not_a_key() -> None:
     warning = binding_warning("dictation", "not-a-key", "Right Option")
     assert warning == "dictation binding 'not-a-key' is not a key; keeping Right Option"
     assert binding_warning("dictation", "Esc", "Right Option") is None
+
+
+def test_bare_option_is_right_option() -> None:
+    for name in ("option", "alt", "opt", "Option"):
+        spec = parse_binding(name)
+        assert spec is not None
+        assert spec.keycode == 61
+        assert spec.kind == "flags"
+    left = parse_binding("Left Option")
+    assert left is not None and left.keycode == 58

@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { createTestRenderer } from "@opentui/core/testing"
 
-import { FOOTER, mountDigivoice, onHangup } from "../src/app.js"
+import { FOOTER, mountDigivoice, onHangup, optionBinding } from "../src/app.js"
 import { BUILD_MS, SHADES, letterGap, wordmarkLines } from "../src/hero.js"
 
 const HOME_ROWS = [
@@ -82,6 +82,15 @@ async function settle(setup) {
   await setup.renderOnce()
 }
 
+test("a physical option press fills a binding the adapter can arm", () => {
+  assert.equal(optionBinding({ name: "option" }), "Right Option")
+  assert.equal(optionBinding({ name: "alt" }), "Right Option")
+  assert.equal(optionBinding({ name: "", option: true }), "Right Option")
+  assert.equal(optionBinding({ name: "option", keycode: 58 }), "Left Option")
+  assert.equal(optionBinding({ name: "option", code: "AltRight" }), "Right Option")
+  assert.equal(optionBinding({ name: "a", option: true, ctrl: true }), "")
+})
+
 test("wordmark is five rows with gap 2 and one color mode", () => {
   assert.equal(letterGap(120, 9), 2)
   const cube = wordmarkLines("DIGIVOICE", { cols: 120, tMs: BUILD_MS, truecolor: false })
@@ -127,6 +136,10 @@ test("home pins the hero and esc does not quit", async () => {
     const footerAt = lines.findIndex((line) => line.includes(FOOTER))
     assert.ok(footerAt > 40, "the footer stays at the bottom")
     assert.ok(footerAt > historyAt)
+    const bracketAt = (token) => lines.find((line) => line.includes(token)).indexOf("[")
+    assert.equal(bracketAt("[*] /history"), bracketAt("[ ] /quit"))
+    const heroCol = lines.find((line) => /[█▀▄]/.test(line)).search(/\S/)
+    assert.ok(heroCol > bracketAt("[*] /history"))
     setup.mockInput.pressArrow("down")
     await setup.renderOnce()
     assert.match(setup.captureCharFrame(), /\[\*\] \/settings/)
@@ -390,6 +403,24 @@ test("a hotkey is stored only when enter locks it in", async () => {
     await setup.waitForFrame((value) => value.includes("/hotkeys"))
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/dictation") && value.includes("Right Option"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("input new hotkey"))
+    setup.renderer.keyInput.processParsedKey({
+      name: "option",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      option: true,
+      sequence: "",
+      number: false,
+      raw: "",
+      eventType: "press",
+      source: "raw",
+      keycode: 58,
+    })
+    await setup.waitForFrame((value) => value.includes("input new hotkey") && value.includes("Left Option"))
+    setup.mockInput.pressEscape()
+    await settle(setup)
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("input new hotkey"))
     setup.mockInput.pressKey("f")

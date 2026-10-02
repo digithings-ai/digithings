@@ -23,6 +23,7 @@ from digivoice.installed_models import InstalledModel, discover_installed_models
 from digivoice.models import VoicePaths
 from digivoice.nav import norm_path
 from digivoice.paths import DEFAULT_MODEL
+from digivoice.reload import run_reload
 from digivoice.settings import (
     LOCAL_REWRITE_MODEL_FILE,
     PRESET_LABELS,
@@ -652,6 +653,7 @@ def browse_settings(
                 continue
             settings = nxt
             save_settings(paths, settings)
+            run_reload(sys.platform, Path.home(), dict(os.environ))
             continue
         typed: str | None = None
         nxt = _changed(settings, row, typed)

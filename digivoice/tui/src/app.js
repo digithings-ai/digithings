@@ -7,7 +7,7 @@ export const HOTKEY_PROMPT = "input new hotkey"
 
 const FRAME_MS = 40
 const SPIN = ["·", "··", "···"]
-const ROW_PAD = "    "
+const FRAME_WIDTH = 80
 
 function colorOf(cell) {
   if (!cell.color) return null
@@ -111,10 +111,30 @@ function rowValue(row) {
   return meta
 }
 
+export function optionBinding(key) {
+  const name = String(key?.name || "").toLowerCase()
+  if (key?.ctrl || key?.shift || key?.super || name.length === 1) return ""
+  const named = name === "option" || name === "alt" || name === "opt"
+  const modifierOnly = !name && Boolean(key?.option || key?.meta)
+  if (!named && !modifierOnly) return ""
+  const code = String(key?.code || "")
+  const keycode = Number(key?.keycode ?? key?.keyCode)
+  const location = key?.location
+  if (code === "AltLeft" || location === 1 || location === "left" || keycode === 58) {
+    return "Left Option"
+  }
+  if (code === "AltRight" || location === 2 || location === "right" || keycode === 61) {
+    return "Right Option"
+  }
+  return "Right Option"
+}
+
 function draftFrom(key) {
   const name = key.name
-  const modified = Boolean(key.ctrl || key.option || key.meta || key.super)
+  const option = optionBinding(key)
   if (name === "backspace") return { edit: "backspace" }
+  if (option) return { replace: option }
+  const modified = Boolean(key.ctrl || key.option || key.meta || key.super)
   if (modified) {
     const parts = []
     if (key.ctrl) parts.push("ctrl")
@@ -157,52 +177,75 @@ export function mountDigivoice(renderer, session, options = {}) {
     resolveDone = resolve
   })
 
+  const frameWidth = Math.max(48, Math.min(cols - 2, FRAME_WIDTH))
   const root = new BoxRenderable(renderer, {
     width: "100%",
     height: "100%",
     flexDirection: "column",
     alignItems: "center",
+    justifyContent: "flex-start",
   })
-  const heroBox = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "center" })
+  const frame = new BoxRenderable(renderer, {
+    width: frameWidth,
+    height: "100%",
+    flexDirection: "column",
+    alignItems: "stretch",
+  })
+  const heroBox = new BoxRenderable(renderer, {
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "center",
+  })
   const heroLines = Array.from({ length: 5 }, () => new TextRenderable(renderer, { content: "" }))
   for (const line of heroLines) heroBox.add(line)
+  const statusBox = new BoxRenderable(renderer, { width: "100%", alignItems: "center" })
   const statusNode = new TextRenderable(renderer, { content: "" })
+  statusBox.add(statusNode)
   const topGap = new BoxRenderable(renderer, { height: HERO_GAP })
   const page = new BoxRenderable(renderer, {
     flexGrow: 1,
     width: "100%",
     overflow: "hidden",
     flexDirection: "column",
-    alignItems: "center",
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
   })
   const column = new BoxRenderable(renderer, {
+    width: "100%",
     flexDirection: "column",
     alignItems: "flex-start",
   })
-  const list = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
+  const list = new BoxRenderable(renderer, {
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "flex-start",
+  })
   const pager = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
   const bottomGap = new BoxRenderable(renderer, { height: HERO_GAP })
+  const footerBox = new BoxRenderable(renderer, { width: "100%", alignItems: "center" })
   const footer = new TextRenderable(renderer, { content: FOOTER })
   footer.onMouseDown = () => {
     goBack()
   }
+  footerBox.add(footer)
   column.add(list)
   column.add(pager)
   page.add(column)
-  root.add(heroBox)
-  root.add(statusNode)
-  root.add(topGap)
-  root.add(page)
-  root.add(bottomGap)
-  root.add(footer)
+  frame.add(heroBox)
+  frame.add(statusBox)
+  frame.add(topGap)
+  frame.add(page)
+  frame.add(bottomGap)
+  frame.add(footerBox)
+  root.add(frame)
   renderer.root.add(root)
 
   const rowNodes = []
   const pageNodes = []
 
   function paintHero() {
-    const frame = wordmarkLines("DIGIVOICE", { cols, tMs, truecolor })
-    frame.lines.forEach((cells, index) => {
+    const drawn = wordmarkLines("DIGIVOICE", { cols: frameWidth, tMs, truecolor })
+    drawn.lines.forEach((cells, index) => {
       heroLines[index].content = paintCells(cells)
     })
   }
@@ -298,7 +341,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     if (gray) {
       const line = new TextRenderable(renderer, {
-        content: mutedLine(`${ROW_PAD}${gray}`, truecolor),
+        content: mutedLine(gray, truecolor),
       })
       if (row.kind !== "note") line.onMouseDown = press
       block.add(line)

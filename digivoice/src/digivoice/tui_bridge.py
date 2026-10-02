@@ -214,8 +214,9 @@ def dispatch(
     if op == "rows":
         path = norm_path(str(req.get("path") or "/settings"))
         return {"footer": footer, "path": path, "rows": _settings_rows(paths, path)}
+    active = runner or run_command
     if op == "apply":
-        return _apply(paths, req)
+        return _apply(paths, req, platform=platform, home=home, env=env, runner=active)
     if op == "history":
         page = int(req.get("page") or 1) - 1
         payload = _history_page(paths, page)
@@ -254,7 +255,7 @@ def dispatch(
         save_settings(paths, load_settings(paths))
         return {"footer": footer, "saved": True}
     if op == "reload":
-        result = run_reload(platform, home, env, runner=run_command)
+        result = run_reload(platform, home, env, runner=active)
         note = result.stdout.strip() or result.stderr.strip() or "reload finished"
         return {"footer": footer, "note": note}
     if op == "reset":
@@ -334,7 +335,15 @@ def _open_path(
     }
 
 
-def _apply(paths: Any, req: dict[str, Any]) -> dict[str, Any]:
+def _apply(
+    paths: Any,
+    req: dict[str, Any],
+    *,
+    platform: str,
+    home: Path,
+    env: dict[str, str],
+    runner: CommandRunner,
+) -> dict[str, Any]:
     path = norm_path(str(req.get("path") or "/settings"))
     settings = load_settings(paths)
     installed = discover_installed_models(Path.home(), dict(os_environ()))
@@ -368,7 +377,12 @@ def _apply(paths: Any, req: dict[str, Any]) -> dict[str, Any]:
         if nxt is None:
             return {"note": "binding unchanged", "saved": False}
         save_settings(paths, nxt)
-        return {"saved": True, "rows": _settings_rows(paths, path)}
+        armed = run_reload(platform, home, env, runner=runner)
+        return {
+            "saved": True,
+            "rows": _settings_rows(paths, path),
+            "reload": armed.stdout.strip() or armed.stderr.strip() or "reload finished",
+        }
     if row.kind != "choice":
         return {"note": row.explain}
     missing = _missing_catalog(paths, row)
