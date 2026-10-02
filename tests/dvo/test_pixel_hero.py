@@ -196,7 +196,7 @@ def test_home_hero_is_a_simple_wordmark() -> None:
         rows=48,
         use_ansi=False,
         clear=False,
-        t_ms=1200,
+        t_ms=1600,
     )
     body = frame.replace("\r\n", "\n")
     lines = body.splitlines()
@@ -224,7 +224,7 @@ def test_mid_height_terminal_keeps_the_simple_wordmark_and_menu() -> None:
         cols=100,
         rows=36,
         use_ansi=False,
-        t_ms=900,
+        t_ms=1600,
     )
     body = frame.replace("\r\n", "\n")
     lines = body.splitlines()

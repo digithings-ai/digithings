@@ -1,10 +1,12 @@
 """Shared stdlib TUI primitives: fullscreen frames, pixel wordmark, menus.
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
-viewport: alternate screen, one repaint per key. The home hero is the
-centered five-row DIGIVOICE half-block wordmark in the terminal's own
-foreground (dim, bold, and a quiet inverse glint). Menus use a step rail.
-The selected row is a bold ``[*]``; other rows are ``[ ]``.
+viewport: alternate screen, one repaint per key. The home hero is the landing pixel lockup: DIGIVOICE builds in over about a
+second, then a voice waveform of dim blocks keeps moving behind it. The
+mark uses the terminal foreground (dim, bold, and a quiet inverse glint).
+The fact line under it is the mono chrome the site sets in JetBrains Mono;
+a terminal cannot change its own face. Menus use a step rail. The selected
+row is a bold ``[*]``; other rows are ``[ ]``.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -13,6 +15,7 @@ that feed StringIO never hang and never gain cursor codes.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import select
@@ -24,7 +27,7 @@ import tty
 from collections.abc import Sequence
 from typing import TextIO
 
-from digivoice.pixel_hero import PIXEL_GLYPHS
+from digivoice.pixel_hero import PIXEL_GLYPHS, cell_hash, word_cells
 
 # TTY contract:
 # - Full viewport: alternate screen while a shell is open, CSI clear + home
@@ -268,6 +271,82 @@ def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tu
     return found
 
 
+# Landing pixel-build runs out by ~1.1s; strays finish a little later.
+_BUILD_MS = 1400
+_HERO_FACT = "local speech  /  on this mac  /  no cloud"
+
+
+def _reveal_alpha(
+    delay_ms: int, duration_ms: int, t_ms: int, final: float, a: float, b: float, c: float
+) -> float:
+    """Stepped opacity from the landing ``pixel-build`` keyframes."""
+    if t_ms < delay_ms:
+        return 0.0
+    span = max(1, duration_ms)
+    if t_ms >= delay_ms + span:
+        return final
+    progress = (t_ms - delay_ms) / span
+    if progress < 0.33:
+        return a
+    if progress < 0.66:
+        return b
+    return c
+
+
+def _alpha_sgr(alpha: float) -> str:
+    if alpha >= 0.9:
+        return "\x1b[1m"
+    if alpha < 0.55:
+        return "\x1b[2m"
+    return ""
+
+
+def _voice_shade(x: int, y: int, cols: int, rows: int, t_ms: int) -> str:
+    """One cell of a speech waveform. Sparse blocks, same gloom as the landing field."""
+    if cols < 8 or rows < 3:
+        return " "
+    breath = (t_ms % 2400) / 2400
+    level = 0.0
+    u = x / cols
+    for index, origin in enumerate((0.18, 0.5, 0.78)):
+        drift = 0.035 * math.sin((breath + index * 0.2) * math.tau)
+        dx = (u - (origin + drift)) / 0.13
+        lobe = max(0.0, 1.0 - dx * dx)
+        syllable = 0.4 + 0.6 * abs(math.sin(breath * math.tau * (1.15 + 0.28 * index) + index))
+        level = max(level, lobe * syllable)
+    if level < 0.14:
+        return " "
+    mid = (rows - 1) / 2
+    dist = abs(y - mid) / (rows / 2)
+    if dist > level:
+        return " "
+    if cell_hash(x, y + t_ms // 180) > 0.42:
+        return " "
+    if dist < level * 0.38:
+        return "▒"
+    return "░"
+
+
+def _shade_span(start: int, count: int, y: int, cols: int, rows: int, t_ms: int, ansi: bool) -> str:
+    parts: list[str] = []
+    dirty = False
+    for offset in range(count):
+        ch = _voice_shade(start + offset, y, cols, rows, t_ms)
+        if ch == " ":
+            if dirty and ansi:
+                parts.append(_ANSI_RESET)
+                dirty = False
+            parts.append(" ")
+            continue
+        if ansi and not dirty:
+            parts.append("\x1b[2m")
+            dirty = True
+        parts.append(ch)
+    if dirty and ansi:
+        parts.append(_ANSI_RESET)
+    return "".join(parts)
+
+
 def _cell_sgr(x: int, y: int, phase: int, glints: dict[tuple[int, int], int], hot_ok: bool) -> str:
     """One foreground: dim, bold, or inverse. No extra hue."""
     gi = glints.get((x, y))
@@ -280,6 +359,25 @@ def _cell_sgr(x: int, y: int, phase: int, glints: dict[tuple[int, int], int], ho
     return ""
 
 
+def _timed_pixels(
+    word: str, cols: int, t_ms: int
+) -> tuple[dict[tuple[int, int], float], set[tuple[int, int]]]:
+    """Letter alphas and the strays that are flickering at ``t_ms``."""
+    gap = _letter_gap(cols, max(1, len(word)))
+    letters, stray = word_cells(word, gap)
+    alphas: dict[tuple[int, int], float] = {}
+    for cell in letters:
+        alpha = _reveal_alpha(cell.delay_ms, cell.duration_ms, t_ms, cell.f, cell.a, cell.b, cell.c)
+        if alpha > 0:
+            alphas[(cell.x, cell.y)] = alpha
+    flickering = {
+        (cell.x, cell.y)
+        for cell in stray
+        if cell.delay_ms <= t_ms < cell.delay_ms + max(1, cell.duration_ms)
+    }
+    return alphas, flickering
+
+
 def render_wordmark_lines(
     word: str = "DIGIVOICE",
     *,
@@ -287,18 +385,25 @@ def render_wordmark_lines(
     phase: int = 0,
     frac: float = 1.0,
     ansi: bool = False,
+    t_ms: int | None = None,
 ) -> list[str]:
-    """Five half-block rows. `frac` reveals cells for the build-in; `phase` glints."""
+    """Five half-block rows. `frac` reveals cells; `t_ms` plays the landing build."""
     letters = word.upper()
     gap = _letter_gap(cols, max(1, len(letters)))
     grid = _pixel_grid(letters, gap)
     if not grid or not grid[0]:
         return []
     cells = _filled_cells(grid)
-    lit = _lit_set(cells, frac)
+    building = t_ms is not None and t_ms < _BUILD_MS
+    alphas: dict[tuple[int, int], float] = {}
+    if building and t_ms is not None:
+        alphas, strays = _timed_pixels(letters, cols, t_ms)
+        lit = set(alphas)
+    else:
+        lit = _lit_set(cells, frac)
+        strays = _stray_set(len(grid[0]), set(cells), frac)
     glints = _glint_index(cells)
-    strays = _stray_set(len(grid[0]), set(cells), frac)
-    hot_ok = ansi and frac >= 1
+    hot_ok = ansi and not building and frac >= 1
     lines: list[str] = []
     width = len(grid[0])
     for y in range(0, 10, 2):
@@ -324,7 +429,12 @@ def render_wordmark_lines(
                 sx, sy = x, y + 1
             if ansi:
                 stray_only = (sx, sy) in strays and (sx, sy) not in lit
-                sgr = "\x1b[2m" if stray_only else _cell_sgr(sx, sy, phase, glints, hot_ok)
+                if stray_only:
+                    sgr = "\x1b[2m"
+                elif building:
+                    sgr = _alpha_sgr(alphas.get((sx, sy), 0.0))
+                else:
+                    sgr = _cell_sgr(sx, sy, phase, glints, hot_ok)
                 if sgr:
                     parts.append(sgr)
                     dirty = True
@@ -336,6 +446,57 @@ def render_wordmark_lines(
             parts.append(_ANSI_RESET)
         lines.append("".join(parts))
     return lines
+
+
+def render_hero_band(
+    cols: int,
+    *,
+    phase: int = 0,
+    ansi: bool = False,
+    t_ms: int | None = None,
+    pad: bool = False,
+) -> list[str]:
+    """Wordmark, mono fact line, and the voice-block field behind them.
+
+    ``pad`` is the tall header: two waveform rows, the lockup, the fact line,
+    two waveform rows. Short terminals get the lockup alone.
+    """
+    clock = 0 if t_ms is None else t_ms
+    words = render_wordmark_lines(
+        "DIGIVOICE",
+        cols=cols,
+        phase=phase,
+        ansi=ansi,
+        t_ms=t_ms,
+    )
+    if not words or not pad:
+        return words
+    width = _visible_len(words[0])
+    left = max(0, (cols - width) // 2)
+    right = max(0, cols - left - width)
+    band_h = 2 + len(words) + 1 + 2
+
+    def field_row(y: int) -> str:
+        return _shade_span(0, cols, y, cols, band_h, clock, ansi)
+
+    def around(y: int, word: str) -> str:
+        return (
+            _shade_span(0, left, y, cols, band_h, clock, ansi)
+            + word
+            + _shade_span(left + width, right, y, cols, band_h, clock, ansi)
+        )
+
+    fact = _HERO_FACT if len(_HERO_FACT) <= cols else _HERO_FACT[:cols]
+    fact_pad = max(0, (cols - len(fact)) // 2)
+    fact_line = (" " * fact_pad + fact).ljust(cols)
+    if ansi:
+        fact_line = f"\x1b[2m{fact_line}{_ANSI_RESET}"
+    rows = [field_row(0), field_row(1)]
+    rows.extend(around(2 + index, word) for index, word in enumerate(words))
+    rows.append(fact_line)
+    rows.append(field_row(band_h - 2))
+    rows.append(field_row(band_h - 1))
+    return rows
 
 
 def pixel_wordmark(word: str = "DIGIVOICE", fill: str = "█", empty: str = " ") -> str:
@@ -657,17 +818,22 @@ def render_screen(
             ansi=use_ansi,
         )
         header_h = rows - len(panel)
-        needed = 6 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
+        tall = hero and rows >= 42
+        needed = (
+            (10 if tall else 5) if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
+        )
         if header_h >= needed or density == "tight":
             chosen_panel = panel
             break
         chosen_panel = panel
+    pad = bool(hero and rows >= 42 and rows - len(chosen_panel) >= 10)
     word_lines = (
-        render_wordmark_lines(
-            "DIGIVOICE",
-            cols=cols,
+        render_hero_band(
+            cols,
             phase=max(0, elapsed // 160),
             ansi=use_ansi,
+            t_ms=t_ms,
+            pad=pad,
         )
         if hero
         else []
@@ -822,8 +988,9 @@ def choose(
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
     TTY mode paints a step-rail frame and redraws on every key. Space confirms
-    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel wordmark and,
-    when `pulse` is set, lets a few half-block cells glint while idle.
+    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel lockup on a
+    voice-block field. When `pulse` is set, the field keeps moving and a few
+    cells glint. The load itself plays in :func:`play_intro`.
     Returns None on back.
     """
     stdin = stdin or sys.stdin
@@ -840,7 +1007,9 @@ def choose(
         first = True
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
-        born = time.monotonic()
+        # Intro already played the build. Start past it so the menu opens
+        # on the finished lockup while the voice field keeps moving.
+        born = time.monotonic() - (_BUILD_MS / 1000 if hero else 0)
         try:
             _set_menu_raw(fd)
             _cursor(stdout, False)
@@ -860,7 +1029,7 @@ def choose(
                         use_screen=screen,
                         clear=first,
                         redraw=not first,
-                        t_ms=int((time.monotonic() - born) * 1000),
+                        t_ms=int((time.monotonic() - born) * 1000) if live else None,
                     )
                 )
                 stdout.flush()
@@ -1104,10 +1273,10 @@ def _render_menu_frame(
 def play_intro(
     stdout: TextIO,
     subtitle: str | None = None,
-    steps: tuple[float, ...] = (0.22, 0.48, 0.72, 0.9, 1.0),
-    delay: float = 0.045,
+    steps: tuple[float, ...] = (0.0, 0.22, 0.48, 0.74, 1.0),
+    delay: float = 0.16,
 ) -> None:
-    """Brief centered pixel build-in before the home menu. Skips on error."""
+    """Landing-style build: DIGIVOICE cells arrive, strays flicker, field moves."""
     if _reduce_motion():
         return
     cols, rows = _term_size()
@@ -1122,12 +1291,13 @@ def play_intro(
                 _paint(_fit(f"│  {tag}", panel_w), "kv", ansi),
                 _paint(_fit("└", panel_w), "rule", ansi),
             ]
-            word = render_wordmark_lines(
-                "DIGIVOICE",
-                cols=cols,
+            clock = int(frac * _BUILD_MS)
+            word = render_hero_band(
+                cols,
                 phase=index,
-                frac=frac,
                 ansi=ansi,
+                t_ms=clock,
+                pad=rows >= 42,
             )
             stdout.write(
                 _compose(
