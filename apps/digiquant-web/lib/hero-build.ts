@@ -24,3 +24,14 @@ export function buildProgress(elapsedMs: number, f: number): number {
 
 /** Elapsed time after which every candle has finished rising. */
 export const BUILD_DONE_MS = sweepDelayMs(1) + BUILD_RISE_MS;
+
+/** After the wordmark (and hero copy) have settled — chart build starts then. */
+export const COPY_SETTLE_MS = 280;
+export const COPY_DONE_MS = BUILD_DONE_MS + COPY_SETTLE_MS;
+
+/** Vela candle intro duration once the chart phase begins (elegant L→R grow). */
+export const CHART_INTRO_MS = 2400;
+
+/** Stagger between mounting volume-adjacent overlays during the chart build. */
+export const INDICATOR_STAGGER_MS = 520;
+
