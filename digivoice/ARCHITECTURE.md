@@ -16,7 +16,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/speak.py` | Piper synthesis + local player (`afplay` / `aplay` / `ffplay`). |
 | `src/digivoice/history.py` | JSONL append, tolerant read, `--last` / `--grep` / `--copy-last` / `--json`. |
 | `src/digivoice/settings.py` | `settings.json` under the data dir; agent-scriptable get/set. |
-| `src/digivoice/menu_tree.py` | TTY `/settings` path. Enter opens a folder or toggles a value. Each row explains itself. |
+| `src/digivoice/menu_tree.py` | TTY `/settings` path. Enter opens a folder or toggles a value. Each row is a bold name, a bracketed value, and a gray explanation. |
 | `src/digivoice/setup.py` | TTY opens the `/settings` path. Pipes keep the numbered wizard. `--print` overview and `recommend_models()` hardware stub (#4939 hook). |
 | `src/digivoice/tui.py` | Shared stdlib TUI: alternate-screen frames, step-rail menus, intro build-in, wrapping. |
 | `src/digivoice/pixel_hero.py` | 7×10 DIGIVOICE glyph map. The home header paints those glyphs as five half-block rows in `tui.py`. |

@@ -4,7 +4,9 @@ Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
 viewport: alternate screen, one repaint per key. The home hero is the landing pixel lockup: five half-block rows of DIGIVOICE.
 Each cell is an xterm color-cube gray (truecolor when the terminal asks for
 it), the wordmark builds in place, then a few cells glint. Menus use a step rail.
-The selected row is a bold ``[*]``; other rows are ``[ ]``.
+The selected row is a bold ``[*]``; other rows are ``[ ]``. A settings
+row paints the name in bold, the value in brackets, and the explanation
+in a cube gray.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -34,9 +36,10 @@ from digivoice.pixel_hero import PIXEL_GLYPHS, PixelCell, word_cells
 # - Menu loops hold raw *input* so CSI arrows stay intact, but keep OPOST so
 #   NL→CRLF still runs. Full setraw clears OPOST; frames joined with bare LF
 #   then staircase (scattered labels / broken wordmark) on Terminal.app.
-# - Menu color is bold/dim on the terminal's own foreground. The wordmark uses
-#   the xterm 6×6×6 cube (or truecolor when COLORTERM says so). The gray ramp
-#   232–255 and bold/dim both collapse to one white in Terminal.app.
+# - Menu color is bold/dim on the terminal's own foreground. Settings rows
+#   put the value in brackets and the explanation in a cube gray (index 145),
+#   because dim and the 232–255 ramp both collapse to white in Terminal.app.
+#   The wordmark uses the xterm 6×6×6 cube (or truecolor when COLORTERM says so).
 #   `NO_COLOR` or `TERM=dumb` skips color. `DIGIVOICE_REDUCE_MOTION=1` skips
 #   the build-in and the idle pulse.
 
@@ -479,6 +482,70 @@ def _option_parts(option: str) -> tuple[str, str]:
     return option, ""
 
 
+def _value_face(label: str) -> tuple[str, str]:
+    """Split ``name  [value]`` into the name and the bracketed value."""
+    if label.endswith("]") and " [" in label:
+        name, rest = label.rsplit(" [", 1)
+        name = name.rstrip()
+        if name:
+            return name, f"[{rest}"
+    return label, ""
+
+
+def _muted_sgr(*, truecolor: bool) -> str:
+    """Explanation gray. Cube 145, the landing 0.66 step. Not dim, not the ramp."""
+    return _alpha_sgr(0.66, truecolor=truecolor)
+
+
+def _edge_spaces(text: str) -> tuple[str, str, str]:
+    """Split leading spaces, the word, and trailing spaces."""
+    gap = text[: len(text) - len(text.lstrip(" "))]
+    rest = text[len(gap) :]
+    name = rest.rstrip(" ")
+    return gap, name, rest[len(name) :]
+
+
+def _paint_detail_name(plain: str, *, ansi: bool) -> str:
+    """Bold the name. Leave ``[value]`` in the terminal foreground."""
+    if not ansi:
+        return plain
+    lead = ""
+    body = plain
+    if body[:1] in {"│", "|"}:
+        lead = f"\x1b[2m{body[:1]}{_ANSI_RESET}"
+        body = body[1:]
+    mark_at = body.find("[*]")
+    token = "[*]"
+    if mark_at < 0:
+        mark_at = body.find("[ ]")
+        token = "[ ]"
+    if mark_at < 0:
+        return f"{lead}{body}"
+    before = body[:mark_at]
+    after = body[mark_at + 3 :]
+    mark_s = f"\x1b[1m{token}{_ANSI_RESET}" if token == "[*]" else token
+    if "  [" in after:
+        name_part, value_tail = after.split("  [", 1)
+        gap, name, pad = _edge_spaces(name_part)
+        return f"{lead}{before}{mark_s}{gap}\x1b[1m{name}{_ANSI_RESET}{pad}  [{value_tail}"
+    gap, name, pad = _edge_spaces(after)
+    return f"{lead}{before}{mark_s}{gap}\x1b[1m{name}{_ANSI_RESET}{pad}"
+
+
+def _paint_detail_explain(plain: str, *, ansi: bool, truecolor: bool) -> str:
+    """One explanation line in cube gray."""
+    if not ansi:
+        return plain
+    if plain[:1] in {"│", "|"}:
+        lead = f"\x1b[2m{plain[:1]}{_ANSI_RESET}"
+        body = plain[1:]
+    else:
+        lead, body = "", plain
+    if not body.strip():
+        return f"{lead}{body}"
+    return f"{lead}{_muted_sgr(truecolor=truecolor)}{body}{_ANSI_RESET}"
+
+
 def _health_symbol(value: str) -> str:
     return "■" if value.strip().lower().startswith("ok") else "□"
 
@@ -525,6 +592,47 @@ def _mark(index: int, selected: int, checked: set[int] | None) -> str:
     return "[*] " if on else "[ ] "
 
 
+def _emit_detail_items(
+    lines: list[str],
+    options: Sequence[str],
+    start: int,
+    end: int,
+    selected: int,
+    checked: set[int] | None,
+    panel_w: int,
+    density: str,
+    ansi: bool,
+    truecolor: bool,
+) -> None:
+    """Name in bold, value in brackets, explanation on the next line in gray."""
+    inner_w = max(12, panel_w - 1)
+    faces: list[tuple[str, str]] = []
+    for index in range(start, end):
+        label, _hint = _option_parts(options[index])
+        faces.append(_value_face(label))
+    name_w = max((len(name) for name, value in faces if value), default=0)
+    for offset, index in enumerate(range(start, end)):
+        _label, hint = _option_parts(options[index])
+        name, value = faces[offset]
+        mark = _mark(index, selected, checked)
+        prefix = f"  {mark}"
+        body = f"{name.ljust(name_w)}  {value}" if value else name
+        lines.append(_paint_detail_name(_fit("│" + prefix + body, panel_w), ansi=ansi))
+        if hint:
+            indent = " " * len(prefix)
+            width = max(8, inner_w - len(prefix))
+            for part in wrap_text(hint, width):
+                lines.append(
+                    _paint_detail_explain(
+                        _fit("│" + indent + part, panel_w),
+                        ansi=ansi,
+                        truecolor=truecolor,
+                    )
+                )
+        if density == "roomy" and index + 1 < end:
+            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
+
+
 def _emit_items(
     lines: list[str],
     options: Sequence[str],
@@ -536,7 +644,24 @@ def _emit_items(
     panel_w: int,
     density: str,
     ansi: bool,
+    *,
+    detail: bool = False,
+    truecolor: bool = False,
 ) -> None:
+    if detail:
+        _emit_detail_items(
+            lines,
+            options,
+            start,
+            end,
+            selected,
+            checked,
+            panel_w,
+            density,
+            ansi,
+            truecolor,
+        )
+        return
     _ = label_w
     inner_w = max(12, panel_w - 1)
     for index in range(start, end):
@@ -574,6 +699,8 @@ def _panel_lines(
     density: str,
     hint: str | None,
     ansi: bool,
+    detail: bool = False,
+    truecolor: bool = False,
 ) -> list[str]:
     lines: list[str] = []
     count = len(options)
@@ -616,7 +743,18 @@ def _panel_lines(
             style = "step-on" if active else "step-off"
             lines.append(_paint(_fit(f"{symbol}  {name.upper()}", panel_w), style, ansi))
             _emit_items(
-                lines, options, start, end, selected, checked, label_w, panel_w, density, ansi
+                lines,
+                options,
+                start,
+                end,
+                selected,
+                checked,
+                label_w,
+                panel_w,
+                density,
+                ansi,
+                detail=detail,
+                truecolor=truecolor,
             )
             covered.update(range(start, end))
             if spaced:
@@ -625,7 +763,18 @@ def _panel_lines(
             if index in covered:
                 continue
             _emit_items(
-                lines, options, index, index + 1, selected, checked, label_w, panel_w, density, ansi
+                lines,
+                options,
+                index,
+                index + 1,
+                selected,
+                checked,
+                label_w,
+                panel_w,
+                density,
+                ansi,
+                detail=detail,
+                truecolor=truecolor,
             )
     else:
         if spaced and lines:
@@ -635,7 +784,18 @@ def _panel_lines(
             lines.append(_paint(_fit("│", panel_w), "rail", ansi))
         if count:
             _emit_items(
-                lines, options, 0, count, selected, checked, label_w, panel_w, density, ansi
+                lines,
+                options,
+                0,
+                count,
+                selected,
+                checked,
+                label_w,
+                panel_w,
+                density,
+                ansi,
+                detail=detail,
+                truecolor=truecolor,
             )
         if spaced:
             lines.append(_paint(_fit("│", panel_w), "rail", ansi))
@@ -720,6 +880,7 @@ def render_screen(
     t_ms: int | None = None,
     pointer: tuple[int, int] | None = None,
     truecolor: bool = False,
+    detail: bool = False,
 ) -> str:
     """One centered frame. `hero` paints the half-block DIGIVOICE wordmark."""
     term_cols, term_rows = _term_size()
@@ -745,6 +906,8 @@ def render_screen(
             density=density,
             hint=hint,
             ansi=use_ansi,
+            detail=detail,
+            truecolor=truecolor,
         )
         header_h = rows - len(panel)
         needed = 5 + _HERO_GAP + 1 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
@@ -914,6 +1077,7 @@ def choose(
     hero: bool = False,
     pulse: bool = False,
     groups: Sequence[Group] | None = None,
+    detail: bool = False,
 ) -> int | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
@@ -967,6 +1131,7 @@ def choose(
                         redraw=not first,
                         t_ms=int((time.monotonic() - origin) * 1000) if live else None,
                         truecolor=color_true,
+                        detail=detail,
                     )
                 )
                 stdout.flush()

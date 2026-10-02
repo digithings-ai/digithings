@@ -101,6 +101,68 @@ def test_wordmark_v_is_the_version3_block_letter() -> None:
     assert rows[-1].split()[4] == "▀███▀"
 
 
+def test_setting_row_separates_name_value_and_explanation() -> None:
+    """Name is bold, the value sits in brackets, the explanation is cube gray."""
+    options = [
+        "speech/ (Dictation model, Piper voice, and what happens when a take stops.)",
+        "paste  [on] (Paste the words when dictation stops.)",
+        "model  [ggml-base.en] (Which local whisper file transcribes.)",
+    ]
+    plain = render_screen(
+        "/settings/speech",
+        options,
+        1,
+        cols=100,
+        rows=32,
+        use_ansi=False,
+        clear=False,
+        detail=True,
+    )
+    body = plain.replace("\r\n", "\n")
+    lines = body.splitlines()
+    paste = next(line for line in lines if "paste" in line)
+    assert "[*]" in paste
+    assert "[on]" in paste
+    assert "Paste the words" not in paste
+    explain_at = next(i for i, line in enumerate(lines) if "paste" in line)
+    assert "Paste the words when dictation stops." in lines[explain_at + 1]
+    speech = next(line for line in lines if "speech/" in line)
+    assert "[" not in speech.split("speech/", 1)[-1]
+
+    colored = render_screen(
+        "/settings/speech",
+        options,
+        1,
+        cols=100,
+        rows=32,
+        use_ansi=True,
+        clear=False,
+        detail=True,
+    )
+    name_line = next(line for line in colored.splitlines() if "paste" in line)
+    assert "\x1b[1mpaste" in name_line
+    assert "[on]" in name_line
+    assert "38;5;145" not in name_line
+    gray = next(line for line in colored.splitlines() if "Paste the words" in line)
+    assert "38;5;145" in gray
+    assert "\x1b[1m" not in gray
+
+    true = render_screen(
+        "/settings/speech",
+        options,
+        1,
+        cols=100,
+        rows=32,
+        use_ansi=True,
+        clear=False,
+        detail=True,
+        truecolor=True,
+    )
+    gray_true = next(line for line in true.splitlines() if "Paste the words" in line)
+    assert "38;2;175;175;175" in gray_true
+    assert "38;5;" not in gray_true
+
+
 def test_selected_row_is_brackets_with_a_star() -> None:
     """Selection is a bold ``[*]``. The row is not a teal bar."""
     plain = _frame()

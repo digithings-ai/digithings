@@ -60,7 +60,7 @@ class TreeRow(BaseModel):
         if self.kind == "dir":
             head = f"{self.name}/"
         elif self.value:
-            head = f"{self.name}  {self.value}"
+            head = f"{self.name}  [{self.value}]"
         else:
             head = self.name
         return f"{head} ({self.explain})"
@@ -358,6 +358,7 @@ def browse_settings(
             stdin,
             stdout,
             subtitle="Enter opens a folder or changes the value. Esc goes up.",
+            detail=True,
         )
         if picked is None:
             stack.pop()
