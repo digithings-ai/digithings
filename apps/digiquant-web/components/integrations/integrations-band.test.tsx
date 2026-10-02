@@ -12,7 +12,7 @@ describe("IntegrationsBand", () => {
     expect(html).toContain('href="https://nautilustrader.io/"');
     expect(html).toContain('href="https://digithings.ai"');
     expect(html).toContain("NautilusTrader");
-    expect(html).toContain("live signal backbone");
+    expect(html).toContain("local gateway below");
   });
 
   it("does not draw a fake preview in place of a feed", () => {
@@ -21,11 +21,11 @@ describe("IntegrationsBand", () => {
     expect(html).not.toContain("Backtest run timeline");
   });
 
-  it("does not mount the local LuxAlgo library lookup", () => {
-    expect(html).not.toContain("LuxAlgo, as a demo");
-    expect(html).not.toContain("Search LuxAlgo Library");
-    expect(html).not.toContain("local gateway below");
-    expect(html).not.toContain("<form");
+  it("mounts the local LuxAlgo lookup with its offline-honest copy", () => {
+    expect(html).toContain("LuxAlgo, as a demo");
+    expect(html).toContain("Search LuxAlgo Library");
+    expect(html).toContain("places no orders");
+    expect(html).toContain("Local wire checks after hydration");
   });
 
   it("keeps the platform row, the quiet secondary marks, and the showcase line", () => {
