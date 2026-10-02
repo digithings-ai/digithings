@@ -1,4 +1,4 @@
-"""Setup wizard non-interactive paths, doctor spine checks, and thin stubs."""
+"""Setup wizard non-interactive paths, doctor spine checks, and install wiring."""
 
 from __future__ import annotations
 
@@ -122,16 +122,6 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
     assert load_settings(paths).banner_density == "full"
-
-
-def test_update_and_uninstall_are_documented_stubs(tmp_path: Path) -> None:
-    runtime = _runtime(tmp_path)
-    update = run(["update"], runtime)
-    assert update.code == 0
-    assert "not wired yet" in update.stdout
-    uninstall = run(["uninstall"], runtime)
-    assert uninstall.code == 0
-    assert "not wired yet" in uninstall.stdout
 
 
 def test_doctor_reports_settings_hotkeys_hammerspoon(tmp_path: Path) -> None:

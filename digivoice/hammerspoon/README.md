@@ -88,10 +88,28 @@ Default stop-file: `~/Library/Application Support/digivoice/dict.stop`
 
 ## Install
 
+One-command from a checkout (CLI + Hammerspoon symlink + models bootstrap):
+
+```bash
+bash digivoice/scripts/install.sh
+```
+
+That script records `git rev-parse HEAD` as `DIGIVOICE_TIP_SHA`, installs the CLI with `uv tool install -e ./digivoice` when uv is on PATH (no pre-activated venv), and **never rsyncs** this folder over `~/Library/Application Support/digivoice/hammerspoon`. Live adapter path is a symlink:
+
+```bash
+mkdir -p ~/.hammerspoon
+ln -s /path/to/digithings/digivoice/hammerspoon ~/.hammerspoon/digivoice
+```
+
+(`digivoice install` does that symlink for you.) Then `require("digivoice")` in `~/.hammerspoon/init.lua` (also added by install / bare `digivoice`).
+
+Manual path if you skip the script:
+
 1. Install [Hammerspoon](https://www.hammerspoon.org/) and grant **Accessibility**.
-2. Install digivoice (`uv sync --all-packages` or `pip install -e ./digivoice`) so
-   `digivoice` is on `PATH`, or set `DIGIVOICE_BIN` to the absolute binary.
-3. Symlink or copy this folder into your Hammerspoon config:
+2. Install digivoice (`uv tool install -e ./digivoice`, or `uv sync --all-packages` /
+   `pip install -e ./digivoice` in a venv) so `digivoice` is on `PATH`, or set
+   `DIGIVOICE_BIN` to the absolute binary.
+3. Symlink this folder (do **not** copy into Application Support):
 
    ```bash
    mkdir -p ~/.hammerspoon
@@ -109,23 +127,37 @@ Default stop-file: `~/Library/Application Support/digivoice/dict.stop`
 Optional: `export DIGIVOICE_BIN=/absolute/path/to/digivoice` if PATH lookup fails
 inside Hammerspoon's environment.
 
-## Refreshing the Mac after an update (Chris's runbook)
+## Mac reinstall runbook (SHA-safe)
 
-After a digivoice change lands on `develop`:
+Never rsync `digivoice/hammerspoon/` over `~/Library/Application Support/digivoice/hammerspoon` without a tip SHA check. An unguarded TUI-branch sync wiped the #4965 banner tip.
 
-1. Update the checkout and the CLI it runs:
+1. Confirm the checkout tip before touching the adapter:
 
    ```bash
-   cd ~/path/to/digithings
-   git pull origin develop
-   uv sync --all-packages        # or: pip install -e ./digivoice
+   git -C ~/path/to/digithings rev-parse HEAD
+   # compare with {data_dir}/install.json  and, if present,
+   # ~/Library/Application\ Support/digivoice/hammerspoon/.digivoice-tip
    ```
 
-   The CLI is an editable install, so the pull alone updates the Python code; `uv sync` only matters if dependencies changed.
+   If the Application Support copy exists and the stamp does not match, **leave it alone**. Refresh via the `~/.hammerspoon/digivoice` symlink only.
 
-2. Reload the Lua adapter: Hammerspoon menubar icon → **Reload Config** (or run `hs.reload()` in the Hammerspoon console). The adapter is symlinked from the checkout (`~/.hammerspoon/digivoice` → `digithings/digivoice/hammerspoon`), so reloading picks up the new `init.lua` and `banner_core.lua`. Settings changes need no reload.
+2. Reinstall from the checkout (one command):
 
-3. Check which CLI Hammerspoon will run. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. Confirm with `hs -c 'return require("digivoice")'` after reload, or watch `dict`/`speak` argv. If it is wrong or missing, point it at the right binary and reload:
+   ```bash
+   bash digivoice/scripts/install.sh
+   ```
+
+   Or, if the CLI is already on PATH: `digivoice update` (add `--fetch-models` when `ggml-base.en.bin` is missing).
+
+3. Smoke checklist (in order):
+
+   1. `digivoice doctor` — whisper-cli, piper, sox/ffmpeg, `ggml-base.en.bin`, adapter present.
+   2. `digivoice reload` — bounded `hs` reload; adapter realpath should be this checkout.
+   3. `digivoice banner show` — preview banner, no dictation. Confirms background-only HS (no Dock icon, no digivoice menubar, no toast).
+   4. **Quit teardown** — TUI **Quit** stops the adapter and quits Hammerspoon. Closing Terminal alone must leave HS running.
+   5. **Uninstall → reinstall** — `digivoice uninstall` (data kept) then `bash digivoice/scripts/install.sh` (or `digivoice install`). Doctor + banner show still work. `--purge-data` only when you intend to wipe history/models.
+
+4. Check which CLI Hammerspoon will run. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. If it is wrong or missing, point it at the right binary and reload:
 
    ```bash
    launchctl setenv DIGIVOICE_BIN "$HOME/path/to/digithings/.venv/bin/digivoice"   # then quit/reopen Hammerspoon
@@ -133,9 +165,9 @@ After a digivoice change lands on `develop`:
 
    (or `export DIGIVOICE_BIN=…` in the shell that launches Hammerspoon).
 
-4. Verify the CLI is new enough: `digivoice cancel --help` and `digivoice status` must exist. A stale CLI behind a new `init.lua` still dictates, but Esc cannot discard the take (the banner will honestly report `done`).
+5. Verify the CLI is new enough: `digivoice cancel --help` and `digivoice status` must exist. A stale CLI behind a new `init.lua` still dictates, but Esc cannot discard the take (the banner will honestly report `done`).
 
-5. Smoke test: **Right Option**, say a few words, press **Esc** → banner says `cancelled`, nothing pasted, `digivoice history --last 1` unchanged. Then **Right Option**, speak, **Right Option** → text appears in the banner, then pastes.
+6. Hotkey smoke: **Right Option**, say a few words, press **Esc** → banner says `cancelled`, nothing pasted, `digivoice history --last 1` unchanged. Then **Right Option**, speak, **Right Option** → text appears in the banner, then pastes.
 
 
 ## Mic + Accessibility TCC runbook

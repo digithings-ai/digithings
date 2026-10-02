@@ -34,7 +34,8 @@ HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 # App-home actions. Setup sits second-last as a "wizard…" submenu — it opens
 # the setup wizard and returns to home, it is never the home screen itself.
 # Status is not an action: the live status.json feed surfaces in the context
-# strip and via `digivoice status`. Update/Uninstall stay CLI-only stubs.
+# strip and via `digivoice status`. Update/Uninstall stay CLI-only
+# (`digivoice install` / `update` / `uninstall`).
 HOME_MENU = (
     "Doctor (health checks)",
     "Settings (show)",

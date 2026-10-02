@@ -25,3 +25,7 @@ class CancelledError(VoiceError):
 
 class SpeakError(VoiceError):
     """Piper was missing, the voice file was missing, or playback failed."""
+
+
+class AdapterGuardError(VoiceError):
+    """Refusing to copy/rsync a Hammerspoon adapter over a live tip without a SHA match."""
