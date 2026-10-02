@@ -17,3 +17,9 @@
 .dk-desk { padding: 6px 12px; border-bottom: 1px solid var(--hair); min-width: 0; }
 .dk-desk[aria-current='true'] { border-left: 2px solid var(--accent); }
 .dk-spine { font: 10.5px/1.4 var(--mono); color: var(--ink-soft); overflow-wrap: anywhere; }
+
+/* Docked digichat rail. The page grid stays 12×12; this column is chrome. */
+.shell.has-rail.has-chat { grid-template-columns: var(--rail) minmax(0, 1fr) 220px; }
+.shell.has-chat:not(.has-rail) { grid-template-columns: minmax(0, 1fr) 220px; }
+.chat-rail { grid-row: 2; border-left: 1px solid var(--hair-strong); overflow: auto; background: var(--win); min-width: 0; min-height: 0; }
+.chat-rail .rail-head a { color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; }
