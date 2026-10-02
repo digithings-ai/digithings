@@ -108,4 +108,12 @@ commits = [
   # and still flags the introducing commit. No rotation needed —
   # "296-jwt-claims" was never a secret.
   "3ed49c426d38c5e7ed91be48e8f71a5cee9fe9ae",
+
+  # 2026-10-02: 0f193360d committed apps/digiquant-app/.next dev output.
+  # prerender-manifest.json holds Next's locally generated draft-mode
+  # previewModeId plus signing and encryption material. Those are not a
+  # provider credential, so there is nothing to rotate at a vendor. A later
+  # commit on this branch removed the tree; apps/digiquant-app/.gitignore
+  # ignores .next/. History is not rewritten.
+  "0f193360d21305ca8a65d33c47a7502a7ad5ec60",
 ]
