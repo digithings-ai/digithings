@@ -62,26 +62,37 @@ def test_wordmark_glint_is_a_short_flash() -> None:
         )
         if before != during:
             changed = True
-            assert "38;5;255" in "\n".join(during)
+            assert "38;5;231" in "\n".join(during)
             assert "38;2;" not in "\n".join(during)
             break
     assert changed
 
 
 def test_wordmark_shades_are_terminal_grays() -> None:
-    """Terminal.app draws bold and dim as one white. Shades are 256-color grays."""
+    """Cube indexes, not the 232–255 ramp Terminal.app paints as one white."""
     codes = [_alpha_sgr(alpha) for alpha in (0.36, 0.5, 0.66, 0.82, 1.0)]
     assert codes == [
-        "\x1b[38;5;236m",
-        "\x1b[38;5;241m",
-        "\x1b[38;5;246m",
-        "\x1b[38;5;251m",
-        "\x1b[38;5;255m",
+        "\x1b[38;5;59m",
+        "\x1b[38;5;102m",
+        "\x1b[38;5;145m",
+        "\x1b[38;5;188m",
+        "\x1b[38;5;231m",
     ]
     joined = "\n".join(render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=1600))
     assert "38;2;" not in joined
-    present = {level for level in ("236", "241", "246", "251", "255") if f"38;5;{level}" in joined}
+    present = {level for level in ("59", "102", "145", "188", "231") if f"38;5;{level}" in joined}
     assert len(present) >= 3
+
+
+def test_wordmark_truecolor_matches_the_cube() -> None:
+    assert _alpha_sgr(0.36, truecolor=True) == "\x1b[38;2;95;95;95m"
+    assert _alpha_sgr(1.0, truecolor=True) == "\x1b[38;2;255;255;255m"
+    joined = "\n".join(
+        render_wordmark_lines("DIGIVOICE", cols=120, ansi=True, t_ms=1600, truecolor=True)
+    )
+    assert "38;2;95;95;95" in joined
+    assert "38;2;255;255;255" in joined
+    assert "38;5;" not in joined
 
 
 def test_wordmark_v_is_the_version3_block_letter() -> None:

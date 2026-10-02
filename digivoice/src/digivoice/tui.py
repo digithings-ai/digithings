@@ -1,9 +1,9 @@
 """Shared stdlib TUI primitives: fullscreen frames, pixel wordmark, menus.
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
-viewport: alternate screen, one repaint per key. The home hero is the landing
-pixel lockup: five half-block rows of DIGIVOICE, each cell a 256-color gray
-for the site's opacity, plus a short glint. Menus use a step rail.
+viewport: alternate screen, one repaint per key. The home hero is the landing pixel lockup: five half-block rows of DIGIVOICE.
+Each cell is an xterm color-cube gray (truecolor when the terminal asks for
+it), the wordmark builds in place, then a few cells glint. Menus use a step rail.
 The selected row is a bold ``[*]``; other rows are ``[ ]``.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
@@ -35,8 +35,8 @@ from digivoice.pixel_hero import PIXEL_GLYPHS, PixelCell, word_cells
 #   NL→CRLF still runs. Full setraw clears OPOST; frames joined with bare LF
 #   then staircase (scattered labels / broken wordmark) on Terminal.app.
 # - Menu color is bold/dim on the terminal's own foreground. The wordmark uses
-#   the 256-color gray ramp instead: Terminal.app paints bold and dim as the
-#   same white, so the hero's opacities would all be one cube.
+#   the xterm 6×6×6 cube (or truecolor when COLORTERM says so). The gray ramp
+#   232–255 and bold/dim both collapse to one white in Terminal.app.
 #   `NO_COLOR` or `TERM=dumb` skips color. `DIGIVOICE_REDUCE_MOTION=1` skips
 #   the build-in and the idle pulse.
 
@@ -264,6 +264,8 @@ def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tu
 
 # Landing pixel-build runs out by ~1.1s; strays finish a little later.
 _BUILD_MS = 1400
+# Set by play_intro so the home frame continues that same landing clock.
+_hero_origin: float | None = None
 
 
 def _reveal_alpha(
@@ -283,23 +285,30 @@ def _reveal_alpha(
     return c
 
 
-# Landing opacities (0.36, 0.5, 0.66, 0.82, 1) snapped onto xterm grays 232–255.
-# Even steps, darkest first, so neighboring pixels read apart on a dark terminal.
-_LANDING_GRAY = (
-    (0.36, 236),
-    (0.50, 241),
-    (0.66, 246),
-    (0.82, 251),
-    (1.00, 255),
+# Landing opacities → xterm cube grays (k=1..5). These indexes are the ones
+# Terminal.app actually draws apart. The 232–255 ramp often comes out white.
+# RGB matches the cube so truecolor terminals show the same five shades.
+_SHADES: tuple[tuple[float, int, int], ...] = (
+    (0.36, 95, 59),
+    (0.50, 135, 102),
+    (0.66, 175, 145),
+    (0.82, 215, 188),
+    (1.00, 255, 231),
 )
 
 
-def _alpha_sgr(alpha: float) -> str:
-    """256-color gray for one landing opacity. Bold/dim stay white in Terminal.app."""
+def _truecolor() -> bool:
+    return os.environ.get("COLORTERM", "").lower() in {"truecolor", "24bit"}
+
+
+def _alpha_sgr(alpha: float, *, truecolor: bool = False) -> str:
+    """One landing opacity as a cube gray, or the matching RGB when asked."""
     if alpha <= 0:
         return ""
-    nearest = min(_LANDING_GRAY, key=lambda item: abs(item[0] - alpha))
-    return f"\x1b[38;5;{nearest[1]}m"
+    _step, rgb, cube = min(_SHADES, key=lambda item: abs(item[0] - alpha))
+    if truecolor:
+        return f"\x1b[38;2;{rgb};{rgb};{rgb}m"
+    return f"\x1b[38;5;{cube}m"
 
 
 def _landing_flash(cell: PixelCell, t_ms: int) -> bool:
@@ -337,6 +346,7 @@ def render_wordmark_lines(
     frac: float = 1.0,
     ansi: bool = False,
     t_ms: int | None = None,
+    truecolor: bool = False,
 ) -> list[str]:
     """Five half-block rows. `frac` reveals cells; `t_ms` plays the landing build."""
     letters = word.upper()
@@ -393,13 +403,13 @@ def render_wordmark_lines(
                     point in strays and point not in lit for point in points
                 )
                 if stray_only:
-                    sgr = "\x1b[38;5;234m"
+                    sgr = _alpha_sgr(0.36, truecolor=truecolor)
                 elif building:
-                    sgr = _alpha_sgr(alphas.get((sx, sy), 0.0))
+                    sgr = _alpha_sgr(alphas.get((sx, sy), 0.0), truecolor=truecolor)
                 elif any(_landing_flash(cell, clock) for cell in cells_here):
-                    sgr = _alpha_sgr(1.0)
+                    sgr = _alpha_sgr(1.0, truecolor=truecolor)
                 elif primary is not None:
-                    sgr = _alpha_sgr(primary.f)
+                    sgr = _alpha_sgr(primary.f, truecolor=truecolor)
                 else:
                     sgr = ""
                 if sgr:
@@ -707,6 +717,7 @@ def render_screen(
     redraw: bool = False,
     t_ms: int | None = None,
     pointer: tuple[int, int] | None = None,
+    truecolor: bool = False,
 ) -> str:
     """One centered frame. `hero` paints the half-block DIGIVOICE wordmark."""
     term_cols, term_rows = _term_size()
@@ -746,6 +757,7 @@ def render_screen(
             phase=max(0, elapsed // 160),
             ansi=use_ansi,
             t_ms=t_ms,
+            truecolor=truecolor,
         )
         if hero
         else []
@@ -901,8 +913,8 @@ def choose(
 
     TTY mode paints a step-rail frame and redraws on every key. Space confirms
     like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel lockup.
-    When `pulse` is set, a few cells glint on the landing schedule. The load
-    itself plays in :func:`play_intro`.
+    When `pulse` is set, the lockup builds on the landing clock and a few
+    cells keep glinting. :func:`play_intro` arms that clock.
     Returns None on back.
     """
     stdin = stdin or sys.stdin
@@ -913,15 +925,21 @@ def choose(
         selected = 0
         color = _use_ansi()
         screen = _use_screen()
+        color_true = _truecolor()
         # Pulse needs timed reads; screen (not color) is enough to redraw.
         live = pulse and screen and not _reduce_motion()
         phase = 0
         first = True
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
-        # Intro already played the build. Start past it so the menu opens
-        # on the finished lockup while the glint keeps running.
-        born = time.monotonic() - (_BUILD_MS / 1000 if hero else 0)
+        # Home arms the clock in play_intro so the build plays on this frame.
+        # A hero opened on its own starts already settled.
+        if hero and _hero_origin is not None:
+            origin = _hero_origin
+        elif hero:
+            origin = time.monotonic() - _BUILD_MS / 1000
+        else:
+            origin = time.monotonic()
         try:
             _set_menu_raw(fd)
             _cursor(stdout, False)
@@ -941,12 +959,14 @@ def choose(
                         use_screen=screen,
                         clear=first,
                         redraw=not first,
-                        t_ms=int((time.monotonic() - born) * 1000) if live else None,
+                        t_ms=int((time.monotonic() - origin) * 1000) if live else None,
+                        truecolor=color_true,
                     )
                 )
                 stdout.flush()
                 first = False
-                key = _read_key_on_fd(fd, 0.16 if live else None)
+                # 80ms tracks the landing glint; a slower poll skips the flash.
+                key = _read_key_on_fd(fd, 0.08 if live else None)
                 if key is None or key == "mouse":
                     phase = (phase + 1) % 8
                     continue
@@ -1186,49 +1206,19 @@ def play_intro(
     stdout: TextIO,
     subtitle: str | None = None,
     steps: tuple[float, ...] = (0.0, 0.22, 0.48, 0.74, 1.0),
-    delay: float = 0.16,
+    delay: float = 0.08,
 ) -> None:
-    """Landing-style build: DIGIVOICE cells arrive over about a second."""
+    """Arm the landing clock. The home frame plays the build, then the glint.
+
+    The wordmark stays put above the menu, the same way the site builds the
+    hero in place. ``steps`` and ``delay`` remain so older callers still import.
+    """
+    global _hero_origin
+    _ = (stdout, subtitle, steps, delay)
     if _reduce_motion():
+        _hero_origin = time.monotonic() - _BUILD_MS / 1000
         return
-    cols, rows = _term_size()
-    ansi = _use_ansi()
-    screen = _use_screen()
-    panel_w = max(36, min(64, cols - 4))
-    tag = subtitle or "local speech control"
-    try:
-        for index, frac in enumerate(steps):
-            panel = [
-                _paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi),
-                _paint(_fit(f"│  {tag}", panel_w), "kv", ansi),
-                _paint(_fit("└", panel_w), "rule", ansi),
-            ]
-            clock = int(frac * _BUILD_MS)
-            word = render_wordmark_lines(
-                "DIGIVOICE",
-                cols=cols,
-                phase=index,
-                ansi=ansi,
-                t_ms=clock,
-            )
-            stdout.write(
-                _compose(
-                    word,
-                    panel,
-                    cols,
-                    rows,
-                    panel_w,
-                    clear=index == 0,
-                    redraw=index != 0,
-                    ansi=ansi,
-                    screen=screen,
-                    fill=False,
-                )
-            )
-            stdout.flush()
-            time.sleep(delay)
-    except (OSError, ValueError):
-        pass
+    _hero_origin = time.monotonic()
 
 
 __all__ = [
