@@ -2,8 +2,8 @@
 
 Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
 viewport: alternate screen, one repaint per key. The home hero is the landing
-pixel lockup: five half-block rows of DIGIVOICE in the terminal foreground,
-with the site's per-cell weight and a short glint. Menus use a step rail.
+pixel lockup: five half-block rows of DIGIVOICE, each cell a 256-color gray
+for the site's opacity, plus a short glint. Menus use a step rail.
 The selected row is a bold ``[*]``; other rows are ``[ ]``.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
@@ -34,7 +34,9 @@ from digivoice.pixel_hero import PIXEL_GLYPHS, PixelCell, word_cells
 # - Menu loops hold raw *input* so CSI arrows stay intact, but keep OPOST so
 #   NL→CRLF still runs. Full setraw clears OPOST; frames joined with bare LF
 #   then staircase (scattered labels / broken wordmark) on Terminal.app.
-# - Color is SGR on the terminal's own foreground, so light and dark both work.
+# - Menu color is bold/dim on the terminal's own foreground. The wordmark uses
+#   the 256-color gray ramp instead: Terminal.app paints bold and dim as the
+#   same white, so the hero's opacities would all be one cube.
 #   `NO_COLOR` or `TERM=dumb` skips color. `DIGIVOICE_REDUCE_MOTION=1` skips
 #   the build-in and the idle pulse.
 
@@ -281,12 +283,23 @@ def _reveal_alpha(
     return c
 
 
+# Landing opacities (0.36, 0.5, 0.66, 0.82, 1) snapped onto xterm grays 232–255.
+# Even steps, darkest first, so neighboring pixels read apart on a dark terminal.
+_LANDING_GRAY = (
+    (0.36, 236),
+    (0.50, 241),
+    (0.66, 246),
+    (0.82, 251),
+    (1.00, 255),
+)
+
+
 def _alpha_sgr(alpha: float) -> str:
-    if alpha >= 0.9:
-        return "\x1b[1m"
-    if alpha < 0.55:
-        return "\x1b[2m"
-    return ""
+    """256-color gray for one landing opacity. Bold/dim stay white in Terminal.app."""
+    if alpha <= 0:
+        return ""
+    nearest = min(_LANDING_GRAY, key=lambda item: abs(item[0] - alpha))
+    return f"\x1b[38;5;{nearest[1]}m"
 
 
 def _landing_flash(cell: PixelCell, t_ms: int) -> bool:
@@ -380,11 +393,11 @@ def render_wordmark_lines(
                     point in strays and point not in lit for point in points
                 )
                 if stray_only:
-                    sgr = "\x1b[2m"
+                    sgr = "\x1b[38;5;234m"
                 elif building:
                     sgr = _alpha_sgr(alphas.get((sx, sy), 0.0))
                 elif any(_landing_flash(cell, clock) for cell in cells_here):
-                    sgr = "\x1b[1m"
+                    sgr = _alpha_sgr(1.0)
                 elif primary is not None:
                     sgr = _alpha_sgr(primary.f)
                 else:
