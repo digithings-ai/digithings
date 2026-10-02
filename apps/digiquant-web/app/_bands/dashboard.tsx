@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { CtaLink, MediaFrame } from "@digithings/ui";
 import { DASHBOARD_VIDEO_POSTER, DASHBOARD_VIDEO_SRC } from "@/components/dashboard/dashboard-video";
 import { Band } from "../_chrome/Band";
-import { DashboardViewPlaceholder } from "../_placeholders";
 
 /** What the dashboard holds, as a ledger. The surfaces live in the dashboard app,
  *  not on this site. */
@@ -15,10 +14,10 @@ const DASHBOARD_SURFACES: { key: string; value: string }[] = [
   { key: "tools", value: "Research data and MCP tools, reached from inside the app." },
 ];
 
-/** The product band: the dashboard view (a labelled placeholder until a recording
- *  or screenshot exists) beside what it holds. Surfaces auto-cycle when idle;
- *  any interaction pauses the cycle. The dashboard is a separate app and
- *  is not embedded here. */
+/** The product band: a walkthrough frame beside what the dashboard holds.
+ *  With no recording published, the frame is the kit's empty state. Surfaces
+ *  auto-cycle when idle; any interaction pauses the cycle. The dashboard is a
+ *  separate app and is not embedded here. */
 export function DashboardBand() {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -37,18 +36,18 @@ export function DashboardBand() {
       takeaway="Build strategies, read the results and keep notes in one app. This page shows it; the tools live there."
     >
       <div className="grid min-h-[min(36rem,calc(100svh-18rem))] flex-1 items-stretch gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        {DASHBOARD_VIDEO_SRC ? (
-          <MediaFrame
-            src={DASHBOARD_VIDEO_SRC}
-            poster={DASHBOARD_VIDEO_POSTER}
-            title="dashboard walkthrough"
-            badge="Recorded walkthrough"
-            placeholderLabel="recording to come"
-            caption="A recorded walkthrough of the dashboard."
-          />
-        ) : (
-          <DashboardViewPlaceholder />
-        )}
+        <MediaFrame
+          src={DASHBOARD_VIDEO_SRC}
+          poster={DASHBOARD_VIDEO_POSTER}
+          title="dashboard walkthrough"
+          badge={DASHBOARD_VIDEO_SRC ? "Recorded walkthrough" : "Placeholder · no recording yet"}
+          placeholderLabel="recording to come"
+          caption={
+            DASHBOARD_VIDEO_SRC
+              ? "A recorded walkthrough of the dashboard."
+              : "No walkthrough is published in this build. The dashboard app is the product; this page does not rebuild it."
+          }
+        />
 
         <div
           className="flex min-w-0 flex-col gap-4"
