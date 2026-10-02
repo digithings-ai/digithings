@@ -1,5 +1,6 @@
 import { CtaLink } from "@digithings/ui";
 import { IntegrationMark, integrationHref, type IntegrationId } from "@/components/integrations/marks";
+import { LocalLuxalgoWorkflow } from "@/components/luxalgo/local-luxalgo-workflow";
 import { Band } from "../_chrome/Band";
 import { MCP_TOOLS } from "../_mcp";
 
@@ -20,7 +21,7 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
     id: "luxalgo",
     name: "LuxAlgo",
     role: "Vela backbone · live signals",
-    line: "The live chart is the hero. LuxAlgo Vela is the live signal backbone on that chart.",
+    line: "The live chart is the hero. Library lookup runs through the local gateway below when that gateway is up.",
     fact: `${toolCount("luxalgo_")} MCP tools · live on hero`,
   },
   {
@@ -47,7 +48,8 @@ const SECONDARY: { id: IntegrationId; name: string; role: string }[] = [
 /** Integrations: the only band that names partners. The three architectural drivers lead,
  *  digithings follows as the platform under the agents and chat, brokers and feeds sit
  *  last and quiet. Showcase only: nothing here places an order. LuxAlgo Vela is the live
- *  price backbone on the hero. */
+ *  price backbone on the hero. The panel under the cards is the local library lookup,
+ *  which stays honest when the loopback gateway is down. */
 export function IntegrationsBand() {
   return (
     <Band
@@ -74,6 +76,8 @@ export function IntegrationsBand() {
             </li>
           ))}
         </ul>
+
+        <LocalLuxalgoWorkflow />
 
         <div className="grid min-w-0 items-start gap-4 overflow-x-clip border border-hair p-[1.3rem] md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-center md:gap-8">
           <CtaLink href={integrationHref("digithings")} external variant="ghost" className="h-auto w-full min-w-0 shrink items-center justify-start gap-3 self-center overflow-hidden p-0 text-start whitespace-normal no-underline hover:bg-transparent">
