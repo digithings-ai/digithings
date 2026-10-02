@@ -21,6 +21,7 @@ Local CLI package at `digivoice/`. No network service and no port. Python 3.12. 
 | `src/digivoice/tui.py` | Shared stdlib TUI: alternate-screen frames, step-rail menus, intro build-in, wrapping. |
 | `src/digivoice/pixel_hero.py` | 7×10 DIGIVOICE glyph map. The home header paints those glyphs as five half-block rows in `tui.py`. |
 | `src/digivoice/catalog.py` | Suggested local STT ggml + rewrite GGUF list; download + wire into models/. |
+| `src/digivoice/installed_models.py` | Local GGUF and whisper files already installed by LM Studio, Ollama, and MLX Studio. |
 | `src/digivoice/home.py` | Bare-`digivoice` home shell: fullscreen centered menu on a TTY, printed overview otherwise. |
 | `src/digivoice/panels.py` | TTY doctor (green ok, red not ok, ready line at the bottom), history browser, and the system pane (reload, reset, restart, update, logs). |
 | `src/digivoice/reload.py` | `reload`: CLI path, settings, Lua adapter tip, bounded Hammerspoon reload; clears stale status on failure. |
@@ -108,10 +109,16 @@ commands write.
    collapsed into one line.
 3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local llama.cpp (or
    local ollama) with a preset (email / SMS / professional / coding / blog). The
-   model is a local GGUF from the suggested catalog under the models
-   dir (multilingual Qwen2.5 instruct Q4_K_M variants). URLs, OpenRouter, and
-   ollama registry tags are rejected. Setup lists the catalog; select
-   downloads and wires the file. Auto-route from the focused app when enabled
+   model is a local GGUF: a suggested catalog file under the models
+   dir, or an absolute file already on disk. The download list adds whisper.cpp
+   medium and large ggml files plus Qwen2.5 7B, Llama 3.2 3B, and Gemma 2 2B
+   GGUF weights. The same chooser also lists runnable files discovered under
+   `~/.lmstudio/models`, `~/.cache/lm-studio/models`, `~/.ollama/models`
+   (or `OLLAMA_MODELS`), and `~/.mlxstudio/models` (MLX Studio, the app also
+   called MX Studio). Safetensors and an Ollama tag whose blob is missing stay
+   out. URLs, OpenRouter, and ollama registry tags are rejected. Setup lists
+   the catalog; select downloads and wires the file. Selecting a discovered
+   file stores that path. Auto-route from the focused app when enabled
    (match table is `rewrite_app_routes` in settings). Timeout is off by
    default; when enabled it cycles 15 / 30 / 60 seconds only. Fail soft —
    raw transcript on error. Disabled by default. `--no-rewrite` skips.

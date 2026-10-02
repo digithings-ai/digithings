@@ -9,14 +9,16 @@ confirm. Esc goes up. The numbered ``setup`` wizard stays for pipes and agents.
 
 from __future__ import annotations
 
+import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TextIO
 
 from pydantic import BaseModel, ConfigDict
 
 from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, CatalogModel
+from digivoice.installed_models import InstalledModel, discover_installed_models
 from digivoice.models import VoicePaths
 from digivoice.nav import norm_path
 from digivoice.paths import DEFAULT_MODEL
@@ -117,6 +119,7 @@ def rows_at(
     settings: VoiceSettings,
     path: str,
     models_dir: Path | None = None,
+    installed: Sequence[InstalledModel] | None = None,
 ) -> list[TreeRow]:
     """Rows for one settings path. Unknown paths are empty."""
     here = _norm(path)
@@ -166,7 +169,7 @@ def rows_at(
             ),
         ]
     if here == "/settings/speech/model":
-        return _model_choices("stt_model")
+        return _model_choices("stt_model", installed or ())
     if here == "/settings/speech/voice":
         return _voice_choices(settings, models_dir)
     if here == "/settings/speech/paste":
@@ -205,7 +208,7 @@ def rows_at(
     if here == "/settings/rewrite/style":
         return _style_choices()
     if here == "/settings/rewrite/model":
-        return _model_choices("rewrite_model")
+        return _model_choices("rewrite_model", installed or ())
     if here == "/settings/banner":
         return [
             TreeRow(
@@ -293,6 +296,16 @@ def _short_title(title: str) -> str:
     return title.replace(" (default)", "")
 
 
+def _display_name(title: str) -> str:
+    """Model name with the language word removed. That word lives on the meta line."""
+    name = _short_title(title).strip()
+    for suffix in (" English", " multilingual"):
+        if name.endswith(suffix):
+            trimmed = name[: -len(suffix)].strip()
+            return trimmed or name
+    return name
+
+
 def _plain(text: str) -> str:
     return text.replace(" (default)", "").replace("(", "").replace(")", "")
 
@@ -304,8 +317,11 @@ def _model_title(field: str, current: str) -> str:
     needle = current or recommended
     for item in catalog:
         if item.id == needle or item.filename == needle:
-            return _short_title(item.title)
-    return current or _short_title(catalog[0].title)
+            return _display_name(item.title)
+    candidate = Path(needle)
+    if candidate.is_absolute():
+        return candidate.stem or candidate.name
+    return current or _display_name(catalog[0].title)
 
 
 _STYLE_EXPLAIN: dict[str, str] = {
@@ -351,8 +367,19 @@ def _language_label(languages: str) -> str:
     return languages
 
 
-def _model_choices(field: str) -> list[TreeRow]:
+_SOURCE_EXPLAIN = {
+    "lmstudio": "Installed by LM Studio",
+    "ollama": "Installed by Ollama",
+    "mlxstudio": "Installed by MLX Studio",
+}
+
+
+def _model_choices(
+    field: str,
+    installed: Sequence[InstalledModel] = (),
+) -> list[TreeRow]:
     catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
+    kind = "stt" if field == "stt_model" else "rewrite"
     recommended = DEFAULT_MODEL if field == "stt_model" else LOCAL_REWRITE_MODEL_FILE
     rows: list[TreeRow] = []
     seen: set[str] = set()
@@ -368,12 +395,27 @@ def _model_choices(field: str) -> list[TreeRow]:
         )
         rows.append(
             TreeRow(
-                name=_short_title(item.title),
+                name=_display_name(item.title),
                 kind="choice",
                 field=field,
                 value=size,
                 choice=stored,
                 explain=_plain(item.best_for),
+            )
+        )
+    for item in installed:
+        if item.kind != kind or item.path in seen:
+            continue
+        seen.add(item.path)
+        lang = _language_label(item.languages)
+        rows.append(
+            TreeRow(
+                name=item.name,
+                kind="choice",
+                field=field,
+                value=f"{lang} · installed",
+                choice=item.path,
+                explain=_SOURCE_EXPLAIN.get(item.source, "Installed locally"),
             )
         )
     return rows
@@ -515,6 +557,7 @@ def _stack_for(
     settings: VoiceSettings,
     start: str,
     models_dir: Path | None = None,
+    installed: Sequence[InstalledModel] | None = None,
 ) -> list[str]:
     """Folders from ``/settings`` down to ``start``. A leaf stays on its parent."""
     path = _norm(start)
@@ -523,7 +566,7 @@ def _stack_for(
     chain = ["/settings"]
     cursor = "/settings"
     for part in [piece for piece in path.split("/") if piece][1:]:
-        rows = rows_at(settings, cursor, models_dir)
+        rows = rows_at(settings, cursor, models_dir, installed)
         match = next((row for row in rows if row.name == part), None)
         if match is None or match.kind not in {"dir", "pick"}:
             break
@@ -540,18 +583,21 @@ def browse_settings(
     install: InstallFn | None = None,
     start: str = "/settings",
     on_path: Callable[[str], None] | None = None,
+    installed: Sequence[InstalledModel] | None = None,
 ) -> None:
     """Walk ``/settings/...``. Esc at the root returns to the caller."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     settings = load_settings(paths)
     models_dir = Path(paths.models_dir)
-    stack = _stack_for(settings, start, models_dir)
+    if installed is None:
+        installed = discover_installed_models(Path.home(), os.environ)
+    stack = _stack_for(settings, start, models_dir, installed)
     # Parent screens remember the row that was opened. A redraw does not jump to 0.
     cursors: dict[str, int] = {}
     while stack:
         path = stack[-1]
-        rows = rows_at(settings, path, models_dir)
+        rows = rows_at(settings, path, models_dir, installed)
         if not rows:
             stack.pop()
             continue
@@ -570,7 +616,7 @@ def browse_settings(
         if isinstance(picked, str) and picked.startswith("/"):
             jumped = norm_path(picked)
             if jumped.startswith("/settings"):
-                stack[:] = _stack_for(settings, jumped, models_dir)
+                stack[:] = _stack_for(settings, jumped, models_dir, installed)
                 continue
             if on_path is not None:
                 on_path(jumped)

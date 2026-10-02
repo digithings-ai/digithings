@@ -282,7 +282,8 @@ def test_model_rows_show_language_and_a_unique_name() -> None:
             visible = f"{block.action}\n{block.meta}\n{block.path}"
             assert row.choice in block.path
             assert visible.count(row.choice) == 1
-            assert "English" in visible or "multilingual" in visible
+            language = "English" if "English" in visible else "multilingual"
+            assert visible.count(language) == 1
             assert row.field == field
 
 

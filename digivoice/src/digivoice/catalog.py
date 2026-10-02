@@ -100,6 +100,34 @@ STT_CATALOG: tuple[CatalogModel, ...] = (
         "multilingual",
         "~466 MB",
     ),
+    _whisper(
+        "ggml-medium.en",
+        "Medium",
+        "clearer English when you can wait",
+        "en",
+        "~1.5 GB",
+    ),
+    _whisper(
+        "ggml-medium",
+        "Medium",
+        "clearer dictation, many languages",
+        "multilingual",
+        "~1.5 GB",
+    ),
+    _whisper(
+        "ggml-large-v3-turbo",
+        "Large v3 turbo",
+        "fast large model, many languages",
+        "multilingual",
+        "~1.6 GB",
+    ),
+    _whisper(
+        "ggml-large-v3",
+        "Large v3",
+        "highest accuracy, many languages",
+        "multilingual",
+        "~3.1 GB",
+    ),
 )
 
 REWRITE_CATALOG: tuple[CatalogModel, ...] = (
@@ -142,7 +170,60 @@ REWRITE_CATALOG: tuple[CatalogModel, ...] = (
         languages="multilingual",
         size_hint="~2.0 GB",
     ),
+    CatalogModel(
+        id="qwen2.5-7b-instruct-q4_k_m",
+        filename="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/"
+            "Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+        ),
+        title="Qwen2.5 7B",
+        best_for="larger rewrite when you have the disk",
+        languages="multilingual",
+        size_hint="~4.7 GB",
+    ),
+    CatalogModel(
+        id="llama-3.2-3b-instruct-q4_k_m",
+        filename="Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/"
+            "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+        ),
+        title="Llama 3.2 3B",
+        best_for="another small instruct model",
+        languages="multilingual",
+        size_hint="~2.0 GB",
+    ),
+    CatalogModel(
+        id="gemma-2-2b-it-q4_k_m",
+        filename="gemma-2-2b-it-Q4_K_M.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/"
+            "gemma-2-2b-it-Q4_K_M.gguf"
+        ),
+        title="Gemma 2 2B",
+        best_for="small instruct model",
+        languages="multilingual",
+        size_hint="~1.7 GB",
+    ),
 )
+
+
+def stt_model_path(models_dir: str | Path, model_id: str | None) -> Path:
+    """File whisper-cli should open. An absolute local .bin is used as-is."""
+    raw = (model_id or "").strip()
+    if raw:
+        candidate = Path(raw).expanduser()
+        if (
+            candidate.is_absolute()
+            and ".." not in candidate.parts
+            and candidate.suffix.casefold() == ".bin"
+        ):
+            return candidate
+    return Path(models_dir) / stt_filename(model_id)
 
 
 def stt_catalog() -> tuple[CatalogModel, ...]:
@@ -255,4 +336,5 @@ __all__ = [
     "stt_catalog",
     "stt_filename",
     "stt_language",
+    "stt_model_path",
 ]

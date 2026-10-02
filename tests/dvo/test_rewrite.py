@@ -103,8 +103,9 @@ def test_remote_rewrite_models_are_rejected() -> None:
     assert is_remote_rewrite_model("ollama.com/library/qwen")
     assert not is_local_rewrite_model("qwen2.5:3b", models_dir)
     assert is_local_rewrite_model("qwen2.5-1.5b-instruct-q4_k_m.gguf", models_dir)
-    assert not is_local_rewrite_model("/opt/other/model.gguf", models_dir)
+    assert is_local_rewrite_model("/opt/other/model.gguf", models_dir)
     assert not is_local_rewrite_model("../escape.gguf", models_dir)
+    assert not is_local_rewrite_model("/opt/other/blob", models_dir)
 
 
 def test_resolve_rewrite_model_stays_under_models_dir(tmp_path: Path) -> None:
@@ -121,9 +122,13 @@ def test_resolve_rewrite_model_stays_under_models_dir(tmp_path: Path) -> None:
     )
     assert remote is None
     outside = resolve_rewrite_model_path(
-        paths, VoiceSettings.model_construct(rewrite_model="/etc/passwd.gguf")
+        paths, VoiceSettings.model_construct(rewrite_model="/opt/other/model.gguf")
     )
-    assert outside is None
+    assert outside == "/opt/other/model.gguf"
+    tag = resolve_rewrite_model_path(
+        paths, VoiceSettings.model_construct(rewrite_model="llama3:latest")
+    )
+    assert tag is None
 
 
 def test_rewrite_timeout_off_passes_none(tmp_path: Path) -> None:
