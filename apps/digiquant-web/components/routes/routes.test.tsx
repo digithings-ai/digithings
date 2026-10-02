@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import ChangelogPage from "@/app/changelog/page";
+import ContactPage from "@/app/contact/page";
+import StrategiesPage from "@/app/strategies/page";
+import TearsheetPage from "@/app/strategies/[id]/page";
+
+describe("linked routes", () => {
+  it("lists real tagged releases and does not say placeholder", () => {
+    const html = renderToStaticMarkup(<ChangelogPage />);
+    expect(html).toContain("digichat 2.4.0");
+    expect(html).toContain("digiskills 0.2.1");
+    expect(html).toContain("no product tag");
+    expect(html).not.toContain(">placeholder<");
+  });
+
+  it("keeps managed contact at Coming soon", () => {
+    const html = renderToStaticMarkup(<ContactPage />);
+    expect(html).toContain("Coming soon");
+    expect(html).toContain("Write to us");
+    expect(html).toContain("Free");
+    expect(html).not.toContain(">placeholder<");
+  });
+
+  it("shows unpublished strategy statistics as em dashes", async () => {
+    const index = renderToStaticMarkup(<StrategiesPage />);
+    expect(index).toContain("unpublished");
+    expect(index).toContain("—");
+    expect(index).not.toContain(">placeholder<");
+
+    const detail = renderToStaticMarkup(await TearsheetPage({ params: Promise.resolve({ id: "btc_slapper" }) }));
+    expect(detail).toContain("CAGR");
+    expect(detail).toContain("—");
+    expect(detail).toContain("not connected");
+    expect(detail).not.toContain(">placeholder<");
+  });
+});
