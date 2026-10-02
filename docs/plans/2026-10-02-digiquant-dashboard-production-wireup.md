@@ -17,11 +17,11 @@ These are product locks. They override the approved mock’s information archite
 
 1. **One viewport per page.** The document does not scroll. Panes rearrange and resize. Overflow scrolls inside the pane, or the page splits into sidebar sub-routes. Never grow the page taller or shorter than the viewport to fit content.
 2. **Nested collapsible sidebar owns all navigation.** Kill horizontal in-page section tabs (`PortfolioSectionNav`, settings tab strips, Brief section chips). Chart interval tabs inside a chart pane stay local.
-3. **Top chrome is path only.** Example: `house / portfolio / holdings`. `house` is a desk name, not the `/house` Corpus / Book / Profile page. The path tree mirrors DigiCon / component paths (`/book`, `/movers`, and the real routes in §4).
+3. **Top chrome is path only.** Example: `house / portfolio / holdings`. `house` is a desk name, not the `/house` Corpus / Book / Profile page. The path tree mirrors digiquant API paths (`/book`, `/movers`, and the real routes in §4).
 4. **Pane column priority + fullscreen.** Narrow panes drop columns in a fixed priority order (keep identity and the number that matters; drop provenance and long text first). Every pane has fullscreen. `Esc` leaves fullscreen and does not navigate away.
 5. **Desk picker** is a dropdown / popover wider than the rail, plus a fullscreen overlay of the same menu. Choosing a desk replaces the whole spine. Three desks exist in the mock: `house`, `rates watch`, `FX Hub`.
 6. **DigiChat is the right rail.** DigiQuant content stays on the left (rail + panes). The current popup is the wrong chrome.
-7. **Every data block maps to a DigiCon path.** Remock numbers are visual aids. No orphan visualization and no second fake book.
+7. **Every data block maps to a digiquant path.** Remock numbers are visual aids. No orphan visualization and no second fake book.
 8. **DigiQuant Vela theme.** Up is DigiQuant teal `#3dd6c4`. Down is DigiQuant red `#e5533e`. Full pane color scale comes from `@digithings/design` tokens (`--up`, `--down`, `--warn`, `--accent`, `--ink*`, `--hair`). Do not ship stock TradingView green/red, and do not copy the mock stylesheet’s `--up: #52d296` / `--down: #f06a5e`.
 9. **Chart vertical wheel** moves the pane column (the in-viewport scroller), not the chart’s vertical scale, when that interaction exists. Horizontal wheel stays on the chart (pan / zoom). This must not reintroduce document scroll (lock 1).
 
@@ -100,7 +100,7 @@ Open `http://127.0.0.1:3920/brief.html`. Hard-refresh. Read `CLAUDE-HANDOFF.md` 
 | `packages/ui` | Kit. `TabStrip` (do not use it for section nav after lock 2), finance tearsheet CSS, gloomberb mark URL. |
 | `apps/dashboard/components/research/VelaSpikeChart.tsx` | Only Vela mount. `theme: 'dark'`, no custom bull/bear colors. Route `app/research/vela-spike/page.tsx`. |
 
-There is **no** package, route, or doc on `develop` named DigiCon. This plan uses that name for the data plane in §4. If Chris means a different service, the Human Gate in §9 stops the data seats.
+The handoff said “DigiCon.” That was a typo for **digiquant**. The data plane is the digiquant dashboard API in §4 (`apps/dashboard-api`), the market-data worker, and allowlisted table reads. Do not search for a DigiCon package, host, or route. Slices B–D do not wait on a renamed service.
 
 `apps/dashboard` has no `AGENTS.md` or `ARCHITECTURE.md`. Read this plan, `apps/dashboard/README.md`, `apps/dashboard/lib/TABLES.md`, `apps/dashboard/lib/CHARTS.md`, and `apps/dashboard-api/CONTRACT.md` before editing.
 
@@ -211,9 +211,9 @@ Envelope routes (`/portfolio`, `/brief`, …) have a stub lane when `SUPABASE_SE
 
 ---
 
-## 4. API map (DigiCon)
+## 4. API map (digiquant)
 
-**DigiCon, in this repo, means:**
+**The digiquant reads this desk calls are:**
 
 1. `apps/dashboard-api` HTTP routes, also mounted at `/dashboard-api/*` on the stack worker.
 2. MCP tools on `POST /mcp` (same handlers, header `x-digi-mcp-key` = `MCP_EDGE_KEY`). Fail closed when the secret is unset.
@@ -240,7 +240,7 @@ Live vs mockable:
 - **stub** — worker doubles in `apps/dashboard-api/src/stubs.ts` when the key is absent (envelope family only).
 - **client-derived** — no route; seat computes from a live route and must label provenance.
 - **missing** — no route and no honest client derivation yet. Render the mock’s empty/wip state. Do not invent numbers.
-- **direct** — not DigiCon. Existing client stays.
+- **direct** — existing client stays. Not a dashboard-api envelope.
 
 `retrieval_pin` is an opaque echo (`CONTRACT.md` §4). Pass it through; do not interpret it.
 
@@ -276,7 +276,7 @@ Market strip in the top band (SPY, TLT, GLD, …) is `GET /v1/market/closes` for
 
 ### 4.3 Client functions to add (slice B owns the file)
 
-Add typed wrappers next to `apiGet` in `apps/dashboard/lib/desk/digicon.ts` (new). One function per row in §4.2 that has an endpoint. Return the `CONTRACT.md` `data` object plus `provenance`. Map `ApiError` to the pane error state. Do not catch and render zeros.
+Add typed wrappers next to `apiGet` in `apps/dashboard/lib/desk/digiquant.ts` (new). One function per row in §4.2 that has an endpoint. Return the `CONTRACT.md` `data` object plus `provenance`. Map `ApiError` to the pane error state. Do not catch and render zeros.
 
 Suggested names: `getPortfolio`, `getAllocations`, `getBrief`, `getPerformance`, `getNavSeries`, `getKpisLive`, `getBenchmarks`, `getLedger`, `getTable`. `getKpisLive` (`GET /kpis/live`) is the live-marks overlay only. It must never wear a `finalized accounting` badge (`CONTRACT.md` §5, §6.5).
 
@@ -298,7 +298,7 @@ Stack stays React / Next in `apps/dashboard`. Design hooks:
 apps/dashboard/
   lib/desk/
     paths.ts              # chrome path → endpoint, from §4.2
-    digicon.ts            # typed getters
+    digiquant.ts          # typed getters
     movers.ts             # client-derived movers
     column-priority.ts    # ordered column ids per table
     layout-store.ts       # sessionStorage pane order + sizes
@@ -387,11 +387,11 @@ Each dashboard seat branches from current `develop` as `task/<N>-<slug>` when an
 
 **Depends on.** Nothing.
 
-### Slice B — Atoms and DigiCon client
+### Slice B — Atoms and digiquant client
 
 **Goal.** Table, chart, feed, state atoms. Typed client for §4.3. Movers derivation. Vela DigiQuant colors. Column priority.
 
-**Files.** `components/desk/atoms/*`, `lib/desk/digicon.ts`, `lib/desk/paths.ts`, `lib/desk/movers.ts`, `lib/desk/column-priority.ts`, `components/research/VelaSpikeChart.tsx` only if the theme must be shared (prefer the new `DeskChart` and leave the spike calling it). Tests with mocked `fetch`.
+**Files.** `components/desk/atoms/*`, `lib/desk/digiquant.ts`, `lib/desk/paths.ts`, `lib/desk/movers.ts`, `lib/desk/column-priority.ts`, `components/research/VelaSpikeChart.tsx` only if the theme must be shared (prefer the new `DeskChart` and leave the spike calling it). Tests with mocked `fetch`.
 
 **Do not edit.** Shell chrome, page routes, worker routes. Do not add `GET /movers`.
 
@@ -416,7 +416,7 @@ Each dashboard seat branches from current `develop` as `task/<N>-<slug>` when an
 
 **Acceptance.**
 
-- Each pane shows its chrome path and calls the mapped function (test by mocking `lib/desk/digicon`).
+- Each pane shows its chrome path and calls the mapped function (test by mocking `lib/desk/digiquant`).
 - Gloomberg pane says it is a layout placeholder and does not render fake tape headlines.
 - LuxAlgo pane renders `DeskChart` for the book’s focus symbol or an empty state when bars are absent.
 - Provenance badges (`live marks` vs `finalized accounting`) follow CONTRACT rules.
@@ -519,7 +519,7 @@ Each dashboard seat branches from current `develop` as `task/<N>-<slug>` when an
    3. Candles and volume sweep left to right together. Each volume bar arrives with its candle, not as a histogram that pops in after the candles.
    4. Indicators sweep left to right. They may stream on one pass together.
 
-This slice does not touch `apps/dashboard`, DigiCon, or the desk shell.
+This slice does not touch `apps/dashboard`, the digiquant dashboard API, or the desk shell.
 
 **Where the code already is.** `develop` still has the older mesh/graph hero (`apps/digiquant-web/components/landing/HeroMesh.tsx`). The live craft is on #4900:
 
@@ -627,7 +627,7 @@ Slice I browser check is the marketing hero on the #4900 dev server. Record the 
 | House book UUID treated as a secret | It is a public selector (`CONTRACT.md` §3). Still do not log service-role keys. |
 | Paying user sees a half-migrated shell | Feature-flag the shell (`NEXT_PUBLIC_DESK_SHELL=1`) until A+C cover Brief, or ship A behind the flag default off. **Recommend the flag default off** until C merges, so production `/dashboard/` does not lose the current brief in a shell-only deploy. |
 | `PortfolioSectionNav` tests and mobile chip row | Slice D updates them. Mobile rail must remain usable; the old hamburger regression is #1570. |
-| Static export cannot read request-time env | `NEXT_PUBLIC_*` is build-time. Document that in the slice PR. Do not add a Node-only BFF for DigiCon. |
+| Static export cannot read request-time env | `NEXT_PUBLIC_*` is build-time. Document that in the slice PR. Do not add a Node-only BFF for the digiquant dashboard API. |
 
 ---
 
@@ -635,13 +635,14 @@ Slice I browser check is the marketing hero on the #4900 dev server. Record the 
 
 These do not block writing the plan. They block the seats named.
 
-1. **DigiCon name.** Confirm §4: dashboard-api + market data + `GET /v1/tables/:table`. There is no DigiCon package on `develop`. If DigiCon is a different host, slices B–D wait.
-2. **Path aliases.** Confirm chrome may say `/book` and `/movers` while the client calls `GET /portfolio` and a derived movers list. First seats will not add routes.
-3. **Type.** Adopt Inter + JetBrains Mono from the mock, or keep Geist Mono and copy only hairlines, eyebrows, and density? CSP today depends on `next/font` self-hosting.
-4. **Shell flag.** Agree the new shell is default-off until Brief panes (slice C) mount, so the paying dashboard does not ship an empty terminal.
-5. **Rates watch and Strategies.** Agree they are banners only in this program (slice H), not a second book.
-6. **Verbatim comments file** cited by the handoff is not in the repo. If Message D has a lock missing from §0, send it before slice A merges.
-7. **Gloomberg / LuxAlgo.** Agree the quote board stays a labeled placeholder and the chart is Vela on digiquant bars, not a live vendor embed.
+1. **Path aliases.** Confirm chrome may say `/book` and `/movers` while the client calls `GET /portfolio` and a derived movers list. First seats will not add routes.
+2. **Type.** Adopt Inter + JetBrains Mono from the mock, or keep Geist Mono and copy only hairlines, eyebrows, and density? CSP today depends on `next/font` self-hosting.
+3. **Shell flag.** Agree the new shell is default-off until Brief panes (slice C) mount, so the paying dashboard does not ship an empty terminal.
+4. **Rates watch and Strategies.** Agree they are banners only in this program (slice H), not a second book.
+5. **Verbatim comments file** cited by the handoff is not in the repo. If Message D has a lock missing from §0, send it before slice A merges.
+6. **Gloomberg / LuxAlgo.** Agree the quote board stays a labeled placeholder and the chart is Vela on digiquant bars, not a live vendor embed.
+
+Resolved: “DigiCon” was a typo for digiquant. §4 is the data plane. Slices B–D do not wait on a name.
 
 No Human Gate box in the PR template applies to this docs PR. Implement slices that touch brokers, auth, or a new hostname still stop.
 
@@ -649,8 +650,8 @@ No Human Gate box in the PR template applies to this docs PR. Implement slices t
 
 ## 10. First three slices (for One)
 
-1. **Slice A — shell.** Unblocks every pane seat and removes the horizontal tabs. Ship behind a default-off flag unless Chris answers §9.4 with “default on.”
-2. **Slice B — atoms + DigiCon client.** Unblocks real numbers. Parallel with A.
+1. **Slice A — shell.** Unblocks every pane seat and removes the horizontal tabs. Ship behind a default-off flag unless Chris answers §9.3 with “default on.”
+2. **Slice B — atoms + digiquant client.** Unblocks real numbers. Parallel with A.
 3. **Slice C — Brief.** First page that is both the remock layout and live house data (`/brief`, `/portfolio`, derived movers, Vela, run health). Gloomberg stays a placeholder on purpose.
 
 After those three, spawn D, E, F, G together. H last.
