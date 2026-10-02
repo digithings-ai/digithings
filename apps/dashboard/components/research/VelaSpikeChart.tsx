@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { DeskChart } from '@/components/desk/atoms/DeskChart';
 
 /** Vela project page — the attribution link target required by NOTICE.luxalgo-vela. */
 export const VELA_PROJECT_URL = 'https://luxalgo.com/vela';
@@ -51,43 +51,6 @@ export function VelaSpikeChart({
   timeframe = '1D',
   quantChartsHref = 'https://app.luxalgo.com/',
 }: VelaSpikeChartProps) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [mountError, setMountError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host || bars.length === 0) return;
-    let chart: { destroy(): void } | null = null;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { Vela } = await import('@luxalgo/vela');
-        if (cancelled) return;
-        chart = new Vela(host, {
-          data: bars.map((b) => ({
-            time: b.t,
-            open: b.o,
-            high: b.h,
-            low: b.l,
-            close: b.c,
-            ...(b.v === undefined ? {} : { volume: b.v }),
-          })),
-          timeframe,
-          theme: 'dark',
-          live: false,
-          drawings: false,
-        });
-      } catch (err) {
-        if (!cancelled) setMountError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-    return () => {
-      cancelled = true;
-      chart?.destroy();
-      chart = null;
-    };
-  }, [bars, timeframe]);
-
   if (bars.length === 0) {
     return (
       <div
@@ -107,12 +70,12 @@ export function VelaSpikeChart({
       <p className="font-mono text-[11px] text-ink-soft">
         {symbol} · {timeframe} · {bars.length} bars · {fmtDay(first.t)}–{fmtDay(last.t)}
       </p>
-      <div ref={hostRef} data-testid="vela-spike-host" className="h-[320px] w-full" />
-      {mountError ? (
-        <p className="font-mono text-[10px] text-warn" data-testid="vela-spike-mount-error">
-          Vela failed to mount: {mountError} — figures above are the underlying bars.
-        </p>
-      ) : null}
+      <DeskChart
+        bars={bars}
+        timeframe={timeframe}
+        hostTestId="vela-spike-host"
+        hostClassName="h-[320px] w-full"
+      />
       <p className="font-mono text-[10px] text-ink-mute" data-testid="vela-attribution">
         Chart by{' '}
         <a href={VELA_PROJECT_URL} target="_blank" rel="noreferrer" className="underline">
