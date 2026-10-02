@@ -5,16 +5,11 @@
 ---                                 Esc on a preview banner only hides the preview.
 ---   Double-tap Left Option (58) → speak --selection (fail soft; the grid is the status)
 ---
---- Status: a custom overlay banner (banner_core.lua) draws a status word and
---- the grid. It is display only: no title chrome, no transcript, no settings
---- UI — a click toggles density retract → full, Esc cancels a take.
---- Ship model: background only — no Dock icon, no digivoice menubar mark, no
---- launch toast. Customize and Quit live in the digivoice TUI (Quit tears HS down;
---- closing the Terminal alone leaves Hammerspoon running).
---- Hover shows one pin under the banner. Pin keeps it on screen (and at the
---- top); unpin hides it until the next take. Drag moves it freely; release
---- near one of the 9 anchors snaps and persists the position.
---- The banner stays hidden until a take, an error, a warning, or the pin.
+--- Status: a custom overlay banner (banner_core.lua) draws one status icon.
+--- No status word, pin, button, transcript, or waveform. A click focuses the
+--- digivoice terminal when it is already open, and opens it otherwise.
+--- Esc still cancels a take. Drag moves the icon; release near an anchor snaps.
+--- Retract (default) hides the icon when voice is idle. banner_pinned keeps it.
 --- `digivoice banner show` still reveals a status preview with no dictation.
 --- Banner enable/position/density/animations/pin live in settings.json
 --- (`digivoice settings set banner_pinned true`) and are re-read per take.
@@ -179,8 +174,7 @@ end
 -- banner canvas
 --------------------------------------------------------------------------------
 
-local CELL_FIRST = 3 -- canvas element index of grid cell 0 (1 = background, 2 = body)
-local BODY_INDEX = 2
+local CELL_FIRST = 2 -- canvas element index of grid cell 0 (1 = background)
 
 local function delete_canvas()
   if canvas then
@@ -213,23 +207,6 @@ local function cell_color(state, i, t, animate)
   }
 end
 
---- Visible body: the one status word. There is no transcript to scroll.
-local function visible_text(s, box)
-  if s.density == "full" and box.clipped and box.all and #box.all > 0 then
-    local rows = box.all
-    local size = math.max(1, #box.lines)
-    local max_top = math.max(0, #rows - size)
-    local top = math.min(s.scroll or 0, max_top)
-    s.scroll = top
-    local win = {}
-    for i = top + 1, math.min(top + size, #rows) do
-      win[#win + 1] = rows[i]
-    end
-    return table.concat(win, "\n")
-  end
-  return box.body or ""
-end
-
 local function scroll_max(s, box)
   if s.density == "full" and box.clipped and box.all then
     return math.max(0, #box.all - #box.lines)
@@ -237,38 +214,11 @@ local function scroll_max(s, box)
   return 0
 end
 
---- Pin mark on a 24px grid: a head, a stem, and a foot. Filled head when on.
-local function icon_pin(x, y, color, id, on)
-  local k = core.CTRL_SIZE / 24
-  local function pt(px, py)
-    return { x = x + px * k, y = y + py * k }
+local function icon_phase_for(s, view)
+  if core.should_draw(view.state, s.config.banner_pinned == true) then
+    return core.icon_phase(view.state)
   end
-  local function seg(a, b)
-    return {
-      type = "segments",
-      action = "stroke",
-      strokeColor = color,
-      strokeWidth = 2 * k,
-      strokeCap = "round",
-      coordinates = { pt(a[1], a[2]), pt(b[1], b[2]) },
-      id = id,
-    }
-  end
-  local parts = {
-    seg({ 7, 7 }, { 17, 7 }),
-    seg({ 12, 7 }, { 12, 18 }),
-    seg({ 9, 18 }, { 15, 18 }),
-  }
-  if on then
-    parts[#parts + 1] = {
-      type = "rectangle",
-      action = "fill",
-      fillColor = color,
-      frame = { x = x + 9 * k, y = y + 4 * k, w = 6 * k, h = 3 * k },
-      id = id,
-    }
-  end
-  return parts
+  return ""
 end
 
 local function build_canvas(s, view, box)
@@ -278,15 +228,14 @@ local function build_canvas(s, view, box)
     return
   end
   local chrome = core.theme_colors(s.theme)
-  local hover = s.hover
-  local controls = hover and core.controls_layout(box.w, box.h, s.density) or nil
-  local canvas_h = box.h + (hover and core.controls_height(s.density) or 0)
+  local canvas_h = box.h
   local origin = s.origin or core.resolve_position(s.config.banner_position, screen:frame(), box, core.MARGIN)
   s.origin = { x = origin.x, y = origin.y }
   s.size = { w = box.w, h = canvas_h }
   canvas = hs.canvas.new({ x = origin.x, y = origin.y, w = box.w, h = canvas_h })
   canvas:level(hs.canvas.windowLevels.overlay)
-  -- A click only cycles density; it must never steal focus from the app being typed into.
+  -- The click focuses the terminal UI through the launcher. The overlay itself
+  -- must not become the focused window.
   canvas:clickActivating(false)
   canvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
   -- One window only: banner + controls share this canvas. Never a second
@@ -301,7 +250,7 @@ local function build_canvas(s, view, box)
   -- transparent canvas: sibling chrome of the same float unit, never a
   -- stretch of the banner fill/stroke (mock .banner + .controls-under).
 
-  -- No chrome: background + body text only. State reads from the grid alone.
+  -- Icon only: the background holds the phase. The grid is the status mark.
   canvas:appendElements({
     {
       type = "rectangle",
@@ -311,24 +260,10 @@ local function build_canvas(s, view, box)
       strokeWidth = 1,
       trackMouseUp = true,
       trackMouseDown = true,
-      trackMouseEnterExit = true,
+      trackMouseEnterExit = false,
       id = "background",
+      phase = icon_phase_for(s, view),
       frame = { x = 0, y = 0, w = box.w, h = box.h },
-    },
-    {
-      type = "text",
-      text = visible_text(s, box),
-      textColor = chrome.text,
-      textSize = core.FONT_SIZE,
-      textFont = "Menlo",
-      textAlignment = "left",
-      id = "body",
-      frame = {
-        x = box.text_x,
-        y = box.text_y or core.text_origin_y(),
-        w = box.text_w,
-        h = math.max(0, box.h - (box.text_y or core.text_origin_y()) - core.PAD),
-      },
     },
   })
 
@@ -346,63 +281,11 @@ local function build_canvas(s, view, box)
   end
   canvas:appendElements(cells)
 
-  -- Hover: one pin under the banner. Filled when the banner is pinned.
-  if controls then
-    for _, btn in ipairs(controls.buttons) do
-      canvas:appendElements({
-        {
-          type = "rectangle",
-          action = "strokeAndFill",
-          fillColor = chrome.bg,
-          strokeColor = chrome.border,
-          strokeWidth = 1,
-          trackMouseUp = true,
-          trackMouseEnterExit = true,
-          id = btn.id,
-          frame = { x = btn.x, y = btn.y, w = btn.w, h = btn.h },
-        },
-      })
-      canvas:appendElements(icon_pin(btn.x, btn.y, chrome.text, btn.id, s.config.banner_pinned == true))
-    end
-  end
-
   canvas:mouseCallback(function(_, message, id)
     if session ~= s then
       return
     end
-    if message == "mouseEnter" then
-      hover_seq = hover_seq + 1
-      hover_timer = cancel_timer(hover_timer)
-      if not s.hover then
-        s.hover = true
-        rebuild(s)
-      end
-    elseif message == "mouseExit" then
-      local seen = hover_seq + 1
-      hover_seq = seen
-      hover_timer = cancel_timer(hover_timer)
-      hover_timer = hs.timer.doAfter(0.25, function()
-        if session ~= s or hover_seq ~= seen or not s.hover then
-          return
-        end
-        -- Same-canvas chrome: banner face, the CTRL_GAP gutter, and the pills
-        -- are one window. Moving pointer banner<->controls (or pausing in the
-        -- transparent gap, which fires exit with no enter) must not dismiss.
-        local ok, pos = pcall(hs.mouse.getAbsolutePosition)
-        if ok and pos and s.origin and s.size then
-          if
-            pos.x >= s.origin.x
-            and pos.x < s.origin.x + s.size.w
-            and pos.y >= s.origin.y
-            and pos.y < s.origin.y + s.size.h
-          then
-            return
-          end
-        end
-        s.hover = false
-        rebuild(s)
-      end)
-    elseif message == "mouseDown" and id == "background" then
+    if message == "mouseDown" and id == "background" then
       start_drag(s)
     elseif message == "mouseUp" then
       finish_click(s, id)
@@ -424,8 +307,7 @@ function rebuild(s)
   local box = core.layout(view, s.kind, s.density, { screen_h = screen:frame().h })
   s.box = box
   local prev = { x = s.origin.x, y = s.origin.y, w = s.size.w, h = s.size.h }
-  local extra = s.hover and core.controls_height(s.density) or 0
-  local next = core.reanchor(prev, { w = box.w, h = box.h + extra }, s.anchor)
+  local next = core.reanchor(prev, { w = box.w, h = box.h }, s.anchor)
   s.origin = next
   build_canvas(s, view, box)
   ensure_scroll_tap(s, box)
@@ -466,10 +348,9 @@ local function render(s)
   local theme = detect_theme()
   local signature = table.concat({
     view.state,
-    box.raw or box.body or "",
+    icon_phase_for(s, view),
     s.density,
     theme,
-    tostring(s.hover),
     tostring(s.config.banner_pinned),
   }, "\0")
   if signature ~= s.signature or not canvas then
@@ -485,43 +366,20 @@ local function render(s)
         s.anchor = core.anchor_for_position(s.config.banner_position)
       end
     else
-      -- Keep the pin across takes/text updates so growth heads outward.
-      local extra = s.hover and core.controls_height(s.density) or 0
       s.origin = core.reanchor(
         { x = s.origin.x, y = s.origin.y, w = s.size.w, h = s.size.h },
-        { w = box.w, h = box.h + extra },
+        { w = box.w, h = box.h },
         s.anchor
       )
     end
     build_canvas(s, view, box)
   else
     paint_cells(s, view)
-    if canvas then
-      canvas[BODY_INDEX].text = visible_text(s, box)
+    if canvas and canvas[1] then
+      canvas[1].phase = icon_phase_for(s, view)
     end
   end
   ensure_scroll_tap(s, box)
-end
-
---- Collapse to a smaller density. The transcript is already fully shown.
-local function collapse_to(s, density)
-  s.density = density
-  s.hover = false
-  s.scroll = 0
-  s.signature = nil
-  render(s)
-end
-
-local function cycle_density(s)
-  local next = core.next_density(s.density)
-  if next ~= "full" then
-    collapse_to(s, next)
-  else
-    s.density = next
-    s.scroll = 0
-    s.signature = nil
-    render(s)
-  end
 end
 
 --------------------------------------------------------------------------------
@@ -587,33 +445,6 @@ function finish_drag(s)
   return was_moved
 end
 
---------------------------------------------------------------------------------
--- hover control: pin (always show) 
---------------------------------------------------------------------------------
-
---- Patch banner_pinned in settings.json without rewriting the other keys.
-local function write_pinned(pinned)
-  local flag = pinned and "true" or "false"
-  local f = io.open(SETTINGS_FILE, "r")
-  local text = ""
-  if f then
-    text = f:read("*a") or ""
-    f:close()
-  end
-  if text:find('"banner_pinned"') then
-    text = text:gsub('"banner_pinned"%s*:%s*%a+', '"banner_pinned": ' .. flag, 1)
-  elseif text:match("^%s*{") then
-    text = text:gsub("^%s*{", '{"banner_pinned": ' .. flag .. ", ", 1)
-  else
-    text = '{"banner_pinned": ' .. flag .. "}\n"
-  end
-  write_file(SETTINGS_FILE, text)
-end
-
-local function task_running(s)
-  return s.task and s.task.isRunning and s.task:isRunning()
-end
-
 --- Hide the canvas. Takes keep running; previews end. Esc still discards a take.
 local function hide_banner(s)
   stop_scroll_tap()
@@ -630,75 +461,36 @@ local function hide_banner(s)
   end
 end
 
---- Pin keeps the banner up and snaps it to the top. Unpin hides it when idle.
-local function toggle_pin(s)
-  local next_pin = not (s.config.banner_pinned == true)
-  s.config.banner_pinned = next_pin
-  write_pinned(next_pin)
-  if next_pin then
-    s.hidden = false
-    local screen = hs.screen.mainScreen()
-    if screen and s.box then
-      local origin = core.resolve_position(
-        "top-center",
-        screen:frame(),
-        { w = s.box.w, h = s.box.h },
-        core.MARGIN
-      )
-      s.origin = { x = origin.x, y = origin.y }
-      s.anchor = "tc"
-      if canvas then
-        canvas:topLeft({ x = origin.x, y = origin.y })
-      end
-      save_pos({ x = origin.x, y = origin.y, anchor = "tc" })
-    end
-    s.signature = nil
-    render(s)
-    return
+local function tui_pid_text()
+  local f = io.open(DATA_DIR .. "/tui.pid", "r")
+  if not f then
+    return ""
   end
-  if task_running(s) then
-    s.signature = nil
-    render(s)
-    return
-  end
-  hide_banner(s)
-  if session == s then
-    end_session(s)
+  local text = f:read("*a") or ""
+  f:close()
+  return text
+end
+
+--- Tests replace this. The default calls M._executor and never starts a terminal
+--- on its own, so a unit run cannot launch Terminal or Hammerspoon.
+function M.launch_tui(action)
+  local run = M._executor
+  if run then
+    run(action)
   end
 end
 
---- Which control (if any) sits under the cursor. Fallback for hosts whose
---- mouseCallback does not pass the element id: same hit-test, same result.
-local function hit_test(s)
-  local mouse = hs.mouse and hs.mouse.getAbsolutePosition and hs.mouse.getAbsolutePosition()
-  if not mouse or not s.origin or not s.box or not s.hover then
-    return "background"
-  end
-  local layout = core.controls_layout(s.box.w, s.box.h, s.density)
-  for _, btn in ipairs(layout.buttons) do
-    local x, y = mouse.x - s.origin.x, mouse.y - s.origin.y
-    if x >= btn.x and x < btn.x + btn.w and y >= btn.y and y < btn.y + btn.h then
-      return btn.id
-    end
-  end
-  return "background"
-end
-
-function finish_click(s, id)
+function finish_click(s, _)
   local dragged = finish_drag(s)
   if dragged then
-    return -- a drag-drop never also clicks.
+    return
   end
-  if id == nil then
-    id = hit_test(s)
+  if s.kind == "preview" and s.discarded then
+    return
   end
-  if id == "pin" then
-    toggle_pin(s)
-  else
-    if s.kind == "preview" and s.discarded then
-      return
-    end
-    cycle_density(s)
+  local action = core.focus_action(core.tui_is_open(tui_pid_text()))
+  if M.launch_tui then
+    M.launch_tui(action)
   end
 end
 
@@ -738,7 +530,6 @@ ensure_scroll_tap = function(s, box)
       return false
     end
     s.scroll = next
-    canvas[BODY_INDEX].text = visible_text(s, s.box or box)
     return true
   end)
   scroll_tap:start()
@@ -837,8 +628,7 @@ local function finish_session(s, exit_code, stdout, stderr)
   if s.config.live_banner then
     s.signature = nil
     render(s)
-    -- Full stays until collapsed. A pin settles done into a quiet idle.
-    -- Retract dismisses a few seconds after the take ends.
+    -- A pin settles done into the idle icon. Retract hides when the take is done.
     local wait = core.linger_seconds(s.final.state, s.density, s.config.banner_pinned)
     if wait ~= nil then
       hide_timer = hs.timer.doAfter(wait, function()

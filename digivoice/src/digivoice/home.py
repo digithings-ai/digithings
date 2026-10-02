@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
+from digivoice.banner_launch import mark_tui_closed, mark_tui_open
 from digivoice.doctor import doctor_checks
 from digivoice.history import read_history
 from digivoice.menu_tree import browse_settings
@@ -310,6 +311,7 @@ def run_home(
             stdout.write(f"  {copied.detail}\n")
             stdout.flush()
 
+    mark_tui_open(paths.data_dir)
     fullscreen_enter(stdout)
     previous_hup = signal.getsignal(signal.SIGHUP)
     signal.signal(signal.SIGHUP, _on_terminal_close)
@@ -352,3 +354,4 @@ def run_home(
     finally:
         signal.signal(signal.SIGHUP, previous_hup)
         fullscreen_leave(stdout)
+        mark_tui_closed(paths.data_dir)
