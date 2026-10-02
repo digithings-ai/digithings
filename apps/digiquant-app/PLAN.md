@@ -10,9 +10,9 @@ Principles: never invent numbers (fail closed, "—"); one catalog (`access.ts`)
 |---|---|
 | App shell, desks, nav, search, grid, locked states | Done. |
 | Atoms (Phase 0) | Done: DataTable v2 (sort/filter/row click/sticky/pagination), AreaChart (+underwater), BarChart, RangeTabs, Drawer, gallery at `/blocks/atoms`. |
-| Worker foundation (Phase 0) | Done: real tier ladder, `routes/` registry (+`{param}` templates), `tableRead()` enveloped reader, twelve-x reader (fails closed without key), PUT/POST/DELETE plumbing (401 without `x-digi-user`), catalog-generated MCP tools, edge identity key, brief+ gate on raw `/v1/tables/*`. 287 tests. |
+| Worker foundation (Phase 0) | Done: real tier ladder, `routes/` registry (+`{param}` templates), `tableRead()` enveloped reader, twelve-x reader (fails closed without key), PUT/POST/DELETE plumbing (401 without `x-digi-user`), catalog-generated MCP tools, edge identity key, brief+ gate on raw `/v1/tables/*`. |
 | Live data | Worker runs against live core Supabase locally (`.dev.vars` populated from the main checkouts). Real `/portfolio` verified. |
-| Routes | 8 of ~57 block routes live. Registry is empty; every remaining route is new work. |
+| Routes | Phases 1–3 registered in `src/routes/` and the catalog: portfolio enrichment, drawdown, theses/signals, brief decision/risks, dossier, pipeline run routes, FX hub and rates. Flags, paper exposure, and directives return a typed empty state. Draft SQL is in `apps/dashboard-api/migrations-draft/` and is not applied. |
 | Blocks | 12 implemented, 7 partial, ~57 with no route. 13 pages have layouts. |
 
 ### Review findings from Phase 0 (all fixed unless noted)
