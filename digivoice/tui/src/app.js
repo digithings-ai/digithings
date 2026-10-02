@@ -131,6 +131,13 @@ function rowLabel(row, screen) {
   return row.path || row.action
 }
 
+function barLine(percent) {
+  const width = 24
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0))
+  const filled = Math.round((width * pct) / 100)
+  return `${"█".repeat(filled)}${"░".repeat(width - filled)}  ${pct}%`
+}
+
 function rowValue(row) {
   if (["take", "log", "note", "check", "copy", "delete", "confirm", "back"].includes(row.kind)) {
     return ""
@@ -201,6 +208,8 @@ export function mountDigivoice(renderer, session, options = {}) {
   let engineAttached = false
   const timelines = []
   let confirmIndex = null
+  let downloadJob = null
+  let downloadGen = 0
   let finished = false
   let statusText = ""
   let homeRows = []
@@ -517,7 +526,8 @@ export function mountDigivoice(renderer, session, options = {}) {
       label = rowLabel(row, screen)
       if (!capturing) gray = rowValue(row)
     }
-    const room = Math.max(4, frameWidth - label.length - 2)
+    const mark = row.downloaded ? 1 : 0
+    const room = Math.max(4, frameWidth - label.length - 2 - mark)
     const action = new TextRenderable(renderer, {
       content: label ? ` ${label}` : "",
       height: 1,
@@ -555,6 +565,10 @@ export function mountDigivoice(renderer, session, options = {}) {
           wrapMode: "none",
         }),
       )
+    }
+    if (row.downloaded) {
+      block.add(new BoxRenderable(renderer, { flexGrow: 1, height: 1 }))
+      block.add(new TextRenderable(renderer, { content: "↓", width: 1, height: 1 }))
     }
     if (row.kind !== "note" && row.kind !== "check") {
       block.onMouseOver = () => {
@@ -597,6 +611,10 @@ export function mountDigivoice(renderer, session, options = {}) {
     if (screen.kind === "busy") {
       const mark = SPIN[(screen.tick || 0) % SPIN.length]
       addLine(list, rowNodes, `${screen.busyLabel || "working"} ${mark}`)
+    } else if (screen.kind === "download") {
+      addLine(list, rowNodes, screen.downloadName || "")
+      addLine(list, rowNodes, barLine(screen.percent || 0))
+      if (screen.downloadError) addLine(list, rowNodes, screen.downloadError)
     } else if (screen.kind === "doctor") {
       for (const row of screen.rows || []) {
         addLine(list, rowNodes, doctorLine(row), null, {
@@ -665,6 +683,20 @@ export function mountDigivoice(renderer, session, options = {}) {
     if (capture) {
       capture = null
       armCapture(false)
+      renderList()
+      return
+    }
+    if (screen.kind === "download") {
+      downloadGen += 1
+      if (downloadJob) downloadJob.cancel()
+      downloadJob = null
+      try {
+        session.call({ op: "cancel-download", filename: screen.filename || "" })
+      } catch {
+        /* leaving the page still drops the partial on the next open */
+      }
+      const previous = stack.pop()
+      if (previous) screen = previous
       renderList()
       return
     }
@@ -1025,9 +1057,68 @@ export function mountDigivoice(renderer, session, options = {}) {
     renderList()
   }
 
+  function beginDownload(result) {
+    const gen = ++downloadGen
+    const listIndex = screen.selected
+    const listPath = screen.path
+    stack.push({ ...screen })
+    screen = {
+      ...screen,
+      kind: "download",
+      downloadName: result.name || result.title || result.filename,
+      filename: result.filename,
+      percent: 0,
+      downloadError: "",
+      rows: [],
+      body: "",
+      notice: "",
+      paging: false,
+      listIndex,
+    }
+    renderList()
+    const follow = session.follow
+    if (typeof follow !== "function") {
+      screen = { ...screen, downloadError: "download is unavailable" }
+      renderList()
+      return
+    }
+    downloadJob = follow(
+      { op: "download", path: result.path || listPath, index: result.index ?? listIndex, filename: result.filename },
+      (event) => {
+        if (gen !== downloadGen || !screen || screen.kind !== "download") return
+        if (event.error) {
+          screen = { ...screen, downloadError: String(event.error) }
+          renderList()
+          return
+        }
+        if (event.got != null) {
+          const total = Number(event.total)
+          const percent = total > 0 ? Math.min(100, Math.round((Number(event.got) * 100) / total)) : screen.percent
+          screen = { ...screen, percent }
+          renderList()
+        }
+        if (event.ok) {
+          downloadJob = null
+          const previous = stack.pop()
+          screen = {
+            ...(previous || screen),
+            kind: "settings",
+            path: event.path || listPath,
+            rows: event.rows || (previous && previous.rows) || [],
+            selected: event.index ?? listIndex,
+            body: "",
+            notice: "",
+            downloadError: "",
+          }
+          renderList()
+        }
+      },
+    )
+  }
+
   async function chooseCurrent() {
     const row = (screen.rows || [])[screen.selected]
-    if (!row) return
+    if (!row || (screen && screen.kind === "download")) return
     if (row.kind === "capture") {
       capture = {}
       armCapture(true)
@@ -1036,6 +1127,22 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     if (row.kind === "choice") {
       const result = await session.call({ op: "apply", path: screen.path, index: screen.selected })
+      if (result.download) {
+        beginDownload(result)
+        return
+      }
+      if (result.stay) {
+        screen = {
+          ...screen,
+          rows: result.rows || screen.rows,
+          path: result.path || screen.path,
+          selected: result.index ?? screen.selected,
+          body: "",
+          notice: "",
+        }
+        renderList()
+        return
+      }
       if (result.confirm) {
         confirmIndex = screen.selected
         stack.push({ ...screen })
@@ -1065,7 +1172,7 @@ export function mountDigivoice(renderer, session, options = {}) {
   }
 
   function move(delta) {
-    if (!screen || working || screen.kind === "doctor" || screen.kind === "busy") return
+    if (!screen || working || screen.kind === "doctor" || screen.kind === "busy" || screen.kind === "download") return
     if (!screen.rows || !screen.rows.length) return
     const count = screen.rows.length
     screen.selected = (screen.selected + delta + count) % count
@@ -1090,6 +1197,7 @@ export function mountDigivoice(renderer, session, options = {}) {
   function onKey(key) {
     if (finished || working) return
     const name = key.name
+    if (screen && screen.kind === "download" && name !== "escape") return
     if (capture) {
       if (name === "escape") {
         if (typeof key.stopPropagation === "function") key.stopPropagation()

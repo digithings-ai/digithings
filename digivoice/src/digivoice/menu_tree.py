@@ -3,8 +3,10 @@
 A value is saved only when that chooser is picked. Enter on the parent
 does not toggle or cycle. After a choice or cancel, the parent stays on
 the row that was opened. A model row opens the catalog. Size and the
-recommended flag are on each row. A missing file downloads only after
-confirm. Esc goes up. The numbered ``setup`` wizard stays for pipes and agents.
+recommended flag are on each row. A file already in the models directory
+is marked downloaded. The numbered menu still asks before it fetches a
+missing speech or rewrite file. Esc goes up. The numbered ``setup`` wizard
+stays for pipes and agents.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from typing import TextIO
 from pydantic import BaseModel, ConfigDict
 
 from digivoice.bindings import binding_conflict, binding_warning, parse_binding, set_hotkey_capture
-from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, CatalogModel
+from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, VOICE_CATALOG, CatalogModel, find_voice
 from digivoice.installed_models import InstalledModel, discover_installed_models
 from digivoice.models import VoicePaths
 from digivoice.nav import norm_path
@@ -51,12 +53,8 @@ _POSITIONS: tuple[str, ...] = (
 )
 _STT_IDS: tuple[str, ...] = tuple(item.id for item in STT_CATALOG)
 _REWRITE_FILES: tuple[str, ...] = tuple(item.filename for item in REWRITE_CATALOG)
-# Local Piper filenames. No download URL. On-disk .onnx files are added beside these.
-_PIPER_VOICES: tuple[tuple[str, str, str], ...] = (
-    ("en_US-lessac-medium.onnx", "Lessac medium", "English"),
-    ("en_US-amy-medium.onnx", "Amy medium", "English"),
-    ("en_GB-alba-medium.onnx", "Alba medium", "English"),
-)
+# Local Piper voices. The OpenTUI download page fetches these files. The
+# numbered menu still saves a voice name without fetching.
 _MODEL_FIELDS = frozenset({"stt_model", "rewrite_model", "tts_voice"})
 _BOOL_FIELDS = frozenset(
     {
@@ -80,6 +78,7 @@ class TreeRow(BaseModel):
     value: str = ""
     field: str = ""
     choice: str = ""
+    downloaded: bool = False
 
     def label(self) -> str:
         if self.kind == "dir":
@@ -155,7 +154,7 @@ def rows_at(
                 name="model",
                 kind="pick",
                 value=_model_title("stt_model", settings.stt_model),
-                explain="Local whisper file. Enter opens the list. A download asks first.",
+                explain="Local whisper file. Enter opens the list.",
             ),
             TreeRow(
                 name="voice",
@@ -171,7 +170,7 @@ def rows_at(
             ),
         ]
     if here == "/settings/speech/model":
-        return _model_choices("stt_model", installed or ())
+        return _model_choices("stt_model", installed or (), models_dir)
     if here == "/settings/speech/voice":
         return _voice_choices(settings, models_dir)
     if here == "/settings/speech/paste":
@@ -198,7 +197,7 @@ def rows_at(
                 name="model",
                 kind="pick",
                 value=_model_title("rewrite_model", settings.rewrite_model or ""),
-                explain="On-device model. Enter opens the list. A download asks first.",
+                explain="On-device model. Enter opens the list.",
             ),
         ]
     if here == "/settings/rewrite/enabled":
@@ -210,7 +209,7 @@ def rows_at(
     if here == "/settings/rewrite/style":
         return _style_choices()
     if here == "/settings/rewrite/model":
-        return _model_choices("rewrite_model", installed or ())
+        return _model_choices("rewrite_model", installed or (), models_dir)
     if here == "/settings/banner":
         return [
             TreeRow(
@@ -376,9 +375,16 @@ _SOURCE_EXPLAIN = {
 }
 
 
+def _on_disk(models_dir: Path | None, filename: str) -> bool:
+    if models_dir is None or not filename:
+        return False
+    return (Path(models_dir) / Path(filename).name).is_file()
+
+
 def _model_choices(
     field: str,
     installed: Sequence[InstalledModel] = (),
+    models_dir: Path | None = None,
 ) -> list[TreeRow]:
     catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
     kind = "stt" if field == "stt_model" else "rewrite"
@@ -403,6 +409,7 @@ def _model_choices(
                 value=size,
                 choice=stored,
                 explain=_plain(item.best_for),
+                downloaded=_on_disk(models_dir, item.filename),
             )
         )
     for item in installed:
@@ -418,6 +425,7 @@ def _model_choices(
                 value=f"{lang} · installed",
                 choice=item.path,
                 explain=_SOURCE_EXPLAIN.get(item.source, "Installed locally"),
+                downloaded=True,
             )
         )
     return rows
@@ -428,7 +436,7 @@ def _voice_choices(settings: VoiceSettings, models_dir: Path | None) -> list[Tre
     rows: list[TreeRow] = []
     seen: set[str] = set()
 
-    def add(choice: str, name: str, explain: str) -> None:
+    def add(choice: str, name: str, explain: str, *, downloaded: bool = False) -> None:
         if not choice or choice in seen:
             return
         seen.add(choice)
@@ -440,18 +448,25 @@ def _voice_choices(settings: VoiceSettings, models_dir: Path | None) -> list[Tre
                 choice=choice,
                 value=explain,
                 explain=explain,
+                downloaded=downloaded,
             )
         )
 
     add("auto", "auto", "First Piper file on disk")
-    for filename, title, lang in _PIPER_VOICES:
-        add(filename, title, lang)
+    for item in VOICE_CATALOG:
+        add(
+            item.filename,
+            _display_name(item.title),
+            "English",
+            downloaded=_on_disk(models_dir, item.filename),
+        )
     if models_dir is not None and models_dir.is_dir():
         for path in sorted(models_dir.glob("*.onnx")):
-            add(path.name, path.stem, "Installed Piper voice")
+            add(path.name, path.stem, "Installed Piper voice", downloaded=True)
     current = (settings.tts_voice or "").strip()
     if current:
-        add(current, Path(current).stem or current, "Saved Piper voice")
+        present = Path(current).expanduser().is_file() or _on_disk(models_dir, current)
+        add(current, Path(current).stem or current, "Saved Piper voice", downloaded=present)
     return rows
 
 
@@ -484,6 +499,21 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
         if row.choice == current:
             return index
     return 0
+
+
+def _pending_download(paths: VoicePaths, row: TreeRow) -> CatalogModel | None:
+    """Catalog file the OpenTUI download page should fetch. None when it is on disk."""
+    if row.field == "tts_voice":
+        if not row.choice or row.choice == "auto":
+            return None
+        entry = find_voice(row.choice)
+        if entry is None:
+            return None
+        dest = Path(paths.models_dir) / entry.filename
+        if dest.is_file():
+            return None
+        return entry
+    return _missing_catalog(paths, row)
 
 
 def _missing_catalog(paths: VoicePaths, row: TreeRow) -> CatalogModel | None:

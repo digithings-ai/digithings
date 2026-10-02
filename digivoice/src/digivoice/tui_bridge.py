@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from digivoice.bindings import binding_conflict, binding_warning, set_hotkey_capture
-from digivoice.catalog import install_catalog_model
+from digivoice.catalog import download_partial, install_catalog_model
 from digivoice.doctor import doctor_checks
 from digivoice.history import delete_entry, read_history
 from digivoice.home import HOME_BLOCKS, build_context_lines, build_status_line
 from digivoice.install import FetchFn, render_install, run_install
 from digivoice.installed_models import discover_installed_models
-from digivoice.menu_tree import TreeRow, _changed, _missing_catalog, rows_at
+from digivoice.menu_tree import TreeRow, _changed, _pending_download, rows_at
 from digivoice.models import HistoryEntry
 from digivoice.nav import norm_path
 from digivoice.opentui import NAV_FOOTER
@@ -35,7 +35,7 @@ _DOCTOR_SKIP = frozenset({"tcc", "interrupt", "paths", "detection", "history"})
 _DOCTOR_WIDTH = 60
 
 
-def _row(row: TreeRow, path: str) -> dict[str, str]:
+def _row(row: TreeRow, path: str) -> dict[str, Any]:
     block = row.as_block(path)
     return {
         "action": block.action,
@@ -44,10 +44,11 @@ def _row(row: TreeRow, path: str) -> dict[str, str]:
         "kind": row.kind,
         "name": row.name,
         "choice": row.choice,
+        "downloaded": row.downloaded,
     }
 
 
-def _settings_rows(paths: Any, path: str) -> list[dict[str, str]]:
+def _settings_rows(paths: Any, path: str) -> list[dict[str, Any]]:
     settings = load_settings(paths)
     installed = discover_installed_models(Path.home(), dict(os_environ()))
     rows = rows_at(settings, path, Path(paths.models_dir), installed)
@@ -283,6 +284,11 @@ def dispatch(
     if op == "quit":
         report = stop_home_control(platform, home, env, runner=run_command)
         return {"footer": footer, "exit": 0, "stopped": True, "note": report.summary}
+    if op == "cancel-download":
+        return {
+            "footer": footer,
+            **cancel_download(paths, str(req.get("filename") or "")),
+        }
     if op == "hotkey-capture":
         set_hotkey_capture(paths.data_dir, bool(req.get("active")))
         return {"footer": footer, "active": bool(req.get("active"))}
@@ -399,30 +405,29 @@ def _apply(
         }
     if row.kind != "choice":
         return {"note": row.explain}
-    missing = _missing_catalog(paths, row)
-    if missing is not None and not req.get("confirm"):
+    pending = _pending_download(paths, row)
+    if pending is not None:
         return {
-            "confirm": True,
-            "title": missing.title,
-            "rows": [
-                {
-                    "action": f"Download ({missing.size_hint})",
-                    "path": path,
-                    "meta": "",
-                    "kind": "confirm",
-                },
-                {"action": "Back", "path": path, "meta": "", "kind": "back"},
-            ],
+            "download": True,
+            "title": pending.title,
+            "name": row.name,
+            "filename": pending.filename,
+            "path": path,
+            "index": index,
         }
-    if missing is not None and req.get("confirm"):
-        try:
-            install_catalog_model(paths, missing)
-        except (OSError, ValueError) as exc:
-            return {"error": f"could not install {missing.filename}: {exc}"}
     nxt = _changed(settings, row, None)
     if nxt is None:
         return {"note": "unchanged"}
     save_settings(paths, nxt)
+    if row.field in {"stt_model", "rewrite_model", "tts_voice"}:
+        return {
+            "saved": True,
+            "stay": True,
+            "path": path,
+            "index": index,
+            "rows": _settings_rows(paths, path),
+            "title": path.rsplit("/", 1)[-1],
+        }
     parent = path.rsplit("/", 1)[0] or "/settings"
     return {
         "saved": True,
@@ -430,6 +435,75 @@ def _apply(
         "rows": _settings_rows(paths, parent),
         "title": parent.rsplit("/", 1)[-1],
     }
+
+
+def cancel_download(paths: Any, filename: str) -> dict[str, bool]:
+    """Drop a partial download. The finished file and every other model stay."""
+    name = Path(filename).name
+    if not name or name in {".", ".."} or name.startswith("."):
+        return {"cancelled": False}
+    root = Path(paths.models_dir)
+    download_partial(root / name).unlink(missing_ok=True)
+    download_partial(root / f"{name}.json").unlink(missing_ok=True)
+    return {"cancelled": True}
+
+
+def run_download(
+    paths: Any,
+    req: dict[str, Any],
+    *,
+    emit: Any,
+    fetch: FetchFn | None = None,
+    home: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> None:
+    """Stream progress, then ok or error. A failure does not select the model."""
+    path = norm_path(str(req.get("path") or "/settings"))
+    index = int(req.get("index") or 0)
+    settings = load_settings(paths)
+    installed = discover_installed_models(home or Path.home(), dict(env or {}))
+    models_dir = Path(paths.models_dir)
+    rows = rows_at(settings, path, models_dir, installed)
+    if not rows or not 0 <= index < len(rows):
+        emit({"error": "no row"})
+        return
+    row = rows[index]
+    pending = _pending_download(paths, row)
+    if pending is None:
+        nxt = _changed(settings, row, None)
+        if nxt is not None:
+            save_settings(paths, nxt)
+        emit(
+            {
+                "ok": True,
+                "rows": _settings_rows(paths, path),
+                "path": path,
+                "index": index,
+            }
+        )
+        return
+
+    def progress(got: int, total: int | None) -> None:
+        emit({"got": got, "total": total})
+
+    try:
+        install_catalog_model(paths, pending, fetch=fetch, progress=progress)
+    except Exception as exc:
+        emit({"error": f"could not install {pending.filename}: {exc}"})
+        return
+    fresh = rows_at(load_settings(paths), path, models_dir, installed)
+    chosen = fresh[index] if 0 <= index < len(fresh) else row
+    nxt = _changed(load_settings(paths), chosen, None)
+    if nxt is not None:
+        save_settings(paths, nxt)
+    emit(
+        {
+            "ok": True,
+            "rows": _settings_rows(paths, path),
+            "path": path,
+            "index": index,
+        }
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -444,7 +518,17 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(json.dumps({"error": "invalid json"}))
         return 0
     env = dict(os.environ)
-    result = dispatch(req, platform=sys.platform, home=Path.home(), env=env)
+    home = Path.home()
+    if req.get("op") == "download":
+        paths = resolve_paths(sys.platform, home, env)
+
+        def emit(event: dict[str, Any]) -> None:
+            sys.stdout.write(json.dumps(event) + "\n")
+            sys.stdout.flush()
+
+        run_download(paths, req, emit=emit, home=home, env=env)
+        return 0
+    result = dispatch(req, platform=sys.platform, home=home, env=env)
     sys.stdout.write(json.dumps(result))
     return 0
 

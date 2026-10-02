@@ -1,4 +1,4 @@
-"""Suggested local models for STT and post-process rewrite.
+"""Suggested local models for STT, Piper voices, and post-process rewrite.
 
 Setup lists these, then download + wire into the models directory. Files stay
 on this machine — no cloud, URL, or user-hosted OpenAI-style endpoints.
@@ -16,7 +16,7 @@ from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL
 from digivoice.settings import LOCAL_REWRITE_MODEL_FILE
 
-Kind = Literal["stt", "rewrite"]
+Kind = Literal["stt", "rewrite", "voice"]
 ProgressFn = Callable[[int, int | None], None]
 FetchFn = Callable[..., None]
 
@@ -33,6 +33,7 @@ class CatalogModel:
     best_for: str
     languages: str
     size_hint: str
+    sidecar_url: str = ""
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -279,6 +280,46 @@ def catalog_public() -> dict[str, Any]:
     }
 
 
+_PIPER_VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0"
+
+
+def _piper(locale_path: str, filename: str, title: str) -> CatalogModel:
+    url = f"{_PIPER_VOICE_BASE}/{locale_path}/{filename}"
+    return CatalogModel(
+        id=filename,
+        filename=filename,
+        kind="voice",
+        url=url,
+        title=title,
+        best_for="local Piper voice",
+        languages="en",
+        size_hint="~60 MB",
+        sidecar_url=f"{url}.json",
+    )
+
+
+VOICE_CATALOG: tuple[CatalogModel, ...] = (
+    _piper("en/en_US/lessac/medium", "en_US-lessac-medium.onnx", "Lessac medium"),
+    _piper("en/en_US/amy/medium", "en_US-amy-medium.onnx", "Amy medium"),
+    _piper("en/en_GB/alba/medium", "en_GB-alba-medium.onnx", "Alba medium"),
+)
+
+
+def find_voice(name: str) -> CatalogModel | None:
+    needle = Path(name.strip()).name
+    if not needle:
+        return None
+    for item in VOICE_CATALOG:
+        if item.id == needle or item.filename == needle:
+            return item
+    return None
+
+
+def download_partial(dest: Path) -> Path:
+    """Sibling written until the download finishes. Not a selected model file."""
+    return dest.with_name(dest.name + ".partial")
+
+
 def _fetch_url(url: str, dest: Path, progress: ProgressFn | None = None) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".tmp")
@@ -312,25 +353,45 @@ def install_catalog_model(
     fetch: FetchFn | None = None,
     progress: ProgressFn | None = None,
 ) -> str:
-    """Place `entry.filename` under models_dir. Idempotent. Local file only."""
+    """Place `entry.filename` under models_dir. Idempotent. Local file only.
+
+    Bytes land in a ``.partial`` sibling and replace the real file only after
+    every piece is on disk. A failure deletes those partials and leaves every
+    other model file alone.
+    """
     dest = Path(paths.models_dir) / Path(entry.filename).name
     if dest.is_file():
         return str(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     worker = fetch or _fetch_url
-    _invoke_fetch(worker, entry.url, dest, progress)
-    if not dest.is_file():
-        raise OSError(f"download did not write {dest}")
+    pieces: list[tuple[str, Path]] = [(entry.url, dest)]
+    if entry.sidecar_url:
+        pieces.append((entry.sidecar_url, dest.with_name(dest.name + ".json")))
+    partials = [download_partial(target) for _url, target in pieces]
+    try:
+        for (url, _target), partial in zip(pieces, partials, strict=True):
+            _invoke_fetch(worker, url, partial, progress)
+            if not partial.is_file():
+                raise OSError(f"download did not write {dest}")
+        for (_url, target), partial in zip(pieces, partials, strict=True):
+            partial.replace(target)
+    except Exception:
+        for partial in partials:
+            partial.unlink(missing_ok=True)
+        raise
     return str(dest)
 
 
 __all__ = [
     "REWRITE_CATALOG",
     "STT_CATALOG",
+    "VOICE_CATALOG",
     "CatalogModel",
     "catalog_public",
+    "download_partial",
     "find_rewrite",
     "find_stt",
+    "find_voice",
     "install_catalog_model",
     "rewrite_catalog",
     "stt_catalog",

@@ -64,6 +64,10 @@ function session(extra = {}) {
       }
       return { rows: [] }
     },
+    follow(request, onLine) {
+      if (extra.follow) return extra.follow(request, onLine)
+      return { cancel() {} }
+    },
   }
 }
 
@@ -80,6 +84,18 @@ function mount(setup, api, extra = {}) {
 async function settle(setup) {
   await new Promise((resolve) => setTimeout(resolve, 80))
   await setup.renderOnce()
+}
+
+async function untilFrame(setup, predicate, ms = 1500) {
+  const start = Date.now()
+  let frame = ""
+  while (Date.now() - start < ms) {
+    await setup.renderOnce()
+    frame = setup.captureCharFrame()
+    if (predicate(frame)) return frame
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error(`frame timeout\n${frame}`)
 }
 
 test("a physical option press fills a binding the adapter can arm", () => {
@@ -263,23 +279,20 @@ test("a settings choice returns to the same row", async () => {
   }
 })
 
-test("esc from a download confirm returns to that model", async () => {
-  const setup = await createTestRenderer({ width: 100, height: 56 })
-  const api = session({
+const TINY = {
+  action: "Tiny",
+  path: "/settings/speech/model/ggml-tiny.en",
+  meta: "English · ~75 MB",
+  kind: "choice",
+  name: "Tiny",
+  downloaded: false,
+}
+
+function modelListSession(extra = {}) {
+  return session({
     rows(request) {
       if (request.path === "/settings/speech/model") {
-        return {
-          path: request.path,
-          rows: [
-            {
-              action: "Tiny",
-              path: "/settings/speech/model/ggml-tiny.en",
-              meta: "English · ~75 MB",
-              kind: "choice",
-              name: "Tiny",
-            },
-          ],
-        }
+        return { path: request.path, rows: [extra.model || TINY] }
       }
       if (request.path === "/settings") {
         return {
@@ -292,38 +305,173 @@ test("esc from a download confirm returns to that model", async () => {
         rows: [{ action: "model", path: "/settings/speech/model", meta: "", kind: "pick", name: "model" }],
       }
     },
-    apply(request) {
-      if (!request.confirm) {
-        return {
-          confirm: true,
-          title: "Download",
-          rows: [
-            { action: "Download", path: request.path, meta: "", kind: "confirm" },
-            { action: "Back", path: request.path, meta: "", kind: "back" },
-          ],
-        }
+    ...extra,
+  })
+}
+
+async function openModelList(setup) {
+  await setup.waitForFrame((value) => value.includes("│ /history"))
+  setup.mockInput.pressArrow("down")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((value) => value.includes("/speech"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((value) => value.includes("/model"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((value) => value.includes("│ Tiny"))
+}
+
+test("a downloaded model keeps the path on the left and the arrow on the right", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = modelListSession({ model: { ...TINY, downloaded: true } })
+  try {
+    const app = mount(setup, api)
+    await openModelList(setup)
+    const frame = setup.captureCharFrame()
+    const line = frame.split("\n").find((item) => item.includes("Tiny") && item.includes("↓"))
+    assert.ok(line)
+    assert.match(line, /│ Tiny/)
+    assert.ok(line.indexOf("Tiny") < line.indexOf("↓"))
+    assert.equal(line.trimEnd().endsWith("↓"), true)
+    assert.match(frame, /↑↓ move · enter select · esc back · click/)
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a missing model downloads in the pane and the percent advances", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  let requested = null
+  let push = null
+  const api = modelListSession({
+    apply() {
+      return {
+        download: true,
+        name: "Tiny",
+        title: "Tiny",
+        filename: "ggml-tiny.en.bin",
+        path: "/settings/speech/model",
+        index: 0,
       }
-      return { saved: true, path: "/settings/speech", rows: SPEECH_ROWS }
+    },
+    follow(request, onLine) {
+      requested = request
+      push = onLine
+      return { cancel() {} }
     },
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
-    setup.mockInput.pressArrow("down")
+    await openModelList(setup)
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("/speech"))
+    const started = await untilFrame(setup, (value) => value.includes("0%"))
+    assert.match(started, /Tiny/)
+    assert.match(started, /░/)
+    assert.match(started, /↑↓ move · enter select · esc back · click/)
+    push({ got: 40, total: 100 })
+    const mid = await untilFrame(setup, (value) => value.includes("40%"))
+    assert.match(mid, /Tiny/)
+    assert.match(mid, /█/)
+    assert.match(mid, /░/)
+    assert.match(mid, /↑↓ move · enter select · esc back · click/)
+    push({ got: 100, total: 100 })
+    push({
+      ok: true,
+      path: "/settings/speech/model",
+      index: 0,
+      rows: [{ ...TINY, downloaded: true }],
+    })
+    const done = await untilFrame(setup, (value) => value.includes("↓"))
+    const line = done.split("\n").find((item) => item.includes("Tiny"))
+    assert.ok(line)
+    assert.equal(line.trimEnd().endsWith("↓"), true)
+    assert.equal(requested.op, "download")
+    assert.equal(requested.filename, "ggml-tiny.en.bin")
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a failed download stays on the page and esc drops the partial", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  let cancelled = false
+  let push = null
+  const api = modelListSession({
+    apply() {
+      return {
+        download: true,
+        name: "Tiny",
+        filename: "ggml-tiny.en.bin",
+        path: "/settings/speech/model",
+        index: 0,
+      }
+    },
+    follow(_request, onLine) {
+      push = onLine
+      return {
+        cancel() {
+          cancelled = true
+        },
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await openModelList(setup)
     setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("/model"))
-    setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("│ Tiny"))
-    setup.mockInput.pressEnter()
-    await setup.waitForFrame((value) => value.includes("Download"))
+    await untilFrame(setup, (value) => value.includes("0%"))
+    push({ got: 10, total: 100 })
+    await untilFrame(setup, (value) => value.includes("10%"))
+    push({ error: "disk full" })
+    await untilFrame(setup, (value) => value.includes("disk full"))
+    let frame = setup.captureCharFrame()
+    const failed = frame.split("\n").find((item) => item.includes("Tiny"))
+    assert.ok(failed)
+    assert.equal(failed.includes("↓"), false)
+    assert.match(frame, /10%/)
+    assert.match(frame, /disk full/)
+    assert.match(frame, /↑↓ move · enter select · esc back · click/)
     setup.mockInput.pressEscape()
+    await untilFrame(setup, (value) => value.includes("│ Tiny"))
+    frame = setup.captureCharFrame()
+    assert.match(frame, /│ Tiny/)
+    assert.equal(cancelled, true)
+    assert.ok(api.calls.some((call) => call.op === "cancel-download" && call.filename === "ggml-tiny.en.bin"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("choosing a downloaded model does not download it again", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  let followed = false
+  const api = modelListSession({
+    model: { ...TINY, downloaded: true },
+    apply() {
+      return {
+        stay: true,
+        path: "/settings/speech/model",
+        index: 0,
+        rows: [{ ...TINY, downloaded: true }],
+      }
+    },
+    follow() {
+      followed = true
+      return { cancel() {} }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await openModelList(setup)
+    setup.mockInput.pressEnter()
     await settle(setup)
     const frame = setup.captureCharFrame()
     assert.match(frame, /│ Tiny/)
-    assert.equal((frame.match(/English/g) || []).length, 1)
-    assert.ok(!api.calls.some((call) => call.confirm))
+    assert.match(frame, /↓/)
+    assert.doesNotMatch(frame, /0%/)
+    assert.equal(followed, false)
     app.destroy()
   } finally {
     setup.renderer.destroy()
