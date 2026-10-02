@@ -4,6 +4,7 @@ Home (`home.py`) and setup (`setup.py`) draw from here. A TTY takes the
 viewport: alternate screen, one repaint per key. The home hero is the
 centered five-row DIGIVOICE half-block wordmark in the terminal's own
 foreground (dim, bold, and a quiet inverse glint). Menus use a step rail.
+The selected row is a bold ``[*]``; other rows are ``[ ]``.
 
 Non-TTY paths (StringIO / pipes / agents) stay on the numbered prompt so
 `--print` / `DIGIVOICE_SETUP_NONINTERACTIVE` / `--json` and the unit tests
@@ -48,8 +49,6 @@ _ANSI_ALT_OFF = "\x1b[?1049l"
 _ANSI_RESET = "\x1b[0m"
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
-# digithings landing accent (teal). Header chrome stays one hue — no rainbow title.
-_TEAL = "\x1b[38;2;61;214;196m"
 # SGR mouse cell, 0-based, or None when the terminal is not reporting motion.
 _pointer: tuple[int, int] | None = None
 
@@ -149,18 +148,31 @@ def wrap_text(text: str, width: int) -> list[str]:
     return lines or [""]
 
 
+def _paint_selected(plain: str) -> str:
+    """Bold the ``[*]`` mark. The rest of the row keeps the terminal foreground."""
+    mark_at = plain.find("[*]")
+    if mark_at < 0:
+        return f"\x1b[1m{plain}{_ANSI_RESET}"
+    head = plain[:mark_at]
+    mark = plain[mark_at : mark_at + 3]
+    tail = plain[mark_at + 3 :]
+    if head[:1] in {"│", "|"}:
+        head_s = f"\x1b[2m{head[:1]}{_ANSI_RESET}{head[1:]}"
+    else:
+        head_s = head
+    return f"{head_s}\x1b[1m{mark}{_ANSI_RESET}{tail}"
+
+
 def _paint(plain: str, style: str, ansi: bool) -> str:
-    """Theme-safe SGR. Teal selection; dim chrome; body uses default fg."""
+    """Theme-safe SGR. Selected mark is bold; dim chrome; body uses default fg."""
     if not ansi or not plain:
         return plain
-    if style == "bar" and plain[:1] in {"│", "|"}:
-        return f"\x1b[2m{plain[:1]}{_ANSI_RESET}{_TEAL}\x1b[7;1m{plain[1:]}{_ANSI_RESET}"
     if style == "bar":
-        return f"{_TEAL}\x1b[7;1m{plain}{_ANSI_RESET}"
+        return _paint_selected(plain)
     if style in {"item", "kv"} and plain[:1] in {"│", "|"}:
         return f"\x1b[2m{plain[:1]}{_ANSI_RESET}{plain[1:]}"
     if style == "step-on":
-        return f"{_TEAL}\x1b[1m{plain}{_ANSI_RESET}"
+        return f"\x1b[1m{plain}{_ANSI_RESET}"
     return f"\x1b[2m{plain}{_ANSI_RESET}"
 
 
@@ -416,9 +428,12 @@ def _context_pairs(context: Sequence[str] | None) -> list[tuple[str, str]]:
 
 
 def _mark(index: int, selected: int, checked: set[int] | None) -> str:
+    """``[*]`` when chosen, ``[ ]`` otherwise. Same width so labels stay aligned."""
     if checked is not None:
-        return "■ " if index in checked else "□ "
-    return "■   " if index == selected else "□   "
+        on = index in checked
+    else:
+        on = index == selected
+    return "[*] " if on else "[ ] "
 
 
 def _emit_items(

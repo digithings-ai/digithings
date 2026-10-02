@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-# Letters stay grayscale (DIGITHINGS lockup). Menu chrome may still use teal.
+# Letters stay grayscale. The home header uses this table; menu selection does not.
 TEAL_RGB = (61, 214, 196)
 _RESET = "\x1b[0m"
 
@@ -107,17 +107,18 @@ PIXEL_GLYPHS: dict[str, tuple[str, ...]] = {
         "#######",
         "######.",
     ),
+    # Centered half-block header (f62e5982d): a block V, not the pointed landing V.
     "V": (
         "##...##",
         "##...##",
         "##...##",
         "##...##",
-        ".##.##.",
-        ".##.##.",
-        ".##.##.",
-        "..#.#..",
+        "##...##",
+        "##...##",
+        "##...##",
+        "##...##",
+        ".#####.",
         "..###..",
-        "...#...",
     ),
     "O": (
         ".#####.",
