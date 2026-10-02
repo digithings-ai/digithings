@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
+import { BLOCKS, layoutFor, type BlockDef } from "../../../../../clients/digiquant-tui/src/catalog";
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { readOfficial } from "../read-block";
 
@@ -409,27 +409,21 @@ export function fxTone(result: ReadResult | null, lines: string[]): ReadResult["
 
 type Loaded = { result: ReadResult; data: unknown };
 
-function FxBlock({ id }: { id: string }) {
-  const def = BLOCKS[id];
-  const route = def?.route;
-  const kind = def?.kind;
+function FxRead({ def }: { def: BlockDef }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {
-    if (!route || !kind) return;
     const ac = new AbortController();
     let cancel = false;
-    setLoaded(null);
-    void readOfficial(route, kind, ac.signal).then((next) => {
+    void readOfficial(def.route, def.kind, ac.signal).then((next) => {
       if (!cancel) setLoaded(next);
     });
     return () => {
       cancel = true;
       ac.abort();
     };
-  }, [route, kind]);
+  }, [def.route, def.kind]);
 
-  if (!def) return null;
   const lines = loaded ? fxBlockLines(def.id, loaded.result, loaded.data) : ["loading…"];
   const status = fxTone(loaded?.result ?? null, lines);
   return (
@@ -443,6 +437,12 @@ function FxBlock({ id }: { id: string }) {
       </p>
     </section>
   );
+}
+
+function FxBlock({ id }: { id: string }) {
+  const def = BLOCKS[id];
+  if (!def) return null;
+  return <FxRead key={`${def.route}:${def.kind}`} def={def} />;
 }
 
 /** FX hub, ideas, watch, rates, and settings. One block per catalog route. */
