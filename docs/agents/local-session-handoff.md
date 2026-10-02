@@ -124,7 +124,7 @@ bun test
 DIGICHAT_DEVKIT_URL=http://127.0.0.1:3000 bun src/index.tsx
 ```
 
-The only read is `GET /api/devkit/configs` (`DIGICHAT_DEVKIT_URL`, default `http://127.0.0.1:3000`). A refused or unreachable service stays empty. It does not invent sessions or sample deployments, and it does not print secrets. If the directory is missing after the fast-forward, the cloud pass is still landing: run the fetch and fast-forward again, then follow the README. Do not invent a launch command.
+It reads `GET /api/devkit/configs` and posts a draft to `POST /api/baseline-chat` (`DIGICHAT_DEVKIT_URL`, default `http://127.0.0.1:3000`). A refused or unreachable service stays empty. It does not invent sessions or sample deployments, and it does not print secrets. If the directory is missing after the fast-forward, the cloud pass is still landing: run the fetch and fast-forward again, then follow the README. Do not invent a launch command.
 
 Web digichat, from the repo root:
 

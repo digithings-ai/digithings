@@ -31,14 +31,12 @@ test("a down service leaves every section empty and invents nothing", async () =
     "Tools",
     "MCP servers",
     "Gate",
-    "Preview",
     "Export",
     "Validation",
   ]);
   expect(values(down, "deployments")).toContain("none");
   expect(values(down, "deployments").filter((line) => line === "none")).toHaveLength(2);
   expect(values(down, "identity")).toEqual(["slug=—", "aliases=—"]);
-  expect(values(down, "preview")).toEqual(["session=no session"]);
   expect(values(down, "export")).toEqual([
     "local compose=nothing to export",
     "embed snippet=nothing to export",
@@ -105,8 +103,6 @@ test("a real file fills only the fields it carries", () => {
   expect(values(read, "gate")).toContain("quota consume URL (server-side)=set");
   expect(values(read, "tools")).toContain("vault=default on");
   expect(values(read, "export")).toContain("config YAML=redacted on file");
-  expect(values(read, "preview")).toEqual(["session=no session"]);
-  expect(panesFor(read).find((pane) => pane.id === "preview")?.footer).toBe("acme · digichat · dark");
   expect(values(read, "validation")).toEqual(["accent contrast"]);
   expect(values(read, "deployments")).toContain("other (invalid)");
   const painted = blob(read);
