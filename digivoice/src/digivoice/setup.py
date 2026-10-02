@@ -15,6 +15,7 @@ endpoints.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, TextIO
@@ -27,8 +28,8 @@ from digivoice.catalog import (
     rewrite_catalog,
     stt_catalog,
 )
-from digivoice.menu_tree import browse_settings
 from digivoice.models import VoicePaths
+from digivoice.opentui import launch_opentui
 from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE
 from digivoice.settings import (
     HOTKEYS_DOCS,
@@ -632,12 +633,7 @@ def run_interactive_setup(
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     if _is_tty(stdin):
-        fullscreen_enter(stdout)
-        try:
-            browse_settings(paths, stdin, stdout, install=_install_with_progress)
-        finally:
-            fullscreen_leave(stdout)
-        return 0
+        return launch_opentui(sys.platform, Path.home(), os.environ, start="/settings")
     current = load_settings(paths)
     working: dict[str, Any] = current.model_dump(mode="json")
     dirty = False

@@ -388,64 +388,43 @@ def test_stop_home_control_skips_on_linux(tmp_path: Path) -> None:
 
 
 def test_home_quit_tears_down_hammerspoon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """TTY Quit calls stop_home_control; process kill / Terminal close does not."""
+    """Quit is the OpenTUI action that stops Hammerspoon."""
     from digivoice.reload import LaunchReport
-
-    from digivoice import home as home_mod
+    from digivoice.tui_bridge import dispatch
 
     calls: list[str] = []
-
-    def fake_ensure(*_a, **_k) -> LaunchReport:
-        return LaunchReport(summary="hammerspoon up · banner shown", lines=[])
 
     def fake_stop(*_a, **_k) -> LaunchReport:
         calls.append("stop")
         return LaunchReport(summary="hammerspoon quit", lines=["hammerspoon .. quit"])
 
-    monkeypatch.setattr(home_mod, "ensure_home_control", fake_ensure)
-    monkeypatch.setattr(home_mod, "stop_home_control", fake_stop)
-    monkeypatch.setattr(home_mod, "_is_tty", lambda _s: True)
-    monkeypatch.setattr(home_mod, "fullscreen_enter", lambda _o: None)
-    monkeypatch.setattr(home_mod, "fullscreen_leave", lambda _o: None)
-    monkeypatch.setattr(home_mod, "play_intro", lambda *_a, **_k: None)
-    quit_at = next(i for i, item in enumerate(home_mod.HOME_MENU) if item == "Quit")
-    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: quit_at)
-
-    code = home_mod.run_home(
-        "darwin",
-        tmp_path,
-        _env(tmp_path),
-        stdin=__import__("io").StringIO(""),
-        stdout=__import__("io").StringIO(),
-        launch=LaunchReport(summary="hammerspoon up · banner shown", lines=[]),
-    )
-    assert code == 0
+    monkeypatch.setattr("digivoice.tui_bridge.stop_home_control", fake_stop)
+    result = dispatch({"op": "quit"}, platform="darwin", home=tmp_path, env=_env(tmp_path))
+    assert result["exit"] == 0
+    assert result["stopped"] is True
     assert calls == ["stop"]
 
 
 def test_home_escape_leaves_hammerspoon_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Esc closes the screen. Only Quit stops Hammerspoon."""
+    """A TTY launches OpenTUI. Esc is a close, not a Hammerspoon stop."""
     from digivoice.reload import LaunchReport
+    from digivoice.tui_bridge import dispatch
 
     from digivoice import home as home_mod
 
-    calls: list[str] = []
+    launched: list[str] = []
 
-    def fake_stop(*_a, **_k) -> LaunchReport:
-        calls.append("stop")
-        return LaunchReport(summary="hammerspoon quit", lines=["hammerspoon .. quit"])
+    def fake_launch(*_a, **kwargs) -> int:
+        launched.append(kwargs.get("start", "/"))
+        return 0
 
     monkeypatch.setattr(
         home_mod, "ensure_home_control", lambda *_a, **_k: LaunchReport(summary="up", lines=[])
     )
-    monkeypatch.setattr(home_mod, "stop_home_control", fake_stop)
+    monkeypatch.setattr(home_mod, "launch_opentui", fake_launch)
     monkeypatch.setattr(home_mod, "_is_tty", lambda _s: True)
-    monkeypatch.setattr(home_mod, "fullscreen_enter", lambda _o: None)
-    monkeypatch.setattr(home_mod, "fullscreen_leave", lambda _o: None)
-    monkeypatch.setattr(home_mod, "play_intro", lambda *_a, **_k: None)
-    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: None)
 
     code = home_mod.run_home(
         "darwin",
@@ -456,4 +435,6 @@ def test_home_escape_leaves_hammerspoon_running(
         launch=LaunchReport(summary="up", lines=[]),
     )
     assert code == 0
-    assert calls == []
+    assert launched == ["/"]
+    closed = dispatch({"op": "close"}, platform="darwin", home=tmp_path, env=_env(tmp_path))
+    assert closed["stopped"] is False
