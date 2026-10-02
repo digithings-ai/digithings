@@ -114,7 +114,7 @@ export function DeskChart({
           {mountError}
         </p>
       ) : null}
-      <div ref={hostRef} data-testid="desk-chart-host" className="min-h-[220px] w-full" />
+      <div ref={hostRef} data-testid="desk-chart-host" className="h-[220px] w-full" />
     </div>
   );
 }
