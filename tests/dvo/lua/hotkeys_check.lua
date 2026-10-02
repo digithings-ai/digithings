@@ -35,6 +35,9 @@ check(not hotkeys.flags_match(chord, { ctrl = true, shift = true, cmd = true }),
 check(not hotkeys.flags_match(chord, { ctrl = true }), "missing shift misses")
 
 eq(hotkeys.parse_binding("Right Option").keycode, 61, "typed Right Option")
+eq(hotkeys.parse_binding("option").keycode, 61, "bare option is Right Option")
+eq(hotkeys.parse_binding("alt").kind, "flags", "bare alt is Right Option")
+eq(hotkeys.parse_binding("Left Option").keycode, 58, "typed Left Option")
 eq(hotkeys.parse_binding("Double-tap Left Option").double, true, "typed double-tap")
 eq(hotkeys.parse_binding("Esc").keycode, 53, "typed Esc")
 eq(hotkeys.parse_binding("ctrl+shift+s").keycode, 1, "s keycode")

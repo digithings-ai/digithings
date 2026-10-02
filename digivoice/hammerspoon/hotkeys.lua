@@ -93,6 +93,9 @@ function M.parse_binding(text)
   if name == "esc" or name == "escape" then
     return spec(53, "key", false, false, false, false, false)
   end
+  if name == "option" or name == "alt" or name == "opt" then
+    return spec(61, "flags", false, false, true, false, false)
+  end
 
   local parts = split_plus(name)
   if #parts == 0 then
