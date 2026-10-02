@@ -83,7 +83,7 @@ export function ChatBand() {
     <Band
       id="chat"
       fill
-      status="story · in development"
+      status="scripted · not a live session"
       title="From a chat to a tested strategy"
       takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. Scripted, not live: the builder lives in the dashboard."
     >
@@ -106,9 +106,8 @@ export function ChatBand() {
           <div className="grid md:grid-cols-[12rem_minmax(0,1fr)]">
             <div aria-hidden="true" className="hidden border-e border-hair p-3 font-mono text-[0.66rem] leading-[1.7] text-ink-mute md:block">
               <p className="m-0 text-ink">threads</p>
-              <p className="m-0 text-ink-soft">▸ vela breakout v3</p>
-              <p className="m-0">mean-revert spy</p>
-              <p className="m-0">edge report q3</p>
+              <p className="m-0 text-ink-soft">▸ scripted story</p>
+              <p className="m-0">one thread · not a live session</p>
             </div>
             <ChatPlayback
               script={STRATEGY_SCRIPT}
