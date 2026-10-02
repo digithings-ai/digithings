@@ -23,8 +23,10 @@ import sys
 import termios
 import time
 import tty
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TextIO
+
+from pydantic import BaseModel, ConfigDict
 
 from digivoice.pixel_hero import PIXEL_GLYPHS, PixelCell, word_cells
 
@@ -65,9 +67,101 @@ _KICKER = "digivoice"
 # Nested home → setup stays on one alternate screen.
 _fullscreen_depth = 0
 
-TUI_FOOTER_HINT = "↑↓ move · enter select · esc back · q quit"
+TUI_FOOTER_HINT = "↑↓ move · enter select · esc back · / path"
 
 Group = tuple[str, int, int]
+
+# Screen row → option index for the last frame. Clicks use this.
+_ROW_HITS: list[int | None] = []
+_MOUSE_ON = "\x1b[?1000h\x1b[?1006h"
+_MOUSE_OFF = "\x1b[?1000l\x1b[?1006l"
+
+
+class MenuBlock(BaseModel):
+    """One row, drawn the same way on every screen.
+
+    The action is the line you read. Under it, in gray: the shortcut key,
+    the slash path, then metadata (a value or a timestamp). Empty parts
+    are skipped. No sentence explaining the shortcut.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    action: str
+    path: str = ""
+    meta: str = ""
+    shortcut: str = ""
+
+
+def hit_at(row: int) -> int | None:
+    """Option index for a 0-based screen row, or None on chrome."""
+    if row < 0 or row >= len(_ROW_HITS):
+        return None
+    return _ROW_HITS[row]
+
+
+def row_hits() -> list[int | None]:
+    """Screen-row hit map from the last `render_screen`."""
+    return _ROW_HITS
+
+
+def match_shortcut(key: str, shortcuts: Mapping[str, int] | None) -> int | None:
+    """Map a key to an option. ``copy`` is Command-C / Windows-C when the terminal sends it."""
+    if not shortcuts:
+        return None
+    if key in shortcuts:
+        return shortcuts[key]
+    if key == "copy" and "c" in shortcuts:
+        return shortcuts["c"]
+    return None
+
+
+def _kitty_key(payload: str) -> str:
+    """CSI u: ``code;mods``. Super (Command / Windows) plus c is ``copy``."""
+    head = payload.split(":", 1)[0]
+    parts = head.split(";")
+    try:
+        code = int(parts[0])
+        mods = int(parts[1]) if len(parts) > 1 else 1
+    except ValueError:
+        return "esc"
+    if not 32 <= code < 127:
+        return "esc"
+    char = chr(code)
+    if char in {"c", "C"} and (mods - 1) & 8:
+        return "copy"
+    return char
+
+
+def _modify_other_key(payload: str) -> str:
+    """xterm modifyOtherKeys: ``27;mod;code``. Meta/super plus c is ``copy``."""
+    parts = payload.split(";")
+    if len(parts) < 3:
+        return "esc"
+    try:
+        mod = int(parts[1])
+        code = int(parts[2])
+    except ValueError:
+        return "esc"
+    if code in {99, 67} and mod & 8:
+        return "copy"
+    return "esc"
+
+
+def mouse_action(body: str, *, pressed: bool) -> str:
+    """Left press is ``click``. Motion and other buttons stay ``mouse``."""
+    parts = body.split(";")
+    if len(parts) != 3:
+        return "mouse"
+    try:
+        btn = int(parts[0])
+    except ValueError:
+        return "mouse"
+    if not pressed or btn & 32:
+        return "mouse"
+    if btn & 3 == 0:
+        return "click"
+    return "mouse"
 
 
 def _use_screen() -> bool:
@@ -592,8 +686,67 @@ def _mark(index: int, selected: int, checked: set[int] | None) -> str:
     return "[*] " if on else "[ ] "
 
 
+def _push(lines: list[str], hits: list[int | None], line: str, hit: int | None = None) -> None:
+    lines.append(line)
+    hits.append(hit)
+
+
+def _emit_blocks(
+    lines: list[str],
+    hits: list[int | None],
+    blocks: Sequence[MenuBlock],
+    start: int,
+    end: int,
+    selected: int,
+    checked: set[int] | None,
+    panel_w: int,
+    density: str,
+    ansi: bool,
+    truecolor: bool,
+) -> None:
+    """Action, then gray shortcut, path, and metadata. Every line of a row is clickable."""
+    inner_w = max(12, panel_w - 1)
+    for index in range(start, end):
+        block = blocks[index]
+        mark = _mark(index, selected, checked)
+        prefix = f"  {mark}"
+        indent = " " * len(prefix)
+        body_w = max(8, inner_w - len(prefix))
+        action_lines = wrap_text(block.action, body_w) or [""]
+        _push(
+            lines,
+            hits,
+            _paint_detail_name(_fit("│" + prefix + action_lines[0], panel_w), ansi=ansi),
+            index,
+        )
+        for extra in action_lines[1:]:
+            _push(
+                lines,
+                hits,
+                _paint_detail_name(_fit("│" + indent + extra, panel_w), ansi=ansi),
+                index,
+            )
+        for gray in (block.shortcut, block.path, block.meta):
+            if not gray:
+                continue
+            for part in wrap_text(gray, body_w):
+                _push(
+                    lines,
+                    hits,
+                    _paint_detail_explain(
+                        _fit("│" + indent + part, panel_w),
+                        ansi=ansi,
+                        truecolor=truecolor,
+                    ),
+                    index,
+                )
+        if density == "roomy" and index + 1 < end:
+            _push(lines, hits, _paint(_fit("│", panel_w), "rail", ansi), None)
+
+
 def _emit_detail_items(
     lines: list[str],
+    hits: list[int | None],
     options: Sequence[str],
     start: int,
     end: int,
@@ -617,24 +770,33 @@ def _emit_detail_items(
         mark = _mark(index, selected, checked)
         prefix = f"  {mark}"
         body = f"{name.ljust(name_w)}  {value}" if value else name
-        lines.append(_paint_detail_name(_fit("│" + prefix + body, panel_w), ansi=ansi))
+        _push(
+            lines,
+            hits,
+            _paint_detail_name(_fit("│" + prefix + body, panel_w), ansi=ansi),
+            index,
+        )
         if hint:
             indent = " " * len(prefix)
             width = max(8, inner_w - len(prefix))
             for part in wrap_text(hint, width):
-                lines.append(
+                _push(
+                    lines,
+                    hits,
                     _paint_detail_explain(
                         _fit("│" + indent + part, panel_w),
                         ansi=ansi,
                         truecolor=truecolor,
-                    )
+                    ),
+                    index,
                 )
         if density == "roomy" and index + 1 < end:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
+            _push(lines, hits, _paint(_fit("│", panel_w), "rail", ansi), None)
 
 
 def _emit_items(
     lines: list[str],
+    hits: list[int | None],
     options: Sequence[str],
     start: int,
     end: int,
@@ -647,10 +809,27 @@ def _emit_items(
     *,
     detail: bool = False,
     truecolor: bool = False,
+    blocks: Sequence[MenuBlock] | None = None,
 ) -> None:
+    if blocks is not None:
+        _emit_blocks(
+            lines,
+            hits,
+            blocks,
+            start,
+            end,
+            selected,
+            checked,
+            panel_w,
+            density,
+            ansi,
+            truecolor,
+        )
+        return
     if detail:
         _emit_detail_items(
             lines,
+            hits,
             options,
             start,
             end,
@@ -680,9 +859,9 @@ def _emit_items(
             else:
                 extra.extend(remainder_indent + part for part in wrap_text(hint, body_w))
         for row in [first, *extra]:
-            lines.append(_paint(_fit("│" + row, panel_w), style, ansi))
+            _push(lines, hits, _paint(_fit("│" + row, panel_w), style, ansi), index)
         if density == "roomy" and index + 1 < end:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
+            _push(lines, hits, _paint(_fit("│", panel_w), "rail", ansi), None)
 
 
 def _panel_lines(
@@ -701,11 +880,19 @@ def _panel_lines(
     ansi: bool,
     detail: bool = False,
     truecolor: bool = False,
-) -> list[str]:
+    blocks: Sequence[MenuBlock] | None = None,
+    lead: Sequence[str] | None = None,
+    lead_meta: str | None = None,
+    typed: str | None = None,
+) -> tuple[list[str], list[int | None]]:
     lines: list[str] = []
-    count = len(options)
+    hits: list[int | None] = []
+    count = len(blocks) if blocks is not None else len(options)
     selected = selected % count if count else 0
-    labels = [_option_parts(option)[0] for option in options] or [""]
+    if blocks is not None:
+        labels = [block.action for block in blocks] or [""]
+    else:
+        labels = [_option_parts(option)[0] for option in options] or [""]
     natural = max(len(label) for label in labels)
     label_w = min(natural, max(8, panel_w - 20))
     if density == "tight":
@@ -714,105 +901,113 @@ def _panel_lines(
     roomy = density == "roomy"
     spaced = density not in {"compact", "tight"}
 
-    lines.append(_paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi))
+    def add(line: str, hit: int | None = None) -> None:
+        _push(lines, hits, line, hit)
+
+    add(_paint(_fit(f"┌  {_KICKER}", panel_w), "rule", ansi))
     if subtitle and spaced:
         for row in wrap_text(subtitle, max(12, panel_w - 3)):
-            lines.append(_paint(_fit(f"│  {row}", panel_w), "kv", ansi))
+            add(_paint(_fit(f"│  {row}", panel_w), "kv", ansi))
 
     pairs = _context_pairs(context) if hero else []
     if pairs:
         if spaced:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
-        lines.append(_paint(_fit("■  STATUS", panel_w), "step-off", ansi))
+            add(_paint(_fit("│", panel_w), "rail", ansi))
+        add(_paint(_fit("■  STATUS", panel_w), "step-off", ansi))
         for symbol, val in pairs:
-            lead = symbol if symbol in _STATUS_SYMBOLS else "□"
-            prefix = f"│  {lead}  " if lead else "│  "
+            lead_symbol = symbol if symbol in _STATUS_SYMBOLS else "□"
+            prefix = f"│  {lead_symbol}  " if lead_symbol else "│  "
             wrapped = wrap_text(val, max(8, panel_w - len(prefix)))
             for i, row in enumerate(wrapped):
                 lead_out = prefix if i == 0 else "│     "
-                lines.append(_paint(_fit(lead_out + row, panel_w), "kv", ansi))
+                add(_paint(_fit(lead_out + row, panel_w), "kv", ansi))
+
+    def emit(start: int, end: int) -> None:
+        _emit_items(
+            lines,
+            hits,
+            options,
+            start,
+            end,
+            selected,
+            checked,
+            label_w,
+            panel_w,
+            density,
+            ansi,
+            detail=detail,
+            truecolor=truecolor,
+            blocks=blocks,
+        )
 
     usable = [group for group in groups or [] if 0 <= group[1] < group[2] <= count]
     if usable:
         if spaced:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
+            add(_paint(_fit("│", panel_w), "rail", ansi))
         covered: set[int] = set()
         for name, start, end in usable:
             active = start <= selected < end
             symbol = "■" if active else "□"
             style = "step-on" if active else "step-off"
-            lines.append(_paint(_fit(f"{symbol}  {name.upper()}", panel_w), style, ansi))
-            _emit_items(
-                lines,
-                options,
-                start,
-                end,
-                selected,
-                checked,
-                label_w,
-                panel_w,
-                density,
-                ansi,
-                detail=detail,
-                truecolor=truecolor,
-            )
+            add(_paint(_fit(f"{symbol}  {name.upper()}", panel_w), style, ansi))
+            emit(start, end)
             covered.update(range(start, end))
             if spaced:
-                lines.append(_paint(_fit("│", panel_w), "rail", ansi))
+                add(_paint(_fit("│", panel_w), "rail", ansi))
         for index in range(count):
             if index in covered:
                 continue
-            _emit_items(
-                lines,
-                options,
-                index,
-                index + 1,
-                selected,
-                checked,
-                label_w,
-                panel_w,
-                density,
-                ansi,
-                detail=detail,
-                truecolor=truecolor,
-            )
+            emit(index, index + 1)
     else:
         if spaced and lines:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
-        lines.append(_paint(_fit(f"■  {title}", panel_w), "step-on", ansi))
+            add(_paint(_fit("│", panel_w), "rail", ansi))
+        add(_paint(_fit(f"■  {title}", panel_w), "step-on", ansi))
+        if lead:
+            width = max(8, panel_w - 3)
+            for row in lead:
+                for part in wrap_text(row, width):
+                    add(_paint(_fit(f"│  {part}", panel_w), "item", ansi))
+            if lead_meta:
+                add(
+                    _paint_detail_explain(
+                        _fit(f"│  {lead_meta}", panel_w),
+                        ansi=ansi,
+                        truecolor=truecolor,
+                    )
+                )
         if roomy:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
+            add(_paint(_fit("│", panel_w), "rail", ansi))
         if count:
-            _emit_items(
-                lines,
-                options,
-                0,
-                count,
-                selected,
-                checked,
-                label_w,
-                panel_w,
-                density,
-                ansi,
-                detail=detail,
+            emit(0, count)
+        if spaced:
+            add(_paint(_fit("│", panel_w), "rail", ansi))
+
+    if typed:
+        add(
+            _paint_detail_explain(
+                _fit(f"│  {typed}", panel_w),
+                ansi=ansi,
                 truecolor=truecolor,
             )
-        if spaced:
-            lines.append(_paint(_fit("│", panel_w), "rail", ansi))
-
-    current = _option_parts(options[selected])[0] if count else title
+        )
+    if blocks is not None and count:
+        current = blocks[selected].action
+    elif count:
+        current = _option_parts(options[selected])[0]
+    else:
+        current = title
     footer_hint = hint or TUI_FOOTER_HINT
     full = f"└  {current}  ·  {footer_hint}"
     short = f"└  {footer_hint}"
     footer = full if len(full) <= panel_w else short
     if len(footer) <= panel_w:
-        lines.append(_paint(_fit(footer, panel_w), "rule", ansi))
-        return lines
+        add(_paint(_fit(footer, panel_w), "rule", ansi))
+        return lines, hits
     wrapped = wrap_text(footer_hint, max(8, panel_w - 3))
-    lines.append(_paint(_fit(f"└  {wrapped[0]}", panel_w), "rule", ansi))
+    add(_paint(_fit(f"└  {wrapped[0]}", panel_w), "rule", ansi))
     for row in wrapped[1:]:
-        lines.append(_paint(_fit(f"   {row}", panel_w), "rule", ansi))
-    return lines
+        add(_paint(_fit(f"   {row}", panel_w), "rule", ansi))
+    return lines, hits
 
 
 def _pad_line(line: str, cols: int, anchor: int, ansi: bool) -> str:
@@ -881,8 +1076,13 @@ def render_screen(
     pointer: tuple[int, int] | None = None,
     truecolor: bool = False,
     detail: bool = False,
+    blocks: Sequence[MenuBlock] | None = None,
+    lead: Sequence[str] | None = None,
+    lead_meta: str | None = None,
+    typed: str | None = None,
 ) -> str:
     """One centered frame. `hero` paints the half-block DIGIVOICE wordmark."""
+    global _ROW_HITS
     term_cols, term_rows = _term_size()
     cols = term_cols if cols is None else cols
     rows = term_rows if rows is None else rows
@@ -892,8 +1092,9 @@ def render_screen(
     elapsed = phase * 160 if t_ms is None else t_ms
     _ = pointer
     chosen_panel: list[str] = []
+    chosen_hits: list[int | None] = []
     for density in ("roomy", "comfy", "compact", "tight"):
-        panel = _panel_lines(
+        panel, panel_hits = _panel_lines(
             title=title,
             options=options,
             selected=selected,
@@ -908,13 +1109,19 @@ def render_screen(
             ansi=use_ansi,
             detail=detail,
             truecolor=truecolor,
+            blocks=blocks,
+            lead=lead,
+            lead_meta=lead_meta,
+            typed=typed,
         )
         header_h = rows - len(panel)
         needed = 5 + _HERO_GAP + 1 if hero and density in {"roomy", "comfy"} else (5 if hero else 0)
         if header_h >= needed or density == "tight":
             chosen_panel = panel
+            chosen_hits = panel_hits
             break
         chosen_panel = panel
+        chosen_hits = panel_hits
     word_lines = (
         render_wordmark_lines(
             "DIGIVOICE",
@@ -931,6 +1138,9 @@ def render_screen(
         spare = rows - len(chosen_panel) - len(word_lines)
         gap_n = min(_HERO_GAP, max(0, spare))
         word_lines = [*word_lines, *([" "] * gap_n)]
+    placed_n = len(word_lines) + len(chosen_panel)
+    top = (rows - placed_n) // 2 if placed_n < rows else 0
+    _ROW_HITS = [None] * top + [None] * len(word_lines) + chosen_hits
     return _compose(
         word_lines,
         chosen_panel,
@@ -1005,10 +1215,11 @@ def _read_key_on_fd(fd: int, timeout: float | None = None) -> str | None:
                     packed.append(ch)
                     if len(packed) > 16:
                         return "esc"
-                cell = parse_sgr_mouse("".join(packed))
+                packed_body = "".join(packed)
+                cell = parse_sgr_mouse(packed_body)
                 if cell is not None:
                     _note_pointer(cell)
-                    return "mouse"
+                    return mouse_action(packed_body, pressed=ch == "M")
                 return "esc"
             # CSI cursor: [A or [1;3A — final byte is 0x40–0x7E.
             body: list[str] = [peek]
@@ -1022,6 +1233,11 @@ def _read_key_on_fd(fd: int, timeout: float | None = None) -> str | None:
                         break
                     if len(body) > 8:
                         return "esc"
+            joined = "".join(body)
+            if joined.endswith("u") and ";" in joined:
+                return _kitty_key(joined[:-1])
+            if joined.startswith("27;") and joined.endswith("~"):
+                return _modify_other_key(joined[:-1])
             return _arrow_name(body[-1])
         if second == "O":
             # SS3 application cursor keys: OA/OB/OC/OD.
@@ -1065,9 +1281,36 @@ def _cursor(stdout: TextIO, show: bool) -> None:
         pass
 
 
+def _write_numbered(
+    stdout: TextIO,
+    title: str,
+    options: Sequence[str],
+    blocks: Sequence[MenuBlock] | None,
+    *,
+    paging: bool,
+) -> None:
+    stdout.write(f"\n{title}\n")
+    rows = list(blocks) if blocks is not None else None
+    count = len(rows) if rows is not None else len(options)
+    for index in range(count):
+        if rows is not None:
+            block = rows[index]
+            stdout.write(f"  {index + 1}) {block.action}\n")
+            for extra in (block.shortcut, block.path, block.meta):
+                if extra:
+                    stdout.write(f"     {extra}\n")
+        else:
+            stdout.write(f"  {index + 1}) {options[index]}\n")
+    if paging:
+        stdout.write("  (number, next/prev, /path, or blank to go back)\n")
+    else:
+        stdout.write("  (number, /path, or blank to go back)\n")
+    stdout.flush()
+
+
 def choose(
     title: str,
-    options: list[str],
+    options: list[str] | None = None,
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
     hint: str | None = None,
@@ -1080,47 +1323,57 @@ def choose(
     detail: bool = False,
     start_at: int = 0,
     paging: bool = False,
+    blocks: Sequence[MenuBlock] | None = None,
+    shortcuts: Mapping[str, int] | None = None,
+    lead: Sequence[str] | None = None,
+    lead_meta: str | None = None,
 ) -> int | str | None:
     """Pick an option index. Arrow/Enter on a TTY, numbered prompt otherwise.
 
     TTY mode paints a step-rail frame and redraws on every key. Space confirms
-    like Enter; Esc/q goes back. `hero` paints the DIGIVOICE pixel lockup.
-    When `pulse` is set, the lockup builds on the landing clock and a few
-    cells keep glinting. :func:`play_intro` arms that clock.
+    like Enter; Esc/q goes back. `/` starts a slash path; Enter runs it.
+    A shortcut key or a click on a row returns that index. `c` copies when
+    the screen binds it; Command-C / Windows-C does too when the terminal
+    forwards the chord. `hero` paints the DIGIVOICE pixel lockup.
     Returns None on back. With `paging`, left/right return ``page-prev`` and
-    ``page-next`` instead of backing out or confirming.
+    ``page-next``. A slash path is returned as the string itself.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
+    listed = list(options or [])
+    if blocks is not None:
+        listed = [block.action for block in blocks]
     if _is_tty(stdin):
-        if not options:
+        if not listed:
             return None
-        selected = start_at % len(options)
+        selected = start_at % len(listed)
         color = _use_ansi()
         screen = _use_screen()
         color_true = _truecolor()
-        # Pulse needs timed reads; screen (not color) is enough to redraw.
         live = pulse and screen and not _reduce_motion()
         phase = 0
         first = True
+        typed = ""
         fd = stdin.fileno()
         saved = termios.tcgetattr(fd)
-        # Home arms the clock in play_intro so the build plays on this frame.
-        # A hero opened on its own starts already settled.
         if hero and _hero_origin is not None:
             origin = _hero_origin
         elif hero:
             origin = time.monotonic() - _BUILD_MS / 1000
         else:
             origin = time.monotonic()
+        mouse_on = bool(screen and _is_tty(stdout))
         try:
             _set_menu_raw(fd)
             _cursor(stdout, False)
+            if mouse_on:
+                stdout.write(_MOUSE_ON)
+                stdout.flush()
             while True:
                 stdout.write(
                     render_screen(
                         title,
-                        options,
+                        listed,
                         selected,
                         hint=hint,
                         subtitle=subtitle,
@@ -1135,19 +1388,45 @@ def choose(
                         t_ms=int((time.monotonic() - origin) * 1000) if live else None,
                         truecolor=color_true,
                         detail=detail,
+                        blocks=blocks,
+                        lead=lead,
+                        lead_meta=lead_meta,
+                        typed=typed or None,
                     )
                 )
                 stdout.flush()
                 first = False
-                # 80ms tracks the landing glint; a slower poll skips the flash.
                 key = _read_key_on_fd(fd, 0.08 if live else None)
                 if key is None or key == "mouse":
                     phase = (phase + 1) % 8
                     continue
+                if key == "click" and _pointer is not None:
+                    hit = hit_at(_pointer[1])
+                    if hit is not None:
+                        return hit
+                    continue
+                if typed:
+                    if key == "enter":
+                        return typed
+                    if key == "esc":
+                        typed = ""
+                        continue
+                    if key in {"\x7f", "\x08"}:
+                        typed = typed[:-1]
+                        continue
+                    if len(key) == 1 and key.isprintable():
+                        typed += key
+                    continue
+                jumped = match_shortcut(key, shortcuts)
+                if jumped is not None:
+                    return jumped
+                if key == "/":
+                    typed = "/"
+                    continue
                 if key == "up" or key in {"k", "K"}:
-                    selected = (selected - 1) % len(options)
+                    selected = (selected - 1) % len(listed)
                 elif key == "down" or key in {"j", "J"}:
-                    selected = (selected + 1) % len(options)
+                    selected = (selected + 1) % len(listed)
                 elif paging and (key == "left" or key in {"h", "H"}):
                     return "page-prev"
                 elif paging and (key == "right" or key in {"l", "L"}):
@@ -1160,16 +1439,15 @@ def choose(
             pass
         finally:
             _note_pointer(None)
+            if mouse_on:
+                try:
+                    stdout.write(_MOUSE_OFF)
+                    stdout.flush()
+                except (OSError, ValueError):
+                    pass
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
-    stdout.write(f"\n{title}\n")
-    for i, option in enumerate(options, start=1):
-        stdout.write(f"  {i}) {option}\n")
-    if paging:
-        stdout.write("  (number, next/prev, or blank to go back)\n")
-    else:
-        stdout.write("  (number, or blank to go back)\n")
-    stdout.flush()
+    _write_numbered(stdout, title, listed, blocks, paging=paging)
     try:
         raw = stdin.readline()
     except (OSError, ValueError):
@@ -1179,6 +1457,8 @@ def choose(
     raw = raw.strip()
     if not raw:
         return None
+    if raw.startswith("/"):
+        return raw
     if paging and raw.casefold() in {"n", "next", ">", "l"}:
         return "page-next"
     if paging and raw.casefold() in {"p", "prev", "<", "h"}:
@@ -1187,7 +1467,7 @@ def choose(
         index = int(raw) - 1
     except ValueError:
         return None
-    return index if 0 <= index < len(options) else None
+    return index if 0 <= index < len(listed) else None
 
 
 def choose_many(

@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict
 
 from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, CatalogModel
 from digivoice.models import VoicePaths
+from digivoice.nav import norm_path
 from digivoice.paths import DEFAULT_MODEL
 from digivoice.settings import (
     LOCAL_REWRITE_MODEL_FILE,
@@ -25,7 +26,7 @@ from digivoice.settings import (
     load_settings,
     save_settings,
 )
-from digivoice.tui import choose
+from digivoice.tui import MenuBlock, choose
 
 InstallFn = Callable[[VoicePaths, CatalogModel, TextIO | None], str]
 
@@ -67,6 +68,11 @@ class TreeRow(BaseModel):
         else:
             head = self.name
         return f"{head} ({self.explain})"
+
+    def as_block(self, path: str) -> MenuBlock:
+        """Action, slash path, then the value (or the note) as metadata."""
+        meta = self.explain if self.kind == "note" else self.value
+        return MenuBlock(action=self.name, path=f"{path}/{self.name}", meta=meta)
 
 
 def _norm(path: str) -> str:
@@ -387,6 +393,23 @@ def _read_voice(stdin: TextIO, stdout: TextIO, current: str | None) -> str | Non
     return text
 
 
+def _stack_for(settings: VoiceSettings, start: str) -> list[str]:
+    """Folders from ``/settings`` down to ``start``. A leaf stays on its parent."""
+    path = _norm(start)
+    if not path.startswith("/settings"):
+        return ["/settings"]
+    chain = ["/settings"]
+    cursor = "/settings"
+    for part in [piece for piece in path.split("/") if piece][1:]:
+        rows = rows_at(settings, cursor)
+        match = next((row for row in rows if row.name == part), None)
+        if match is None or match.kind not in {"dir", "pick"}:
+            break
+        cursor = f"{cursor}/{part}"
+        chain.append(cursor)
+    return chain
+
+
 def browse_settings(
     paths: VoicePaths,
     stdin: TextIO | None = None,
@@ -394,36 +417,40 @@ def browse_settings(
     *,
     install: InstallFn | None = None,
     start: str = "/settings",
+    on_path: Callable[[str], None] | None = None,
 ) -> None:
     """Walk ``/settings/...``. Esc at the root returns to the caller."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     settings = load_settings(paths)
-    stack = [_norm(start)]
+    stack = _stack_for(settings, start)
     while stack:
         path = stack[-1]
         rows = rows_at(settings, path)
         if not rows:
             stack.pop()
             continue
-        title = path
-        choosing = any(row.kind == "choice" for row in rows)
-        subtitle = (
-            "Enter selects. A missing file asks before it downloads. Esc goes up."
-            if choosing
-            else "Enter opens a folder or changes the value. Esc goes up."
-        )
+        title = path.rsplit("/", 1)[-1]
         picked = choose(
             title,
-            [row.label() for row in rows],
-            stdin,
-            stdout,
-            subtitle=subtitle,
-            detail=True,
+            stdin=stdin,
+            stdout=stdout,
+            subtitle=path,
+            blocks=[row.as_block(path) for row in rows],
             start_at=_list_cursor(settings, path, rows),
         )
         if picked is None:
             stack.pop()
+            continue
+        if isinstance(picked, str) and picked.startswith("/"):
+            jumped = norm_path(picked)
+            if jumped.startswith("/settings"):
+                stack[:] = _stack_for(settings, jumped)
+                continue
+            if on_path is not None:
+                on_path(jumped)
+            return
+        if not isinstance(picked, int) or not 0 <= picked < len(rows):
             continue
         row = rows[picked]
         if row.kind in {"dir", "pick"}:

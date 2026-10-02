@@ -99,8 +99,12 @@ def test_history_pages_and_copies(tmp_path: Path) -> None:
     assert "UNIQUE-END" in head
     assert "\n" in head
     assert long not in head
-    browse_history(paths, "linux", probe, runner, io.StringIO("1\n1\n\n"), io.StringIO())
+    copied = io.StringIO()
+    browse_history(paths, "linux", probe, runner, io.StringIO("1\n1\n\n"), copied)
     assert runner.calls[-1].stdin == long
+    assert "put this take" not in copied.getvalue()
+    assert "/history/copy" in copied.getvalue()
+    assert "\n     c\n" in copied.getvalue()
 
 
 def test_history_delete_removes_one_take(tmp_path: Path) -> None:

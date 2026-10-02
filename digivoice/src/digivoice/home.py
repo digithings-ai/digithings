@@ -11,19 +11,25 @@ the subcommands use.
 from __future__ import annotations
 
 import os
+import signal
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
 from digivoice.doctor import doctor_checks
+from digivoice.history import read_history
 from digivoice.menu_tree import browse_settings
-from digivoice.panels import browse_history, browse_system, present_doctor
+from digivoice.nav import QuitRequested, norm_path, section_of
+from digivoice.panels import _UPDATE, browse_history, browse_system, present_doctor
+from digivoice.paste import copy_to_clipboard
 from digivoice.paths import resolve_paths
-from digivoice.reload import LaunchReport, ensure_home_control, stop_home_control
-from digivoice.runner import CommandRunner
+from digivoice.reload import LaunchReport, ensure_home_control, run_reload, stop_home_control
+from digivoice.runner import CommandRunner, run_command
+from digivoice.settings import default_settings, save_settings
 from digivoice.setup import _install_with_progress
 from digivoice.tui import (
+    MenuBlock,
     _is_tty,
     choose,
     fullscreen_enter,
@@ -34,13 +40,14 @@ from digivoice.tui import (
 HOME_TITLE = "DIGIVOICE"
 HOME_SUBTITLE = "DIGIVOICE · app home — local speech control"
 
-# Four home actions. Doctor lives under System. Status is the context strip.
-HOME_MENU = (
-    "History (previous takes)",
-    "Settings (/settings)",
-    "System (doctor, reload, reset, restart, update)",
-    "Quit",
+# Four home actions. Each path is a command: `digivoice /history`, `digivoice quit`.
+HOME_BLOCKS: tuple[MenuBlock, ...] = (
+    MenuBlock(action="History", path="/history"),
+    MenuBlock(action="Settings", path="/settings"),
+    MenuBlock(action="System", path="/system"),
+    MenuBlock(action="Quit", path="/quit"),
 )
+HOME_MENU = tuple(block.action for block in HOME_BLOCKS)
 
 # Contiguous slices of HOME_MENU. Settings sits above System.
 HOME_GROUPS: tuple[tuple[str, int, int], ...] = (
@@ -138,7 +145,7 @@ def render_home_overview(
     lines = [
         "┌─ DIGIVOICE ────────────────────────────────────────────┐",
         "│  DIGIVOICE · app home — local speech control           │",
-        "│  ↑↓ move · Enter select · Esc/q quit                   │",
+        "│  ↑↓ move · Enter select · / path · Quit stops            │",
         "└────────────────────────────────────────────────────────┘",
         "",
     ]
@@ -148,13 +155,17 @@ def render_home_overview(
             lines.append(f"  {entry}")
         lines.append("")
     lines.append("— Actions —")
-    for index, item in enumerate(HOME_MENU):
+    for index, block in enumerate(HOME_BLOCKS):
         marker = "▶" if index == 0 else " "
-        lines.append(f"  {marker} {item}")
+        lines.append(f"  {marker} {block.action}")
+        lines.append(f"    {block.path}")
     lines += [
         "",
         "History, Settings, System, and Quit. Doctor lives under System.",
         "Enter opens a folder or a list. Esc goes up.",
+        "Each path is a command: digivoice /history, digivoice /doctor, digivoice /quit.",
+        "System is /doctor, /reload, /reset, /restart, /update.",
+        "Closing the terminal leaves digivoice running. Quit stops it.",
         "",
         "— Settings (current) —",
         settings_text.rstrip(),
@@ -174,6 +185,11 @@ def render_home_overview(
 
 def _context_with_control(context: list[str], summary: str) -> list[str]:
     return [*context, f"▤ {summary}"]
+
+
+def _on_terminal_close(_signum: int, _frame: object) -> None:
+    """The terminal went away. Leave Hammerspoon running."""
+    raise SystemExit(0)
 
 
 def run_home(
@@ -209,7 +225,94 @@ def run_home(
     runtime = _cli.Runtime(
         platform=platform, home=home, env=env, probe=_cli.real_probe(env.get("PATH"))
     )
+
+    def _restart() -> None:
+        stop_home_control(platform, home, env, runner=runner)
+        fullscreen_leave(stdout)
+        os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    def _doctor() -> None:
+        present_doctor(
+            doctor_checks(platform, home, dict(env), runtime.probe),
+            stdout,
+            stdin,
+        )
+
+    def _follow(raw: str) -> None:
+        path = norm_path(raw)
+        kind = section_of(path)
+        if kind == "quit":
+            raise QuitRequested()
+        if kind == "settings":
+            browse_settings(
+                paths,
+                stdin,
+                stdout,
+                install=_install_with_progress,
+                start=path,
+                on_path=_follow,
+            )
+            return
+        if kind == "history":
+            browse_history(
+                paths,
+                platform,
+                runtime.probe,
+                runner,
+                stdin,
+                stdout,
+                on_path=_follow,
+            )
+            return
+        if kind == "system":
+            browse_system(
+                paths,
+                platform,
+                home,
+                env,
+                stdin,
+                stdout,
+                runner=runner,
+                restart=_restart,
+                doctor=_doctor,
+                on_path=_follow,
+            )
+            return
+        if kind == "doctor":
+            _doctor()
+            return
+        if kind == "reload":
+            result = run_reload(platform, home, dict(env), runner=runner)
+            text = result.stdout.strip() or result.stderr.strip() or "reload finished"
+            stdout.write(text + "\n")
+            stdout.flush()
+            return
+        if kind == "reset":
+            save_settings(paths, default_settings())
+            stdout.write("  settings reset\n")
+            stdout.flush()
+            return
+        if kind == "restart":
+            _restart()
+            return
+        if kind == "update":
+            stdout.write(_UPDATE + "\n")
+            stdout.flush()
+            return
+        if kind == "history-copy":
+            reading = read_history(paths.history_file)
+            if not reading.entries:
+                stdout.write("  no takes yet\n")
+                stdout.flush()
+                return
+            text = reading.entries[-1].text
+            copied = copy_to_clipboard(platform, runtime.probe, runner or run_command, text)
+            stdout.write(f"  {copied.detail}\n")
+            stdout.flush()
+
     fullscreen_enter(stdout)
+    previous_hup = signal.getsignal(signal.SIGHUP)
+    signal.signal(signal.SIGHUP, _on_terminal_close)
     try:
         play_intro(stdout, "local speech control")
         while True:
@@ -219,49 +322,33 @@ def run_home(
             )
             picked = choose(
                 "Actions",
-                list(HOME_MENU),
-                stdin,
-                stdout,
+                stdin=stdin,
+                stdout=stdout,
                 subtitle="local speech control",
                 context=context,
                 hero=True,
                 pulse=True,
                 groups=HOME_GROUPS,
+                blocks=HOME_BLOCKS,
             )
-            if picked is None or HOME_MENU[picked] == "Quit":
-                # Explicit TUI exit tears Hammerspoon down. Closing the Terminal
-                # alone (SIGHUP/SIGTERM) never reaches here — HS stays running.
+            if isinstance(picked, str) and picked.startswith("/"):
+                try:
+                    _follow(picked)
+                except QuitRequested:
+                    stop_home_control(platform, home, env, runner=runner)
+                    return 0
+                continue
+            if picked is None:
+                # Esc leaves the screen. Hammerspoon keeps running.
+                return 0
+            if HOME_MENU[picked] == "Quit":
                 stop_home_control(platform, home, env, runner=runner)
                 return 0
-            entry = HOME_MENU[picked]
-            if entry.startswith("History"):
-                browse_history(paths, platform, runtime.probe, runner, stdin, stdout)
-            elif entry.startswith("System"):
-
-                def _restart() -> None:
-                    stop_home_control(platform, home, env, runner=runner)
-                    fullscreen_leave(stdout)
-                    os.execv(sys.executable, [sys.executable, *sys.argv])
-
-                def _doctor() -> None:
-                    present_doctor(
-                        doctor_checks(platform, home, dict(env), runtime.probe),
-                        stdout,
-                        stdin,
-                    )
-
-                browse_system(
-                    paths,
-                    platform,
-                    home,
-                    env,
-                    stdin,
-                    stdout,
-                    runner=runner,
-                    restart=_restart,
-                    doctor=_doctor,
-                )
-            elif entry.startswith("Settings"):
-                browse_settings(paths, stdin, stdout, install=_install_with_progress)
+            try:
+                _follow(HOME_BLOCKS[picked].path)
+            except QuitRequested:
+                stop_home_control(platform, home, env, runner=runner)
+                return 0
     finally:
+        signal.signal(signal.SIGHUP, previous_hup)
         fullscreen_leave(stdout)

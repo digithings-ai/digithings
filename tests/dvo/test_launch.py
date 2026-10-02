@@ -421,3 +421,39 @@ def test_home_quit_tears_down_hammerspoon(tmp_path: Path, monkeypatch: pytest.Mo
     )
     assert code == 0
     assert calls == ["stop"]
+
+
+def test_home_escape_leaves_hammerspoon_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Esc closes the screen. Only Quit stops Hammerspoon."""
+    from digivoice.reload import LaunchReport
+
+    from digivoice import home as home_mod
+
+    calls: list[str] = []
+
+    def fake_stop(*_a, **_k) -> LaunchReport:
+        calls.append("stop")
+        return LaunchReport(summary="hammerspoon quit", lines=["hammerspoon .. quit"])
+
+    monkeypatch.setattr(
+        home_mod, "ensure_home_control", lambda *_a, **_k: LaunchReport(summary="up", lines=[])
+    )
+    monkeypatch.setattr(home_mod, "stop_home_control", fake_stop)
+    monkeypatch.setattr(home_mod, "_is_tty", lambda _s: True)
+    monkeypatch.setattr(home_mod, "fullscreen_enter", lambda _o: None)
+    monkeypatch.setattr(home_mod, "fullscreen_leave", lambda _o: None)
+    monkeypatch.setattr(home_mod, "play_intro", lambda *_a, **_k: None)
+    monkeypatch.setattr(home_mod, "choose", lambda *_a, **_k: None)
+
+    code = home_mod.run_home(
+        "darwin",
+        tmp_path,
+        _env(tmp_path),
+        stdin=__import__("io").StringIO(""),
+        stdout=__import__("io").StringIO(),
+        launch=LaunchReport(summary="up", lines=[]),
+    )
+    assert code == 0
+    assert calls == []

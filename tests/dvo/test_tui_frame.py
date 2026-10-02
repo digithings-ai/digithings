@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import pytest
-from digivoice.home import HOME_GROUPS, HOME_MENU, render_home_overview
+from digivoice.home import HOME_BLOCKS, HOME_GROUPS, HOME_MENU, render_home_overview
 from digivoice.pixel_hero import word_cells
 from digivoice.settings import default_settings
 from digivoice.setup import postprocess_menu_options
 from digivoice.tui import (
+    MenuBlock,
     _alpha_sgr,
+    _kitty_key,
+    hit_at,
+    mouse_action,
     parse_sgr_mouse,
     render_screen,
     render_wordmark_lines,
+    row_hits,
     wrap_text,
 )
 
@@ -29,6 +34,7 @@ def _frame(**overrides: object) -> str:
         "context": _CONTEXT,
         "hero": True,
         "groups": HOME_GROUPS,
+        "blocks": HOME_BLOCKS,
         "cols": 120,
         "rows": 48,
         "use_ansi": False,
@@ -435,3 +441,33 @@ def test_sgr_mouse_motion_is_not_esc() -> None:
     os.close(slave)
     os.close(master)
     assert got == ["mouse", "up"], got
+
+
+def test_block_stacks_shortcut_path_and_meta() -> None:
+    """Same row shape everywhere: action, then gray shortcut, path, metadata."""
+    assert _kitty_key("99;9") == "copy"
+    assert mouse_action("0;4;2", pressed=True) == "click"
+    assert mouse_action("32;4;2", pressed=True) == "mouse"
+    blocks = [
+        MenuBlock(action="Copy", shortcut="c", path="/history/copy"),
+        MenuBlock(action="pin", path="/settings/banner/pin", meta="off"),
+    ]
+    plain = render_screen("Take", [], 0, cols=80, rows=24, use_ansi=False, blocks=blocks)
+    lines = [line.strip() for line in plain.replace("\r\n", "\n").splitlines()]
+    copy_at = next(i for i, line in enumerate(lines) if line.endswith("Copy"))
+    assert lines[copy_at + 1].endswith("c")
+    assert lines[copy_at + 2].endswith("/history/copy")
+    pin_at = next(i for i, line in enumerate(lines) if line.endswith("pin"))
+    assert lines[pin_at + 1].endswith("/settings/banner/pin")
+    assert lines[pin_at + 2].endswith("off")
+    assert "copies" not in plain
+    colored = render_screen(
+        "Take", [], 0, cols=80, rows=24, use_ansi=True, blocks=blocks
+    )
+    path = next(line for line in colored.splitlines() if "/history/copy" in line)
+    assert "38;5;145" in path
+    assert "\x1b[1m" not in path
+    hits = row_hits()
+    assert hits.count(0) >= 3
+    row = next(index for index, hit in enumerate(hits) if hit == 1)
+    assert hit_at(row) == 1
