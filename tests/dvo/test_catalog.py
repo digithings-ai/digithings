@@ -30,6 +30,11 @@ def test_stt_catalog_has_english_and_multilingual() -> None:
     assert "ggml-tiny.en" in ids
     assert "ggml-base" in ids
     assert "ggml-tiny" in ids
+    assert "ggml-medium.en" in ids
+    assert "ggml-medium" in ids
+    assert "ggml-large-v3-turbo" in ids
+    assert "ggml-large-v3" in ids
+    assert ids[0] == "ggml-tiny.en"
     assert any(item.languages == "en" for item in STT_CATALOG)
     assert any(item.languages == "multilingual" for item in STT_CATALOG)
     assert all(item.kind == "stt" for item in STT_CATALOG)
@@ -42,6 +47,10 @@ def test_rewrite_catalog_offers_more_than_one_local_gguf() -> None:
     assert len(REWRITE_CATALOG) >= 2
     files = [item.filename for item in REWRITE_CATALOG]
     assert LOCAL_REWRITE_MODEL_FILE in files
+    assert "Qwen2.5-7B-Instruct-Q4_K_M.gguf" in files
+    assert "Llama-3.2-3B-Instruct-Q4_K_M.gguf" in files
+    assert "gemma-2-2b-it-Q4_K_M.gguf" in files
+    assert len(files) == len(set(files))
     assert all(item.filename.endswith(".gguf") for item in REWRITE_CATALOG)
     assert all(item.kind == "rewrite" for item in REWRITE_CATALOG)
     assert all(item.languages == "multilingual" for item in REWRITE_CATALOG)

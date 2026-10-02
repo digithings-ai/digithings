@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from digivoice.catalog import stt_filename, stt_language
+from digivoice.catalog import stt_language, stt_model_path
 from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import Transcript
 from digivoice.paths import DEFAULT_MODEL, VoicePaths
@@ -62,7 +62,7 @@ def clean_transcript(raw: str) -> str:
 
 
 def model_file(paths: VoicePaths, model_id: str | None = None) -> Path:
-    return Path(paths.models_dir) / stt_filename(model_id)
+    return stt_model_path(paths.models_dir, model_id)
 
 
 def transcribe(

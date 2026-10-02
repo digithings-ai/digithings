@@ -86,7 +86,7 @@ def is_remote_rewrite_model(value: str) -> bool:
 
 
 def is_local_rewrite_model(value: str, models_dir: str | Path) -> bool:
-    """True when value is a filename (or path) that stays under models_dir."""
+    """True for a models_dir file, an absolute .gguf/.bin, or a local GGUF blob."""
     text = value.strip()
     if not text or is_remote_rewrite_model(text):
         return False
@@ -96,16 +96,23 @@ def is_local_rewrite_model(value: str, models_dir: str | Path) -> bool:
     root = Path(models_dir).expanduser().resolve()
     candidate = Path(text).expanduser()
     if candidate.is_absolute():
-        try:
-            candidate.resolve().relative_to(root)
-        except ValueError:
-            return False
-        return candidate.suffix.casefold() in {".gguf", ".bin"}
+        suffix = candidate.suffix.casefold()
+        if suffix in {".gguf", ".bin"}:
+            return True
+        return _file_starts_with(candidate, b"GGUF")
     try:
         (root / text).resolve().relative_to(root)
     except ValueError:
         return False
     return True
+
+
+def _file_starts_with(path: Path, magic: bytes) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(len(magic)) == magic
+    except OSError:
+        return False
 
 
 def parse_rewrite_timeout(value: object) -> float | None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from digivoice.catalog import stt_filename
+from digivoice.catalog import stt_model_path
 from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
     DEFAULT_MODEL,
@@ -36,8 +36,7 @@ def _models(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
         model_id = settings.stt_model
     except Exception:
         model_id = DEFAULT_MODEL
-    filename = stt_filename(model_id)
-    model_path = str(Path(models_dir) / filename)
+    model_path = str(stt_model_path(models_dir, model_id))
     if not probe.is_dir(models_dir):
         return DoctorCheck(
             id="models",

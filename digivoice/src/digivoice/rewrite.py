@@ -187,21 +187,16 @@ def _llama_reply(stdout: str, user: str) -> str:
 
 
 def resolve_rewrite_model_path(paths: VoicePaths, settings: VoiceSettings) -> str | None:
-    """Absolute GGUF path under models_dir. None when remote or outside the dir."""
+    """Local GGUF path. A models_dir name or an absolute on-disk file. None when remote."""
     raw = (settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE).strip()
     if not raw or is_remote_rewrite_model(raw):
         return None
     if not is_local_rewrite_model(raw, paths.models_dir):
         return None
     candidate = Path(raw).expanduser()
-    if not candidate.is_absolute():
-        candidate = Path(paths.models_dir) / raw
-    root = Path(paths.models_dir).expanduser().resolve()
-    try:
-        candidate.expanduser().resolve().relative_to(root)
-    except ValueError:
-        return None
-    return str(candidate)
+    if candidate.is_absolute():
+        return str(candidate)
+    return str(Path(paths.models_dir) / raw)
 
 
 def _fetch_url(url: str, dest: Path) -> None:
@@ -384,7 +379,10 @@ def rewrite_doctor_detail(
     model = resolve_rewrite_model_path(paths, settings)
     local = pick_runner(paths, settings, probe, runner)
     raw = (settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE).strip()
-    expected = Path(paths.models_dir) / Path(raw).name
+    if model and Path(model).is_absolute() and Path(raw).is_absolute():
+        expected = Path(model)
+    else:
+        expected = Path(paths.models_dir) / Path(raw).name
     present = expected.is_file()
     missing_note = (
         f" local rewrite model not installed: {expected} "
