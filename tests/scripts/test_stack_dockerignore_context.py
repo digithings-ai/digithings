@@ -15,14 +15,22 @@ their re-includes and took the deploy down).
 
 These tests read the two committed files, so a future `COPY scripts/...` without
 its re-include fails the normal unit suite instead of the deploy.
+
+`pytestmark = pytest.mark.unit` is load-bearing, not boilerplate: `ci.yml`
+collects with `-m "unit or baseline"` and `make test-unit` with `-m unit`, so a
+module without the marker is silently deselected and the guard never runs
+(same trap `test-digifetch.yml:50-53` calls out).
 """
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STACK_DOCKERFILE = REPO_ROOT / "Dockerfile.digithings-stack-cloudflare"
@@ -35,7 +43,8 @@ EXCLUDED_ROOTS = ("scripts",)
 _COPY_LINE = re.compile(r"^COPY\s+(?P<body>.+)$")
 
 
-def _dockerignore_lines() -> list[str]:
+def _dockerignore_patterns() -> list[str]:
+    """Effective patterns, comments and blanks dropped, order preserved."""
     return [
         line.strip()
         for line in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
@@ -43,9 +52,43 @@ def _dockerignore_lines() -> list[str]:
     ]
 
 
+def _dockerignore_lines() -> list[str]:
+    return _dockerignore_patterns()
+
+
 def _reincluded_paths() -> set[str]:
     """`!path` entries, normalised without the leading `!`."""
     return {line[1:].strip().strip("/") for line in _dockerignore_lines() if line.startswith("!")}
+
+
+def _is_included(path: str, patterns: list[str] | None = None) -> bool:
+    """Docker's `.dockerignore` semantics: last matching pattern wins.
+
+    A bare directory pattern (`scripts`) excludes the whole subtree; a later
+    `!scripts/<path>` re-includes that entry. Order matters, so this cannot be a
+    set lookup — verified against Docker 29.2.1 with a two-line fixture: moving
+    `!scripts/thing.py` *above* `scripts` fails the build with
+    `"not found"`, so the re-include must come after the exclusion.
+    """
+    patterns = _dockerignore_patterns() if patterns is None else patterns
+    included = True
+    for pattern in patterns:
+        negated = pattern.startswith("!")
+        candidate = pattern[1:] if negated else pattern
+        candidate = candidate.strip().rstrip("/")
+        if candidate in ("", "**"):
+            matches = True
+        elif candidate == path or path.startswith(f"{candidate}/"):
+            matches = True
+        elif any(ch in candidate for ch in "*?["):
+            matches = fnmatch.fnmatch(path, candidate) or fnmatch.fnmatch(
+                f"{path}/", f"{candidate}/*"
+            )
+        else:
+            matches = False
+        if matches:
+            included = negated
+    return included
 
 
 def _logical_lines() -> list[str]:
@@ -63,11 +106,32 @@ def _copied_scripts_paths() -> list[str]:
             continue
         match = _COPY_LINE.match(line)
         assert match is not None, f"unparsed COPY instruction: {line}"
-        tokens = match.group("body").split()
-        for source in tokens[:-1]:  # last token is the destination
-            source = source.strip("\"'").removeprefix("./").strip("/")
+        body = match.group("body")
+        if body.startswith("["):  # JSON-array form: COPY ["src", "dst"]
+            import json
+
+            tokens = json.loads(body)
+            assert isinstance(tokens, list), f"unparsed COPY JSON form: {line}"
+            sources = tokens[:-1]
+        else:
+            sources = body.split()[:-1]  # last token is the destination
+        for source in sources:
+            source = str(source).strip("\"'").removeprefix("./").strip("/")
             if source.split("/")[0] in EXCLUDED_ROOTS:
                 found.append(source)
+    return sorted(found)
+
+
+def _all_copied_paths() -> list[str]:
+    """Every COPY source the stack Dockerfile names, excluded roots or not."""
+    found: list[str] = []
+    for line in _logical_lines():
+        if not line.upper().startswith("COPY "):
+            continue
+        match = _COPY_LINE.match(line)
+        assert match is not None, f"unparsed COPY instruction: {line}"
+        for source in match.group("body").split()[:-1]:
+            found.append(source.strip("\"'").removeprefix("./").strip("/"))
     return sorted(found)
 
 
@@ -96,15 +160,32 @@ def test_excluded_roots_are_still_excluded() -> None:
 
 
 @pytest.mark.parametrize("source", _copied_scripts_paths())
-def test_copied_script_is_reincluded_in_dockerignore(source: str) -> None:
-    """`!scripts/<path>` (or a re-included parent) must exist for every COPY."""
-    reincluded = _reincluded_paths()
-    candidates = {source, *_ancestors(source)}
-    assert candidates & reincluded, (
+def test_copied_script_survives_dockerignore(source: str) -> None:
+    """Each `COPY scripts/...` source must end up in the build context."""
+    patterns = _dockerignore_patterns()
+    assert _is_included(source, patterns), (
         f"Dockerfile.digithings-stack-cloudflare COPYs `{source}` but `.dockerignore` "
-        f"has no matching `!{source}` — the image build will fail with "
-        f'"failed to calculate checksum ... /{source}: not found". Add the re-include.'
+        f"excludes it — the image build will fail with "
+        f'"failed to calculate checksum ... /{source}: not found". Add a `!{source}` '
+        f"re-include AFTER the exclusion line (last match wins)."
     )
+
+
+@pytest.mark.parametrize("source", _all_copied_paths())
+def test_no_copied_source_is_excluded(source: str) -> None:
+    """Blanket check: no COPY source, in any excluded root, is filtered out."""
+    patterns = _dockerignore_patterns()
+    assert _is_included(source, patterns), (
+        f"`{source}` is COPYed by Dockerfile.digithings-stack-cloudflare but excluded "
+        f"by `.dockerignore`; the production image build fails on it"
+    )
+
+
+def test_reinclude_above_the_exclusion_is_detected() -> None:
+    """Docker is last-match-wins, so `!scripts/x` above `scripts` does nothing."""
+    reordered = ["!scripts/thing.py", "scripts", "tests"]
+    assert not _is_included("scripts/thing.py", reordered)
+    assert _is_included("scripts/thing.py", ["scripts", "!scripts/thing.py"])
 
 
 def test_occ_ticket_seed_scripts_are_reincluded() -> None:
