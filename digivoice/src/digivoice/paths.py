@@ -33,7 +33,7 @@ def piper_fallback(home: Path) -> Path:
 
 
 def vendor_dir(home: Path) -> Path:
-    """Extracted bun, whisper.cpp, and Piper trees. Not a cloud service."""
+    """Extracted bun, whisper.cpp, and Piper trees, plus install.json. Not a cloud service."""
     return home / ".local" / "share" / "digivoice" / "vendor"
 
 

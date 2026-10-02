@@ -1,13 +1,16 @@
-"""Install the local toolchain and the default models. No cloud STT or TTS.
+"""Install the local toolchain, the default models, and the Hammerspoon adapter.
 
 `digivoice install` fetches bun, the OpenTUI packages, whisper-cli, Piper, sox,
-`ggml-base.en.bin`, and the Lessac Piper voice. Rewrite GGUF stays off.
-Tests pass `fetch` and `runner` so nothing here has to touch the network.
+`ggml-base.en.bin`, and the Lessac Piper voice, then copies this checkout's
+banner adapter into `~/.hammerspoon/digivoice`. `digivoice update` refreshes a
+step whose pin changed. Rewrite GGUF stays off. Tests pass `fetch` and `runner`
+so nothing here has to touch the network.
 """
 
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import tarfile
@@ -17,9 +20,10 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 from digivoice.catalog import find_stt
-from digivoice.models import InstallReport, InstallStep
+from digivoice.models import InstallReport, InstallStamp, InstallStep
 from digivoice.paths import DEFAULT_MODEL, local_bin, piper_fallback, vendor_dir
 from digivoice.probe import CommandProbe
+from digivoice.reload import reload_hammerspoon
 from digivoice.runner import CommandRunner, error_tail
 
 FetchFn = Callable[[str, Path], None]
@@ -95,6 +99,16 @@ def http_fetch(url: str, dest: Path) -> None:
     tmp.replace(dest)
 
 
+def adapter_source_dir() -> Path:
+    """Repo `digivoice/hammerspoon`, next to the Python package."""
+    return Path(__file__).resolve().parents[2] / "hammerspoon"
+
+
+def hammerspoon_adapter_dir(home: Path) -> Path:
+    """Where Hammerspoon loads the adapter. Not a cloud path."""
+    return home / ".hammerspoon" / "digivoice"
+
+
 def run_install(
     *,
     home: Path,
@@ -105,29 +119,45 @@ def run_install(
     models_dir: Path,
     tui_root: Path,
     fetch: FetchFn | None = None,
+    refresh: bool = False,
+    adapter_source: Path | None = None,
 ) -> InstallReport:
-    """Install every local piece. A failed step does not skip the rest."""
+    """Install every local piece. A failed step does not skip the rest.
+
+    `refresh` is what `digivoice update` passes. A step that is already at the
+    pinned version stays. A missing or older step is fetched again.
+    """
     worker = fetch or http_fetch
+    source = adapter_source if adapter_source is not None else adapter_source_dir()
     steps: list[InstallStep] = []
-    _attempt(steps, "bun", lambda: _install_bun(home, platform, machine, probe, worker))
-    _attempt(steps, "opentui", lambda: _install_opentui(home, probe, runner, tui_root))
+    _attempt(steps, "bun", lambda: _install_bun(home, platform, machine, probe, worker, refresh))
+    _attempt(
+        steps,
+        "opentui",
+        lambda: _install_opentui(home, probe, runner, tui_root, refresh),
+    )
     _attempt(
         steps,
         "whisper-cli",
-        lambda: _install_whisper(home, platform, machine, probe, runner, worker),
+        lambda: _install_whisper(home, platform, machine, probe, runner, worker, refresh),
     )
-    _attempt(steps, "piper", lambda: _install_piper(home, platform, machine, probe, worker))
-    _attempt(steps, "sox", lambda: _install_sox(probe, runner))
-    _attempt(steps, "stt", lambda: _install_stt(models_dir, worker))
-    _attempt(steps, "voice", lambda: _install_voice(models_dir, worker))
+    _attempt(
+        steps,
+        "piper",
+        lambda: _install_piper(home, platform, machine, probe, worker, refresh),
+    )
+    _attempt(steps, "sox", lambda: _install_sox(home, probe, runner, refresh))
+    _attempt(steps, "stt", lambda: _install_stt(home, models_dir, worker, refresh))
+    _attempt(steps, "voice", lambda: _install_voice(home, models_dir, worker, refresh))
+    _attempt(steps, "adapter", lambda: _install_adapter(home, source, probe, runner))
     return InstallReport(steps=steps)
 
 
-def render_install(report: InstallReport) -> str:
-    lines = ["digivoice install"]
+def render_install(report: InstallReport, *, heading: str = "digivoice install") -> str:
+    lines = [heading]
     lines.extend(f"{step.id}  {step.status}  {step.detail}" for step in report.steps)
     if not report.ok:
-        lines.append("digivoice install: one or more steps failed")
+        lines.append(f"{heading}: one or more steps failed")
     return "\n".join(lines) + "\n"
 
 
@@ -139,16 +169,71 @@ def _attempt(steps: list[InstallStep], step_id: str, action: Callable[[], Instal
         steps.append(InstallStep(id=step_id, status="failed", detail=detail))
 
 
+def _stamp_path(home: Path) -> Path:
+    return vendor_dir(home) / "install.json"
+
+
+def _load_stamp(home: Path) -> InstallStamp:
+    path = _stamp_path(home)
+    if not path.is_file():
+        return InstallStamp()
+    try:
+        return InstallStamp.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return InstallStamp()
+
+
+def _remember(home: Path, **fields: str) -> None:
+    current = _load_stamp(home).model_copy(update=fields)
+    path = _stamp_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(current.model_dump_json(), encoding="utf-8")
+
+
+def _up_to_date(*, refresh: bool, present: bool, stamp: str, pin: str) -> bool:
+    """A first install skips whatever is already on disk and does not stamp it.
+
+    Update (`refresh`) fetches again when the file is missing or the stamp
+    differs from the pin we last wrote.
+    """
+    if not present:
+        return False
+    if not refresh:
+        return True
+    return stamp == pin
+
+
+def _opentui_pin(tui_root: Path) -> str:
+    package = tui_root / "package.json"
+    if not package.is_file():
+        return ""
+    try:
+        payload = json.loads(package.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    deps = payload.get("dependencies")
+    if not isinstance(deps, dict):
+        return ""
+    spec = deps.get("@opentui/core")
+    return spec if isinstance(spec, str) else ""
+
+
 def _install_bun(
     home: Path,
     platform: str,
     machine: str,
     probe: CommandProbe,
     fetch: FetchFn,
+    refresh: bool,
 ) -> InstallStep:
     existing = _find_bun(home, probe)
-    if existing:
-        return InstallStep(id="bun", status="present", detail=existing)
+    if _up_to_date(
+        refresh=refresh,
+        present=existing is not None,
+        stamp=_load_stamp(home).bun,
+        pin=BUN_VERSION,
+    ):
+        return InstallStep(id="bun", status="present", detail=existing or "")
     url = bun_archive_url(platform, machine)
     root = vendor_dir(home) / "bun"
     _extract_url(fetch, url, root)
@@ -156,6 +241,7 @@ def _install_bun(
     if binary is None:
         raise InstallError("archive did not contain bun")
     link = _link_binary(local_bin(home) / "bun", binary)
+    _remember(home, bun=BUN_VERSION)
     return InstallStep(id="bun", status="installed", detail=link)
 
 
@@ -164,9 +250,16 @@ def _install_opentui(
     probe: CommandProbe,
     runner: CommandRunner,
     tui_root: Path,
+    refresh: bool,
 ) -> InstallStep:
     package = tui_root / "node_modules" / "@opentui" / "core"
-    if package.is_dir():
+    pin = _opentui_pin(tui_root)
+    if _up_to_date(
+        refresh=refresh,
+        present=package.is_dir(),
+        stamp=_load_stamp(home).opentui,
+        pin=pin,
+    ):
         return InstallStep(id="opentui", status="present", detail=str(package))
     if not (tui_root / "package.json").is_file():
         raise InstallError(f"OpenTUI package is not in this checkout: {tui_root}")
@@ -179,6 +272,7 @@ def _install_opentui(
         raise InstallError(f"bun install failed ({reason})")
     if not package.is_dir():
         raise InstallError("bun install did not install @opentui/core")
+    _remember(home, opentui=pin)
     return InstallStep(id="opentui", status="installed", detail=str(package))
 
 
@@ -189,20 +283,66 @@ def _install_whisper(
     probe: CommandProbe,
     runner: CommandRunner,
     fetch: FetchFn,
+    refresh: bool,
 ) -> InstallStep:
     existing = _find_whisper(home, probe)
-    if existing:
-        return InstallStep(id="whisper-cli", status="present", detail=existing)
+    stamp = _load_stamp(home).whisper
+    if platform == "darwin":
+        return _install_whisper_brew(home, probe, runner, existing, stamp, refresh)
+    if _up_to_date(
+        refresh=refresh,
+        present=existing is not None,
+        stamp=stamp,
+        pin=WHISPER_TAG,
+    ):
+        return InstallStep(id="whisper-cli", status="present", detail=existing or "")
     url = whisper_archive_url(platform, machine)
     if url is None:
-        return _brew(probe, runner, "whisper-cpp", "whisper-cli")
+        raise InstallError("whisper-cli has no archive for this platform")
     root = vendor_dir(home) / "whisper"
     _extract_url(fetch, url, root)
     binary = _find_file(root, "whisper-cli")
     if binary is None:
         raise InstallError("archive did not contain whisper-cli")
     link = _link_binary(local_bin(home) / "whisper-cli", binary)
+    _remember(home, whisper=WHISPER_TAG)
     return InstallStep(id="whisper-cli", status="installed", detail=link)
+
+
+def _install_whisper_brew(
+    home: Path,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    existing: str | None,
+    stamp: str,
+    refresh: bool,
+) -> InstallStep:
+    """macOS whisper-cli comes from Homebrew. Update upgrades the bottle we installed."""
+    if existing and not refresh:
+        return InstallStep(id="whisper-cli", status="present", detail=existing)
+    if existing and refresh and stamp not in {"", "brew"}:
+        step = _brew(probe, runner, "whisper-cpp", "whisper-cli")
+    else:
+        upgrade = refresh and existing is not None and stamp in {"", "brew"}
+        step = _brew_whisper(probe, runner, upgrade=upgrade, stamp=stamp)
+    _remember(home, whisper="brew")
+    return step
+
+
+def _brew_whisper(
+    probe: CommandProbe,
+    runner: CommandRunner,
+    *,
+    upgrade: bool,
+    stamp: str,
+) -> InstallStep:
+    """Homebrew whisper-cpp. An unstamped binary tries upgrade, then install."""
+    if upgrade and stamp == "":
+        try:
+            return _brew(probe, runner, "whisper-cpp", "whisper-cli", upgrade=True)
+        except InstallError:
+            return _brew(probe, runner, "whisper-cpp", "whisper-cli")
+    return _brew(probe, runner, "whisper-cpp", "whisper-cli", upgrade=upgrade)
 
 
 def _install_piper(
@@ -211,10 +351,16 @@ def _install_piper(
     machine: str,
     probe: CommandProbe,
     fetch: FetchFn,
+    refresh: bool,
 ) -> InstallStep:
     existing = _find_piper(home, probe)
-    if existing:
-        return InstallStep(id="piper", status="present", detail=existing)
+    if _up_to_date(
+        refresh=refresh,
+        present=existing is not None,
+        stamp=_load_stamp(home).piper,
+        pin=PIPER_TAG,
+    ):
+        return InstallStep(id="piper", status="present", detail=existing or "")
     url = piper_archive_url(platform, machine)
     root = vendor_dir(home) / "piper"
     _extract_url(fetch, url, root)
@@ -222,51 +368,137 @@ def _install_piper(
     if binary is None:
         raise InstallError("archive did not contain piper")
     link = _link_binary(piper_fallback(home), binary)
+    _remember(home, piper=PIPER_TAG)
     return InstallStep(id="piper", status="installed", detail=link)
 
 
-def _install_sox(probe: CommandProbe, runner: CommandRunner) -> InstallStep:
+def _install_sox(
+    home: Path,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    refresh: bool,
+) -> InstallStep:
     found = probe.lookup("sox")
-    if found:
+    stamp = _load_stamp(home).sox
+    if found and (not refresh or stamp != "brew"):
         return InstallStep(id="sox", status="present", detail=found)
-    return _brew(probe, runner, "sox", "sox")
+    upgrade = bool(found) and refresh and stamp == "brew"
+    step = _brew(probe, runner, "sox", "sox", upgrade=upgrade)
+    _remember(home, sox="brew")
+    return step
 
 
-def _install_stt(models_dir: Path, fetch: FetchFn) -> InstallStep:
+def _install_stt(home: Path, models_dir: Path, fetch: FetchFn, refresh: bool) -> InstallStep:
     dest = models_dir / f"{DEFAULT_MODEL}.bin"
-    if _nonempty(dest):
+    pin = stt_url()
+    if _up_to_date(
+        refresh=refresh,
+        present=_nonempty(dest),
+        stamp=_load_stamp(home).stt,
+        pin=pin,
+    ):
         return InstallStep(id="stt", status="present", detail=str(dest))
-    _download(fetch, stt_url(), dest)
+    _download(fetch, pin, dest)
+    _remember(home, stt=pin)
     return InstallStep(id="stt", status="installed", detail=str(dest))
 
 
-def _install_voice(models_dir: Path, fetch: FetchFn) -> InstallStep:
+def _install_voice(home: Path, models_dir: Path, fetch: FetchFn, refresh: bool) -> InstallStep:
     onnx_url, json_url = voice_urls()
     onnx = models_dir / f"{VOICE_NAME}.onnx"
     sidecar = models_dir / f"{VOICE_NAME}.onnx.json"
-    wrote = False
-    if not _nonempty(onnx):
+    stamp = _load_stamp(home).voice
+    both = _nonempty(onnx) and _nonempty(sidecar)
+    if _up_to_date(refresh=refresh, present=both, stamp=stamp, pin=onnx_url):
+        return InstallStep(id="voice", status="present", detail=str(onnx))
+    replace = refresh and stamp != onnx_url
+    if replace or not _nonempty(onnx):
         _download(fetch, onnx_url, onnx)
-        wrote = True
-    if not _nonempty(sidecar):
+    if replace or not _nonempty(sidecar):
         _download(fetch, json_url, sidecar)
-        wrote = True
-    status = "installed" if wrote else "present"
-    return InstallStep(id="voice", status=status, detail=str(onnx))
+    _remember(home, voice=onnx_url)
+    return InstallStep(id="voice", status="installed", detail=str(onnx))
 
 
-def _brew(probe: CommandProbe, runner: CommandRunner, formula: str, step_id: str) -> InstallStep:
+def _install_adapter(
+    home: Path,
+    source: Path,
+    probe: CommandProbe,
+    runner: CommandRunner,
+) -> InstallStep:
+    dest = hammerspoon_adapter_dir(home)
+    changed = _sync_adapter(dest, source)
+    message, ok = reload_hammerspoon(runner, probe.lookup("hs"))
+    detail = f"{dest} — {message}"
+    if not ok:
+        raise InstallError(detail)
+    status = "installed" if changed else "present"
+    return InstallStep(id="adapter", status=status, detail=detail)
+
+
+def _sync_adapter(dest: Path, source: Path) -> bool:
+    """Copy sibling `*.lua` into `dest`. True when a file changed.
+
+    A symlink that already points at `source` is left alone. A real directory
+    is updated in place, including deletion of lua that this checkout no longer
+    ships, so an old hover control cannot stay behind.
+    """
+    root = source.resolve()
+    if not root.is_dir():
+        raise InstallError(f"adapter source is missing: {source}")
+    lua_files = sorted(path for path in root.glob("*.lua") if path.is_file())
+    if not lua_files:
+        raise InstallError(f"adapter source has no lua: {source}")
+    if dest.is_symlink():
+        try:
+            current = dest.resolve(strict=True)
+        except OSError:
+            current = None
+        if current == root:
+            return False
+        dest.unlink()
+    elif dest.exists() and not dest.is_dir():
+        dest.unlink()
+    dest.mkdir(parents=True, exist_ok=True)
+    names = {path.name for path in lua_files}
+    changed = False
+    for path in lua_files:
+        target = dest / path.name
+        data = path.read_bytes()
+        same = target.is_file() and not target.is_symlink() and target.read_bytes() == data
+        if same:
+            continue
+        if target.is_symlink() or target.exists():
+            target.unlink()
+        target.write_bytes(data)
+        changed = True
+    for extra in list(dest.glob("*.lua")):
+        if extra.name not in names:
+            extra.unlink()
+            changed = True
+    return changed
+
+
+def _brew(
+    probe: CommandProbe,
+    runner: CommandRunner,
+    formula: str,
+    step_id: str,
+    *,
+    upgrade: bool = False,
+) -> InstallStep:
     brew = probe.lookup("brew")
     if not brew:
         raise InstallError(
             f"{formula} is not on PATH and Homebrew is not available. "
             "Install Homebrew, then rerun digivoice install."
         )
-    result = runner([brew, "install", formula], timeout=INSTALL_TIMEOUT)
+    verb = "upgrade" if upgrade else "install"
+    result = runner([brew, verb, formula], timeout=INSTALL_TIMEOUT)
     if result.code != 0:
         reason = error_tail(result.stderr) or f"exit {result.code}"
-        raise InstallError(f"brew install {formula} failed ({reason})")
-    return InstallStep(id=step_id, status="installed", detail=f"brew install {formula}")
+        raise InstallError(f"brew {verb} {formula} failed ({reason})")
+    return InstallStep(id=step_id, status="installed", detail=f"brew {verb} {formula}")
 
 
 def _find_bun(home: Path, probe: CommandProbe) -> str | None:

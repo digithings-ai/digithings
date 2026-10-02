@@ -10,6 +10,8 @@ from digivoice.paths import resolve_paths
 from digivoice.settings import load_settings
 from digivoice.tui_bridge import dispatch
 
+from tests.dvo.fakes import FakeProbe, FakeRunner
+
 pytestmark = pytest.mark.unit
 
 
@@ -69,6 +71,42 @@ def test_bridge_restart_does_not_stop_and_update_stays_a_note(tmp_path: Path) ->
     restart = dispatch({"op": "restart"}, platform="linux", home=tmp_path, env=env)
     assert restart["restart"] is True
     assert "stopped" not in restart
-    update = dispatch({"op": "update"}, platform="linux", home=tmp_path, env=env)
-    assert "not wired yet" in update["note"]
-    assert "uv tool install" in update["note"]
+    source = tmp_path / "lua"
+    source.mkdir()
+    (source / "init.lua").write_text("-- status icon only\n", encoding="utf-8")
+    tui = tmp_path / "tui"
+    tui.mkdir()
+    (tui / "package.json").write_text('{"name":"digivoice-tui"}\n', encoding="utf-8")
+
+    def fetch(url: str, dest: Path) -> None:
+        raise OSError(f"offline {url}")
+
+    update = dispatch(
+        {"op": "update"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        runner=FakeRunner(),
+        fetch=fetch,
+        machine="aarch64",
+        adapter_source=source,
+        tui_root=tui,
+    )
+    assert "digivoice update" in update["note"]
+    assert "failed" in update["note"]
+    assert "not wired yet" not in update["note"]
+    assert "stopped" not in update
+    assert "exit" not in update
+    assert (tmp_path / ".hammerspoon" / "digivoice" / "init.lua").is_file()
+
+
+def test_bridge_update_exception_is_a_note(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(**_kwargs: object) -> None:
+        raise RuntimeError("update broke")
+
+    monkeypatch.setattr("digivoice.tui_bridge.run_install", boom)
+    update = dispatch({"op": "update"}, platform="linux", home=tmp_path, env=_env(tmp_path))
+    assert update["note"] == "update broke"
+    assert "exit" not in update
+    assert "stopped" not in update

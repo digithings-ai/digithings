@@ -11,14 +11,16 @@ import pytest
 from digivoice.catalog import find_stt
 from digivoice.cli import Runtime, run
 from digivoice.install import (
+    adapter_source_dir,
     bun_archive_url,
+    hammerspoon_adapter_dir,
     piper_archive_url,
     run_install,
     voice_urls,
     whisper_archive_url,
 )
-from digivoice.models import InstallReport, InstallStep
-from digivoice.paths import DEFAULT_MODEL_FILE
+from digivoice.models import InstallReport, InstallStamp, InstallStep
+from digivoice.paths import DEFAULT_MODEL_FILE, vendor_dir
 
 from tests.dvo.fakes import FakeCall, FakeProbe, FakeReply, FakeRunner
 
@@ -110,6 +112,8 @@ def _install(
     probe: FakeProbe | None = None,
     runner: FakeRunner | None = None,
     fail_urls: set[str] | None = None,
+    refresh: bool = False,
+    adapter_source: Path | None = None,
 ) -> tuple[InstallReport, list[str]]:
     fetched: list[str] = []
     blocked = fail_urls or set()
@@ -132,6 +136,8 @@ def _install(
         models_dir=home / "models",
         tui_root=tui,
         fetch=fetch,
+        refresh=refresh,
+        adapter_source=adapter_source,
     )
     return report, fetched
 
@@ -193,6 +199,15 @@ def test_linux_install_fetches_the_local_set(
     assert (home / "models" / "en_US-lessac-medium.onnx.json").read_bytes() == b"{}"
     assert (tui / "node_modules" / "@opentui" / "core").is_dir()
     assert _step(report, "sox").status == "present"
+    adapter = hammerspoon_adapter_dir(home)
+    assert adapter.is_relative_to(tmp_path)
+    source = adapter_source_dir()
+    for name in ("init.lua", "banner_core.lua", "hotkeys.lua"):
+        assert (adapter / name).read_bytes() == (source / name).read_bytes()
+    installed = "\n".join(path.read_text(encoding="utf-8") for path in adapter.glob("*.lua"))
+    assert "pin button" in installed
+    assert "copy button" not in installed
+    assert "hover" not in installed.casefold()
 
 
 def test_macos_without_a_cli_tarball_uses_brew(tmp_path: Path) -> None:
@@ -302,7 +317,9 @@ def test_present_tools_are_not_fetched_again(tmp_path: Path) -> None:
     )
     assert report.ok
     assert fetched == []
-    assert {step.status for step in report.steps} == {"present"}
+    assert hammerspoon_adapter_dir(home).is_relative_to(tmp_path)
+    assert all(step.status == "present" for step in report.steps if step.id != "adapter")
+    assert _step(report, "adapter").status == "installed"
 
 
 def test_cli_install_uses_the_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -328,6 +345,261 @@ def test_cli_install_uses_the_report(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert "fetch" not in seen
 
 
+def _lua_tree(path: Path, text: str = "-- status icon only\n") -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    for name in ("init.lua", "banner_core.lua", "hotkeys.lua"):
+        (path / name).write_text(text, encoding="utf-8")
+    return path
+
+
+def _runner_with_hs(tui: Path, hs: FakeReply | None = None) -> FakeRunner:
+    runner = _runner(tui)
+    runner._responses["hs"] = FakeReply() if hs is None else hs
+    return runner
+
+
+def test_update_refetches_only_an_outdated_pin(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    source = _lua_tree(tmp_path / "lua")
+    kwargs = {
+        "platform": "linux",
+        "machine": "aarch64",
+        "bodies": _linux_bodies(),
+        "probe": FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        "adapter_source": source,
+    }
+    report, fetched = _install(home, tui, **kwargs)
+    assert report.ok
+    assert fetched == [BUN_LINUX, WHISPER_LINUX, PIPER_LINUX, STT_URL, VOICE_ONNX, VOICE_JSON]
+    stamp = InstallStamp.model_validate_json(
+        (vendor_dir(home) / "install.json").read_text(encoding="utf-8")
+    )
+    assert stamp.bun == "1.4.2"
+    assert "otter" not in stamp.model_dump_json().casefold()
+    again, fetched_again = _install(home, tui, refresh=True, **kwargs)
+    assert again.ok
+    assert fetched_again == []
+    assert {step.status for step in again.steps} == {"present"}
+    stamp.bun = "0.0.1"
+    (vendor_dir(home) / "install.json").write_text(stamp.model_dump_json(), encoding="utf-8")
+    refreshed, fetched_bun = _install(home, tui, refresh=True, **kwargs)
+    assert refreshed.ok
+    assert fetched_bun == [BUN_LINUX]
+    assert _step(refreshed, "bun").status == "installed"
+    assert _step(refreshed, "whisper-cli").status == "present"
+    assert _step(refreshed, "adapter").status == "present"
+
+
+def test_update_upgrades_homebrew_tools_this_install_wrote(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    bodies = {
+        BUN_DARWIN: _zip({"bun-darwin-aarch64/bun": b"bun"}),
+        PIPER_DARWIN: _tar({"piper/piper": b"piper", "piper/espeak-ng-data/phontab": b"data"}),
+        STT_URL: b"ggml-base",
+        VOICE_ONNX: b"onnx",
+        VOICE_JSON: b"{}",
+    }
+    source = _lua_tree(tmp_path / "lua")
+    first, _fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        adapter_source=source,
+    )
+    assert _step(first, "whisper-cli").detail == "brew install whisper-cpp"
+    assert _step(first, "sox").detail == "brew install sox"
+    runner = _runner(tui)
+    second, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(
+            commands={
+                "brew": "/opt/homebrew/bin/brew",
+                "whisper-cli": "/opt/homebrew/bin/whisper-cli",
+                "sox": "/opt/homebrew/bin/sox",
+            }
+        ),
+        runner=runner,
+        refresh=True,
+        adapter_source=source,
+    )
+    assert second.ok
+    assert fetched == []
+    brew_calls = [call.argv[1:] for call in runner.calls if call.program == "brew"]
+    assert brew_calls == [["upgrade", "whisper-cpp"], ["upgrade", "sox"]]
+
+
+def test_unstamped_whisper_upgrade_falls_back_to_install(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    bindir = home / ".local" / "bin"
+    bindir.mkdir(parents=True)
+    for name in ("bun", "whisper-cli", "piper"):
+        binary = bindir / name
+        binary.write_bytes(b"#!/bin/sh\n")
+        binary.chmod(0o755)
+    models = home / "models"
+    models.mkdir()
+    (models / DEFAULT_MODEL_FILE).write_bytes(b"ggml")
+    (models / "en_US-lessac-medium.onnx").write_bytes(b"onnx")
+    (models / "en_US-lessac-medium.onnx.json").write_bytes(b"{}")
+    tui = _tui(tmp_path / "tui")
+    (tui / "node_modules" / "@opentui" / "core").mkdir(parents=True)
+    stamp = InstallStamp(
+        bun="1.4.2",
+        piper="2023.11.14-2",
+        stt=STT_URL,
+        voice=VOICE_ONNX,
+    )
+    stamp_path = vendor_dir(home) / "install.json"
+    stamp_path.parent.mkdir(parents=True)
+    stamp_path.write_text(stamp.model_dump_json(), encoding="utf-8")
+    verbs: list[str] = []
+
+    def brew(call: FakeCall) -> FakeReply:
+        verbs.append(call.argv[1])
+        if call.argv[1] == "upgrade":
+            return FakeReply(code=1, stderr="missing")
+        return FakeReply()
+
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies={},
+        probe=FakeProbe(
+            commands={
+                "brew": "/opt/homebrew/bin/brew",
+                "whisper-cli": str(bindir / "whisper-cli"),
+                "sox": "/usr/bin/sox",
+            }
+        ),
+        runner=FakeRunner({"brew": brew}),
+        refresh=True,
+        adapter_source=_lua_tree(tmp_path / "lua"),
+    )
+    assert fetched == []
+    assert verbs == ["upgrade", "install"]
+    assert _step(report, "whisper-cli").detail == "brew install whisper-cpp"
+    assert _step(report, "sox").status == "present"
+    assert report.ok
+
+
+def test_symlink_to_the_checkout_is_left_and_reloaded(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    source = _lua_tree(tmp_path / "checkout")
+    dest = hammerspoon_adapter_dir(home)
+    dest.parent.mkdir(parents=True)
+    dest.symlink_to(source)
+    tui = _tui(tmp_path / "tui")
+    runner = _runner_with_hs(tui)
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox", "hs": "/usr/bin/hs"}),
+        runner=runner,
+        adapter_source=source,
+    )
+    assert report.ok
+    assert dest.is_symlink()
+    assert dest.resolve() == source.resolve()
+    assert _step(report, "adapter").status == "present"
+    assert ".hammerspoon/digivoice" in _step(report, "adapter").detail
+    assert ["hs", "-c", "hs.reload()"] in [call.argv for call in runner.calls]
+
+
+def test_stale_adapter_directory_drops_the_hover_controls(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    source = _lua_tree(tmp_path / "source", "-- status icon only\n")
+    dest = hammerspoon_adapter_dir(home)
+    dest.mkdir(parents=True)
+    (dest / "init.lua").write_text("-- copy button\n", encoding="utf-8")
+    (dest / "banner_core.lua").write_text("-- close button\n", encoding="utf-8")
+    (dest / "hotkeys.lua").write_text("-- old\n", encoding="utf-8")
+    (dest / "hover.lua").write_text("-- copy button\n-- X\n", encoding="utf-8")
+    tui = _tui(tmp_path / "tui")
+    runner = _runner_with_hs(tui)
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox", "hs": "/usr/bin/hs"}),
+        runner=runner,
+        adapter_source=source,
+    )
+    assert report.ok
+    assert not dest.is_symlink()
+    assert _step(report, "adapter").status == "installed"
+    assert (dest / "init.lua").read_text(encoding="utf-8") == "-- status icon only\n"
+    assert not (dest / "hover.lua").exists()
+    assert "copy button" not in "\n".join(
+        path.read_text(encoding="utf-8") for path in dest.glob("*.lua")
+    )
+    assert ["hs", "-c", "hs.reload()"] in [call.argv for call in runner.calls]
+
+
+def test_symlink_to_another_tree_is_replaced_not_followed(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    other = _lua_tree(tmp_path / "old", "-- copy button\n")
+    source = _lua_tree(tmp_path / "source", "-- status icon only\n")
+    dest = hammerspoon_adapter_dir(home)
+    dest.parent.mkdir(parents=True)
+    dest.symlink_to(other)
+    tui = _tui(tmp_path / "tui")
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        adapter_source=source,
+    )
+    assert report.ok
+    assert not dest.is_symlink()
+    assert (dest / "init.lua").read_text(encoding="utf-8") == "-- status icon only\n"
+    assert (other / "init.lua").read_text(encoding="utf-8") == "-- copy button\n"
+
+
+def test_reload_failure_keeps_the_new_adapter(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    source = _lua_tree(tmp_path / "source")
+    tui = _tui(tmp_path / "tui")
+    runner = _runner_with_hs(tui, FakeReply(code=1, stderr="hs down"))
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox", "hs": "/usr/bin/hs"}),
+        runner=runner,
+        adapter_source=source,
+    )
+    assert not report.ok
+    assert _step(report, "adapter").status == "failed"
+    assert "reload failed" in _step(report, "adapter").detail
+    assert _step(report, "stt").status == "installed"
+    assert (
+        (hammerspoon_adapter_dir(home) / "init.lua")
+        .read_text(encoding="utf-8")
+        .startswith("-- status")
+    )
+
+
 def test_cli_install_exits_1_when_a_step_fails(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -344,3 +616,50 @@ def test_cli_install_exits_1_when_a_step_fails(
     assert result.code == 1
     assert "one or more steps failed" in result.stdout
     assert "Homebrew" in result.stdout
+
+
+def test_cli_update_refreshes_the_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_run_install(**kwargs: object) -> InstallReport:
+        seen.update(kwargs)
+        return InstallReport(
+            steps=[
+                InstallStep(
+                    id="adapter",
+                    status="installed",
+                    detail=str(tmp_path / ".hammerspoon" / "digivoice"),
+                )
+            ]
+        )
+
+    monkeypatch.setattr("digivoice.cli.run_install", fake_run_install)
+    runtime = Runtime(
+        platform="linux", home=tmp_path, env={}, probe=FakeProbe(), runner=FakeRunner()
+    )
+    result = run(["update"], runtime)
+    assert result.code == 0
+    assert seen["refresh"] is True
+    assert "fetch" not in seen
+    assert result.stdout.startswith("digivoice update\n")
+    assert ".hammerspoon/digivoice" in result.stdout
+    for path in ("/update", "/system/update"):
+        seen.clear()
+        followed = run([path], runtime)
+        assert followed.code == 0
+        assert seen["refresh"] is True
+        assert ".hammerspoon/digivoice" in followed.stdout
+
+
+def test_cli_update_exits_1_when_a_step_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "digivoice.cli.run_install",
+        lambda **kwargs: InstallReport(
+            steps=[InstallStep(id="adapter", status="failed", detail="reload failed")]
+        ),
+    )
+    result = run(["update"], Runtime(platform="linux", home=tmp_path, env={}, probe=FakeProbe()))
+    assert result.code == 1
+    assert "digivoice update: one or more steps failed" in result.stdout

@@ -14,6 +14,7 @@ from digivoice.settings import VoiceSettings, load_settings, save_settings
 from digivoice.status import StatusReporter, system_log_path
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
+from tests.dvo.test_install import _linux_bodies, _runner, _tui
 
 pytestmark = pytest.mark.unit
 
@@ -219,7 +220,26 @@ def test_error_status_appends_a_system_log_line(tmp_path: Path) -> None:
     assert system_log_path(paths).read_text(encoding="utf-8") == "1000 error boom\n"
 
 
-def test_system_update_stays_a_hint(tmp_path: Path) -> None:
+def test_system_update_reports_and_returns_to_the_menu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "digivoice.install.urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network")),
+    )
+    source = tmp_path / "lua"
+    source.mkdir()
+    for name in ("init.lua", "banner_core.lua", "hotkeys.lua"):
+        (source / name).write_text("-- status icon only\n", encoding="utf-8")
+    tui = _tui(tmp_path / "tui")
+    bodies = _linux_bodies()
+    fetched: list[str] = []
+
+    def fetch(url: str, dest: Path) -> None:
+        fetched.append(url)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(bodies[url])
+
     paths = _paths(tmp_path)
     out = io.StringIO()
     browse_system(
@@ -229,5 +249,23 @@ def test_system_update_stays_a_hint(tmp_path: Path) -> None:
         {"DIGIVOICE_DATA_DIR": str(tmp_path)},
         io.StringIO("5\n\n"),
         out,
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        runner=_runner(tui),
+        fetch=fetch,
+        machine="aarch64",
+        adapter_source=source,
+        tui_root=tui,
     )
-    assert "not wired yet" in out.getvalue()
+    text = out.getvalue()
+    assert "not wired yet" not in text
+    assert "digivoice update" in text
+    assert ".hammerspoon/digivoice" in text
+    assert text.count("System") >= 2
+    assert (tmp_path / ".hammerspoon" / "digivoice" / "init.lua").read_text(
+        encoding="utf-8"
+    ) == "-- status icon only\n"
+    assert "copy button" not in (tmp_path / ".hammerspoon" / "digivoice" / "init.lua").read_text(
+        encoding="utf-8"
+    )
+    assert fetched
+    assert all("otter" not in url.casefold() for url in fetched)

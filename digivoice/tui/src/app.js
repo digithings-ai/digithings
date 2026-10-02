@@ -127,7 +127,11 @@ export function mountDigivoice(renderer, session, options = {}) {
 
   function contextLines() {
     if (!screen) return []
-    if (screen.note) return [screen.note]
+    if (screen.note) {
+      return String(screen.note)
+        .split("\n")
+        .filter((line) => line.length > 0)
+    }
     if ((screen.path || "/") === "/") return screen.context || []
     return []
   }
@@ -399,9 +403,14 @@ export function mountDigivoice(renderer, session, options = {}) {
       renderList()
       return
     }
-    if (row.path === "/update" || row.action === "Update") {
-      const result = await session.call({ op: "update" })
-      screen = { ...screen, note: result.note || "", context: [] }
+    if (row.path === "/update" || row.path === "/system/update" || row.action === "Update") {
+      try {
+        const result = await session.call({ op: "update" })
+        screen = { ...screen, note: result.note || "", context: [] }
+      } catch (error) {
+        const message = error && error.message ? error.message : String(error)
+        screen = { ...screen, note: message, context: [] }
+      }
       renderList()
       return
     }

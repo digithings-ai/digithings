@@ -245,7 +245,10 @@ def build_parser() -> _Parser:
         "install",
         help="Install bun, OpenTUI, whisper-cli, Piper, sox, and the default local models",
     )
-    sub.add_parser("update", help="Reinstall hint (not wired yet)")
+    sub.add_parser(
+        "update",
+        help="Refresh the local install and copy the Hammerspoon adapter",
+    )
     sub.add_parser("uninstall", help="Removal hint (not wired yet)")
     sub.add_parser("quit", help="Stop digivoice and quit Hammerspoon")
     sub.add_parser("reset", help="Restore settings defaults; history and models stay")
@@ -387,10 +390,22 @@ def _install(runtime: Runtime) -> CliResult:
     return CliResult(code=code, stdout=render_install(report), stderr="")
 
 
-def _update() -> CliResult:
+def _update(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    report = run_install(
+        home=runtime.home,
+        platform=runtime.platform,
+        machine=platform.machine(),
+        probe=runtime.probe,
+        runner=runtime.runner or run_command,
+        models_dir=Path(paths.models_dir),
+        tui_root=tui_root(),
+        refresh=True,
+    )
+    code = 0 if report.ok else 1
     return CliResult(
-        code=0,
-        stdout="digivoice update: not wired yet — reinstall via uv / brew when available\n",
+        code=code,
+        stdout=render_install(report, heading="digivoice update"),
         stderr="",
     )
 
@@ -911,7 +926,7 @@ def _dispatch_path(raw: str, runtime: Runtime) -> CliResult:
     if kind == "restart":
         return _restart(runtime)
     if kind == "update":
-        return _update()
+        return _update(runtime)
     if kind == "logs":
         return _logs(runtime)
     if kind == "history-delete":
@@ -973,7 +988,7 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     if command == "install":
         return _install(runtime)
     if command == "update":
-        return _update()
+        return _update(runtime)
     if command == "uninstall":
         return _uninstall()
     if command == "reload":
