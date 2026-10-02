@@ -49,7 +49,10 @@ function rowLine(row: unknown): string {
 
 /** One level of fields. Nulls are an em dash. Arrays say when they have no rows. */
 export function fieldLines(data: unknown, limit = 16): string[] {
-  if (isEmptyPayload(data)) return [EMPTY_READ];
+  if (data == null || (typeof data === "object" && !Array.isArray(data) && Object.keys(data).length === 0)) {
+    return [EMPTY_READ];
+  }
+  if (Array.isArray(data) && data.length === 0) return [EMPTY_READ];
   const lines: string[] = [];
   const push = (line: string) => {
     if (lines.length < limit) lines.push(line);
