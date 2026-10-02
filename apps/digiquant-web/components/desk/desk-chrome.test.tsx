@@ -26,6 +26,8 @@ const baseline: ManifestDesk = {
     { path: "/tools/charts", label: "Charts", status: "soon", access: "granted" },
     { path: "/tools/chat", label: "digichat", status: "wip", access: "granted" },
     { path: "/settings", label: "Settings", access: "granted" },
+    { path: "/settings/paper", label: "Paper", access: "granted" },
+    { path: "/fx/settings", label: "Settings", access: "granted" },
   ],
 };
 
@@ -55,6 +57,12 @@ describe("desk chrome", () => {
     const portfolio = groups.flatMap((group) => group.items).find((item) => item.path === "/portfolio");
     expect(portfolio?.children?.map((child) => child.path)).toEqual(["/portfolio/holdings"]);
     expect(groups.some((group) => group.title === "tools")).toBe(true);
+    const paths = groups.flatMap((group) =>
+      group.items.flatMap((item) => [item.path, ...(item.children ?? []).map((child) => child.path)]),
+    );
+    expect(paths).toContain("/fx/settings");
+    expect(paths).not.toContain("/settings");
+    expect(paths).not.toContain("/settings/paper");
     expect(deskHomeHref(baseline)).toBe("/app/brief/");
     expect(deskHomeHref(fx)).toBeNull();
     expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBe(
@@ -87,8 +95,11 @@ describe("desk chrome", () => {
     expect(linked("/app/portfolio/")).toBe(true);
     expect(linked("/app/tools/charts/")).toBe(true);
     expect(html).toContain(">/tools/terminal<");
-    expect(html).toContain(">/settings<");
-    expect(html).not.toContain('href="/app/settings');
+    expect(html).toContain(">/fx/settings<");
+    expect(html).not.toContain(">/settings<");
+    expect(html).not.toContain(">/settings/paper<");
+    expect(html).not.toContain('href="/app/settings"');
+    expect(html).not.toContain('href="/app/settings/');
     expect(html).not.toContain("luxalgo");
     expect(html).toContain("desk: Baseline");
     expect(html).toContain("FX Hub");
