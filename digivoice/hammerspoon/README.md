@@ -20,16 +20,18 @@ Do not invent other default binds in this sample. The terminal UI can store anot
 
 Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
-The banner is one status icon. It has no status word, copy, close, pin button, transcript, or waveform. A click focuses the digivoice terminal when that UI is already open, and opens it otherwise; it does not stack a terminal and it does not stop a take. Esc is the only take control. Whether the idle icon stays up is `banner_pinned` in the terminal UI (default off). Pending, idle, and nothing-to-show hide the icon. It shows for recording, dictating, processing, a current error, or a current warning. A `pending: true` flag hides it. Drag moves the icon; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`). Chrome follows the system appearance (remock dark ground, ivory light ground). Launch does not draw the banner unless it is pinned. `digivoice banner show` reveals a recording icon (not the flag text); Esc on a preview only hides it.
+The banner is one status icon. It has no status word, copy, close, pin button, or transcript. Recording is a level meter drawn in that same grid. A click focuses the digivoice terminal when that UI is already open, and opens it otherwise; it does not stack a terminal and it does not stop a take. Esc is the only take control. Whether the idle icon stays up is `banner_pinned` in the terminal UI (default off). Pending, idle, and nothing-to-show hide the icon. It shows for recording, dictating, processing, a current error, or a current warning. A `pending: true` flag hides it. Drag moves the icon; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`). Chrome follows the system appearance (remock dark ground, ivory light ground). Launch does not draw the banner unless it is pinned. `digivoice banner show` reveals a recording icon (not the flag text); Esc on a preview only hides it.
 
-| Phase | Animation (digichat 5x5 square grid) |
+| Phase | Motion on the same 5x5 grid |
 | --- | --- |
-| recording | red equalizer, still |
-| transcribing / rewriting / pasting / speaking / loading | processing grid |
-| error | red mark |
-| nothing heard | amber mark |
+| recording | red level meter: five bars rise and fall on their own timing, with a slow flow across the columns |
+| transcribing | dictating mark; a bright band sweeps across it |
+| loading / rewriting / pasting / speaking | processing ring; a bright segment chases around it |
+| error | red cross ripples outward from the center |
+| warning | amber mark; brightness runs down the stem, then the dot flashes |
 | done / cancelled | settles to idle when pinned, otherwise hides |
-| pinned, idle | quiet gray grid |
+| pinned, idle | gray square breathes slowly |
+| `banner_animations` off | the same picture, held on one frame |
 
 No titles, no hints, no transcript, no copy, no close, no pin, and no settings UI on the banner. The banner reads `status.json` that the CLI writes and draws only the icon.
 

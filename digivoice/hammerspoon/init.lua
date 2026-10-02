@@ -10,8 +10,10 @@
 --- A binding that does not parse keeps the previous one and prints a warning.
 ---
 --- Status: a custom overlay banner (banner_core.lua) draws one status icon.
---- No status word, copy, close, pin button, transcript, or waveform. A click
---- focuses the digivoice terminal when it is already open, and opens it otherwise.
+--- No status word, copy, close, pin button, or transcript. Recording is a
+--- level meter on the grid; the other marks move. banner_animations false
+--- holds one frame. A click focuses the digivoice terminal when it is already
+--- open, and opens it otherwise.
 --- The cancel bind still cancels a take. Drag moves the icon; release near an anchor snaps.
 --- Off hides the icon when voice is idle. banner_pinned keeps it. Density is ignored.
 --- `digivoice banner show` still reveals a status preview with no dictation.
