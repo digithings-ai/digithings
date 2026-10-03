@@ -608,6 +608,7 @@
           "n_trials": {
             "default": 50,
             "description": "Trials for bayesian/random",
+            "minimum": 1.0,
             "title": "N Trials",
             "type": "integer"
           },

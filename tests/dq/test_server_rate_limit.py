@@ -170,6 +170,8 @@ def test_string_false_does_not_enable_pipeline_flags(monkeypatch: pytest.MonkeyP
 
 
 def test_mcp_pipeline_rejects_explicit_zero_trials(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("mcp.server.fastmcp")
+
     from digiquant.mcp_server import create_mcp_server
 
     called: list[dict[str, object]] = []
