@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type SyntheticEvent,
+} from "react";
 import { Button } from "@digithings/ui/ui";
-import { deskHref } from "@/components/desk/paths";
+import { DESK_GO_TYPE } from "@/components/desk/paths";
 import { publicCatalogPages } from "@/components/desk/public-surface";
 import {
+  DESK_EMBED_SRC,
   OPEN_BUDGET_MS,
   bindYieldListeners,
   embedLooksDown,
@@ -13,99 +22,75 @@ import {
 } from "./desk-walk";
 import { TerminalScreen } from "./terminal-screen";
 import {
-  HOSTED_COPY,
-  HOSTED_TITLE,
   IDLE_RESUME_MS,
-  PAGE_FADE_MS,
-  SELF_HOSTED_COPY,
-  SELF_HOSTED_TITLE,
-  SPLIT_MAX,
-  SPLIT_MIN,
+  REVEAL_REST,
+  REVEAL_RETURN_MS,
+  REVEAL_SWEEP_MS,
+  TERMINAL_COPY,
+  TERMINAL_TITLE,
   TOUR_DWELL_MS,
+  WEB_COPY,
   WEB_EMPTY_COPY,
+  WEB_TITLE,
   clampSplit,
+  deskPathFromLocation,
   deskShellLoaded,
   nextTerminalPath,
-  paneLayers,
   prevTerminalPath,
+  revealShare,
+  sentenceFits,
   splitFromPointer,
-  widerSide,
   type StagePhase,
 } from "./surface-tour";
 
 const PAGES = publicCatalogPages();
 const HOME = PAGES[0]?.path ?? "/brief";
-const LAYER = "absolute inset-0";
-const PANE_MOTION = `
-@keyframes dq-desk-in { from { opacity: 0; transform: translateX(1rem); } to { opacity: 1; transform: none; } }
-@keyframes dq-desk-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-1rem); } }
-@media (prefers-reduced-motion: reduce) {
-  @keyframes dq-desk-in { from, to { opacity: 1; transform: none; } }
-  @keyframes dq-desk-out { from, to { opacity: 0; transform: none; } }
-}
-`;
+const KNOWN = new Set(PAGES.map((page) => page.path));
 
-function frameSrc(path: string): string {
-  return path === "/brief" ? "/app" : deskHref(path);
-}
-
-function layerStyle(item: string, shown: string, leaving: string | null): CSSProperties | undefined {
-  if (item === leaving) return { animation: `dq-desk-out ${PAGE_FADE_MS}ms ease-out forwards` };
-  if (item === shown && leaving) return { animation: `dq-desk-in ${PAGE_FADE_MS}ms ease-out both` };
-  if (item === shown) return undefined;
-  return { opacity: 0 };
-}
-
-/** Iframes keep a 300×150 user-agent size unless height and width are set. */
-function frameBox(item: string, shown: string, leaving: string | null): CSSProperties {
-  return { width: "100%", height: "100%", ...layerStyle(item, shown, leaving) };
-}
-
-/** Self-hosted terminal and the hosted web desk, side by side.
- *  Both stay visible and tour the same page. The gap changes the width.
+/** Terminal UI and the web app, both at the full preview size.
+ *  A clip reveals a slice. The handle can sit on either edge.
  *  A pointer, wheel, or key inside a frame pauses the tour. */
 export function ProductStage() {
   const stageRef = useRef<HTMLDivElement>(null);
-  const gapRef = useRef<HTMLButtonElement>(null);
-  const frames = useRef(new Map<string, HTMLIFrameElement>());
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const pathRef = useRef(HOME);
   const holdRef = useRef<() => void>(() => {});
+  const dragRef = useRef(false);
   const [path, setPath] = useState(HOME);
-  const [shown, setShown] = useState(HOME);
-  const [leaving, setLeaving] = useState<string | null>(null);
-  const [share, setShare] = useState(0.5);
+  const [share, setShare] = useState(REVEAL_REST);
   const [phase, setPhase] = useState<StagePhase>("opening");
   const phaseRef = useRef<StagePhase>("opening");
-  if (path !== shown) {
-    setLeaving(shown);
-    setShown(path);
-  }
-  const lead = widerSide(share);
-  const preload = phase === "touring" && path === shown ? nextTerminalPath(path) : null;
-  const layers = paneLayers(shown, path, leaving, preload);
-  const pageLabel = (item: string) => PAGES.find((page) => page.path === item)?.label ?? item;
+  const pageLabel = PAGES.find((page) => page.path === path)?.label ?? path;
 
   useEffect(() => {
-    if (!leaving) return;
-    const timer = setTimeout(() => setLeaving(null), PAGE_FADE_MS);
-    return () => clearTimeout(timer);
-  }, [leaving]);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const started = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      if (dragRef.current) return;
+      setShare(revealShare(now - started, false));
+      if (now - started < REVEAL_SWEEP_MS + REVEAL_RETURN_MS) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
-  const go = (next: string, user: boolean) => {
-    if (next === pathRef.current) return;
-    pathRef.current = next;
-    setPath(next);
-    if (user) holdRef.current();
+  const showWeb = (next: string) => {
+    const win = frameRef.current?.contentWindow;
+    if (!win || !KNOWN.has(next)) return;
+    win.postMessage({ type: DESK_GO_TYPE, path: next }, window.location.origin);
   };
 
   useEffect(() => {
+    const frame = frameRef.current;
     let stopped = false;
     let held = false;
     let primed = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let idle: ReturnType<typeof setTimeout> | null = null;
     let probeTimer: ReturnType<typeof setTimeout> | null = null;
-    let detaches: (() => void)[] = [];
+    let detach: (() => void) | null = null;
+    let bound: Document | null = null;
     const started = Date.now();
 
     const clearTimer = () => {
@@ -123,40 +108,44 @@ export function ProductStage() {
       setPhase(next);
     };
 
-    const activeFrame = () => {
-      const node = frames.current.get(pathRef.current);
-      return node && node.isConnected ? node : null;
-    };
-
-    const armAll = () => {
-      for (const off of detaches) off();
-      detaches = [];
-      for (const frame of frames.current.values()) {
-        if (!frame.isConnected) continue;
-        const probe = probeEmbed(frame);
-        if (probe.kind !== "scriptable") continue;
-        const doc = frame.contentDocument;
-        if (!doc) continue;
-        try {
-          detaches.push(bindYieldListeners(doc, () => holdRef.current()));
-        } catch {
-          /* The frame is opaque. */
-        }
+    const arm = (doc: Document) => {
+      if (bound === doc) return;
+      detach?.();
+      bound = doc;
+      try {
+        detach = bindYieldListeners(doc, () => holdRef.current());
+      } catch {
+        detach = null;
       }
     };
 
     const webBlocked = (): StagePhase | null => {
-      const frame = activeFrame();
       if (!frame) return "opening";
       const probe = probeEmbed(frame);
       if (probe.kind === "cross-origin") return "live";
       if (probe.kind === "closed") return Date.now() - started > OPEN_BUDGET_MS ? "empty" : "opening";
       const doc = frame.contentDocument;
       if (!doc) return "opening";
-      armAll();
+      arm(doc);
       if (deskShellLoaded(doc)) return null;
       if (embedLooksDown(doc)) return "empty";
       return Date.now() - started > OPEN_BUDGET_MS ? "empty" : "opening";
+    };
+
+    const syncFromWeb = () => {
+      if (!held || !frame) return;
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      let pathname = "";
+      try {
+        pathname = doc.location.pathname;
+      } catch {
+        return;
+      }
+      const next = deskPathFromLocation(pathname);
+      if (!KNOWN.has(next) || next === pathRef.current) return;
+      pathRef.current = next;
+      setPath(next);
     };
 
     const schedule = () => {
@@ -183,6 +172,7 @@ export function ProductStage() {
       }
       if (held) {
         publish("yours");
+        syncFromWeb();
         return;
       }
       if (blocked) {
@@ -204,6 +194,8 @@ export function ProductStage() {
         publish(blocked);
         return;
       }
+      const win = frame.contentWindow;
+      if (win) win.postMessage({ type: DESK_GO_TYPE, path: next }, window.location.origin);
       publish("touring");
     };
 
@@ -237,10 +229,18 @@ export function ProductStage() {
       clearTimer();
       clearIdle();
       if (probeTimer != null) clearTimeout(probeTimer);
-      for (const off of detaches) off();
+      detach?.();
       holdRef.current = () => {};
     };
   }, []);
+
+  const go = (next: string, user: boolean) => {
+    if (next === pathRef.current || !KNOWN.has(next)) return;
+    pathRef.current = next;
+    setPath(next);
+    showWeb(next);
+    if (user) holdRef.current();
+  };
 
   const onViewEvent = (event: SyntheticEvent) => {
     if (shouldYieldToUser(event.nativeEvent)) holdRef.current();
@@ -252,95 +252,66 @@ export function ProductStage() {
     go(event.key === "ArrowDown" ? nextTerminalPath(pathRef.current) : prevTerminalPath(pathRef.current), true);
   };
 
+  const takeHandle = () => {
+    dragRef.current = true;
+  };
+
   const resizeTo = (clientX: number) => {
     const stage = stageRef.current;
     if (!stage) return;
     const rect = stage.getBoundingClientRect();
-    const gap = gapRef.current?.getBoundingClientRect().width ?? 0;
-    setShare(splitFromPointer(clientX, rect.left, rect.width, gap));
+    setShare(splitFromPointer(clientX, rect.left, rect.width));
   };
 
-  const onGapDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const onHandleDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
+    takeHandle();
     event.currentTarget.setPointerCapture(event.pointerId);
     resizeTo(event.clientX);
   };
 
-  const onGapMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const onHandleMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
     resizeTo(event.clientX);
   };
 
-  const onGapKey = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  const onHandleKey = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
     event.stopPropagation();
-    const step = event.key === "ArrowRight" ? 0.06 : -0.06;
+    takeHandle();
+    if (event.key === "Home") {
+      setShare(0);
+      return;
+    }
+    if (event.key === "End") {
+      setShare(1);
+      return;
+    }
+    const step = event.key === "ArrowRight" ? 0.05 : -0.05;
     setShare((value) => clampSplit(value + step));
   };
 
-  const terminalWidth = `calc((100% - 1.5rem) * ${share})`;
-  const webWidth = `calc((100% - 1.5rem) * ${1 - share})`;
+  const handleLeft = `clamp(0px, calc(${share * 100}% - 0.5rem), calc(100% - 1rem))`;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid gap-px border border-hair sm:grid-cols-2">
-        <Story title={SELF_HOSTED_TITLE} copy={SELF_HOSTED_COPY} emphasis={lead === "terminal"} />
-        <Story title={HOSTED_TITLE} copy={HOSTED_COPY} emphasis={lead === "web"} />
+      <div className="flex border border-hair" data-reveal={share === REVEAL_REST ? "rest" : "moving"}>
+        <div className="min-w-0 overflow-hidden" style={{ width: `${share * 100}%` }} data-side="terminal">
+          <SideCopy title={TERMINAL_TITLE} copy={TERMINAL_COPY} />
+        </div>
+        <div className="min-w-0 overflow-hidden border-s border-hair" style={{ width: `${(1 - share) * 100}%` }} data-side="web">
+          <SideCopy title={WEB_TITLE} copy={WEB_COPY} />
+        </div>
       </div>
-      <style>{PANE_MOTION}</style>
       <div
         ref={stageRef}
-        className="flex h-[min(40rem,calc(100svh-18rem))] min-h-[28rem]"
-        data-wider={lead}
+        data-stage="desk"
+        className="relative h-[min(40rem,calc(100svh-18rem))] min-h-[28rem] overflow-hidden border border-hair bg-surface"
+        style={{ containerType: "inline-size" }}
       >
         <div
-          className="relative h-full min-w-0 overflow-hidden border border-hair bg-surface"
-          style={{ width: terminalWidth }}
-          data-pane="terminal"
-          data-page={path}
-          onPointerDown={onViewEvent}
-          onWheel={onViewEvent}
-          onKeyDown={onViewEvent}
-        >
-          {layers.map((item) => {
-            const open = item === shown;
-            return (
-              <div
-                key={item}
-                inert={open ? undefined : true}
-                aria-hidden={open ? undefined : true}
-                className={`${LAYER} ${open ? "" : "pointer-events-none"}`}
-                style={layerStyle(item, shown, leaving)}
-              >
-                <TerminalStage
-                  path={item}
-                  label={pageLabel(item)}
-                  onListKey={onListKey}
-                  onNavigate={(next) => go(next, true)}
-                />
-              </div>
-            );
-          })}
-        </div>
-        <Button
-          ref={gapRef}
-          type="button"
-          variant="ghost"
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuemin={Math.round(SPLIT_MIN * 100)}
-          aria-valuemax={Math.round(SPLIT_MAX * 100)}
-          aria-valuenow={Math.round(share * 100)}
-          aria-label="Give more width to the terminal or the hosted desk"
-          className="h-auto w-6 shrink-0 self-stretch rounded-none border-0 bg-transparent px-0 hover:bg-transparent active:translate-y-0"
-          onPointerDown={onGapDown}
-          onPointerMove={onGapMove}
-          onKeyDown={onGapKey}
-        />
-        <div
-          className="relative h-full min-w-0 overflow-hidden border border-hair bg-surface"
-          style={{ width: webWidth }}
+          className="absolute inset-0"
           data-pane="web"
           data-page={path}
           onPointerDown={onViewEvent}
@@ -350,37 +321,86 @@ export function ProductStage() {
           {phase === "empty" ? (
             <p className="relative z-10 m-0 px-3 py-6 font-mono text-[0.75rem] leading-[1.5] text-ink-mute">{WEB_EMPTY_COPY}</p>
           ) : null}
-          {layers.map((item) => {
-            const open = item === shown && phase !== "empty";
-            return (
-              <iframe
-                key={item}
-                ref={(node) => {
-                  if (node) frames.current.set(item, node);
-                  else frames.current.delete(item);
-                }}
-                title="Hosted digiquant"
-                src={frameSrc(item)}
-                loading="eager"
-                data-desk-path={item}
-                inert={open ? undefined : true}
-                aria-hidden={open ? undefined : true}
-                className={`block h-full w-full border-0 bg-surface ${LAYER} ${open ? "" : "pointer-events-none"} ${phase === "empty" ? "invisible" : ""}`}
-                style={frameBox(item, shown, leaving)}
-              />
-            );
-          })}
+          <iframe
+            ref={frameRef}
+            title="digiquant web app"
+            src={DESK_EMBED_SRC}
+            loading="eager"
+            data-frame="full"
+            className={`absolute inset-0 block h-full w-full border-0 bg-surface ${phase === "empty" ? "invisible" : ""}`}
+          />
         </div>
+        <div
+          className="absolute inset-y-0 left-0 z-10 overflow-hidden"
+          data-pane="terminal"
+          data-page={path}
+          style={{ width: `${share * 100}%` }}
+          onPointerDown={onViewEvent}
+          onWheel={onViewEvent}
+          onKeyDown={onViewEvent}
+        >
+          <div className="absolute top-0 left-0 h-full" style={{ width: "100cqi" }} data-frame="full">
+            <TerminalStage path={path} label={pageLabel} onListKey={onListKey} onNavigate={(next) => go(next, true)} />
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          role="slider"
+          aria-orientation="vertical"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(share * 100)}
+          aria-label="Drag to reveal the terminal UI or the web app"
+          className="absolute top-0 z-30 h-full w-4 rounded-none border-0 bg-transparent px-0 transition-none hover:bg-transparent active:translate-y-0"
+          style={{ left: handleLeft }}
+          onPointerDown={onHandleDown}
+          onPointerMove={onHandleMove}
+          onKeyDown={onHandleKey}
+        >
+          <span aria-hidden="true" className="block h-9 w-2.5 border border-hair bg-surface" />
+        </Button>
       </div>
     </div>
   );
 }
 
-function Story({ title, copy, emphasis }: { title: string; copy: string; emphasis: boolean }) {
+function SideCopy({ title, copy }: { title: string; copy: string }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [fits, setFits] = useState(false);
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const text = textRef.current;
+    if (!box || !text) return;
+    const measure = () => {
+      const styles = getComputedStyle(box);
+      const pad = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+      setFits(sentenceFits(text.scrollWidth, box.clientWidth - pad));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [copy]);
+
   return (
-    <div className={`px-3 py-2.5 ${emphasis ? "bg-surface-2" : ""}`}>
+    <div ref={boxRef} className="relative px-3 py-2.5">
       <p className="m-0 font-mono text-[0.6875rem] tracking-[0.04em] text-ink">{title}</p>
-      <p className="m-0 mt-1 text-[0.8125rem] leading-[1.55] text-ink-soft">{copy}</p>
+      <span
+        ref={textRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute top-0 left-0 whitespace-nowrap text-[0.8125rem] leading-[1.55]"
+        style={{ visibility: "hidden" }}
+      >
+        {copy}
+      </span>
+      {fits ? (
+        <p data-fit="shown" className="m-0 mt-1 whitespace-nowrap text-[0.8125rem] leading-[1.55] text-ink-soft">
+          {copy}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -424,7 +444,7 @@ function TerminalStage({
             );
           })}
         </nav>
-        <div className="relative min-h-0 min-w-0 flex-1">
+        <div key={path} className="desk-page-settle relative min-h-0 min-w-0 flex-1 overflow-hidden">
           <TerminalScreen path={path} />
         </div>
       </div>

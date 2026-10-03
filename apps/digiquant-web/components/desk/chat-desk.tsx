@@ -39,8 +39,9 @@ function usable(read: OfficialRead): boolean {
   return read.result.status === "ok" || read.result.status === "empty";
 }
 
-/** Sessions and the open thread for /tools/chat. The rail and the pane share this. */
-export function ChatDesk({ children }: { children: ReactNode }) {
+/** Sessions and the open thread for /tools/chat. The rail and the pane share this.
+ *  `active` is false on every other desk page so the shell can stay mounted. */
+export function ChatDesk({ children, active = true }: { children: ReactNode; active?: boolean }) {
   const [threads, setThreads] = useState<DeskThread[]>([]);
   const [messages, setMessages] = useState<DeskMessage[]>([]);
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
@@ -50,6 +51,7 @@ export function ChatDesk({ children }: { children: ReactNode }) {
   const sessionRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!active) return;
     const ac = new AbortController();
     let cancel = false;
     void (async () => {
@@ -72,7 +74,7 @@ export function ChatDesk({ children }: { children: ReactNode }) {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [active]);
 
   const select = useCallback((id: string) => {
     sessionRef.current = id;
@@ -137,9 +139,9 @@ export function ChatDesk({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  return (
-    <ChatDeskContext.Provider value={{ threads, messages, activeId, notice, ready, running, select, send }}>
-      {children}
-    </ChatDeskContext.Provider>
-  );
+  const value: ChatDeskValue | null = active
+    ? { threads, messages, activeId, notice, ready, running, select, send }
+    : null;
+
+  return <ChatDeskContext.Provider value={value}>{children}</ChatDeskContext.Provider>;
 }

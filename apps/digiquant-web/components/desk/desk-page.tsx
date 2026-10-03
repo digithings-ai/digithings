@@ -71,33 +71,30 @@ export function DeskCatalogLive({ path }: { path: string }) {
   return <DeskReadout path={path} reads={reads} />;
 }
 
-/** Loads the current page. A mounted page fetches its own reads. */
-export function DeskPage({ path }: { path: string }) {
+/** The page body only. The shell around it stays mounted across navigations. */
+export function DeskRouteBody({ path }: { path: string }): ReactNode {
   if (isInviteSurface(path)) {
     return (
-      <DeskFrame current="/brief">
-        <p className="m-0 px-3 py-6 text-[0.75rem] leading-[1.5] text-ink-mute">This page is not on the public desk.</p>
-      </DeskFrame>
+      <p className="m-0 px-3 py-6 text-[0.75rem] leading-[1.5] text-ink-mute">This page is not on the public desk.</p>
     );
   }
-  if (mountedDeskKind(path)) {
-    return (
-      <DeskFrame current={path}>
-        <DeskBody path={path} />
-      </DeskFrame>
-    );
-  }
+  if (mountedDeskKind(path)) return <DeskBody path={path} />;
   const known = pageByPath(path);
-  if (!known) {
-    return (
-      <DeskFrame current="/brief">
-        <DeskReadout path="/brief" reads={{}} />
-      </DeskFrame>
-    );
-  }
+  if (!known) return <DeskReadout path="/brief" reads={{}} />;
+  return <DeskCatalogLive path={known.path} />;
+}
+
+function framePath(path: string): string {
+  if (isInviteSurface(path)) return "/brief";
+  if (mountedDeskKind(path)) return path;
+  return pageByPath(path)?.path ?? "/brief";
+}
+
+/** Loads the current page. A mounted page fetches its own reads. */
+export function DeskPage({ path }: { path: string }) {
   return (
-    <DeskFrame current={known.path}>
-      <DeskCatalogLive path={known.path} />
+    <DeskFrame current={framePath(path)}>
+      <DeskRouteBody path={path} />
     </DeskFrame>
   );
 }

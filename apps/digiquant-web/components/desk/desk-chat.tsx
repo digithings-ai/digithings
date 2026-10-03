@@ -23,7 +23,7 @@ function appendText(message: { content?: unknown }): string {
 }
 
 /** Thread and composer on the desk ground. Threads live in the desk rail. */
-function ChatPane() {
+export function ChatPane() {
   const chat = useChatDesk();
   const runtime = useExternalStoreRuntime({
     messages: chat?.messages ?? [],

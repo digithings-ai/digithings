@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DeskPage } from "@/components/desk/desk-page";
+import { DeskRouteBody } from "@/components/desk/desk-page";
 
 export const metadata: Metadata = {
   title: "Terminal — digiquant",
@@ -7,9 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function TerminalHome() {
-  return (
-    <main id="main" className="h-[100svh]">
-      <DeskPage path="/brief" />
-    </main>
-  );
+  return <DeskRouteBody path="/brief" />;
 }
