@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   computeStatus,
@@ -5,8 +8,11 @@ import {
   equityCell,
   formatChange,
   formatCloseStamp,
+  formatLiveStamp,
   formatPrice,
+  mergeTapeQuotes,
   parseTick,
+  TAPE_SYMBOLS,
   type MarketBarStatus,
   type SocketLike,
 } from "./market-bar";
@@ -34,6 +40,67 @@ describe("parseTick", () => {
   });
 });
 
+function tupleTickers(src: string, name: string): string[] {
+  const marker = `${name}: Final[tuple[str, ...]] = (`;
+  const start = src.indexOf(marker);
+  const end = src.indexOf("\n)", start);
+  return [...src.slice(start + marker.length, end).matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+}
+
+describe("baseline tape", () => {
+  it("lists every core venue ticker once, skipping Yahoo FX aliases", () => {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../../../digiquant/src/digiquant/data/prices/ticker_venues.py"),
+      "utf8",
+    );
+    const fx = tupleTickers(src, "_FX_TICKERS");
+    const expected = [
+      ...tupleTickers(src, "_NYSE_TICKERS"),
+      ...tupleTickers(src, "_CRYPTO_TICKERS"),
+      ...fx.filter((ticker) => !ticker.includes("=")),
+    ];
+    expect([...TAPE_SYMBOLS]).toEqual(expected);
+    expect(TAPE_SYMBOLS).toHaveLength(expected.length);
+    for (const alias of fx.filter((ticker) => ticker.includes("="))) {
+      expect(TAPE_SYMBOLS).toContain(alias.replace("=X", ""));
+      expect(TAPE_SYMBOLS).not.toContain(alias);
+    }
+  });
+
+  it("keeps a real quote and leaves the rest unavailable", () => {
+    const spy = equityCell("SPY", [
+      { date: "2026-09-26", price: 100 },
+      { date: "2026-09-29", price: 110 },
+    ]);
+    const close = equityCell("BTC-USD", [
+      { date: "2026-09-26", price: 100 },
+      { date: "2026-09-29", price: 110 },
+    ]);
+    expect(spy).not.toBeNull();
+    expect(close).not.toBeNull();
+    const live = {
+      ...close!,
+      kind: "crypto" as const,
+      price: 120,
+      changePct: 1,
+      value: "120.00",
+      change: "▲1.00%",
+      up: true,
+    };
+    const cells = mergeTapeQuotes([spy!, close!], [live]);
+    expect(cells).toHaveLength(TAPE_SYMBOLS.length);
+    expect(cells.map((cell) => cell.symbol)).toEqual([...TAPE_SYMBOLS]);
+    expect(cells.find((cell) => cell.symbol === "SPY")?.changePct).toBeCloseTo(10);
+    expect(cells.find((cell) => cell.symbol === "BTC-USD")?.price).toBe(120);
+    const qqq = cells.find((cell) => cell.symbol === "QQQ");
+    expect(qqq?.value).toBe("—");
+    expect(qqq?.changePct).toBeNull();
+    expect(qqq?.change).toBe("—");
+    const wiped = mergeTapeQuotes([close!], [{ ...live, price: Number.NaN }]);
+    expect(wiped.find((cell) => cell.symbol === "BTC-USD")?.price).toBe(110);
+  });
+});
+
 describe("formatters", () => {
   it("formats price, change and stamp", () => {
     expect(formatPrice(65432.1)).toBe("65,432.10");
@@ -42,6 +109,8 @@ describe("formatters", () => {
     expect(formatChange(-1.234)).toBe("▼1.23%");
     expect(formatChange(null)).toBe("—");
     expect(formatCloseStamp("2026-09-29")).toBe("as of 2026-09-29 close");
+    expect(formatLiveStamp("2026-09-30T12:00:00.000Z")).toBe("12:00:00Z");
+    expect(formatLiveStamp("2026-09-30T12:00:00.000Z").toLowerCase()).not.toContain("live");
   });
   it("builds an equity cell from the latest close", () => {
     const c = equityCell("SPY", [

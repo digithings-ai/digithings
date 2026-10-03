@@ -1,36 +1,39 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Marquee } from "../marquee/Marquee";
-import { LiveBadge } from "../finance-tearsheet/LiveBadge";
 import { toneClass } from "../finance-tearsheet/format";
 import { cn } from "../../lib/utils";
 
 /**
- * MarketBar — the terminal status line: `[● live] BTC 63,410 ▲0.40% … [pause]`.
- * Props-driven and honest: it renders exactly the cells it is given and never a
- * price of its own. The consumer owns the feed, the clock and the status.
+ * MarketBar — the terminal status line: a green square, then
+ * `BTC 63,410 ▲0.40% …`, then `[pause]`. Props-driven and honest: it renders
+ * exactly the cells it is given and never a price of its own. The consumer
+ * owns the feed, the clock and the status.
  *
- * Built on `Marquee` (seamless -50% loop, edge fade, pause-on-hover). Honesty
+ * Built on `Marquee` (seamless -50% loop, edge fade, pause-on-hover). Each
+ * cell carries its own horizontal padding and the group gap is zero, so the
+ * join where the list repeats is the same gap as every other pair. Honesty
  * and a11y contract:
- *  - the badge reads "live" ONLY for `status="live"`; `connecting` / `stale` /
- *    `offline` show a muted bracketed word instead (LiveBadge is not used);
+ *  - `status="live"` is a green square (it may pulse). The word is not shown.
+ *    `connecting` / `stale` / `offline` show a muted bracketed word;
  *  - no cells -> the text `connecting…` (or `offline`), never invented prices;
- *  - a cell with `value: null` shows an em dash and no change;
+ *  - a cell with `value: null` shows an em dash for the price;
+ *  - a missing percent is an em dash, never a fabricated number;
  *  - `asOf` (e.g. "as of 09-29") and `source` label recorded cells — `asOf`
  *    shows inline, `source` in the tooltip and the screen-reader summary;
  *  - the scrolling strip is `aria-hidden` and the region is `aria-live="off"`;
  *    a plain-text `sr-only` summary carries the same facts once, statically;
  *  - a pause control (the marquee auto-runs well past 5s; hover also pauses);
  *    it is hidden under reduced motion, where nothing moves;
- *  - tick flash is an opacity-only overlay re-keyed by a cell's `flashKey`
- *    (the initial `flashKey` never flashes; only a change does);
+ *  - when a percent actually changes, only that number pulses. The first
+ *    observation does not. The symbol, the price, and the row stay still;
  *  - `--up` / `--down` colour ONLY the signed change (`toneClass`, the
  *    finance-tearsheet `is-pos` / `is-neg`), never the symbol or value.
  *
  * Wiring (in the consuming app):
- *   globals.css   @import "@digithings/ui/styles/marquee.css";            (loop, pause, flash keyframes)
- *                 @import "@digithings/ui/styles/finance-tearsheet.css";  (LiveBadge dot, is-pos / is-neg)
+ *   globals.css   @import "@digithings/ui/styles/marquee.css";
+ *                 @import "@digithings/ui/styles/finance-tearsheet.css";
  *                 @source "<path-to>/packages/ui/src/components/finance-composites";
  * CSS-only motion: no MotionProvider needed. Client component (pause state).
  */
@@ -41,13 +44,13 @@ export type MarketBarCell = {
   symbol: string;
   /** Preformatted price, or null while unknown (renders "—"). */
   value: string | null;
-  /** Signed percent change (0.4 = +0.40%); null / undefined hides the change. */
+  /** Signed percent change (0.4 = +0.40%). Null or missing renders an em dash. */
   changePct?: number | null;
   /** Freshness stamp shown inline for recorded cells — "as of 09-29". */
   asOf?: string;
   /** Origin of the number — tooltip and screen-reader text only. */
   source?: string;
-  /** Change this to flash the cell (opacity wash). The first value never flashes. */
+  /** Retained for callers. The tape pulses from `changePct`, not this key. */
   flashKey?: string | number;
 };
 
@@ -75,10 +78,25 @@ const STATUS_WORD: Record<Exclude<MarketBarStatus, "live">, string> = {
 
 const STATUS_SR: Record<MarketBarStatus, string> = {
   connecting: "Connecting to the price feed.",
-  live: "Prices are live.",
+  live: "The price feed is ticking.",
   stale: "Prices are stale; the feed has stopped ticking.",
   offline: "The price feed is offline.",
 };
+
+/**
+ * Pulse generation for a percent. The first observation never pulses. A null
+ * or non-finite percent never pulses. An unchanged number never pulses.
+ */
+export function percentPulseGeneration(
+  previous: number | null | undefined,
+  next: number | null,
+  generation: number,
+): { previous: number | null; generation: number } {
+  const pct = next !== null && Number.isFinite(next) ? next : null;
+  if (previous === undefined) return { previous: pct, generation };
+  if (pct !== null && pct !== previous) return { previous: pct, generation: generation + 1 };
+  return { previous: pct, generation };
+}
 
 /** Change magnitude — the sign is carried by the arrow and the tone. */
 function fmtChange(pct: number): string {
@@ -93,35 +111,50 @@ function srCell(c: MarketBarCell): string {
   const parts = [c.symbol, c.value ?? "no value"];
   if (hasChange(c)) {
     parts.push(c.changePct === 0 ? "unchanged" : `${c.changePct > 0 ? "up" : "down"} ${fmtChange(c.changePct)}`);
+  } else {
+    parts.push("percent unavailable");
   }
   if (c.asOf) parts.push(c.asOf);
   if (c.source) parts.push(`source ${c.source}`);
   return parts.join(" ");
 }
 
+function PercentNumber({ pct }: { pct: number | null }) {
+  const [generation, setGeneration] = useState(0);
+  const previous = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    const next = percentPulseGeneration(previous.current, pct, generation);
+    previous.current = next.previous;
+    if (next.generation !== generation) setGeneration(next.generation);
+  }, [pct, generation]);
+  const pulsing = generation > 0 && pct !== null && Number.isFinite(pct);
+  return (
+    <span key={generation} data-mb="pct" className={pulsing ? "mb-pct-pulse" : undefined}>
+      {pct === null || !Number.isFinite(pct) ? "—" : fmtChange(pct)}
+    </span>
+  );
+}
+
 function Cell({ cell }: { cell: MarketBarCell }) {
-  const initialFlash = useRef(cell.flashKey);
-  const flashing = cell.flashKey !== undefined && cell.flashKey !== initialFlash.current;
+  const pct = hasChange(cell) ? cell.changePct : null;
   return (
     <span
       title={cell.source ? `${cell.symbol} · source ${cell.source}` : undefined}
-      className="relative inline-flex items-baseline gap-2 whitespace-nowrap px-1 font-mono text-[0.72rem] [font-variant-numeric:tabular-nums]"
+      className="mb-cell inline-flex items-baseline gap-2 whitespace-nowrap px-[1.15rem] font-mono text-[0.72rem] [font-variant-numeric:tabular-nums]"
     >
-      {flashing ? (
-        <span
-          key={String(cell.flashKey)}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-accent opacity-0 [animation:mb-flash_0.7s_ease-out] motion-reduce:hidden"
-        />
-      ) : null}
       <span className="tracking-[0.02em] text-ink">{cell.symbol}</span>
-      <span className="text-ink-soft">{cell.value ?? "—"}</span>
-      {hasChange(cell) ? (
-        <span className={cn("inline-flex items-center gap-1", toneClass(cell.changePct) || "text-ink-mute")}>
-          <span aria-hidden="true">{cell.changePct > 0 ? "▲" : cell.changePct < 0 ? "▼" : "·"}</span>
-          {fmtChange(cell.changePct)}
-        </span>
-      ) : null}
+      <span className="mb-price text-ink-soft">{cell.value ?? "—"}</span>
+      <span
+        className={cn(
+          "mb-pct inline-flex items-center justify-end gap-1",
+          pct === null ? "text-ink-mute" : toneClass(pct) || "text-ink-mute",
+        )}
+      >
+        {pct === null ? null : (
+          <span aria-hidden="true">{pct > 0 ? "▲" : pct < 0 ? "▼" : "·"}</span>
+        )}
+        <PercentNumber pct={pct} />
+      </span>
       {cell.asOf ? <span className="text-ink-mute">{cell.asOf}</span> : null}
     </span>
   );
@@ -150,7 +183,7 @@ export function MarketBar({
       )}
     >
       {status === "live" ? (
-        <LiveBadge label="live" ariaLabel="Prices are live" />
+        <span className="mb-live-mark" aria-hidden="true" />
       ) : (
         <span className="shrink-0 tracking-[0.04em]">{`[${STATUS_WORD[status]}]`}</span>
       )}
@@ -162,7 +195,7 @@ export function MarketBar({
       ) : (
         <>
           <div aria-hidden="true" className="min-w-0 flex-1">
-            <Marquee speed={speed} paused={paused}>
+            <Marquee className="mb-tape" speed={speed} paused={paused}>
               {cells.map((c) => (
                 <Cell key={c.symbol} cell={c} />
               ))}
