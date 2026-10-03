@@ -1,11 +1,7 @@
 import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
+import { ACCENT, BG, HAIR, MUTE } from "../theme";
 import { shapeLines, type PaneBody } from "./shape";
-
-const BG = "#14120f";
-const DIM = "#8a8175";
-const LINE = "#3a342c";
-const GOLD = "#d4b483";
 
 export const PANE_HINT = "[tab] next";
 
@@ -38,14 +34,14 @@ function Blocks({ body, ink }: { body: PaneBody; ink: string }) {
         }
         if (block.kind === "stat") {
           return (
-            <text key={index} fg={DIM}>
+            <text key={index} fg={MUTE}>
               {block.text}
             </text>
           );
         }
         return (
           <box key={index} flexDirection="column">
-            {block.columns.length ? <text fg={DIM}>{block.columns.join("  ")}</text> : null}
+            {block.columns.length ? <text fg={MUTE}>{block.columns.join("  ")}</text> : null}
             {block.rows.map((row, rowIndex) => (
               <text key={rowIndex} fg={ink}>
                 {row.join("  ")}
@@ -80,21 +76,21 @@ export function PaneFrame({
       width="100%"
       height="100%"
       border
-      borderColor={focused ? GOLD : LINE}
+      borderColor={focused ? ACCENT : HAIR}
       flexDirection="column"
       overflow="hidden"
       backgroundColor={BG}
     >
-      <box height={1} paddingLeft={1} paddingRight={1} border={["bottom"]} borderColor={LINE} flexShrink={0}>
-        <text fg={focused ? GOLD : DIM}>{title}</text>
+      <box height={1} paddingLeft={1} paddingRight={1} border={["bottom"]} borderColor={HAIR} flexShrink={0}>
+        <text fg={focused ? ACCENT : MUTE}>{title}</text>
       </box>
       <box flexGrow={1} paddingLeft={1} paddingRight={1} overflow="hidden" flexDirection="column">
         <Blocks body={body} ink={ink} />
       </box>
-      <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={LINE} flexDirection="row" flexShrink={0}>
-        <text fg={DIM}>{status}</text>
+      <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} flexDirection="row" flexShrink={0}>
+        <text fg={MUTE}>{status}</text>
         <box flexGrow={1} />
-        {focused ? <text fg={DIM}>{PANE_HINT}</text> : null}
+        {focused ? <text fg={MUTE}>{PANE_HINT}</text> : null}
       </box>
     </box>
   );

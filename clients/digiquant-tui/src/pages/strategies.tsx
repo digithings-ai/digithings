@@ -8,14 +8,11 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
+import { DANGER, INK, MUTE } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
 import { strategyBlocks } from "./shape";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
-
-const INK = "#e7e1d6";
-const DIM = "#8a8175";
-const BAD = "#c47a6a";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -330,8 +327,8 @@ export function strategyBlockBody(id: string, data: unknown, result: ReadResult)
 
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
-  if (status === "empty" || status === "loading") return DIM;
-  return BAD;
+  if (status === "empty" || status === "loading") return MUTE;
+  return DANGER;
 };
 
 /** Same fetch as readBlock, plus the payload so an empty store can be named. */

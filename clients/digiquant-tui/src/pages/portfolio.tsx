@@ -3,13 +3,10 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, readBlock, type ReadResult } from "../read";
+import { DANGER, INK, MUTE } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
-
-const INK = "#e7e1d6";
-const DIM = "#8a8175";
-const BAD = "#c47a6a";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
 export const PORTFOLIO_PATHS = [
@@ -81,8 +78,8 @@ const share = (cells: number, total: number): `${number}%` => `${(cells / total)
 
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
-  if (status === "empty" || status === "loading") return DIM;
-  return BAD;
+  if (status === "empty" || status === "loading") return MUTE;
+  return DANGER;
 };
 
 type Reads = Record<string, ReadResult | undefined>;
