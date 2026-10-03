@@ -1,7 +1,3 @@
-/**
- * Pure helpers extracted in the single-route refactor — suggestions/theme/
- * accent seeding must not flash unconfigured defaults on first paint.
- */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CLIENT_CONFIG } from "./deploy-config";
 import { DEFAULT_EMBED_TENANT_CONFIG } from "./embed-client-config";

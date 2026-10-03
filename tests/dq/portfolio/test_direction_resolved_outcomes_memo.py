@@ -137,12 +137,7 @@ def test_memo_hit_returns_an_equal_copy() -> None:
 
 
 def test_memo_miss_returns_a_copy_so_first_reader_cannot_poison_cache() -> None:
-    """#4617 miss-path: return ``list(resolved)``, not the cached list itself.
-
-    Before the fix the first reader received the same list object stored in the
-    memo. Mutating that list (append/clear) poisoned every later hit — the
-    preflight snapshot and direction phase would disagree silently.
-    """
+    """#4617 miss-path: the first reader gets a copy, not the cached list itself."""
     client, gets = _counting_client(canned_reads={fo.OUTCOMES: [_healthy_row()]})
     memo: fo.ResolvedOutcomesMemo = {}
     state = _state()

@@ -55,13 +55,7 @@ def test_compare_int_float_equality_ignores_bool():
 
 
 def test_compare_datetime_strings_use_instant_not_lexicographic():
-    """ISO instants with Z/+00:00 must compare as times (Zammad windows, #4729).
-
-    Pre-tables-lib filters returned False for date-string inequalities; the
-    shared ``_compare`` path parses ISO and compares instants. A lexicographic
-    trap would still pass naive ``2026-09-20`` vs ``2026-09-25`` ASCII order,
-    so pin a same-day hour ordering and aware-datetime vs ISO string.
-    """
+    """ISO instants with Z/+00:00 must compare as times (Zammad windows, #4729)."""
     from datetime import datetime, timezone
 
     from digisearch.core.tables import _compare
@@ -78,7 +72,6 @@ def test_compare_datetime_strings_use_instant_not_lexicographic():
 
 
 def test_apply_filters_updated_at_window_keeps_rows_inside_range():
-    """since_days-style windows filter on updated_at via ge/lt datetime compare."""
     out = apply_filters(
         ROWS,
         [
