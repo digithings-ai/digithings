@@ -188,10 +188,32 @@ def test_refuses_a_finer_level_that_loses_capture_count() -> None:
     assert choice.capture_count == 4
 
 
-def test_the_coarsest_level_always_qualifies() -> None:
-    """It has nothing coarser to compare against, so a ladder is never undecidable."""
+def test_the_coarsest_level_does_not_win_when_a_finer_level_captures_more() -> None:
+    """The coarsest rung always QUALIFIES; it does not always WIN.
+
+    Corrected as unsatisfiable (2026-10-03, #4804). This pin used to read
+    ``assert select_sensitivity_level(ladder).chosen_min_move_pct == 15.0`` against
+    capture counts ``[0, 1]`` — that is not the owner-ruled choice, which takes the
+    most sensitive QUALIFIER: a strictly larger count at a finer level must beat
+    the coarsest, exactly as pins (b) and (c) do. So the pin now asserts what the
+    rule actually decides, and the coarsest rung's real property stays in the
+    prose: it has nothing coarser to lose against, so it is always a candidate and
+    a ladder is therefore never undecidable.
+
+    The fixture deliberately keeps STRICTLY UNEQUAL counts (0 captures at 15%, 1 at
+    5%), so no tie-break is in play and the choice must be the finer qualifier.
+    """
     ladder = [_level(15.0, [_row("a", 0.0)]), _level(5.0, [_row("a", 0.6)])]
-    assert select_sensitivity_level(ladder).chosen_min_move_pct == 15.0
+    choice = select_sensitivity_level(ladder)
+    # Both rungs are read, coarsest first — the coarsest is weighed, not discarded.
+    assert [level.min_move_pct for level in choice.level_rows] == [15.0, 5.0]
+    # 5% captures strictly more (1 vs 0), so the most sensitive qualifier wins and
+    # the coarsest rung does not get the choice by default.
+    assert choice.chosen_min_move_pct == 5.0
+    assert choice.capture_count == 1
+    assert choice.capturing_indicators == ("a",)
+    # Nothing is finer than the chosen rung, so no finer level is charged for it.
+    assert choice.dropped_at_finer_levels == ()
 
 
 # --------------------------------------------------------------------------- #
@@ -220,6 +242,16 @@ def test_equal_capture_counts_resolve_to_the_coarser_level() -> None:
 
 
 def test_reports_each_indicator_that_drops_at_a_finer_level() -> None:
+    """One row per level FINER than the chosen one; each drop names its indicator.
+
+    Corrected as unsatisfiable (2026-10-03, #4804). The pin used to unpack a single
+    row — ``(finer,) = choice.dropped_at_finer_levels`` — assert that same object was
+    ``min_move_pct == 10.0``, and then take ``choice.dropped_at_finer_levels[-1]``,
+    i.e. the SAME object again, and assert ``min_move_pct == 5.0``. One object cannot
+    be both, and the unpack also pinned a table length of 1 while this ladder has two
+    levels finer than the chosen 15%. The table has one row per finer level, coarsest
+    finer first, which is what this pin now reads.
+    """
     ladder = [
         _level(15.0, [_row("a", 0.6), _row("b", 0.6), _row("c", 0.6)]),
         _level(10.0, [_row("a", 0.6), _row("b", 0.6), _row("c", 0.6)]),
@@ -227,18 +259,33 @@ def test_reports_each_indicator_that_drops_at_a_finer_level() -> None:
     ]
     choice = select_sensitivity_level(ladder)
     assert choice.chosen_min_move_pct == 15.0
-    (finer,) = choice.dropped_at_finer_levels
-    assert finer.min_move_pct == 10.0
-    assert [drop.name for drop in finer.dropped] == []
-    # 5% is only reported once 10% has already lost b and c.
-    finests = choice.dropped_at_finer_levels[-1]
-    assert finests.min_move_pct == 5.0
-    assert [drop.name for drop in finests.dropped] == ["b", "c"]
-    below = next(drop for drop in finests.dropped if drop.name == "b")
+    # Every level FINER than the chosen one is reported, coarsest finer first — the
+    # chosen 15% itself is not a row of its own cost.
+    table = choice.dropped_at_finer_levels
+    assert [entry.min_move_pct for entry in table] == [10.0, 5.0]
+    assert all(entry.min_move_pct < choice.chosen_min_move_pct for entry in table)
+    finer_qualifier, finer_cost = table
+    # 10% still captures all three and loses nothing, so it qualifies and its drop
+    # list is empty: being finer than the choice is not by itself a drop.
+    assert finer_qualifier.capture_count == 3
+    assert finer_qualifier.qualifies is True
+    assert [drop.name for drop in finer_qualifier.dropped] == []
+    # 5% is where the evidence runs out: b and c captured at the chosen 15% and fail
+    # here, so naming them is what this level costs. a still captures, so it is not
+    # reported as a drop.
+    assert finer_cost.capture_count == 1
+    assert finer_cost.qualifies is False
+    assert [drop.name for drop in finer_cost.dropped] == ["b", "c"]
+    below = next(drop for drop in finer_cost.dropped if drop.name == "b")
+    # Both separations are the fixture's own numbers: 0.6 is where b captured at the
+    # chosen level, 0.21 is the same leg at this finer one — short of the bar.
     assert below.separation_at_chosen_level == 0.6
     assert below.separation_at_finer_level == 0.21
     assert "0.5" in below.reason
-    flipped = next(drop for drop in finests.dropped if drop.name == "c")
+    flipped = next(drop for drop in finer_cost.dropped if drop.name == "c")
+    # c's chosen-level separation is the 0.6 it captured at; here the vote flipped,
+    # and the reason says so rather than crediting the magnitude.
+    assert flipped.separation_at_chosen_level == 0.6
     assert flipped.separation_at_finer_level == -0.8
     assert "negative" in flipped.reason
 
