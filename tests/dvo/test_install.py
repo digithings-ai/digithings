@@ -14,6 +14,7 @@ from digivoice.catalog import find_rewrite, find_stt, find_voice
 from digivoice.cli import Runtime, run
 from digivoice.install import (
     PHONEMIZE_MACOS_ARM64_URL,
+    _place_first_matching,
     adapter_source_dir,
     bun_archive_url,
     hammerspoon_adapter_dir,
@@ -1436,6 +1437,69 @@ def test_arm64_update_fetches_phonemize_for_an_existing_piper(tmp_path: Path) ->
     assert beside.read_bytes() == library
     assert PHONEMIZE_MACOS_ARM64_URL in fetched
     assert PIPER_DARWIN not in fetched
+
+
+def test_phonemize_copy_skips_an_x86_64_file_ahead_of_arm64(tmp_path: Path) -> None:
+    """The jar lists an x86_64 file of the same name. That file is not copied."""
+    binary_dir = tmp_path / "piper" / "piper"
+    binary_dir.mkdir(parents=True)
+    binary = binary_dir / "piper"
+    binary.write_bytes(_macho("arm64") + b"piper")
+    x86 = tmp_path / "macos-amd64" / "libpiper_phonemize.1.dylib"
+    arm = tmp_path / "macos-arm64" / "libpiper_phonemize.1.dylib"
+    x86.parent.mkdir()
+    arm.parent.mkdir()
+    x86.write_bytes(_macho("x86_64") + b"wrong")
+    arm.write_bytes(_macho("arm64") + b"right")
+    onnx_x86 = tmp_path / "macos-amd64" / "libonnxruntime.1.14.1.dylib"
+    onnx_arm = tmp_path / "macos-arm64" / "libonnxruntime.1.14.1.dylib"
+    onnx_x86.write_bytes(_macho("x86_64") + b"ort-wrong")
+    onnx_arm.write_bytes(_macho("arm64") + b"ort-right")
+    placed = _place_first_matching(
+        str(binary),
+        [x86, arm],
+        "libpiper_phonemize.1.dylib",
+    )
+    onnx = _place_first_matching(
+        str(binary),
+        [onnx_x86, onnx_arm],
+        "libonnxruntime.1.14.1.dylib",
+    )
+    assert placed is not None and onnx is not None
+    assert placed.read_bytes() == arm.read_bytes()
+    assert onnx.read_bytes() == onnx_arm.read_bytes()
+    assert b"wrong" not in placed.read_bytes()
+
+
+def test_arm64_install_uses_the_arm64_member_when_the_jar_has_both(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    arm_phon = _macho("arm64") + b"arm-phon"
+    bodies = _darwin_bodies({"piper/piper": _macho("arm64") + b"piper"})
+    bodies[PHONEMIZE_MACOS_ARM64_URL] = _zip(
+        {
+            "macos-amd64/libpiper_phonemize.1.dylib": _macho("x86_64") + b"x86-phon",
+            "macos-amd64/libonnxruntime.1.14.1.dylib": _macho("x86_64") + b"x86-ort",
+            "macos-arm64/libpiper_phonemize.1.dylib": arm_phon,
+            "macos-arm64/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"arm-ort",
+        }
+    )
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=_runner(tui),
+    )
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    beside = real / "libpiper_phonemize.1.dylib"
+    onnx = real / "libonnxruntime.1.14.1.dylib"
+    assert beside.read_bytes() == arm_phon
+    assert onnx.read_bytes().endswith(b"arm-ort")
+    assert _step(report, "phonemize").status == "installed"
+    assert _step(report, "phonemize").detail == str(beside)
 
 
 def test_arm64_install_does_not_copy_an_x86_64_phonemize(tmp_path: Path) -> None:

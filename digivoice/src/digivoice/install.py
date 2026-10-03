@@ -63,9 +63,11 @@ PIPER_MACOS_ARM64_URL = (
 )
 # That arm64 archive links @rpath/libpiper_phonemize.1.dylib and does not
 # ship the file (its CMake install copies *.so and *.dll only). This jar's
-# macos-arm64 build is Mach-O arm64, install name @rpath/libpiper_phonemize.1.dylib,
-# and exports the piper phonemize symbols that binary links. It also ships
-# arm64 libonnxruntime.1.14.1.dylib, which piper and phonemize both load.
+# macos-arm64 member is thin Mach-O arm64. The same jar also has macos-amd64
+# copies of the same filenames, and those are Mach-O x86_64. Install must
+# copy the arm64 member. The arm64 phonemize library's install name is
+# @rpath/libpiper_phonemize.1.dylib. The jar also ships arm64
+# libonnxruntime.1.14.1.dylib, which piper and phonemize both load.
 PHONEMIZE_MACOS_ARM64_URL = (
     "https://github.com/GiviMAD/piper-jni/releases/download/"
     "piper_jni_1.2.0-a0f09cd/piper-jni-1.2.0-a0f09cd.jar"
@@ -712,10 +714,10 @@ def _install_phonemize(home: Path, probe: CommandProbe, fetch: FetchFn) -> Insta
     try:
         _extract_url(fetch, PHONEMIZE_MACOS_ARM64_URL, staging)
         for name in missing:
-            found = _find_file(staging, name)
-            if found is None:
+            candidates = _named_files(staging, name)
+            if not candidates:
                 raise InstallError(f"archive did not contain {name}")
-            placed = place_macho_library(binary, found, name)
+            placed = _place_first_matching(binary, candidates, name)
             if placed is None:
                 raise InstallError(f"{name} is not the same architecture as piper")
     finally:
@@ -733,12 +735,22 @@ def _copy_piper_library(home: Path, binary: str, name: str) -> Path | None:
     beside = _beside_matching(binary, name)
     if beside is not None:
         return beside
-    vendor = vendor_dir(home) / "piper"
-    if not vendor.is_dir():
-        return None
-    for path in vendor.rglob(name):
-        if not path.is_file() or path.name != name:
-            continue
+    return _place_first_matching(binary, _named_files(vendor_dir(home) / "piper", name), name)
+
+
+def _named_files(root: Path, name: str) -> list[Path]:
+    if not root.is_dir():
+        return []
+    return [path for path in root.rglob(name) if path.is_file() and path.name == name]
+
+
+def _place_first_matching(binary: str, candidates: list[Path], name: str) -> Path | None:
+    """Copy the first candidate whose Mach-O cpu matches `binary`.
+
+    A jar can hold an x86_64 and an arm64 file under the same name. The first
+    directory entry is not the architecture.
+    """
+    for path in candidates:
         placed = place_macho_library(binary, path, name)
         if placed is not None:
             return placed
