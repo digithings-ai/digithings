@@ -402,7 +402,8 @@ closed). The worker does not authenticate; only expose behind the edge.
 - `routes`: de-duplicated data routes of every granted block (no query strings).
 
 Policy lives in `src/access.ts` (`DESKS`); `baseline` is open with brief/desk
-parts, `fx` requires the `12x` group. `12x` is the app-facing group name; the edge maps the
+parts, `fx` requires the `12x` group and is omitted from the manifest until that
+group is present. `12x` is the app-facing group name; the edge maps the
 product grant `fx_hub` (client_product_grants.product_key) to group `12x` when it injects
 `x-digi-groups`. The worker never sees product keys.
 

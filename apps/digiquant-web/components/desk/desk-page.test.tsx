@@ -21,7 +21,8 @@ describe("mounted desk pages", () => {
     expect(strategies).toContain("Strategies · summary");
 
     const fx = renderToStaticMarkup(<DeskPage path="/fx" />);
-    expect(fx).toContain("FX hub · summary");
-    expect(fx).toContain("/fx/summary");
+    expect(fx).toContain("This page is not on the public desk.");
+    expect(fx).not.toMatch(/fx hub|12x/i);
+    expect(fx).not.toContain("/fx/summary");
   });
 });

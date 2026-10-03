@@ -38,6 +38,18 @@ describe("phase 4 shell, settings, chat", () => {
     expect(items.items.some((i) => i.href === "/brief")).toBe(true);
   });
 
+  it("omits the fx desk from callers outside the 12x group", async () => {
+    const desks = await app.fetch(new Request("https://x/desks"), BRIEF);
+    const body = (await desks.json()) as { data: { desks: { id: string; name: string; chip: string | null }[] } };
+    expect(desks.status).toBe(200);
+    expect(body.data.desks.map((d) => d.id)).toEqual(["baseline"]);
+    expect(JSON.stringify(body)).not.toMatch(/fx hub|12x/i);
+    const features = await app.fetch(new Request("https://x/features"), BRIEF);
+    const flags = ((await features.json()) as { data: { flags: { key: string; text: string }[] } }).data.flags;
+    expect(flags.some((f) => f.key === "/fx" || /fx hub|12x/i.test(f.text))).toBe(false);
+    expect(flags.some((f) => f.key === "/tools/terminal")).toBe(true);
+  });
+
   it("settings reads are empty and writes are not provisioned", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

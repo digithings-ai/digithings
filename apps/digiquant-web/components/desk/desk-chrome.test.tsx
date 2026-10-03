@@ -65,9 +65,7 @@ describe("desk chrome", () => {
     expect(paths).not.toContain("/settings/paper");
     expect(deskHomeHref(baseline)).toBe("/app/brief/");
     expect(deskHomeHref(fx)).toBeNull();
-    expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBe(
-      "/app/fx/",
-    );
+    expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBeNull();
   });
 
   it("does not invent desks when the manifest is missing", () => {
@@ -95,17 +93,16 @@ describe("desk chrome", () => {
     expect(linked("/app/portfolio/")).toBe(true);
     expect(linked("/app/tools/charts/")).toBe(true);
     expect(html).toContain(">/tools/terminal<");
-    expect(html).toContain(">/fx/settings<");
+    expect(html).not.toContain(">/fx/settings<");
+    expect(html).not.toContain(">/fx<");
     expect(html).not.toContain(">/settings<");
     expect(html).not.toContain(">/settings/paper<");
     expect(html).not.toContain('href="/app/settings"');
     expect(html).not.toContain('href="/app/settings/');
     expect(html).not.toContain("luxalgo");
     expect(html).toContain("desk: Baseline");
-    expect(html).toContain("FX Hub");
-    expect(html).toContain("[12x]");
-    expect(html).toContain("Requires the 12x group");
-    expect(html).toContain("disabled");
+    expect(html).not.toMatch(/fx hub|12x/i);
+    expect(html).not.toContain("Requires the 12x group");
   });
 
   it("keeps the draft classes and the d binding without a cursor utility", () => {
