@@ -62,6 +62,14 @@ export {
 } from "./components/diagrams";
 export { camTransform, fitCamera, type CamFrame } from "./components/diagrams";
 export {
+  TerminalSchematic,
+  type SchematicLegend,
+  type SchematicNode,
+  type SchematicRow,
+  type SchematicTone,
+  type TerminalSchematicProps,
+} from "./components/diagrams";
+export {
   Footer,
   Colophon,
   ModuleCard,
