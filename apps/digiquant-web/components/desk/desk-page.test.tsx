@@ -60,6 +60,17 @@ describe("mounted desk pages", () => {
     expect(strategies).toContain("My deployments");
     expect(strategies).toContain('data-route="/strategies/deployments"');
 
+    const detail = renderToStaticMarkup(<DeskPage path="/strategies/detail" />);
+    expect(detail).toContain("Overview");
+    expect(detail).toContain('data-route="/strategies/default"');
+    expect(detail).toContain("Parameters");
+    expect(detail).toContain('data-route="/strategies/default/parameters"');
+    expect(detail).toContain("Tearsheet");
+    expect(detail).toContain("Paper track record");
+    expect(detail).toContain('data-route="/strategies/default/performance"');
+    expect(detail).toContain("Runs");
+    expect(detail).toContain('data-route="/strategies/default/runs"');
+
     const fx = renderToStaticMarkup(<DeskPage path="/fx" />);
     expect(fx).toContain("This page is not on the public desk.");
     expect(fx).not.toMatch(/fx hub|12x/i);
