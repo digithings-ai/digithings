@@ -6,7 +6,7 @@
  * and ThreadListPrimitive sidebar (inside the runtime provider).
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
@@ -24,6 +24,8 @@ import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 import { toStockChatPrefsConfig } from "@/lib/route-client-config";
 import {
+  setPendingForceTool,
+  setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
   takePendingWebSearchForce,
@@ -86,6 +88,7 @@ function useShellThreadRuntime(
   getMcpSession: () => string | undefined,
   getEffort: () => string | undefined,
   getSearchEngine: () => string | undefined,
+  redoRef: { current: () => void },
 ) {
   const transport = useMemo(
     () =>
@@ -151,6 +154,17 @@ function useShellThreadRuntime(
   );
 
   const chat = useChat<UIMessage>({ transport });
+  useEffect(() => {
+    redoRef.current = () => {
+      const key = chat.id || sessionKey;
+      // Force-tool is send-only (#3466). Clear it before regenerate, and arm
+      // the turn mode on the key prepareSendMessagesRequest will read.
+      setPendingForceTool(sessionKey);
+      if (key !== sessionKey) setPendingForceTool(key);
+      setPendingTurnMode(key, "regenerate");
+      void chat.regenerate();
+    };
+  }, [chat, redoRef, sessionKey]);
   const adapters = useMemo(
     () => buildProductRuntimeAdapters(clientConfig.features),
     [clientConfig.features],
@@ -166,13 +180,16 @@ function HomeStockClientSingle({
   userId?: string;
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
+  const redoRef = useRef<() => void>(() => {});
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: false,
     newThread: () => {},
-    redo: () => {},
+    redo: () => {
+      redoRef.current();
+    },
   });
   const runtime = useShellThreadRuntime(
     clientConfig,
@@ -184,6 +201,7 @@ function HomeStockClientSingle({
     prefs.getMcpSession,
     prefs.getEffort,
     prefs.getSearchEngine,
+    redoRef,
   );
 
   const mode = clientConfig.chrome.mode;
@@ -221,13 +239,16 @@ function HomeStockClientMemory({
   userId?: string;
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
+  const redoRef = useRef<() => void>(() => {});
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: true,
     newThread: () => {},
-    redo: () => {},
+    redo: () => {
+      redoRef.current();
+    },
   });
   const [memoryAdapter] = useState(
     () => new SessionMemoryThreadListAdapter(memoryThreadStorageKey("app", userId)),
@@ -273,9 +294,10 @@ function HomeStockClientMemory({
         () => getMcpRef.current(),
         () => getEffortRef.current(),
         () => getSearchEngineRef.current(),
+        redoRef,
       );
     };
-  }, []);
+  }, [redoRef]);
 
   const runtime = useRemoteThreadListRuntime({
     adapter: memoryAdapter,

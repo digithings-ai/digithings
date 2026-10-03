@@ -222,6 +222,63 @@ describe("writeStandardActivity", () => {
     expect(chunks.some((c) => c.type === "tool-output-error")).toBe(false);
   });
 
+  it("maps a failed tool span to tool-output-error, not a successful result", () => {
+    const chunks = collect([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "datatap__get_item",
+        toolName: "datatap__get_item",
+        callId: "c1",
+      },
+      {
+        operation: "execute_tool",
+        status: "failed",
+        label: "datatap__get_item",
+        toolName: "datatap__get_item",
+        callId: "c1",
+        toolResult: "not found",
+      },
+    ]);
+    const err = chunks.find((c) => c.type === "tool-output-error");
+    expect(err?.errorText).toBe("not found");
+    expect(err?.toolCallId).toBe(
+      chunks.find((c) => c.type === "tool-input-start")?.toolCallId,
+    );
+    expect(chunks.some((c) => c.type === "tool-output-available")).toBe(false);
+  });
+
+  it("uses object error text, then a fallback, for a failed tool with no string result", () => {
+    const fromContent = collect({
+      operation: "execute_tool",
+      status: "failed",
+      label: "search",
+      toolName: "search",
+      toolResult: { content: "upstream said no" },
+    });
+    expect(fromContent.find((c) => c.type === "tool-output-error")?.errorText).toBe(
+      "upstream said no",
+    );
+
+    const fromError = collect({
+      operation: "execute_tool",
+      status: "failed",
+      label: "search",
+      toolName: "search",
+      toolResult: { error: "boom" },
+    });
+    expect(fromError.find((c) => c.type === "tool-output-error")?.errorText).toBe("boom");
+
+    const fallback = collect({
+      operation: "execute_tool",
+      status: "failed",
+      label: "search",
+      toolName: "search",
+    });
+    expect(fallback.find((c) => c.type === "tool-output-error")?.errorText).toBe("Tool failed.");
+    expect(fallback.some((c) => c.type === "tool-output-available")).toBe(false);
+  });
+
   it("keeps started MCP args on the retrieve result row", () => {
     const chunks = collect([
       {

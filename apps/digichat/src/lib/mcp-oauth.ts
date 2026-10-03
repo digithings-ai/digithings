@@ -127,6 +127,36 @@ async function fetchJsonAllowed(
   return readJson(res);
 }
 
+/** RFC 9728: path-specific protected-resource metadata before the origin root. */
+function protectedResourceMetadataUrls(resource: URL): string[] {
+  const path = resource.pathname === "/" ? "" : resource.pathname.replace(/\/$/, "");
+  const specific = new URL(
+    `/.well-known/oauth-protected-resource${path}`,
+    resource.origin,
+  ).toString();
+  const root = new URL("/.well-known/oauth-protected-resource", resource.origin).toString();
+  return path ? [specific, root] : [root];
+}
+
+/**
+ * RFC 8414 inserts `/.well-known/oauth-authorization-server` before an issuer
+ * path. OIDC discovery appends `/.well-known/openid-configuration` to the
+ * issuer. Origin-root and suffix URLs stay as later fallbacks.
+ */
+function authorizationServerMetadataUrls(issuer: string): string[] {
+  const asUrl = new URL(issuer.endsWith("/") ? issuer : `${issuer}/`);
+  const path = asUrl.pathname === "/" ? "" : asUrl.pathname.replace(/\/$/, "");
+  const trimmed = issuer.replace(/\/$/, "");
+  const candidates = [
+    `${asUrl.origin}/.well-known/oauth-authorization-server${path}`,
+    `${trimmed}/.well-known/openid-configuration`,
+    `${asUrl.origin}/.well-known/oauth-authorization-server`,
+    `${asUrl.origin}/.well-known/openid-configuration`,
+    `${trimmed}/.well-known/oauth-authorization-server`,
+  ];
+  return [...new Set(candidates)];
+}
+
 export async function discoverMcpAuthorization(
   resourceUrl: string,
   fetchImpl: typeof fetch = fetch,
@@ -135,13 +165,7 @@ export async function discoverMcpAuthorization(
     throw new Error("blocked_url");
   }
   const resource = new URL(resourceUrl);
-  const wellKnown = [
-    new URL("/.well-known/oauth-protected-resource", resource.origin).toString(),
-    new URL(
-      `/.well-known/oauth-protected-resource${resource.pathname}`.replace(/\/$/, ""),
-      resource.origin,
-    ).toString(),
-  ];
+  const wellKnown = protectedResourceMetadataUrls(resource);
   let prm: Record<string, unknown> | null = null;
   for (const u of wellKnown) {
     prm = await fetchJsonAllowed(u, fetchImpl);
@@ -160,12 +184,7 @@ export async function discoverMcpAuthorization(
   if (!issuer || !isAllowedMcpServerUrl(issuer)) {
     throw new Error("oauth_metadata_missing");
   }
-  const asOrigin = new URL(issuer.endsWith("/") ? issuer : `${issuer}/`);
-  const asWellKnown = [
-    new URL("/.well-known/oauth-authorization-server", asOrigin.origin).toString(),
-    new URL("/.well-known/openid-configuration", asOrigin.origin).toString(),
-    `${issuer.replace(/\/$/, "")}/.well-known/oauth-authorization-server`,
-  ];
+  const asWellKnown = authorizationServerMetadataUrls(issuer);
   let asMeta: Record<string, unknown> | null = null;
   for (const u of asWellKnown) {
     asMeta = await fetchJsonAllowed(u, fetchImpl);
