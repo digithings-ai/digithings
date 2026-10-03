@@ -18,6 +18,19 @@ import {
   shouldYieldToUser,
   stopFromPath,
 } from "./desk-walk";
+import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
+import { screenKind } from "./terminal-screen";
+import {
+  HOSTED_COPY,
+  SELF_HOSTED_COPY,
+  TOUR_CAPTION,
+  deskShellLoaded,
+  nextDeskAnchor,
+  nextTerminalPath,
+  nextWebPath,
+  prevTerminalPath,
+  surfaceFromSlider,
+} from "./surface-tour";
 
 function docWith(
   links: { label: string; href: string; current?: boolean }[],
@@ -184,15 +197,81 @@ describe("desk walk", () => {
   });
 });
 
+describe("surface tour", () => {
+  it("keeps the two stories free of a price", () => {
+    const copy = `${SELF_HOSTED_COPY} ${HOSTED_COPY} ${TOUR_CAPTION}`;
+    expect(copy).toContain("The terminal runs on your computer.");
+    expect(copy).toContain("You run pipelines, models, and strategies yourself.");
+    expect(copy).toContain("Paying makes the hosted services available.");
+    expect(copy).toContain("The web app hosts pipelines and runs the strategies.");
+    expect(copy).not.toMatch(/\$\d|\bFree\b|Coming soon|per month|99\.909|204\.04/);
+  });
+
+  it("slides the terminal in from the left and the web app in from the right", () => {
+    expect(surfaceFromSlider(0)).toBe("terminal");
+    expect(surfaceFromSlider(49)).toBe("terminal");
+    expect(surfaceFromSlider(50)).toBe("web");
+    expect(surfaceFromSlider(100)).toBe("web");
+  });
+
+  it("treats a page rail with no links as a loaded desk", () => {
+    const doc = docWith([], { body: "Nothing is filed under this address. access unavailable" });
+    expect(deskShellLoaded(doc)).toBe(true);
+    expect(embedLooksDown(doc)).toBe(true);
+    expect(nextDeskAnchor(doc)).toBeNull();
+    expect(nextWebPath("/app/")).toBe("/portfolio");
+  });
+
+  it("tours every terminal page, including strategies, and wraps", () => {
+    expect(nextTerminalPath("/brief")).toBe("/portfolio");
+    expect(nextTerminalPath("/strategies")).toBe("/strategies/detail");
+    expect(nextTerminalPath("/fx/settings")).toBe("/brief");
+    expect(prevTerminalPath("/brief")).toBe("/fx/settings");
+    expect(nextWebPath("/app")).toBe("/portfolio");
+    expect(nextWebPath("/app/brief/")).toBe("/portfolio");
+    expect(nextWebPath("/app/strategies/")).toBe("/strategies/detail");
+    const seen = new Set<string>();
+    let path = "/brief";
+    for (let i = 0; i < PAGES.length; i += 1) {
+      seen.add(path);
+      path = nextTerminalPath(path);
+    }
+    expect(seen.size).toBe(PAGES.length);
+    expect(path).toBe("/brief");
+  });
+
+  it("draws a real screen for every OpenTUI page and not for a web-only slot", () => {
+    for (const page of PAGES) expect(screenKind(page.path)).not.toBe("undrawn");
+    expect(screenKind("/tools/charts")).toBe("undrawn");
+    expect(screenKind("/tools/chat")).toBe("undrawn");
+  });
+
+  it("clicks the next /app page and skips the landing pipeline link", () => {
+    const doc = docWith([
+      ...shell,
+      { label: "Strategies", href: "/app/strategies" },
+      { label: "Pipeline", href: "/#pipeline" },
+    ], { pathname: "/app/brief" });
+    expect(nextDeskAnchor(doc)?.getAttribute("href")).toBe("/app/portfolio");
+    const last = docWith(shell, { pathname: "/app/fx" });
+    expect(nextDeskAnchor(last)?.getAttribute("href")).toBe("/app/brief");
+  });
+});
+
 describe("DashboardBand", () => {
   const html = renderToStaticMarkup(<DashboardBand />);
 
-  it("embeds the terminal and does not paint the placeholder book", () => {
+  it("loads the web desk and the terminal screens, with no invented book", () => {
     expect(html).toContain('src="/app"');
-    expect(html).toContain('title="digiquant terminal"');
-    expect(html).toContain("Opening the terminal.");
-    expect(html).toContain("Take control");
-    expect(html).toContain("Brief, Portfolio, and Pipeline");
+    expect(html).toContain('title="Hosted digiquant"');
+    expect(html).toContain('aria-label="Terminal pages"');
+    expect(html).toContain('data-slot="slider"');
+    expect(html).toContain(SELF_HOSTED_COPY);
+    expect(html).toContain(HOSTED_COPY);
+    expect(html).toContain("Opening the web app.");
+    expect(html).toContain("Brief · scoreboard");
+    expect(html).toContain("Strategies");
+    expect(html).toContain("screens the terminal draws");
     expect(html).not.toContain("01 / Book");
     expect(html).not.toContain("12×12");
     expect(html).not.toContain("Reading the official API.");
@@ -200,7 +279,8 @@ describe("DashboardBand", () => {
     expect(html).not.toContain("204.04");
     expect(html).not.toContain("legacy_estimate");
     expect(html).not.toContain("sample run");
-    expect(html).not.toContain(DESK_EMPTY_COPY);
+    expect(html).not.toContain("Take control");
+    expect(html).not.toMatch(/\$\d|\bFree\b|Coming soon/);
   });
 });
 
