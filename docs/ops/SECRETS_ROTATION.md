@@ -17,16 +17,16 @@ risk ids R1–R13). No value is ever printed here; every literal below is masked
 
 **A running Container is not replaced when a new Worker version deploys.** It keeps the environment it
 booted with until the instance is recycled. Evidence: `apps/digithings-stack-cloudflare/README.md:18-23`
-("a running digichat Container keeps start-time env values until recycled"); `sleepAfter` is `15m`
-(`apps/digichat-cloudflare/src/index.ts:26`), `15m` for the stack sibling (`apps/digithings-stack-cloudflare/src/index.ts:54`),
-`15m` for the MCP container (`:166`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
+("a running digichat Container keeps start-time env values until recycled"); `sleepAfter` is `3m`
+(`apps/digichat-cloudflare/src/index.ts:26`), `3m` for the stack sibling (`apps/digithings-stack-cloudflare/src/index.ts:83`),
+`3m` for the MCP container (`:208`) and the folded digichat class (`:260`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
 
 **The lever that works today: bump the container id.** Change `SHARED_DIGICHAT_CONTAINER_ID`
-(`apps/digichat-cloudflare/src/paths.ts:22`) from `shared-v7` to `shared-v8` and deploy. Incident #4289 / PR #4290
-did exactly this: `shared-v6`→`shared-v7` booted a new instance with the current image + env while the old one went
+(`apps/digichat-cloudflare/src/paths.ts:23`) from `shared-v9` to `shared-v10` and deploy. Incident #4289 / PR #4290
+did the same bump on an earlier suffix (`shared-v6`→`shared-v7`): a new instance boots with the current image + env while the old one goes
 inactive. The stack equivalent is `SHARED_STACK_CONTAINER_ID` (`apps/digithings-stack-cloudflare/src/ports.ts:37`,
-`shared-v15`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
-reads worker env only when the instance starts" (`ports.ts:33`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
+`shared-v16`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
+reads worker env only when the instance starts" (`ports.ts:33-35`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
 
 **Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:18-23` and the rebuild-marker
 comments (`Dockerfile.digichat-cloudflare:65-69`, `Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
@@ -46,10 +46,10 @@ and `DigiQuantMcpContainer` (`:176-184`). Known silent drops: on digichat,
 ```bash
 # stack: the live instance id is served by the Worker itself (src/index.ts:319).
 curl -sf https://graph.digithings.ai/_stack/meta \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v15 (or the bumped value)
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v16 (or the bumped value)
 # digichat has no id probe. Prove the recycle behaviourally: rotate AUTH_SECRET, then a
 # pre-rotation browser session must fail and a fresh login must succeed (see §13).
-sleep 900   # digichat sleepAfter == 15m; the old instance drains within this window (paths.ts:22, index.ts:26)
+sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance drains within this window (paths.ts:23, index.ts:26)
 ```
 
 ## Per-target procedures
@@ -63,7 +63,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 1. Generate: `openssl rand -hex 32`.
 2. On the stack Worker: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put MCP_EDGE_KEY`. The Worker reads it per request, so the edge rotates instantly.
 3. Replace the literal `token` in `DIGICHAT_EMBED_TENANTS`, then `printf '%s' "$JSON" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_EMBED_TENANTS` in `apps/digichat-cloudflare`.
-4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:22`) so the container reboots with the new tenant JSON.
+4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`) so the container reboots with the new tenant JSON.
 5. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
 **Verify** — new key not 401, old/absent key 401:
 `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → any status except `401`; drop the header → `401`.
@@ -79,7 +79,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_BFF_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Same command in `apps/digichat-cloudflare`.
-4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:22`).
+4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 5. Deploy both Workers.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/oauth/token -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{"grant_type":"bff_session","tenant_slug":"digithings","subject":"bff-rotation-probe"}'` → `200`; with the previous value → `401`.
 **Rollback** — re-put the previous value on both Workers and bump both ids again.
@@ -87,7 +87,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 
 ### 3. Cloudflare token family — `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN`
 
-**Blast radius** — Vectorize + D1 access (digivault, digisearch, the remote-index cutover); deploy workflows (`deploy-*.yml`, `docs-onboard-digithings.yml`, `sync-cheaperinference-cf-secrets.yml`); local `scripts/d1_sync.py:442`, `scripts/vectorize_sync.py:365` (R7).
+**Blast radius** — Vectorize + D1 access (digivault, digisearch, the remote-index cutover); deploy workflows that still read the repo secret (`deploy-digithings-cron.yml`, `deploy-digiquant-runner.yml`, `sync-digiquant-runner-*.yml`); local `scripts/d1_sync.py:442`, `scripts/vectorize_sync.py:365` (R7). `docs-onboard-digithings.yml` and `sync-cheaperinference-cf-secrets.yml` are not in `.github/workflows`.
 **Copies** — stack Worker: canonical `CLOUDFLARE_API_TOKEN` (`apps/digithings-stack-cloudflare/wrangler.toml:159`) and legacy `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` (`:190-193`), forwarded at `src/index.ts:89-93`; GitHub repo secret; local `.env`.
 **Pre-flight** — the wrangler self-auth trap: `CLOUDFLARE_API_TOKEN` is also wrangler's own auth variable (`wrangler.toml:167-180`). Never `set -a; . .env` before wrangler; use `env -u CLOUDFLARE_API_TOKEN` and keep `CLOUDFLARE_ACCOUNT_ID` exported.
 **Steps**
@@ -204,11 +204,11 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 ### 11. Provider keys — `OPENROUTER_API_KEY`, `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`
 
 **Blast radius** — house LLM routing (`digillm/src/digillm/client.py:242,485`) and digigraph/LiteLLM (`apps/digithings-stack-cloudflare/src/index.ts:100-104`).
-**Copies (note the dead/misdirected ones)** — `OPENROUTER_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:145`); digichat Worker **dead** (put but not in `envVars`, `apps/digichat-cloudflare/src/index.ts:32-56`); local `.env`; Pages `digithings-web` **dead** (`wrangler.toml:24`; `/chat` returns 410). `CHEAPERINFERENCE_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:146`); digichat Worker **dead**; synced by the stack-only `sync-stack` job (`sync-cheaperinference-cf-secrets.yml:39-40`). `GROQ_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:145`); local `.env` (R4/R9).
+**Copies (note the dead/misdirected ones)** — `OPENROUTER_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:179`); digichat Worker **dead** (put but not in `envVars`, `apps/digichat-cloudflare/src/index.ts:32-56`); local `.env`; Pages `digithings-web` **dead** (`wrangler.toml:24`; `/chat` returns 410). `CHEAPERINFERENCE_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:180`); digichat Worker **dead**; put with `wrangler secret put` / `gh secret set` — no sync workflow remains (`sync-cheaperinference-cf-secrets.yml` is not in `.github/workflows`). `GROQ_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:179`); local `.env` (R4/R9).
 **Steps**
 1. Rotate upstream in the provider console.
 2. `gh secret set OPENROUTER_API_KEY` (and `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`).
-3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). The CI sync workflow can do the stack put for `CHEAPERINFERENCE_API_KEY` / `OPENROUTER_API_KEY`.
+3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). There is no CI workflow that puts these Worker secrets.
 4. Bump `SHARED_STACK_CONTAINER_ID`; deploy the stack.
 **Verify** — a one-token completion through LiteLLM: `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/chat/completions -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' -d '{"model":"house","messages":[{"role":"user","content":"ping"}],"max_tokens":1}'` → `200`.
 **Rollback** — re-put the previous key and bump the id.
@@ -233,7 +233,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 **Steps**
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put AUTH_SECRET` in `apps/digichat-cloudflare`.
-3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:22`).
+3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 4. Deploy the digichat Worker.
 5. Update the compose / profile env files for the non-Cloudflare instances.
 **Verify** — `/api/auth/*` is not a Worker-proxied path (`paths.ts:6-19`), so there is no curl probe. Prove it in a browser: `curl -s -o /dev/null -w '%{http_code}\n' 'https://digithings.ai/embed?host=digithings.ai'` → not `5xx` (container up), then log in at `https://digithings.ai/chat` and reload a pre-rotation session — it must be logged out, which is the expected proof of the rotation.

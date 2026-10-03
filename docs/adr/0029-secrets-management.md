@@ -14,8 +14,11 @@ rotation runbook](../ops/SECRETS_ROTATION.md) (what rotation costs today).
 
 The stack has three disjoint secret surfaces and no system of record:
 
-- **Cloudflare.** Three Workers hold 27 `secret_text` secrets (digichat 10,
-  stack 16, cron 1) plus the `digithings-web` Pages project. Worker secrets are
+- **Cloudflare.** Three Workers hold `secret_text` secrets
+  (digichat 10 and cron 1 from the 2026-09 audit; stack **25** names as of the
+  2026-09-27 `wrangler secret list`, target 23 after #4700 — see
+  [`../ops/SECRETS_INVENTORY.md`](../ops/SECRETS_INVENTORY.md) "Folded stack
+  worker") plus the `digithings-web` Pages project. Worker secrets are
   write-only: `wrangler secret list` returns names and type, never values
   ([`../ops/SECRETS_INVENTORY.md`](../ops/SECRETS_INVENTORY.md), "Storage
   surfaces"). Each Container receives only what its Worker's `envVars` whitelist
@@ -23,9 +26,11 @@ The stack has three disjoint secret surfaces and no system of record:
   (`apps/digithings-stack-cloudflare/src/index.ts:60-112`) and
   `DigiQuantMcpContainer` (`:176-184`) — and a secret that is `put` but absent
   from `envVars` is a silent drop (R4).
-- **GitHub.** 72 workflows, only 4 declare `environment: production`
-  (`SECRETS_INVENTORY.md:158`); ~42 repo secrets + 6 vars, repo-scoped, so any
-  workflow on any branch can read production credentials (R13).
+- **GitHub.** 49 workflows, only 1 declares `environment: production`
+  (`deploy-digiquant-runner.yml`; inventory R13). The four files named in the
+  2026-09 audit are not in `.github/workflows`. ~42 repo secrets + 6 vars,
+  repo-scoped, so any workflow on any branch can read production credentials
+  (R13).
 - **Local / Python.** `digikey`, `digigraph`, `digiquant`, `digisearch`,
   `digismith`, `digivault`, `digibase`, `digillm` read plain env vars; dev uses
   gitignored `.env` / `.dev.vars`. `digikey` owns the JWT/API-key model, and
@@ -50,7 +55,7 @@ wrangler config.
 
 **2. A running Container keeps its boot-time env until recycled.** `wrangler
 deploy` does not roll it; the only working lever is bumping
-`SHARED_DIGICHAT_CONTAINER_ID` (`apps/digichat-cloudflare/src/paths.ts:22`)
+`SHARED_DIGICHAT_CONTAINER_ID` (`apps/digichat-cloudflare/src/paths.ts:23`)
 or `SHARED_STACK_CONTAINER_ID`
 (`apps/digithings-stack-cloudflare/src/ports.ts:37`) — R5. A rotated
 secret can look rotated in `secret list` while the old value stays live.
@@ -154,7 +159,7 @@ new tooling.
    list` against workflow `secrets.*` references; fail on any name that is
    neither consumed nor documented-inert (the refresh commands in
    `SECRETS_INVENTORY.md:174-193` are the basis).
-6. Put the container roll lever where operators look: `paths.ts:22` /
+6. Put the container roll lever where operators look: `paths.ts:23` /
    `ports.ts:37` in the component READMEs, alongside the existing note in
    [`../ops/SECRETS_ROTATION.md`](../ops/SECRETS_ROTATION.md).
 
@@ -177,8 +182,8 @@ consumer.
    `wrangler secret put` on each Worker and `gh secret set` for repo/environment
    secrets. Idempotent, with a `--dry-run` diff and a scheduled reconcile that
    opens an issue on drift.
-4. Move production reads behind GitHub Environments (extend the 4 gated
-   workflows, `SECRETS_INVENTORY.md:158`) and scope
+4. Move production reads behind GitHub Environments (extend the one gated
+   workflow, `deploy-digiquant-runner.yml`, inventory R13) and scope
    `DIGITHINGS_PROJECT_TOKEN` to fine-grained permissions (R13).
 5. Python and local dev: `op run --env-file` materialises env; no service reads
    the vault directly, so no vendor SDK ships in `digibase`/`digillm`.
@@ -223,15 +228,16 @@ rotation APIs; human approval for the `digikey/` crypto path.
    roll (`../ops/SECRETS_ROTATION.md`, "The container boot-env trap").
 2. Prove the roll behaviourally: the stack exposes its instance id at
    `_stack/meta` (`apps/digithings-stack-cloudflare/src/index.ts:319`);
-   digichat has no probe, so prove via an auth reset after the 15 m
-   `sleepAfter`.
+   digichat has no probe, so prove via an auth reset after the 3 m
+   `sleepAfter` (`apps/digichat-cloudflare/src/index.ts:26`; stack and MCP
+   classes are also `3m`).
 3. **Defer** the async alternative — `startAndWaitForPorts({ startOptions:
    { envVars: { X: await env.SECRET.get() } } })` — until Secrets Store is GA
    and its values are manageable.
 
 **Acceptance:** rotating an env-consuming secret and re-running sync updates the
 running container with no manual id edit, and the probe shows the new instance.
-**Effort:** ~1 week. **Does not fix:** cold-start cost or the 15 m / 2 h sleep
+**Effort:** ~1 week. **Does not fix:** cold-start cost or the 3 m sleep
 windows.
 
 ## Unverified / could not confirm
