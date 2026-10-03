@@ -52,6 +52,12 @@ ACTIVATE_AND_COPY_SCRIPT = """on run argv
   tell application "System Events" to keystroke "c" using command down
 end run"""
 READ_SOURCE_TIMEOUT = 5.0
+_NOTHING_SELECTED = (
+    "nothing selected: select text then run speak --selection (clipboard alone is not used)"
+)
+# Planted before Command-C so a selection that matches the clipboard still changes it.
+# The marker itself is never spoken. Nothing selected restores the previous clipboard.
+_CLIPBOARD_MARKER = "digivoice-selection-"
 # Accessibility query for the focused element's selected text. Static script, no
 # user text interpolated: every external binary goes through CommandRunner argv.
 AX_SELECTED_TEXT_ARGS: list[str] = [
@@ -443,6 +449,47 @@ def _named_pasteboard(pbpaste: str, runner: CommandRunner, name: str) -> str | N
     return result.stdout.strip() or None
 
 
+def _clipboard_text(platform: str, probe: CommandProbe, runner: CommandRunner) -> str | None:
+    """Clipboard text, or None when it cannot be read. An empty clipboard is ``""``."""
+    if platform != "darwin":
+        return None
+    binary = probe.lookup("pbpaste")
+    if not binary:
+        return None
+    result = runner([binary], timeout=READ_SOURCE_TIMEOUT)
+    if result.code != 0:
+        return None
+    return result.stdout.strip()
+
+
+def _write_clipboard(pbcopy: str, runner: CommandRunner, text: str) -> bool:
+    result = runner([pbcopy], stdin=text, timeout=READ_SOURCE_TIMEOUT)
+    return result.code == 0
+
+
+def _restore_clipboard(pbcopy: str, runner: CommandRunner, previous: str | None) -> None:
+    if previous is None:
+        return
+    _write_clipboard(pbcopy, runner, previous)
+
+
+def _plant_marker(
+    pbcopy: str,
+    platform: str,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    previous: str | None,
+) -> str | None:
+    """Replace the clipboard with a marker. None when the marker did not stick."""
+    marker = f"{_CLIPBOARD_MARKER}{uuid4().hex}"
+    if not _write_clipboard(pbcopy, runner, marker):
+        return None
+    if _clipboard_text(platform, probe, runner) == marker:
+        return marker
+    _restore_clipboard(pbcopy, runner, previous)
+    return None
+
+
 def read_selection(
     platform: str,
     probe: CommandProbe,
@@ -456,12 +503,16 @@ def read_selection(
     1. the focused element's Accessibility selected text (no clipboard touched);
     2. Ghostty's selection pasteboard, when Ghostty is frontmost (Ghostty's
        copy-on-select writes the highlight there instead of the general clipboard);
-    3. Cmd+C via osascript, which only counts as a selection when the clipboard
-       *changes*. When a focus target was captured, that keystroke is sent to
-       that app (activate, then Command-C), not to whoever is frontmost now.
+    3. Cmd+C via osascript. When pbcopy is available, a private marker is written
+       first. The copy counts only when the clipboard then differs from that
+       marker, including when the selection is what was already copied. The
+       marker is never spoken. If the clipboard is still the marker, nothing
+       was selected: the previous clipboard is restored and is not spoken.
+       When a focus target was captured, that keystroke is sent to that app
+       (activate, then Command-C), not to whoever is frontmost now.
 
-    An unchanged clipboard (including leftover dictation paste) is treated as
-    empty selection — never as coding-reply readout.
+    Without pbcopy, an unchanged clipboard (including leftover dictation paste)
+    is empty selection — never a coding-reply readout.
     """
     if platform == "darwin":
         osascript = probe.lookup("osascript")
@@ -483,10 +534,16 @@ def read_selection(
             ghostty = _named_pasteboard(pbpaste, runner, GHOSTTY_SELECTION_PBOARD)
             if ghostty:
                 return ghostty
-        try:
-            before: str | None = read_clipboard(platform, probe, runner)
-        except SpeakError:
-            before = None
+        pbcopy = probe.lookup("pbcopy")
+        marker: str | None = None
+        if pbcopy:
+            before = _clipboard_text(platform, probe, runner)
+            marker = _plant_marker(pbcopy, platform, probe, runner, before)
+        else:
+            try:
+                before = read_clipboard(platform, probe, runner)
+            except SpeakError:
+                before = None
         copy_argv = (
             [osascript, "-e", ACTIVATE_AND_COPY_SCRIPT, focus.bundle_id, focus.name]
             if known and focus is not None
@@ -494,17 +551,23 @@ def read_selection(
         )
         typed = runner(copy_argv, timeout=READ_SOURCE_TIMEOUT)
         if typed.code != 0:
+            if marker is not None and pbcopy is not None:
+                _restore_clipboard(pbcopy, runner, before)
             reason = error_tail(typed.stderr) or f"exit {typed.code}"
             raise SpeakError(f"could not copy selection ({reason})")
+        if marker is not None and pbcopy is not None:
+            copied = _clipboard_text(platform, probe, runner)
+            if copied and copied != marker:
+                return copied
+            _restore_clipboard(pbcopy, runner, before)
+            raise SpeakError(_NOTHING_SELECTED)
         try:
             after = read_clipboard(platform, probe, runner)
         except SpeakError:
             after = None
         if after and after != before:
             return after
-        raise SpeakError(
-            "nothing selected: select text then run speak --selection (clipboard alone is not used)"
-        )
+        raise SpeakError(_NOTHING_SELECTED)
     for name, argv_extra in (
         ("xclip", ["-o", "-selection", "primary"]),
         ("xsel", ["--primary", "--output"]),
@@ -517,10 +580,7 @@ def read_selection(
                 raise SpeakError(f"selection read failed ({reason})")
             text = result.stdout.strip()
             if not text:
-                raise SpeakError(
-                    "nothing selected: select text then run speak --selection "
-                    "(clipboard alone is not used)"
-                )
+                raise SpeakError(_NOTHING_SELECTED)
             return text
     raise SpeakError("no selection tool on PATH (need xclip or xsel)")
 

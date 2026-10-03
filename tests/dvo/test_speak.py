@@ -511,6 +511,65 @@ def _ax_frontmost_dispatch(*, ax_stdout: str = "", ax_code: int = 0, frontmost: 
     return _respond
 
 
+def _clipboard_board(initial: str, *, on_copy: str | None):
+    """pbpaste/pbcopy share one clipboard. Command-C sets `on_copy` when given."""
+    board = {"text": initial}
+
+    def pbpaste(_call: object) -> FakeReply:
+        return FakeReply(stdout=board["text"])
+
+    def pbcopy(call: object) -> FakeReply:
+        board["text"] = getattr(call, "stdin", None) or ""
+        return FakeReply()
+
+    def osascript(call: object) -> FakeReply:
+        script = " ".join(getattr(call, "argv", []))
+        if "keystroke" in script and on_copy is not None:
+            board["text"] = on_copy
+            return FakeReply()
+        if "AXSelectedText" in script:
+            return FakeReply(stdout="missing value")
+        return FakeReply()
+
+    return board, pbpaste, pbcopy, osascript
+
+
+def test_read_selection_keeps_a_copy_that_matches_the_clipboard() -> None:
+    """A real selection is kept when Command-C writes text already on the clipboard."""
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    _board, pbpaste, pbcopy, osascript = _clipboard_board(
+        "selected sentence", on_copy="selected sentence"
+    )
+    runner = FakeRunner({"pbpaste": pbpaste, "pbcopy": pbcopy, "osascript": osascript})
+    probe = FakeProbe(
+        commands={
+            "pbpaste": "/usr/bin/pbpaste",
+            "pbcopy": "/usr/bin/pbcopy",
+            "osascript": "/usr/bin/osascript",
+        }
+    )
+    assert read_selection("darwin", probe, runner, focus) == "selected sentence"
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    assert typed.argv[3:] == ["com.apple.TextEdit", "TextEdit"]
+    assert "-" not in typed.argv[3:]
+
+
+def test_read_selection_does_not_speak_clipboard_when_copy_writes_nothing() -> None:
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    board, pbpaste, pbcopy, osascript = _clipboard_board("leftover dictation", on_copy=None)
+    runner = FakeRunner({"pbpaste": pbpaste, "pbcopy": pbcopy, "osascript": osascript})
+    probe = FakeProbe(
+        commands={
+            "pbpaste": "/usr/bin/pbpaste",
+            "pbcopy": "/usr/bin/pbcopy",
+            "osascript": "/usr/bin/osascript",
+        }
+    )
+    with pytest.raises(SpeakError, match="nothing selected"):
+        read_selection("darwin", probe, runner, focus)
+    assert board["text"] == "leftover dictation"
+
+
 def test_read_selection_copy_targets_the_captured_app() -> None:
     focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
     pastes = iter(["leftover dictation", "selected sentence"])
