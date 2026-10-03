@@ -1,7 +1,7 @@
 """Microphone to wav. sox first, then ffmpeg. No shell, no hang.
 
 whisper.cpp wants 16 kHz mono 16-bit, so capture there once. Hold / default
-modes bound themselves with `sox … rec trim 0 N` and `ffmpeg … -t N`. Toggle
+modes bound themselves with `sox … trim 0 N` and `ffmpeg … -t N`. Toggle
 mode can stop early on SIGINT/SIGTERM or a stop-file so a hotkey adapter
 (Hammerspoon) can press-to-start / press-to-stop without waiting out the cap.
 """
@@ -96,7 +96,9 @@ def capture_argv(
             str(wav),
         ]
         if not unbounded:
-            argv.extend(["rec", "trim", "0", str(seconds)])
+            # `trim 0 N` stops the take. `rec` is not an effect: SoX would take
+            # it as the output filename and the wav path as a second input.
+            argv.extend(["trim", "0", str(seconds)])
         elif silence_pause is not None and silence_pause > 0:
             argv.extend(["silence", "1", "0.1", "1%", "1", str(silence_pause), "1%"])
         return argv
