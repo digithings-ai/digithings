@@ -2,10 +2,13 @@
 
 Text is piped to Piper over stdin (never interpolated into a shell string).
 Piper writes a wav; then afplay (macOS) or aplay/ffplay (Linux) plays it.
+On macOS, Piper is linked to libespeak-ng.1.dylib. speak points dyld at a
+copy already on the machine and passes that tree's espeak-ng-data.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,10 +17,14 @@ from uuid import uuid4
 from digivoice.errors import SpeakError
 from digivoice.focus import FocusTarget
 from digivoice.models import SpeakResult, VoicePaths
-from digivoice.paths import piper_fallback
+from digivoice.paths import piper_fallback, vendor_dir
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
 from digivoice.settings import load_settings
+
+_ESPEAK_LIBRARY = "libespeak-ng.1.dylib"
+_ESPEAK_DATA = "espeak-ng-data"
+_ESPEAK_PHON = "phontab"
 
 PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
@@ -154,8 +161,114 @@ def speak_wav_path(paths: VoicePaths, now: datetime | None = None) -> Path:
     return Path(paths.recordings_dir) / f"speak-{stamp}-{uuid4().hex[:8]}.wav"
 
 
-def piper_argv(binary: str, voice: Path, wav: Path) -> list[str]:
-    return [binary, "--model", str(voice), "--output_file", str(wav)]
+def espeak_library_dirs() -> tuple[Path, ...]:
+    """Homebrew and /usr/local library directories. Tests replace this."""
+    return (
+        Path("/opt/homebrew/lib"),
+        Path("/opt/homebrew/opt/espeak-ng/lib"),
+        Path("/usr/local/lib"),
+        Path("/usr/local/opt/espeak-ng/lib"),
+    )
+
+
+def espeak_data_dirs() -> tuple[Path, ...]:
+    """Homebrew espeak-ng-data directories. Tests replace this."""
+    return (
+        Path("/opt/homebrew/share/espeak-ng-data"),
+        Path("/usr/local/share/espeak-ng-data"),
+    )
+
+
+def find_espeak_library(home: Path, binary: str, *, platform: str) -> Path | None:
+    """A libespeak-ng already on disk. This does not download or install one."""
+    invoked = Path(binary)
+    for directory in (invoked.resolve().parent, invoked.parent):
+        found = _existing_file(directory / _ESPEAK_LIBRARY)
+        if found is not None:
+            return found
+    found = _named_under(vendor_dir(home) / "piper", _ESPEAK_LIBRARY)
+    if found is not None:
+        return found
+    if platform != "darwin":
+        return None
+    for directory in espeak_library_dirs():
+        found = _existing_file(directory / _ESPEAK_LIBRARY)
+        if found is not None:
+            return found
+    return None
+
+
+def find_espeak_data(home: Path, binary: str, *, platform: str) -> Path | None:
+    """An espeak-ng-data directory that contains phontab. No download."""
+    invoked = Path(binary)
+    for directory in (invoked.resolve().parent, invoked.parent):
+        found = _phon_dir(directory / _ESPEAK_DATA)
+        if found is not None:
+            return found
+    vendor = vendor_dir(home) / "piper"
+    if vendor.is_dir():
+        tabs = [
+            path
+            for path in vendor.rglob(_ESPEAK_PHON)
+            if path.is_file() and path.name == _ESPEAK_PHON and path.parent.name == _ESPEAK_DATA
+        ]
+        if tabs:
+            return tabs[0].parent
+    if platform != "darwin":
+        return None
+    for directory in espeak_data_dirs():
+        found = _phon_dir(directory)
+        if found is not None:
+            return found
+    return None
+
+
+def piper_library_env(platform: str, binary: str, library: Path | None) -> dict[str, str] | None:
+    """DYLD path so macOS Piper can load espeak-ng. Linux uses $ORIGIN."""
+    if platform != "darwin" or library is None:
+        return None
+    dirs: list[str] = []
+    for directory in (Path(binary).resolve().parent, library.resolve().parent):
+        text = str(directory)
+        if text not in dirs:
+            dirs.append(text)
+    previous = os.environ.get("DYLD_LIBRARY_PATH", "")
+    for part in previous.split(os.pathsep):
+        if part and part not in dirs:
+            dirs.append(part)
+    return {"DYLD_LIBRARY_PATH": os.pathsep.join(dirs)}
+
+
+def piper_argv(
+    binary: str,
+    voice: Path,
+    wav: Path,
+    *,
+    espeak_data: Path | None = None,
+) -> list[str]:
+    argv = [binary, "--model", str(voice), "--output_file", str(wav)]
+    if espeak_data is not None:
+        argv.extend(["--espeak_data", str(espeak_data)])
+    return argv
+
+
+def _existing_file(path: Path) -> Path | None:
+    if path.is_file():
+        return path
+    return None
+
+
+def _named_under(root: Path, name: str) -> Path | None:
+    if not root.is_dir():
+        return None
+    matches = [path for path in root.rglob(name) if path.is_file() and path.name == name]
+    return matches[0] if matches else None
+
+
+def _phon_dir(path: Path) -> Path | None:
+    if (path / _ESPEAK_PHON).is_file():
+        return path
+    return None
 
 
 def select_player(platform: str, probe: CommandProbe) -> tuple[str, str] | None:
@@ -366,8 +479,15 @@ def speak(
     player, player_bin = player_sel
     wav = speak_wav_path(paths)
     wav.parent.mkdir(parents=True, exist_ok=True)
-    piper_cmd = piper_argv(binary, voice, wav)
-    synthesized = runner(piper_cmd, stdin=cleaned + "\n", timeout=PIPER_TIMEOUT)
+    library = find_espeak_library(home, binary, platform=platform)
+    data = find_espeak_data(home, binary, platform=platform)
+    piper_cmd = piper_argv(binary, voice, wav, espeak_data=data)
+    synthesized = runner(
+        piper_cmd,
+        stdin=cleaned + "\n",
+        timeout=PIPER_TIMEOUT,
+        env=piper_library_env(platform, binary, library),
+    )
     if synthesized.code != 0:
         reason = error_tail(synthesized.stderr) or f"exit {synthesized.code}"
         raise SpeakError(f"piper failed ({reason})")

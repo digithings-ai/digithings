@@ -62,6 +62,7 @@ class InstallStamp(BaseModel):
     whisper: str = ""
     piper: str = ""
     sox: str = ""
+    espeak: str = ""
     stt: str = ""
     voice: str = ""
 
