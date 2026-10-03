@@ -2,7 +2,7 @@
 title: "digichat install — guide"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - guide
@@ -16,13 +16,12 @@ digithings ships **self-hosted** AI infra. Clients install digichat **releases f
 ### Install unit
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v2.3.2
+docker pull ghcr.io/digithings-ai/digichat:v2.4.0
 ```
 
 - Git tag: `digichat-vX.Y.Z`
-- GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v2.3.2`)
+- GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (package version `2.4.0`, released 2026-09-29). Pin a tag the release workflow has published from `main`; do not assume `v2.4.0` is on GHCR until that workflow has run.
 - Changelog: `apps/digichat/CHANGELOG.md`
-- Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.
 
 ### Profiles
 

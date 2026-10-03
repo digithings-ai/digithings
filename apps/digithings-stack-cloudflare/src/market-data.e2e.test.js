@@ -69,8 +69,24 @@ describe("handleMarketData end-to-end (real parquet fixture)", () => {
     expect(await res.json()).toEqual({
       as_of: "2026-09-11",
       rows: [
-        { date: "2026-09-10", ticker: "GLD", close: 250 },
-        { date: "2026-09-11", ticker: "GLD", close: 260 },
+        {
+          date: "2026-09-10",
+          ticker: "GLD",
+          open: 249,
+          high: 251,
+          low: 248,
+          close: 250,
+          volume: 1000,
+        },
+        {
+          date: "2026-09-11",
+          ticker: "GLD",
+          open: 255,
+          high: 261,
+          low: 254,
+          close: 260,
+          volume: 2000,
+        },
       ],
     });
   });
@@ -83,7 +99,17 @@ describe("handleMarketData end-to-end (real parquet fixture)", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       as_of: "2026-09-11",
-      rows: [{ date: "2026-09-11", ticker: "GLD", close: 260 }],
+      rows: [
+        {
+          date: "2026-09-11",
+          ticker: "GLD",
+          open: 255,
+          high: 261,
+          low: 254,
+          close: 260,
+          volume: 2000,
+        },
+      ],
     });
   });
 });

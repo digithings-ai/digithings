@@ -22,6 +22,7 @@
  * `POST /mcp` exposes the same routes as JSON-RPC tools (see `./mcp`).
  */
 
+import { buildManifest, callerFor, grantedRoutes, routeVerdict, tierAtLeast } from "./access";
 import { adaptOnGet } from "./adapters";
 import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
@@ -45,60 +46,30 @@ import {
   hasSupabaseEnv,
   type SupabaseSource,
 } from "./supabase";
-import { MCP_PATH, handleMcp } from "./mcp";
+import { MCP_PATH, STANDALONE_PATHS, handleMcp, secretlessStubLane } from "./mcp";
+import { buildProvenance, errorResponse } from "./errors";
+import { buildRegistry, userIdFor } from "./routes";
+import type { Method } from "./routes/registry";
 
-export const HOUSE_WORKSPACE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319" as const;
 
 export interface Env {
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   /** Secret for POST /mcp (`x-digi-mcp-key`); unset = deny all (fail closed). */
   MCP_EDGE_KEY?: string;
+  /** Secret the edge sends as `x-digi-edge-key`; when set, identity headers without it are ignored. Set on every deployed worker. */
+  DASHBOARD_EDGE_KEY?: string;
   /** Comma-separated CORS allowlist override (issue #4679); defaults cover
    * the production dashboard plus local dashboard dev servers. */
   DASHBOARD_API_ALLOWED_ORIGINS?: string;
+  /** Local dev only: caller used when a request has no identity headers, e.g. "enterprise+12x". */
+  DASHBOARD_DEV_CALLER?: string;
+  /** Optional twelve-x (FX hub) Supabase project; absent = FX reads fail closed (upstream_empty). */
+  TWELVEX_SUPABASE_URL?: string;
+  TWELVEX_SUPABASE_SERVICE_KEY?: string;
 }
 
-export type ErrorCode = "bad_request" | "not_found" | "upstream_empty" | "internal";
-
-export interface Provenance {
-  source: string;
-  tip_date: string | null;
-  contract: "finalized_accounting" | "legacy_estimate" | null;
-  seam: boolean;
-  marks: "stored" | "market_api" | "unavailable";
-}
-
-const ERROR_STATUS: Record<ErrorCode, number> = {
-  bad_request: 400,
-  not_found: 404,
-  upstream_empty: 502,
-  internal: 500,
-};
-
-/** Contract section 2 error envelope — the only failure shape. */
-export function errorResponse(
-  code: ErrorCode,
-  message: string,
-  retrievalPin: string | null,
-  details: Record<string, unknown> = {},
-): Response {
-  return Response.json(
-    { error: { code, message, details, retrieval_pin: retrievalPin } },
-    { status: ERROR_STATUS[code] },
-  );
-}
-
-/** Contract section 1 provenance object — every success carries one. */
-export function buildProvenance(partial: Partial<Provenance> & Pick<Provenance, "source">): Provenance {
-  return {
-    tip_date: null,
-    contract: null,
-    seam: false,
-    marks: "unavailable",
-    ...partial,
-  };
-}
+export { buildProvenance, errorResponse, type ErrorCode, type Provenance } from "./errors";
 
 export interface CommonParams {
   asOf: string | null;
@@ -191,6 +162,27 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = normalizePath(url.pathname);
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
+  if (request.method !== "GET") return routeWrite(request, env, path);
+  if (request.method === "GET" && path !== "/access/manifest") {
+    // Secretless stub lane keeps the contracted doubles (200 §1). An identified
+    // caller, including explicit free, is still refused when the manifest says so.
+    const stubContract = secretlessStubLane(request, env) && STANDALONE_PATHS.has(path);
+    if (!stubContract) {
+      const manifest = buildManifest(callerFor(request, env));
+      if (routeVerdict(manifest, path) === "forbidden") {
+        return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: manifest.caller.tier });
+      }
+    }
+  }
+  if (request.method === "GET" && path === "/access/manifest") {
+    const manifest = buildManifest(callerFor(request, env));
+    return Response.json({
+      data: { ...manifest, routes: grantedRoutes(manifest) },
+      as_of: null,
+      retrieval_pin: url.searchParams.get("retrieval_pin"),
+      provenance: buildProvenance({ source: "access_policy" }),
+    });
+  }
   if (request.method === "GET" && path === "/ledger") {
     try {
       const res = await tryHandleLedger(request, ledgerBook);
@@ -205,6 +197,12 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
     }
   }
   if (request.method === "GET" && path.startsWith("/v1/tables/")) {
+    // Raw tables carry paid-tier data (ledger, attribution, trace): brief and above only.
+    // With no Supabase and no caller, fail closed as upstream_empty (502) instead of 403.
+    const caller = callerFor(request, env);
+    if (!secretlessStubLane(request, env) && !tierAtLeast(caller, "brief")) {
+      return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: caller.tier });
+    }
     try {
       const res = await tryHandleTables(request, env);
       if (res) return res;
@@ -220,8 +218,36 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   if (request.method === "GET") {
     const handler = routes.get(`GET ${path}`);
     if (handler) return handler(request);
+    // Domain modules (src/routes): exact or `{param}` template paths, same gate as above.
+    const hit = buildRegistry().match("GET", path);
+    if (hit) {
+      // Registry routes must be named in the catalog; an uncatalogued read fails closed.
+      if (routeVerdict(buildManifest(callerFor(request, env)), path) !== "allowed") {
+        return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path });
+      }
+      const caller = callerFor(request, env);
+      return failClosed((req) => hit.fn(req, { env, params: hit.params, userId: userIdFor(req, env), caller }))(request);
+    }
   }
   return errorResponse("bad_request", `unknown route ${path}`, null, { path });
+}
+
+/**
+ * Writes (PUT/POST/DELETE): only registered routes exist; each needs a verified
+ * user (`x-digi-user`, 401) and a catalog route the caller's manifest grants (403).
+ * Ungoverned write paths fail closed. No auth/session logic lives here.
+ */
+async function routeWrite(request: Request, env: Env, path: string): Promise<Response> {
+  const pin = new URL(request.url).searchParams.get("retrieval_pin");
+  const hit = buildRegistry().match(request.method as Method, path);
+  if (!hit) return errorResponse("bad_request", `unknown route ${path}`, null, { path, method: request.method });
+  const userId = userIdFor(request, env);
+  if (!userId) return errorResponse("unauthorized", "writes require a verified user (x-digi-user)", pin, { path });
+  const manifest = buildManifest(callerFor(request, env));
+  if (routeVerdict(manifest, path) !== "allowed") {
+    return errorResponse("forbidden", `${request.method} ${path} is not available to this caller`, pin, { path, tier: manifest.caller.tier });
+  }
+  return failClosed((req) => hit.fn(req, { env, params: hit.params, userId, caller: manifest.caller }))(request);
 }
 
 export default {

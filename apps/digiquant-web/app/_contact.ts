@@ -2,7 +2,7 @@
 
 export const CONTACT_SELF_FEATURES = [
   "The full research and portfolio-construction stack — execution is not built yet",
-  "MIT-licensed; clone, fork, and run it on hardware you own",
+  "MIT-licensed; fork it and run it on hardware you own",
   "Research, portfolio construction, and the backtest pipeline",
   "Your data, your machines, your keys — nothing leaves your infra",
   "Community support on GitHub",

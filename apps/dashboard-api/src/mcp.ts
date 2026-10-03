@@ -2,7 +2,8 @@
  * Slice 0006 — read-only MCP-style discovery over the dashboard-api routes.
  *
  * `POST /mcp` speaks JSON-RPC `tools/list` + `tools/call` (one tool per
- * read-only route). Secret-gated EXACTLY like the `/_stack/mcp` precedent
+ * catalog GET route: curated names for the original eight, the rest generated
+ * from `DESKS`; all behind the same gate as HTTP). Secret-gated EXACTLY like the `/_stack/mcp` precedent
  * (`x-digi-mcp-key` vs env secret, fail-closed 401).
  *
  * Sharing rule: tools NEVER reimplement route logic. Each `tools/call`
@@ -14,18 +15,22 @@
  * `wrangler dev` only. No Python/FastMCP; this is a TS worker.
  */
 
+import { anonymousCaller, buildManifest, callerFor, governedRoutes, routeVerdict, type Manifest } from './access';
+import { hasSupabaseEnv, type SupabaseEnv } from './supabase';
+
 export const MCP_PATH = '/mcp';
 export const MCP_KEY_HEADER = 'x-digi-mcp-key';
 
-export interface McpEnv {
+export interface McpEnv extends SupabaseEnv {
   MCP_EDGE_KEY?: string;
+  DASHBOARD_DEV_CALLER?: string;
 }
 
 export interface McpToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  /** Route path this tool reads through. */
+  /** Route path this tool reads through; `{name}` segments are filled from the same-named argument. */
   path: string;
   /** Query params forwarded from tool arguments (in order). */
   params: readonly string[];
@@ -33,7 +38,15 @@ export interface McpToolDef {
 
 const STR = { type: 'string' };
 
-export const MCP_TOOLS: readonly McpToolDef[] = [
+/** Hand-written tools: the original names, kept stable (clients depend on them). */
+const CURATED_TOOLS: readonly McpToolDef[] = [
+  {
+    name: 'get_access_manifest',
+    description: 'Desks, pages, blocks and data routes visible to the caller, with locked reasons (contract §6.9). Call first to learn what else you may read.',
+    inputSchema: { type: 'object', properties: {} },
+    path: '/access/manifest',
+    params: [],
+  },
   {
     name: 'get_portfolio',
     description: 'Committed-book snapshot + invested envelope (contract §6.1).',
@@ -113,6 +126,67 @@ export const MCP_TOOLS: readonly McpToolDef[] = [
   },
 ];
 
+const PATH_PARAM = /\{(\w+)\}/g;
+
+/** `/fx/pairs/{pair}/path` -> `get_fx_pairs_pair_path`. */
+export function toolNameFor(route: string): string {
+  return 'get_' + route.replace(PATH_PARAM, '$1').split('/').filter(Boolean).join('_').replace(/[^A-Za-z0-9_]/g, '_');
+}
+
+/** One generated tool per catalog GET route that no curated tool already covers. */
+function generatedTools(covered: ReadonlySet<string>): McpToolDef[] {
+  return governedRoutes()
+    .filter((r) => !covered.has(r))
+    .sort()
+    .map((route) => {
+      const pathParams = [...route.matchAll(PATH_PARAM)].map((m) => m[1]!);
+      const props: Record<string, unknown> = Object.fromEntries(pathParams.map((p) => [p, STR]));
+      Object.assign(props, { asOf: STR, retrieval_pin: STR });
+      return {
+        name: toolNameFor(route),
+        description: `Read ${route} (same route, same access gate as the app; see get_access_manifest).`,
+        inputSchema: { type: 'object', properties: props, ...(pathParams.length ? { required: pathParams } : {}) },
+        path: route,
+        params: ['asOf', 'retrieval_pin'],
+      };
+    });
+}
+
+/** Curated tools first, then one tool per remaining catalog route (generated from `DESKS`). */
+export const MCP_TOOLS: readonly McpToolDef[] = [
+  ...CURATED_TOOLS,
+  ...generatedTools(new Set(CURATED_TOOLS.map((t) => t.path))),
+];
+
+/**
+ * The original eight dashboard tools. The folded stack worker exposes this
+ * list — not `MCP_TOOLS`, and not the digiquant server manifest.
+ */
+export const STANDALONE_MCP_TOOLS: readonly McpToolDef[] = CURATED_TOOLS.filter(
+  (t) => t.path !== '/access/manifest',
+);
+
+export const STANDALONE_PATHS: ReadonlySet<string> = new Set(STANDALONE_MCP_TOOLS.map((t) => t.path));
+
+/**
+ * No Supabase and no caller identity. Contracted routes keep their stub
+ * envelopes; an identified caller (including explicit `free`) stays gated.
+ */
+export function secretlessStubLane(request: Request, env: McpEnv): boolean {
+  return anonymousCaller(request, env) && !hasSupabaseEnv(env);
+}
+
+/** Concrete route path for a call, or an error message when a path argument is missing. */
+function resolvePath(tool: McpToolDef, args: Record<string, unknown>): { path: string } | { error: string } {
+  let missing: string | null = null;
+  const path = tool.path.replace(PATH_PARAM, (_m, name: string) => {
+    const v = args[name];
+    if (typeof v !== 'string' || v.trim() === '' || v === '.' || v === '..') missing = name; // '..' would let the URL parser climb out of the gated route
+    return encodeURIComponent(String(v ?? ''));
+  });
+  return missing ? { error: `missing required argument ${missing}` } : { path };
+}
+
 /**
  * Secret gate mirroring the `/_stack/mcp` precedent: the `x-digi-mcp-key`
  * header must match the env secret. Fail closed — no secret configured,
@@ -146,9 +220,17 @@ function toolResultText(tool: McpToolDef, args: Record<string, unknown>): URLSea
   return query;
 }
 
+/** MCP gate = the app's gate: a tool is visible and callable only if the caller's manifest grants its route. */
+function toolAllowed(tool: McpToolDef, m: Manifest): boolean {
+  return routeVerdict(m, tool.path) !== 'forbidden';
+}
+
 async function handleOne(
   raw: unknown,
   dispatch: (req: Request) => Promise<Response>,
+  m: Manifest,
+  identity: Record<string, string>,
+  stub: boolean,
 ): Promise<Record<string, unknown>> {
   const req = (raw ?? {}) as JsonRpcRequest;
   const id: JsonRpcId = req.id ?? null;
@@ -160,7 +242,7 @@ async function handleOne(
       jsonrpc: '2.0',
       id,
       result: {
-        tools: MCP_TOOLS.map((t) => ({
+        tools: (stub ? STANDALONE_MCP_TOOLS : MCP_TOOLS.filter((t) => toolAllowed(t, m))).map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
@@ -181,9 +263,15 @@ async function handleOne(
     if (typeof args !== 'object' || Array.isArray(args)) {
       return { jsonrpc: '2.0', id, error: { code: -32602, message: 'arguments must be an object' } };
     }
-    // Shared service layer: run the worker's own route handler.
-    const url = `https://internal${tool.path}?${toolResultText(tool, args).toString()}`;
-    const res = await dispatch(new Request(url, { method: 'GET' }));
+    const standalone = STANDALONE_MCP_TOOLS.some((t) => t.name === tool.name);
+    if (!(stub && standalone) && !toolAllowed(tool, m)) {
+      return { jsonrpc: '2.0', id, error: { code: -32003, message: `forbidden: ${tool.name} is not available to this caller (tier ${m.caller.tier})` } };
+    }
+    // Shared service layer: run the worker's own route handler (identity forwarded, so the HTTP gate agrees).
+    const resolved = resolvePath(tool, args);
+    if ('error' in resolved) return { jsonrpc: '2.0', id, error: { code: -32602, message: resolved.error } };
+    const url = `https://internal${resolved.path}?${toolResultText(tool, args).toString()}`;
+    const res = await dispatch(new Request(url, { method: 'GET', headers: identity }));
     const text = await res.text();
     return {
       jsonrpc: '2.0',
@@ -213,6 +301,13 @@ export async function handleMcp(
     // Stack precedent: plain fail-closed 401, no envelope.
     return new Response('dashboard-api: unauthorized', { status: 401 });
   }
+  const m = buildManifest(callerFor(request, env));
+  const stub = secretlessStubLane(request, env);
+  const identity: Record<string, string> = {};
+  for (const h of ['x-digi-tier', 'x-digi-groups']) {
+    const v = request.headers.get(h);
+    if (v !== null) identity[h] = v;
+  }
   let body: unknown;
   try {
     body = await request.json();
@@ -222,8 +317,8 @@ export async function handleMcp(
   if (Array.isArray(body)) {
     if (body.length === 0) return rpcError(null, -32600, 'invalid request');
     const out = [];
-    for (const item of body) out.push(await handleOne(item, dispatch));
+    for (const item of body) out.push(await handleOne(item, dispatch, m, identity, stub));
     return Response.json(out);
   }
-  return Response.json(await handleOne(body, dispatch));
+  return Response.json(await handleOne(body, dispatch, m, identity, stub));
 }

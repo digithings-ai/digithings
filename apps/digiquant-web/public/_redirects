@@ -17,3 +17,40 @@
 /subsystems/hermes/      /subsystems/portfolio/   301
 /subsystems/kairos       /subsystems/execution/   301
 /subsystems/kairos/      /subsystems/execution/   301
+
+# Retired operator UI. /dashboard is the brief at /app. Known desk paths keep
+# their slug. Unknown paths under /dashboard go to /app. apps/dashboard stays
+# in the tree and is not a destination. Same map as legacyDashboardRedirects().
+/dashboard/portfolio/attribution /app/portfolio/attribution/ 308
+/dashboard/portfolio/attribution/ /app/portfolio/attribution/ 308
+/dashboard/portfolio/tearsheet /app/portfolio/tearsheet/ 308
+/dashboard/portfolio/tearsheet/ /app/portfolio/tearsheet/ 308
+/dashboard/portfolio/holdings /app/portfolio/holdings/ 308
+/dashboard/portfolio/holdings/ /app/portfolio/holdings/ 308
+/dashboard/strategies/deploy /app/strategies/deploy/ 308
+/dashboard/strategies/deploy/ /app/strategies/deploy/ 308
+/dashboard/strategies/detail /app/strategies/detail/ 308
+/dashboard/strategies/detail/ /app/strategies/detail/ 308
+/dashboard/portfolio/ledger /app/portfolio/ledger/ 308
+/dashboard/portfolio/ledger/ /app/portfolio/ledger/ 308
+/dashboard/portfolio/theses /app/portfolio/theses/ 308
+/dashboard/portfolio/theses/ /app/portfolio/theses/ 308
+/dashboard/tools/terminal /app/tools/terminal/ 308
+/dashboard/tools/terminal/ /app/tools/terminal/ 308
+/dashboard/tools/charts /app/tools/charts/ 308
+/dashboard/tools/charts/ /app/tools/charts/ 308
+/dashboard/performance /app/performance/ 308
+/dashboard/performance/ /app/performance/ 308
+/dashboard/strategies /app/strategies/ 308
+/dashboard/strategies/ /app/strategies/ 308
+/dashboard/tools/chat /app/tools/chat/ 308
+/dashboard/tools/chat/ /app/tools/chat/ 308
+/dashboard/portfolio /app/portfolio/ 308
+/dashboard/portfolio/ /app/portfolio/ 308
+/dashboard/pipeline /app/pipeline/ 308
+/dashboard/pipeline/ /app/pipeline/ 308
+/dashboard/brief /app/brief/ 308
+/dashboard/brief/ /app/brief/ 308
+/dashboard /app 308
+/dashboard/ /app 308
+/dashboard/* /app 308

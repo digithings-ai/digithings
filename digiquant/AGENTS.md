@@ -97,7 +97,7 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`apps/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/app`** on digiquant.io (`apps/digiquant-web`). `/dashboard/` redirects there. `apps/dashboard` stays in the tree and is no longer the served desk.
 
 When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
 

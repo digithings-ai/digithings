@@ -62,6 +62,14 @@ export {
 } from "./components/diagrams";
 export { camTransform, fitCamera, type CamFrame } from "./components/diagrams";
 export {
+  TerminalSchematic,
+  type SchematicLegend,
+  type SchematicNode,
+  type SchematicRow,
+  type SchematicTone,
+  type TerminalSchematicProps,
+} from "./components/diagrams";
+export {
   Footer,
   Colophon,
   ModuleCard,
@@ -134,6 +142,13 @@ export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyBu
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
 export {
+  ChatPlayback,
+  type ChatPlaybackProps,
+  type ChatPlaybackStep,
+  type ChatPlaybackTool,
+  type ChatPlaybackTable,
+} from "./components/chat/ChatPlayback";
+export {
   ChatWidgetFrame,
   ChatWidgetButton,
   type ChatWidgetFrameProps,
@@ -192,6 +207,8 @@ export {
   PRICE_CHART_DEMO,
   EQUITY_CURVE_DEMO,
   DRAWDOWN_DEMO,
+  DIGIQUANT_CHART,
+  readDigiquantChartScale,
   type PriceChartProps,
   type EquityCurveProps,
   type DrawdownPlotProps,
@@ -203,11 +220,16 @@ export {
   type ChartTip,
   type UseLightweightChartConfig,
   type UseLightweightChartResult,
+  type DigiquantChartScale,
 } from "./components/finance-charts";
 
 // finance-composites family (#1450)
 export {
   StockTicker,
+  MarketBar,
+  type MarketBarProps,
+  type MarketBarCell,
+  type MarketBarStatus,
   OrderBook,
   SortableTable,
   PerformanceDashboard,
@@ -235,6 +257,9 @@ export {
   BentoCell,
   CardRail,
   ProductFrame,
+  type CardRailProps,
+  MediaFrame,
+  type MediaFrameProps,
   FeatureCell,
   TestimonialWall,
   ModuleGrid,
@@ -245,7 +270,6 @@ export {
   type ModuleGridProps,
   type TreemapRect,
   type TreemapMins,
-  type CardRailProps,
   type OdometerStat,
   type DotMatrixStatProps,
   type BentoSpan,
@@ -266,6 +290,11 @@ export {
   tabId,
   tabPanelId,
   ToastStack,
+  HorizontalScrollTrack,
+  HorizontalTrackStepper,
+  useHorizontalTrack,
+  type HorizontalScrollTrackProps,
+  type HorizontalTrackState,
   type PipelineProps,
   type PipelineColumn,
   type PipelineNode,
@@ -381,6 +410,15 @@ export {
   type LiveKpiBenchmarkPoint,
   type LivePerformanceKpis,
   type LivePerformanceKpisInput,
+  StrategyTearsheet,
+  buildStrategyTearsheet,
+  seriesOrNull,
+  seriesSparkline,
+  sheetCagr,
+  type StrategySheetBar,
+  type StrategySheetMetric,
+  type StrategySheetModel,
+  type StrategySheetPoint,
 } from "./components/finance-tearsheet";
 
 // repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed

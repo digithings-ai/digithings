@@ -108,6 +108,7 @@ barrel, re-exported from `src/index.ts`:
 | `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
 | `repo-activity` | RepoActivity (compact + detailed) + `fetchRepoActivityLive`. Snapshot-first GitHub velocity: three 30-day counts (commits on the configured branch, merged PRs, closed issues), current open PRs/issues, latest release, recent merged PRs, recently updated open issues. Optional client refresh applies atomically or keeps the snapshot. No stars/forks/watchers. | `./styles/repo-activity.css` |
 | `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
+| `diagrams` | `TerminalSchematic` — fully drawn terminal flow (legend, dotted stack, loop, numbered notes, receipt, traveling marks). Dress is the `.tschem` block in `styles/diagrams.css`. | `./styles/diagrams.css` |
 
 The #1463 reverse-promotion added the **`finance-tearsheet`** family — the
 print-grade SVG tearsheet grammar (`.ts-*`) promoted from

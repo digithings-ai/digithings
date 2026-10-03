@@ -146,7 +146,7 @@ export function DocsLayout({
     railItems && railItems.length > 0 ? (
       <nav
         aria-label={typeof railLabel === "string" ? railLabel : "on this page"}
-        className="flex flex-col gap-[0.1rem]"
+        className="mt-[0.8rem] flex flex-col gap-[0.1rem]"
       >
         <span className="mb-[0.2rem] px-[0.6rem] font-mono text-[0.68rem] uppercase tracking-[0.12em] text-ink-mute">
           {railLabel}
