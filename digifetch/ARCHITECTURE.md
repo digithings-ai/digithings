@@ -159,11 +159,16 @@ variables; a consumer (`digisearch`) sources the allowlist from
 dicts to the `{name: value}` dict an HTTP client sends — the exact hand-off
 twelve-x's `scrape_research` performs inline before its AJAX call.
 
-Per-call `cookies=` are host-agnostic, so redirect handling forwards them only
-while the hop stays on the **original origin**; a hop to another origin drops
-them rather than leaking a session credential across hosts. (A client-level
-cookie jar passed via `cookies=`/Playwright keeps httpx's own domain-scoped
-rules.)
+Per-call `cookies=` and credential headers (`Authorization`,
+`Proxy-Authorization`, `Cookie`) are forwarded only while the hop stays on the
+**original origin**. The origin includes the scheme's default port, so
+`https://host` and `https://host:443` are the same origin. A hop to another
+origin drops those credentials. 303 always becomes GET. 301/302 downgrade a
+non-GET/HEAD method to GET and drop the body. 307/308 keep the method and
+body. (A client-level cookie jar passed via `cookies=`/Playwright keeps
+httpx's own domain-scoped rules.) A host whose DNS lookup fails produces no
+addresses to refuse, so the guard allows it; the later connect fails the same
+way.
 
 **Injection seams for tests:** pass `transport=httpx.MockTransport(...)` to
 exercise the real client (headers/cookies/timeout wiring) without a socket, or

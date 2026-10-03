@@ -49,11 +49,48 @@ MAX_REDIRECTS = 5
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
+# RFC 6454: the default port for a scheme is part of the origin, so
+# ``https://host`` and ``https://host:443`` are the same origin.
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+# Per-call credential headers. A cross-origin hop must not receive them.
+_SENSITIVE_HEADERS = frozenset({"authorization", "proxy-authorization", "cookie"})
+
 
 def _url_origin(url: str) -> tuple[str, str, int | None]:
     """(scheme, host, port) identity used for same-origin redirect decisions."""
     parsed = urlparse(url)
-    return (parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port)
+    scheme = parsed.scheme.lower()
+    port = parsed.port
+    if port is None:
+        port = _DEFAULT_PORTS.get(scheme)
+    return (scheme, (parsed.hostname or "").lower(), port)
+
+
+def _redirect_method(status: int, method: str) -> str:
+    """Method for the next hop.
+
+    303 always becomes GET. 301/302 downgrade a non-GET/HEAD method to GET.
+    307/308 keep the original method.
+    """
+    normalized = method.upper()
+    if status == 303 or (status in (301, 302) and normalized not in ("GET", "HEAD")):
+        return "GET"
+    return method
+
+
+def _hop_headers(
+    headers: Mapping[str, str] | None,
+    *,
+    same_origin: bool,
+) -> dict[str, str] | None:
+    """Per-call headers for this hop. Cross-origin hops drop credential headers."""
+    if not headers:
+        return None
+    if same_origin:
+        return dict(headers)
+    kept = {key: value for key, value in headers.items() if key.lower() not in _SENSITIVE_HEADERS}
+    return kept or None
 
 
 class FetchResult(BaseModel):
@@ -129,10 +166,12 @@ class HttpFetcher:
     before a request is sent, and hops are capped at :data:`MAX_REDIRECTS`. Pass
     ``allowed_hosts`` for operator-trusted internal hosts.
 
-    **Redirect cookies.** Per-call ``cookies`` (the Playwright hand-off seam)
-    are host-agnostic, so they are forwarded only while the hop stays on the
-    original origin; a cross-origin redirect drops them instead of leaking a
-    session credential.
+    **Redirect cookies and headers.** Per-call ``cookies`` and credential
+    headers (``Authorization``, ``Proxy-Authorization``, ``Cookie``) are
+    forwarded only while the hop stays on the original origin (default ports
+    included). A cross-origin redirect drops them. 303 always becomes GET;
+    301/302 downgrade a non-GET/HEAD method and drop the body; 307/308 keep
+    the method and body.
     """
 
     def __init__(
@@ -221,24 +260,28 @@ class HttpFetcher:
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
         each hop is re-validated by the SSRF guard before it is requested.
-        Per-call ``cookies`` are forwarded **only to same-origin hops**; a hop
-        to another origin drops them (session cookies must not leak across
-        hosts). The client-level cookie jar, if any, follows httpx's own
-        domain-scoped rules.
+        Per-call ``cookies`` and credential headers are forwarded **only to
+        same-origin hops**; a hop to another origin drops them. 307/308 keep
+        the method and body; 301/302/303 downgrade as browsers do. The
+        client-level cookie jar, if any, follows httpx's own domain-scoped
+        rules.
         """
         origin = _url_origin(url)
         current_url = url
         current_method = method
+        current_data = data
+        current_json = json
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
-            hop_cookies = cookies if _url_origin(current_url) == origin else None
+            same_origin = _url_origin(current_url) == origin
+            hop_cookies = cookies if same_origin else None
             response = self._client.request(
                 current_method,
                 current_url,
                 params=dict(params) if params else None,
-                data=dict(data) if data else None,
-                json=json,
-                headers=dict(headers) if headers else None,
+                data=dict(current_data) if current_data else None,
+                json=current_json,
+                headers=_hop_headers(headers, same_origin=same_origin),
                 cookies=dict(hop_cookies) if hop_cookies else None,
                 follow_redirects=False,
             )
@@ -246,10 +289,10 @@ class HttpFetcher:
                 location = response.headers.get("location")
                 if location:
                     current_url = urljoin(str(response.url), location)
-                    # 303 always becomes GET; 301/302 downgrade a body-bearing
-                    # method to GET (browser semantics). 307/308 preserve it.
-                    if response.status_code == 303 or current_method not in ("GET", "HEAD"):
-                        current_method, data, json = "GET", None, None
+                    next_method = _redirect_method(response.status_code, current_method)
+                    if next_method != current_method or response.status_code == 303:
+                        current_data, current_json = None, None
+                    current_method = next_method
                     params = None
                     continue
             response.raise_for_status()
@@ -290,11 +333,12 @@ class HttpFetcher:
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
-            hop_cookies = cookies if _url_origin(current_url) == origin else None
+            same_origin = _url_origin(current_url) == origin
+            hop_cookies = cookies if same_origin else None
             with self._client.stream(
                 current_method,
                 current_url,
-                headers=dict(headers) if headers else None,
+                headers=_hop_headers(headers, same_origin=same_origin),
                 cookies=dict(hop_cookies) if hop_cookies else None,
                 follow_redirects=False,
             ) as response:
@@ -302,8 +346,7 @@ class HttpFetcher:
                     location = response.headers.get("location")
                     if location:
                         current_url = urljoin(str(response.url), location)
-                        if response.status_code == 303 or current_method not in ("GET", "HEAD"):
-                            current_method = "GET"
+                        current_method = _redirect_method(response.status_code, current_method)
                         continue
                 response.raise_for_status()
                 chunks: list[bytes] = []

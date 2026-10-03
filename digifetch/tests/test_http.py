@@ -221,3 +221,116 @@ def test_download_redirect_drops_per_call_cookies_on_cross_origin_hop() -> None:
     assert result.content == b"bytes"
     assert seen[0][1] == "session=secret"
     assert seen[1][1] is None
+
+
+def test_307_post_keeps_method_and_body() -> None:
+    seen: list[tuple[str, str, bytes]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, request.content))
+        if request.url.path == "/start":
+            return httpx.Response(307, headers={"location": "/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.fetch(
+            "https://one.example/start",
+            method="POST",
+            data={"a": "b"},
+        )
+
+    assert result.text == "ok"
+    assert seen[1][0] == "POST"
+    assert seen[1][1] == "/final"
+    assert b"a=b" in seen[1][2]
+
+
+def test_302_post_becomes_get_and_drops_body() -> None:
+    seen: list[tuple[str, bytes]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.content))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.fetch("https://one.example/start", method="POST", json={"a": 1})
+
+    assert result.text == "ok"
+    assert seen[0][0] == "POST"
+    assert seen[1] == ("GET", b"")
+
+
+def test_308_download_keeps_method() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.method)
+        if request.url.path == "/doc":
+            return httpx.Response(308, headers={"location": "/doc.bin"})
+        return httpx.Response(200, content=b"bytes")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.download("https://one.example/doc", method="POST")
+
+    assert result.content == b"bytes"
+    assert seen == ["POST", "POST"]
+
+
+def test_cross_origin_redirect_drops_authorization() -> None:
+    seen: list[tuple[str, str | None, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            (
+                request.url.host,
+                request.headers.get("authorization"),
+                request.headers.get("accept"),
+            )
+        )
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example", "two.example"]) as f:
+        f.fetch(
+            "https://one.example/start",
+            headers={"Authorization": "Bearer secret", "Accept": "text/plain"},
+        )
+
+    assert seen[0][1] == "Bearer secret"
+    assert seen[0][2] == "text/plain"
+    assert seen[1][0] == "two.example"
+    assert seen[1][1] is None
+    assert seen[1][2] == "text/plain"
+
+
+def test_same_origin_redirect_keeps_authorization() -> None:
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        f.fetch("https://one.example/start", headers={"Authorization": "Bearer secret"})
+
+    assert seen == ["Bearer secret", "Bearer secret"]
+
+
+def test_explicit_default_port_stays_same_origin_for_cookies() -> None:
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("cookie"))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "https://one.example:443/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        f.fetch("https://one.example/start", cookies={"session": "secret"})
+
+    assert seen == ["session=secret", "session=secret"]
