@@ -274,4 +274,20 @@ describe('registerPerformanceRoutes', () => {
     );
     expect(bad.status).toBe(400);
   });
+
+  it('forwards retrieval_pin into the book read', async () => {
+    const handlers = new Map<string, (req: Request) => Promise<Response>>();
+    let seen: string | null | undefined;
+    registerPerformanceRoutes((path, handler) => handlers.set(path, handler), {
+      loadPerformanceBook: async (_asOf, _benchmark, _window, pin) => {
+        seen = pin;
+        return null;
+      },
+    });
+    const res = await handlers.get('/performance')!(
+      new Request('https://api.test/performance?retrieval_pin=pin%209'),
+    );
+    expect(res.status).toBe(404);
+    expect(seen).toBe('pin 9');
+  });
 });

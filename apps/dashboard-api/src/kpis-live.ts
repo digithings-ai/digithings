@@ -200,6 +200,29 @@ export function buildLiveData(book: LiveBook): LiveData {
   };
 }
 
+/**
+ * Provenance follows the numbers actually used. A book with no fresh quote
+ * is stored closes — claiming `market_api` would badge a close as a live mark.
+ */
+export function provenanceForLiveBook(
+  book: LiveBook,
+  quoteDate: string | null,
+): {
+  source: string;
+  tip_date: string | null;
+  contract: null;
+  seam: false;
+  marks: 'stored' | 'market_api' | 'unavailable';
+} {
+  const anyLive = book.positions.some((p) => p.isLive);
+  const anyMark = book.positions.some(
+    (p) => p.markPrice != null && Number.isFinite(p.markPrice) && p.markPrice > 0,
+  );
+  const marks = anyLive ? 'market_api' : anyMark ? 'stored' : 'unavailable';
+  const source = anyLive ? 'market_api' : anyMark ? 'positions' : 'unavailable';
+  return { source, tip_date: quoteDate, contract: null, seam: false, marks };
+}
+
 // ─── Mount (scaffold wiring) ──────────────────────────────────────────────────
 
 export interface LiveDeps {
@@ -234,13 +257,7 @@ export function registerLiveRoutes(
       data,
       as_of: data.quote_date,
       retrieval_pin: parsed.retrievalPin,
-      provenance: {
-        source: 'market_api',
-        tip_date: data.quote_date,
-        contract: null,
-        seam: false,
-        marks: 'market_api',
-      },
+      provenance: provenanceForLiveBook(book, data.quote_date),
     });
   });
 }

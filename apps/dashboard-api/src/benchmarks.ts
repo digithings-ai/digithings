@@ -164,7 +164,11 @@ export interface BenchmarksDeps {
    * `fetchComparablePriceHistory`-style closes; empty when the market API
    * had nothing — the bundle falls back to keys, never to Supabase.
    */
-  loadBenchmarksBook: (from: string | null, to: string | null) => Promise<BenchmarksBook | null>;
+  loadBenchmarksBook: (
+    from: string | null,
+    to: string | null,
+    retrievalPin?: string | null,
+  ) => Promise<BenchmarksBook | null>;
 }
 
 function errorBody(code: string, message: string, retrievalPin: string | null): object {
@@ -183,7 +187,11 @@ export function registerBenchmarksRoutes(
     if (!parsed.ok) {
       return Response.json(errorBody(parsed.code, parsed.message, pin), { status: 400 });
     }
-    const book = await deps.loadBenchmarksBook(parsed.query.from, parsed.query.to);
+    const book = await deps.loadBenchmarksBook(
+      parsed.query.from,
+      parsed.query.to,
+      pin,
+    );
     if (!book) {
       return Response.json(errorBody('not_found', 'no NAV window', pin), { status: 404 });
     }

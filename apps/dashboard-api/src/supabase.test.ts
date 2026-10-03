@@ -35,6 +35,7 @@ function mockFetch(handler: (url: string) => unknown | Response): void {
 afterEach(() => {
   FETCHED.length = 0;
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('hasSupabaseEnv', () => {
@@ -193,6 +194,56 @@ describe('brief source', () => {
   });
 });
 
+describe('position paging and NAV honesty', () => {
+  it('reads past the first page so an older asOf still resolves a committed book', async () => {
+    const newest = Array.from({ length: 5000 }, () => ({ ...POSITIONS[0] }));
+    const older = [{ ...POSITIONS[0], date: '2020-01-02', weight_pct: 10 }];
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) {
+        return url.includes('date=lte.2020-01-02') ? [{ date: '2020-01-02' }] : [{ date: '2026-09-24' }];
+      }
+      if (url.includes('/positions?')) {
+        return url.includes('offset=5000') ? older : newest;
+      }
+      if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2020-01-02', as_of_date: '2020-01-02', invested_pct: 10 }];
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const source = createSupabaseSource(ENV);
+    const book = await source.envelope.loadBook('2020-01-02', null);
+    expect(book?.bookAsOf).toBe('2020-01-02');
+    expect(book?.snapshotDate).toBe('2020-01-02');
+    expect(FETCHED.filter((url) => url.includes('/positions?')).some((url) => url.includes('offset=5000'))).toBe(
+      true,
+    );
+  });
+
+  it('drops a null or non-positive NAV instead of publishing 0', async () => {
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) return [{ date: '2026-09-24' }];
+      if (url.includes('/positions?')) return POSITIONS;
+      if (url.includes('/public_accounting_nav_history')) {
+        return [
+          ...NAV_ROWS,
+          { date: '2026-09-25', nav: null, source: 'legacy_nav_history', contract: 'legacy_estimate' },
+          { date: '2026-09-22', nav: 0, source: 'legacy_nav_history', contract: 'legacy_estimate' },
+        ];
+      }
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const source = createSupabaseSource(ENV);
+    const book = await source.envelope.loadBook(null, null);
+    expect(book?.navRows.map((row) => row.date)).toEqual(['2026-09-23', '2026-09-24']);
+    expect(book?.navRows.map((row) => row.nav)).toEqual([108.4, 99.909]);
+    expect(book?.navRows.some((row) => row.nav === 0)).toBe(false);
+  });
+});
+
 describe('market closes', () => {
   it('returns an empty map when the market API is unset', async () => {
     const map = await loadMarketClosesMap(ENV, ['SPY'], '2026-09-01', '2026-09-24');
@@ -221,6 +272,119 @@ describe('market closes', () => {
     );
     const map = await loadMarketClosesMap(withMarket, ['SPY'], '2026-09-01', '2026-09-24');
     expect(map.size).toBe(0);
+  });
+
+  it('forwards retrieval_pin unchanged on the closes URL', async () => {
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    mockFetch(() => ({ rows: [{ date: '2026-09-24', ticker: 'SPY', close: 505 }] }));
+    await loadMarketClosesMap(withMarket, ['SPY'], '2026-09-01', '2026-09-24', 'pin 1');
+    expect(FETCHED[0]).toContain('retrieval_pin=pin%201');
+  });
+});
+
+describe('retrieval_pin on real market reads', () => {
+  const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+
+  function mockMarketBook(): void {
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) return [{ date: '2026-09-24' }];
+      if (url.includes('/positions?')) return POSITIONS;
+      if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
+      }
+      if (url.includes('/v1/market/tickers')) return { tickers: ['SPY'] };
+      if (url.includes('/v1/market/closes')) {
+        return { rows: [{ date: '2026-09-24', ticker: 'SPY', close: 505 }] };
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+  }
+
+  it('forwards the pin from the envelope market fill', async () => {
+    mockMarketBook();
+    const source = createSupabaseSource(withMarket);
+    await source.envelope.loadMarketCloses(['SPY'], 'pin-9');
+    const market = FETCHED.find((url) => url.includes('/v1/market/closes'));
+    expect(market).toContain('retrieval_pin=pin-9');
+  });
+
+  it('forwards the pin on the performance benchmark fetch', async () => {
+    mockMarketBook();
+    const source = createSupabaseSource(withMarket);
+    await source.performance.loadPerformanceBook(null, 'SPY', 'inception', 'pin-9');
+    const market = FETCHED.find((url) => url.includes('/v1/market/closes'));
+    expect(market).toContain('retrieval_pin=pin-9');
+  });
+
+  it('forwards the pin on the benchmarks universe and closes fetches', async () => {
+    mockMarketBook();
+    const source = createSupabaseSource(withMarket);
+    await source.benchmarks.loadBenchmarksBook(null, null, 'pin 1');
+    const tickers = FETCHED.find((url) => url.includes('/v1/market/tickers'));
+    const closes = FETCHED.find((url) => url.includes('/v1/market/closes'));
+    expect(tickers).toContain('retrieval_pin=pin%201');
+    expect(closes).toContain('retrieval_pin=pin%201');
+  });
+});
+
+describe('live quotes', () => {
+  function mockLive(quotedAt: string | null, status = 200): void {
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) return [{ date: '2026-09-24' }];
+      if (url.includes('/positions?')) return POSITIONS;
+      if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
+      }
+      if (url.includes('/prices_live')) {
+        if (status !== 200) return new Response('quotes down', { status });
+        if (quotedAt == null) return [];
+        return [{ ticker: 'XLV', price: 110, quoted_at: quotedAt }];
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+  }
+
+  it('uses a fresh prices_live tick as the effective price', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-24T15:00:00Z'));
+    mockLive('2026-09-24T14:58:00Z');
+    const source = createSupabaseSource(ENV);
+    const book = await source.live.loadLiveBook();
+    const xlv = book?.positions.find((p) => p.ticker === 'XLV');
+    expect(xlv).toMatchObject({
+      isLive: true,
+      effectivePrice: 110,
+      markPrice: 105,
+      livePriceDate: '2026-09-24',
+    });
+    const quotesUrl = FETCHED.find((url) => url.includes('/prices_live?'));
+    expect(quotesUrl).toContain('ticker=in.("XLV")');
+    expect(quotesUrl).not.toContain('CASH');
+    vi.useRealTimers();
+  });
+
+  it('keeps the stored close when the quote is older than five minutes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-24T15:00:00Z'));
+    mockLive('2026-09-24T14:50:00Z');
+    const source = createSupabaseSource(ENV);
+    const book = await source.live.loadLiveBook();
+    const xlv = book?.positions.find((p) => p.ticker === 'XLV');
+    expect(xlv).toMatchObject({ isLive: false, effectivePrice: 105, livePriceDate: null });
+    vi.useRealTimers();
+  });
+
+  it('falls back to stored marks when prices_live fails', async () => {
+    mockLive(null, 500);
+    const source = createSupabaseSource(ENV);
+    const book = await source.live.loadLiveBook();
+    expect(book?.positions.find((p) => p.ticker === 'XLV')).toMatchObject({
+      isLive: false,
+      effectivePrice: 105,
+    });
+    expect(FETCHED.some((url) => url.includes('/prices_live?'))).toBe(true);
   });
 });
 

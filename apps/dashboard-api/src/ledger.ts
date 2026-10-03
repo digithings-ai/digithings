@@ -221,6 +221,11 @@ export function parseLedgerQuery(
   const asOf = input.asOf && input.asOf !== '' ? input.asOf : null;
 
   const tickerRaw = (input.ticker ?? '').trim().toUpperCase();
+  // The value is interpolated into a PostgREST filter. Reject anything that
+  // is not a ticker so `&`, `,`, and `)` cannot add parameters.
+  if (tickerRaw.length > 0 && !/^[A-Z0-9.=-]{1,32}$/.test(tickerRaw)) {
+    return bad('malformed ticker', { ticker: input.ticker });
+  }
   const ticker = tickerRaw.length > 0 ? tickerRaw : null;
 
   let limit = LEDGER_DEFAULT_LIMIT;
