@@ -4,13 +4,6 @@ import { publicCatalogPages } from "@/components/desk/public-surface";
 
 const PAGES = publicCatalogPages();
 
-export const SLIDER_MIN = 0;
-export const SLIDER_MAX = 100;
-
-/** 0 brings the terminal across the frame. 100 brings the web app across. */
-export const TERMINAL_AT = SLIDER_MIN;
-export const HOSTED_AT = SLIDER_MAX;
-
 export const SELF_HOSTED_TITLE = "Self-hosted";
 export const SELF_HOSTED_COPY =
   "The terminal runs on your computer. You run pipelines, models, and strategies yourself.";
@@ -19,7 +12,7 @@ export const HOSTED_TITLE = "Hosted";
 export const HOSTED_COPY =
   "Paying makes the hosted services available. The web app hosts pipelines and runs the strategies.";
 
-export const TOUR_CAPTION = "The pages tour until you move the slider or open a page.";
+export const TOUR_CAPTION = "The pages tour until you use the switch or click inside the frame.";
 
 export const TOUR_DWELL_MS = 4_200;
 export const IDLE_RESUME_MS = 8_000;
@@ -30,10 +23,6 @@ export const WEB_EMPTY_COPY =
 export type Surface = "terminal" | "web";
 
 export type StagePhase = "opening" | "touring" | "yours" | "live" | "empty";
-
-export function surfaceFromSlider(value: number): Surface {
-  return value < 50 ? "terminal" : "web";
-}
 
 export function nextTerminalPath(current: string): string {
   const index = PAGES.findIndex((page) => page.path === current);

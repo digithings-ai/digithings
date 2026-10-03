@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type SyntheticEvent } from "react";
-import { Button, Slider } from "@digithings/ui/ui";
+import { Button, SegmentedControl } from "@digithings/ui/ui";
 import { deskHref } from "@/components/desk/paths";
 import { publicCatalogPages } from "@/components/desk/public-surface";
 import {
@@ -14,15 +14,11 @@ import {
 } from "./desk-walk";
 import { TerminalScreen } from "./terminal-screen";
 import {
-  HOSTED_AT,
   HOSTED_COPY,
   HOSTED_TITLE,
   IDLE_RESUME_MS,
   SELF_HOSTED_COPY,
   SELF_HOSTED_TITLE,
-  SLIDER_MAX,
-  SLIDER_MIN,
-  TERMINAL_AT,
   TOUR_CAPTION,
   TOUR_DWELL_MS,
   WEB_EMPTY_COPY,
@@ -32,30 +28,25 @@ import {
   nextWebPath,
   prevTerminalPath,
   stageStatus,
-  surfaceFromSlider,
   type StagePhase,
+  type Surface,
 } from "./surface-tour";
 
 const PAGES = publicCatalogPages();
 const HOME = PAGES[0]?.path ?? "/brief";
 
-function sliderNumber(value: number | readonly number[]): number {
-  return typeof value === "number" ? value : (value[0] ?? SLIDER_MIN);
-}
-
-/** Self-hosted terminal screens and the hosted web desk. Both stay mounted.
- *  The slider translates one into the frame. A tour advances the visible pages
- *  until the slider or a pointer, wheel, or key inside the view takes over. */
+/** Self-hosted terminal screens and the hosted web desk. The switch shows one.
+ *  A tour advances the visible pages until the switch, a page, or a pointer,
+ *  wheel, or key inside the view takes over. */
 export function ProductStage() {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const sliderRef = useRef(HOSTED_AT);
+  const surfaceRef = useRef<Surface>("web");
   const pathRef = useRef(HOME);
   const holdRef = useRef<() => void>(() => {});
-  const [slider, setSlider] = useState(HOSTED_AT);
+  const [surface, setSurface] = useState<Surface>("web");
   const [path, setPath] = useState(HOME);
   const [phase, setPhase] = useState<StagePhase>("opening");
   const phaseRef = useRef<StagePhase>("opening");
-  const surface = surfaceFromSlider(slider);
   const page = PAGES.find((item) => item.path === path) ?? PAGES[0];
 
   useEffect(() => {
@@ -110,7 +101,7 @@ export function ProductStage() {
     };
 
     const publishSurface = () => {
-      const showing = surfaceFromSlider(sliderRef.current);
+      const showing = surfaceRef.current;
       const blocked = showing === "web" ? webPhase() : null;
       if (blocked === "empty" || blocked === "live") {
         publish(blocked);
@@ -129,7 +120,7 @@ export function ProductStage() {
 
     const advance = () => {
       if (stopped || held) return;
-      const showing = surfaceFromSlider(sliderRef.current);
+      const showing = surfaceRef.current;
       if (showing === "terminal") {
         const next = nextTerminalPath(pathRef.current);
         pathRef.current = next;
@@ -224,13 +215,10 @@ export function ProductStage() {
     };
   }, []);
 
-  const onSlider = (value: number | readonly number[], details?: { reason?: string }) => {
-    const reason = details?.reason;
-    if (reason !== "track-press" && reason !== "drag" && reason !== "keyboard") return;
-    const next = sliderNumber(value);
-    if (next === sliderRef.current) return;
-    sliderRef.current = next;
-    setSlider(next);
+  const onSurface = (next: Surface) => {
+    if (next === surfaceRef.current) return;
+    surfaceRef.current = next;
+    setSurface(next);
     holdRef.current();
   };
 
@@ -250,8 +238,8 @@ export function ProductStage() {
     choose(event.key === "ArrowDown" ? nextTerminalPath(pathRef.current) : prevTerminalPath(pathRef.current));
   };
 
-  const terminalHidden = slider >= HOSTED_AT;
-  const webHidden = slider <= TERMINAL_AT;
+  const terminalHidden = surface !== "terminal";
+  const webHidden = surface !== "web";
 
   return (
     <div className="flex flex-col gap-2">
@@ -260,17 +248,14 @@ export function ProductStage() {
         <Story title={HOSTED_TITLE} copy={HOSTED_COPY} on={surface === "web"} />
       </div>
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
-          <span className={surface === "terminal" ? "text-ink" : undefined}>{SELF_HOSTED_TITLE}</span>
-          <span className={surface === "web" ? "text-ink" : undefined}>{HOSTED_TITLE}</span>
-        </div>
-        <Slider
-          value={slider}
-          min={SLIDER_MIN}
-          max={SLIDER_MAX}
-          step={1}
+        <SegmentedControl<Surface>
           aria-label="Show the self-hosted terminal or the hosted web app"
-          onValueChange={onSlider}
+          value={surface}
+          options={[
+            { value: "terminal", label: SELF_HOSTED_TITLE },
+            { value: "web", label: HOSTED_TITLE },
+          ]}
+          onChange={onSurface}
         />
         <p className="m-0 flex flex-wrap items-center justify-between gap-2 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
           <span>{TOUR_CAPTION}</span>
@@ -284,12 +269,10 @@ export function ProductStage() {
         onWheel={onViewEvent}
         onKeyDown={onViewEvent}
       >
-        <div
-          className="flex h-full w-[200%]"
-          style={{ transform: `translateX(-${slider / 2}%)` }}
-        >
+        <div className="h-full">
           <div
-            className="h-full w-1/2 min-w-0"
+            className="h-full min-w-0"
+            hidden={terminalHidden ? true : undefined}
             inert={terminalHidden ? true : undefined}
             aria-hidden={terminalHidden ? true : undefined}
           >
@@ -302,13 +285,15 @@ export function ProductStage() {
             />
           </div>
           <div
-            className="flex h-full w-1/2 min-w-0 flex-col"
+            className="flex h-full min-w-0 flex-col"
+            hidden={webHidden ? true : undefined}
             inert={webHidden ? true : undefined}
             aria-hidden={webHidden ? true : undefined}
           >
             {phase === "empty" && surface === "web" ? (
               <p className="m-0 px-3 py-6 font-mono text-[0.75rem] leading-[1.5] text-ink-mute">{WEB_EMPTY_COPY}</p>
             ) : null}
+            {/* The hosted frame is the real /app desk, not a second copy of its pages. */}
             <iframe
               ref={frameRef}
               title="Hosted digiquant"
