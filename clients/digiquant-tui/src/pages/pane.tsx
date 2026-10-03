@@ -25,30 +25,45 @@ function Blocks({ body, ink }: { body: PaneBody; ink: string }) {
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
       {body.blocks.map((block, index) => {
-        if (block.kind === "sentence") {
-          return (
-            <text key={index} fg={ink}>
-              {block.text}
-            </text>
-          );
-        }
-        if (block.kind === "stat") {
-          return (
-            <text key={index} fg={MUTE}>
-              {block.text}
-            </text>
-          );
-        }
-        return (
-          <box key={index} flexDirection="column">
-            {block.columns.length ? <text fg={MUTE}>{block.columns.join("  ")}</text> : null}
-            {block.rows.map((row, rowIndex) => (
-              <text key={rowIndex} fg={ink}>
-                {row.join("  ")}
+        switch (block.kind) {
+          case "sentence":
+            return (
+              <text key={index} fg={ink}>
+                {block.text}
               </text>
-            ))}
-          </box>
-        );
+            );
+          case "stat":
+            return (
+              <text key={index} fg={MUTE}>
+                {block.text}
+              </text>
+            );
+          case "chart":
+            return (
+              <text key={index} fg={ink}>
+                {block.text}
+              </text>
+            );
+          case "table":
+            return (
+              <box key={index} flexDirection="column">
+                {block.columns.length ? <text fg={MUTE}>{block.columns.join("  ")}</text> : null}
+                {block.rows.map((row, rowIndex) => (
+                  <text key={rowIndex} fg={ink}>
+                    {row.join("  ")}
+                  </text>
+                ))}
+              </box>
+            );
+          default: {
+            const exhaustive: never = block;
+            return (
+              <text key={index} fg={ink}>
+                {String(exhaustive)}
+              </text>
+            );
+          }
+        }
       })}
     </box>
   );

@@ -1,9 +1,10 @@
 import { EMPTY_READ, STUB_READ } from "../read";
 
-/** One painted block inside a pane body. Sentences stay verbatim. */
+/** One painted block inside a pane body. Sentences stay verbatim. A chart is one row of block characters. */
 export type PaneBlock =
   | { kind: "sentence"; text: string }
   | { kind: "stat"; text: string }
+  | { kind: "chart"; text: string }
   | { kind: "table"; columns: string[]; rows: string[][] };
 
 export type PaneBody = { blocks: PaneBlock[] };
