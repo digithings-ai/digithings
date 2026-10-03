@@ -11,7 +11,7 @@ bun install
 DQ_API_URL=http://127.0.0.1:8788 bun src/index.tsx
 ```
 
-The top right is the same pixel DIGIQUANT mark as the web hero. The sidebar is the web desk rail (`~/pages`, slash paths, the same order and labels). `d` switches Baseline and FX Hub. `↑` `↓` moves through that rail. `→` or tab enters a block. Arrows move it, shift+arrows resize it. `/` jumps to a path.
+The header matches the public web desk. The pixel DIGIQUANT mark is on the left, then the desk control (`desk: Baseline ▾`), then the path. `/` focuses the path and filters the public web rail: the same pages, in the same order, with the same labels. Enter opens the highlighted page. `d` opens the desk list. Invite-only desks are not listed. The sidebar is that rail. `↑` `↓` moves through it when the desk list is closed. `→` or tab enters a block. Arrows move it, shift+arrows resize it.
 
 This app is bun-managed and lives outside the root npm workspaces.
 

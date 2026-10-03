@@ -2,15 +2,12 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { EMPTY_READ, STUB_READ, readBlock, type ReadResult } from "../read";
+import { DANGER, INK, MUTE } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
-
-const INK = "#e7e1d6";
-const DIM = "#8a8175";
-const BAD = "#c47a6a";
 
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
@@ -18,8 +15,8 @@ const share = (cells: number, total: number): `${number}%` => `${(cells / total)
 
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
-  if (status === "empty" || status === "loading") return DIM;
-  return BAD;
+  if (status === "empty" || status === "loading") return MUTE;
+  return DANGER;
 };
 
 type Shown = { status: ReadResult["status"] | "loading"; lines: string[]; asOf: string | null };
