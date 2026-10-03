@@ -16,7 +16,7 @@ import {
   type HeroBar,
   type HeroOverlay,
 } from "@/lib/hero-build";
-import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
+import { heroWatermark, HERO_HOLD_MS, loadHeroSeries, nextHero, type HeroSeries } from "@/lib/live/hero-series";
 
 /** Hero backdrop: one finished LuxAlgo Vela chart, faded in.
  *
@@ -29,6 +29,7 @@ import { HERO_PRODUCTS } from "@/lib/live/hero-feed";
  *  Wheel: zoom-out while the gesture is live; after settle or the zoom-out
  *  budget, the next wheel scrolls the page. Horizontal / shift stays on the chart. */
 
+// Switch candle, volume, and study inputs to `@/lib/chart-scale` when that module is on the branch.
 const UP = "#3DFF9A"; // canon-allow: hero candle up
 const DOWN = "#FF5C6C"; // canon-allow: hero candle down
 const CYCLE = [
@@ -50,10 +51,7 @@ const THEME = {
 const WHEEL_IDLE_MS = 140;
 const ZOOM_OUT_BUDGET = 720;
 const BAR_MS = 60_000;
-
-type BarSource = {
-  getBars: (ticker: string, timeframe: string, range: { limit?: number }) => Promise<unknown>;
-};
+const DAY_MS = 86_400_000;
 
 function asBars(rows: unknown): HeroBar[] {
   if (!Array.isArray(rows)) return [];
@@ -114,10 +112,21 @@ function applyLockedDomain(chart: Vela, bars: readonly HeroBar[], overlay: HeroO
   control.renderer?.scheduler?.invalidate(4);
 }
 
+function velaBars(bars: readonly HeroBar[]) {
+  return bars.map((bar) => ({
+    time: bar.time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    ...(bar.volume === undefined ? {} : { volume: bar.volume }),
+  }));
+}
+
 export function QuantField() {
   const ref = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const [caption, setCaption] = useState("LuxAlgo Vela");
+  const [watermark, setWatermark] = useState("");
 
   useEffect(() => {
     const host = ref.current;
@@ -125,7 +134,6 @@ export function QuantField() {
     if (!host || !frame) return;
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const product = HERO_PRODUCTS[Math.floor(Math.random() * HERO_PRODUCTS.length)] ?? HERO_PRODUCTS[0];
     const picked = CYCLE[Math.floor(Math.random() * CYCLE.length)] ?? CYCLE[0];
     const overlayKind = picked.type as HeroOverlay;
     let dead = false;
@@ -136,6 +144,8 @@ export function QuantField() {
     let shown = false;
     let hasBars = false;
     let book: HeroBar[] = [];
+    let barMs = BAR_MS;
+    let flight: AbortController | null = null;
     const timers: Array<ReturnType<typeof setTimeout>> = [];
 
     const later = (ms: number, fn: () => void) => {
@@ -149,13 +159,12 @@ export function QuantField() {
       frame.dataset.heroBeat = name;
     };
 
-    setCaption(`LuxAlgo Vela · ${product} · 1m`);
     beat("chrome");
     host.style.transition = reduced ? "none" : `opacity ${HERO_FADE_MS}ms ease`;
     if (reduced) host.style.opacity = "1";
 
     const unavailable = () => {
-      setCaption("LuxAlgo Vela · chart unavailable");
+      setWatermark("");
       beat("unavailable");
       host.style.opacity = "1";
     };
@@ -170,7 +179,7 @@ export function QuantField() {
     const lockFrame = (rows: readonly HeroBar[]) => {
       if (!chart || rows.length < 2) return;
       try {
-        chart.setVisibleRange(candleSweepRange(rows[0].time, rows[rows.length - 1].time, BAR_MS));
+        chart.setVisibleRange(candleSweepRange(rows[0].time, rows[rows.length - 1].time, barMs));
       } catch {
         /* renderer without range control */
       }
@@ -182,7 +191,6 @@ export function QuantField() {
       sma = chart.addNativeIndicator("sma", { inputs: { length: SMA_LENGTH, color: SMA_COLOR } });
       ema = chart.addNativeIndicator("ema", { inputs: { length: EMA_LENGTH, color: EMA_COLOR } });
       overlayInd = chart.addNativeIndicator(picked.type, { inputs: heroOverlayInputs(overlayKind) });
-      setCaption(`LuxAlgo Vela · ${product} · 1m · volume · SMA 20 · EMA 50 · ${picked.label}`);
     };
 
     const fadeIn = () => {
@@ -254,60 +262,101 @@ export function QuantField() {
 
     host.addEventListener("wheel", onWheelCapture, { capture: true, passive: true });
 
-    const mountChart = async () => {
-      const [{ Vela: VelaChart }, { CoinbaseProvider }] = await Promise.all([
-        import("@luxalgo/vela"),
-        import("@luxalgo/vela/providers/coinbase"),
-      ]);
-      if (dead) return;
-
-      chart = new VelaChart(host, {
-        symbol: `coinbase:${product}`,
-        timeframe: "1",
-        bars: 300,
-        live: !reduced,
+    const chartOptions = (series: HeroSeries) => {
+      const motion = reduced ? false : { intro: false, zoom: true, pan: true, autoscale: false };
+      const theme = {
         theme: THEME,
         upColor: UP,
         downColor: DOWN,
         volume: true,
-        drawings: false,
-        animations: reduced
-          ? false
-          : { intro: false, zoom: true, pan: true, autoscale: false },
-      });
-      host.style.touchAction = "pan-y";
-      chart.data.registerProvider("coinbase", new CoinbaseProvider());
-
-      const source = chart.data.providerInstance("coinbase") as BarSource | undefined;
-      if (source && typeof source.getBars === "function") {
-        void source
-          .getBars(product, "1", { limit: 300 })
-          .then((rows) => {
-            if (dead) return;
-            book = asBars(rows);
-            fadeIn();
-          })
-          .catch(() => undefined);
+        drawings: false as const,
+        animations: motion,
+      };
+      if (series.source === "coinbase") {
+        return {
+          ...theme,
+          symbol: `coinbase:${series.symbol}`,
+          timeframe: series.velaTimeframe,
+          bars: 300,
+          live: !reduced,
+        };
       }
-
-      chart.on("load:end", (ev) => {
-        if (dead) return;
-        hasBars = (ev?.bars ?? 0) > 0;
-        if (!hasBars) unavailable();
-        else fadeIn();
-      });
-
-      await chart.ready().catch(() => undefined);
-      if (dead) return;
-      hasBars = hasBars || Boolean(chart.replay.bounds);
-      chart.resize();
-      if (hasBars) fadeIn();
-      else if (reduced) unavailable();
+      return {
+        ...theme,
+        symbol: series.symbol,
+        timeframe: series.velaTimeframe,
+        live: false as const,
+        data: velaBars(series.bars),
+      };
     };
 
-    void mountChart().catch(() => {
-      if (!dead) unavailable();
-    });
+    const paint = async (series: HeroSeries) => {
+      book = series.bars;
+      barMs = series.velaTimeframe === "1" ? BAR_MS : DAY_MS;
+      setWatermark(heroWatermark(series.symbol, series.timeframe));
+      if (!chart) {
+        const [{ Vela: VelaChart }, { CoinbaseProvider }] = await Promise.all([
+          import("@luxalgo/vela"),
+          import("@luxalgo/vela/providers/coinbase"),
+        ]);
+        if (dead) return;
+        chart = new VelaChart(host, chartOptions(series));
+        host.style.touchAction = "pan-y";
+        chart.data.registerProvider("coinbase", new CoinbaseProvider());
+        chart.on("load:end", (ev) => {
+          if (dead) return;
+          hasBars = (ev?.bars ?? 0) > 0 || book.length >= 2;
+          if (hasBars) fadeIn();
+        });
+        await chart.ready().catch(() => undefined);
+      } else if (series.source === "coinbase") {
+        await chart.setMarket({ symbol: `coinbase:${series.symbol}`, timeframe: "1" });
+      } else {
+        await chart.setMarket({
+          symbol: series.symbol,
+          timeframe: "D",
+          data: velaBars(series.bars),
+        });
+      }
+      if (dead || !chart) return;
+      hasBars = true;
+      chart.resize();
+      fadeIn();
+      lockFrame(loadedSeries());
+    };
+
+    const missed = new Set<string>();
+    const load = (symbol: string, signal?: AbortSignal) => {
+      if (missed.has(symbol)) return Promise.resolve(null);
+      return loadHeroSeries(symbol, signal).then((series) => {
+        if (!series) missed.add(symbol);
+        return series;
+      });
+    };
+
+    const step = async (start: number) => {
+      flight?.abort();
+      const controller = new AbortController();
+      flight = controller;
+      try {
+        const found = await nextHero(start, load, controller.signal);
+        if (dead || controller.signal.aborted) return;
+        if (!found) {
+          unavailable();
+          return;
+        }
+        await paint(found.series);
+        if (dead || controller.signal.aborted) return;
+        later(HERO_HOLD_MS, () => {
+          void step(found.index + 1);
+        });
+      } catch (err) {
+        if (dead || (err instanceof DOMException && err.name === "AbortError")) return;
+        unavailable();
+      }
+    };
+
+    void step(0);
 
     later(CHART_BUILD_MAX_MS, () => {
       if (shown) return;
@@ -317,6 +366,7 @@ export function QuantField() {
 
     return () => {
       dead = true;
+      flight?.abort();
       if (idleTimer) clearTimeout(idleTimer);
       for (const id of timers) clearTimeout(id);
       host.removeEventListener("wheel", onWheelCapture, { capture: true });
@@ -332,13 +382,19 @@ export function QuantField() {
       <div ref={frameRef} data-hero-beat="chrome" className="absolute inset-0 -z-10 h-full min-h-full w-full">
         <div
           ref={ref}
-          aria-label={caption}
+          aria-label={watermark || "price chart"}
           className="hero-chart absolute inset-0 h-full w-full [transform:translateZ(0)]"
         />
+        {watermark ? (
+          <p
+            data-hero-watermark=""
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-[14%] left-1/2 z-10 m-0 -translate-x-1/2 font-mono text-[clamp(1.35rem,3vw,2.25rem)] tracking-[0.12em] text-ink opacity-40"
+          >
+            {watermark}
+          </p>
+        ) : null}
       </div>
-      <p className="pointer-events-none absolute bottom-3 left-4 z-10 m-0 font-mono text-[0.66rem] text-ink-mute">
-        {caption}
-      </p>
     </>
   );
 }

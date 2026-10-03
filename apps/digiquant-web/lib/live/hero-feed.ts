@@ -1,13 +1,8 @@
-import { COINBASE_WS_URL, CRYPTO_PRODUCTS } from "./market-bar";
+import { COINBASE_WS_URL } from "./market-bar";
 
-/** Live data for the hero chart: real one-minute candles from Coinbase's public
- *  Exchange REST endpoint (keyless, CORS-open) for backfill, then the public
- *  WebSocket `ticker` channel (the same keyless feed the price strip reads) to move
- *  the forming candle. Nothing here needs a secret. Any failure resolves to the
- *  caller's simulated fallback; prices are never invented. */
+/** Live tick folding for a Coinbase minute series. The hero chart does not keep
+ *  its own product list — it walks `TAPE_SYMBOLS`. Prices are never invented. */
 
-export const HERO_PRODUCTS = CRYPTO_PRODUCTS;
-export type HeroProduct = (typeof HERO_PRODUCTS)[number];
 export const HERO_GRANULARITY_S = 60;
 
 export interface FeedCandle {
@@ -24,7 +19,7 @@ const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 30_000;
 
 /** Coinbase returns `[time, low, high, open, close, volume]`, newest first. */
-export async function fetchHeroCandles(product: HeroProduct, signal: AbortSignal): Promise<FeedCandle[]> {
+export async function fetchHeroCandles(product: string, signal: AbortSignal): Promise<FeedCandle[]> {
   const res = await fetch(`${REST_BASE}/products/${product}/candles?granularity=${HERO_GRANULARITY_S}`, { signal });
   if (!res.ok) throw new Error(`candles ${res.status}`);
   const rows: unknown = await res.json();
@@ -56,7 +51,7 @@ export function applyTick(candles: FeedCandle[], price: number, unixSec: number)
 /** Opens the public ticker socket for one product and reconnects with backoff until
  *  the returned function is called. `onTick` gets the trade price and its unix time. */
 export function openHeroTicker(
-  product: HeroProduct,
+  product: string,
   onTick: (price: number, unixSec: number) => void,
   onState: (open: boolean) => void,
 ): () => void {
