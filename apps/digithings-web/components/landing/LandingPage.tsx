@@ -161,10 +161,9 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
       <Hero />
       <ModuleGrid />
 
-      {/* The app-first band: three apps with their own provider architectures, a
-          guided walk, a box-by-box morph to the digithings stack, and a
-          sticky live invoice. `WhyStack` is a thin alias for it; the section
-          keeps only the anchor and the band rules. */}
+      {/* The app-first band: three example apps, each a terminal picture of its
+          digithings flow. `WhyStack` is a thin alias; the section keeps the
+          anchor and the band rules. */}
       <section id="why" className="line-b px-[var(--page-pad)] py-[var(--page-step)]">
         <WhyStack />
       </section>
