@@ -224,19 +224,29 @@ def find_local_weight(
 
     The model list hides catalog filenames so the same weights are not shown
     twice. A take still has to open that copy when it is the one on disk.
+    The match ignores case, because LM Studio, Ollama, and MLX keep the
+    catalog name with whatever case the download used.
     """
     name = Path(filename).name
     if not name or name in {".", ".."} or name.startswith("."):
         return None
+    needle = name.casefold()
     for _source, root in install_roots(home, env):
         if not root.is_dir():
             continue
+        folded: Path | None = None
         try:
-            matches = [path for path in root.rglob(name) if path.is_file() and path.name == name]
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if path.name == name:
+                    return path
+                if folded is None and path.name.casefold() == needle:
+                    folded = path
         except OSError:
             continue
-        if matches:
-            return matches[0]
+        if folded is not None:
+            return folded
     return None
 
 

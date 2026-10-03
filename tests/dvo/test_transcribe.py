@@ -151,6 +151,42 @@ def test_transcribe_opens_a_catalog_copy_under_an_install_root(
     assert call.argv[call.argv.index("-l") + 1] == "en"
 
 
+def test_absolute_model_id_is_that_file_not_the_models_dir(
+    paths: VoicePaths, tmp_path: Path
+) -> None:
+    """A selected absolute path is the file itself, even when models_dir has the same name."""
+    weight = tmp_path / "Library" / "Models" / "ggml-small.en"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"installed weights")
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    decoy = models / "ggml-small.en.bin"
+    decoy.write_bytes(b"not this copy")
+    found = model_file(paths, str(weight), home=tmp_path, env={})
+    assert found == weight
+    assert found != decoy
+
+
+def test_transcribe_opens_a_catalog_copy_under_mlx(paths: VoicePaths, tmp_path: Path) -> None:
+    weight = tmp_path / ".mlxstudio" / "models" / "whisper" / "GGML-small.en.bin"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"mlx weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship the notes\n")})
+    result = transcribe(
+        paths,
+        WHISPER,
+        runner,
+        "/tmp/a.wav",
+        model_id="ggml-small.en",
+        home=tmp_path,
+        env={},
+    )
+    assert result.model_path == str(weight)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    assert call.argv[call.argv.index("-m") + 1] == str(weight)
+
+
 def test_transcribe_keeps_a_missing_absolute_bin(paths: VoicePaths, tmp_path: Path) -> None:
     missing = tmp_path / "gone.bin"
     decoy = tmp_path / ".ollama" / "models" / "gone.bin"

@@ -136,9 +136,10 @@ The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any si
    `recordings/dict-<UTC stamp>-<8 hex>.wav`.
 2. **Transcribe** (`transcribe.py`). `whisper-cli` (or the `whisper-cpp` alias) with
    `-m <model> -f <wav> -l en -nt` (multilingual catalog models use `-l auto`). The
-   model is the selected local file: the weights under `models_dir`, an absolute `.bin`,
-   or the same filename already installed under LM Studio, Ollama (`OLLAMA_MODELS`), or
-   MLX Studio. A missing file raises `model <id> is not installed locally: <path>`,
+   model is the selected local file: the weights under `models_dir`, an absolute path
+   (that file, not a same-named file under `models_dir`), or the same filename already
+   installed under LM Studio, Ollama (`OLLAMA_MODELS`), or MLX Studio (case does not
+   matter). A missing file raises `model <id> is not installed locally: <path>`,
    the take exits 1, and that line is appended to `system.log`. stdout is the transcript;
    the banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
    collapsed into one line.
