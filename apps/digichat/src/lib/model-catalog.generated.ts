@@ -30,14 +30,14 @@ export const MODEL_CATALOG_BYOK_PROVIDER_MAP: Record<string, string> = {"anthrop
 
 export const MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS: Record<string, readonly string[]> = {
   "anthropic": [
-    "claude-haiku-4-20250514",
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514"
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-sonnet-4-6"
   ],
   "gemini": [
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro"
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.7-flash"
   ],
   "openai": [
     "gpt-4o",
@@ -58,7 +58,7 @@ export const MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS: Record<string, readonly stri
     "deepseek/deepseek-v4-pro",
     "dots-3-note-preview:free",
     "dots-studio/dots-3-note-preview:free",
-    "gemini-2.0-flash",
+    "gemini-2.5-flash",
     "gemini-3.1-flash-lite",
     "gemini-3.7-flash",
     "gemini-3.7-flash:online",
@@ -132,7 +132,7 @@ export const MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS: Record<string, readonly stri
     "z-ai/glm-5.3-flash"
   ],
   "xai": [
-    "grok-4-3",
+    "grok-4.3",
     "grok-4.5"
   ]
 };

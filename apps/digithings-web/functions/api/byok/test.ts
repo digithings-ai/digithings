@@ -21,16 +21,16 @@ export const FALLBACK_MODELS: Record<ProviderId, readonly string[]> = {
     "openai/gpt-4o-mini",
     "openai/gpt-4o",
     "anthropic/claude-sonnet-4",
-    "google/gemini-2.0-flash",
+    "google/gemini-2.5-flash",
   ],
   openai: ["gpt-4o-mini", "gpt-4o", "o4-mini"],
   anthropic: [
-    "claude-sonnet-4-20250514",
-    "claude-haiku-4-20250514",
-    "claude-opus-4-20250514",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
   ],
-  gemini: ["gemini/gemini-2.0-flash", "gemini/gemini-2.5-flash", "gemini/gemini-2.5-pro"],
-  xai: ["grok-4-3", "grok-4.5"],
+  gemini: ["gemini/gemini-3.5-flash-lite", "gemini/gemini-3.5-flash", "gemini/gemini-3.7-flash"],
+  xai: ["grok-4.3", "grok-4.5"],
 };
 
 /** Catalog member the caller asked for, otherwise that provider's first fallback. */
