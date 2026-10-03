@@ -1,25 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BLOCKS, layoutFor, type BlockDef } from "../../../../../clients/digiquant-tui/src/catalog";
-import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import type { Placement } from "../../../../../clients/digiquant-tui/src/grid";
-import { readDeskBlock } from "../read-block";
+import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
+import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
+import { pipelineBody } from "../../../../../clients/digiquant-tui/src/pages/pipeline-format";
+import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { readOfficial, type OfficialRead } from "../read-block";
 import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
-/**
- * Pipeline page for the desk. One block per official read. Same reads as the terminal.
- * Run health is not drawn: a missing table stays the nulls in that read.
- *
- * pl-narrative       GET /pipeline/runs/latest/narrative
- * pl-artifacts       GET /pipeline/runs/latest/artifacts
- * pl-canvas          GET /pipeline/runs/latest/graph
- * pl-node-document   GET /pipeline/runs/latest/nodes/selected/document
- * pl-call-trace      GET /pipeline/runs/latest/trace
- */
+/** Pipeline desk. Same blocks as the terminal. A down API or a stub stays a sentence. */
+const PATH = "/pipeline";
 
-const PIPELINE_IDS = ["pl-narrative", "pl-artifacts", "pl-canvas", "pl-node-document", "pl-call-trace"] as const;
-type PipelineId = (typeof PIPELINE_IDS)[number];
+const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 const tone: Record<ReadResult["status"] | "loading", string> = {
   ok: "text-ink",
@@ -29,40 +21,33 @@ const tone: Record<ReadResult["status"] | "loading", string> = {
   error: "text-ink-soft",
 };
 
-function isPipelineId(id: string): id is PipelineId {
-  return (PIPELINE_IDS as readonly string[]).includes(id);
-}
-
-function linesOf(read: ReadResult | undefined): string[] {
-  if (!read) return ["loading…"];
-  if (read.lines.length > 0) return read.lines;
-  return read.status === "empty" ? [EMPTY_READ] : [DASH];
-}
-
-function pipelinePlacements(): { id: PipelineId; def: BlockDef; placement: Placement }[] {
-  const out: { id: PipelineId; def: BlockDef; placement: Placement }[] = [];
-  for (const placement of layoutFor("/pipeline")) {
-    if (!isPipelineId(placement.id)) continue;
-    const def = BLOCKS[placement.id];
-    if (!def) continue;
-    out.push({ id: placement.id, def, placement });
+function paint(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
   }
-  return out;
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: pipelineBody(id, read.data, read.result), asOf: read.result.asOf };
 }
 
-/** Desk pipeline. Not mounted by the frame. */
+/** Desk pipeline. Run health, narrative, artifacts, nodes, the node document, and the call trace. */
 export function PipelinePage() {
-  const [reads, setReads] = useState<Partial<Record<PipelineId, ReadResult>>>({});
-  const blocks = pipelinePlacements();
-  const panes = usePaneFocus(blocks.map((block) => block.id));
+  const [reads, setReads] = useState<Record<string, OfficialRead>>({});
+  const layout = layoutFor(PATH);
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
 
   useEffect(() => {
+    const placements = layoutFor(PATH);
     const ac = new AbortController();
     let cancel = false;
-    for (const { id, def } of pipelinePlacements()) {
-      void readDeskBlock(def.route, def.kind, ac.signal).then((result) => {
+    for (const placement of placements) {
+      const def = BLOCKS[placement.id];
+      if (!def) continue;
+      void readOfficial(def.route, def.kind, ac.signal).then((result) => {
         if (cancel) return;
-        setReads((prev) => ({ ...prev, [id]: result }));
+        setReads((prev) => ({ ...prev, [placement.id]: result }));
       });
     }
     return () => {
@@ -73,24 +58,24 @@ export function PipelinePage() {
 
   return (
     <div className={PANE_GRID}>
-      {blocks.map(({ id, def, placement }) => {
-        const read = reads[id];
-        const status = read?.status ?? "loading";
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paint(placement.id, reads[placement.id]);
         return (
           <div
-            key={id}
-            data-block={id}
-            className="flex min-h-0 min-w-0"
+            key={placement.id}
+            className="min-h-0 min-w-0"
             style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
           >
             <DeskPane
               title={def.title}
               route={def.route}
-              asOf={read?.asOf ?? null}
-              lines={linesOf(read)}
-              tone={tone[status]}
-              focused={panes.focus === id}
-              onFocus={() => panes.focusAt(id)}
+              asOf={view.asOf}
+              blocks={view.blocks}
+              tone={tone[view.status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
               onNext={panes.next}
             />
           </div>

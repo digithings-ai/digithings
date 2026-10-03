@@ -1,69 +1,75 @@
 import { useEffect, useState } from "react";
-import { BLOCKS, layoutFor, type BlockDef } from "../catalog";
-import { COLS, ROWS, type Placement } from "../grid";
-import { DASH, EMPTY_READ, readBlock, type ReadResult } from "../read";
+import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
+import { COLS, ROWS } from "../grid";
+import { EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE } from "../theme";
+import { pipelineBody } from "./pipeline-format";
 import { PaneFrame, useFocusedPane } from "./pane";
+import { shapeLines, type PaneBody } from "./shape";
 
-/**
- * Pipeline page for the terminal. One block per official read.
- * Run health is not drawn: a missing table stays the nulls in that read.
- *
- * pl-narrative       GET /pipeline/runs/latest/narrative
- * pl-artifacts       GET /pipeline/runs/latest/artifacts
- * pl-canvas          GET /pipeline/runs/latest/graph
- * pl-node-document   GET /pipeline/runs/latest/nodes/selected/document
- * pl-call-trace      GET /pipeline/runs/latest/trace
- */
-
-const PIPELINE_IDS = ["pl-narrative", "pl-artifacts", "pl-canvas", "pl-node-document", "pl-call-trace"] as const;
-type PipelineId = (typeof PIPELINE_IDS)[number];
-
+/** Pipeline desk. One block per official read. A down API or a stub stays a sentence. */
+const PATH = "/pipeline";
 const DEFAULT_API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
+
+const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
 
-function isPipelineId(id: string): id is PipelineId {
-  return (PIPELINE_IDS as readonly string[]).includes(id);
-}
-
-function tone(status: ReadResult["status"] | "loading"): string {
+const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
   if (status === "empty" || status === "loading") return MUTE;
   return DANGER;
-}
+};
 
-function linesOf(read: ReadResult | undefined): string[] {
-  if (!read) return ["loading…"];
-  if (read.lines.length > 0) return read.lines;
-  return read.status === "empty" ? [EMPTY_READ] : [DASH];
-}
+type Loaded = { result: ReadResult; data: unknown };
 
-function pipelinePlacements(): { id: PipelineId; def: BlockDef; placement: Placement }[] {
-  const out: { id: PipelineId; def: BlockDef; placement: Placement }[] = [];
-  for (const placement of layoutFor("/pipeline")) {
-    if (!isPipelineId(placement.id)) continue;
-    const def = BLOCKS[placement.id];
-    if (!def) continue;
-    out.push({ id: placement.id, def, placement });
+async function loadPipeline(api: string, route: string, kind: BlockKind, signal?: AbortSignal): Promise<Loaded> {
+  let res: Response;
+  try {
+    res = await fetch(`${api}${route}`, { signal });
+  } catch {
+    if (signal?.aborted) return { result: { status: "error", lines: [], asOf: null }, data: null };
+    return { result: { status: "error", lines: [`${route}: the official API could not be reached.`], asOf: null }, data: null };
   }
-  return out;
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  const result = presentResponse(route, res.status, body, kind);
+  if (result.status === "error" || result.status === "stub") return { result, data: null };
+  const data = body && typeof body === "object" && "data" in body ? (body as { data: unknown }).data : null;
+  return { result, data };
 }
 
-/** Terminal pipeline. Not mounted by the spine. */
+function paint(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: pipelineBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
+/** Terminal pipeline. Run health, narrative, artifacts, nodes, the node document, and the call trace. */
 export function PipelinePage({ api = DEFAULT_API }: { api?: string }) {
-  const [reads, setReads] = useState<Partial<Record<PipelineId, ReadResult>>>({});
-  const blocks = pipelinePlacements();
-  const [focus, setFocus] = useFocusedPane(blocks.length);
+  const [reads, setReads] = useState<Record<string, Loaded>>({});
+  const layout = layoutFor(PATH);
+  const [focus, setFocus] = useFocusedPane(layout.length);
 
   useEffect(() => {
+    const placements = layoutFor(PATH);
     const ac = new AbortController();
     let cancel = false;
-    setReads({});
-    for (const { id, def } of pipelinePlacements()) {
-      void readBlock(api, def.route, def.kind, ac.signal).then((result) => {
+    for (const placement of placements) {
+      const def = BLOCKS[placement.id];
+      if (!def) continue;
+      void loadPipeline(api, def.route, def.kind, ac.signal).then((result) => {
         if (cancel) return;
-        setReads((prev) => ({ ...prev, [id]: result }));
+        setReads((prev) => ({ ...prev, [placement.id]: result }));
       });
     }
     return () => {
@@ -73,13 +79,14 @@ export function PipelinePage({ api = DEFAULT_API }: { api?: string }) {
   }, [api]);
 
   return (
-    <box width="100%" height="100%" position="relative">
-      {blocks.map(({ id, def, placement }, index) => {
-        const read = reads[id];
-        const status = read?.status ?? "loading";
+    <box width="100%" height="100%" position="relative" overflow="hidden">
+      {layout.map((placement, index) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paint(placement.id, reads[placement.id]);
         return (
           <box
-            key={id}
+            key={placement.id}
             position="absolute"
             left={share(placement.x - 1, COLS)}
             top={share(placement.y - 1, ROWS)}
@@ -89,10 +96,10 @@ export function PipelinePage({ api = DEFAULT_API }: { api?: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={read?.asOf ? `as of ${read.asOf}` : def.route}
+              status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
-              lines={linesOf(read)}
-              ink={tone(status)}
+              blocks={view.blocks}
+              ink={tone(view.status)}
             />
           </box>
         );
