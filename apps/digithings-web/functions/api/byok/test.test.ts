@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { onRequestPost } from "./test";
+import { FALLBACK_MODELS, onRequestPost } from "./test";
 
 function request(headers: Record<string, string> = {}): { request: Request } {
   return {
@@ -18,6 +20,21 @@ function jsonFetchResponse(body: unknown, status = 200): Response {
 }
 
 describe("POST /api/byok/test", () => {
+  it("copies config/byok-providers.json fallbackModels", () => {
+    const path = fileURLToPath(
+      new URL("../../../../../config/byok-providers.json", import.meta.url),
+    );
+    const catalog = JSON.parse(readFileSync(path, "utf8")) as {
+      id: string;
+      fallbackModels: string[];
+    }[];
+    for (const entry of catalog) {
+      expect(FALLBACK_MODELS[entry.id as keyof typeof FALLBACK_MODELS]).toEqual(
+        entry.fallbackModels,
+      );
+    }
+  });
+
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -225,6 +242,56 @@ describe("POST /api/byok/test", () => {
       expect(url).toBe("https://api.anthropic.com/v1/models");
       expect((init.headers as Record<string, string>)["x-api-key"]).toBe("sk-ant-realkey");
       expect(res.status).toBe(200);
+    });
+
+    it("returns the caller's catalog model for OpenRouter and Gemini", async () => {
+      fetchMock.mockResolvedValue(jsonFetchResponse({}));
+
+      const openrouter = await onRequestPost(
+        request({
+          "x-byok-key": "sk-or-realkey",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "google/gemini-2.0-flash",
+        }),
+      );
+      expect(await openrouter.json()).toEqual({ ok: true, model: "google/gemini-2.0-flash" });
+
+      const gemini = await onRequestPost(
+        request({
+          "x-byok-key": "AIza-realkey",
+          "x-byok-provider": "gemini",
+          "x-byok-model": "gemini/gemini-2.5-pro",
+        }),
+      );
+      expect(await gemini.json()).toEqual({ ok: true, model: "gemini/gemini-2.5-pro" });
+    });
+
+    it("falls back to the catalog's first model when the caller sends none", async () => {
+      fetchMock.mockResolvedValue(jsonFetchResponse({}));
+
+      const openrouter = await onRequestPost(
+        request({ "x-byok-key": "sk-or-realkey", "x-byok-provider": "openrouter" }),
+      );
+      expect((await openrouter.json()).model).toBe("openai/gpt-4o-mini");
+
+      const gemini = await onRequestPost(
+        request({ "x-byok-key": "AIza-realkey", "x-byok-provider": "gemini" }),
+      );
+      const body = await gemini.json();
+      expect(body.model).toBe("gemini/gemini-2.0-flash");
+      expect(body.model).not.toBe("gemini-2.5-flash");
+    });
+
+    it("ignores a requested model that is not in that provider's catalog", async () => {
+      fetchMock.mockResolvedValueOnce(jsonFetchResponse({}));
+      const res = await onRequestPost(
+        request({
+          "x-byok-key": "sk-or-realkey",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "meta-llama/llama-3.3-70b-instruct",
+        }),
+      );
+      expect((await res.json()).model).toBe("openai/gpt-4o-mini");
     });
 
     it("still rejects an openai key missing the sk- prefix", async () => {

@@ -63,6 +63,21 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
+  it("posts digichat:theme on a live toggle instead of rebuilding iframe src", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    const start = src.indexOf("const onThemeAttr");
+    const end = src.indexOf("const observer", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const handler = src.slice(start, end);
+    expect(handler).not.toContain("setSrc");
+    expect(handler).toContain("postMessage");
+    expect(handler).toContain("buildEmbedThemeMessage");
+  });
+
   it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093)
     // and keep the cold-start window animated. The shell mounts the shared
