@@ -250,6 +250,106 @@ def test_langfuse_specific_backend_name(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
+def test_langfuse_host_does_not_relabel_generic_otel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LANGFUSE_HOST is display-only. A generic OTEL endpoint stays ``otel``."""
+    monkeypatch.setenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318")
+    assert config_mod.langfuse_configured() is True
+    assert config_mod.export_backend() == "otel"
+
+
+@pytest.mark.unit
+def test_langfuse_otlp_endpoint_installs_exporter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Langfuse-only endpoint must build an OTLP exporter, not only a local span."""
+    monkeypatch.setattr(trace_mod, "LANGSMITH_SDK_AVAILABLE", False)
+    endpoint = "https://cloud.langfuse.com/api/public/otel"
+    monkeypatch.setenv("DIGITRACE_LANGFUSE_OTLP_ENDPOINT", endpoint)
+    monkeypatch.setenv("DIGI_OTEL_HEADERS", "Authorization=Basic%20abc")
+    constructed: dict[str, Any] = {}
+    spans: list[dict[str, Any]] = []
+
+    def _pkg(name: str) -> types.ModuleType:
+        mod = types.ModuleType(name)
+        mod.__path__ = []  # type: ignore[attr-defined]
+        mod.__package__ = name
+        return mod
+
+    otel = _pkg("opentelemetry")
+    trace_api = _pkg("opentelemetry.trace")
+    sdk_trace = _pkg("opentelemetry.sdk.trace")
+    sdk_export = _pkg("opentelemetry.sdk.trace.export")
+    exporter_mod = _pkg("opentelemetry.exporter.otlp.proto.http.trace_exporter")
+
+    class _StatusCode:
+        UNSET = "UNSET"
+        ERROR = "ERROR"
+
+    class ProxyTracerProvider:
+        """Name must match the SDK proxy so the installer treats it as unset."""
+
+    class _FakeTracer:
+        def start_as_current_span(self, name: str, attributes: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
+            class _CM:
+                def __enter__(self_cm):  # type: ignore[no-untyped-def]
+                    return self
+
+                def __exit__(self_cm, *_args: object) -> bool:
+                    spans.append({"name": name})
+                    return False
+
+                def set_status(self_cm, _status: object) -> None:
+                    return None
+
+            return _CM()
+
+    class _Exporter:
+        def __init__(self, *, endpoint: str, headers: dict[str, str] | None = None) -> None:
+            constructed["endpoint"] = endpoint
+            constructed["headers"] = headers
+
+    class _Processor:
+        def __init__(self, exporter: _Exporter) -> None:
+            constructed["processor"] = exporter
+
+    class _Provider:
+        def add_span_processor(self, processor: _Processor) -> None:
+            constructed["added"] = processor
+
+    trace_api.StatusCode = _StatusCode  # type: ignore[attr-defined]
+    trace_api.get_tracer = lambda _name: _FakeTracer()  # type: ignore[attr-defined]
+    trace_api.get_tracer_provider = lambda: ProxyTracerProvider()  # type: ignore[attr-defined]
+    trace_api.set_tracer_provider = lambda provider: constructed.setdefault("provider", provider)  # type: ignore[attr-defined]
+    sdk_trace.TracerProvider = _Provider  # type: ignore[attr-defined]
+    sdk_export.BatchSpanProcessor = _Processor  # type: ignore[attr-defined]
+    exporter_mod.OTLPSpanExporter = _Exporter  # type: ignore[attr-defined]
+    otel.trace = trace_api  # type: ignore[attr-defined]
+
+    for name, mod in (
+        ("opentelemetry", otel),
+        ("opentelemetry.trace", trace_api),
+        ("opentelemetry.sdk", _pkg("opentelemetry.sdk")),
+        ("opentelemetry.sdk.trace", sdk_trace),
+        ("opentelemetry.sdk.trace.export", sdk_export),
+        ("opentelemetry.exporter", _pkg("opentelemetry.exporter")),
+        ("opentelemetry.exporter.otlp", _pkg("opentelemetry.exporter.otlp")),
+        ("opentelemetry.exporter.otlp.proto", _pkg("opentelemetry.exporter.otlp.proto")),
+        ("opentelemetry.exporter.otlp.proto.http", _pkg("opentelemetry.exporter.otlp.proto.http")),
+        ("opentelemetry.exporter.otlp.proto.http.trace_exporter", exporter_mod),
+    ):
+        monkeypatch.setitem(sys.modules, name, mod)
+
+    @trace_mod.traceable("langfuse-span")
+    def fn() -> str:
+        return "ok"
+
+    assert fn() == "ok"
+    assert constructed["endpoint"] == endpoint
+    assert constructed["headers"] == {"Authorization": "Basic abc"}
+    assert "provider" in constructed
+    assert spans[0]["name"] == "digitrace.langfuse-span"
+
+
+@pytest.mark.unit
 def test_langfuse_host_sanitized_strips_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",

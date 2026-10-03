@@ -36,14 +36,23 @@ Do not point `LANGSMITH_ENDPOINT` at Langfuse.
   `DIGI_OTEL_ENDPOINT`, or `OTEL_EXPORTER_OTLP_ENDPOINT`). Opens one span per
   call named `digitrace.<name>` carrying only the run name plus short
   correlation ids (`digi.workflow_id`, `digi.request_id`, `digi.session_id`).
+  When the global tracer provider is still the SDK proxy, `traceable` installs
+  an OTLP HTTP exporter for that endpoint (Langfuse URL first, then
+  `DIGI_OTEL_ENDPOINT`, then `OTEL_EXPORTER_OTLP_ENDPOINT`) and the headers from
+  `digibase.otel.resolve_otel_headers`. A provider that is already real is left
+  alone. Missing SDK packages leave the in-process span and do not raise.
   Against Langfuse, point the endpoint at `/api/public/otel` and pass the
   public:secret Basic auth via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`
-  (parsed by `digibase.otel`, #4934).
+  (parsed by `digibase.otel`, #4934). FastAPI server instrumentation
+  (`digibase.otel.setup_otel_fastapi`) still keys off `DIGI_OTEL_ENDPOINT` /
+  `OTEL_EXPORTER_OTLP_ENDPOINT` only.
 
 Either leg degrades to the other; both missing is a pure no-op. Backend
 summary helpers live in `digitrace.config` (`export_backend()` →
 `dual|langsmith|langfuse-otlp|otel|none`) and are surfaced secret-free on
-`GET /v1/status`. digigraph wraps its three workflow entry points in a shared
+`GET /v1/status`. `langfuse-otlp` requires a Langfuse OTLP endpoint.
+`LANGFUSE_HOST` / `LANGFUSE_URL` stay display-only and do not relabel a
+generic OTEL export. digigraph wraps its three workflow entry points in a shared
 `digigraph_workflow_run` span plus per-node spans for the plain-function
 nodes (supervisor / validate / backtest / optimize); the compiled research
 subgraph stays unwrapped so `graph.stream(..., subgraphs=True)` custom events

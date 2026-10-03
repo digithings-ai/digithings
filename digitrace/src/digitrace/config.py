@@ -153,6 +153,11 @@ def export_backend() -> str:
         return "dual"
     if langsmith:
         return "langsmith"
+    # LANGFUSE_HOST / LANGFUSE_URL are status display only. The langfuse-otlp
+    # label requires a Langfuse OTLP endpoint, not a generic OTEL endpoint
+    # that happens to sit next to a host name.
+    if otel and langfuse_otlp_endpoint():
+        return "langfuse-otlp"
     if otel:
-        return "langfuse-otlp" if langfuse_configured() else "otel"
+        return "otel"
     return "none"

@@ -18,10 +18,13 @@ from __future__ import annotations
 import functools
 import logging
 import os
+import threading
 from collections.abc import Callable, Mapping
 from typing import Any, TypeVar
 
-from digitrace.config import otel_export_configured
+from digibase.otel import resolve_otel_headers
+
+from digitrace.config import langfuse_otlp_endpoint, otel_export_configured
 from digitrace.redaction import PiiRedactor, default_redactor
 
 logger = logging.getLogger(__name__)
@@ -44,6 +47,58 @@ _CORRELATION_KEYS = ("workflow_id", "request_id", "session_id")
 #: Max length for a correlation value — longer values are dropped, never truncated
 #: (truncation could split a token and still leak part of it).
 _MAX_CORRELATION_CHARS = 128
+
+_EXPORTER_LOCK = threading.Lock()
+
+# After a Langfuse OTLP endpoint, the generic OTEL vars. Status treats all
+# four as "export on"; the exporter has to use the same order.
+_GENERIC_OTLP_ENVS = ("DIGI_OTEL_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+
+
+def _export_endpoint() -> str:
+    """Endpoint the OTLP exporter should post to, or ``""`` when unset."""
+    endpoint = langfuse_otlp_endpoint()
+    if endpoint:
+        return endpoint
+    for key in _GENERIC_OTLP_ENVS:
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _ensure_otlp_exporter() -> None:
+    """Install an OTLP HTTP exporter when the global provider is still a proxy.
+
+    ``otel_export_configured`` is true for ``DIGITRACE_LANGFUSE_OTLP_ENDPOINT``
+    alone, but nothing else in this process attaches an exporter to that URL.
+    Spans opened by :func:`traceable` would otherwise stay in-process. A
+    provider that is already a real SDK provider is left alone. Missing SDK
+    packages are a no-op so tests (and hosts without ``digibase[otel]``) keep
+    the in-memory tracer.
+    """
+    endpoint = _export_endpoint()
+    if not endpoint:
+        return
+    try:
+        from opentelemetry import trace as otel_trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:
+        return
+    with _EXPORTER_LOCK:
+        provider = otel_trace.get_tracer_provider()
+        if type(provider).__name__ != "ProxyTracerProvider":
+            return
+        try:
+            headers = resolve_otel_headers() or None
+            exporter = OTLPSpanExporter(endpoint=endpoint, headers=headers)
+            sdk_provider = TracerProvider()
+            sdk_provider.add_span_processor(BatchSpanProcessor(exporter))
+            otel_trace.set_tracer_provider(sdk_provider)
+        except Exception as exc:  # tracing must never break the caller
+            logger.debug("OTLP exporter setup failed: %s", exc)
 
 
 def otel_leg_enabled() -> bool:
@@ -80,6 +135,7 @@ def _maybe_wrap_otel(fn: F, name: str) -> F:
         from opentelemetry.trace import StatusCode
     except ImportError:
         return fn
+    _ensure_otlp_exporter()
     try:
         tracer = _otel_trace.get_tracer("digitrace")
     except Exception as exc:  # fail-soft: tracing must never break caller work
