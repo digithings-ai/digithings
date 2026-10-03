@@ -5,6 +5,8 @@
 ---   * which state to show (local phase vs the CLI's status.json)
 ---   * density (mini/peek/full), text wrapping/clipping, box size, screen position
 ---   * banner settings from settings.json
+---   * theme chrome (digichat light/dark flips; RYG status colors stay)
+---   * drag/snap anchors, hover controls layout, typewriter slicing, reanchoring
 --- init.lua only draws what this module computes. No chrome: no titles, no hints.
 
 local M = {}
@@ -23,6 +25,8 @@ M.POSITIONS = {
   ["top-center"] = true,
   ["top-left"] = true,
   ["top-right"] = true,
+  ["middle-left"] = true,
+  ["middle-right"] = true,
   ["bottom-center"] = true,
   ["bottom-left"] = true,
   ["bottom-right"] = true,
@@ -348,18 +352,48 @@ end
 -- text, layout, position
 --------------------------------------------------------------------------------
 
-M.FONT_SIZE = 13
-M.LINE_HEIGHT = 17
-M.PAD = 12
-M.ICON = 28
-M.HEAD_HEIGHT = 28
+M.FONT_SIZE = 11
+M.LINE_HEIGHT = 18
+M.PAD = 10
+M.ICON = 18
+-- Max caps; the box hugs content up to these widths (no min-width gutter).
 M.WIDTH_COLLAPSED = 380
 M.WIDTH_EXPANDED = 580
+-- Mock soft caps: peek hugs visible glyphs, full locks to the longest line.
+M.PEEK_MAX_CH = 36
+M.FULL_MAX_CH = 47
 M.LINES_COLLAPSED = 3
 M.LINES_EXPANDED = 14
-M.MARGIN = 12
+M.MARGIN = 16
+-- v5.8 typewriter: 9ms/char, faster than v5.7 (14ms).
+M.TW_SEC = 0.009
+M.SNAP_PX = 36
+M.CTRL_SIZE = 18
+M.CTRL_GAP = 4
 -- Conservative average glyph width so our wrapping is never re-wrapped by AppKit.
 M.CHAR_WIDTH = M.FONT_SIZE * 0.6
+
+--- DigiChat light/dark flips. Status (RYG) colors stay; only chrome flips.
+--- Mock: dark pill #12181c / text #f2f5f6, light pill #ffffff / text #1a2228.
+M.CHROME = {
+  dark = {
+    bg = { red = 0x12 / 255, green = 0x18 / 255, blue = 0x1C / 255, alpha = 0.94 },
+    text = { red = 0xF2 / 255, green = 0xF5 / 255, blue = 0xF6 / 255, alpha = 1 },
+    border = { red = 0x2A / 255, green = 0x35 / 255, blue = 0x3C / 255, alpha = 1 },
+  },
+  light = {
+    bg = { red = 1, green = 1, blue = 1, alpha = 0.96 },
+    text = { red = 0x1A / 255, green = 0x22 / 255, blue = 0x28 / 255, alpha = 1 },
+    border = { red = 0xC5 / 255, green = 0xCE / 255, blue = 0xD3 / 255, alpha = 1 },
+  },
+}
+
+function M.theme_colors(theme)
+  if theme == "light" then
+    return M.CHROME.light
+  end
+  return M.CHROME.dark
+end
 
 function M.body_for(view)
   if view.state == "error" then
@@ -432,39 +466,119 @@ function M.cell_box(i)
   return { x = cx - side / 2, y = cy - side / 2, w = side, h = side }
 end
 
+--- Pad every line to `width` with spaces so all lines share one uniform width.
+function M.pad_lines(lines, width)
+  local out = {}
+  for i, line in ipairs(lines) do
+    local pad = width - #line
+    if pad > 0 then
+      out[i] = line .. string.rep(" ", pad)
+    else
+      out[i] = line
+    end
+  end
+  return out
+end
+
+--- Full density caps near half the viewport height (mock: max-height 50vh).
+--- The budget is the box inside equal padding — no leftover header row.
+function M.full_max_lines(screen_h)
+  if type(screen_h) ~= "number" or screen_h <= 0 then
+    return M.LINES_EXPANDED
+  end
+  return math.max(1, math.floor((screen_h * 0.5 - M.PAD * 2) / M.LINE_HEIGHT))
+end
+
+--- Typewriter slice: reveal `text` up to `caret` chars. The caller keeps the
+--- caret across peek→full so expansion continues instead of restarting.
+function M.tw_slice(text, caret)
+  text = tostring(text or "")
+  caret = math.max(0, math.min(#text, math.floor(caret or 0)))
+  return { shown = text:sub(1, caret), done = caret >= #text }
+end
+
 --- Box geometry for a view at a density. No chrome: no title line, no hints —
 --- state reads from the grid symbol/animation alone. Mini is grid only.
 --- Peek is a short glimpse; full widens and shows the whole transcript.
-function M.layout(view, kind, density)
+--- The box hugs content (no min-width gutter): width derives from the longest
+--- wrapped line, capped at the density max. The width locks from the full
+--- wrapped text up front, so the typewriter reveals within a stable width and
+--- peek→full never re-wraps what is already shown. Empty text hugs the grid.
+function M.layout(view, kind, density, opts)
   kind = kind -- kind no longer changes geometry; kept for call shape.
+  opts = opts or {}
   if density ~= "peek" and density ~= "full" then
     density = "mini"
   end
   local text_x = M.PAD + M.ICON + 10
-  local function columns(width)
-    return math.floor((width - text_x - M.PAD) / M.CHAR_WIDTH)
-  end
+  local mini_side = M.PAD * 2 + M.ICON
   if density == "mini" then
-    local side = M.PAD * 2 + M.ICON
     return {
-      w = side,
-      h = side,
+      w = mini_side,
+      h = mini_side,
       text_x = text_x,
       text_w = 0,
       cols = 0,
       lines = {},
       body = "",
       clipped = false,
+      total = 0,
+      longest = 0,
+      all = {},
+      raw = "",
     }
   end
   local body = M.body_for(view)
-  local width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
-  local cols = columns(width)
+  if body == "" then
+    return {
+      w = mini_side,
+      h = mini_side,
+      text_x = text_x,
+      text_w = 0,
+      cols = 0,
+      lines = {},
+      body = "",
+      clipped = false,
+      total = 0,
+      longest = 0,
+      all = {},
+      raw = "",
+    }
+  end
+  local max_width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
+  local max_ch = density == "full" and M.FULL_MAX_CH or M.PEEK_MAX_CH
+  local cols = math.min(math.floor((max_width - text_x - M.PAD) / M.CHAR_WIDTH), max_ch)
+  cols = math.max(8, cols)
+  local all = M.wrap(body, cols)
+  local longest = 0
+  for _, line in ipairs(all) do
+    longest = math.max(longest, #line)
+  end
+  longest = math.max(longest, 1)
   local limit = density == "full" and M.LINES_EXPANDED or M.LINES_COLLAPSED
-  local lines, clipped = M.clip_lines(M.wrap(body, cols), limit, cols)
-  local height = M.PAD * 2 + M.ICON
-  if #lines > 0 then
-    height = math.max(height, M.PAD + M.HEAD_HEIGHT + #lines * M.LINE_HEIGHT + M.PAD)
+  if density == "full" then
+    limit = math.min(limit, M.full_max_lines(opts.screen_h))
+  end
+  -- Full scrolls instead of truncating: plain window, no ellipsis mid-list.
+  -- Peek keeps the glimpse ellipsis.
+  local lines, clipped
+  if density == "full" then
+    local padded = M.pad_lines(all, longest)
+    clipped = #padded > limit
+    lines = {}
+    for i = 1, math.min(limit, #padded) do
+      lines[i] = padded[i]
+    end
+  else
+    lines, clipped = M.clip_lines(all, limit, cols)
+    lines = M.pad_lines(lines, longest)
+  end
+  local width = text_x + longest * M.CHAR_WIDTH + M.PAD
+  -- Text sits beside the grid, so the box is the taller of the grid and the
+  -- lines, plus the same PAD on every side. No header row under the text.
+  local height = math.max(mini_side, M.PAD + #lines * M.LINE_HEIGHT + M.PAD)
+  if type(opts.screen_h) == "number" and opts.screen_h > 0 and density == "full" then
+    height = math.min(height, math.floor(opts.screen_h * 0.5))
   end
   return {
     w = width,
@@ -475,6 +589,10 @@ function M.layout(view, kind, density)
     lines = lines,
     body = table.concat(lines, "\n"),
     clipped = clipped,
+    total = #all,
+    longest = longest,
+    all = M.pad_lines(all, longest),
+    raw = body,
   }
 end
 
@@ -494,9 +612,151 @@ function M.resolve_position(position, frame, size, margin)
   elseif position:find("bottom", 1, true) then
     y = frame.y + frame.h - size.h - margin
   else
+    -- center, middle-left, middle-right: vertically centered.
     y = frame.y + (frame.h - size.h) / 2
   end
   return { x = x, y = y }
+end
+
+--- Anchor id (tl|tc|tr|ml|c|mr|bl|bc|br) for a banner_position setting.
+function M.anchor_for_position(position)
+  local map = {
+    ["top-left"] = "tl",
+    ["top-center"] = "tc",
+    ["top-right"] = "tr",
+    ["middle-left"] = "ml",
+    ["center"] = "c",
+    ["middle-right"] = "mr",
+    ["bottom-left"] = "bl",
+    ["bottom-center"] = "bc",
+    ["bottom-right"] = "br",
+  }
+  return map[position] or "tc"
+end
+--- Ids: tl | tc | tr | ml | c | mr | bl | bc | br.
+function M.anchors(frame, size, margin)
+  margin = margin or M.MARGIN
+  local min_x, min_y = frame.x + margin, frame.y + margin
+  local max_x = math.max(min_x, frame.x + frame.w - size.w - margin)
+  local max_y = math.max(min_y, frame.y + frame.h - size.h - margin)
+  local mid_x, mid_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+  return {
+    { id = "tl", x = min_x, y = min_y },
+    { id = "tc", x = mid_x, y = min_y },
+    { id = "tr", x = max_x, y = min_y },
+    { id = "ml", x = min_x, y = mid_y },
+    { id = "c", x = mid_x, y = mid_y },
+    { id = "mr", x = max_x, y = mid_y },
+    { id = "bl", x = min_x, y = max_y },
+    { id = "bc", x = mid_x, y = max_y },
+    { id = "br", x = max_x, y = max_y },
+  }
+end
+
+--- Clamp a free position inside the screen with the edge margin kept.
+function M.clamp_position(x, y, frame, size, margin)
+  margin = margin or M.MARGIN
+  local max_x = math.max(frame.x + margin, frame.x + frame.w - size.w - margin)
+  local max_y = math.max(frame.y + margin, frame.y + frame.h - size.h - margin)
+  return {
+    x = math.min(max_x, math.max(frame.x + margin, x)),
+    y = math.min(max_y, math.max(frame.y + margin, y)),
+  }
+end
+
+--- Snap a free position to the nearest anchor within `threshold` px.
+--- Returns {x, y, anchor} where anchor is nil when nothing is near.
+function M.snap_position(x, y, frame, size, margin, threshold)
+  threshold = threshold or M.SNAP_PX
+  local best, best_d
+  for _, a in ipairs(M.anchors(frame, size, margin)) do
+    local d = math.sqrt((x - a.x) * (x - a.x) + (y - a.y) * (y - a.y))
+    if best_d == nil or d < best_d then
+      best, best_d = a, d
+    end
+  end
+  if best ~= nil and best_d <= threshold then
+    return { x = best.x, y = best.y, anchor = best.id }
+  end
+  local clamped = M.clamp_position(x, y, frame, size, margin)
+  return { x = clamped.x, y = clamped.y, anchor = nil }
+end
+
+--- Resolve a persisted {x, y, anchor} position: clamp it onto the current
+--- screen. Returns nil when there is nothing persisted worth keeping.
+function M.resolve_saved(saved, frame, size, margin)
+  if type(saved) ~= "table" or type(saved.x) ~= "number" or type(saved.y) ~= "number" then
+    return nil
+  end
+  local clamped = M.clamp_position(saved.x, saved.y, frame, size, margin)
+  return { x = clamped.x, y = clamped.y, anchor = saved.anchor }
+end
+
+--- After a size change (density flip, hover controls), keep the pin so the
+--- banner grows outward: center pins keep the center, left pins grow right,
+--- right pins grow left, free floats keep their top-left (grid stays put).
+function M.reanchor(prev, size, anchor)
+  anchor = anchor or "free"
+  local cx, cy = prev.x + prev.w / 2, prev.y + prev.h / 2
+  if anchor == "c" or anchor == "tc" or anchor == "bc" then
+    if anchor == "tc" then
+      return { x = cx - size.w / 2, y = prev.y }
+    elseif anchor == "bc" then
+      return { x = cx - size.w / 2, y = prev.y + prev.h - size.h }
+    end
+    return { x = cx - size.w / 2, y = cy - size.h / 2 }
+  elseif anchor == "tl" or anchor == "ml" or anchor == "bl" then
+    local y = prev.y
+    if anchor == "ml" then
+      y = cy - size.h / 2
+    elseif anchor == "bl" then
+      y = prev.y + prev.h - size.h
+    end
+    return { x = prev.x, y = y }
+  elseif anchor == "tr" or anchor == "mr" or anchor == "br" then
+    local y = prev.y
+    if anchor == "mr" then
+      y = cy - size.h / 2
+    elseif anchor == "br" then
+      y = prev.y + prev.h - size.h
+    end
+    return { x = prev.x + prev.w - size.w, y = y }
+  end
+  return { x = prev.x, y = prev.y }
+end
+
+--- Hover controls below the banner: icon-only copy + close, 18px squares.
+--- Mini stacks them centered; wider densities row them right-aligned.
+--- Frames are relative to the banner's top-left (y starts below the box).
+function M.controls_layout(box_w, box_h, density)
+  local y = box_h + M.CTRL_GAP
+  if density == "mini" then
+    local x = (box_w - M.CTRL_SIZE) / 2
+    return {
+      dir = "stack",
+      buttons = {
+        { id = "copy", x = x, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
+        { id = "close", x = x, y = y + M.CTRL_SIZE + M.CTRL_GAP, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
+      },
+    }
+  end
+  local total = M.CTRL_SIZE * 2 + M.CTRL_GAP
+  local x = box_w - total
+  return {
+    dir = "row",
+    buttons = {
+      { id = "copy", x = x, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
+      { id = "close", x = x + M.CTRL_SIZE + M.CTRL_GAP, y = y, w = M.CTRL_SIZE, h = M.CTRL_SIZE },
+    },
+  }
+end
+
+--- Extra canvas height the hover controls need below the box.
+function M.controls_height(density)
+  if density == "mini" then
+    return M.CTRL_GAP + M.CTRL_SIZE * 2 + M.CTRL_GAP
+  end
+  return M.CTRL_GAP + M.CTRL_SIZE
 end
 
 return M

@@ -35,10 +35,13 @@ from digivoice.status import (
     CancelToken,
     StatusKind,
     StatusReporter,
+    banner_flag_path,
     default_cancel_file,
+    read_banner_flag,
     read_status,
     request_cancel,
     status_path,
+    write_banner_flag,
 )
 from digivoice.transcribe import transcribe
 
@@ -154,6 +157,23 @@ def build_parser() -> _Parser:
         "--cancel-file", default=None, help="Cancel-file path (default under the data dir)"
     )
     sub.add_parser("status", help="Print the live status.json the banner reads")
+
+    banner_cmd = sub.add_parser(
+        "banner",
+        help="Show or hide the Hammerspoon banner preview (no dictation needed)",
+    )
+    banner_cmd.add_argument(
+        "action",
+        nargs="?",
+        default="show",
+        choices=["show", "hide", "toggle"],
+        help="show (default), hide, or toggle the preview banner",
+    )
+    banner_cmd.add_argument(
+        "--text",
+        default="",
+        help="Preview text to typeset (show only)",
+    )
 
     settings_cmd = sub.add_parser(
         "settings",
@@ -516,6 +536,24 @@ def _status(runtime: Runtime) -> CliResult:
     return CliResult(code=0, stdout=snapshot.model_dump_json(indent=2) + "\n", stderr="")
 
 
+def _banner(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    """Spawn-flag for the banner preview. The adapter polls it; no dictation."""
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    flag = banner_flag_path(paths)
+    action = args.action
+    if action == "toggle":
+        current = read_banner_flag(flag)
+        action = "hide" if current and current.get("visible") else "show"
+    try:
+        if action == "hide":
+            write_banner_flag(flag, visible=False)
+            return CliResult(code=0, stdout=f"{flag}\n", stderr="digivoice: banner hidden\n")
+        write_banner_flag(flag, visible=True, text=args.text or "")
+    except OSError as exc:
+        return CliResult(code=1, stdout="", stderr=f"digivoice banner: {exc}\n")
+    return CliResult(code=0, stdout=f"{flag}\n", stderr="digivoice: banner shown\n")
+
+
 def _history(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     if args.last is not None and args.last < 1:
         return _usage("--last expects a positive integer")
@@ -651,6 +689,8 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         return _cancel(args, runtime)
     if command == "status":
         return _status(runtime)
+    if command == "banner":
+        return _banner(args, runtime)
     if command == "history":
         return _history(args, runtime)
     if command in {"settings", "setup"}:

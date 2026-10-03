@@ -162,6 +162,94 @@ eq(core.linger_seconds("done", "peek"), 4.0, "peek dismisses after a few seconds
 eq(core.linger_seconds("done", "mini"), 4.0, "mini dismisses too")
 eq(core.linger_seconds("cancelled", "peek"), 1.2, "cancelled clears fast")
 
+-- hug widths: short text stays far under the caps, empty hugs the grid
+local hug = core.layout({ state = "rewriting", text = "short text", detail = "" }, "dict", "peek")
+check(hug.w < core.WIDTH_COLLAPSED, "peek hugs short text")
+check(hug.w > core.PAD * 2 + core.ICON, "peek wider than grid-only")
+eq(hug.h, core.PAD * 2 + math.max(core.ICON, core.LINE_HEIGHT), "one line hugs the grid row")
+local hug_empty = core.layout({ state = "recording", text = "", detail = "" }, "dict", "peek")
+eq(hug_empty.w, core.PAD * 2 + core.ICON, "empty hugs the grid")
+eq(hug_empty.h, core.PAD * 2 + core.ICON, "empty hugs the grid")
+-- equal padding all densities: grid cell origin sits at PAD
+local cell0 = core.cell_box(0)
+check(math.abs(cell0.x - core.PAD) < core.PAD and math.abs(cell0.y - core.PAD) < core.PAD, "grid top-left with even pad")
+-- uniform line widths
+for _, line in ipairs(hug.lines) do
+  eq(#line, hug.longest, "lines share one uniform width")
+end
+-- first line locks the final width: same longest line, same width
+local a = core.layout({ state = "done", text = "same longest line here yes\nshort", detail = "" }, "dict", "full", { screen_h = 900 })
+local b = core.layout({ state = "done", text = "same longest line here yes\nshort plus more", detail = "" }, "dict", "full", { screen_h = 900 })
+eq(a.w, b.w, "width locks from the longest line")
+-- full caps near half the viewport: tiny screen clamps the line budget
+eq(core.full_max_lines(900), 23, "50vh budget on a normal screen")
+eq(core.full_max_lines(200), 4, "small screen clamps lines")
+local tall = core.layout(
+  { state = "rewriting", text = string.rep("word ", 400), detail = "" }, "dict", "full", { screen_h = 200 }
+)
+check(tall.h <= 100, "short screen caps full height at 50vh")
+check(tall.clipped, "overflow is marked for the scroll window")
+check(#tall.all > #tall.lines, "scroll keeps lines past the window")
+-- full skips the peek ellipsis: the window is a plain slice for scrolling
+for _, line in ipairs(tall.lines) do
+  check(not line:find("…", 1, true), "no mid-list ellipsis in full")
+end
+
+-- theme chrome flips, status colors stay (RYG untouched by theme)
+check(core.theme_colors("dark").bg.red < 0.1, "dark pill")
+check(core.theme_colors("light").bg.red > 0.9, "light pill")
+check(core.theme_colors("bogus").bg.red < 0.1, "unknown theme falls back to dark")
+eq(core.matrix_for("recording").color.red, 0.94, "recording red stays")
+
+-- typewriter slices
+local tw = core.tw_slice("hello", 2)
+eq(tw.shown, "he", "caret prefix")
+eq(tw.done, false, "not done")
+eq(core.tw_slice("hello", 99).done, true, "clamped caret finishes")
+eq(core.tw_slice("hello", 0).shown, "", "zero caret shows nothing")
+
+-- 9 anchors, snap, clamp, saved, reanchor
+local frame9 = { x = 0, y = 0, w = 1440, h = 900 }
+local size9 = { w = 100, h = 50 }
+eq(#core.anchors(frame9, size9, 16), 9, "nine anchors")
+local snapped = core.snap_position(20, 20, frame9, size9, 16)
+eq(snapped.anchor, "tl", "snaps near tl")
+eq(snapped.x, 16, "snap x")
+local free = core.snap_position(700, 400, frame9, size9, 16)
+eq(free.anchor, nil, "mid-screen stays free")
+local clamped = core.clamp_position(-50, 9999, frame9, size9, 16)
+eq(clamped.x, 16, "clamp left")
+eq(clamped.y, 900 - 50 - 16, "clamp bottom")
+check(core.resolve_saved(nil, frame9, size9, 16) == nil, "nothing persisted")
+local kept = core.resolve_saved({ x = 100, y = 100, anchor = "c" }, frame9, size9, 16)
+eq(kept.x, 100, "saved position kept")
+eq(kept.anchor, "c", "saved anchor kept")
+eq(core.anchor_for_position("middle-left"), "ml", "setting maps to anchor")
+eq(core.anchor_for_position("bogus"), "tc", "bad setting maps to default anchor")
+local rc = core.reanchor({ x = 100, y = 100, w = 38, h = 38 }, { w = 200, h = 100 }, "c")
+eq(rc.x, 100 + 19 - 100, "center x kept on expand")
+eq(rc.y, 100 + 19 - 50, "center y kept on expand")
+local rl = core.reanchor({ x = 16, y = 16, w = 38, h = 38 }, { w = 200, h = 38 }, "tl")
+eq(rl.x, 16, "left pin grows right")
+local rr = core.reanchor({ x = 100, y = 16, w = 38, h = 38 }, { w = 200, h = 38 }, "tr")
+eq(rr.x, 100 + 38 - 200, "right pin grows left")
+local rf = core.reanchor({ x = 300, y = 300, w = 38, h = 38 }, { w = 200, h = 100 }, nil)
+eq(rf.x, 300, "free float keeps top-left")
+eq(rf.y, 300, "free float keeps top-left")
+
+-- hover controls: mini stacks centered, wider rows right-aligned
+local mini_ctl = core.controls_layout(38, 38, "mini")
+eq(mini_ctl.dir, "stack", "mini stacks")
+eq(mini_ctl.buttons[1].x, mini_ctl.buttons[2].x, "stack shares x")
+check(mini_ctl.buttons[2].y > mini_ctl.buttons[1].y, "stack grows down")
+eq(mini_ctl.buttons[1].x, (38 - 18) / 2, "stack centered")
+local wide_ctl = core.controls_layout(280, 60, "peek")
+eq(wide_ctl.dir, "row", "wider rows")
+eq(wide_ctl.buttons[1].y, wide_ctl.buttons[2].y, "row shares y")
+eq(wide_ctl.buttons[1].x + 18 + 4 + 18, 280, "row right-aligned")
+eq(core.controls_height("mini"), 4 + 18 * 2 + 4, "stack height")
+eq(core.controls_height("peek"), 4 + 18, "row height")
+
 -- launch notice lists commands and the cli
 local notice = core.launch_notice("/x/digivoice")
 check(notice:find("Esc", 1, true) and notice:find("cli: /x/digivoice", 1, true), "launch notice")
