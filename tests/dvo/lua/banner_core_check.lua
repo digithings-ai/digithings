@@ -225,6 +225,47 @@ for _, state in ipairs({ "recording", "transcribing", "rewriting", "error", "war
   signatures[key] = state
 end
 
+-- A wall-clock second is ~1e9. sin of that raw angle sticks on some libm builds
+-- and froze the recording meter. The other marks already wrapped their phase.
+local real_sin = math.sin
+local max_sin_arg = 0
+math.sin = function(x)
+  local ax = math.abs(x)
+  if ax > max_sin_arg then
+    max_sin_arg = ax
+  end
+  if ax > 64 then
+    return 0
+  end
+  return real_sin(x)
+end
+local wall = 1759440123.2
+local function keeps_moving(state, seconds)
+  local prev = frame_key(state, wall, true)
+  local steps = 0
+  local n = math.floor(seconds / 0.2)
+  for i = 1, n do
+    local now = frame_key(state, wall + i * 0.2, true)
+    if now == prev then
+      return false
+    end
+    prev = now
+    steps = steps + 1
+  end
+  return steps == n
+end
+check(frame_key("recording", wall, true) ~= frame_key("recording", wall + 0.35, true), "recording equalizer moves at a wall clock")
+check(max_sin_arg < 64, "recording does not feed the wall clock to sin")
+check(keeps_moving("recording", 3), "recording bars keep rising and falling")
+check(keeps_moving("loading", 4), "loading keeps moving for the whole load")
+check(keeps_moving("rewriting", 4), "processing keeps moving")
+check(keeps_moving("pasting", 4), "pasting keeps moving")
+check(keeps_moving("transcribing", 4), "dictating keeps moving")
+check(keeps_moving("speaking", 4), "dictating keeps moving while speech plays")
+local still_load = frame_key("loading", wall, false)
+check(frame_key("loading", wall + 0.4, true) ~= still_load, "loading is not the still frame")
+math.sin = real_sin
+
 -- view merge
 local session = { kind = "dict", start_ms = 1000 }
 local snap = { kind = "dict", state = "rewriting", text = "hi", detail = "d", updated_ms = 1500 }
