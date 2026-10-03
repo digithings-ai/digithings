@@ -29,34 +29,45 @@ export function usePaneFocus(ids: string[]): { focus: string; focusAt: (id: stri
 }
 
 function BlockView({ block }: { block: PaneBlock }) {
-  if (block.kind === "sentence") return <p className="m-0 whitespace-pre-wrap">{block.text}</p>;
-  if (block.kind === "stat") return <p className="m-0 text-ink-mute">{block.text}</p>;
-  return (
-    <table className="w-full border-collapse text-left">
-      {block.columns.length ? (
-        <thead>
-          <tr>
-            {block.columns.map((column) => (
-              <th key={column} className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute">
-                {column}
-              </th>
+  switch (block.kind) {
+    case "sentence":
+      return <p className="m-0 whitespace-pre-wrap">{block.text}</p>;
+    case "stat":
+      return <p className="m-0 text-ink-mute">{block.text}</p>;
+    case "chart":
+      return <p className="m-0 whitespace-pre">{block.text}</p>;
+    case "table":
+      return (
+        <table className="w-full border-collapse text-left">
+          {block.columns.length ? (
+            <thead>
+              <tr>
+                {block.columns.map((column) => (
+                  <th key={column} className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute">
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          ) : null}
+          <tbody>
+            {block.rows.map((row, index) => (
+              <tr key={index} className="border-b border-hair last:border-b-0">
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex} className="px-2 py-1 align-top">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
             ))}
-          </tr>
-        </thead>
-      ) : null}
-      <tbody>
-        {block.rows.map((row, index) => (
-          <tr key={index} className="border-b border-hair last:border-b-0">
-            {row.map((cell, cellIndex) => (
-              <td key={cellIndex} className="px-2 py-1 align-top">
-                {cell}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+          </tbody>
+        </table>
+      );
+    default: {
+      const exhaustive: never = block;
+      return <p className="m-0">{String(exhaustive)}</p>;
+    }
+  }
 }
 
 /** Same chrome as the terminal pane: one-row header, body, footer. */

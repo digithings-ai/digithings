@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import { readDeskBlock } from "../read-block";
+import { portfolioBody } from "../../../../../clients/digiquant-tui/src/pages/portfolio-format";
+import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
 import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
@@ -140,12 +142,79 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
 
 type DeskProps = { reads?: Reads };
 
+const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
+
+function paintPortfolio(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: portfolioBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
+/** `/portfolio` only. Later portfolio pages stay on the line read. */
+function PortfolioHome() {
+  const path = "/portfolio";
+  const [reads, setReads] = useState<Record<string, OfficialRead>>({});
+  const layout = layoutFor(path);
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
+
+  useEffect(() => {
+    const placements = layoutFor(path);
+    const ac = new AbortController();
+    let cancel = false;
+    for (const placement of placements) {
+      const def = BLOCKS[placement.id];
+      if (!def) continue;
+      void readOfficial(def.route, def.kind, ac.signal).then((result) => {
+        if (cancel) return;
+        setReads((prev) => ({ ...prev, [placement.id]: result }));
+      });
+    }
+    return () => {
+      cancel = true;
+      ac.abort();
+    };
+  }, []);
+
+  return (
+    <div className={PANE_GRID}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paintPortfolio(placement.id, reads[placement.id]);
+        return (
+          <div
+            key={placement.id}
+            className="min-h-0 min-w-0"
+            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              blocks={view.blocks}
+              tone={tone[view.status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
+              onNext={panes.next}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function page(path: PortfolioPath, props: DeskProps) {
   return <PortfolioDesk path={path} reads={props.reads} />;
 }
 
 export function PortfolioPage(props: DeskProps) {
-  return page("/portfolio", props);
+  return <PortfolioPages path="/portfolio" {...props} />;
 }
 
 export function HoldingsPage(props: DeskProps) {
@@ -174,6 +243,7 @@ export function PerformancePage(props: DeskProps) {
 
 /** Renders a portfolio-family path. Any other path, including a dossier, is empty. */
 export function PortfolioPages({ path, ...props }: DeskProps & { path: string }) {
+  if (path === "/portfolio") return <PortfolioHome />;
   if (!isPortfolioPath(path)) return null;
   return page(path, props);
 }
