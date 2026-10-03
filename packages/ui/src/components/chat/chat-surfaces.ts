@@ -14,9 +14,9 @@ export const digichatSurfaces = {
   thread:
     "digichat-thread aui-root aui-thread-root flex h-full min-h-0 flex-col bg-term-bg font-mono text-term-ink",
   viewport:
-    "digichat-thread__viewport flex min-h-0 flex-1 flex-col gap-[0.7rem] overflow-y-auto overscroll-contain px-[1.15rem] pt-[1rem] pb-[1.2rem]",
+    "digichat-thread__viewport flex min-h-0 flex-1 flex-col gap-[0.55rem] overflow-y-auto overscroll-contain px-[0.9rem] pt-[0.75rem] pb-[0.85rem]",
   footer:
-    "digichat-thread__footer aui-thread-viewport-footer sticky bottom-0 mt-auto flex flex-col gap-[0.45rem] bg-term-bg pt-[0.4rem] pb-[0.2rem]",
+    "digichat-thread__footer aui-thread-viewport-footer sticky bottom-0 mt-auto flex flex-col gap-[0.4rem] bg-term-bg pt-[0.35rem] pb-[0.35rem]",
   empty: "digichat-thread__empty aui-thread-empty flex flex-col gap-[0.7rem]",
   welcome: "aui-thread-welcome-root flex flex-col gap-[0.45rem]",
   welcomeTitle:
@@ -29,7 +29,7 @@ export const digichatSurfaces = {
   exampleMark: "select-none font-mono text-[0.88rem] leading-[1.45] text-term-ink",
   turn: "digichat-turn flex flex-col items-stretch gap-[0.2rem]",
   composer:
-    "digichat-composer aui-composer-root flex flex-col gap-[0.45rem] rounded-none border border-hair bg-transparent px-[0.85rem] pt-[0.75rem] pb-[0.6rem]",
+    "digichat-composer aui-composer-root flex flex-col gap-[0.35rem] rounded-none border border-hair bg-transparent px-[0.75rem] pt-[0.55rem] pb-[0.45rem]",
   composerRow: "flex items-start gap-[0.55rem]",
   composerGlyph: "shrink-0 select-none font-mono text-[0.9rem] leading-[1.5] text-ink",
   composerInput:
@@ -47,6 +47,6 @@ export const digichatSurfaces = {
   error: "ml-[1.8rem] mt-[0.35rem] border border-danger/40 px-[0.7rem] py-[0.4rem] font-mono text-[0.78rem] text-danger",
   list: "digichat-thread-list flex w-56 shrink-0 flex-col border-r border-term-hair bg-term-bg font-mono",
   listItem:
-    "digichat-thread-list__item w-full truncate rounded-none border-0 bg-transparent px-[0.7rem] py-[0.4rem] text-left font-mono text-[0.78rem] text-term-ink data-[active]:bg-term-fill",
+    "digichat-thread-list__item block h-7 w-full truncate rounded-none border-0 bg-transparent px-[0.7rem] py-0 text-left font-mono text-[0.75rem] leading-7 text-term-ink data-[active]:bg-term-fill",
   pane: "flex h-full min-h-0 flex-col rounded-none border border-term-hair bg-term-bg",
 } as const;

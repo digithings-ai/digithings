@@ -34,7 +34,7 @@ export function TopBand() {
         <QuantWordmark className="block h-auto w-[264px] fill-current text-ink min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]" />
         <h1
           id="top-h"
-          className="hero-rise m-0 mt-[2rem] font-display text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
+          className="hero-rise m-0 mt-[1.5rem] font-display text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"
           style={rise(0)}
         >
           Quant research that shows its work.
@@ -43,7 +43,7 @@ export function TopBand() {
           digiquant runs the daily research, sizes the risk, tests every idea against history and logs each decision. You run it in
           the terminal. This site shows it working.
         </p>
-        <div className="hero-rise pointer-events-auto mt-[1.75rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]" style={rise(2)}>
+        <div className="hero-rise pointer-events-auto mt-[1.5rem] flex max-w-full flex-wrap items-center justify-center gap-[0.65rem]" style={rise(2)}>
           <CtaLink href="/app" variant="ghost" className={HERO_ACTION}>
             Open the terminal
           </CtaLink>

@@ -85,13 +85,13 @@ export function PaneFrame({
       overflow="hidden"
       backgroundColor={BG}
     >
-      <box height={1} paddingLeft={1} flexShrink={0}>
+      <box height={1} paddingLeft={1} paddingRight={1} border={["bottom"]} borderColor={LINE} flexShrink={0}>
         <text fg={focused ? GOLD : DIM}>{title}</text>
       </box>
       <box flexGrow={1} paddingLeft={1} paddingRight={1} overflow="hidden" flexDirection="column">
         <Blocks body={body} ink={ink} />
       </box>
-      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" flexShrink={0}>
+      <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={LINE} flexDirection="row" flexShrink={0}>
         <text fg={DIM}>{status}</text>
         <box flexGrow={1} />
         {focused ? <text fg={DIM}>{PANE_HINT}</text> : null}

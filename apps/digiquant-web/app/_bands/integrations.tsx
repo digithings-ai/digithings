@@ -7,7 +7,7 @@ import { MCP_TOOLS } from "../_mcp";
 const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
 
 const CARD =
-  "flex h-auto min-h-full w-full min-w-0 shrink flex-col items-stretch gap-3 overflow-hidden border border-hair bg-surface p-[1.3rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
+  "flex h-auto min-h-full w-full min-w-0 shrink flex-col items-stretch gap-2.5 overflow-hidden bg-surface p-[1.15rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
 
 const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
   {
@@ -59,7 +59,7 @@ export function IntegrationsBand() {
       takeaway="Three integrations drive digiquant: Gloomberg for data, LuxAlgo Vela for live signals, NautilusTrader for the engine. digithings runs the agents and the chat around them."
     >
       <div className="flex min-w-0 flex-col gap-5">
-        <ul aria-label="Architectural drivers" className="m-0 grid min-w-0 list-none gap-4 overflow-x-clip p-0 md:grid-cols-3">
+        <ul aria-label="Architectural drivers" className="m-0 grid min-w-0 list-none gap-px overflow-x-clip border border-hair bg-hair p-px md:grid-cols-3">
           {DRIVERS.map((d) => (
             <li key={d.id} className="min-w-0">
               <CtaLink href={integrationHref(d.id)} external variant="ghost" className={CARD}>

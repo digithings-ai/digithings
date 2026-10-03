@@ -376,15 +376,15 @@ export function App() {
       <DigichatWordmark cols={width} />
       <box flexGrow={1} flexDirection="row" backgroundColor={BG}>
       <box width={rail} flexDirection="column" backgroundColor={BG} border={["right"]} borderColor={HAIR}>
-        <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" backgroundColor={BG}>
+        <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
           <box flexGrow={1} backgroundColor={BG} />
           <text fg={MUTE}>{NEW_CHAT}</text>
         </box>
         {(screen?.sessions ?? []).map((session) => {
           const active = session.id === screen?.currentId;
           return (
-            <box key={session.id} height={1} paddingLeft={1} backgroundColor={active ? FILL : BG}>
-              <text fg={active ? INK : SOFT}>{clip(sessionTitle(session.title), rail - 3)}</text>
+            <box key={session.id} height={1} paddingLeft={1} paddingRight={1} backgroundColor={active ? FILL : BG}>
+              <text fg={active ? INK : SOFT}>{clip(sessionTitle(session.title), rail - 4)}</text>
             </box>
           );
         })}
@@ -409,7 +409,7 @@ export function App() {
           </box>
         ) : null}
         {ui.choice || showPalette || showMentions ? (
-          <box border borderColor={HAIR} backgroundColor={BG} flexDirection="column">
+          <box border={["left", "right", "top"]} borderColor={HAIR} backgroundColor={BG} flexDirection="column">
             {rows.length === 0 ? (
               <box height={1} paddingLeft={1} backgroundColor={BG}>
                 <text fg={MUTE}>{showMentions ? "No matching tools" : "No matching commands"}</text>
@@ -452,7 +452,7 @@ export function App() {
             <text fg={MUTE}>{clip(status, threadWidth)}</text>
           </box>
         ) : null}
-        <box height={1} backgroundColor={BG}>
+        <box height={1} border={["top"]} borderColor={HAIR} backgroundColor={BG}>
           <text fg={MUTE}>{center(CREDIT, threadWidth)}</text>
         </box>
       </box>
