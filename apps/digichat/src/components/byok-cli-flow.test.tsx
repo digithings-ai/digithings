@@ -113,6 +113,158 @@ describe("ByokCliFlow", () => {
     await waitFor(() => expect(screen.getByText(/free \(1\)/)).toBeInTheDocument());
   });
 
+  // #4994 — /api/byok/models now answers every BYOK provider, not just
+  // openrouter. x.ai is the cleanest probe: it has no key-step ping and no
+  // live fetch of its own, so the model list can only have come from the
+  // catalog branch of the route.
+  it("populates the model picker from the catalog for a provider with no live list", async () => {
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/byok/models")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              provider: "xai",
+              source: "catalog",
+              fetchedAt: "2026-10-02T23:38:18+00:00",
+              free: [],
+              opensource: [],
+              flagship: [{ id: "grok-4.5", label: "Grok 4.5" }],
+              all: [
+                { id: "grok-4.5", label: "Grok 4.5" },
+                { id: "grok-4.3", label: "Grok 4.3" },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: false, error: "Incorrect API key" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("xai"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "xai-test" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    // Labels come from the catalog, so this asserts the payload reached the
+    // picker rather than the bare ids falling back to themselves.
+    expect(await screen.findByText("Grok 4.5")).toBeInTheDocument();
+    expect(screen.getByText("Grok 4.3")).toBeInTheDocument();
+    const modelCalls = fetchSpy.mock.calls.filter(([u]) => String(u).includes("/api/byok/models"));
+    expect(modelCalls.some(([u]) => String(u).includes("provider=xai"))).toBe(true);
+  });
+
+  // #4994 — catalog membership is not key-scoped availability. The key-step
+  // ping returns exactly what this key may call, so it must stay above the
+  // catalog in modelOptions' precedence; otherwise a user whose key can see
+  // two models is offered twenty-six they cannot call.
+  it("keeps the key-scoped ping list above the catalog list", async () => {
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/byok/models")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              provider: "openai",
+              source: "catalog",
+              free: [],
+              opensource: [],
+              flagship: [{ id: "gpt-5.4", label: "GPT-5.4" }],
+              all: [
+                { id: "gpt-5.4", label: "GPT-5.4" },
+                { id: "gpt-4o-mini", label: "GPT-4o mini" },
+                { id: "gpt-4o", label: "GPT-4o" },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            model: "gpt-4o-mini",
+            models: [
+              { id: "gpt-4o-mini", label: "gpt-4o-mini" },
+              { id: "gpt-4o", label: "gpt-4o" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("openai"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "sk-test-1234" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    expect(await screen.findByText("gpt-4o")).toBeInTheDocument();
+    // The catalog's flagship entry is in `all` but the ping won, so neither
+    // its id nor its catalog label may reach the picker.
+    expect(screen.queryByText("GPT-5.4")).not.toBeInTheDocument();
+    expect(screen.queryByText("gpt-5.4")).not.toBeInTheDocument();
+  });
+
+  // #4994 — `if (tieredOptions)` used to be truthy even when every bucket was
+  // empty, so selecting an empty tier collapsed the picker to just "custom…"
+  // instead of falling through to the presets.
+  it("falls back to presets when the selected catalog tier is empty", async () => {
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/byok/models")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              provider: "anthropic",
+              source: "catalog",
+              free: [],
+              opensource: [],
+              flagship: [],
+              all: [{ id: "claude-opus-4-5", label: "Claude Opus 4.5" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      // A ping with no `models` array: key-scoped list is unavailable, so the
+      // catalog owns the picker — which is exactly the state under test.
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, model: "claude-opus-4-5" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("anthropic"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    // Default tier "all" has one member, so the catalog list renders.
+    expect(await screen.findByText("Claude Opus 4.5")).toBeInTheDocument();
+
+    // Now select the empty "free" tier — the presets must come back rather
+    // than the picker emptying out to just "custom…".
+    fireEvent.click(await screen.findByText(/free \(0\)/));
+    expect(await screen.findByText("claude-sonnet-4-20250514")).toBeInTheDocument();
+    expect(screen.queryByText("Claude Opus 4.5")).not.toBeInTheDocument();
+  });
+
   it("pings at the key step for OpenAI and populates the model picker from the live list", async () => {
     // Two distinct response shapes needed: the openrouter live-catalog
     // prefetch fires on mount (provider defaults to "openrouter" before any
@@ -149,11 +301,13 @@ describe("ByokCliFlow", () => {
     fireEvent.keyDown(keyInput, { key: "Enter" });
 
     // The ping fires as soon as the key step advances — not after a model
-    // is picked. Two total fetch calls: the openrouter mount-time prefetch,
-    // then this key-step ping.
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
-    const [testUrl] = fetchSpy.mock.calls[1] as [string];
-    expect(testUrl).toContain("/api/byok/test");
+    // is picked. Three total fetch calls since #4994: the openrouter
+    // mount-time catalog prefetch, the openai catalog prefetch when the
+    // provider changes, then this key-step ping.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
+    const testCalls = fetchSpy.mock.calls.filter(([u]) => String(u).includes("/api/byok/test"));
+    expect(testCalls).toHaveLength(1);
+    expect(String(testCalls[0][0])).toContain("/api/byok/test");
     expect(await screen.findByText("gpt-4o")).toBeInTheDocument();
     expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
   });

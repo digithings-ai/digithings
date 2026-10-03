@@ -1,0 +1,35 @@
+{
+  "_comment": "Hand-maintained escape hatches for the model-catalog coverage test (see docs/superpowers/specs/2026-10-03-unified-model-catalog-design.md, decision D8). One entry per model id that config/ pins but models.dev does not carry, each with a reason. `make model-catalog-check` fails when an entry loses its reason and when an entry's id has become resolvable -- a stale exemption silently excuses a future real problem with the same id, so it is deleted rather than left behind. Empty means every strictly-checked pin resolves upstream. IDs that are advisory-only (OpenRouter `:free` route spellings, ollama-cloud `:cloud` tags) are NOT exempt here; they are reported by the advisory test in tests/config/test_model_catalog.py instead.",
+  "exemptions": [
+    {
+      "id": "google/gemini-2.0-flash",
+      "provider": "openrouter",
+      "reason": "OPENROUTER_MODEL_GROUP_PINNED: advertised as an openrouter fallbackModel, so it must also be a model_name in config/litellm.yaml (test_every_advertised_byok_preset_is_a_litellm_model_group). Swapping it for google/gemini-2.5-flash needs a matching LiteLLM model group whose litellm_params.model is an unverified upstream slug -- a routing change that cannot be confirmed without a provider key. Retiring it in favour of a live group is tracked in docs/MODEL_CATALOG.md."
+    },
+    {
+      "id": "claude-sonnet-4-20250514",
+      "provider": "anthropic",
+      "reason": "LITELLM_MODEL_GROUP_PINNED: dated Claude 4 snapshot routed by config/litellm.yaml. models.dev carries no Claude 4 generation at all (only 4-5 and later), so the current model_name is stale against upstream -- but renaming it is a routing change to an unverified upstream slug, not a catalog edit. Needs a live Anthropic key to confirm."
+    },
+    {
+      "id": "claude-haiku-4-20250514",
+      "provider": "anthropic",
+      "reason": "LITELLM_MODEL_GROUP_PINNED: dated Claude 4 snapshot routed by config/litellm.yaml; models.dev has no Claude 4 generation. See the claude-sonnet-4-20250514 entry."
+    },
+    {
+      "id": "claude-opus-4-20250514",
+      "provider": "anthropic",
+      "reason": "LITELLM_MODEL_GROUP_PINNED: dated Claude 4 snapshot routed by config/litellm.yaml; models.dev has no Claude 4 generation. See the claude-sonnet-4-20250514 entry."
+    },
+    {
+      "id": "gemini/gemini-2.0-flash",
+      "provider": "gemini",
+      "reason": "LITELLM_MODEL_GROUP_PINNED: routed to the Google v1beta OpenAI-compatible endpoint by config/litellm.yaml. Google's models.dev slice starts at gemini-2.5-flash; gemini-2.0-flash is retired upstream, so this model_name needs replacing -- a routing change that needs a live Gemini key to confirm."
+    },
+    {
+      "id": "grok-4-3",
+      "provider": "xai",
+      "reason": "LITELLM_MODEL_GROUP_PINNED: the dashed spelling is inconsistent with the dotted form x.ai publishes (grok-4.3, alongside grok-4.5 which this repo already routes) and models.dev carries only the dotted form. Almost certainly a typo in config/litellm.yaml, but correcting it changes routing and needs a live xAI key to confirm."
+    }
+  ]
+}
