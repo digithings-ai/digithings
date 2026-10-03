@@ -669,6 +669,79 @@ def test_copy_speaks_the_selection_and_an_unchanged_marker_does_not(tmp_path: Pa
     assert "nothing selected" in silent.stderr
     assert silent.stdout == ""
     assert board["text"] == "leftover dictation"
+    assert "app=Cursor" in silent.stderr
+    assert "bundle=com.example.Cursor" in silent.stderr
+
+
+def test_a_late_copy_is_spoken_and_a_stuck_marker_is_not(tmp_path: Path) -> None:
+    """The first read after Command-C can still be the marker. A later one counts."""
+    focus_args = ["--focus-name", "Cursor", "--focus-bundle", "com.example.Cursor"]
+
+    def _speak(late: str | None) -> tuple[object, FakeRunner, dict[str, object]]:
+        state: dict[str, object] = {
+            "text": "leftover dictation",
+            "after": 0,
+            "armed": False,
+        }
+
+        def pbpaste(_call: object) -> FakeReply:
+            if state["armed"]:
+                state["after"] = int(state["after"]) + 1
+                if late is not None and int(state["after"]) >= 2:
+                    return FakeReply(stdout=late)
+            return FakeReply(stdout=str(state["text"]))
+
+        def pbcopy(call: object) -> FakeReply:
+            state["text"] = getattr(call, "stdin", None) or ""
+            return FakeReply()
+
+        def osascript(call: object) -> FakeReply:
+            script = " ".join(getattr(call, "argv", []))
+            if "keystroke" in script:
+                state["armed"] = True
+                return FakeReply()
+            if "AXSelectedText" in script:
+                return FakeReply(stdout="missing value")
+            return FakeReply()
+
+        runner = FakeRunner(
+            {
+                "piper": _writes_speak_wav(),
+                "afplay": FakeReply(),
+                "pbpaste": pbpaste,
+                "pbcopy": pbcopy,
+                "osascript": osascript,
+            }
+        )
+        runtime = _speak_runtime(
+            tmp_path,
+            platform="darwin",
+            runner=runner,
+            commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+        )
+        result = run(["speak", "--selection", *focus_args], runtime)
+        return result, runner, state
+
+    spoken, runner, state = _speak("highlighted sentence")
+    assert spoken.code == 0
+    assert spoken.stdout == "highlighted sentence\n"
+    assert int(state["after"]) >= 2
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    script = typed.argv[2]
+    assert script.index("key up option") < script.index("delay 0.1")
+    assert script.index("delay 0.1") < script.index('keystroke "c"')
+    assert typed.argv[3:] == ["com.example.Cursor", "Cursor"]
+    restored = [call.stdin for call in runner.calls if call.program == "pbcopy"]
+    assert all(not (text or "").startswith("leftover") for text in restored)
+
+    silent, _runner, stuck = _speak(None)
+    assert silent.code == 1
+    assert silent.stdout == ""
+    assert "nothing selected" in silent.stderr
+    assert "app=Cursor" in silent.stderr
+    assert "bundle=com.example.Cursor" in silent.stderr
+    assert stuck["text"] == "leftover dictation"
+    assert int(stuck["after"]) == 5
 
 
 def test_ax_selected_text_is_used_without_a_clipboard_change() -> None:

@@ -241,17 +241,19 @@ the wav path, the paste result, and the history path all go to stderr.
    or `--selection` (macOS, in order: focused element's Accessibility selected
    text in the captured app when `--focus-name` / `--focus-bundle` is set, else the
    frontmost app; then Ghostty's selection pasteboard when that target is Ghostty;
-   then Cmd+C via osascript. Option is released first, because the speak hotkey
-   is Left Option and a keystroke sent while it is down is not Copy. That
-   keystroke is sent to the captured process. When `pbcopy` is available a private
-   marker is written first, and the copy counts only when the clipboard then
-   differs from that marker, including a selection that was already on the
-   clipboard. The marker is never spoken. If the clipboard is still the marker,
-   nothing was selected: the previous clipboard is restored and is not spoken.
-   Accessibility text is used as soon as it is returned and does not require the
-   clipboard to change. Without `pbcopy`, the copy counts only when the clipboard
-   changes. A captured app is activated before that Command-C, with the same argv
-   rule as paste: no leading dash. Linux: primary),
+   then Cmd+C via osascript. Option is released, then a short pause, then a plain
+   Command-C to the captured process. When `pbcopy` is available a private marker
+   is written first. The clipboard is read again until it differs from that
+   marker or a few brief retries run out. The first read is often still the
+   marker, because the keystroke returns before the app copies. A later read that
+   differs is the selection, including a selection that was already on the
+   clipboard. The marker is never spoken. If every read is still the marker,
+   nothing was selected: the previous clipboard is restored and is not spoken,
+   and the error names the captured app and bundle. Accessibility text is used
+   as soon as it is returned and does not require the clipboard to change.
+   Without `pbcopy`, the copy counts only when the clipboard changes. A captured
+   app is activated before that Command-C, with the same argv rule as paste: no
+   leading dash. Linux: primary),
    or `--clipboard-or-history` (clipboard only; **no** history fallback — not the hotkey path).
    Hammerspoon speak uses `--selection`.
 2. **Piper** (`speak.py`). `piper --model <voice.onnx> --output_file <speak-…wav>` with text
@@ -281,11 +283,13 @@ the wav path, the paste result, and the history path all go to stderr.
 | Grok Bot / other apps | Hit when a text field holds the selection | Skipped | **Hit** — release Option, then Command-C to that process |
 
 Step 3 speaks the text Command-C wrote after the marker, not whatever was already
-on the clipboard. Option is released before that keystroke, and the keystroke is
-sent to the captured process. A clipboard that is still the marker is empty selection: the
-previous clipboard is put back and is not spoken. Leftover dictation or coding
-replies are not spoken, and no `kind:dict` history is consulted. Every step fails
-soft to the next; all three empty is exit 1.
+on the clipboard. Option is released, then Command-C is sent to the captured
+process. The clipboard is read more than once: the keystroke returns before the
+app copies, so an early read can still be the marker, and a later read that
+differs is the selection. A clipboard that stays the marker is empty selection:
+the previous clipboard is put back and is not spoken, and the error names that
+app. Leftover dictation or coding replies are not spoken, and no `kind:dict`
+history is consulted. Every step fails soft to the next; all three empty is exit 1.
 
 stdout is the spoken text. Missing piper, voice, player, or empty selection → exit 1,
 one line on stderr. Hotkey (`--selection`) soft-fails when nothing is selected — never
