@@ -975,8 +975,22 @@
   }
 }
 
-/* Terminal schematic — fully drawn flow. Tokens only. No draw-on. */
+/* Terminal schematic — fully drawn flow. The window is a dark terminal even
+   when the page is light: light theme flips --term-* and --surface to paper,
+   so the schematic pins the dark ground and the dark semantic hues locally.
+   Structure stays light gray; color is only for live data. */
 .tschem {
+  --term-bg: #08090b;
+  --term-ink: #e7eaec;
+  --term-mute: #7e858b;
+  --term-hair: rgba(255, 255, 255, 0.09);
+  --warn: #e0b341;
+  --up: #3dd6c4;
+  --down: #e5533e;
+  --accent-digisearch: #5aa3c4;
+  --accent-digitrace: #6fa3a3;
+  display: flex;
+  flex-direction: column;
   margin: 0;
   min-width: 0;
   background: var(--term-bg);
@@ -1129,8 +1143,9 @@
 .tschem__box {
   min-width: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
   border: 1px solid var(--term-hair);
   background: transparent;
   color: var(--term-ink);
@@ -1139,46 +1154,59 @@
 
 .tschem__name {
   min-width: 0;
-  overflow-wrap: anywhere;
+  color: var(--term-ink);
+  overflow-wrap: break-word;
 }
 
 .tschem__state {
-  flex: none;
+  align-self: flex-end;
+  white-space: nowrap;
+  line-height: 1.2;
   color: var(--term-mute);
 }
 
 .tschem__box[data-status="running"][data-tone="main"] {
   border-color: var(--warn);
+}
+.tschem__box[data-status="running"][data-tone="main"] .tschem__state {
   color: var(--warn);
 }
 .tschem__box[data-status="running"][data-tone="model"] {
   border-color: var(--accent-digisearch);
+}
+.tschem__box[data-status="running"][data-tone="model"] .tschem__state {
   color: var(--accent-digisearch);
 }
 .tschem__box[data-status="running"][data-tone="side"] {
   border-color: var(--accent-digitrace);
+}
+.tschem__box[data-status="running"][data-tone="side"] .tschem__state {
   color: var(--accent-digitrace);
 }
 .tschem__box[data-status="running"][data-tone="fallback"] {
   border-color: var(--down);
+}
+.tschem__box[data-status="running"][data-tone="fallback"] .tschem__state {
   color: var(--down);
 }
 .tschem__box[data-status="ok"] {
   border-color: var(--up);
+}
+.tschem__box[data-status="ok"] .tschem__state {
   color: var(--up);
 }
 .tschem__box[data-status="pending"] {
   border-style: dashed;
+}
+.tschem__box[data-status="pending"] .tschem__name,
+.tschem__box[data-status="pending"] .tschem__state {
   color: var(--term-mute);
 }
 .tschem__box[data-status="hold"] {
   border-color: var(--down);
-  color: var(--down);
 }
-.tschem__box[data-status="running"] .tschem__state,
-.tschem__box[data-status="ok"] .tschem__state,
 .tschem__box[data-status="hold"] .tschem__state {
-  color: inherit;
+  color: var(--down);
 }
 
 .tschem__loop {
@@ -1206,11 +1234,14 @@
 }
 
 .tschem__receipt {
-  max-height: 4.5rem;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: 4.8rem;
   overflow: hidden;
   border-top: 1px solid var(--term-hair);
+  background: var(--term-bg);
   color: var(--term-mute);
-  padding: 0.35rem 0.7rem 0;
+  padding: 0.45rem 0.7rem 0.4rem;
 }
 
 .tschem__receipt-track {
@@ -1224,13 +1255,17 @@
 }
 
 .tschem__foot {
+  position: relative;
+  z-index: 1;
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.7rem 0.9rem;
   margin: 0;
   border-top: 1px solid var(--term-hair);
-  padding: 0.35rem 0.7rem;
+  background: var(--term-bg);
+  padding: 0.4rem 0.7rem;
   color: var(--term-mute);
 }
 
@@ -1278,9 +1313,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tschem__drop,
-  .tschem__cluster,
-  .tschem__receipt-track {
-    animation: none !important;
+  .tschem[data-motion="on"] .tschem__drop,
+  .tschem[data-motion="on"] .tschem__row[data-live="true"] .tschem__cluster,
+  .tschem[data-motion="on"] .tschem__receipt-track {
+    animation: none;
+  }
+  .tschem__meter > span {
+    transition: none;
   }
 }
