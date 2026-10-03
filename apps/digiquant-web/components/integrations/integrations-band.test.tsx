@@ -39,6 +39,13 @@ describe("IntegrationsBand", () => {
     expect(html).toContain("digifetch");
     expect(html).not.toContain("favicon-dg.svg");
     expect(html).not.toMatch(/12x|fx hub/i);
+    expect(html).toContain('aria-label="digiquant"');
+    expect(html).toContain('aria-label="digichat"');
+    expect(html).toContain('aria-label="digivoice"');
+    expect(html).toContain('fill="#878787"');
+    expect(html).toContain('fill="#ffffff"');
+    expect(html).not.toContain("M-9 -5.5 -2 0 -9 5.5");
+    expect(html).toContain("M0 -6 -9 8");
   });
 
   it("scrolls the packages this tree actually calls, in two directions", () => {
