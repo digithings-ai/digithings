@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { IndicatorHandle, Vela } from "@luxalgo/vela";
+import { readDigiquantChartScale } from "@digithings/ui/chart-scale";
 import {
   CHART_BUILD_MAX_MS,
   HERO_FADE_MS,
@@ -29,9 +30,6 @@ import { heroWatermark, HERO_HOLD_MS, loadHeroSeries, nextHero, type HeroSeries 
  *  Wheel: zoom-out while the gesture is live; after settle or the zoom-out
  *  budget, the next wheel scrolls the page. Horizontal / shift stays on the chart. */
 
-// Switch candle, volume, and study inputs to `@/lib/chart-scale` when that module is on the branch.
-const UP = "#3DFF9A"; // canon-allow: hero candle up
-const DOWN = "#FF5C6C"; // canon-allow: hero candle down
 const CYCLE = [
   { type: "bollinger-bands", label: "Bollinger" },
   { type: "vwap", label: "VWAP" },
@@ -43,8 +41,6 @@ const THEME = {
   textColor: "#d7dde4", // canon-allow: hero axis text
   gridColor: "#1a1f24", // canon-allow: hero grid
   borderColor: "#2a3138", // canon-allow: hero frame
-  upColor: UP,
-  downColor: DOWN,
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
 };
 
@@ -133,6 +129,8 @@ export function QuantField() {
     const frame = frameRef.current;
     if (!host || !frame) return;
 
+    const scale = readDigiquantChartScale(host);
+    const theme = { ...THEME, upColor: scale.candleUp, downColor: scale.candleDown };
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const picked = CYCLE[Math.floor(Math.random() * CYCLE.length)] ?? CYCLE[0];
     const overlayKind = picked.type as HeroOverlay;
@@ -264,17 +262,17 @@ export function QuantField() {
 
     const chartOptions = (series: HeroSeries) => {
       const motion = reduced ? false : { intro: false, zoom: true, pan: true, autoscale: false };
-      const theme = {
-        theme: THEME,
-        upColor: UP,
-        downColor: DOWN,
-        volume: true,
+      const colors = {
+        theme,
+        upColor: scale.candleUp,
+        downColor: scale.candleDown,
+        volume: false as const,
         drawings: false as const,
         animations: motion,
       };
       if (series.source === "coinbase") {
         return {
-          ...theme,
+          ...colors,
           symbol: `coinbase:${series.symbol}`,
           timeframe: series.velaTimeframe,
           bars: 300,
@@ -282,7 +280,7 @@ export function QuantField() {
         };
       }
       return {
-        ...theme,
+        ...colors,
         symbol: series.symbol,
         timeframe: series.velaTimeframe,
         live: false as const,
@@ -301,6 +299,9 @@ export function QuantField() {
         ]);
         if (dead) return;
         chart = new VelaChart(host, chartOptions(series));
+        chart.addNativeIndicator("volume", {
+          inputs: { upColor: scale.volumeUp, downColor: scale.volumeDown },
+        });
         host.style.touchAction = "pan-y";
         chart.data.registerProvider("coinbase", new CoinbaseProvider());
         chart.on("load:end", (ev) => {
