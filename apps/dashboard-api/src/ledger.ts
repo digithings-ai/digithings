@@ -454,13 +454,10 @@ function ledgerEventPath(offset: number, query: LedgerQuery): string {
     `price,thesis_id,reason&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
     `&order=date.desc&limit=${LEDGER_FETCH_PAGE}&offset=${offset}`;
   if (query.asOf != null) path += `&date=lte.${query.asOf}`;
-  if (query.ticker != null) path += `&ticker=${postgrestEq(query.ticker)}`;
+  // Horizontal eq keeps any quotes in the value. `ticker=eq.BRK.B` matches;
+  // `ticker=eq."BRK.B"` looks up the quoted string.
+  if (query.ticker != null) path += `&ticker=eq.${query.ticker}`;
   return path;
-}
-
-/** Quote a filter value. PostgREST treats `.` as reserved unless the value is quoted. */
-function postgrestEq(value: string): string {
-  return `eq."${value.replaceAll('"', '""')}"`;
 }
 
 function ledgerMarksPath(offset: number, asOf: string | null): string {
