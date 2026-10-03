@@ -455,7 +455,7 @@ export function ChatShell({
             <div>DT</div>
             <div>
               <div>digichat</div>
-              <div>v0.1 · digithings</div>
+              <div>v2.4.0 · digichat</div>
             </div>
           </div>
 
