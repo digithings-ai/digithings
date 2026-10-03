@@ -1003,6 +1003,56 @@ function scenarios.dict_hotkey_stops_the_readout_before_listening()
   eq(tasks[2].args[1], "dict", "the next task is dictation")
 end
 
+function scenarios.palette_recolors_banner_background_border_and_grid()
+  write(DATA .. "/settings.json", '{"theme_palette":"tokyonight","theme_mode":"dark","live_banner":true}')
+  press_right_option()
+  local c = live_canvas()
+  check(c, "palette banner is visible")
+  local core = dofile(ADAPTER .. "banner_core.lua")
+  local chrome = core.theme_colors("dark", "tokyonight")
+  local bg = c.elements[1].fillColor
+  local border = c.elements[1].strokeColor
+  local cell = c.elements[2].fillColor
+  local function near(a, b)
+    return math.abs(a - b) < 0.002
+  end
+  check(near(bg.red, chrome.bg.red) and near(bg.green, chrome.bg.green) and near(bg.blue, chrome.bg.blue), "banner background is palette neutral")
+  check(near(border.red, chrome.border.red) and near(border.green, chrome.border.green) and near(border.blue, chrome.border.blue), "banner border is palette accent")
+  check(near(cell.red, chrome.accent.red) and near(cell.green, chrome.accent.green) and near(cell.blue, chrome.accent.blue), "animated cell is palette primary")
+  check(not (near(bg.red, 0) and near(bg.green, 0) and near(bg.blue, 0)), "background left legacy black")
+  check(not near(border.green, 1), "border left legacy white")
+  check(not (near(cell.red, 0.94) and near(cell.green, 0.27)), "grid left legacy red")
+end
+
+function scenarios.empty_palette_keeps_legacy_banner_chrome()
+  write(DATA .. "/settings.json", '{"theme_palette":"","theme_mode":"dark","live_banner":true}')
+  press_right_option()
+  local c = live_canvas()
+  check(c, "legacy banner is visible")
+  eq(c.elements[1].fillColor.red, 0, "empty palette keeps black ground")
+  eq(c.elements[1].fillColor.green, 0, "empty palette keeps black ground green")
+  eq(c.elements[1].fillColor.blue, 0, "empty palette keeps black ground blue")
+  eq(c.elements[2].fillColor.red, 0.94, "empty palette keeps recording red")
+  eq(c.elements[2].fillColor.green, 0.27, "empty palette keeps recording red green")
+  eq(c.elements[2].fillColor.blue, 0.27, "empty palette keeps recording red blue")
+end
+
+function scenarios.theme_mode_picks_the_palette_variant()
+  write(DATA .. "/settings.json", '{"theme_palette":"tokyonight","theme_mode":"light","live_banner":true}')
+  press_right_option()
+  local c = live_canvas()
+  local core = dofile(ADAPTER .. "banner_core.lua")
+  local light = core.theme_colors("light", "tokyonight")
+  local dark = core.theme_colors("dark", "tokyonight")
+  local bg = c.elements[1].fillColor
+  local function near(a, b)
+    return math.abs(a - b) < 0.002
+  end
+  check(near(bg.red, light.bg.red) and near(bg.green, light.bg.green), "explicit light mode paints the light ground")
+  check(not near(bg.red, dark.bg.red), "explicit light mode is not the detected dark variant")
+  check(near(c.elements[2].fillColor.red, light.accent.red), "light mode grid uses the light primary")
+end
+
 local run = scenarios[scenario]
 if not run then
   fail("unknown scenario")

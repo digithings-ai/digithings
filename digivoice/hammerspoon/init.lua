@@ -150,6 +150,16 @@ local function detect_theme()
   return "light"
 end
 
+--- Theme for a settings table: an explicit `theme_mode` dark/light wins, and
+--- only `system` falls back to the appearance. Render must ask this every
+--- frame — re-reading detect_theme() alone would drop the saved mode.
+local function theme_for(config)
+  if config and (config.theme_mode == "light" or config.theme_mode == "dark") then
+    return config.theme_mode
+  end
+  return detect_theme()
+end
+
 local function load_saved_pos()
   return read_json(POS_FILE)
 end
@@ -195,12 +205,16 @@ local function cancel_timer(timer)
   return nil
 end
 
-local function cell_color(state, i, t, animate)
+--- One grid cell. `accent` is the palette primary (theme_colors accent channel)
+--- and is nil for an empty palette, which keeps the legacy RED/INK/AMBER/GRAY
+--- matrix colors.
+local function cell_color(state, i, t, animate, accent)
   local cfg = core.matrix_for(state)
+  local color = accent or cfg.color
   return {
-    red = cfg.color.red,
-    green = cfg.color.green,
-    blue = cfg.color.blue,
+    red = color.red,
+    green = color.green,
+    blue = color.blue,
     alpha = core.dot_alpha(state, i, t, animate),
   }
 end
@@ -260,7 +274,7 @@ local function build_canvas(s, view, box)
       type = "rectangle",
       action = "fill",
       frame = frame,
-      fillColor = cell_color(view.state, i, t, s.config.banner_animations),
+      fillColor = cell_color(view.state, i, t, s.config.banner_animations, chrome.accent),
     }
   end
   canvas:appendElements(cells)
@@ -300,9 +314,11 @@ local function paint_cells(s, view)
   if not canvas then
     return
   end
+  local chrome = core.theme_colors(s.theme, s.theme_palette)
   local t = hs.timer.secondsSinceEpoch()
   for i = 0, core.GRID * core.GRID - 1 do
-    canvas[CELL_FIRST + i].fillColor = cell_color(view.state, i, t, s.config.banner_animations)
+    canvas[CELL_FIRST + i].fillColor =
+      cell_color(view.state, i, t, s.config.banner_animations, chrome.accent)
   end
 end
 
@@ -339,12 +355,14 @@ local function render(s)
   local frame = screen:frame()
   local box = core.layout(view)
   s.box = box
-  local theme = detect_theme()
+  -- Settings win over the system appearance; `system` keeps detect_theme().
+  local theme = theme_for(s.config)
   local signature = table.concat({
     view.state,
     icon_phase_for(s, view),
     theme,
     tostring(s.config.banner_pinned),
+    tostring(s.theme_palette or ""),
   }, "\0")
   if signature ~= s.signature or not canvas then
     s.signature = signature
@@ -512,10 +530,7 @@ local function begin_session(kind)
     end_session(session)
   end
   local config = core.parse_settings(read_json(SETTINGS_FILE))
-  local theme = detect_theme()
-  if config.theme_mode == "light" or config.theme_mode == "dark" then
-    theme = config.theme_mode
-  end
+  local theme = theme_for(config)
   local s = {
     kind = kind,
     start_ms = now_ms(),
@@ -549,10 +564,7 @@ local function start_frames(s)
   theme_timer = hs.timer.doEvery(2.0, function()
     if session == s then
       local config = core.parse_settings(read_json(SETTINGS_FILE))
-      local theme = detect_theme()
-      if config.theme_mode == "light" or config.theme_mode == "dark" then
-        theme = config.theme_mode
-      end
+      local theme = theme_for(config)
       local palette = config.theme_palette or ""
       if theme ~= s.theme or palette ~= s.theme_palette then
         s.theme = theme

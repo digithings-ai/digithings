@@ -13,6 +13,7 @@ import {
 } from "@opentui/core"
 
 import { HERO_GAP, pixelScale, slotRowsFor, wordmarkLines } from "./hero.js"
+import { menuPaint } from "./menu_colors.js"
 
 export const FOOTER = "↑↓ move · enter select · esc back · click"
 export const HOTKEY_PROMPT = "input new hotkey"
@@ -56,12 +57,25 @@ function summaryKind(summary) {
 
 let activeTheme = null
 
+function rgbaFromChannels(channels) {
+  if (!channels) return null
+  if (channels.cube != null) return RGBA.fromIndex(channels.cube)
+  return RGBA.fromInts(channels[0], channels[1], channels[2])
+}
+
 function statusLine(text, truecolor) {
   const parts = statusParts(text)
-  const chunks = [fg(mutedColor(truecolor))(`${parts.mark} `)]
-  if (parts.head) chunks.push({ __isChunk: true, text: `${parts.head} · ` })
-  if (!parts.summary || parts.kind === "info") chunks.push({ __isChunk: true, text: parts.summary })
-  else chunks.push(fg(statusColor(truecolor, parts.kind))(parts.summary))
+  const paint = menuPaint(activeTheme, truecolor)
+  const ink = rgbaFromChannels(paint.statusText)
+  const plain = (value) =>
+    value && ink ? fg(ink)(value) : { __isChunk: true, text: value }
+  const chunks = [fg(ink || mutedColor(truecolor))(`${parts.mark} `)]
+  if (parts.head) chunks.push(plain(`${parts.head} · `))
+  if (!parts.summary || parts.kind === "info") chunks.push(plain(parts.summary))
+  else {
+    const status = rgbaFromChannels(paint.status) || statusColor(truecolor, parts.kind)
+    chunks.push(fg(status)(parts.summary))
+  }
   return new StyledText(chunks)
 }
 
@@ -96,12 +110,7 @@ function paintCells(cells) {
 }
 
 function mutedColor(truecolor, theme = activeTheme) {
-  if (theme && theme.active && truecolor) {
-    const rgb = hexChannels(theme.text)
-    if (rgb) return RGBA.fromInts(rgb[0], rgb[1], rgb[2])
-  }
-  if (truecolor) return RGBA.fromInts(175, 175, 175)
-  return RGBA.fromIndex(145)
+  return rgbaFromChannels(menuPaint(theme, truecolor).value)
 }
 
 function mutedLine(text, truecolor) {
@@ -645,6 +654,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     const mark = row.downloaded ? 1 : 0
     const room = Math.max(4, frameWidth - label.length - 2 - mark)
+    const rowColor = rgbaFromChannels(menuPaint(activeTheme, truecolor).row)
     const action = new TextRenderable(renderer, {
       content: label ? ` ${label}` : "",
       height: 1,
@@ -652,6 +662,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       width: row.kind === "log" ? room : undefined,
       truncate: row.kind === "log",
       wrapMode: row.kind === "log" ? "none" : undefined,
+      ...(rowColor ? { fg: rowColor } : {}),
     })
     block.add(action)
     if (capturing) {

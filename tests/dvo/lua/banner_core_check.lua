@@ -425,6 +425,20 @@ check(math.abs(core.theme_colors("light").bg.blue - 0xF6 / 255) < 0.002, "ivory 
 check(core.theme_colors("bogus").bg.red == 0, "unknown theme falls back to dark")
 eq(core.matrix_for("recording").color.red, 0.94, "recording red stays")
 
+local tokyo = core.theme_colors("dark", "tokyonight")
+check(math.abs(tokyo.bg.red - 0x1a / 255) < 0.002, "tokyonight ground")
+check(math.abs(tokyo.bg.green - 0x1b / 255) < 0.002, "tokyonight ground green")
+check(math.abs(tokyo.bg.blue - 0x26 / 255) < 0.002, "tokyonight ground blue")
+check(math.abs(tokyo.border.red - 0xff / 255) < 0.002, "tokyonight border")
+check(math.abs(tokyo.border.green - 0x9e / 255) < 0.002, "tokyonight border green")
+check(math.abs(tokyo.border.blue - 0x64 / 255) < 0.002, "tokyonight border blue")
+check(math.abs(tokyo.accent.red - 0x7a / 255) < 0.002, "tokyonight primary")
+check(math.abs(tokyo.accent.green - 0xa2 / 255) < 0.002, "tokyonight primary green")
+check(math.abs(tokyo.accent.blue - 0xf7 / 255) < 0.002, "tokyonight primary blue")
+eq(core.theme_colors("dark", "").bg.red, 0, "empty palette stays on legacy ground")
+eq(core.theme_colors("dark", "").border.green, 1, "empty palette stays on legacy border")
+eq(core.matrix_for("recording").color.red, 0.94, "matrix red is still the empty-palette grid")
+
 -- 9 anchors, snap, clamp, saved, reanchor
 local frame9 = { x = 0, y = 0, w = 1440, h = 900 }
 local size9 = { w = 100, h = 50 }
