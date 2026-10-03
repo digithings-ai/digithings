@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { useKeyboard, useRenderer } from "@opentui/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { WEB_SLOTS } from "../../../apps/digiquant-web/components/desk/web-slots";
 import { BLOCKS, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
 import {
@@ -15,7 +15,9 @@ import {
 } from "./command";
 import { COLS, ROWS, nudge, type Layout } from "./grid";
 import { MARK_COLS, MARK_ROWS, REVEAL_MS, glintCell, markDirection, markElapsed, markLines, revealedColumns } from "./mark";
+import type { DeskThread } from "../../../apps/digiquant-web/components/desk/chat-model";
 import { BriefPage } from "./pages/brief";
+import { ChatPage } from "./pages/chat";
 import { PipelinePage } from "./pages/pipeline";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
@@ -189,6 +191,9 @@ export function App() {
   const [deskOpen, setDeskOpen] = useState(false);
   const [deskCursor, setDeskCursor] = useState(() => deskIndex(publicDeskId(start)));
   const [railCols, setRailCols] = useState(RAIL_COLS_DEFAULT);
+  const [chatThreads, setChatThreads] = useState<DeskThread[]>([]);
+  const [chatActive, setChatActive] = useState<string | undefined>();
+  const [chatTyping, setChatTyping] = useState(false);
   const [note, setNote] = useState("");
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
 
@@ -202,6 +207,11 @@ export function App() {
   const deskOpenRef = useRef(deskOpen);
   const deskCursorRef = useRef(deskCursor);
   const catalogRef = useRef(true);
+  const chatTypingRef = useRef(false);
+  const setTyping = useCallback((on: boolean) => {
+    chatTypingRef.current = on;
+    setChatTyping(on);
+  }, []);
   pathRef.current = path;
   deskRef.current = desk;
   layoutRef.current = layout;
@@ -318,9 +328,20 @@ export function App() {
     void writeFile(STATUS, JSON.stringify(payload, null, 2));
   }, [STATUS, layout, path, page, reads]);
 
+  useEffect(() => {
+    if (path === "/tools/chat") return;
+    setChatThreads([]);
+    chatTypingRef.current = false;
+    setChatTyping(false);
+  }, [path]);
+
   const onKey = useRef<(key: Key) => void>(() => {});
   onKey.current = (key) => {
     const name = key.name ?? "";
+    if (chatTypingRef.current && modeRef.current === "desk" && !deskOpenRef.current) {
+      if (name === "escape") setTyping(false);
+      return;
+    }
     if (modeRef.current === "path") {
       if (name === "escape") {
         setMode("desk");
@@ -437,8 +458,18 @@ export function App() {
   };
 
   const catalog = isCatalogPath(path);
-  const undrawn = isWebSlot(path);
-  const view = catalog || undrawn ? null : mountedView(path);
+  const chat = path === "/tools/chat";
+  const undrawn = isWebSlot(path) && !chat;
+  const view = chat ? (
+    <ChatPage
+      api={API}
+      activeId={chatActive}
+      typing={chatTyping}
+      onThreads={setChatThreads}
+      onActive={setChatActive}
+      onTyping={setTyping}
+    />
+  ) : catalog || undrawn ? null : mountedView(path);
   const selected = catalog && shownFocus >= 0 ? shown[shownFocus] : undefined;
   const footer =
     mode === "path"
@@ -519,6 +550,25 @@ export function App() {
               </box>
             ),
           )}
+          {path === "/tools/chat" && chatThreads.length > 0 ? (
+            <box flexDirection="column">
+              <box height={1} paddingLeft={1}>
+                <text fg={MUTE}>threads</text>
+              </box>
+              {chatThreads.map((thread) => (
+                <box
+                  key={thread.id}
+                  height={1}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={thread.id === chatActive ? WASH : BG}
+                  onMouseDown={() => setChatActive(thread.id)}
+                >
+                  <text fg={thread.id === chatActive ? ACCENT : SOFT}>{`▸ ${thread.title}`}</text>
+                </box>
+              ))}
+            </box>
+          ) : null}
         </box>
         <box flexGrow={1} position="relative" overflow="hidden">
           {undrawn ? (

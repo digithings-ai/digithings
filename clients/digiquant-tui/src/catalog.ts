@@ -1,7 +1,7 @@
 import type { Layout } from "./grid";
 
-// Parked: a digichat terminal tab is not built. See README.md.
-// Browser pages, not drawn here: /tools/terminal, /tools/luxalgo, /tools/charts, /tools/chat.
+// Browser pages, not drawn here: /tools/terminal, /tools/charts.
+// /tools/chat is a dedicated page: threads in the desk rail, one empty sentence.
 
 const FX_PAIR = "USDJPY";
 

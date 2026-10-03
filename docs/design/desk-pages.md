@@ -19,4 +19,4 @@ Invite-only desks are not on this list. Do not invent rows, prices, or sessions.
 - [ ] `/strategies/deploy` Deploy — targets table, plan steps table, draft fields. Empty sentence when a list is empty. The draft is not an order.
 - [ ] `/tools/terminal` Terminal — not drawn in this terminal. Web keeps the existing link. No invented quotes.
 - [ ] `/tools/charts` Charts — not drawn in this terminal. Web chart stays on bars the API returns. No invented prices.
-- [ ] `/tools/chat` digichat — not drawn in this terminal. Web keeps the thread. No invented messages.
+- [x] `/tools/chat` digichat — threads in the desk rail. One sentence when digichat is not configured. No second sidebar and no read footer. No invented messages.

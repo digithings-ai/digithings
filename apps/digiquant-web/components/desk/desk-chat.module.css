@@ -1,0 +1,37 @@
+/* Desk chat sits on the desk ground. The digichat skin's own fill and composer
+   border stay on the marketing page; this scope only clears them here. */
+.ground {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+}
+
+.ground :global(.digichat-thread),
+.ground :global(.digichat-thread__viewport),
+.ground :global(.digichat-thread__footer),
+.ground :global(.aui-thread-viewport-footer),
+.ground :global(.aui-root) {
+  width: 100%;
+  background: transparent !important;
+  background-color: transparent !important;
+  --thread-max-width: 100% !important;
+  --composer-bg: transparent !important;
+  --background: transparent;
+  --card: transparent;
+}
+
+.ground :global(.digichat-thread__viewport) > :global(.mx-auto) {
+  width: 100%;
+  max-width: none !important;
+}
+
+.ground :global([data-slot="aui_composer-shell"]) {
+  border: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}

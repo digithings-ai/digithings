@@ -20,7 +20,8 @@ describe("official chat reads", () => {
   it("mounts the digichat thread instead of the scripted stand-in", () => {
     const src = readFileSync(new URL("./desk-chat.tsx", import.meta.url), "utf8");
     expect(src).toContain("DigichatThread");
-    expect(src).toContain("DigichatThreadList");
+    expect(src).not.toContain("DigichatThreadList");
+    expect(src).not.toContain("Chat · sessions");
     expect(src).not.toContain("scripted-session");
     expect(src).not.toContain("COMPOSER_HIDDEN");
     expect(src).not.toContain("_strategy-script");

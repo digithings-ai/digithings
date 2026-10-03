@@ -1,46 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui/react";
 import { DigichatThread } from "@digithings/ui/chat/thread";
-import { DigichatThreadList } from "@digithings/ui/chat/thread-list";
-import { DASH } from "../../../../clients/digiquant-tui/src/read";
-import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
 import { DeskFrame } from "./desk-frame";
-import {
-  CHAT_ROUTES,
-  messageRoute,
-  messageRows,
-  replyText,
-  sessionId,
-  sessionRows,
-  type DeskMessage,
-} from "./chat-model";
-import { postOfficial, readOfficial, type OfficialRead } from "./read-block";
+import { ChatDesk, useChatDesk } from "./chat-desk";
+import styles from "./desk-chat.module.css";
 
-const tone: Record<ReadResult["status"] | "loading", string> = {
-  ok: "text-ink",
-  empty: "text-ink-mute",
-  loading: "text-ink-mute",
-  stub: "text-ink-soft",
-  error: "text-ink-soft",
-};
-
-function lineOf(read: OfficialRead | null): string {
-  if (!read) return "loading…";
-  return read.result.lines.join("\n") || DASH;
-}
-
-function ReadBlock({ label, route, read }: { label: string; route: string; read: OfficialRead | null }) {
-  const status = read?.result.status ?? "loading";
-  return (
-    <section aria-label={label} className="flex min-w-0 flex-col gap-1 border-r border-hair px-2.5 py-1.5 last:border-r-0">
-      <h2 className="m-0 truncate font-mono text-[0.6875rem] font-normal tracking-[0.04em] text-ink-mute">{label}</h2>
-      <p className={`m-0 max-h-16 overflow-auto whitespace-pre-wrap font-mono text-[0.75rem] leading-[1.45] ${tone[status]}`}>{lineOf(read)}</p>
-      <p className="m-0 truncate font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">{route}</p>
-    </section>
-  );
-}
+const SENTENCE = "m-0 px-3 py-6 font-mono text-[0.75rem] leading-[1.45] text-ink-mute";
 
 function appendText(message: { content?: unknown }): string {
   const content = message.content;
@@ -56,143 +22,39 @@ function appendText(message: { content?: unknown }): string {
     .trim();
 }
 
-/** The digichat thread and sidebar. Reads and sends go to the official API. No script. */
-export function DeskChat() {
-  const [sessions, setSessions] = useState<OfficialRead | null>(null);
-  const [current, setCurrent] = useState<OfficialRead | null>(null);
-  const [transcript, setTranscript] = useState<OfficialRead | null>(null);
-  const [messages, setMessages] = useState<DeskMessage[]>([]);
-  const [activeId, setActiveId] = useState<string | undefined>(undefined);
-  const [running, setRunning] = useState(false);
-  const [sendNote, setSendNote] = useState("");
-  const sessionRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    let cancel = false;
-    void (async () => {
-      const [sessionRead, currentRead, messageRead] = await Promise.all([
-        readOfficial(CHAT_ROUTES.sessions, "fields", ac.signal),
-        readOfficial(CHAT_ROUTES.current, "fields", ac.signal),
-        readOfficial(CHAT_ROUTES.messages, "fields", ac.signal),
-      ]);
-      if (cancel) return;
-      setSessions(sessionRead);
-      setCurrent(currentRead);
-      setTranscript(messageRead);
-      const usable = messageRead.result.status === "ok" || messageRead.result.status === "empty";
-      setMessages(usable ? messageRows(messageRead.data) : []);
-      const id =
-        currentRead.result.status === "ok" || currentRead.result.status === "empty" ? sessionId(currentRead.data) : null;
-      sessionRef.current = id;
-      setActiveId(id ?? undefined);
-    })();
-    return () => {
-      cancel = true;
-      ac.abort();
-    };
-  }, []);
-
-  const threads =
-    sessions && (sessions.result.status === "ok" || sessions.result.status === "empty") ? sessionRows(sessions.data) : [];
-  const failed = [sessions, current, transcript].some(
-    (read) => read != null && (read.result.status === "error" || read.result.status === "stub"),
-  );
-  const settled = sessions != null && current != null && transcript != null;
-
+/** Thread and composer on the desk ground. Threads live in the desk rail. */
+function ChatPane() {
+  const chat = useChatDesk();
   const runtime = useExternalStoreRuntime({
-    messages,
-    isRunning: running,
+    messages: chat?.messages ?? [],
+    isRunning: chat?.running ?? false,
     convertMessage: (message) => message,
     onNew: async (message) => {
       const text = appendText(message);
-      if (!text) {
-        setSendNote(DASH);
-        return;
-      }
-      setRunning(true);
-      setSendNote("loading…");
-      try {
-        let id = sessionRef.current;
-        if (!id) {
-          const created = await postOfficial("/chat/sessions", {});
-          setSendNote(lineOf(created));
-          if (created.result.status !== "ok" && created.result.status !== "empty") return;
-          id = sessionId(created.data);
-          if (!id) return;
-          sessionRef.current = id;
-          setActiveId(id);
-        }
-        const sent = await postOfficial(messageRoute(id), { text });
-        setSendNote(lineOf(sent));
-        if (sent.result.status !== "ok" && sent.result.status !== "empty") return;
-        const reply = replyText(sent.data);
-        if (!reply) return;
-        setMessages((prev) => [...prev, { id: `reply-${id}`, role: "assistant", content: reply }]);
-      } finally {
-        setRunning(false);
-      }
-    },
-    adapters: {
-      threadList: {
-        threadId: activeId,
-        threads,
-        onSwitchToNewThread: async () => {
-          setRunning(true);
-          setSendNote("loading…");
-          try {
-            const created = await postOfficial("/chat/sessions", {});
-            setSendNote(lineOf(created));
-            const id = sessionId(created.data);
-            if (!id) return;
-            sessionRef.current = id;
-            setActiveId(id);
-          } finally {
-            setRunning(false);
-          }
-        },
-        onSwitchToThread: async (id: string) => {
-          sessionRef.current = id;
-          setActiveId(id);
-          const [currentRead, messageRead] = await Promise.all([
-            readOfficial(`/chat/sessions/${encodeURIComponent(id)}`, "fields"),
-            readOfficial(`/chat/sessions/${encodeURIComponent(id)}/messages`, "fields"),
-          ]);
-          setCurrent(currentRead);
-          setTranscript(messageRead);
-          const usable = messageRead.result.status === "ok" || messageRead.result.status === "empty";
-          setMessages(usable ? messageRows(messageRead.data) : []);
-        },
-      },
+      if (!text || !chat) return;
+      await chat.send(text);
     },
   });
 
+  if (!chat?.ready) return <p className={SENTENCE}>loading…</p>;
+  if (chat.notice) return <p className={SENTENCE}>{chat.notice}</p>;
+
   return (
-    <DeskFrame current="/tools/chat">
-      <AssistantRuntimeProvider runtime={runtime}>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="grid min-h-0 flex-1 grid-cols-[14rem_minmax(0,1fr)]">
-            <DigichatThreadList className="h-full min-h-0" />
-            <div className="flex min-h-0 flex-col">
-              {sendNote ? (
-                <p role="status" className="m-0 flex h-7 shrink-0 items-center border-b border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-soft">
-                  {sendNote}
-                </p>
-              ) : null}
-              <DigichatThread
-                welcome={settled && !failed ? "What should we inspect?" : ""}
-                placeholder="Ask digichat…"
-                className="min-h-0 flex-1"
-              />
-            </div>
-          </div>
-          <div className="grid shrink-0 grid-cols-3 border-t border-hair">
-            <ReadBlock label="Chat · sessions" route={CHAT_ROUTES.sessions} read={sessions} />
-            <ReadBlock label="Chat · thread" route={CHAT_ROUTES.current} read={current} />
-            <ReadBlock label="Chat · transcript" route={CHAT_ROUTES.messages} read={transcript} />
-          </div>
-        </div>
-      </AssistantRuntimeProvider>
-    </DeskFrame>
+    <AssistantRuntimeProvider runtime={runtime}>
+      <div className={styles.ground}>
+        <DigichatThread welcome="What should we inspect?" placeholder="Ask digichat…" className="min-h-0 flex-1" />
+      </div>
+    </AssistantRuntimeProvider>
+  );
+}
+
+/** digichat on the desk. Reads and sends go to the official API. No script. */
+export function DeskChat() {
+  return (
+    <ChatDesk>
+      <DeskFrame current="/tools/chat">
+        <ChatPane />
+      </DeskFrame>
+    </ChatDesk>
   );
 }
