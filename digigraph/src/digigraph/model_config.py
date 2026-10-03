@@ -396,11 +396,24 @@ def get_digiquant_tier() -> str:
 
     Sole-read since #3784: ``DIGIQUANT_MODEL_TIER`` is the only key that selects
     a tier here, and no ``OLYMPUS_*`` alias is read anywhere (#4295).
+
+    An empty value is the kill switch: it forces ``cheap`` even when the yaml
+    ``default_tier`` is something else. A typo does the same, with a warning,
+    so it cannot silently follow a non-cheap yaml default. An unset variable
+    still uses that yaml default.
     """
+    if "DIGIQUANT_MODEL_TIER" not in os.environ:
+        return _load_digiquant_models().default_tier or "cheap"
     raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
     if raw in _VALID_MODEL_TIERS:
         return raw
-    return _load_digiquant_models().default_tier or "cheap"
+    if raw:
+        logger.warning(
+            "DIGIQUANT_MODEL_TIER=%r is not one of %s; using cheap",
+            raw,
+            ", ".join(sorted(_VALID_MODEL_TIERS)),
+        )
+    return "cheap"
 
 
 def _capability_for_phase(phase_slug: str, cfg: DigiquantModelsConfig) -> str | None:
