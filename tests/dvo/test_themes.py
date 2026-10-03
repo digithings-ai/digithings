@@ -135,7 +135,7 @@ def test_named_palette_recolors_menu_rows_values_and_status() -> None:
     app = (ROOT / "digivoice" / "tui" / "src" / "app.js").read_text(encoding="utf-8")
     assert "menuPaint(activeTheme, truecolor)" in app
     assert "menuPaint(activeTheme, truecolor).row" in app
-    assert "hexChannels(activeTheme.accent)" in app
+    assert "screenPaint(activeTheme).foreground" in app
     script = f"""
 import {{ menuPaint }} from "./digivoice/tui/src/menu_colors.js"
 const named = menuPaint({{ active: true, text: {ink!r}, accent: {primary!r} }}, true)
@@ -153,6 +153,61 @@ if (!same(named.status, channels({primary!r}))) process.exit(1)
 if (!same(named.statusText, channels({ink!r}))) process.exit(1)
 if (empty.row !== null || empty.status !== null || empty.statusText !== null) process.exit(1)
 if (!same(empty.value, [175, 175, 175])) process.exit(1)
+console.log("PASS")
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "PASS" in result.stdout
+
+
+def test_screen_paint_covers_the_theme_ground() -> None:
+    """The screen behind the wordmark and menu follows the palette ground."""
+    palettes = _registry()["palettes"]
+    light = palettes["matrix"]["light"]
+    dark = palettes["matrix"]["dark"]
+    app = (ROOT / "digivoice" / "tui" / "src" / "app.js").read_text(encoding="utf-8")
+    assert "setBackgroundColor" in app
+    assert "screenPaint(activeTheme)" in app
+    script = f"""
+import {{ screenPaint }} from "./digivoice/tui/src/menu_colors.js"
+const channels = (hex) => {{
+  const body = hex.slice(1)
+  const value = Number.parseInt(body, 16)
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
+}}
+const same = (got, want) => got && got.join() === want.join()
+const luminance = (rgb) => {{
+  const linear = (channel) => {{
+    const c = channel / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }}
+  return 0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2])
+}}
+const empty = screenPaint(null)
+const off = screenPaint({{ active: false, bg: "#000000", text: "#ffffff", accent: "#ffffff" }})
+for (const paint of [empty, off]) {{
+  if (paint.background !== null || paint.ink !== null || paint.foreground !== null) process.exit(1)
+}}
+const lightPaint = screenPaint({{ active: true, bg: {light["neutral"]!r}, text: {light["ink"]!r}, accent: {light["accent"]!r} }})
+if (!same(lightPaint.background, channels({light["neutral"]!r}))) process.exit(1)
+if (!same(lightPaint.ink, channels({light["ink"]!r}))) process.exit(1)
+if (!(luminance(lightPaint.background) > luminance(lightPaint.ink))) process.exit(1)
+if (!same(lightPaint.foreground, channels({light["ink"]!r}))) process.exit(1)
+const darkPaint = screenPaint({{ active: true, bg: {dark["neutral"]!r}, text: {dark["ink"]!r}, accent: {dark["accent"]!r} }})
+if (!same(darkPaint.background, channels({dark["neutral"]!r}))) process.exit(1)
+if (!same(darkPaint.ink, channels({dark["ink"]!r}))) process.exit(1)
+if (!(luminance(darkPaint.background) < luminance(darkPaint.ink))) process.exit(1)
+const flat = screenPaint({{ active: true, bg: "#eef3ea", text: "#203022", accent: "#eef3ea" }})
+if (!same(flat.foreground, channels("#203022"))) process.exit(1)
+const vivid = screenPaint({{ active: true, bg: "#0a0e0a", text: "#62ff94", accent: "#c770ff" }})
+if (!same(vivid.foreground, channels("#c770ff"))) process.exit(1)
+if (!same(vivid.background, channels("#0a0e0a"))) process.exit(1)
 console.log("PASS")
 """
     result = subprocess.run(
