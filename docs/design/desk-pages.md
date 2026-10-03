@@ -12,7 +12,7 @@ Invite-only desks are not on this list. Do not invent rows, prices, or sessions.
 - [x] `/portfolio/attribution` Attribution — table of sleeves and names, or the empty sentence.
 - [x] `/portfolio/ledger` Ledger — table of position events, and a cash table, or the empty sentence for a block with no rows.
 - [x] `/portfolio/tearsheet` Tearsheet — performance stat. NAV table from the series, and a chart only when `points` has two or more values. Benchmarks table. Empty sentence per block when that read is empty.
-- [ ] `/portfolio/theses` Theses — stat of the counts when theses exist, then the thesis table. Signals table. Empty sentence when a list is empty.
+- [x] `/portfolio/theses` Theses — stat of the counts when theses exist, then the thesis table. Signals table. Empty sentence when a list is empty.
 - [ ] `/pipeline` Pipeline — run-health stat. Narrative sentence. Artifact table. Graph as a node table (no canvas). Node document sentence. Call-trace table. Empty sentence per block when that read is empty.
 - [ ] `/strategies` Strategies — summary stat, catalog table, deployments table. An empty deployment store stays its empty sentence.
 - [ ] `/strategies/detail` Detail — overview fields as a stat or table. Parameters table. Track record: stat from the card, table of points, and a chart only when `points` has two or more values. Runs table. Empty sentence when a store is empty.
