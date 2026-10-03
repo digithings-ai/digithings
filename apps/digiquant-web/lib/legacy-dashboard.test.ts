@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { PAGES } from "../../../clients/digiquant-tui/src/catalog";
+import { publicCatalogPages } from "../components/desk/public-surface";
 import { WEB_SLOTS } from "../components/desk/web-slots";
 import { deskHref } from "../components/desk/paths";
 import {
@@ -13,7 +13,7 @@ import {
 
 describe("legacy dashboard redirects", () => {
   it("covers every desk path and no extra ones", () => {
-    const expected = [...PAGES.map((page) => page.path), ...WEB_SLOTS.map((slot) => slot.path)];
+    const expected = [...publicCatalogPages().map((page) => page.path), ...WEB_SLOTS.map((slot) => slot.path)];
     expect(new Set(LEGACY_DESK_PATHS)).toEqual(new Set(expected));
     expect(LEGACY_DESK_PATHS).toHaveLength(expected.length);
   });
@@ -36,6 +36,9 @@ describe("legacy dashboard redirects", () => {
     expect(legacyDashboardTarget("/dashboard/settings/brokers/callback")).toBe("/app");
     expect(legacyDashboardTarget("/dashboard/portfolio/performance")).toBe("/app");
     expect(legacyDashboardTarget("/dashboard/tools/luxalgo")).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/fx")).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/fx/ideas")).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/twelve-x")).toBe("/app");
     expect(legacyDashboardTarget("/app")).toBeNull();
     expect(legacyDashboardTarget("/app/portfolio/")).toBeNull();
     expect(legacyDashboardTarget("/")).toBeNull();

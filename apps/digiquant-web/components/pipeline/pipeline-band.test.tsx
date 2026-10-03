@@ -28,7 +28,7 @@ describe("PipelineBand", () => {
     expect(html.match(/in development/g)).toHaveLength(2);
     expect(html).toContain("digiquant baseline research");
     expect(html).toContain("custom knowledge base");
-    expect(html).toContain("12x terminal");
+    expect(html).not.toMatch(/12x|fx hub/i);
     expect(html).toContain("digithings");
     expect(html).toContain("digigraph");
     expect(html).toContain("digiquant baseline portfolio");

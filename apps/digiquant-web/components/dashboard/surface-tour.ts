@@ -1,6 +1,8 @@
 /** Homepage desk: which surface is in the frame, and which page comes next. */
 
-import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
+import { publicCatalogPages } from "@/components/desk/public-surface";
+
+const PAGES = publicCatalogPages();
 
 export const SLIDER_MIN = 0;
 export const SLIDER_MAX = 100;

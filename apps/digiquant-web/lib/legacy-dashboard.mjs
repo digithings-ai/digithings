@@ -4,7 +4,8 @@
  * same trailing-slash shape as deskHref. Anything else under /dashboard goes
  * to /app. The apps/dashboard package stays in the tree; it is not a destination.
  *
- * Keep LEGACY_DESK_PATHS equal to the catalog pages plus the web-only slots.
+ * Keep LEGACY_DESK_PATHS equal to the public catalog pages plus the web-only
+ * slots. Invite-only FX Hub paths are not public routes.
  * lib/legacy-dashboard.test.ts pins that.
  */
 
@@ -21,11 +22,6 @@ export const LEGACY_DESK_PATHS = [
   "/strategies",
   "/strategies/detail",
   "/strategies/deploy",
-  "/fx",
-  "/fx/ideas",
-  "/fx/watch",
-  "/fx/rates",
-  "/fx/settings",
   "/tools/terminal",
   "/tools/charts",
   "/tools/chat",

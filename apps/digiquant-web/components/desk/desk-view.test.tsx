@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
+import { publicCatalogPages } from "./public-surface";
 import { STUB_READ, presentResponse } from "../../../../clients/digiquant-tui/src/read";
 import { DeskView } from "./desk-view";
 import { deskPathFromSlug, deskStaticParams, isDeskPath } from "./paths";
@@ -14,9 +15,15 @@ function hasHref(html: string, href: string): boolean {
 describe("terminal desk", () => {
   it("publishes every terminal page and no web-only route", () => {
     const params = deskStaticParams().map((row) => `/${row.slug.join("/")}`);
-    for (const page of PAGES) {
+    for (const page of publicCatalogPages()) {
       expect(params).toContain(page.path);
       expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBe(page.path);
+    }
+    for (const page of PAGES) {
+      if (page.path === "/fx" || page.path.startsWith("/fx/")) {
+        expect(params).not.toContain(page.path);
+        expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBeNull();
+      }
     }
     expect(deskPathFromSlug(undefined)).toBe("/brief");
     expect(deskPathFromSlug(["markets"])).toBeNull();

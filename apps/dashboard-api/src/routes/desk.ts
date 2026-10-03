@@ -8,7 +8,7 @@
  * reads are 502, create/rename/send are 503. Nothing is invented.
  */
 
-import { DESKS } from "../access";
+import { DESKS, buildManifest, type Caller } from "../access";
 import { buildProvenance, errorResponse } from "../errors";
 import { tableRows, type TableReadEnv } from "../table-read";
 import type { RouteCtx, RouteModule } from "./registry";
@@ -47,12 +47,18 @@ function chatClosed(pin: string | null): Response {
   return errorResponse("upstream_empty", CHAT_NOTE, pin, { source: "digichat" });
 }
 
-function desks(req: Request): Response {
+/** Desks the caller may see. A hidden invite desk stays out until the group matches. */
+function desksFor(caller: Caller) {
+  const ids = new Set(buildManifest(caller).desks.map((d) => d.id));
+  return DESKS.filter((d) => ids.has(d.id));
+}
+
+function desks(req: Request, caller: Caller): Response {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
   return ok(
     {
-      desks: DESKS.map((d) => ({
+      desks: desksFor(caller).map((d) => ({
         id: d.id,
         name: d.label,
         chip: d.group ?? null,
@@ -85,11 +91,11 @@ function spine(req: Request): Response {
   );
 }
 
-function features(req: Request): Response {
+function features(req: Request, caller: Caller): Response {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
   const flags: { key: string; tag: "wip" | "soon"; text: string; action: { label: string; href: string } }[] = [];
-  for (const d of DESKS) {
+  for (const d of desksFor(caller)) {
     for (const p of d.pages) {
       if (!p.status) continue;
       flags.push({ key: p.path, tag: p.status, text: p.label, action: { label: "open", href: p.path } });
@@ -210,9 +216,9 @@ function writePin(req: Request): string | null {
 }
 
 export const registerDesk: RouteModule<Env> = (reg) => {
-  reg.get("/desks", async (req) => desks(req));
+  reg.get("/desks", async (req, ctx) => desks(req, ctx.caller));
   reg.get("/desks/active/spine", async (req) => spine(req));
-  reg.get("/features", async (req) => features(req));
+  reg.get("/features", async (req, ctx) => features(req, ctx.caller));
   reg.get("/settings/prefs", async (req) => prefs(req));
   reg.add("PUT", "/settings/prefs", async (req) => notProvisioned(writePin(req), "settings prefs"));
   reg.get("/settings/desk", async (req, ctx) => settingsDesk(req, ctx));

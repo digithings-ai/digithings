@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type SyntheticEvent } from "react";
 import { Button, Slider } from "@digithings/ui/ui";
 import { deskHref } from "@/components/desk/paths";
-import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
+import { publicCatalogPages } from "@/components/desk/public-surface";
 import {
   OPEN_BUDGET_MS,
   activateNavLink,
@@ -36,6 +36,7 @@ import {
   type StagePhase,
 } from "./surface-tour";
 
+const PAGES = publicCatalogPages();
 const HOME = PAGES[0]?.path ?? "/brief";
 
 function sliderNumber(value: number | readonly number[]): number {

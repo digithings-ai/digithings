@@ -20,7 +20,7 @@ type Workflow = {
 const WORKFLOWS: readonly Workflow[] = [
   {
     name: "Research",
-    body: "digiquant baseline research. Theme-delegated sub-agents search the web and read a custom knowledge base, including the 12x terminal. It runs on digithings, on digigraph and the digithings infrastructure.",
+    body: "digiquant baseline research. Theme-delegated sub-agents search the web and read a custom knowledge base. It runs on digithings, on digigraph and the digithings infrastructure.",
     loop: "search again until the theme is covered",
     graph: [
       { nodes: [{ label: "Theme", tone: "main" }] },
@@ -28,21 +28,19 @@ const WORKFLOWS: readonly Workflow[] = [
         nodes: [
           { label: "Web search", tone: "side" },
           { label: "Custom knowledge base", tone: "side" },
-          { label: "12x terminal", tone: "side" },
         ],
       },
       { nodes: [{ label: "digigraph", tone: "model" }] },
     ],
     notes: [
       "The theme sets the question",
-      "Web search, the knowledge base, and the 12x terminal run together",
+      "Web search and the knowledge base run together",
       "digigraph orchestrates the pass on digithings",
     ],
     receipt: [
       "theme · question",
       "web search · in parallel",
       "knowledge base · in parallel",
-      "12x terminal · in parallel",
       "digigraph · orchestrate",
     ],
   },
@@ -101,7 +99,7 @@ const WORKFLOWS: readonly Workflow[] = [
   {
     name: "Trade setups",
     status: "in development",
-    body: "From research, prices, and charts, long or short ideas on asset pairs — the 12x work.",
+    body: "From research, prices, and charts, long or short ideas on asset pairs.",
     later:
       "Reliable setups with an entry, a stop, and a target, then monitoring. The system builds trade levels from different criteria, and an agent selects the one it judges most viable. Technical judgment on the chart.",
     loop: "watch again while a setup is open",
