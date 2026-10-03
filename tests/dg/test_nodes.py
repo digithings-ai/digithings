@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Iterator
 from typing import Any  # score:allow
 from unittest.mock import MagicMock, patch
 
@@ -504,6 +506,61 @@ class TestBacktestNode:
         expected_hdrs = {"X-Request-ID": "trace-xyz"}
         for i in range(3):
             assert mock_post.call_args_list[i][1]["headers"] == expected_hdrs
+
+    def test_sse_progress_heartbeats_cannot_outrun_the_deadline(self) -> None:
+        """Legacy ``/backtest/{id}/progress`` heartbeats reset the httpx read timeout.
+
+        The v1 status poll already stops at 120s. The SSE fallback only set
+        ``timeout=90`` on the stream, which is a per-read idle limit. digiquant
+        emits a heartbeat well inside that window, so a job that never reaches
+        ``done`` used to block the node until the client gave up. The wall clock
+        is checked between events; the read timeout stays the idle limit.
+        """
+        v1_response = MagicMock()
+        v1_response.status_code = 404
+        start_response = MagicMock()
+        start_response.status_code = 200
+        start_response.json.return_value = {"job_id": "job-sse"}
+
+        class _Heartbeats:
+            def __enter__(self) -> _Heartbeats:
+                return self
+
+            def __exit__(self, *_exc: object) -> bool:
+                return False
+
+            def iter_lines(self) -> Iterator[str]:
+                while True:
+                    yield 'data: {"event":"heartbeat"}'
+
+        mock_client = MagicMock()
+        mock_client.post = MagicMock(side_effect=[v1_response, start_response])
+        mock_client.stream.return_value = _Heartbeats()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        clock = {"t": 0.0}
+
+        def _monotonic() -> float:
+            clock["t"] += 100.0
+            return clock["t"]
+
+        holder: dict[str, dict] = {}
+
+        def _run() -> None:
+            with (
+                patch("digigraph.graph.nodes.sync_client", return_value=mock_client),
+                patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"),
+                patch("digigraph.graph.nodes.time.monotonic", _monotonic),
+            ):
+                holder["out"] = backtest_node({"strategy_name": "mr", "symbols": ["AAPL"]})
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        thread.join(2.0)
+        assert not thread.is_alive(), "SSE progress poll did not stop on the deadline"
+        assert holder["out"]["backtest_result"] is None
+        assert holder["out"]["error"] == "Backtest job timed out waiting for completion."
+        mock_client.get.assert_not_called()
 
     def test_missing_strategy_and_symbols_returns_error(self) -> None:
         """Missing strategy_name/symbols returns error; no defaults."""
