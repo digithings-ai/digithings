@@ -41,17 +41,27 @@ def _load() -> Any:
 
 def test_gitignore_paths_returns_only_what_git_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     mod = _load()
-    asked: list[list[str]] = []
+    seen: list[bytes] = []
 
-    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        asked.append(cmd[cmd.index("--stdin") + 1 :])
+    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        seen.append(kwargs["input"])
+        # `-z` makes git NUL-delimit its output, so the stub has to too — the
+        # newline form is what an older version of this test asserted and it no
+        # longer matches anything the production code can see.
         return subprocess.CompletedProcess(
-            cmd, 0, stdout="apps/digichat/.next/standalone/AGENTS.md\n", stderr=""
+            cmd, 0, stdout=b"apps/digichat/.next/standalone/AGENTS.md\x00", stderr=b""
         )
 
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
     out = mod._gitignore_paths({"AGENTS.md", "apps/digichat/AGENTS.md", "apps/digichat/.next/x.md"})
     assert out == frozenset({"apps/digichat/.next/standalone/AGENTS.md"})
+    # On stdin, NUL-delimited too — 459 paths would blow the argv limit, and
+    # a newline inside a filename would otherwise split into two paths.
+    assert seen and set(seen[0].split(b"\x00")) == {
+        b"AGENTS.md",
+        b"apps/digichat/AGENTS.md",
+        b"apps/digichat/.next/x.md",
+    }
 
 
 def test_gitignore_paths_returns_empty_when_nothing_is_ignored(
@@ -62,7 +72,7 @@ def test_gitignore_paths_returns_empty_when_nothing_is_ignored(
     monkeypatch.setattr(
         mod.subprocess,
         "run",
-        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, stdout="", stderr=""),
+        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, stdout=b"", stderr=b""),
     )
     assert mod._gitignore_paths({"AGENTS.md"}) == frozenset()
 
@@ -82,15 +92,48 @@ def test_gitignore_paths_degrades_gracefully_outside_a_git_checkout(
     assert mod._gitignore_paths({"AGENTS.md"}) == frozenset()
 
 
-def test_collect_skips_paths_git_ignores(monkeypatch: pytest.MonkeyPatch) -> None:
+def _git_repo(path: Path) -> None:
+    """A real checkout, so `_gitignore_paths` reaches a real `git check-ignore`.
+
+    Every other test here stubs the subprocess, so this is the only place the
+    production code path is exercised end to end — which is exactly why the
+    filter must not be stubbed in the test that claims to test it.
+    """
+    subprocess.run(["git", "init", "-q", str(path)], check=True, capture_output=True)
+
+
+def test_collect_skips_paths_git_ignores(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """An ignored `AGENTS.md` is dropped, an untracked one is kept, and a `!`
+    negation is honoured.
+
+    Built on a throwaway repository rather than the digithings tree because the
+    bug only exists where an ignored file actually sits on disk, and this repo
+    has no such file in a clean checkout. The real subprocess runs here, so
+    deleting the filter from the production code fails this test instead of
+    passing it — which a monkeypatched `_gitignore_paths` could never do.
+    """
     mod = _load()
-    monkeypatch.setattr(
-        mod,
-        "_gitignore_paths",
-        lambda paths: frozenset({"apps/digichat/.next/standalone/AGENTS.md"}),
+    _git_repo(tmp_path)
+    (tmp_path / ".gitignore").write_text(
+        "build/\ndocs/generated/*\n!docs/generated/kept.md\n", encoding="utf-8"
     )
-    collected = {p.relative_to(mod.REPO_ROOT).as_posix() for p in mod._collect_markdown_files()}
-    assert "apps/digichat/.next/standalone/AGENTS.md" not in collected
+    for rel in ("build/AGENTS.md", "docs/generated/drop.md", "docs/generated/kept.md", "docs/a.md"):
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# doc\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "REPO_ROOT", tmp_path)
+
+    collected = {p.relative_to(tmp_path).as_posix() for p in mod._collect_markdown_files()}
+
+    # Ignored, and each one matches a collect rule, so only the gitignore
+    # filter can keep them out.
+    assert "build/AGENTS.md" not in collected
+    assert "docs/generated/drop.md" not in collected
+    # Never ignored, so they must survive.
+    assert "docs/a.md" in collected
+    # `!docs/generated/kept.md` re-includes a file git would otherwise have
+    # ignored; re-implementing .gitignore by hand is what this change refused.
+    assert "docs/generated/kept.md" in collected
 
 
 def test_collect_still_includes_tracked_component_docs() -> None:
