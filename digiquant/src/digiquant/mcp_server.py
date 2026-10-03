@@ -44,7 +44,31 @@ logger = logging.getLogger(__name__)
 # the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
 
 _TTL_SECONDS = 900
+_MAX_LOOKBACK = 500
 _ttl: dict[tuple, tuple[float, str]] = {}
+
+
+def _bounded_lookback(lookback: int) -> int:
+    """Clamp a window length to ``0..500``.
+
+    ``rows[-0:]`` is the whole series, and a negative index slices from the
+    front. Both are the wrong window, so non-positive lookbacks become 0
+    (an empty tail) instead of passing through to a Python slice.
+    """
+    try:
+        n = int(lookback)
+    except (TypeError, ValueError):
+        return 0
+    if n < 1:
+        return 0
+    return min(n, _MAX_LOOKBACK)
+
+
+def _tail(rows: list[Any], n: int) -> list[Any]:
+    if n <= 0:
+        return []
+    return rows[-n:]
+
 
 # Calendar days of live overlap fetched ahead of the R2 manifest seal.
 _R2_LIVE_OVERLAP_DAYS = 30
@@ -349,12 +373,12 @@ def digiquant_get_price_technicals(
     must carry the glossary entry.
     """
     try:
-        lookback = min(int(lookback), 500)
+        lookback = _bounded_lookback(lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
         resolved = as_of or manifest["as_of"]
-        cache_key = ("technicals", ticker, resolved, manifest["version"])
+        cache_key = ("technicals", ticker, resolved, manifest["version"], lookback)
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
@@ -369,7 +393,7 @@ def digiquant_get_price_technicals(
                 live_stale,
             )
         payload = json.dumps(
-            {"as_of": resolved, "rows": rows[-lookback:], "stale": stale}, default=str
+            {"as_of": resolved, "rows": _tail(rows, lookback), "stale": stale}, default=str
         )
         # Task 7 fix round (M1): never cache a stale-flagged payload — a stale
         # serve pinned for the full 900s TTL would keep reporting stale after
@@ -395,16 +419,19 @@ def digiquant_get_macro_series(
     reader-side ``stale``. Task 10 docs must carry the glossary entry.
     """
     try:
-        lookback = min(int(lookback), 500)
+        lookback = _bounded_lookback(lookback)
         from digiquant.research.data.queries import r2_backend_enabled
 
         if not r2_backend_enabled():
+            if lookback < 1:
+                empty = {sid: {"latest": {}, "window": []} for sid in series_ids}
+                return json.dumps(empty)
             return _supabase_macro(series_ids, lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
         resolved = as_of or manifest["as_of"]
-        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"])
+        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"], lookback)
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
@@ -418,7 +445,7 @@ def digiquant_get_macro_series(
                 manifest["as_of"],
             )
         series = {
-            sid: {"latest": payload["latest"], "window": payload["window"][-lookback:]}
+            sid: {"latest": payload["latest"], "window": _tail(payload["window"], lookback)}
             for sid, payload in per_series.items()
         }
         payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)

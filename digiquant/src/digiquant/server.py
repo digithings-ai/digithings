@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
 import threading
+import time
+from collections import deque
 from queue import Empty, Queue
 from typing import Any, get_args
 
@@ -62,12 +65,10 @@ install_cors(app, service="digiquant")
 app.add_middleware(DigiAuthMiddleware, service="digiquant", path_scopes=digiquant_path_scopes)
 
 
-import time as _time
-from collections import deque as _deque
-from threading import Lock as _Lock
-
-_rl_windows: dict[str, _deque] = {}
-_rl_lock = _Lock()
+_rl_windows: dict[str, deque[float]] = {}
+_rl_lock = threading.Lock()
+_IPV6_BUCKET_PREFIX = 64
+_trusted_proxy_cache: dict[str, tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]] = {}
 _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/run_backtest": (10, 60),
     "/run_optimize": (10, 60),
@@ -81,21 +82,107 @@ _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
 
 
-def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | None:
+def _parse_trusted_proxies(
+    trusted_raw: str,
+) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    """Parse ``DIGI_TRUSTED_PROXIES`` into networks. Invalid entries are dropped."""
+    cached = _trusted_proxy_cache.get(trusted_raw)
+    if cached is not None:
+        return cached
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for entry in trusted_raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=True))
+        except ValueError:
+            try:
+                widened = ipaddress.ip_network(entry, strict=False)
+            except ValueError:
+                logger.warning(
+                    "DIGI_TRUSTED_PROXIES entry %r is not a valid IP or CIDR; ignoring it",
+                    entry,
+                )
+                continue
+            logger.warning(
+                "DIGI_TRUSTED_PROXIES entry %r has host bits set; trusting %s",
+                entry,
+                widened,
+            )
+            networks.append(widened)
+    parsed = tuple(networks)
+    _trusted_proxy_cache[trusted_raw] = parsed
+    return parsed
+
+
+def _ip_address(ip: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        return addr.ipv4_mapped
+    return addr
+
+
+def _is_trusted(
+    ip: str, networks: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
+) -> bool:
+    addr = _ip_address(ip)
+    if addr is None:
+        return False
+    return any(addr in net for net in networks)
+
+
+def _client_ip(request: Request) -> str:
+    """Socket peer, or the rightmost untrusted XFF hop when that peer is trusted.
+
+    ``X-Forwarded-For`` is appended left to right. The leftmost hop is whatever
+    the original caller wrote, so it is ignored unless ``DIGI_TRUSTED_PROXIES``
+    lists the socket peer. An unparseable hop (including the ``testclient``
+    sentinel) stops the walk; entries to its left are not trusted.
+    """
+    direct = request.client.host if request.client else "unknown"
+    networks = _parse_trusted_proxies(os.environ.get("DIGI_TRUSTED_PROXIES", ""))
+    if not networks or not _is_trusted(direct, networks):
+        return direct
+    xff = ", ".join(request.headers.getlist("x-forwarded-for"))
+    hops = [hop.strip() for hop in xff.split(",") if hop.strip()]
+    for hop in reversed(hops):
+        if _is_trusted(hop, networks):
+            continue
+        if _ip_address(hop) is None:
+            break
+        return hop
+    return direct
+
+
+def _bucket_key(ip: str) -> str:
+    """IPv6 clients share a /64 bucket. IPv4-mapped addresses bucket as IPv4."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped is not None:
+            return str(addr.ipv4_mapped)
+        network = ipaddress.ip_network(f"{addr}/{_IPV6_BUCKET_PREFIX}", strict=False)
+        return str(network.network_address)
+    return str(addr)
+
+
+def _rl_check(request: Request, max_req: int, window: int, *, path: str) -> JSONResponse | None:
     if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
         return None
-    xff = request.headers.get("X-Forwarded-For")
-    ip = (
-        xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
-    )
-    if ip == "testclient":
+    # Exempt FastAPI TestClient by the socket peer, never by a header hop.
+    if request.client and request.client.host == "testclient":
         return None
-    now = _time.monotonic()
+    bucket = f"{_bucket_key(_client_ip(request))}|{path}"
+    now = time.monotonic()
     cutoff = now - window
     with _rl_lock:
-        if ip not in _rl_windows:
-            _rl_windows[ip] = _deque()
-        q = _rl_windows[ip]
+        q = _rl_windows.setdefault(bucket, deque())
         while q and q[0] < cutoff:
             q.popleft()
         if len(q) >= max_req:
@@ -113,11 +200,11 @@ def _rl_check(request: Request, max_req: int, window: int) -> JSONResponse | Non
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    """Per-IP rate limiting. /run_backtest and /run_optimize: 10/min; others: 30/min."""
+    """Per-IP, per-path rate limiting. Expensive routes: 10/min; others: 30/min."""
     path = request.url.path
     if path not in _UNLIMITED_PATHS:
         max_req, window = _RATE_LIMITS.get(path, _DEFAULT_RATE_LIMIT)
-        result = _rl_check(request, max_req, window)
+        result = _rl_check(request, max_req, window, path=path)
         if result is not None:
             return result
     return await call_next(request)
@@ -162,7 +249,7 @@ class OptimizeRequest(BaseModel):
         default=None, description="Explicit param grid (overrides auto)"
     )
     method: str = Field(default="grid", description="grid | bayesian | random")
-    n_trials: int = Field(default=50, description="Trials for bayesian/random")
+    n_trials: int = Field(default=50, ge=1, description="Trials for bayesian/random")
     objective: str = Field(default="sharpe", description="sharpe | return | pnl")
     constraints: OptimizationConstraints | None = Field(
         default=None, description="Hard limits (min_trades, max_drawdown_pct, etc.)"
@@ -410,6 +497,43 @@ def _normalize_symbols(raw: Any) -> list[str]:
     return []
 
 
+_TRUE_STRINGS = frozenset({"1", "true", "yes", "y", "on"})
+_FALSE_STRINGS = frozenset({"0", "false", "no", "n", "off"})
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    """Parse an orchestrator argument. The string ``false`` is False."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in _TRUE_STRINGS:
+            return True
+        if lowered in _FALSE_STRINGS:
+            return False
+        return default
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return value != 0
+    return default
+
+
+def _coerce_n_trials(value: Any, default: int = 50) -> int | str:
+    """Missing ``n_trials`` uses *default*. Explicit 0 is rejected, not replaced."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return "n_trials must be an integer >= 1"
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return "n_trials must be an integer >= 1"
+    if n < 1:
+        return "n_trials must be an integer >= 1"
+    return n
+
+
 def _digifetch_error_message(payload: dict[str, Any]) -> str | None:
     """Typed error message when a digifetch envelope's ``data`` is a ``DigifetchError``.
 
@@ -451,7 +575,7 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             data_dir=args.get("data_dir"),
             strategy_params=args.get("strategy_params"),
             tearsheet_path=args.get("tearsheet_path"),
-            full_tearsheet=bool(args.get("full_tearsheet", True)),
+            full_tearsheet=_as_bool(args.get("full_tearsheet", True), True),
         )
         try:
             if bt_req.data_path is None and bt_req.data_dir is None:
@@ -487,12 +611,15 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
                 return {"ok": False, "error": "data_path or data_dir required"}
+            n_trials = _coerce_n_trials(args.get("n_trials"))
+            if isinstance(n_trials, str):
+                return {"ok": False, "error": n_trials}
             result = service_run_optimize(
                 strategy_name=str(args["strategy_name"]),
                 symbols=symbols,
                 param_grid=args.get("param_grid"),
                 method=str(args.get("method") or "grid"),
-                n_trials=int(args.get("n_trials") or 50),
+                n_trials=n_trials,
                 objective=str(args.get("objective") or "sharpe"),
                 constraints=constraints,
                 data_path=args.get("data_path"),
@@ -581,6 +708,9 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         try:
             if args.get("data_path") is None and args.get("data_dir") is None:
                 return {"ok": False, "error": "data_path or data_dir required"}
+            n_trials = _coerce_n_trials(args.get("n_trials"))
+            if isinstance(n_trials, str):
+                return {"ok": False, "error": n_trials}
             raw = run_quant_workflow(
                 {
                     "strategy_name": strategy,
@@ -589,10 +719,10 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                     "data_dir": args.get("data_dir"),
                     "strategy_params": args.get("strategy_params"),
                     "export_target": str(args.get("export_target") or "nautilus"),
-                    "run_optimize": bool(args.get("run_optimize", True)),
-                    "run_export": bool(args.get("run_export", True)),
+                    "run_optimize": _as_bool(args.get("run_optimize", True), True),
+                    "run_export": _as_bool(args.get("run_export", True), True),
                     "method": str(args.get("method") or "grid"),
-                    "n_trials": int(args.get("n_trials") or 50),
+                    "n_trials": n_trials,
                     "constraints": constraints.model_dump(mode="json") if constraints else None,
                 }
             )

@@ -287,6 +287,21 @@ def test_recompute_technicals_rejects_malformed_and_inverted_dates() -> None:
     assert "must be on or before" in inverted.output
 
 
+def test_blank_tickers_are_not_an_empty_override(tmp_path) -> None:
+    """A comma-only or whitespace ``--tickers`` must not yield an empty universe."""
+    from click import UsageError
+    from digiquant.cli.prices import _resolve_universe
+
+    watchlist = tmp_path / "watchlist.md"
+    watchlist.write_text("| SPY |\n", encoding="utf-8")
+
+    with pytest.raises(UsageError, match="did not contain any symbols"):
+        _resolve_universe(",", watchlist, False)
+    assert _resolve_universe("   ", watchlist, False) == ["SPY"]
+    with pytest.raises(UsageError, match="Provide --watchlist or --tickers"):
+        _resolve_universe("   ", None, False)
+
+
 def test_recompute_technicals_needs_a_universe() -> None:
     result = CliRunner().invoke(recompute_technicals_cmd, [])
     assert result.exit_code != 0
@@ -409,9 +424,7 @@ def test_fetch_macro_fred_only_exits_zero_without_api_key(
     assert '"DGS10": 1' in result.output
 
 
-def test_fetch_macro_ignores_a_set_fred_api_key(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_fetch_macro_ignores_a_set_fred_api_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """A set key does not dual-write: the panel stays Gloomberb-only."""
     monkeypatch.setenv("FRED_API_KEY", "test-key")
     monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
