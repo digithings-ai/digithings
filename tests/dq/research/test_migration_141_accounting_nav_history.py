@@ -67,6 +67,23 @@ def test_finalized_nav_stays_definer_but_house_scoped(sql: str) -> None:
     assert "cardinality" in body.lower()
 
 
+def test_finalized_nav_reads_renamed_accounting_tables(sql: str) -> None:
+    """134 renamed the bases; 135 dropped the old-name views. Naming them rolls 141 back."""
+    body = _view_body(sql, "public_finalized_nav")
+    for table in (
+        "accounting_periods",
+        "accounting_contributions",
+        "accounting_holdings",
+    ):
+        assert re.search(rf"public\.{table}\b", body), table
+    for dropped in (
+        "olympus_accounting_periods",
+        "olympus_accounting_contributions",
+        "olympus_accounting_holdings",
+    ):
+        assert dropped not in sql, dropped
+
+
 def test_legacy_nav_window_is_house_only(sql: str) -> None:
     """Lag must run on house rows, not on a later private book's NAV."""
     body = _view_body(sql, "public_accounting_nav_history")

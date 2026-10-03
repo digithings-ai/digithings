@@ -19,6 +19,14 @@
 --
 -- House id matches 096/110: 6b753576-ced9-5319-9bfa-c5d0aacd9319.
 -- Column lists match 123. Does not touch staged cutover 113.
+--
+-- Relation names are the post-134 tables. Migration 134 renamed
+-- olympus_accounting_periods, olympus_accounting_contributions, and
+-- olympus_accounting_holdings. Migration 135 dropped those old-name
+-- compatibility views. CREATE OR REPLACE parses this text, so naming a
+-- dropped view fails with "relation does not exist" and the single-transaction
+-- apply rolls the history replace back with it. The stored 123 view already
+-- follows the renamed tables by OID; this file must name them too.
 
 CREATE OR REPLACE VIEW public.public_finalized_nav
 WITH (security_invoker = false) AS
@@ -42,13 +50,13 @@ SELECT
     END AS day_return_pct,
     'finalized_accounting'::text AS source,
     'finalized_accounting'::text AS contract
-FROM public.olympus_accounting_periods p
+FROM public.accounting_periods p
 WHERE p.workspace_id = '6b753576-ced9-5319-9bfa-c5d0aacd9319'::uuid
   AND p.status = 'final'
   AND cardinality(p.quality_reasons) = 0
   AND NOT EXISTS (
       SELECT 1
-      FROM public.olympus_accounting_periods s
+      FROM public.accounting_periods s
       WHERE s.supersedes_id = p.id
         AND NOT (
             s.status IN ('incomplete', 'failed')
@@ -65,18 +73,18 @@ WHERE p.workspace_id = '6b753576-ced9-5319-9bfa-c5d0aacd9319'::uuid
       )
       OR EXISTS (
           SELECT 1
-          FROM public.olympus_accounting_contributions c
+          FROM public.accounting_contributions c
           WHERE c.period_id = p.id
       )
   )
   AND NOT EXISTS (
       SELECT 1
-      FROM public.olympus_accounting_contributions c
+      FROM public.accounting_contributions c
       WHERE c.period_id = p.id
         AND c.closing_quantity > 0
         AND NOT EXISTS (
             SELECT 1
-            FROM public.olympus_accounting_holdings h
+            FROM public.accounting_holdings h
             WHERE h.period_id = p.id
               AND upper(h.symbol) = upper(c.symbol)
         )
