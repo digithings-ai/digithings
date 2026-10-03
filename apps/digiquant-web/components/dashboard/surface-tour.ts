@@ -50,25 +50,6 @@ export function prevTerminalPath(current: string): string {
   return PAGES[(start - 1 + PAGES.length) % PAGES.length]?.path ?? PAGES[0].path;
 }
 
-export function stageStatus(phase: StagePhase, surface: Surface): string {
-  switch (phase) {
-    case "opening":
-      return surface === "web" ? "Opening the web app." : "Opening the terminal screens.";
-    case "touring":
-      return surface === "web" ? "Touring the web app." : "Touring the terminal.";
-    case "yours":
-      return "You have this view.";
-    case "live":
-      return "The web app is in this frame. The tour stays off because this frame is not same-origin.";
-    case "empty":
-      return "The web app did not load.";
-    default: {
-      const never: never = phase;
-      return never;
-    }
-  }
-}
-
 function routePath(href: string): string {
   const noHash = href.replace(/[?#].*$/, "");
   const path = noHash.includes("://") ? (noHash.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "") || "/") : noHash;

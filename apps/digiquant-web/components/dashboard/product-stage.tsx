@@ -19,7 +19,6 @@ import {
   IDLE_RESUME_MS,
   SELF_HOSTED_COPY,
   SELF_HOSTED_TITLE,
-  TOUR_CAPTION,
   TOUR_DWELL_MS,
   WEB_EMPTY_COPY,
   deskShellLoaded,
@@ -27,7 +26,6 @@ import {
   nextTerminalPath,
   nextWebPath,
   prevTerminalPath,
-  stageStatus,
   type StagePhase,
   type Surface,
 } from "./surface-tour";
@@ -247,21 +245,15 @@ export function ProductStage() {
         <Story title={SELF_HOSTED_TITLE} copy={SELF_HOSTED_COPY} on={surface === "terminal"} />
         <Story title={HOSTED_TITLE} copy={HOSTED_COPY} on={surface === "web"} />
       </div>
-      <div className="flex flex-col gap-2">
-        <SegmentedControl<Surface>
-          aria-label="Show the self-hosted terminal or the hosted web app"
-          value={surface}
-          options={[
-            { value: "terminal", label: SELF_HOSTED_TITLE },
-            { value: "web", label: HOSTED_TITLE },
-          ]}
-          onChange={onSurface}
-        />
-        <p className="m-0 flex flex-wrap items-center justify-between gap-2 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
-          <span>{TOUR_CAPTION}</span>
-          <span aria-live="polite">{stageStatus(phase, surface)}</span>
-        </p>
-      </div>
+      <SegmentedControl<Surface>
+        aria-label="Show the self-hosted terminal or the hosted web app"
+        value={surface}
+        options={[
+          { value: "terminal", label: SELF_HOSTED_TITLE },
+          { value: "web", label: HOSTED_TITLE },
+        ]}
+        onChange={onSurface}
+      />
       <div
         className="h-[min(40rem,calc(100svh-18rem))] min-h-[28rem] overflow-hidden border border-hair bg-surface"
         data-showing={surface}

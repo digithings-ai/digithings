@@ -286,7 +286,9 @@ describe("DashboardBand", () => {
     expect(html).not.toMatch(/slider/i);
     expect(html).toContain(SELF_HOSTED_COPY);
     expect(html).toContain(HOSTED_COPY);
-    expect(html).toContain("Opening the web app.");
+    expect(html).not.toContain("Opening the web app.");
+    expect(html).not.toContain("Touring the web app.");
+    expect(html).not.toContain("Touring the terminal.");
     expect(html).toContain("Brief · scoreboard");
     expect(html).toContain("Strategies");
     expect(html).toContain("screens the terminal draws");
