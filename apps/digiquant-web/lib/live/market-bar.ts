@@ -9,21 +9,20 @@
  * subscribe frame must be sent within 5s of connect. Rate limits: 8 connects/s
  * per IP, 100 client msgs/s per IP: we open one socket and send one subscribe.
  *
- * Equities/ETFs (SPY, QQQ): daily closes from the R2 market Worker
- * (`/v1/market/closes`, via `fetchBenchmarkHistory`; CORS allowlist covers
- * https://digiquant.io). Each cell carries its own "as of YYYY-MM-DD close"
- * stamp. When `NEXT_PUBLIC_MARKET_DATA_URL` is unset or the call fails, those
- * cells are OMITTED. Prices are never invented and never rendered at SSR:
- * the first render is `{cells: [], status: "connecting"}`.
+ * The rest of the baseline universe (ETFs, commodities, currencies, crypto)
+ * comes from official `/benchmarks`, then the R2 close archive. A symbol
+ * neither source returns stays on the tape as an em dash. Prices and percents
+ * are never invented. The first paint is the full symbol list with no numbers.
  */
 import { useEffect, useState } from "react";
 import { officialGet, tapeFromBenchmarks } from "@/lib/official-api";
-import { fetchBenchmarkHistory, seedWindowStart } from "./market-data";
+import { fetchCloseSeries, seedWindowStart } from "./market-data";
 import { num } from "./quote-transforms";
+import { TAPE_SYMBOLS } from "./tape-universe";
 
 export const COINBASE_WS_URL = "wss://ws-feed.exchange.coinbase.com";
 export const CRYPTO_PRODUCTS = ["BTC-USD", "ETH-USD", "SOL-USD"] as const;
-export const EQUITY_SYMBOLS = ["SPY", "QQQ"] as const;
+export { TAPE_SYMBOLS };
 
 /** Socket open + tick within this window = "live". */
 export const LIVE_WINDOW_MS = 15_000;
@@ -88,7 +87,7 @@ export function formatCloseStamp(date: string): string {
 }
 
 export function formatLiveStamp(iso: string): string {
-  return `live ${iso.slice(11, 19)}Z`;
+  return `${iso.slice(11, 19)}Z`;
 }
 
 /* ------------------------------ tick parsing ----------------------------- */
@@ -346,48 +345,96 @@ export function createCryptoFeed(opts: CryptoFeedOptions): CryptoFeed {
 
 const INITIAL: MarketBarState = { cells: [], status: "connecting", asOf: null };
 
-const TAPE_TICKERS = [...CRYPTO_PRODUCTS, ...EQUITY_SYMBOLS].join(",");
+/** Matches the R2 worker cap in `fetchCloseSeries`. */
+const CLOSE_BATCH = 25;
 
-/** Catalog closes from GET /benchmarks. Stub series are dropped. Empty means the API did not expose that symbol. */
-async function loadOfficialCloses(): Promise<MarketCell[]> {
-  const read = await officialGet("/benchmarks", { tickers: TAPE_TICKERS });
-  if (!read.ok) return [];
-  const series = tapeFromBenchmarks(read.body);
-  if (series == null) return [];
-  return series.flatMap((row) => {
-    const cell = equityCell(row.symbol, row.points);
-    if (!cell) return [];
-    return [{ ...cell, stamp: formatCloseStamp(cell.asOf) }];
+export function unavailableCell(symbol: string): MarketCell {
+  return {
+    symbol,
+    kind: "equity",
+    price: Number.NaN,
+    changePct: null,
+    asOf: "",
+    value: "—",
+    change: "—",
+    stamp: "",
+    up: null,
+  };
+}
+
+export function isQuotedCell(cell: MarketCell): boolean {
+  return Number.isFinite(cell.price) && cell.price > 0;
+}
+
+/** One row per baseline symbol. A symbol with no finite price stays an em dash. */
+export function assembleTape(quotes: ReadonlyMap<string, MarketCell>): MarketCell[] {
+  return TAPE_SYMBOLS.map((symbol) => {
+    const hit = quotes.get(symbol);
+    if (!hit || !isQuotedCell(hit)) return unavailableCell(symbol);
+    const changePct = hit.changePct !== null && Number.isFinite(hit.changePct) ? hit.changePct : null;
+    return {
+      ...hit,
+      symbol,
+      changePct,
+      change: formatChange(changePct),
+      up: changePct === null ? null : changePct >= 0,
+    };
   });
 }
 
-async function loadEquityCells(skip: ReadonlySet<string>): Promise<MarketCell[]> {
-  const from = seedWindowStart();
-  const out = await Promise.all(
-    EQUITY_SYMBOLS.filter((s) => !skip.has(s)).map(async (s) => equityCell(s, await fetchBenchmarkHistory(s, from))),
-  );
-  return out.filter((c): c is MarketCell => c !== null);
+/** Archive closes first. A live crypto tick with a real price replaces that symbol. */
+export function mergeTapeQuotes(archive: readonly MarketCell[], live: readonly MarketCell[]): MarketCell[] {
+  const quotes = new Map<string, MarketCell>();
+  for (const cell of archive) {
+    if (isQuotedCell(cell)) quotes.set(cell.symbol, cell);
+  }
+  for (const cell of live) {
+    if (cell.kind === "crypto" && isQuotedCell(cell)) quotes.set(cell.symbol, cell);
+  }
+  return assembleTape(quotes);
+}
+
+function cellFromPoints(symbol: string, points: { date: string; price: number }[]): MarketCell | null {
+  const cell = equityCell(symbol, points);
+  return cell && isQuotedCell(cell) ? cell : null;
+}
+
+async function loadArchiveQuotes(symbols: readonly string[]): Promise<MarketCell[]> {
+  const found = new Map<string, MarketCell>();
+  for (let i = 0; i < symbols.length; i += CLOSE_BATCH) {
+    const batch = symbols.slice(i, i + CLOSE_BATCH);
+    const read = await officialGet("/benchmarks", { tickers: batch.join(",") });
+    if (!read.ok) continue;
+    const series = tapeFromBenchmarks(read.body);
+    if (!series) continue;
+    for (const row of series) {
+      const symbol = row.symbol.trim().toUpperCase();
+      const cell = cellFromPoints(symbol, row.points);
+      if (cell) found.set(symbol, cell);
+    }
+  }
+  const missing = symbols.filter((symbol) => !found.has(symbol));
+  const closes = await fetchCloseSeries(missing, seedWindowStart());
+  for (const [symbol, points] of closes) {
+    if (found.has(symbol)) continue;
+    const cell = cellFromPoints(symbol, points);
+    if (cell) found.set(symbol, cell);
+  }
+  return [...found.values()];
 }
 
 export function useMarketBar(): MarketBarState {
+  const [archive, setArchive] = useState<MarketCell[]>([]);
   const [crypto, setCrypto] = useState<MarketBarState>(INITIAL);
-  const [equities, setEquities] = useState<MarketCell[]>([]);
-  const [official, setOfficial] = useState<MarketCell[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadOfficialCloses()
+    void loadArchiveQuotes(TAPE_SYMBOLS)
       .then((cells) => {
-        if (cancelled) return;
-        setOfficial(cells);
-        const skip = new Set(cells.map((c) => c.symbol));
-        return loadEquityCells(skip);
-      })
-      .then((cells) => {
-        if (!cancelled && cells) setEquities(cells);
+        if (!cancelled) setArchive(cells);
       })
       .catch(() => {
-        /* equities stay omitted */
+        /* symbols without a quote stay unavailable */
       });
     return () => {
       cancelled = true;
@@ -412,9 +459,8 @@ export function useMarketBar(): MarketBarState {
     };
   }, []);
 
-  const covered = new Set(official.map((c) => c.symbol));
   return {
-    cells: [...official, ...crypto.cells.filter((c) => !covered.has(c.symbol)), ...equities],
+    cells: mergeTapeQuotes(archive, crypto.cells),
     status: crypto.status,
     asOf: crypto.asOf,
   };
