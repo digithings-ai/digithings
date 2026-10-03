@@ -41,6 +41,24 @@ export DIGIQUANT_DATA_DIR="$DATA_DIR"
 export DIGIKEY_JWKS_URL="${DIGIKEY_JWKS_URL:-http://127.0.0.1:8005/.well-known/jwks.json}"
 export DIGIKEY_ISSUER="${DIGIKEY_ISSUER:-http://127.0.0.1:8005}"
 export DIGIKEY_AUDIENCE="${DIGIKEY_AUDIENCE:-digi-ecosystem}"
+# This launcher does not start Redis. JWT checks are on, and the blocklist
+# default is fail-closed, so a normal token would 503. Opt out the same way
+# scripts/run_stack_local.sh does unless a Redis URL is already set — then
+# the code default stays fail-closed and the URL is forwarded.
+if [ -z "${DIGIKEY_BLOCKLIST_REDIS_URL:-}" ]; then
+  export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
+fi
+digikey_env=(
+  "DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL}"
+  "DIGIKEY_ISSUER=${DIGIKEY_ISSUER}"
+  "DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE}"
+)
+if [ -n "${DIGIKEY_REQUIRE_BLOCKLIST:-}" ]; then
+  digikey_env+=("DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST}")
+fi
+if [ -n "${DIGIKEY_BLOCKLIST_REDIS_URL:-}" ]; then
+  digikey_env+=("DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL}")
+fi
 
 # Avoid "address already in use"
 for port in "$DQ_PORT" "$DG_PORT"; do
@@ -53,13 +71,13 @@ done
 
 echo "Starting digiquant on http://127.0.0.1:$DQ_PORT (data: $DIGIQUANT_DATA_DIR) ..."
 env PYTHONPATH="$PYTHONPATH" DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" \
-  DIGIKEY_JWKS_URL="$DIGIKEY_JWKS_URL" DIGIKEY_ISSUER="$DIGIKEY_ISSUER" DIGIKEY_AUDIENCE="$DIGIKEY_AUDIENCE" \
+  "${digikey_env[@]}" \
   $UVICORN digiquant.server:app --host 127.0.0.1 --port "$DQ_PORT" &
 DQ_PID=$!
 sleep 1
 echo "Starting digigraph on http://127.0.0.1:$DG_PORT ..."
 env PYTHONPATH="$PYTHONPATH" DIGIQUANT_URL="http://127.0.0.1:$DQ_PORT" DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" \
-  DIGIKEY_JWKS_URL="$DIGIKEY_JWKS_URL" DIGIKEY_ISSUER="$DIGIKEY_ISSUER" DIGIKEY_AUDIENCE="$DIGIKEY_AUDIENCE" \
+  "${digikey_env[@]}" \
   $UVICORN digigraph.server:app --host 127.0.0.1 --port "$DG_PORT" &
 DG_PID=$!
 
