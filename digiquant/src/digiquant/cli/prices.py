@@ -90,11 +90,13 @@ def _resolve_universe(tickers: str, watchlist: Path | None, include_sectors: boo
     """Shared universe resolution for the Supabase-sourced commands."""
     from digiquant.data.prices.fetchers import parse_watchlist
 
-    if tickers:
-        universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
-    elif watchlist:
+    raw = tickers or ""
+    universe = [t.strip().upper() for t in raw.split(",") if t.strip()]
+    if raw.strip() and not universe:
+        raise click.UsageError("--tickers did not contain any symbols.")
+    if not universe and watchlist:
         universe = parse_watchlist(watchlist)
-    else:
+    elif not universe:
         raise click.UsageError("Provide --watchlist or --tickers.")
     if include_sectors:
         from digiquant.research.sectors_config import sector_universe
@@ -241,8 +243,12 @@ def compute_technicals_cmd(
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
-    if tickers:
+    if tickers.strip():
         universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+        if not universe:
+            raise click.UsageError("--tickers did not contain any symbols.")
+    elif tickers:
+        raise click.UsageError("--tickers did not contain any symbols.")
     else:
         # Scan cache_dir for <TICKER>.csv files.
         d = Path(cache_dir)

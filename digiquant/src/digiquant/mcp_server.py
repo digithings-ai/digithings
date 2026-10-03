@@ -44,7 +44,41 @@ logger = logging.getLogger(__name__)
 # the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
 
 _TTL_SECONDS = 900
+_MAX_LOOKBACK = 500
 _ttl: dict[tuple, tuple[float, str]] = {}
+
+
+def _bounded_lookback(lookback: int) -> int:
+    """Clamp a positive window length to ``1..500``.
+
+    Callers must reject a non-positive value before slicing. ``rows[-0:]`` is
+    the whole series, and a negative index slices from the front.
+    """
+    return min(int(lookback), _MAX_LOOKBACK)
+
+
+def _lookback_error(lookback: int) -> str | None:
+    """Error envelope for a non-positive lookback, or None when it is usable.
+
+    An empty ``rows`` array is also what a ticker with no bars looks like, so
+    a bad argument is an ``{"error"}`` instead of a silent empty window. The
+    research reader in ``research/data/queries.py`` does not use this envelope;
+    it slices ``_read_r2_window`` itself.
+    """
+    try:
+        n = int(lookback)
+    except (TypeError, ValueError):
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    if isinstance(lookback, bool) or n < 1:
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    return None
+
+
+def _tail(rows: list[Any], n: int) -> list[Any]:
+    if n <= 0:
+        return []
+    return rows[-n:]
+
 
 # Calendar days of live overlap fetched ahead of the R2 manifest seal.
 _R2_LIVE_OVERLAP_DAYS = 30
@@ -349,12 +383,15 @@ def digiquant_get_price_technicals(
     must carry the glossary entry.
     """
     try:
-        lookback = min(int(lookback), 500)
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
+        lookback = _bounded_lookback(lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
         resolved = as_of or manifest["as_of"]
-        cache_key = ("technicals", ticker, resolved, manifest["version"])
+        cache_key = ("technicals", ticker, resolved, manifest["version"], lookback)
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
@@ -369,7 +406,7 @@ def digiquant_get_price_technicals(
                 live_stale,
             )
         payload = json.dumps(
-            {"as_of": resolved, "rows": rows[-lookback:], "stale": stale}, default=str
+            {"as_of": resolved, "rows": _tail(rows, lookback), "stale": stale}, default=str
         )
         # Task 7 fix round (M1): never cache a stale-flagged payload — a stale
         # serve pinned for the full 900s TTL would keep reporting stale after
@@ -395,7 +432,10 @@ def digiquant_get_macro_series(
     reader-side ``stale``. Task 10 docs must carry the glossary entry.
     """
     try:
-        lookback = min(int(lookback), 500)
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
+        lookback = _bounded_lookback(lookback)
         from digiquant.research.data.queries import r2_backend_enabled
 
         if not r2_backend_enabled():
@@ -404,7 +444,7 @@ def digiquant_get_macro_series(
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
         resolved = as_of or manifest["as_of"]
-        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"])
+        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"], lookback)
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
@@ -418,7 +458,7 @@ def digiquant_get_macro_series(
                 manifest["as_of"],
             )
         series = {
-            sid: {"latest": payload["latest"], "window": payload["window"][-lookback:]}
+            sid: {"latest": payload["latest"], "window": _tail(payload["window"], lookback)}
             for sid, payload in per_series.items()
         }
         payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)
@@ -774,6 +814,8 @@ def create_mcp_server(
         symbols: list[str] = json.loads(symbols_json)
         params = json.loads(strategy_params_json) if strategy_params_json else None
         constraints = json.loads(constraints_json) if constraints_json else None
+        if isinstance(n_trials, bool) or int(n_trials) < 1:
+            return json.dumps({"error": "n_trials must be an integer >= 1"})
         from digiquant.graph.pipeline import run_quant_workflow
 
         raw = run_quant_workflow(
