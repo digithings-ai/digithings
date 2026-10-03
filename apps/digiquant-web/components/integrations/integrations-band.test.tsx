@@ -12,31 +12,57 @@ describe("IntegrationsBand", () => {
     expect(html).toContain('href="https://nautilustrader.io/"');
     expect(html).toContain('href="https://digithings.ai"');
     expect(html).toContain("NautilusTrader");
-    expect(html).toContain("local gateway below");
+    expect(html).toContain("The live chart is the hero");
   });
 
-  it("does not draw a fake preview in place of a feed", () => {
-    expect(html).not.toContain("Terminal-style quote strip");
-    expect(html).not.toContain("Live Vela candlestick preview");
-    expect(html).not.toContain("Backtest run timeline");
+  it("does not mount the LuxAlgo library demo", () => {
+    expect(html).not.toContain("LuxAlgo, as a demo");
+    expect(html).not.toContain("Search LuxAlgo Library");
+    expect(html).not.toContain("Continue in LuxAlgo");
+    expect(html).not.toContain("Research metadata only");
+    expect(html).not.toContain("Local wire checks after hydration");
+    expect(html).not.toContain("luxalgo-library-query");
+    expect(html).not.toContain("The hero chart is live LuxAlgo Vela");
   });
 
-  it("mounts the local LuxAlgo lookup with its offline-honest copy", () => {
-    expect(html).toContain("LuxAlgo, as a demo");
-    expect(html).toContain("Search LuxAlgo Library");
-    expect(html).toContain("places no orders");
-    expect(html).toContain("Local wire checks after hydration");
+  it("uses the digithings hero wordmark and the modules this stack runs", () => {
+    expect(html).toContain("pixel-word-hero");
+    expect(html).toContain('aria-label="digithings"');
+    expect(html).toContain("The platform that drives the agentic side of digiquant.");
+    expect(html).toContain("digigraph");
+    expect(html).toContain("Orchestrates the research and portfolio runs.");
+    expect(html).toContain("digichat");
+    expect(html).toContain("The chat where a strategy idea starts.");
+    expect(html).toContain("digillm");
+    expect(html).toContain("digikey");
+    expect(html).toContain("digibase");
+    expect(html).toContain("digifetch");
+    expect(html).not.toContain("favicon-dg.svg");
+    expect(html).not.toMatch(/12x|fx hub/i);
   });
 
-  it("keeps the platform row, the quiet secondary marks, and the showcase line", () => {
-    expect(html).toContain("agentic workflows");
-    expect(html).toContain("digichat is where a strategy idea starts");
-    expect(html).toContain("also connected");
-    expect(html).toContain("Coinbase");
-    expect(html).toContain("Alpaca");
-    expect(html).toContain("Interactive Brokers");
-    expect(html).toContain("places no orders");
-    expect(html).toContain("live LuxAlgo Vela");
+  it("scrolls the packages this tree actually calls, in two directions", () => {
+    expect(html).toContain("Coinbase · public price feed");
+    expect(html).toContain("Alpaca · broker adapter");
+    expect(html).toContain("Interactive Brokers · broker adapter");
+    expect(html).toContain("Kraken · account snapshots");
+    expect(html).toContain("Tradier · account snapshots");
+    expect(html).toContain("Yahoo Finance · quote history");
+    expect(html).toContain("FRED · macro series");
+    expect(html).toContain("Supabase · stored prices");
+    expect(html).toContain("Binance · chart prices");
+    expect(html).toContain("mq-track--left");
+    expect(html).toContain("mq-track--right");
+    expect(html).not.toContain("also connected");
+  });
+
+  it("drops the showcase tag, the collapse control, and the disclaimer", () => {
+    expect(html).not.toContain("showcase only");
+    expect(html).not.toContain(">Collapse<");
+    expect(html).not.toContain(">Expand<");
+    expect(html).not.toContain("places no orders");
+    expect(html).not.toContain("no live trading");
+    expect(html).not.toContain("implies no affiliation");
   });
 
   it("keeps driver cards from forcing a single nowrap line", () => {
