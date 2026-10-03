@@ -23,7 +23,7 @@ export default function ContactPage() {
   return (
     <>
       <SiteNav />
-      <main className="dq-subpage">
+      <main className="dq-subpage" id="main" tabIndex={-1}>
         <AmbientMesh />
         <section className="section">
           <div className="wrap">

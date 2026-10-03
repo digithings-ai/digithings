@@ -1,19 +1,9 @@
 "use client";
 /**
- * digiquant.io top bar — the shared NavShell primitive (@digithings/ui)
- * dressed with this app's brand, links, GitHub tail action, and the dashboard
- * CTA — in the sheet on narrow viewports, and as a compact tail button right
- * of the GitHub glyph on wide ones (#1450 round 3). Supersedes the app-local
- * DqNav copy (#1401): the scroll grammar
- * (settle after 8px, yield past 180px), hamburger, portal sheet, Escape/scrim
- * dismissal, and body-scroll lock all live in the primitive; only the dress
- * arrives from here.
- *
- * Dashboard CTA is a plain <a href="/dashboard/"> (separate export).
- * Desktop: teal mark only. Sheet: Open dashboard.
+ * digiquant.io top bar — NavShell + showcase wayfinding (#4895).
+ * Loud CTA tours the desk display. The operator dashboard is not this site.
  */
-import { NavShell, GitHubGlyph, DigiquantMark } from "@digithings/ui";
-import { buttonVariants } from "@digithings/ui/ui";
+import { NavShell, GitHubGlyph, CtaLink, IconLink } from "@digithings/ui";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
 
 export function SiteNav() {
@@ -22,36 +12,25 @@ export function SiteNav() {
       brand={<Brand />}
       links={DQ_NAV_PRIMARY}
       homeLabel="digiquant home"
+      skipTo="#main"
       actions={
         <>
-          <a
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+          <IconLink
             href="https://github.com/digithings-ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="digiquant on GitHub"
+            label="digiquant on GitHub"
+            external
           >
             <GitHubGlyph />
-          </a>
-          {/* Icon-only desktop twin. hidden! beats unlayered .dq-cta display. */}
-          <a
-            className="dq-nav-mark-cta dq-cta max-[880px]:hidden!"
-            href="/dashboard/"
-            aria-label="Open the dashboard"
-          >
-            <DigiquantMark size={20} />
-          </a>
+          </IconLink>
+          <CtaLink href="/#desk" variant="ghost" size="sm" className="max-[880px]:hidden!">
+            Tour
+          </CtaLink>
         </>
       }
       cta={
-        <a
-          className={buttonVariants({ variant: "default" }) + " dq-cta"}
-          href="/dashboard/"
-          aria-label="Open the dashboard"
-        >
-          <DigiquantMark size={18} />
-          <span>Open dashboard</span>
-        </a>
+        <CtaLink href="/#desk" variant="default" size="default">
+          Tour the desk
+        </CtaLink>
       }
     />
   );
