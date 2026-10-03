@@ -1,13 +1,16 @@
 import { writeFile } from "node:fs/promises";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { BLOCKS, PAGES, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
+import { WEB_SLOTS } from "../../../apps/digiquant-web/components/desk/web-slots";
+import { BLOCKS, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
 import { COLS, ROWS, nudge, type Layout } from "./grid";
+import { MARK_COLS, MARK_ROWS, markLines } from "./mark";
 import { BriefPage } from "./pages/brief";
 import { FxDesk, isFxPath } from "./pages/fx";
 import { PipelinePage } from "./pages/pipeline";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
+import { deskForPath, deskLabel, railLine, railPaths, railRows } from "./rail";
 import { readBlock, type ReadResult } from "./read";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
@@ -26,6 +29,8 @@ type Key = { name?: string; shift?: boolean; sequence?: string };
 const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
+const WEB_ONLY = new Set<string>(WEB_SLOTS.map((slot) => slot.path));
+const MARK = markLines();
 
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
@@ -34,8 +39,13 @@ const tone = (status: ReadResult["status"] | "loading") => {
   return BAD;
 };
 
-/** Dedicated pages paint themselves. Any other path keeps the catalog grid. */
+function isWebSlot(path: string): boolean {
+  return WEB_ONLY.has(path);
+}
+
+/** Dedicated pages paint themselves. Any other catalog path keeps the grid. */
 function isCatalogPath(path: string): boolean {
+  if (isWebSlot(path)) return false;
   if (path === "/brief" || path === "/pipeline") return false;
   if (isPortfolioPath(path) || STRATEGY_PATHS.has(path) || isFxPath(path)) return false;
   return true;
@@ -52,40 +62,47 @@ function mountedView(path: string) {
 
 export function App() {
   const renderer = useRenderer();
-  const arg = process.argv.find((a) => a.startsWith("/") && pageByPath(a));
-  const [pageIndex, setPageIndex] = useState(() => Math.max(0, PAGES.findIndex((p) => p.path === arg)));
-  const [layout, setLayout] = useState<Layout>(() => layoutFor(PAGES[Math.max(0, PAGES.findIndex((p) => p.path === arg))].path));
+  const arg = process.argv.find((a) => a.startsWith("/") && (pageByPath(a) || isWebSlot(a)));
+  const start = arg && (pageByPath(arg) || isWebSlot(arg)) ? arg : "/brief";
+  const [path, setPath] = useState(start);
+  const [desk, setDesk] = useState(() => deskForPath(start) ?? "baseline");
+  const [layout, setLayout] = useState<Layout>(() => layoutFor(start));
   const [focus, setFocus] = useState(-1);
   const [mode, setMode] = useState<"desk" | "goto">("desk");
   const [draft, setDraft] = useState("");
   const [note, setNote] = useState("");
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
 
-  const pageRef = useRef(pageIndex);
+  const pathRef = useRef(path);
+  const deskRef = useRef(desk);
   const layoutRef = useRef(layout);
   const focusRef = useRef(focus);
   const modeRef = useRef(mode);
   const catalogRef = useRef(true);
-  pageRef.current = pageIndex;
+  pathRef.current = path;
+  deskRef.current = desk;
   layoutRef.current = layout;
   focusRef.current = focus;
   modeRef.current = mode;
 
-  const page = PAGES[pageIndex];
-  catalogRef.current = isCatalogPath(page.path);
-  const aligned = layoutMatchesPage(page.path, layout);
-  const shown = aligned ? layout : layoutFor(page.path);
+  const page = pageByPath(path);
+  catalogRef.current = isCatalogPath(path);
+  const aligned = page ? layoutMatchesPage(path, layout) : false;
+  const shown = aligned ? layout : layoutFor(path);
   const shownReads = aligned ? reads : {};
   const shownFocus = aligned ? focus : -1;
+  const rows = railRows(desk);
 
-  const openPage = (index: number) => {
-    const i = Math.max(0, Math.min(PAGES.length - 1, index));
-    if (i === pageRef.current) return;
-    const placements = layoutFor(PAGES[i].path);
-    pageRef.current = i;
+  const openPath = (next: string) => {
+    if (next === pathRef.current) return;
+    const owner = deskForPath(next);
+    const placements = layoutFor(next);
+    pathRef.current = next;
+    if (owner) deskRef.current = owner;
     layoutRef.current = placements;
     focusRef.current = -1;
-    setPageIndex(i);
+    setPath(next);
+    if (owner) setDesk(owner);
     setLayout(placements);
     setFocus(-1);
     setReads({});
@@ -93,8 +110,8 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!isCatalogPath(page.path)) return;
-    const placements = layoutFor(page.path);
+    if (!isCatalogPath(path)) return;
+    const placements = layoutFor(path);
     setLayout(placements);
     setFocus(-1);
     setReads({});
@@ -111,14 +128,14 @@ export function App() {
       cancel = true;
       ac.abort();
     };
-  }, [page.path]);
+  }, [path]);
 
   useEffect(() => {
     if (!STATUS) return;
-    if (!layoutMatchesPage(page.path, layout)) return;
+    if (!page || !layoutMatchesPage(path, layout)) return;
     if (layout.some((p) => !reads[p.id])) return;
     const payload = {
-      path: page.path,
+      path,
       blocks: layout.map((p) => ({
         id: p.id,
         route: BLOCKS[p.id].route,
@@ -127,7 +144,7 @@ export function App() {
       })),
     };
     void writeFile(STATUS, JSON.stringify(payload, null, 2));
-  }, [STATUS, layout, page.path, reads]);
+  }, [STATUS, layout, path, page, reads]);
 
   const onKey = useRef<(key: Key) => void>(() => {});
   onKey.current = (key) => {
@@ -141,6 +158,15 @@ export function App() {
     }
     if (name === "q") {
       renderer.destroy();
+      return;
+    }
+    if (name === "d") {
+      const nextDesk = deskRef.current === "baseline" ? "fx" : "baseline";
+      const home = railPaths(nextDesk)[0];
+      if (!home) return;
+      deskRef.current = nextDesk;
+      setDesk(nextDesk);
+      openPath(home);
       return;
     }
     if (name === "/" || key.sequence === "/") {
@@ -172,7 +198,10 @@ export function App() {
         if (dx > 0 && catalogRef.current && layoutRef.current.length) setFocus(0);
         return;
       }
-      openPage(pageRef.current + dy);
+      const pages = railPaths(deskRef.current);
+      const index = pages.indexOf(pathRef.current);
+      const next = pages[index + dy];
+      if (next) openPath(next);
       return;
     }
     const id = layoutRef.current[focusRef.current]?.id;
@@ -188,25 +217,28 @@ export function App() {
   useKeyboard((key) => onKey.current(key));
 
   const go = (raw: string) => {
-    const next = pageByPath(raw.trim());
+    const query = raw.trim();
+    const next = pageByPath(query) ?? (isWebSlot(query) ? query : undefined);
     if (!next) {
       setNote("no such page");
       setMode("desk");
       return;
     }
-    openPage(PAGES.findIndex((p) => p.path === next.path));
+    openPath(typeof next === "string" ? next : next.path);
     setMode("desk");
     setDraft("");
   };
 
-  const catalog = isCatalogPath(page.path);
-  const view = catalog ? null : mountedView(page.path);
+  const catalog = isCatalogPath(path);
+  const undrawn = isWebSlot(path);
+  const view = catalog || undrawn ? null : mountedView(path);
   const selected = catalog && shownFocus >= 0 ? shown[shownFocus] : undefined;
   const footer = [
     catalog ? (selected ? "tab block   arrows move   shift+arrows resize" : "↑↓ page   → block") : "↑↓ page",
+    "d desk",
     "/ path",
     "q quit",
-    selected ? `${selected.id} ${selected.x},${selected.y} ${selected.w}×${selected.h}` : page.path,
+    selected ? `${selected.id} ${selected.x},${selected.y} ${selected.w}×${selected.h}` : path,
     note,
   ]
     .filter(Boolean)
@@ -214,25 +246,34 @@ export function App() {
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
-      <box height={1} paddingLeft={1} flexDirection="row">
-        <text fg={GOLD}>digiquant</text>
-        <text fg={DIM}>{`  ${page.label}  ${page.path}  ${API}`}</text>
+      <box height={MARK_ROWS} flexDirection="row" backgroundColor={BG}>
+        <box flexGrow={1} paddingLeft={1} flexDirection="column" justifyContent="center">
+          <text fg={DIM}>{`desk: ${deskLabel(desk)}`}</text>
+          <text fg={INK}>{path}</text>
+        </box>
+        <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
+          {MARK.map((line, index) => (
+            <text key={index} fg={INK}>{line}</text>
+          ))}
+        </box>
       </box>
       <box flexGrow={1} flexDirection="row">
-        <box width={24} border borderColor={shownFocus < 0 ? GOLD : LINE} title="pages" flexDirection="column">
-          {PAGES.map((item, i) => {
-            const current = i === pageIndex;
-            const child = item.path.split("/").filter(Boolean).length > 1;
-            const mark = current ? "›" : " ";
-            return (
-              <text key={item.path} fg={current ? GOLD : DIM}>
-                {child ? `  ${mark} ${item.label}` : `${mark} ${item.label}`}
-              </text>
-            );
-          })}
+        <box width={34} border borderColor={LINE} flexDirection="column">
+          <text fg={DIM}>~/pages</text>
+          {rows.map((row) =>
+            row.kind === "title" ? (
+              <text key={row.text} fg={DIM}>{row.text}</text>
+            ) : (
+              <text key={row.path} fg={row.path === path ? GOLD : DIM}>{railLine(row)}</text>
+            ),
+          )}
         </box>
         <box flexGrow={1} position="relative" overflow="hidden">
-          {view ?? shown.map((placement, i) => {
+          {undrawn ? (
+            <box paddingLeft={1} paddingTop={1}>
+              <text fg={DIM}>This page is not drawn on the terminal.</text>
+            </box>
+          ) : (view ?? shown.map((placement, i) => {
             const def = BLOCKS[placement.id];
             const read = shownReads[placement.id];
             const status = read?.status ?? "loading";
@@ -259,7 +300,7 @@ export function App() {
                 <text fg={tone(status)}>{lines.slice(0, 14).join("\n")}</text>
               </box>
             );
-          })}
+          }))}
         </box>
       </box>
       <box height={1} paddingLeft={1} flexDirection="row">

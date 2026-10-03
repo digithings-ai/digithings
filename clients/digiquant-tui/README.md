@@ -11,12 +11,10 @@ bun install
 DQ_API_URL=http://127.0.0.1:8788 bun src/index.tsx
 ```
 
-`↑` `↓` changes page. `→` or tab enters a block. Arrows move it, shift+arrows resize it. `/` jumps to a path (`/brief`, `/portfolio`, `/portfolio/holdings`, `/portfolio/attribution`, `/portfolio/ledger`, `/portfolio/theses`, `/portfolio/tearsheet`, `/performance`, `/pipeline`, `/strategies`, `/strategies/detail`, `/strategies/deploy`, `/fx`, `/fx/ideas`, `/fx/watch`, `/fx/rates`, `/fx/settings`).
+The top right is the same pixel DIGIQUANT mark as the web hero. The sidebar is the web desk rail (`~/pages`, slash paths, the same order and labels). `d` switches Baseline and FX Hub. `↑` `↓` moves through that rail. `→` or tab enters a block. Arrows move it, shift+arrows resize it. `/` jumps to a path.
 
 This app is bun-managed and lives outside the root npm workspaces.
 
 A digichat terminal tab is parked and not built here.
 
-These slots open in the browser on the digiquant site, not in this terminal:
-`/app/tools/terminal/`, `/app/tools/luxalgo/`, `/app/tools/charts/`,
-`/app/tools/chat/`.
+Terminal, Charts, and digichat stay on the rail. They are not drawn in this terminal.
