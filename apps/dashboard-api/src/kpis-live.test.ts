@@ -159,6 +159,22 @@ describe('registerLiveRoutes', () => {
     expect(body.provenance).toMatchObject({ marks: 'market_api' });
   });
 
+  it('forwards retrieval_pin into the book read', async () => {
+    const handlers = new Map<string, (req: Request) => Promise<Response>>();
+    let seen: string | null | undefined;
+    registerLiveRoutes((path, handler) => handlers.set(path, handler), {
+      loadLiveBook: async (pin) => {
+        seen = pin;
+        return null;
+      },
+    });
+    const res = await handlers.get('/kpis/live')!(
+      new Request('https://api.test/kpis/live?retrieval_pin=pin%209'),
+    );
+    expect(res.status).toBe(404);
+    expect(seen).toBe('pin 9');
+  });
+
   it('badges stored closes when nothing in the book is a fresh quote', async () => {
     const stored = POSITIONS.map((p) => ({ ...p, isLive: false, effectivePrice: p.markPrice }));
     expect(

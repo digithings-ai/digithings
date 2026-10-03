@@ -33,8 +33,9 @@ import type { CommittedBookSnapshot, EnvelopeSource } from './envelope';
 export const HOUSE_WORKSPACE_ID = '6b753576-ced9-5319-9bfa-c5d0aacd9319' as const;
 
 const POSITIONS_PAGE = 5000;
-/** Same row cap as the ledger reader — a single page hides dates behind the newest 5000. */
-const POSITIONS_FETCH_MAX = 80_000;
+/** Columns the book builders read. A `select=*` scan is not a date bound. */
+const POSITION_COLUMNS =
+  'date,ticker,weight_pct,entry_price,current_price,unrealized_pnl_pct,since_entry_return_pct,metrics_as_of';
 const MAX_TICKERS_PER_REQUEST = 25;
 /** Five missed publisher cycles. Mirrors `LIVE_QUOTE_FRESH_MS` in the dashboard client. */
 const LIVE_QUOTE_FRESH_MS = 5 * 60 * 1000;
@@ -119,21 +120,33 @@ interface PositionRow {
   metrics_as_of?: string | null;
 }
 
-async function loadAllPositions(env: SupabaseEnv): Promise<PositionRow[]> {
+/** Latest positions date on or before the snapshot. One row, same shape as `loadSnapshotDate`. */
+async function loadBookDate(env: SupabaseEnv, snapshotDate: string): Promise<string | null> {
+  const rows = (await supaGet(
+    env,
+    `positions?select=date&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
+      `&date=lte.${encodeURIComponent(snapshotDate)}&order=date.desc&limit=1`,
+  )) as SnapshotTip[];
+  return rows.length > 0 ? rows[0].date : null;
+}
+
+/** Rows for one committed date. The `date=eq` filter is the bound — not a history cap. */
+async function loadPositionsOnDate(env: SupabaseEnv, bookDate: string): Promise<PositionRow[]> {
   const out: PositionRow[] = [];
   let offset = 0;
   for (;;) {
     const page = (await supaGet(
       env,
-      `positions?select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
-        `&order=date.desc,ticker.asc&limit=${POSITIONS_PAGE}&offset=${offset}`,
+      `positions?select=${POSITION_COLUMNS}&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
+        `&date=eq.${encodeURIComponent(bookDate)}&order=ticker.asc&limit=${POSITIONS_PAGE}` +
+        (offset > 0 ? `&offset=${offset}` : ''),
     )) as PositionRow[];
     if (!Array.isArray(page) || page.length === 0) break;
     out.push(...page);
+    if (page.length < POSITIONS_PAGE) break;
     offset += page.length;
-    if (page.length < POSITIONS_PAGE || out.length >= POSITIONS_FETCH_MAX) break;
   }
-  return out.slice(0, POSITIONS_FETCH_MAX);
+  return out;
 }
 
 /** Latest position date on or before the snapshot; else null. */
@@ -227,16 +240,15 @@ async function loadCommittedBook(
 ): Promise<CommittedBookSnapshot | null> {
   const snapshotDate = await loadSnapshotDate(env, asOf);
   if (snapshotDate == null) return null;
-  const all = await loadAllPositions(env);
-  const dates = [...new Set(all.map((p) => p.date))];
-  const bookAsOf = committedDate(snapshotDate, dates);
-  if (bookAsOf == null) return null;
+  const bookAsOf = await loadBookDate(env, snapshotDate);
+  if (bookAsOf == null || bookAsOf > snapshotDate) return null;
+  const positions = await loadPositionsOnDate(env, bookAsOf);
   const [navRows, metrics] = await Promise.all([loadNavRows(env), loadMetrics(env)]);
   return {
     snapshotDate,
     bookAsOf,
-    positionDates: dates,
-    positions: all.filter((p) => p.date === bookAsOf).map(toAllocationPosition),
+    positionDates: [bookAsOf],
+    positions: positions.map(toAllocationPosition),
     navRows: navRows.map(toNavTipInput),
     metricsInvestedPct: metrics.investedPct,
     metricsAsOf: metrics.asOf,
@@ -479,11 +491,12 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
     },
   };
   const live: LiveDeps = {
-    loadLiveBook: async (): Promise<LiveBook | null> => {
+    loadLiveBook: async (retrievalPin?: string | null): Promise<LiveBook | null> => {
       const book = await loadCommittedBook(env, null);
       if (!book) return null;
       const w = navWindow(book.navRows.map((r) => ({ date: r.date, nav: r.nav })));
-      const history = w == null ? [] : await loadBenchmarkHistory(env, 'SPY', w.from, w.to);
+      const history =
+        w == null ? [] : await loadBenchmarkHistory(env, 'SPY', w.from, w.to, retrievalPin);
       const held = book.positions.filter((p) => p.ticker !== 'CASH');
       const quotes = await loadFreshLivePrices(
         env,

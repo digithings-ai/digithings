@@ -28,6 +28,16 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function emptyPipelineDay(): PipelineDayData {
+  return {
+    runRecorded: false,
+    fanoutCounts: {},
+    fanoutKeys: {},
+    presentKeys: new Set(),
+    artifacts: [],
+  };
+}
+
 /** The owning stage + `${stageId}:${subId}` fan-out key for a fan-out id, from the static topology. */
 function fanoutOwner(fanoutId: string): { stageId: PipelineStageId; fanoutKey: string } | null {
   for (const stage of PIPELINE_TOPOLOGY) {
@@ -82,13 +92,7 @@ export default function PipelineClient() {
   // run instead. An explicit ?date= deep link or a selector click wins.
   const dateExplicit = useRef(Boolean(params.date));
   const [dayLoading, setDayLoading] = useState(true);
-  const [dayData, setDayData] = useState<PipelineDayData>({
-    runRecorded: false,
-    fanoutCounts: {},
-    fanoutKeys: {},
-    presentKeys: new Set(),
-    artifacts: [],
-  });
+  const [dayData, setDayData] = useState<PipelineDayData>(emptyPipelineDay);
 
   // Node detail
   const [activeNode, setActiveNode] = useState<LaidOutNode | null>(null);
@@ -105,10 +109,12 @@ export default function PipelineClient() {
   // Load documents for the selected date
   useEffect(() => {
     let cancelled = false;
+    setDayLoading(true);
+    // Drop the previous day's graph before the new read. A failed or empty
+    // documents response must not keep yesterday's nodes under today's date.
+    setDayData(emptyPipelineDay());
 
     void (async () => {
-      setDayLoading(true);
-
       try {
         if (!isApiConfigured()) return;
 
@@ -149,15 +155,18 @@ export default function PipelineClient() {
             }
         }
 
-        if (docsRes.data) {
-          setDayData({
-            ...buildPipelineDayData(docsRes.data),
-            runRecorded: uniqueDates.includes(selectedDate),
-          });
+        const recorded = uniqueDates.includes(selectedDate);
+        if (docsRes.error || docsRes.data == null) {
+          setDayData({ ...emptyPipelineDay(), runRecorded: recorded });
+          return;
         }
+        setDayData({
+          ...buildPipelineDayData(docsRes.data),
+          runRecorded: recorded,
+        });
 
       } catch {
-        // Supabase not configured or no data — degrade gracefully
+        // Read failed — the cleared day stays cleared.
       } finally {
         if (!cancelled) setDayLoading(false);
       }

@@ -194,16 +194,22 @@ describe('brief source', () => {
   });
 });
 
-describe('position paging and NAV honesty', () => {
-  it('reads past the first page so an older asOf still resolves a committed book', async () => {
-    const newest = Array.from({ length: 5000 }, () => ({ ...POSITIONS[0] }));
+describe('position date bound and NAV honesty', () => {
+  it('resolves an older asOf with a date bound instead of scanning history', async () => {
     const older = [{ ...POSITIONS[0], date: '2020-01-02', weight_pct: 10 }];
     mockFetch((url: string) => {
       if (url.includes('/daily_snapshots')) {
         return url.includes('date=lte.2020-01-02') ? [{ date: '2020-01-02' }] : [{ date: '2026-09-24' }];
       }
       if (url.includes('/positions?')) {
-        return url.includes('offset=5000') ? older : newest;
+        if (url.includes('select=*') || url.includes('offset=')) {
+          throw new Error(`positions read is not date-bounded: ${url}`);
+        }
+        if (url.includes('limit=1') && url.includes('date=lte.2020-01-02')) {
+          return [{ date: '2020-01-02' }];
+        }
+        if (url.includes('date=eq.2020-01-02')) return older;
+        throw new Error(`unexpected positions url ${url}`);
       }
       if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
       if (url.includes('/portfolio_metrics')) {
@@ -215,9 +221,15 @@ describe('position paging and NAV honesty', () => {
     const book = await source.envelope.loadBook('2020-01-02', null);
     expect(book?.bookAsOf).toBe('2020-01-02');
     expect(book?.snapshotDate).toBe('2020-01-02');
-    expect(FETCHED.filter((url) => url.includes('/positions?')).some((url) => url.includes('offset=5000'))).toBe(
+    expect(book?.positions[0]).toMatchObject({ ticker: 'XLV', weightActual: 10 });
+    const positionUrls = FETCHED.filter((url) => url.includes('/positions?'));
+    expect(positionUrls.some((url) => url.includes('date=lte.2020-01-02') && url.includes('limit=1'))).toBe(
       true,
     );
+    expect(positionUrls.some((url) => url.includes('date=eq.2020-01-02') && url.includes('select=date,ticker'))).toBe(
+      true,
+    );
+    expect(positionUrls.some((url) => url.includes('select=*'))).toBe(false);
   });
 
   it('drops a null or non-positive NAV instead of publishing 0', async () => {
@@ -294,6 +306,7 @@ describe('retrieval_pin on real market reads', () => {
         return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
       }
       if (url.includes('/v1/market/tickers')) return { tickers: ['SPY'] };
+      if (url.includes('/prices_live')) return [];
       if (url.includes('/v1/market/closes')) {
         return { rows: [{ date: '2026-09-24', ticker: 'SPY', close: 505 }] };
       }
@@ -315,6 +328,14 @@ describe('retrieval_pin on real market reads', () => {
     await source.performance.loadPerformanceBook(null, 'SPY', 'inception', 'pin-9');
     const market = FETCHED.find((url) => url.includes('/v1/market/closes'));
     expect(market).toContain('retrieval_pin=pin-9');
+  });
+
+  it('forwards the pin on the live SPY history fetch', async () => {
+    mockMarketBook();
+    const source = createSupabaseSource(withMarket);
+    await source.live.loadLiveBook('pin 9');
+    const closes = FETCHED.find((url) => url.includes('/v1/market/closes') && url.includes('tickers=SPY'));
+    expect(closes).toContain('retrieval_pin=pin%209');
   });
 
   it('forwards the pin on the benchmarks universe and closes fetches', async () => {

@@ -385,7 +385,11 @@ describe('tryHandleLedger (mount function)', () => {
         let rows = [...source];
         const lte = params.get('date')?.match(/^lte\.(.+)$/)?.[1];
         if (lte) rows = rows.filter((r) => (r as { date: string }).date <= (lte as string));
-        const ticker = params.get('ticker')?.match(/^eq\.(.+)$/)?.[1];
+        const tickerRaw = params.get('ticker')?.match(/^eq\.(.+)$/)?.[1];
+        const ticker =
+          tickerRaw != null && tickerRaw.startsWith('"') && tickerRaw.endsWith('"')
+            ? tickerRaw.slice(1, -1).replaceAll('""', '"')
+            : tickerRaw;
         if (ticker) rows = rows.filter((r) => (r as { ticker: string }).ticker === ticker);
         const limit = Number(params.get('limit') ?? '1000');
         const offset = Number(params.get('offset') ?? '0');
@@ -448,6 +452,17 @@ describe('tryHandleLedger (mount function)', () => {
     };
     expect(secondBody.data.events).toHaveLength(1);
     expect(secondBody.data.next_cursor).toBeNull();
+  });
+
+  it('quotes a dotted ticker so PostgREST keeps the dot inside the value', async () => {
+    const book = fakeBook();
+    const res = await tryHandleLedger(get('/ledger?ticker=BRK.B'), book);
+    expect(res?.status).toBe(200);
+    const events = book.seen.filter((path) => path.startsWith('position_events?'));
+    expect(events.some((path) => path.includes('ticker=eq."BRK.B"'))).toBe(true);
+    expect(events.some((path) => path.includes('ticker=eq.BRK.B&') || path.endsWith('ticker=eq.BRK.B'))).toBe(
+      false,
+    );
   });
 
   it('rejects an injected ticker before the book is read', async () => {

@@ -227,7 +227,7 @@ export function provenanceForLiveBook(
 
 export interface LiveDeps {
   /** Latest quotes the server can see (market API snapshot, never a stream). */
-  loadLiveBook: () => Promise<LiveBook | null>;
+  loadLiveBook: (retrievalPin?: string | null) => Promise<LiveBook | null>;
 }
 
 function errorBody(code: string, message: string, retrievalPin: string | null): object {
@@ -246,7 +246,7 @@ export function registerLiveRoutes(
       const pin = url.searchParams.get('retrieval_pin');
       return Response.json(errorBody(parsed.code, parsed.message, pin), { status: 400 });
     }
-    const book = await deps.loadLiveBook();
+    const book = await deps.loadLiveBook(parsed.retrievalPin);
     if (!book) {
       return Response.json(errorBody('not_found', 'no live quotes', parsed.retrievalPin), {
         status: 404,

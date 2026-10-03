@@ -88,6 +88,30 @@ def test_profile_a_digiproject_is_chat_only() -> None:
         assert not any("digiquant" in t or "backtest" in t for t in tools)
 
 
+@pytest.mark.unit
+def test_profile_a_compose_does_not_offer_digisearch() -> None:
+    """Multi-image Profile A does not start digisearch, so the mounted config must not offer it."""
+    root = Path(__file__).resolve().parents[2] / "infra" / "digichat-release"
+    local = DigiProjectConfig.load(root / "config" / "digiproject.profile-a-local.yaml")
+    bundle = DigiProjectConfig.load(root / "config" / "digiproject.profile-a-bundle.yaml")
+    local_tools = set(local.get_allowed_tools())
+    bundle_tools = set(bundle.get_allowed_tools())
+    assert "digisearch" not in local_tools
+    assert "web_search" in local_tools
+    assert "digivault_search_notes" in local_tools
+    assert "digisearch" in bundle_tools
+    assert "web_search" in bundle_tools
+    compose = (root / "compose.profile-a.yml").read_text(encoding="utf-8")
+    assert "digiproject.profile-a-local.yaml" in compose
+    assert "DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digivault_search_notes}" in compose
+    assert (
+        "DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
+        not in compose
+    )
+    bundle_compose = (root / "compose.profile-a-bundle.yml").read_text(encoding="utf-8")
+    assert "digiproject.profile-a-bundle.yaml" in bundle_compose
+
+
 @pytest.fixture(autouse=False)
 def reset_workflow_graph_cache():
     """Reset the process-wide compiled-graph cache so build_workflow_graph() rebuilds
