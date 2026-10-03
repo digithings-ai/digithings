@@ -227,6 +227,72 @@ body {
   to { opacity: 1; transform: none; }
 }
 
+/* digithings hero wordmark. Same widths and cell build as the digithings.ai
+   hero (apps/digithings-web). The integrations block zeros the hero's top
+   margin so the lockup sits in the band. */
+.pixel-word {
+  display: block;
+  width: 264px;
+  height: auto;
+  margin-top: 2.25rem;
+  color: var(--ink);
+  shape-rendering: crispEdges;
+  --glint: var(--accent);
+}
+
+@media (min-width: 380px) {
+  .pixel-word { width: 352px; }
+}
+
+@media (min-width: 640px) {
+  .pixel-word { width: 528px; }
+}
+
+@media (min-width: 768px) {
+  .pixel-word { width: 616px; }
+}
+
+.integrations-hero .pixel-word { margin-top: 0; }
+
+.pixel-word .c { opacity: var(--f); }
+.pixel-word .n { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.no-js) .pixel-word:not(.is-live) .c { opacity: 0; }
+  .pixel-word.is-live .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word.is-live .g {
+    animation:
+      pixel-build var(--t) linear var(--d) both,
+      pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  .pixel-word.is-live .n { animation: pixel-stray var(--t) linear var(--d) both; }
+
+  html.scroll-resumed .pixel-word-hero .c { animation: none; opacity: var(--f); }
+  html.scroll-resumed .pixel-word-hero .g {
+    animation: pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  html.scroll-resumed .pixel-word-hero .n { animation: none; }
+}
+
+@keyframes pixel-build {
+  0% { opacity: 0; }
+  0.1%, 33% { opacity: var(--a); }
+  33.1%, 66% { opacity: var(--b); }
+  66.1%, 99.9% { opacity: var(--c); }
+  100% { opacity: var(--f); }
+}
+
+@keyframes pixel-stray {
+  0% { opacity: 0; }
+  0.1%, 99.9% { opacity: 0.25; }
+  100% { opacity: 0; }
+}
+
+@keyframes pixel-glint {
+  0% { fill: var(--glint); opacity: 1; }
+  5%, 100% { fill: currentColor; opacity: var(--f); }
+}
+
 .hero-action {
   transition:
     background-color var(--duration-hover) var(--ease),
