@@ -16,13 +16,13 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 
 ## Storage surfaces
 
-**Cloudflare Worker secret (`secret_text`).** Set with `wrangler secret put` or the Workers Secrets HTTP API (`{"type":"secret_text"}`). The former `sync-cheaperinference-cf-secrets.yml` workflow is not in `.github/workflows` (removed in the strict-essentials cut). Write-only. Names only — the 2026-09 audit at `35d91f641` listed the sets below; the stack line is **not** the current live set (see [Folded stack worker](#folded-stack-worker--secret-maintenance-2026-09-27) for the 2026-09-27 recount of **25** names, target **23** after the documented #4700 deletes):
+**Cloudflare Worker secret (`secret_text`).** Set with `wrangler secret put` or the Workers Secrets HTTP API (`{"type":"secret_text"}`). The former `sync-cheaperinference-cf-secrets.yml` workflow is not in `.github/workflows` (removed in the strict-essentials cut). Write-only. Names only — the 2026-09 audit at `35d91f641` listed the sets below; the stack line is **not** a live re-read (see [Folded stack worker](#folded-stack-worker--secret-maintenance-2026-09-27) for the 2026-09-27 recount of **25** names; the three documented #4700 deletes from that set are 22, not a live dashboard count):
 
 - `digithings-digichat` (10): AUTH_SECRET, CHEAPERINFERENCE_API_KEY, DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY, DIGICHAT_DASHBOARD_SUPABASE_URL, DIGICHAT_EMBED_TENANTS, DIGICHAT_PLAN_PROOF_SECRET, DIGIGRAPH_INTERNAL_URL, DIGIKEY_BFF_TOKEN, DIGIKEY_URL, OPENROUTER_API_KEY
 - `digithings-stack` (16 at the 2026-09 audit, **superseded**): CHEAPERINFERENCE_API_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, D1_DATABASE_MAP, DIGIKEY_ADMIN_TOKEN, DIGIKEY_BFF_TOKEN, DIGIKEY_DATABASE_URL, DIGIKEY_PRIVATE_KEY_PEM, GROQ_API_KEY, LITELLM_MASTER_KEY, LITELLM_PROXY_API_KEY, MCP_EDGE_KEY, OPENROUTER_API_KEY, VECTORIZE_ACCOUNT_ID, VECTORIZE_API_TOKEN, ZAMMAD_API_TOKEN
 - `digithings-cron` (1): GH_DISPATCH_TOKEN
 
-**Container env (Worker `envVars` whitelist).** A Container only receives what the Worker's `envVars` object forwards ([`apps/digichat-cloudflare/src/index.ts:32`](../../apps/digichat-cloudflare/src/index.ts), [`apps/digithings-stack-cloudflare/src/index.ts:60`](../../apps/digithings-stack-cloudflare/src/index.ts)). A secret that is `put` on the Worker but missing from `envVars` never reaches the process — silently. Known drops: `DIGICHAT_DATABASE_URL`, `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY` on digichat; `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` on the stack.
+**Container env (Worker `envVars` whitelist).** A Container only receives what the Worker's `envVars` object forwards. The standalone digichat whitelist is [`apps/digichat-cloudflare/src/index.ts:32-56`](../../apps/digichat-cloudflare/src/index.ts). The stack Worker runs three Container classes, each with its own `envVars`: `DigiStackContainer` ([`apps/digithings-stack-cloudflare/src/index.ts:89-146`](../../apps/digithings-stack-cloudflare/src/index.ts)), `DigiQuantMcpContainer` (`:218-227`), and `DigiChatContainer` (`:256`, `envVars` at `:277-305`). A secret that is `put` on the Worker but missing from `envVars` never reaches the process — silently. Known drops: `DIGICHAT_DATABASE_URL`, `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY` on digichat; `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` on the stack.
 
 **GitHub repo secret / var.** Repo-scoped by default. Only 1 of 49 workflows declares `environment: production` (`deploy-digiquant-runner.yml:33`). The 2026-09 audit named four files that are not in `.github/workflows` (`deploy-digithings-stack-cloudflare.yml`, `db-migrate.yml`, `sync-architecture-vault.yml`, `docs-onboard-digithings.yml`). Every other `secrets.*` / `vars.*` read has no deployment gate. The repo-level sets were read back on 2026-09-18: **15 secrets** — `CHEAPERINFERENCE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_EMAIL_API_TOKEN`, `CORE_POSTGRES_URI`, `CORE_SUPABASE_SERVICE_KEY`, `CORE_SUPABASE_URL`, `DIGIQUANT_DIGIKEY_API_KEY`, `DIGITHINGS_PROJECT_TOKEN`, `GH_DISPATCH_TOKEN`, `NOTIFY_FROM`, `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_SECRET_ACCESS_KEY` — and **11 variables** (`CHEAPERINFERENCE_API_BASE`, `DIGIKEY_URL`, `DIGI_*_PROJECT_NUMBER`). `CLOUDFLARE_EMAIL_API_TOKEN` — a dedicated Cloudflare API token carrying **Email Sending: Edit**, deliberately not the broad `CLOUDFLARE_API_TOKEN` — and `NOTIFY_FROM` (`DigiQuant <notifications@digiquant.io>`) were stored on 2026-09-18 (#4358); a live send was queued through the sender that day and the daily probe is green. `make secrets-audit` reproduces both directions (reads with no repo secret, and repo secrets nothing reads) and, with `admin:org` on the token since 2026-09-18, classifies every read by level: 11 repo variables, **13 org secrets** (`CEREBRAS_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `DEEPSEEK_API_KEY`, `FRED_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `LANGSMITH_API_KEY`, `MISTRAL_API_KEY`, `NVIDIA_API_KEY`, `OLLAMA_API_KEY`, `OPENROUTER_API_KEY`, `XAI_API_KEY`; all `all` visibility, so every repo inherits them) and the `production` environment's 1 name (`D1_DATABASE_MAP`). Both duplicate-definition cases the tool reported were resolved on 2026-09-18: the repo-level `FRED_API_KEY` and the `production`-environment copies of `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` were deleted, so each name now has exactly one home and `repo-over-org` / `env-over-repo` are both clean. The 68 legacy `||`-alias fallbacks this table used to imply (the real name followed by `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VECTORIZE_API_TOKEN`, `D1_API_TOKEN`, `VECTORIZE_ACCOUNT_ID` or `D1_ACCOUNT_ID` in 10 workflows) were removed on 2026-09-18: `CORE_*` was always set, so no fallback ever fired (#4338).
 
@@ -57,10 +57,10 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 | Name | Consumer (file:line) | Defined in (file:line) | Readback? | Rotation blast radius | Duplicate copies | Notes |
 |---|---|---|---|---|---|---|
-| `OPENROUTER_API_KEY` | `digillm/src/digillm/client.py:242`; stack `src/index.ts:101` | org secret; stack `wrangler.toml:145` | no — write-only | house LLM routing 401 | GH + stack Worker + digichat Worker (**dead**) + local `.env` | triplicated; see R4 |
+| `OPENROUTER_API_KEY` | `digillm/src/digillm/client.py:242`; stack `src/index.ts:135` | org secret; stack `wrangler.toml:179` | no — write-only | house LLM routing 401 | GH + stack Worker + digichat Worker (**dead**) + local `.env` | triplicated; see R4 |
 | `CHEAPERINFERENCE_API_KEY` | `digillm/src/digillm/client.py:485`; stack `src/index.ts:138` | GH repo secret; stack `wrangler.toml:180` | no — write-only | house default LiteLLM upstream 401 | GH + stack Worker + digichat Worker (**dead**) | put with `wrangler secret put` / `gh secret set`; no sync workflow in `.github/workflows` |
-| `GROQ_API_KEY` | stack `src/index.ts:100`; GH workflows | org secret; stack `wrangler.toml:145` | no — write-only | digigraph/LiteLLM calls 401 | GH + stack Worker + `.env` | |
-| `OPENAI_API_KEY` | stack `src/index.ts:102`; `digigraph/src/digigraph/model_config.py:510` | nothing at any level (2026-09-18) — `unresolved`; documented at `wrangler.toml:145` | no — write-only | OpenAI models + embeddings 401 | GH + stack (documented) + `.env` | absent from live stack set (R9) |
+| `GROQ_API_KEY` | stack `src/index.ts:134`; GH workflows | org secret; stack `wrangler.toml:179` | no — write-only | digigraph/LiteLLM calls 401 | GH + stack Worker + `.env` | |
+| `OPENAI_API_KEY` | stack `src/index.ts:136`; `digigraph/src/digigraph/model_config.py:510` | nothing at any level (2026-09-18) — `unresolved`; documented at `wrangler.toml:179` | no — write-only | OpenAI models + embeddings 401 | GH + stack (documented) + `.env` | absent from live stack set (R9) |
 | `GEMINI_API_KEY` · `ANTHROPIC_API_KEY` · `XAI_API_KEY` · `OLLAMA_API_KEY` | `digigraph/src/digigraph/model_config.py:510`; `digillm/src/digillm/client.py:233` | `project_config.py:26-27`; `.env.example:24,34` | yes (`.env`) | respective provider models 401 | local `.env` only | BYOK / operator keys |
 | `LITELLM_MASTER_KEY` · `LITELLM_PROXY_API_KEY` · `DIGIKEY_LITELLM_PROXY_KEY` | `digillm/src/digillm/client.py:362`; stack `src/index.ts:109`; `digikey/src/digikey/server.py:300` | stack `src/index.ts:108-109`; `docker-compose.yml:36,127` | no — write-only | LiteLLM proxy auth; digichat proxy bearer | stack Worker + compose `DIGIKEY_*` fallback | `LITELLM_MASTER_KEY` live but undocumented |
 | `MISTRAL_API_KEY` · `CEREBRAS_API_KEY` · `DEEPSEEK_API_KEY` · `NVIDIA_API_KEY` | `pipeline-provider-review.yml:92-97` | org secrets | n/a | provider-review job probes fail | CI only | not used by services |
@@ -104,7 +104,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGIQUANT_VAULT_MASTER_KEY` · `DIGIQUANT_VAULT_KEY_ID` | `digiquant/src/digiquant/vault/envelope.py:79,80` | `.env` (no default) | yes (`.env`) | every sealed broker credential unreadable | local secret store | AES-256-GCM, base64 32 bytes; `v1` label |
 | `ALPACA_OAUTH_CLIENT_ID` · `ALPACA_OAUTH_CLIENT_SECRET` | `digiquant/.../staging_secrets.py:28-29` | `.env`; `apps/dashboard/.env.local.example` | yes (`.env`) | broker OAuth connect fails | Supabase EF + `.env` | broker path — human gate |
 | `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`); forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
-| `DIGIKEY_BLOCKLIST_REDIS_URL` · `DIGIKEY_REQUIRE_BLOCKLIST` | `digikey/src/digikey/blocklist.py:36,41` | `.env`; container env | yes | revoked JTIs stay valid / fail-closed 503 | compose default `1` (`docker-compose.yml:35`); `.env.example:229` documents the production default `1`; code fallback `0` (`blocklist.py:41`) | see [ADR-0007](../adr/0007-digikey-revocation.md) |
+| `DIGIKEY_BLOCKLIST_REDIS_URL` · `DIGIKEY_REQUIRE_BLOCKLIST` | `digikey/src/digikey/blocklist.py:36,41` | `.env`; container env | yes | revoked JTIs stay valid / fail-closed 503 | code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` (`docker-compose.yml:35`); `.env.example:226` | see [ADR-0007](../adr/0007-digikey-revocation.md) |
 | per-watch delivery secret (HMAC) | `digisearch/src/digisearch/server.py:1941`; `monitors/delivery.py:102` | monitor store (not a fixed env) | n/a | webhook signature verify fails | per-watch row | rotates per watch |
 | `DIGIQUANT_EXECUTION_ROUTING` | `digiquant/.../envcompat.py:14` | `.env` | yes (`.env`) | live-routing kill switch | local `.env` | alias `OLYMPUS_KAIROS_ROUTING`; broker path |
 | `BYOK_PROVIDER` · `BYOK_API_KEY` | `scripts/digiquant_seal_byok.py:4` | `.local/secrets/digithings-byok.env` | yes (local file) | sealed BYOK provider unusable | local secret file | gitignored `.gitignore:34` |
@@ -145,7 +145,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 **R4 — the container `envVars` whitelist drops secrets silently.** Severity: high. Evidence: digichat `src/index.ts:32-56` vs `wrangler.toml:50-58` — `DIGICHAT_DATABASE_URL`, `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY` are `put` on the Worker but never forwarded. Why: an operator rotates a key, the secret list shows it, and the process never sees it. Action: add a test asserting every Worker secret name appears in `envVars` or is documented inert.
 
-**R5 — a running Container serves its start-time env until recycled.** Severity: high. Evidence: `apps/digithings-stack-cloudflare/README.md:18-23`, `apps/digichat-cloudflare/src/paths.ts:23`, commit #4290. Why: `wrangler deploy` does not roll the container, so a rotated secret looks rotated while the old value stays live. Action: make the recycle step (bump `SHARED_DIGICHAT_CONTAINER_ID` / rebuild marker) mandatory in the rotation runbook.
+**R5 — a running Container serves its start-time env until recycled.** Severity: high. Evidence: `apps/digithings-stack-cloudflare/README.md:27-28`, `apps/digichat-cloudflare/src/paths.ts:23`, commit #4290. Why: `wrangler deploy` does not roll the container, so a rotated secret looks rotated while the old value stays live. Action: make the recycle step (bump `SHARED_DIGICHAT_CONTAINER_ID` / rebuild marker) mandatory in the rotation runbook.
 
 **R6 — digikey's static bearer tokens have no rotation procedure and are duplicated.** Severity: high. Evidence: `digikey/src/digikey/server.py:60,117-121` (`DIGIKEY_ADMIN_TOKEN`), `settings.py:20` (`DIGIKEY_BFF_TOKEN`), `apps/digichat-cloudflare/wrangler.toml:54` + `apps/digithings-stack-cloudflare/wrangler.toml:136`. Why: compromise of the admin token grants key-issue/revoke; the BFF token must match across two Workers, so a one-sided rotation breaks chat auth. Action: document a two-surface rotation with a dual-accept window.
 
@@ -172,7 +172,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 - **Alias equality.** `R2_ACCOUNT_ID == CLOUDFLARE_ACCOUNT_ID`, the two `DIGIKEY_BFF_TOKEN` copies, and the `MCP_EDGE_KEY` vs tenant-map literal are inferred from config, not diffed against live state.
 - **Legacy secrets.** Whether `VECTORIZE_*` / `D1_*` are still set on `digithings-stack` — the live list shows `VECTORIZE_ACCOUNT_ID` and `VECTORIZE_API_TOKEN` (but not `D1_ACCOUNT_ID` / `D1_API_TOKEN`), so the "safe to delete" claim is not fully verifiable.
 - **Private key source.** The prod origin of `DIGIKEY_PRIVATE_KEY_PEM` (platform secret store vs `.env`) is not visible in-repo.
-- **Revocation strength.** Whether prod sets `DIGIKEY_BLOCKLIST_REDIS_URL` and `DIGIKEY_REQUIRE_BLOCKLIST=1` (compose default `1` at `docker-compose.yml:35`; `.env.example:229` documents the production default `1`; code fallback `0` at `digikey/src/digikey/blocklist.py:41`).
+- **Revocation strength.** Whether prod sets `DIGIKEY_BLOCKLIST_REDIS_URL`. The code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` at `docker-compose.yml:35`; `.env.example:226`.
 - **Secret-manager adoption.** Cloudflare Secrets Store, 1Password, Infisical, and Doppler appear only as aspirational mentions; no repo evidence of use.
 - **`projects/**` and `.local/`** are gitignored and not auditable from this checkout.
 
@@ -182,11 +182,11 @@ The single folded worker (`digithings-stack`) owns the dashboard-api and digicha
 secrets behind the isolation seam (fold slices #4686/#4688/#4690, launch-readiness
 #4693/#4694). Secret values are write-only in Cloudflare (`secret list` shows
 names only) and local `.env` files are unreadable to agents, so maintenance
-splits three ways. Live set is 25 names (verified 2026-09-27 via
+splits three ways. The last in-repo recount is 25 names (2026-09-27 via
 `wrangler secret list -c apps/digithings-stack-cloudflare/wrangler.toml`);
-that recount **supersedes** the 16-name 2026-09 audit in [Storage surfaces](#storage-surfaces).
-Target 23 after the #4700 consolidation ops below (they run only after the
-manual production deploy carrying the fallback chain).
+that recount **supersedes** the 16-name 2026-09 audit in [Storage surfaces](#storage-surfaces)
+and was not re-run here. The three #4700 consolidation deletes below (they run
+only after the manual production deploy carrying the fallback chain) are 25 − 3 = 22.
 
 ### Agent-settable (values documented in-repo, plaintext)
 
@@ -249,7 +249,8 @@ npx wrangler secret delete SUPABASE_URL -c $CFG
 
 (The lingering `SUPABASE_URL` secret would shadow the new `[vars]` value —
 secrets take precedence — so it must be deleted for the demotion to take
-effect. Target live set afterwards: 23 names.)
+effect. Arithmetic on the 2026-09-27 set: 25 − 3 = 22 names. That is not a
+live re-list.)
 
 ### Gotchas
 

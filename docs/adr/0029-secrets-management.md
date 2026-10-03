@@ -15,22 +15,25 @@ rotation runbook](../ops/SECRETS_ROTATION.md) (what rotation costs today).
 The stack has three disjoint secret surfaces and no system of record:
 
 - **Cloudflare.** Three Workers hold `secret_text` secrets
-  (digichat 10 and cron 1 from the 2026-09 audit; stack **25** names as of the
-  2026-09-27 `wrangler secret list`, target 23 after #4700 — see
+  (digichat 10 and cron 1 from the 2026-09 audit; stack names last counted
+  in-repo on 2026-09-27 — see
   [`../ops/SECRETS_INVENTORY.md`](../ops/SECRETS_INVENTORY.md) "Folded stack
-  worker") plus the `digithings-web` Pages project. Worker secrets are
+  worker"; that list was not re-read here) plus the `digithings-web` Pages
+  project. Worker secrets are
   write-only: `wrangler secret list` returns names and type, never values
   ([`../ops/SECRETS_INVENTORY.md`](../ops/SECRETS_INVENTORY.md), "Storage
   surfaces"). Each Container receives only what its Worker's `envVars` whitelist
-  forwards — the stack Worker runs two: `DigiStackContainer`
-  (`apps/digithings-stack-cloudflare/src/index.ts:60-112`) and
-  `DigiQuantMcpContainer` (`:176-184`) — and a secret that is `put` but absent
+  forwards — the stack Worker runs three: `DigiStackContainer`
+  (`apps/digithings-stack-cloudflare/src/index.ts:89-146`),
+  `DigiQuantMcpContainer` (`:218-227`), and `DigiChatContainer` (`:256`,
+  `envVars` at `:277-305`) — and a secret that is `put` but absent
   from `envVars` is a silent drop (R4).
 - **GitHub.** 49 workflows, only 1 declares `environment: production`
   (`deploy-digiquant-runner.yml`; inventory R13). The four files named in the
-  2026-09 audit are not in `.github/workflows`. ~42 repo secrets + 6 vars,
-  repo-scoped, so any workflow on any branch can read production credentials
-  (R13).
+  2026-09 audit are not in `.github/workflows`. The inventory's 2026-09-18
+  readback recorded 15 repo secrets and 11 variables (plus 13 org secrets);
+  those counts were not re-read here. Repo-scoped, so any workflow on any
+  branch can read production credentials (R13).
 - **Local / Python.** `digikey`, `digigraph`, `digiquant`, `digisearch`,
   `digismith`, `digivault`, `digibase`, `digillm` read plain env vars; dev uses
   gitignored `.env` / `.dev.vars`. `digikey` owns the JWT/API-key model, and
@@ -48,7 +51,7 @@ binding … as defaults here, as getting their values is asynchronous"
 digichat autostarts via `container.fetch(request)`
 (`apps/digichat-cloudflare/src/index.ts:90`) and the stack's
 `startAndWaitForPorts` calls pass no `startOptions.envVars`
-(`apps/digithings-stack-cloudflare/src/index.ts:124`), so both rely on the
+(`apps/digithings-stack-cloudflare/src/index.ts:158`), so both rely on the
 static field. Secrets Store *can* reach a container only through the async
 per-instance path; adopting it means changing the start call, not just the
 wrangler config.
@@ -142,7 +145,7 @@ new tooling.
    it is not enumerable, `SECRETS_INVENTORY.md:162`), and the mcp example keys
    after an owner confirm-dead or rotate (R3).
 2. Reconcile the stack secret checklist against the live set (R9): documented
-   `OPENAI_API_KEY` / `FRED_API_KEY` / `R2_*` (`wrangler.toml:145-155`) are
+   `OPENAI_API_KEY` / `FRED_API_KEY` / `R2_*` (`wrangler.toml:179-190`) are
    absent live; `LITELLM_MASTER_KEY` is live but undocumented.
 3. Collapse alias families to one live name each: the Cloudflare token family
    (`CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN`, R7) and the
@@ -227,7 +230,7 @@ rotation APIs; human approval for the `digikey/` crypto path.
    env-consuming secret changed, then deploys. `wrangler deploy` alone does not
    roll (`../ops/SECRETS_ROTATION.md`, "The container boot-env trap").
 2. Prove the roll behaviourally: the stack exposes its instance id at
-   `_stack/meta` (`apps/digithings-stack-cloudflare/src/index.ts:319`);
+   `_stack/meta` (`apps/digithings-stack-cloudflare/src/index.ts:507`);
    digichat has no probe, so prove via an auth reset after the 3 m
    `sleepAfter` (`apps/digichat-cloudflare/src/index.ts:26`; stack and MCP
    classes are also `3m`).

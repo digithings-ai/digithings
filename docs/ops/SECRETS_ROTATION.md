@@ -16,7 +16,7 @@ risk ids R1–R13). No value is ever printed here; every literal below is masked
 ## The container boot-env trap
 
 **A running Container is not replaced when a new Worker version deploys.** It keeps the environment it
-booted with until the instance is recycled. Evidence: `apps/digithings-stack-cloudflare/README.md:18-23`
+booted with until the instance is recycled. Evidence: `apps/digithings-stack-cloudflare/README.md:27-28`
 ("a running digichat Container keeps start-time env values until recycled"); `sleepAfter` is `3m`
 (`apps/digichat-cloudflare/src/index.ts:26`), `3m` for the stack sibling (`apps/digithings-stack-cloudflare/src/index.ts:83`),
 `3m` for the MCP container (`:208`) and the folded digichat class (`:260`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
@@ -28,23 +28,25 @@ inactive. The stack equivalent is `SHARED_STACK_CONTAINER_ID` (`apps/digithings-
 `shared-v16`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
 reads worker env only when the instance starts" (`ports.ts:33-35`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
 
-**Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:18-23` and the rebuild-marker
+**Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:30-31` and the rebuild-marker
 comments (`Dockerfile.digichat-cloudflare:65-69`, `Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
 **Dockerfile rebuild marker** to propagate env. That changes the image tag, not the instance id; it does not by itself
 replace a warm instance. Prefer the `SHARED_*_CONTAINER_ID` bump, and treat the marker as an image-rebuild trigger only.
 
 **The `envVars` whitelist is the only path into the container.** A secret `put` on the Worker but absent from the
 Container's `envVars` never reaches the process — silently. The digichat whitelist is `apps/digichat-cloudflare/src/index.ts:32-56`;
-the stack whitelists are `DigiStackContainer` (`apps/digithings-stack-cloudflare/src/index.ts:60-112`)
-and `DigiQuantMcpContainer` (`:176-184`). Known silent drops: on digichat,
+the stack Worker runs three Container classes, each with its own `envVars`:
+`DigiStackContainer` (`apps/digithings-stack-cloudflare/src/index.ts:89-146`),
+`DigiQuantMcpContainer` (`:218-227`), and `DigiChatContainer` (`:256`, `envVars`
+at `:277-305`). Known silent drops: on digichat,
 `DIGICHAT_DATABASE_URL` (`wrangler.toml:58`), `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY`; on the stack,
 `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` are no longer
-`[vars]` — the `container/entrypoint.sh` defaults are the live values (`wrangler.toml:214-217`) (R4).
+`[vars]` — the `container/entrypoint.sh` defaults are the live values (`wrangler.toml:266-269`) (R4).
 
 **Trap verification commands.**
 
 ```bash
-# stack: the live instance id is served by the Worker itself (src/index.ts:319).
+# stack: the live instance id is served by the Worker itself (src/index.ts:507).
 curl -sf https://graph.digithings.ai/_stack/meta \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v16 (or the bumped value)
 # digichat has no id probe. Prove the recycle behaviourally: rotate AUTH_SECRET, then a
@@ -203,7 +205,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 
 ### 11. Provider keys — `OPENROUTER_API_KEY`, `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`
 
-**Blast radius** — house LLM routing (`digillm/src/digillm/client.py:242,485`) and digigraph/LiteLLM (`apps/digithings-stack-cloudflare/src/index.ts:100-104`).
+**Blast radius** — house LLM routing (`digillm/src/digillm/client.py:242,485`) and digigraph/LiteLLM (`apps/digithings-stack-cloudflare/src/index.ts:134-138`).
 **Copies (note the dead/misdirected ones)** — `OPENROUTER_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:179`); digichat Worker **dead** (put but not in `envVars`, `apps/digichat-cloudflare/src/index.ts:32-56`); local `.env`; Pages `digithings-web` **dead** (`wrangler.toml:24`; `/chat` returns 410). `CHEAPERINFERENCE_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:180`); digichat Worker **dead**; put with `wrangler secret put` / `gh secret set` — no sync workflow remains (`sync-cheaperinference-cf-secrets.yml` is not in `.github/workflows`). `GROQ_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:179`); local `.env` (R4/R9).
 **Steps**
 1. Rotate upstream in the provider console.
