@@ -1,4 +1,4 @@
-"""digivoice command line. doctor, dict, speak, history, settings, cancel, and status are live."""
+"""digivoice command line. doctor, dict, speak, history, settings, logs, cancel, and status are live."""
 
 from __future__ import annotations
 
@@ -259,6 +259,7 @@ def build_parser() -> _Parser:
     sub.add_parser("reset", help="Restore settings defaults; history and models stay")
     sub.add_parser("restart", help="Quit Hammerspoon and open digivoice again")
     sub.add_parser("system", help="Doctor, reload, reset, restart, update, and logs")
+    sub.add_parser("logs", help="Print the system log without opening the TUI")
     reload_cmd = sub.add_parser(
         "reload",
         help="Refresh local control: CLI path, settings, Lua adapter, Hammerspoon",
@@ -916,14 +917,19 @@ def _settings_at(runtime: Runtime, path: str) -> CliResult:
     return CliResult(code=0, stdout=f"{shown}\n", stderr="")
 
 
-def _logs(runtime: Runtime) -> CliResult:
+def _print_system_log(runtime: Runtime) -> CliResult:
+    """Print system.log. This path never opens the TUI."""
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
-    if sys.stdin.isatty():
-        return _tui(runtime, "/system/logs")
     text = read_system_log(system_log_path(paths)).strip()
     if not text:
         text = "No log yet"
     return CliResult(code=0, stdout=text + "\n", stderr="")
+
+
+def _logs(runtime: Runtime) -> CliResult:
+    if sys.stdin.isatty():
+        return _tui(runtime, "/system/logs")
+    return _print_system_log(runtime)
 
 
 def _dispatch_path(raw: str, runtime: Runtime) -> CliResult:
@@ -1010,6 +1016,8 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         return _restart(runtime)
     if command == "system":
         return _system(runtime)
+    if command == "logs":
+        return _print_system_log(runtime)
     if command == "install":
         return _install(args, runtime)
     if command == "update":
