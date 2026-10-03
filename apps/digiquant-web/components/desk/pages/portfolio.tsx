@@ -5,6 +5,7 @@ import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiqu
 import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { attributionBody } from "../../../../../clients/digiquant-tui/src/pages/attribution-format";
 import { holdingsBody } from "../../../../../clients/digiquant-tui/src/pages/holdings-format";
+import { ledgerBody } from "../../../../../clients/digiquant-tui/src/pages/ledger-format";
 import { portfolioBody } from "../../../../../clients/digiquant-tui/src/pages/portfolio-format";
 import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
@@ -357,8 +358,73 @@ export function AttributionPage() {
   return <AttributionHome />;
 }
 
-export function LedgerPage(props: DeskProps) {
-  return page("/portfolio/ledger", props);
+/** `/portfolio/ledger` only. Later portfolio pages stay on the line read. */
+function LedgerHome() {
+  const path = "/portfolio/ledger";
+  const [reads, setReads] = useState<Record<string, OfficialRead>>({});
+  const layout = layoutFor(path);
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
+
+  useEffect(() => {
+    const placements = layoutFor(path);
+    const ac = new AbortController();
+    let cancel = false;
+    for (const placement of placements) {
+      const def = BLOCKS[placement.id];
+      if (!def) continue;
+      void readOfficial(def.route, def.kind, ac.signal).then((result) => {
+        if (cancel) return;
+        setReads((prev) => ({ ...prev, [placement.id]: result }));
+      });
+    }
+    return () => {
+      cancel = true;
+      ac.abort();
+    };
+  }, []);
+
+  return (
+    <div className={PANE_GRID}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paintLedger(placement.id, reads[placement.id]);
+        return (
+          <div
+            key={placement.id}
+            className="min-h-0 min-w-0"
+            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              blocks={view.blocks}
+              tone={tone[view.status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
+              onNext={panes.next}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function paintLedger(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: ledgerBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
+export function LedgerPage() {
+  return <LedgerHome />;
 }
 
 export function ThesesPage(props: DeskProps) {
@@ -378,6 +444,7 @@ export function PortfolioPages({ path, ...props }: DeskProps & { path: string })
   if (path === "/portfolio") return <PortfolioHome />;
   if (path === "/portfolio/holdings") return <HoldingsHome />;
   if (path === "/portfolio/attribution") return <AttributionHome />;
+  if (path === "/portfolio/ledger") return <LedgerHome />;
   if (!isPortfolioPath(path)) return null;
   return page(path, props);
 }
