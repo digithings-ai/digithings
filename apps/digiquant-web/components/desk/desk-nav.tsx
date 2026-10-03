@@ -57,7 +57,24 @@ function PathLink({
  * Sidebar as a folder listing: every line is a slash path behind a triangle.
  * ▾ open, ▸ closed or leaf. Folders toggle with the triangle; the path navigates.
  */
-export function DeskRail({ current }: { current: string }) {
+export function DeskRail({
+  current,
+  onNavigate,
+  onNarrower,
+  onWider,
+  narrowDisabled = false,
+  wideDisabled = false,
+  collapsed = false,
+}: {
+  current: string;
+  onNavigate?: () => void;
+  onNarrower?: () => void;
+  onWider?: () => void;
+  narrowDisabled?: boolean;
+  wideDisabled?: boolean;
+  /** Phone drawer is off-screen. Keep it out of the tab order. */
+  collapsed?: boolean;
+}) {
   const { nav, manifest, err } = useDeskAccess();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const active = sectionOf(current);
@@ -88,11 +105,48 @@ export function DeskRail({ current }: { current: string }) {
   };
 
   return (
-    <aside className="rail">
+    <aside
+      className="rail"
+      id="desk-rail"
+      inert={collapsed ? true : undefined}
+      aria-hidden={collapsed ? true : undefined}
+    >
       <div className="rail-head">
         <span>~/pages</span>
+        <span className="rail-size">
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="rail-step"
+            aria-label="Make the sidebar smaller"
+            disabled={narrowDisabled}
+            onClick={onNarrower}
+          >
+            −
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="rail-step"
+            aria-label="Make the sidebar larger"
+            disabled={wideDisabled}
+            onClick={onWider}
+          >
+            +
+          </Button>
+        </span>
       </div>
-      <nav className="nav-tree" aria-label="Pages" onKeyDown={onKeyDown}>
+      <nav
+        className="nav-tree"
+        aria-label="Pages"
+        onKeyDown={onKeyDown}
+        onClick={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("a.nav-link")) onNavigate?.();
+        }}
+      >
         {!nav.length ? (
           <p className="nav-empty">{err ? "access unavailable" : manifest ? "no pages" : "loading…"}</p>
         ) : null}
