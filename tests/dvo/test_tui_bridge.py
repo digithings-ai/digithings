@@ -520,6 +520,52 @@ def test_bridge_empty_log_is_not_a_choice(tmp_path: Path) -> None:
     assert row["meta"] == "system.log"
 
 
+def test_rewrite_timeout_persists_only_the_presets(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    folder = dispatch(
+        {"op": "rows", "path": "/settings/rewrite"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert [row["name"] for row in folder["rows"]] == ["enabled", "style", "model", "timeout"]
+    page = dispatch(
+        {"op": "rows", "path": "/settings/rewrite/timeout"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert [row["choice"] for row in page["rows"]] == ["off", "15", "30", "60"]
+    assert page["rows"][page["selected"]]["choice"] == "off"
+    thirty = next(index for index, row in enumerate(page["rows"]) if row["choice"] == "30")
+    saved = dispatch(
+        {"op": "apply", "path": "/settings/rewrite/timeout", "index": thirty},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    paths = resolve_paths("linux", tmp_path, env)
+    assert load_settings(paths).rewrite_timeout_seconds == 30
+    assert saved["path"] == "/settings/rewrite"
+    parent = next(row for row in saved["rows"] if row["name"] == "timeout")
+    assert parent["meta"] == "30s"
+    again = dispatch(
+        {"op": "rows", "path": "/settings/rewrite/timeout"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert again["rows"][again["selected"]]["choice"] == "30"
+    off = next(index for index, row in enumerate(again["rows"]) if row["choice"] == "off")
+    dispatch(
+        {"op": "apply", "path": "/settings/rewrite/timeout", "index": off},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert load_settings(paths).rewrite_timeout_seconds is None
+
+
 def test_bridge_update_exception_is_a_note(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(**_kwargs: object) -> None:
         raise RuntimeError("update broke")
