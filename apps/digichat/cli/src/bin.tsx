@@ -4,7 +4,7 @@
  * Never imported by the Next.js client bundle.
  *
  * Env:
- *   DIGICHAT_URL          BFF origin (required unless --demo)
+ *   DIGICHAT_URL          BFF origin (optional; defaults to http://127.0.0.1:3005)
  *   DIGICHAT_EMBED_TOKEN  X-Embed-Token (embed installs)
  *   DIGICHAT_EMBED_HOST   X-Embed-Host (optional)
  *   DIGICHAT_API_KEY      Bearer API key (session installs)
