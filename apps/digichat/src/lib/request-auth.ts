@@ -32,7 +32,8 @@ export async function requireDigiChatAuth(
     tenantSlug = machine
       ? machine.tenantSlug
       : await tenantSlugForOidcSubject(session!.user!.id);
-    planTier = session?.user?.app_metadata?.plan_tier;
+    // A machine key is not the cookie user. Do not copy that session's plan tier.
+    planTier = machine ? undefined : session?.user?.app_metadata?.plan_tier;
   } catch (e) {
     const message = e instanceof Error ? e.message : "tenant_resolution_failed";
     return new Response(JSON.stringify({ error: "tenant_error", message }), {

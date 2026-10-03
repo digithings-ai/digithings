@@ -8,8 +8,9 @@
  *
  * Reasoning rides `additional_kwargs.reasoning_content` (how LangChain
  * surfaces provider thinking) and tool calls ride `tool_call_chunks`
- * (streaming) / `tool_calls` (complete); tool results arrive as ToolMessage
- * frames carrying `tool_call_id`.
+ * (streaming) / `tool_calls` (settled args). The row stays open until a
+ * ToolMessage (`type: "tool"`, `tool_call_id`) arrives. ToolMessage content
+ * is the tool result, not answer text.
  */
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import type { ActivityDetail } from "@/lib/chat-activity";
@@ -76,7 +77,9 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
   if (reasoning) writeReasoningDelta(c.writer, c.ctx, reasoning, c.activityDetail);
 
   const text = contentText(chunk.content);
-  if (text) c.text.delta(text);
+  // ToolMessage content is the tool result. Emitting it as a text delta
+  // puts the payload in the answer.
+  if (text && chunk.type !== "tool") c.text.delta(text);
 
   // Streaming tool calls: `tool_call_chunks: [{ id, name, args }]`. The args
   // arrive as JSON fragments, so they are accumulated and used as the input
@@ -100,20 +103,25 @@ function consumeChunk(chunk: Record<string, unknown>, c: Consumer): void {
     );
   }
 
-  // Settled tool calls: `tool_calls: [{ id, name, args }]`.
+  // Settled args: `tool_calls: [{ id, name, args }]`. Completing the row here
+  // writes a success with no result, so a missing ToolMessage never becomes
+  // an error. Keep the row started until the ToolMessage (or stream end).
   const calls = Array.isArray(chunk.tool_calls) ? chunk.tool_calls : [];
   for (const raw of calls) {
     if (!isRecord(raw)) continue;
     const callId = stringField(raw, "id") ?? "tool";
     const name = stringField(raw, "name") ?? c.toolNames.get(callId) ?? "tool";
     const input = parseToolInput(raw.args) ?? parseToolInput(c.toolArgs.get(callId));
+    if (input) c.toolArgs.set(callId, JSON.stringify(input));
+    c.toolNames.set(callId, name);
+    if (c.ctx.rowByCallId.has(callId)) continue;
     c.text.close();
     writeGatedSpan(
       c.writer,
       c.ctx,
       {
         operation: "execute_tool",
-        status: "completed",
+        status: "started",
         label: name,
         toolName: name,
         callId,
@@ -186,8 +194,11 @@ export async function createLangGraphStreamResponse(opts: {
           // Never leave an abandoned body holding a socket (the digigraph
           // adapter cancels explicitly for the same reason).
           await res.body?.cancel().catch(() => {});
-          writeFailureStatus(writer, ctx, `LangGraph ${res.status}`, opts.activityDetail);
-          return;
+          const label = `LangGraph ${res.status}`;
+          writeFailureStatus(writer, ctx, label, opts.activityDetail);
+          // activityDetail "off" drops the status row. Throw so the UI stream
+          // still ends on an error part instead of a successful empty turn.
+          throw new Error(label);
         }
         for await (const evt of iterateSse(res.body, opts.signal)) {
           // LangGraph `messages/*` frames carry an ARRAY of message chunks.

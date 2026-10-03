@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { planTierFromOidcClaims } from "@/lib/oidc-plan-tier";
 
 /** Single secret for signing/decrypting session JWT (must stay stable or users must clear cookies). */
 function resolveAuthSecret(): string | undefined {
@@ -23,6 +24,18 @@ function oidcProvider(): NextAuthConfig["providers"][number] | null {
     clientSecret,
     authorization: { params: { scope: "openid email profile" } },
     client: { token_endpoint_auth_method: "client_secret_post" },
+    profile(profile) {
+      const claims = profile as Record<string, unknown>;
+      const tier = planTierFromOidcClaims(claims);
+      const name = typeof profile.name === "string" ? profile.name : undefined;
+      const email = typeof profile.email === "string" ? profile.email : undefined;
+      return {
+        id: String(profile.sub ?? ""),
+        ...(name ? { name } : {}),
+        ...(email ? { email } : {}),
+        ...(tier ? { app_metadata: { plan_tier: tier } } : {}),
+      };
+    },
   };
 }
 
