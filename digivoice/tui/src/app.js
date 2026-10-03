@@ -13,7 +13,7 @@ import {
 } from "@opentui/core"
 
 import { HERO_GAP, pixelScale, slotRowsFor, wordmarkLines } from "./hero.js"
-import { menuPaint } from "./menu_colors.js"
+import { menuPaint, screenPaint } from "./menu_colors.js"
 
 export const FOOTER = "↑↓ move · enter select · esc back · click"
 export const HOTKEY_PROMPT = "input new hotkey"
@@ -273,7 +273,10 @@ export function mountDigivoice(renderer, session, options = {}) {
     options.truecolor ??
     ["truecolor", "24bit"].includes(String(process.env.COLORTERM || "").toLowerCase())
   function takeTheme(result) {
-    if (result && result.theme) activeTheme = result.theme.active ? result.theme : null
+    if (result && result.theme) {
+      activeTheme = result.theme.active ? result.theme : null
+      applyScreenBackground()
+    }
   }
   const cols = options.cols ?? 100
   let tMs = options.tMs ?? 0
@@ -310,6 +313,21 @@ export function mountDigivoice(renderer, session, options = {}) {
     alignItems: "center",
     justifyContent: "flex-start",
   })
+
+  // Paint the screen ground behind the wordmark and menu from the
+  // active palette. An empty palette keeps the terminal background.
+  function applyScreenBackground() {
+    const paint = screenPaint(activeTheme)
+    const color = paint.background
+      ? `#${paint.background.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`
+      : "transparent"
+    root.backgroundColor = color
+    if (typeof renderer.setBackgroundColor === "function") {
+      renderer.setBackgroundColor(color)
+    }
+  }
+  applyScreenBackground()
+
   const frame = new BoxRenderable(renderer, {
     width: frameWidth,
     height: "100%",
@@ -444,7 +462,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     const termH = Math.max(0, renderer.height || 0)
     const scale = pixelScale({ cols: termW, rows: termH, letters: 9 })
     const drawCols = scale === 1 ? frameWidth : termW
-    const ink = activeTheme && activeTheme.active ? hexChannels(activeTheme.accent) : null
+    const ink = screenPaint(activeTheme).foreground
     const drawn = wordmarkLines("DIGIVOICE", { cols: drawCols, rows: termH, tMs, truecolor, scale, ink })
     const markWidth = drawn.lines[0]?.length ?? 0
     const nextFrame = Math.max(frameWidth, Math.min(termW, markWidth + 2))
