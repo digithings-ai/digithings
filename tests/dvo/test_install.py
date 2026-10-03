@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import struct
 import tarfile
 import zipfile
 from pathlib import Path
@@ -46,7 +47,8 @@ PIPER_LINUX = (
 )
 BUN_DARWIN = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-aarch64.zip"
 PIPER_DARWIN = (
-    "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_macos_aarch64.tar.gz"
+    "https://github.com/dharmab/piper/releases/download/"
+    "2024.12.14.1-alpha2/piper_macos_aarch64.tar.gz"
 )
 
 
@@ -168,7 +170,10 @@ def test_archive_urls_follow_the_host() -> None:
     assert piper_archive_url("linux", "aarch64") == PIPER_LINUX
     assert piper_archive_url("linux", "x86_64").endswith("/piper_linux_x86_64.tar.gz")
     assert piper_archive_url("darwin", "arm64") == PIPER_DARWIN
-    assert piper_archive_url("darwin", "x86_64").endswith("/piper_macos_x64.tar.gz")
+    assert piper_archive_url("darwin", "aarch64") == PIPER_DARWIN
+    intel = piper_archive_url("darwin", "x86_64")
+    assert intel.endswith("/piper_macos_x64.tar.gz")
+    assert "2023.11.14-2" in intel
     assert voice_urls() == (VOICE_ONNX, VOICE_JSON)
     entry = find_stt("ggml-base.en")
     assert entry is not None
@@ -1204,6 +1209,122 @@ def test_macos_update_upgrades_espeak_this_install_wrote(
         ["upgrade", "espeak-ng"],
         ["upgrade", "sox"],
     ]
+
+
+def _macho(cpu: str) -> bytes:
+    code = {"arm64": 0x0100000C, "x86_64": 0x01000007}[cpu]
+    return struct.pack("<II", 0xFEEDFACF, code)
+
+
+def test_arm64_install_copies_same_arch_espeak_beside_the_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "homebrew" / "lib"
+    libdir.mkdir(parents=True)
+    library = libdir / "libespeak-ng.1.dylib"
+    library.write_bytes(_macho("arm64") + b"espeak")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    runner = _runner(tui)
+    bodies = _darwin_bodies(
+        {
+            "piper/piper": _macho("arm64") + b"piper",
+            "piper/espeak-ng-data/phontab": b"data",
+        }
+    )
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=runner,
+    )
+    assert PIPER_DARWIN in fetched
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    beside = real / "libespeak-ng.1.dylib"
+    assert beside.read_bytes() == library.read_bytes()
+    assert _step(report, "espeak").status == "present"
+    assert _step(report, "espeak").detail == str(beside)
+    assert ["install", "espeak-ng"] not in _brew_verbs(runner)
+
+
+def test_arm64_update_replaces_an_x86_64_vendor_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    home = tmp_path / "home"
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    real.mkdir(parents=True)
+    binary = real / "piper"
+    original = _macho("x86_64") + b"old"
+    binary.write_bytes(original)
+    binary.chmod(0o755)
+    link = home / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(binary)
+    stamp = InstallStamp(piper="2023.11.14-2")
+    stamp_path = vendor_dir(home) / "install.json"
+    stamp_path.write_text(stamp.model_dump_json(), encoding="utf-8")
+    tui = _tui(tmp_path / "tui")
+    bodies = _darwin_bodies({"piper/piper": _macho("arm64") + b"new"})
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=_runner(tui),
+        refresh=True,
+        adapter_source=_lua_tree(tmp_path / "lua"),
+    )
+    assert PIPER_DARWIN in fetched
+    assert _step(report, "piper").status == "installed"
+    installed = link.resolve().read_bytes()
+    assert installed.startswith(_macho("arm64"))
+    assert installed != original
+
+
+def test_x86_64_archive_on_arm64_keeps_the_vendor_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "homebrew" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64"))
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    home = tmp_path / "home"
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    real.mkdir(parents=True)
+    binary = real / "piper"
+    original = _macho("x86_64") + b"keep"
+    binary.write_bytes(original)
+    binary.chmod(0o755)
+    link = home / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(binary)
+    stamp_path = vendor_dir(home) / "install.json"
+    stamp_path.write_text(InstallStamp(piper="2023.11.14-2").model_dump_json(), encoding="utf-8")
+    tui = _tui(tmp_path / "tui")
+    runner = _runner(tui)
+    bodies = _darwin_bodies({"piper/piper": _macho("x86_64") + b"wrong"})
+    report, _fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=runner,
+        refresh=True,
+    )
+    assert binary.read_bytes() == original
+    assert _step(report, "piper").status == "failed"
+    assert "x86_64" in _step(report, "piper").detail
+    assert _step(report, "espeak").status == "failed"
+    assert ["install", "espeak-ng"] not in _brew_verbs(runner)
 
 
 def test_linux_install_does_not_install_espeak(tmp_path: Path) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import struct
 from pathlib import Path
 
 import pytest
@@ -159,9 +160,7 @@ def test_darwin_speak_uses_a_homebrew_espeak_library(
     assert result.argv_piper[-2:] == ["--espeak_data", str(datadir)]
     call = runtime.runner.calls[0]  # type: ignore[union-attr]
     assert call.env is not None
-    dyld = call.env["DYLD_LIBRARY_PATH"].split(":")
-    assert str(libdir) in dyld
-    assert "/usr/bin" in dyld
+    assert call.env["DYLD_LIBRARY_PATH"].split(":") == [str(libdir)]
 
 
 def test_linux_speak_does_not_set_dyld(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -189,6 +188,71 @@ def test_linux_speak_does_not_set_dyld(tmp_path: Path, monkeypatch: pytest.Monke
     )
     assert result.argv_piper[-2:] == ["--espeak_data", str(data)]
     assert runtime.runner.calls[0].env is None  # type: ignore[union-attr]
+
+
+def _macho(cpu: str) -> bytes:
+    code = {"arm64": 0x0100000C, "x86_64": 0x01000007}[cpu]
+    return struct.pack("<II", 0xFEEDFACF, code)
+
+
+def test_darwin_speak_ignores_a_different_arch_espeak(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64"))
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "vendor" / "piper"
+    real.mkdir(parents=True)
+    piper = real / "piper"
+    piper.write_bytes(_macho("x86_64"))
+    piper.chmod(0o755)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(piper)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert runtime.runner.calls[0].env is None  # type: ignore[union-attr]
+
+
+def test_darwin_speak_prefers_the_same_arch_library_beside_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64"))
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "vendor" / "piper"
+    real.mkdir(parents=True)
+    piper = real / "piper"
+    piper.write_bytes(_macho("x86_64"))
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(_macho("x86_64"))
+    link = tmp_path / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(piper)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(link)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert call.env["DYLD_LIBRARY_PATH"].split(":") == [str(real)]
 
 
 def test_play_argv_per_player() -> None:

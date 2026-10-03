@@ -2,9 +2,10 @@
 
 `digivoice install` fetches bun, the OpenTUI packages, whisper-cli, Piper, sox,
 `ggml-base.en.bin`, and the Lessac Piper voice, then copies this checkout's
-banner adapter into `~/.hammerspoon/digivoice`. On macOS, when Piper's
-`libespeak-ng.1.dylib` is not already on the machine, it also runs
-`brew install espeak-ng`. On a terminal it asks first:
+banner adapter into `~/.hammerspoon/digivoice`. On an arm64 Mac it installs
+the native arm64 Piper build and a same-arch `libespeak-ng.1.dylib` beside
+that binary. A missing same-arch library is `brew install espeak-ng`. On a
+terminal it asks first:
 auto installs that default set, or the user picks local speech, voice, and
 rewrite models. A pick does not delete models already on disk. `digivoice
 update` refreshes a step whose pin changed and stays non-interactive. Tests
@@ -39,13 +40,20 @@ from digivoice.probe import CommandProbe
 from digivoice.reload import reload_hammerspoon
 from digivoice.runner import CommandRunner, error_tail
 from digivoice.settings import load_settings, save_settings
-from digivoice.speak import find_espeak_library
+from digivoice.speak import find_espeak_library, macho_cpu, place_espeak_beside
 
 FetchFn = Callable[[str, Path], None]
 
 BUN_VERSION = "1.4.2"
 WHISPER_TAG = "v1.9.2"
 PIPER_TAG = "2023.11.14-2"
+# rhasspy/piper 2023.11.14-2 built both macOS assets on Intel, so its
+# piper_macos_aarch64.tar.gz is Mach-O x86_64. This is that same asset from
+# the build that actually produced arm64 (rhasspy/piper#284).
+PIPER_MACOS_ARM64_URL = (
+    "https://github.com/dharmab/piper/releases/download/"
+    "2024.12.14.1-alpha2/piper_macos_aarch64.tar.gz"
+)
 VOICE_NAME = "en_US-lessac-medium"
 INSTALL_TIMEOUT = 600.0
 _BUN_RELEASE = f"https://github.com/oven-sh/bun/releases/download/bun-v{BUN_VERSION}"
@@ -74,8 +82,10 @@ def whisper_archive_url(platform: str, machine: str) -> str | None:
 def piper_archive_url(platform: str, machine: str) -> str:
     _require_desktop(platform)
     arch = _arch(machine)
+    if platform == "darwin" and arch == "aarch64":
+        return PIPER_MACOS_ARM64_URL
     if platform == "darwin":
-        name = "piper_macos_aarch64" if arch == "aarch64" else "piper_macos_x64"
+        name = "piper_macos_x64"
     else:
         name = "piper_linux_aarch64" if arch == "aarch64" else "piper_linux_x86_64"
     return f"{_PIPER_RELEASE}/{name}.tar.gz"
@@ -168,7 +178,11 @@ def run_install(
         lambda: _install_piper(home, platform, machine, probe, worker, refresh),
     )
     if platform == "darwin":
-        _attempt(steps, "espeak", lambda: _install_espeak(home, probe, runner, refresh))
+        _attempt(
+            steps,
+            "espeak",
+            lambda: _install_espeak(home, probe, runner, refresh, machine),
+        )
     _attempt(steps, "sox", lambda: _install_sox(home, probe, runner, refresh))
     if chosen.auto:
         _attempt(steps, "stt", lambda: _install_stt(home, models_dir, worker, refresh))
@@ -618,7 +632,8 @@ def _install_piper(
     refresh: bool,
 ) -> InstallStep:
     existing = _find_piper(home, probe)
-    if _up_to_date(
+    replace = _x86_piper_on_arm64_mac(home, platform, machine, existing)
+    if not replace and _up_to_date(
         refresh=refresh,
         present=existing is not None,
         stamp=_load_stamp(home).piper,
@@ -627,7 +642,21 @@ def _install_piper(
         return InstallStep(id="piper", status="present", detail=existing or "")
     url = piper_archive_url(platform, machine)
     root = vendor_dir(home) / "piper"
-    _extract_url(fetch, url, root)
+    staging = vendor_dir(home) / "piper.incoming"
+    try:
+        _extract_url(fetch, url, staging)
+        staged = _find_file(staging, "piper")
+        if staged is None:
+            raise InstallError("archive did not contain piper")
+        if platform == "darwin" and _arch(machine) == "aarch64" and macho_cpu(staged) == "x86_64":
+            raise InstallError("piper archive is x86_64, not arm64")
+        if root.exists():
+            shutil.rmtree(root)
+        staging.rename(root)
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise
     binary = _find_file(root, "piper")
     if binary is None:
         raise InstallError("archive did not contain piper")
@@ -641,16 +670,28 @@ def _install_espeak(
     probe: CommandProbe,
     runner: CommandRunner,
     refresh: bool,
+    machine: str,
 ) -> InstallStep:
-    """macOS Piper needs libespeak-ng. Brew only when that library is missing."""
+    """macOS Piper needs a same-arch libespeak-ng beside the real binary."""
     binary = _find_piper(home, probe) or str(piper_fallback(home))
     found = find_espeak_library(home, binary, platform="darwin")
     stamp = _load_stamp(home).espeak
     if found is not None and (not refresh or stamp != "brew"):
-        return InstallStep(id="espeak", status="present", detail=str(found))
+        placed = place_espeak_beside(binary, found)
+        detail = str(placed if placed is not None else found)
+        return InstallStep(id="espeak", status="present", detail=detail)
+    if found is None and _binary_is_x86_on_arm64(binary, machine):
+        return InstallStep(
+            id="espeak",
+            status="failed",
+            detail="Homebrew espeak-ng is arm64 and cannot load into this x86_64 Piper",
+        )
     upgrade = found is not None and refresh and stamp == "brew"
     step = _brew(probe, runner, "espeak-ng", "espeak", upgrade=upgrade)
     _remember(home, espeak="brew")
+    found = find_espeak_library(home, binary, platform="darwin")
+    if found is not None:
+        place_espeak_beside(binary, found)
     return step
 
 
@@ -899,6 +940,30 @@ def _host_triple(platform: str, machine: str) -> str:
     arch = "aarch64" if _arch(machine) == "aarch64" else "x64"
     prefix = "darwin" if platform == "darwin" else "linux"
     return f"{prefix}-{arch}"
+
+
+def _x86_piper_on_arm64_mac(
+    home: Path,
+    platform: str,
+    machine: str,
+    existing: str | None,
+) -> bool:
+    """An x86_64 Piper this install wrote under vendor, on an arm64 Mac."""
+    if platform != "darwin" or existing is None or _arch(machine) != "aarch64":
+        return False
+    path = Path(existing).resolve()
+    vendor = (vendor_dir(home) / "piper").resolve()
+    if path != vendor and vendor not in path.parents:
+        return False
+    return macho_cpu(path) == "x86_64"
+
+
+def _binary_is_x86_on_arm64(binary: str, machine: str) -> bool:
+    if _arch(machine) != "aarch64":
+        return False
+    path = Path(binary)
+    target = path.resolve() if path.exists() else path
+    return target.is_file() and macho_cpu(target) == "x86_64"
 
 
 def _arch(machine: str) -> str:

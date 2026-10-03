@@ -3,12 +3,15 @@
 Text is piped to Piper over stdin (never interpolated into a shell string).
 Piper writes a wav; then afplay (macOS) or aplay/ffplay (Linux) plays it.
 On macOS, Piper is linked to libespeak-ng.1.dylib. speak points dyld at a
-copy already on the machine and passes that tree's espeak-ng-data.
+same-architecture copy already on the machine and passes that tree's
+espeak-ng-data. A library built for a different architecture is ignored.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
+import struct
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +28,9 @@ from digivoice.settings import load_settings
 _ESPEAK_LIBRARY = "libespeak-ng.1.dylib"
 _ESPEAK_DATA = "espeak-ng-data"
 _ESPEAK_PHON = "phontab"
+_MH_MAGIC_64 = 0xFEEDFACF
+_CPU_ARM64 = 0x0100000C
+_CPU_X86_64 = 0x01000007
 
 PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
@@ -179,20 +185,80 @@ def espeak_data_dirs() -> tuple[Path, ...]:
     )
 
 
+def macho_cpu(path: Path) -> str | None:
+    """Thin Mach-O cpu, `arm64` or `x86_64`. None for any other file."""
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(8)
+    except OSError:
+        return None
+    if len(header) < 8:
+        return None
+    magic, cputype = struct.unpack("<II", header)
+    if magic != _MH_MAGIC_64:
+        return None
+    if cputype == _CPU_ARM64:
+        return "arm64"
+    if cputype == _CPU_X86_64:
+        return "x86_64"
+    return None
+
+
+def library_matches_binary(binary: str, library: Path) -> bool:
+    """True when both files share a Mach-O cpu, or neither is Mach-O."""
+    binary_path = Path(binary)
+    target = binary_path.resolve() if binary_path.exists() else binary_path
+    binary_cpu = macho_cpu(target) if target.is_file() else None
+    library_cpu = macho_cpu(library)
+    if binary_cpu is None and library_cpu is None:
+        return True
+    return binary_cpu is not None and binary_cpu == library_cpu
+
+
+def place_espeak_beside(binary: str, library: Path) -> Path | None:
+    """Copy a same-arch Mach-O espeak library next to the real Piper binary.
+
+    `~/.local/bin/piper` is a symlink, so a library next to that link is not
+    the directory dyld searches for the real binary. A matching library already
+    beside the binary is left in place.
+    """
+    if not library_matches_binary(binary, library):
+        return None
+    binary_path = Path(binary)
+    if not binary_path.exists():
+        return None
+    real = binary_path.resolve()
+    cpu = macho_cpu(real)
+    if cpu is None or macho_cpu(library) != cpu:
+        return None
+    dest = real.parent / _ESPEAK_LIBRARY
+    if dest.is_file() and macho_cpu(dest) == cpu:
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(library, dest, follow_symlinks=True)
+    return dest
+
+
 def find_espeak_library(home: Path, binary: str, *, platform: str) -> Path | None:
-    """A libespeak-ng already on disk. This does not download or install one."""
+    """A same-arch libespeak-ng already on disk. This does not download one."""
     invoked = Path(binary)
     for directory in (invoked.resolve().parent, invoked.parent):
-        found = _existing_file(directory / _ESPEAK_LIBRARY)
+        found = _matching_library(binary, directory / _ESPEAK_LIBRARY)
         if found is not None:
             return found
-    found = _named_under(vendor_dir(home) / "piper", _ESPEAK_LIBRARY)
-    if found is not None:
-        return found
+    vendor = vendor_dir(home) / "piper"
+    if vendor.is_dir():
+        for path in vendor.rglob(_ESPEAK_LIBRARY):
+            if (
+                path.is_file()
+                and path.name == _ESPEAK_LIBRARY
+                and library_matches_binary(binary, path)
+            ):
+                return path
     if platform != "darwin":
         return None
     for directory in espeak_library_dirs():
-        found = _existing_file(directory / _ESPEAK_LIBRARY)
+        found = _matching_library(binary, directory / _ESPEAK_LIBRARY)
         if found is not None:
             return found
     return None
@@ -224,14 +290,12 @@ def find_espeak_data(home: Path, binary: str, *, platform: str) -> Path | None:
 
 
 def piper_library_env(platform: str, binary: str, library: Path | None) -> dict[str, str] | None:
-    """DYLD path so macOS Piper can load espeak-ng. Linux uses $ORIGIN."""
+    """DYLD path for a same-arch espeak-ng. Linux uses $ORIGIN."""
     if platform != "darwin" or library is None:
         return None
-    dirs: list[str] = []
-    for directory in (Path(binary).resolve().parent, library.resolve().parent):
-        text = str(directory)
-        if text not in dirs:
-            dirs.append(text)
+    if not library_matches_binary(binary, library):
+        return None
+    dirs = [str(library.parent)]
     previous = os.environ.get("DYLD_LIBRARY_PATH", "")
     for part in previous.split(os.pathsep):
         if part and part not in dirs:
@@ -250,6 +314,13 @@ def piper_argv(
     if espeak_data is not None:
         argv.extend(["--espeak_data", str(espeak_data)])
     return argv
+
+
+def _matching_library(binary: str, path: Path) -> Path | None:
+    found = _existing_file(path)
+    if found is None or not library_matches_binary(binary, found):
+        return None
+    return found
 
 
 def _existing_file(path: Path) -> Path | None:
