@@ -150,7 +150,7 @@ export function ProductStage() {
         cancelClick = activateNavLink(link);
         return;
       }
-      let pathname = "/app";
+      let pathname: string;
       try {
         pathname = doc.location.pathname;
       } catch {
