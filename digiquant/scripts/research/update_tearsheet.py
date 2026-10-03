@@ -65,6 +65,8 @@ from lib.roots import (  # noqa: E402
 OUTPUT_JSON = DASHBOARD_DATA_JSON
 DAILY_DIR = AGENT_CACHE_ROOT / "daily"
 PORTFOLIO_JSON = RESEARCH_CONFIG / "portfolio.json"
+# backfill-supabase.py calls load_all_markdowns(mod.ROOT). Keep the name.
+ROOT = DIGIQUANT_ROOT
 
 # Benchmarks for comparison
 BENCHMARKS = ["SPY", "QQQ", "IWM", "EEM", "TLT", "GLD", "IBIT"]

@@ -96,6 +96,15 @@ def test_tearsheet_outputs_land_in_the_dashboard_app() -> None:
     assert ut.PORTFOLIO_JSON.is_file()
 
 
+def test_tearsheet_root_alias_is_digiquant_root() -> None:
+    """backfill-supabase.py calls load_all_markdowns(mod.ROOT) once any digest exists."""
+    import update_tearsheet as ut
+    from lib.roots import DIGIQUANT_ROOT
+
+    assert ut.ROOT == DIGIQUANT_ROOT
+    assert ut.load_all_markdowns(ut.ROOT) == ut.load_all_markdowns(DIGIQUANT_ROOT)
+
+
 def test_backfill_export_defaults_to_digiquant_data() -> None:
     from lib.roots import DIGIQUANT_ROOT
 

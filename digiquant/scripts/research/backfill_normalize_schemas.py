@@ -48,7 +48,6 @@ try:
 except ImportError:
     _HAS_SB = False
 
-ROOT = Path(__file__).parent.parent
 from lib.roots import research_script  # noqa: E402
 
 # ── Enum constants from schema ────────────────────────────────────────────────
