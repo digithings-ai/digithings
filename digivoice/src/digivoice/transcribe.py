@@ -75,12 +75,21 @@ def model_file(
     home: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> Path:
-    """Weights for this model. models_dir first, then a copy already installed locally."""
+    """Weights for this model.
+
+    An absolute id is that file, not ``models_dir`` plus the same name.
+    A catalog id opens ``models_dir`` first, then the same filename under
+    LM Studio, Ollama, or MLX Studio.
+    """
+    raw = (model_id or "").strip()
+    if raw:
+        direct = Path(raw).expanduser()
+        if direct.is_absolute():
+            if ".." in direct.parts:
+                direct = direct.resolve()
+            return direct
     chosen = stt_model_path(paths.models_dir, model_id)
     if chosen.is_file() or home is None:
-        return chosen
-    raw = (model_id or "").strip()
-    if raw and Path(raw).expanduser().is_absolute():
         return chosen
     found = find_local_weight(home, env, chosen.name)
     return found if found is not None else chosen
