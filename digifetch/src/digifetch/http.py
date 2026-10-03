@@ -93,6 +93,13 @@ def _hop_headers(
     return kept or None
 
 
+def _drop_credential_headers(headers: httpx.Headers) -> None:
+    """Remove credential headers httpx already merged from the client."""
+    for name in _SENSITIVE_HEADERS:
+        if name in headers:
+            del headers[name]
+
+
 class FetchResult(BaseModel):
     """Outcome of an HTTP fetch — text body plus useful response metadata.
 
@@ -166,12 +173,13 @@ class HttpFetcher:
     before a request is sent, and hops are capped at :data:`MAX_REDIRECTS`. Pass
     ``allowed_hosts`` for operator-trusted internal hosts.
 
-    **Redirect cookies and headers.** Per-call ``cookies`` and credential
-    headers (``Authorization``, ``Proxy-Authorization``, ``Cookie``) are
-    forwarded only while the hop stays on the original origin (default ports
-    included). A cross-origin redirect drops them. 303 always becomes GET;
-    301/302 downgrade a non-GET/HEAD method and drop the body; 307/308 keep
-    the method and body.
+    **Redirect cookies and headers.** Credential headers
+    (``Authorization``, ``Proxy-Authorization``, ``Cookie``), cookies, and
+    client ``auth`` are forwarded only while the hop stays on the original
+    origin (default ports included). That includes per-call values and the
+    client's own ``headers`` / ``cookies`` / ``auth``. A cross-origin redirect
+    drops them. 303 always becomes GET; 301/302 downgrade a non-GET/HEAD
+    method and drop the body; 307/308 keep the method and body.
     """
 
     def __init__(
@@ -229,6 +237,43 @@ class HttpFetcher:
         """Refuse *url* unless it passes the SSRF guard (raises :class:`SsrfBlockedError`)."""
         validate_fetch_url(url, allowed_hosts=self._allowed_hosts)
 
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        same_origin: bool,
+        headers: Mapping[str, str] | None,
+        cookies: Mapping[str, str] | None,
+        stream: bool,
+        params: Mapping[str, Any] | None = None,
+        data: Mapping[str, Any] | None = None,
+        json: Any = None,
+    ) -> httpx.Response:
+        """Send one hop.
+
+        httpx merges client ``headers``, ``cookies``, and ``auth`` after the
+        per-call mapping. On a cross-origin hop those credentials are removed
+        and ``auth`` is not applied. A same-origin hop keeps them.
+        """
+        request = self._client.build_request(
+            method,
+            url,
+            params=dict(params) if params else None,
+            data=dict(data) if data else None,
+            json=json,
+            headers=_hop_headers(headers, same_origin=same_origin),
+            cookies=dict(cookies) if same_origin and cookies else None,
+        )
+        if not same_origin:
+            _drop_credential_headers(request.headers)
+        return self._client.send(
+            request,
+            auth=httpx.USE_CLIENT_DEFAULT if same_origin else None,
+            follow_redirects=False,
+            stream=stream,
+        )
+
     def __enter__(self) -> HttpFetcher:
         return self
 
@@ -260,11 +305,10 @@ class HttpFetcher:
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
         each hop is re-validated by the SSRF guard before it is requested.
-        Per-call ``cookies`` and credential headers are forwarded **only to
-        same-origin hops**; a hop to another origin drops them. 307/308 keep
-        the method and body; 301/302/303 downgrade as browsers do. The
-        client-level cookie jar, if any, follows httpx's own domain-scoped
-        rules.
+        Per-call and client credentials (headers, cookies, and ``auth``) are
+        forwarded **only to same-origin hops**; a hop to another origin drops
+        them. 307/308 keep the method and body; 301/302/303 downgrade as
+        browsers do.
         """
         origin = _url_origin(url)
         current_url = url
@@ -274,34 +318,37 @@ class HttpFetcher:
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
             same_origin = _url_origin(current_url) == origin
-            hop_cookies = cookies if same_origin else None
-            response = self._client.request(
+            response = self._send(
                 current_method,
                 current_url,
-                params=dict(params) if params else None,
-                data=dict(current_data) if current_data else None,
+                same_origin=same_origin,
+                headers=headers,
+                cookies=cookies,
+                stream=False,
+                params=params,
+                data=current_data,
                 json=current_json,
-                headers=_hop_headers(headers, same_origin=same_origin),
-                cookies=dict(hop_cookies) if hop_cookies else None,
-                follow_redirects=False,
             )
-            if response.status_code in _REDIRECT_STATUSES:
-                location = response.headers.get("location")
-                if location:
-                    current_url = urljoin(str(response.url), location)
-                    next_method = _redirect_method(response.status_code, current_method)
-                    if next_method != current_method or response.status_code == 303:
-                        current_data, current_json = None, None
-                    current_method = next_method
-                    params = None
-                    continue
-            response.raise_for_status()
-            return FetchResult(
-                status_code=response.status_code,
-                url=str(response.url),
-                text=response.text,
-                content_type=response.headers.get("content-type", ""),
-            )
+            try:
+                if response.status_code in _REDIRECT_STATUSES:
+                    location = response.headers.get("location")
+                    if location:
+                        current_url = urljoin(str(response.url), location)
+                        next_method = _redirect_method(response.status_code, current_method)
+                        if next_method != current_method or response.status_code == 303:
+                            current_data, current_json = None, None
+                        current_method = next_method
+                        params = None
+                        continue
+                response.raise_for_status()
+                return FetchResult(
+                    status_code=response.status_code,
+                    url=str(response.url),
+                    text=response.text,
+                    content_type=response.headers.get("content-type", ""),
+                )
+            finally:
+                response.close()
         raise httpx.TooManyRedirects(f"exceeded {MAX_REDIRECTS} redirects fetching {url}")
 
     def download(
@@ -320,8 +367,8 @@ class HttpFetcher:
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
         each hop is re-validated by the SSRF guard before it is requested.
-        Per-call ``cookies`` are forwarded only to same-origin hops, exactly as
-        in :meth:`fetch`.
+        Per-call and client credentials are forwarded only to same-origin hops,
+        exactly as in :meth:`fetch`.
 
         Raises:
             DownloadTooLargeError: if the body exceeds ``max_bytes``.
@@ -334,14 +381,15 @@ class HttpFetcher:
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
             same_origin = _url_origin(current_url) == origin
-            hop_cookies = cookies if same_origin else None
-            with self._client.stream(
+            response = self._send(
                 current_method,
                 current_url,
-                headers=_hop_headers(headers, same_origin=same_origin),
-                cookies=dict(hop_cookies) if hop_cookies else None,
-                follow_redirects=False,
-            ) as response:
+                same_origin=same_origin,
+                headers=headers,
+                cookies=cookies,
+                stream=True,
+            )
+            try:
                 if response.status_code in _REDIRECT_STATUSES:
                     location = response.headers.get("location")
                     if location:
@@ -364,4 +412,6 @@ class HttpFetcher:
                     content=b"".join(chunks),
                     content_type=response.headers.get("content-type", ""),
                 )
+            finally:
+                response.close()
         raise httpx.TooManyRedirects(f"exceeded {MAX_REDIRECTS} redirects downloading {url}")

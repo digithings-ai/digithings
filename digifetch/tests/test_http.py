@@ -334,3 +334,129 @@ def test_explicit_default_port_stays_same_origin_for_cookies() -> None:
         f.fetch("https://one.example/start", cookies={"session": "secret"})
 
     assert seen == ["session=secret", "session=secret"]
+
+
+def test_cross_origin_drops_client_default_credentials() -> None:
+    """Constructor headers and cookies must not ride a hop to another host."""
+    seen: list[tuple[str, str | None, str | None, str | None, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            (
+                request.url.host,
+                request.headers.get("authorization"),
+                request.headers.get("cookie"),
+                request.headers.get("proxy-authorization"),
+                request.headers.get("accept"),
+            )
+        )
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with HttpFetcher(
+        transport=httpx.MockTransport(handler),
+        headers={
+            "Authorization": "Bearer client-default",
+            "Proxy-Authorization": "Basic abc",
+            "Accept": "text/plain",
+        },
+        cookies={"session": "from-ctor"},
+        allowed_hosts=["one.example", "two.example"],
+    ) as f:
+        result = f.fetch("https://one.example/start")
+
+    assert result.text == "ok"
+    assert seen[0][1] == "Bearer client-default"
+    assert seen[0][2] == "session=from-ctor"
+    assert seen[1] == ("two.example", None, None, None, "text/plain")
+
+
+def test_cross_origin_drops_injected_client_auth() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.host, request.headers.get("authorization")))
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, text="ok")
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        auth=("user", "secret"),
+        follow_redirects=False,
+    )
+    try:
+        with HttpFetcher(client=client, allowed_hosts=["one.example", "two.example"]) as f:
+            f.fetch("https://one.example/start")
+    finally:
+        client.close()
+
+    assert seen[0][1] == "Basic dXNlcjpzZWNyZXQ="
+    assert seen[1] == ("two.example", None)
+
+
+def test_same_origin_keeps_client_default_credentials() -> None:
+    seen: list[tuple[str | None, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.headers.get("authorization"), request.headers.get("cookie")))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "/final"})
+        return httpx.Response(200, text="ok")
+
+    with HttpFetcher(
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "Bearer client-default"},
+        cookies={"session": "from-ctor"},
+        allowed_hosts=["one.example"],
+    ) as f:
+        f.fetch("https://one.example/start")
+
+    assert seen == [
+        ("Bearer client-default", "session=from-ctor"),
+        ("Bearer client-default", "session=from-ctor"),
+    ]
+
+
+def test_same_origin_keeps_injected_client_auth() -> None:
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "/final"})
+        return httpx.Response(200, text="ok")
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        auth=("user", "secret"),
+        follow_redirects=False,
+    )
+    try:
+        with HttpFetcher(client=client, allowed_hosts=["one.example"]) as f:
+            f.fetch("https://one.example/start")
+    finally:
+        client.close()
+
+    assert seen == ["Basic dXNlcjpzZWNyZXQ=", "Basic dXNlcjpzZWNyZXQ="]
+
+
+def test_download_cross_origin_drops_client_authorization() -> None:
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/doc"})
+        return httpx.Response(200, content=b"bytes")
+
+    with HttpFetcher(
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "Bearer client-default"},
+        allowed_hosts=["one.example", "two.example"],
+    ) as f:
+        result = f.download("https://one.example/doc")
+
+    assert result.content == b"bytes"
+    assert seen == ["Bearer client-default", None]
