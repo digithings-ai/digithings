@@ -17,8 +17,10 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 | `digithings.ai/embed*`, digichat APIs, `/_dtchat*` | Worker → **one** digichat Container | BFF; tenants via `DIGICHAT_EMBED_TENANTS` |
 | `graph.digithings.ai` | Worker → **one** Profile A stack Container | digigraph (chat brain) |
 | `key.digithings.ai` | same stack Container | digikey (JWT / BFF) |
-| digisearch + digivault + LiteLLM | loopback inside stack Container | RAG / vault / LLM router |
+| `search.digithings.ai` | same stack Container | digisearch `:8002` (JWT `digisearch:query`; public Worker route) |
+| digivault + LiteLLM | loopback inside stack Container | vault / LLM router — **not** published hostnames |
 
+- digisearch in-container callers still use `http://127.0.0.1:8002`; the process binds `0.0.0.0:8002` so the Worker can proxy (`wrangler.toml` search route comments, #4071).
 - digithings has **no Azure**. DataTap Azure digichat is client-only.
 - Do **not** use `chat.digithings.ai` as the marketing path host; public URLs stay under `digithings.ai/chat…`.
 - **Preferred digichat host:** Cloudflare Containers (Workers Paid) — [`apps/digichat-cloudflare/`](../../apps/digichat-cloudflare/README.md).
@@ -27,7 +29,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 - **Fallback (no Paid):** operator Compose + named Tunnel if Workers Paid is unavailable.
 - Pages Function OpenRouter digivault loop is **retired** (410).
 - New marketing chats = new Pages `/chat/<slug>` + embed-tenant row — **not** a new Container.
-- **Human gate:** publishing `graph.` / `key.` hostnames is new network exposure; secrets only via `wrangler secret put`.
+- **Human gate:** publishing `graph.` / `key.` / `search.` hostnames is new network exposure (`search.digithings.ai` is owner-approved for CI web grounding, #4063); secrets only via `wrangler secret put`.
 
 ### Historical notes
 
@@ -43,7 +45,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 
 - Cloudflare Pages `digithings-ai`: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`; `_headers` `frame-src` allows that origin.
 - digichat Container: `DIGICHAT_EMBED_HOSTS`, `DIGICHAT_EMBED_TENANTS` (digithings + occ → `digigraph` with OCC `digisearchIndex: occ_help` + `vaultPathPrefix`); `DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai`, `DIGIKEY_URL=https://key.digithings.ai`, digikey BFF secrets.
-- Profile A stack Container: see [`apps/digithings-stack-cloudflare/`](../../apps/digithings-stack-cloudflare/README.md).
+- Profile A stack Container: public `graph.` / `key.` / `search.` hostnames (`search.digithings.ai` → digisearch `:8002`, JWT `digisearch:query`); digivault and LiteLLM stay loopback-only. See [`apps/digithings-stack-cloudflare/`](../../apps/digithings-stack-cloudflare/README.md).
 - Runbook: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
 ## Consequences
