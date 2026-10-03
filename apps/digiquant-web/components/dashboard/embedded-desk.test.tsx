@@ -21,16 +21,20 @@ import {
 import { publicCatalogPages } from "@/components/desk/public-surface";
 import { screenKind, TerminalScreen } from "./terminal-screen";
 import {
-  HOSTED_COPY,
-  SELF_HOSTED_COPY,
-  SPLIT_MAX,
-  SPLIT_MIN,
+  REVEAL_REST,
+  REVEAL_RETURN_MS,
+  REVEAL_SWEEP_MS,
+  TERMINAL_COPY,
+  TERMINAL_TITLE,
+  WEB_COPY,
+  WEB_TITLE,
   deskShellLoaded,
   nextDeskAnchor,
   nextTerminalPath,
   nextWebPath,
-  paneLayers,
   prevTerminalPath,
+  revealShare,
+  sentenceFits,
   splitFromPointer,
   widerSide,
 } from "./surface-tour";
@@ -202,28 +206,34 @@ describe("desk walk", () => {
 
 describe("surface tour", () => {
   it("keeps the two stories free of a price", () => {
-    const copy = `${SELF_HOSTED_COPY} ${HOSTED_COPY}`;
-    expect(copy).toContain("one-to-one with the hosted desk");
+    const copy = `${TERMINAL_COPY} ${WEB_COPY}`;
+    expect(TERMINAL_TITLE).toBe("terminal UI");
+    expect(WEB_TITLE).toBe("web app");
+    expect(copy).toContain("one-to-one with the web app");
     expect(copy).toContain("run pipelines and strategies locally");
-    expect(copy).toContain("The same desk, delegated");
+    expect(copy).toContain("the same desk, delegated");
     expect(copy).toContain("do not host the infrastructure");
+    expect(copy).not.toMatch(/self-hosted|hosted desk|\bHosted\b/i);
     expect(copy).not.toMatch(/\$\d|\bFree\b|Coming soon|per month|99\.909|204\.04/);
     expect(copy).not.toMatch(/Digi[A-Z]/);
   });
 
-  it("keeps both panes on screen and lets the gap change the split", () => {
-    expect(splitFromPointer(0, 0, 1000, 24)).toBe(SPLIT_MIN);
-    expect(splitFromPointer(500, 0, 1000, 24)).toBeCloseTo(0.5, 5);
-    expect(splitFromPointer(1000, 0, 1000, 24)).toBe(SPLIT_MAX);
+  it("lets the handle reach either edge and shows a sentence only when it fits", () => {
+    expect(splitFromPointer(0, 0, 1000)).toBe(0);
+    expect(splitFromPointer(500, 0, 1000)).toBeCloseTo(0.5, 5);
+    expect(splitFromPointer(1000, 0, 1000)).toBe(1);
+    expect(splitFromPointer(10, 0, 0)).toBe(REVEAL_REST);
     expect(widerSide(0.5)).toBe("even");
     expect(widerSide(0.62)).toBe("terminal");
     expect(widerSide(0.4)).toBe("web");
-    expect(paneLayers("/brief", "/brief", null, "/portfolio")).toEqual(["/brief", "/portfolio"]);
-    expect(paneLayers("/portfolio", "/portfolio", "/brief", "/pipeline")).toEqual([
-      "/brief",
-      "/portfolio",
-      "/pipeline",
-    ]);
+    expect(sentenceFits(200, 199)).toBe(false);
+    expect(sentenceFits(200, 200)).toBe(true);
+    expect(sentenceFits(200, 0)).toBe(false);
+    expect(sentenceFits(Number.NaN, 40)).toBe(false);
+    expect(revealShare(0, false)).toBe(0);
+    expect(revealShare(REVEAL_SWEEP_MS, false)).toBe(1);
+    expect(revealShare(REVEAL_SWEEP_MS + REVEAL_RETURN_MS, false)).toBe(REVEAL_REST);
+    expect(revealShare(10, true)).toBe(REVEAL_REST);
   });
 
   it("treats a page rail with no links as a loaded desk", () => {
@@ -290,22 +300,27 @@ describe("DashboardBand", () => {
 
   it("loads the web desk and the terminal screens, with no invented book", () => {
     expect(html).toContain('src="/app"');
-    expect(html).toContain('title="Hosted digiquant"');
+    expect(html.match(/src="\/app"/g)).toHaveLength(1);
+    expect(html).toContain('title="digiquant web app"');
     expect(html).toContain('aria-label="Terminal pages"');
     expect(html).toContain('data-pane="terminal"');
     expect(html).toContain('data-pane="web"');
     expect(html).toContain('data-page="/brief"');
-    expect(html).toContain('data-wider="even"');
-    expect(html).toContain('role="separator"');
-    expect(html).toContain("Give more width to the terminal or the hosted desk");
-    expect(html).toContain("The terminal and the hosted desk are the same product.");
+    expect(html).toContain('data-frame="full"');
+    expect(html).toContain("100cqi");
+    expect(html).toContain('role="slider"');
+    expect(html).toContain("Drag to reveal the terminal UI or the web app");
+    expect(html).toContain("The terminal UI and the web app are the same desk.");
+    expect(html).toContain(TERMINAL_TITLE);
+    expect(html).toContain(WEB_TITLE);
     expect(html).not.toContain('data-slot="segmented"');
     expect(html).not.toContain('data-showing=');
     expect(html).not.toContain("aria-pressed");
-    expect(html).not.toContain('data-slot="slider"');
-    expect(html).not.toMatch(/slider/i);
-    expect(html).toContain(SELF_HOSTED_COPY);
-    expect(html).toContain(HOSTED_COPY);
+    expect(html).not.toContain("status=");
+    expect(html).not.toContain("Self-hosted");
+    expect(html).not.toContain("Hosted");
+    expect(html).not.toContain("dq-desk");
+    expect(html).not.toContain('data-fit="shown"');
     expect(html).not.toContain("The pages tour until");
     expect(html).not.toContain("Opening the web app.");
     expect(html).not.toContain("Touring the web app.");
@@ -320,6 +335,22 @@ describe("DashboardBand", () => {
     expect(html).not.toContain("204.04");
     expect(html).not.toContain("legacy_estimate");
     expect(html).not.toContain("sample run");
+    const stage = readFileSync(new URL("./product-stage.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    const layout = readFileSync(new URL("../../app/app/layout.tsx", import.meta.url), "utf8");
+    const slug = readFileSync(new URL("../../app/app/[...slug]/page.tsx", import.meta.url), "utf8");
+    const band = readFileSync(new URL("../../app/_bands/dashboard.tsx", import.meta.url), "utf8");
+    expect(stage).not.toContain("dq-desk-in");
+    expect(stage).not.toContain("PAGE_FADE");
+    expect(stage).not.toMatch(/opacity:\s*0/);
+    expect(stage).toContain("100cqi");
+    expect(stage).toContain("desk-page-settle");
+    expect(css).toContain("@keyframes desk-page-settle");
+    expect(css.slice(css.indexOf("@keyframes desk-page-settle"), css.indexOf(".nav-title"))).not.toMatch(/opacity/);
+    expect(layout).toContain("DeskShell");
+    expect(slug).toContain("DeskRouteBody");
+    expect(slug).not.toContain("key={path}");
+    expect(band).not.toContain("status=");
     expect(html).not.toContain("Take control");
     expect(html).not.toMatch(/fx hub|12x terminal/i);
     expect(html).not.toMatch(/\$\d|\bFree\b|Coming soon/);

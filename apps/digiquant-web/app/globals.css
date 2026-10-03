@@ -545,6 +545,17 @@ body {
     word-break: break-word;
   }
 }
+/* Page body only. The shell stays painted. Never fades toward invisible. */
+@keyframes desk-page-settle {
+  from { transform: translateY(0.35rem); }
+  to { transform: none; }
+}
+.desk-page-settle {
+  animation: desk-page-settle 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desk-page-settle { animation: none; }
+}
 .nav-title {
   font: 0.6875rem/1 var(--mono);
   letter-spacing: 0.08em;

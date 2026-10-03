@@ -571,6 +571,7 @@ export function App() {
           ) : null}
         </box>
         <box flexGrow={1} position="relative" overflow="hidden">
+          <box key={path} width="100%" height="100%" position="relative" overflow="hidden">
           {undrawn ? (
             <box paddingLeft={1} paddingTop={1}>
               <text fg={MUTE}>This page is not drawn on the terminal.</text>
@@ -608,6 +609,7 @@ export function App() {
                 );
               }))
           )}
+          </box>
           {mode === "path" ? (
             <box position="absolute" top={0} left={0} width="100%" zIndex={8} backgroundColor={BG}>
               <PathHits hits={hits} selected={selectedHit} onPick={openHit} />

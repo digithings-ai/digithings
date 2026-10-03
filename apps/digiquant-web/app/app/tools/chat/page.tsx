@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DeskChat } from "@/components/desk/desk-chat";
+import { ChatPane } from "@/components/desk/desk-chat";
 
 export const metadata: Metadata = {
   title: "digichat — digiquant",
@@ -7,9 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function ToolsChatPage() {
-  return (
-    <main id="main" className="h-[100svh]">
-      <DeskChat />
-    </main>
-  );
+  return <ChatPane />;
 }
