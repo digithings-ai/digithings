@@ -114,10 +114,11 @@ export const PAGE_LAYOUTS: Record<string, Layout> = {
     ["st-deployments", 8, 4, 5, 9],
   ]),
   "/strategies/detail": L([
-    ["st-overview", 1, 1, 6, 6],
-    ["st-parameters", 7, 1, 6, 6],
-    ["st-track-record", 1, 7, 7, 6],
-    ["st-runs", 8, 7, 5, 6],
+    ["st-overview", 1, 1, 6, 4],
+    ["st-parameters", 7, 1, 6, 4],
+    ["st-tearsheet", 1, 5, 12, 4],
+    ["st-track-record", 1, 9, 7, 4],
+    ["st-runs", 8, 9, 5, 4],
   ]),
   "/strategies/deploy": L([
     ["st-targets", 1, 1, 5, 12],
@@ -164,6 +165,7 @@ export const BLOCKS: Record<string, BlockDef> = {
   "st-deployments": block("st-deployments", "My deployments", "/strategies/deployments"),
   "st-targets": block("st-targets", "Deployment targets", "/strategies/targets"),
   "st-overview": block("st-overview", "Overview", "/strategies/default"),
+  "st-tearsheet": block("st-tearsheet", "Tearsheet", "/strategies/default"),
   "st-parameters": block("st-parameters", "Parameters", "/strategies/default/parameters"),
   "st-track-record": block("st-track-record", "Paper track record", "/strategies/default/performance"),
   "st-runs": block("st-runs", "Runs", "/strategies/default/runs"),

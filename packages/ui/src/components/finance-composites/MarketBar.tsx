@@ -17,7 +17,7 @@ import { cn } from "../../lib/utils";
  * and a11y contract:
  *  - `status="live"` is a green square (it may pulse). The word is not shown.
  *    `connecting` / `stale` / `offline` show a muted bracketed word;
- *  - no cells -> the text `connecting…` (or `offline`), never invented prices;
+ *  - no quoted cells -> a red square and `Prices did not load.`;
  *  - a cell with `value: null` shows an em dash for the price;
  *  - a missing percent is an em dash, never a fabricated number;
  *  - `asOf` (e.g. "as of 09-29") and `source` label recorded cells — `asOf`
@@ -55,13 +55,13 @@ export type MarketBarCell = {
 };
 
 export type MarketBarProps = {
-  /** The tape. Empty renders the `connecting…` empty state. */
+  /** The tape. A cell with no price is dropped. None left renders the empty state. */
   cells: MarketBarCell[];
-  /** Feed state. Only "live" earns the live badge. */
+  /** Feed state. Only "live" earns the green square, and only while quotes are scrolling. */
   status: MarketBarStatus;
   /** Right-aligned slot — a clock like "00:00Z". Consumer-rendered (hydration is theirs). */
   trailing?: ReactNode;
-  /** Marquee loop duration in seconds. Default 60. */
+  /** Marquee loop duration in seconds. Omit to give each symbol time to be read. */
   speed?: number;
   /** Start paused. */
   defaultPaused?: boolean;
@@ -69,6 +69,24 @@ export type MarketBarProps = {
   ariaLabel?: string;
   className?: string;
 };
+
+/** Seconds for one symbol to travel its own width — long enough to read symbol, price, and percent. */
+export const TAPE_SECONDS_PER_SYMBOL = 8;
+/** Floor so a one-symbol tape still drifts slowly. */
+export const TAPE_MIN_SECONDS = 48;
+
+/** Loop duration. One period is one copy of the quoted strip. */
+export function tapeDurationSeconds(count: number): number {
+  const n = Number.isFinite(count) && count > 0 ? Math.floor(count) : 1;
+  return Math.max(TAPE_MIN_SECONDS, n * TAPE_SECONDS_PER_SYMBOL);
+}
+
+/** A price string. An em dash, blank, or null is not a quote. */
+export function isTapeQuote(cell: MarketBarCell): boolean {
+  if (cell.value === null) return false;
+  const value = cell.value.trim();
+  return value.length > 0 && value !== "—" && value !== "–" && value !== "-";
+}
 
 const STATUS_WORD: Record<Exclude<MarketBarStatus, "live">, string> = {
   connecting: "connecting",
@@ -164,13 +182,15 @@ export function MarketBar({
   cells,
   status,
   trailing,
-  speed = 60,
+  speed,
   defaultPaused = false,
   ariaLabel = "Market prices",
   className,
 }: MarketBarProps) {
   const [paused, setPaused] = useState(defaultPaused);
-  const empty = cells.length === 0;
+  const quoted = cells.filter(isTapeQuote);
+  const empty = quoted.length === 0;
+  const duration = speed ?? tapeDurationSeconds(quoted.length);
 
   return (
     <div
@@ -182,30 +202,30 @@ export function MarketBar({
         className,
       )}
     >
-      {status === "live" ? (
+      {empty ? (
+        <span className="mb-status-miss" aria-hidden="true" />
+      ) : status === "live" ? (
         <span className="mb-live-mark" aria-hidden="true" />
       ) : (
         <span className="shrink-0 tracking-[0.04em]">{`[${STATUS_WORD[status]}]`}</span>
       )}
 
       {empty ? (
-        <span className="min-w-0 flex-1 truncate text-ink-soft">
-          {status === "offline" ? "offline" : "connecting…"}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-ink-soft">Prices did not load.</span>
       ) : (
         <>
           <div aria-hidden="true" className="min-w-0 flex-1">
-            <Marquee className="mb-tape" speed={speed} paused={paused}>
-              {cells.map((c) => (
+            <Marquee className="mb-tape" speed={duration} paused={paused}>
+              {quoted.map((c) => (
                 <Cell key={c.symbol} cell={c} />
               ))}
             </Marquee>
           </div>
-          <p className="sr-only">{`${STATUS_SR[status]} ${cells.map(srCell).join("; ")}.`}</p>
+          <p className="sr-only">{`${STATUS_SR[status]} ${quoted.map(srCell).join("; ")}.`}</p>
         </>
       )}
 
-      {trailing ? <span className="hidden shrink-0 sm:inline">{trailing}</span> : null}
+      {empty || !trailing ? null : <span className="hidden shrink-0 sm:inline">{trailing}</span>}
 
       {empty ? null : (
         <button

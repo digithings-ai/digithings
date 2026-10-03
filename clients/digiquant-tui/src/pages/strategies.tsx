@@ -12,6 +12,7 @@ import { DANGER, INK, MUTE } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
 import { strategiesBody } from "./strategies-format";
 import { shapeLines, strategyBlocks, type PaneBody } from "./shape";
+import { strategySheetBody } from "./strategy-sheet";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 const INDEX_PATH = "/strategies";
@@ -24,6 +25,7 @@ type BlockId =
   | "st-catalog"
   | "st-deployments"
   | "st-overview"
+  | "st-tearsheet"
   | "st-parameters"
   | "st-track-record"
   | "st-runs"
@@ -36,6 +38,7 @@ const BLOCK_IDS: readonly BlockId[] = [
   "st-catalog",
   "st-deployments",
   "st-overview",
+  "st-tearsheet",
   "st-parameters",
   "st-track-record",
   "st-runs",
@@ -51,7 +54,8 @@ export type StrategyBlockBody =
   | { type: "table"; head: string[]; rows: string[][] }
   | { type: "fields"; notice: string | null; lead: string | null; lede: string | null; rows: { label: string; value: string }[] }
   | { type: "steps"; steps: { label: string; meta: string; detail: string | null }[] }
-  | { type: "track"; headline: string | null; why: string | null; rows: { label: string; value: string }[]; points: { date: string; value: string }[] };
+  | { type: "track"; headline: string | null; why: string | null; rows: { label: string; value: string }[]; points: { date: string; value: string }[] }
+  | { type: "sheet"; rows: { label: string; value: string }[]; chart: string | null; trades: string[][] };
 
 type Loaded = { result: ReadResult; data: unknown };
 
@@ -292,6 +296,10 @@ function paintDraft(data: unknown): StrategyBlockBody | null {
   return { type: "fields", notice, lead: null, lede: null, rows };
 }
 
+function paintStrategySheet(data: unknown): StrategyBlockBody {
+  return strategySheetBody(data);
+}
+
 function paint(id: BlockId, data: unknown): StrategyBlockBody | null {
   switch (id) {
     case "st-kpis":
@@ -302,6 +310,8 @@ function paint(id: BlockId, data: unknown): StrategyBlockBody | null {
       return paintDeployments(data);
     case "st-overview":
       return paintOverview(data);
+    case "st-tearsheet":
+      return paintStrategySheet(data);
     case "st-parameters":
       return paintParameters(data);
     case "st-track-record":
@@ -323,6 +333,7 @@ function paint(id: BlockId, data: unknown): StrategyBlockBody | null {
 
 /** One block body. Stub and error envelopes stay the official lines. */
 export function strategyBlockBody(id: string, data: unknown, result: ReadResult): StrategyBlockBody {
+  if (id === "st-tearsheet") return paintStrategySheet(data);
   if (result.status === "error" || result.status === "stub" || data == null) return textBody(result);
   if (!isBlockId(id)) return textBody(result);
   return paint(id, data) ?? textBody(result);

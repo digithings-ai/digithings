@@ -410,6 +410,15 @@ export {
   type LiveKpiBenchmarkPoint,
   type LivePerformanceKpis,
   type LivePerformanceKpisInput,
+  StrategyTearsheet,
+  buildStrategyTearsheet,
+  seriesOrNull,
+  seriesSparkline,
+  sheetCagr,
+  type StrategySheetBar,
+  type StrategySheetMetric,
+  type StrategySheetModel,
+  type StrategySheetPoint,
 } from "./components/finance-tearsheet";
 
 // repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed

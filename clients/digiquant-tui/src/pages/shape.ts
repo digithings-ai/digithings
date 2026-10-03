@@ -162,7 +162,8 @@ type StrategyView =
   | { type: "table"; head: string[]; rows: string[][] }
   | { type: "fields"; notice: string | null; lead: string | null; lede: string | null; rows: { label: string; value: string }[] }
   | { type: "steps"; steps: { label: string; meta: string; detail: string | null }[] }
-  | { type: "track"; headline: string | null; why: string | null; rows: { label: string; value: string }[]; points: { date: string; value: string }[] };
+  | { type: "track"; headline: string | null; why: string | null; rows: { label: string; value: string }[]; points: { date: string; value: string }[] }
+  | { type: "sheet"; rows: { label: string; value: string }[]; chart: string | null; trades: string[][] };
 
 /** Strategy blocks already name their rows. Text envelopes still go through the line shaper. */
 export function strategyBlocks(body: StrategyView, provenance: string[] = []): PaneBody {
@@ -212,6 +213,20 @@ export function strategyBlocks(body: StrategyView, provenance: string[] = []): P
           kind: "table",
           columns: ["date", "value"],
           rows: body.points.map((point) => [point.date, point.value]),
+        });
+      }
+      break;
+    }
+    case "sheet": {
+      if (body.rows.length) {
+        blocks.push({ kind: "table", columns: [], rows: body.rows.map((item) => [item.label, item.value]) });
+      }
+      if (body.chart) blocks.push({ kind: "chart", text: body.chart });
+      if (body.trades.length) {
+        blocks.push({
+          kind: "table",
+          columns: ["Direction", "Entry date", "Entry", "Exit date", "Exit", "Return"],
+          rows: body.trades,
         });
       }
       break;

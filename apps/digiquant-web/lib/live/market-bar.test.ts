@@ -88,14 +88,10 @@ describe("baseline tape", () => {
       up: true,
     };
     const cells = mergeTapeQuotes([spy!, close!], [live]);
-    expect(cells).toHaveLength(TAPE_SYMBOLS.length);
-    expect(cells.map((cell) => cell.symbol)).toEqual([...TAPE_SYMBOLS]);
+    expect(cells.map((cell) => cell.symbol)).toEqual(["SPY", "BTC-USD"]);
     expect(cells.find((cell) => cell.symbol === "SPY")?.changePct).toBeCloseTo(10);
     expect(cells.find((cell) => cell.symbol === "BTC-USD")?.price).toBe(120);
-    const qqq = cells.find((cell) => cell.symbol === "QQQ");
-    expect(qqq?.value).toBe("—");
-    expect(qqq?.changePct).toBeNull();
-    expect(qqq?.change).toBe("—");
+    expect(cells.find((cell) => cell.symbol === "QQQ")).toBeUndefined();
     const wiped = mergeTapeQuotes([close!], [{ ...live, price: Number.NaN }]);
     expect(wiped.find((cell) => cell.symbol === "BTC-USD")?.price).toBe(110);
   });

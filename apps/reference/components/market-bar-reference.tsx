@@ -8,7 +8,7 @@ import { Button } from "@digithings/ui/ui";
  * Market bar — the specimen for the shared <MarketBar/> (@digithings/ui,
  * finance-composites): the terminal status line built on the Marquee. The badge
  * reads "live" only for status live; the other states show a muted bracketed
- * word; with no cells the bar says `connecting…` and invents nothing. The strip
+ * word; with no quoted cells the bar says `Prices did not load.` and invents nothing. The strip
  * is aria-hidden with a plain-text sr summary and aria-live off; a pause control
  * stops the loop; a tick flashes a cell by opacity alone; only the signed change
  * wears the money colors. Cells here are obviously synthetic sample values, not
