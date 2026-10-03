@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { DeskFrame } from "@/components/desk/desk-frame";
 import { GloomberbTerminal } from "@/components/desk/gloomberb-terminal";
 
 export const metadata: Metadata = {
@@ -8,11 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function ToolsTerminalPage() {
-  return (
-    <main id="main" className="h-[100svh]">
-      <DeskFrame current="/tools/terminal">
-        <GloomberbTerminal />
-      </DeskFrame>
-    </main>
-  );
+  return <GloomberbTerminal />;
 }

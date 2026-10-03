@@ -3,15 +3,15 @@
 import { ProductStage } from "@/components/dashboard/product-stage";
 import { Band } from "../_chrome/Band";
 
-/** The product band, above the pipeline. The terminal and the hosted desk
+/** The product band, above the pipeline. The terminal UI and the web app
  *  stay on screen together and tour the same page. */
 export function DashboardBand() {
   return (
     <Band
       id="dashboard"
       fill
-      title="Self-hosted, or hosted"
-      takeaway="The terminal and the hosted desk are the same product."
+      title="terminal UI, or web app"
+      takeaway="The terminal UI and the web app are the same desk."
     >
       <ProductStage />
     </Band>

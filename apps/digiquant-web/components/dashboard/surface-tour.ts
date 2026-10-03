@@ -1,24 +1,29 @@
-/** Homepage desk: the shared page, and how wide each pane is. */
+/** Homepage desk: the shared page, and how the reveal handle sits. */
 
+import { deskPathFromPathname } from "@/components/desk/paths";
 import { publicCatalogPages } from "@/components/desk/public-surface";
 
 const PAGES = publicCatalogPages();
 
-export const SELF_HOSTED_TITLE = "Self-hosted";
-export const SELF_HOSTED_COPY =
-  "The terminal UI, one-to-one with the hosted desk. You run pipelines and strategies locally, host it yourself, and configure your own API tokens and local models.";
+export const TERMINAL_TITLE = "terminal UI";
+export const TERMINAL_COPY =
+  "the terminal UI, one-to-one with the web app. You run pipelines and strategies locally, host it yourself, and configure your own API tokens and local models.";
 
-export const HOSTED_TITLE = "Hosted";
-export const HOSTED_COPY =
-  "The same desk, delegated. A subscription so you do not host the infrastructure on your own machine.";
+export const WEB_TITLE = "web app";
+export const WEB_COPY =
+  "the same desk, delegated. A subscription so you do not host the infrastructure on your own machine.";
 
 export const TOUR_DWELL_MS = 4_200;
 export const IDLE_RESUME_MS = 8_000;
-export const PAGE_FADE_MS = 700;
 
-/** Both panes stay on screen. The gap cannot close either one. */
-export const SPLIT_MIN = 0.28;
-export const SPLIT_MAX = 0.72;
+/** The handle can close either side. Both frames stay full size under the clip. */
+export const SPLIT_MIN = 0;
+export const SPLIT_MAX = 1;
+
+/** Where the handle rests after the one-time sweep, so both apps are visible. */
+export const REVEAL_REST = 0.5;
+export const REVEAL_SWEEP_MS = 900;
+export const REVEAL_RETURN_MS = 600;
 
 export const WEB_EMPTY_COPY =
   "The web app did not load. This frame stays empty. No figures are filled in.";
@@ -34,10 +39,7 @@ export function nextTerminalPath(current: string): string {
 
 /** `/app` and `/app/brief/` are the brief. Anything else keeps its desk path. */
 export function deskPathFromLocation(pathname: string): string {
-  const bare = pathname.replace(/\/+$/, "") || "/";
-  if (bare === "/app") return "/brief";
-  if (bare.startsWith("/app/")) return bare.slice("/app".length) || "/brief";
-  return bare.startsWith("/") ? bare : `/${bare}`;
+  return deskPathFromPathname(pathname);
 }
 
 /** Next real desk route when the sidebar has not listed pages yet. */
@@ -54,15 +56,30 @@ export function prevTerminalPath(current: string): string {
 }
 
 export function clampSplit(share: number): number {
-  if (Number.isNaN(share)) return 0.5;
+  if (Number.isNaN(share)) return REVEAL_REST;
   return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, share));
 }
 
-/** Left-pane fraction for a pointer on the stage. `gap` is the center column. */
-export function splitFromPointer(clientX: number, left: number, width: number, gap = 0): number {
-  const usable = width - gap;
-  if (usable <= 0) return 0.5;
-  return clampSplit((clientX - left - gap / 2) / usable);
+/** Terminal-side fraction for a pointer on the stage. The handle may sit on either edge. */
+export function splitFromPointer(clientX: number, left: number, width: number): number {
+  if (width <= 0) return REVEAL_REST;
+  return clampSplit((clientX - left) / width);
+}
+
+/** The sentence is placed only when its full width fits the visible slice. */
+export function sentenceFits(textWidth: number, visibleWidth: number): boolean {
+  if (!Number.isFinite(textWidth) || !Number.isFinite(visibleWidth) || visibleWidth <= 0) return false;
+  return Math.ceil(textWidth) <= Math.floor(visibleWidth);
+}
+
+/** One sweep from the left edge to the right edge, then back to the resting split. */
+export function revealShare(elapsedMs: number, reduced: boolean): number {
+  if (reduced || !Number.isFinite(elapsedMs)) return REVEAL_REST;
+  if (elapsedMs <= 0) return 0;
+  if (elapsedMs < REVEAL_SWEEP_MS) return elapsedMs / REVEAL_SWEEP_MS;
+  const back = elapsedMs - REVEAL_SWEEP_MS;
+  if (back >= REVEAL_RETURN_MS) return REVEAL_REST;
+  return 1 + (REVEAL_REST - 1) * (back / REVEAL_RETURN_MS);
 }
 
 export type WiderSide = Surface | "even";
@@ -72,20 +89,6 @@ export function widerSide(share: number): WiderSide {
   if (share > 0.5) return "terminal";
   if (share < 0.5) return "web";
   return "even";
-}
-
-/** Pages mounted together so the outgoing page can fade while the next one loads. */
-export function paneLayers(
-  settled: string,
-  path: string,
-  leaving: string | null,
-  preload: string | null,
-): string[] {
-  const layers: string[] = [];
-  for (const item of [leaving, settled, path, preload]) {
-    if (item && !layers.includes(item)) layers.push(item);
-  }
-  return layers;
 }
 
 function routePath(href: string): string {
