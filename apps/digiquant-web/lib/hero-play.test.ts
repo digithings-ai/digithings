@@ -51,6 +51,8 @@ describe("digiquant hero play", () => {
     const html = renderToStaticMarkup(createElement(QuantWordmark));
     expect(html).toContain('aria-label="digiquant"');
     expect(html).toContain("dq-rise");
+    expect(html).toContain("var(--up)");
+    expect(html).toContain("var(--down)");
     expect(html).toContain("data-dq-build");
     expect(html).not.toContain("data-dq-live");
     const idle = renderToStaticMarkup(createElement(QuantWordmark, { phase: "idle" }));

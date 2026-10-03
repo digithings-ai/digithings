@@ -1,3 +1,5 @@
+import { DIGIQUANT_CHART } from "@digithings/ui/chart-scale";
+
 /** Shared clock for the hero's build-in. The wordmark's pixel columns and the chart's
  *  construct both use this module; wordmark columns still rise on BUILD_* below. */
 
@@ -94,15 +96,16 @@ export type HeroStroke = { color: string; points: HeroPoint[] };
 
 export type HeroOverlay = "bollinger-bands" | "vwap" | "supertrend";
 
-/** Match the native inputs QuantField adds when the sweep hands off. */
-export const SMA_COLOR = "#E8F7FF"; // canon-allow: hero SMA stroke
-export const EMA_COLOR = "#F5C16C"; // canon-allow: hero EMA stroke
+/** Match the native inputs QuantField adds when the sweep hands off.
+ *  Colors are the kit chart scale (digiquant up / down), not a second pair. */
+export const SMA_COLOR = DIGIQUANT_CHART.sma;
+export const EMA_COLOR = DIGIQUANT_CHART.ema;
 export const SMA_LENGTH = 20;
 export const EMA_LENGTH = 50;
-const BB_BASIS = "#ff9800"; // canon-allow: hero Bollinger basis
-const BB_BAND = "#5b9cf6"; // canon-allow: hero Bollinger band
-const LINE_UP = "#089981";
-const LINE_DOWN = "#f23645"; // canon-allow: hero line down
+const BB_BASIS = DIGIQUANT_CHART.bollingerBasis;
+const BB_BAND = DIGIQUANT_CHART.bollingerBand;
+const LINE_UP = DIGIQUANT_CHART.supertrendUp;
+const LINE_DOWN = DIGIQUANT_CHART.supertrendDown;
 
 function finiteRun(bars: readonly HeroBar[], values: readonly number[]): HeroPoint[][] {
   const runs: HeroPoint[][] = [];
@@ -224,7 +227,7 @@ function vwapStrokes(bars: readonly HeroBar[]): HeroStroke[] {
     }
     if (cumV > 0) values[i] = cumPV / cumV;
   }
-  return finiteRun(bars, values).map((points) => ({ color: LINE_UP, points }));
+  return finiteRun(bars, values).map((points) => ({ color: DIGIQUANT_CHART.vwap, points }));
 }
 
 /** Wilder SuperTrend, ATR 10 × 3 — the same recurrence Vela's native uses. */
@@ -296,8 +299,8 @@ export function heroOverlayInputs(overlay: HeroOverlay): Record<string, number |
   return {
     anchor: "Session",
     source: "HLC3",
-    bullColor: LINE_UP,
-    bearColor: LINE_UP,
+    bullColor: DIGIQUANT_CHART.vwap,
+    bearColor: DIGIQUANT_CHART.vwap,
     band1: false,
     fill: false,
   };

@@ -14,14 +14,14 @@ import {
   type CommandHit,
 } from "./command";
 import { COLS, ROWS, nudge, type Layout } from "./grid";
-import { MARK_COLS, MARK_ROWS, glintCell, markElapsed, markLines, revealedColumns } from "./mark";
+import { MARK_COLS, MARK_ROWS, REVEAL_MS, glintCell, markDirection, markElapsed, markLines, revealedColumns } from "./mark";
 import { BriefPage } from "./pages/brief";
 import { PipelinePage } from "./pages/pipeline";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
 import { deskForPath, railLine } from "./rail";
 import { readBlock, type ReadResult } from "./read";
-import { ACCENT, BG, DANGER, HAIR, HAIR_STRONG, INK, MUTE, SOFT, WASH } from "./theme";
+import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 const STATUS = process.env.DQ_TUI_STATUS;
@@ -45,17 +45,28 @@ function PixelMark() {
     return () => clearInterval(timer);
   }, []);
   const elapsed = markElapsed(now);
+  const revealing = elapsed < REVEAL_MS;
   const lines = markLines(revealedColumns(elapsed));
   const glint = glintCell(elapsed);
   return (
     <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
       {lines.map((line, row) => (
         <text key={row}>
-          {[...line].map((ch, col) => (
-            <span key={col} fg={glint && glint.row === row && glint.col === col ? ACCENT : INK}>
-              {ch}
-            </span>
-          ))}
+          {[...line].map((ch, col) => {
+            const glinting = glint !== null && glint.row === row && glint.col === col;
+            const fg = glinting
+              ? ACCENT
+              : revealing && ch !== " "
+                ? markDirection(row, col) === "up"
+                  ? UP
+                  : DOWN
+                : INK;
+            return (
+              <span key={col} fg={fg}>
+                {ch}
+              </span>
+            );
+          })}
         </text>
       ))}
     </box>

@@ -179,6 +179,7 @@
   --up:   var(--accent-digiquant);
   --down: #E5533E;
   --warn: #E0B341;
+  /* Chart roles sit on this pair. See the shared block below :root[data-theme]. */
 
   /* Returns-matrix cell ink (finance-tearsheet.css). The heatmap wash is
      --up/--down over --surface, so the cell text has to clear AA against the
@@ -261,6 +262,7 @@
   --up:   #0C7C71;
   --down: #B2452E;
   --warn: #8F6220;
+  /* Chart roles sit on this pair. See the shared block below :root[data-theme]. */
 
   /* Non-financial danger/error/destructive red — see the dark-theme comment
      above (named --danger, not --destructive, for the same shadcn-collision
@@ -327,6 +329,24 @@
 
 /* Shared (theme-independent) tokens for the redesign. */
 :root[data-theme] {
+  /* Chart roles for candles, volume, and the hero studies. Each one aliases
+     the --up / --down pair declared beside it in the theme blocks above
+     (dark phosphor #3DD6C4 / #E5533E, light paper #0C7C71 / #B2452E).
+     Grid and axis stay on the neutral hair and mute tokens. */
+  --chart-candle-up: var(--up);
+  --chart-candle-down: var(--down);
+  --chart-volume-up: var(--up);
+  --chart-volume-down: var(--down);
+  --chart-sma: var(--up);
+  --chart-ema: var(--down);
+  --chart-vwap: var(--up);
+  --chart-bollinger: var(--down);
+  --chart-bollinger-band: var(--up);
+  --chart-supertrend-up: var(--up);
+  --chart-supertrend-down: var(--down);
+  --chart-grid: var(--hair);
+  --chart-axis: var(--ink-mute);
+
   /* ruled 2026-07-08 (promoted from design-reference): research · portfolio · execution
      name backend langgraphs, not colored products — on redesigned surfaces
      their accents collapse to ink so any scope, livery, or stale persisted

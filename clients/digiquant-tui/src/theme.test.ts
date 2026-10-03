@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { ACCENT, BG, DANGER, HAIR, HAIR_STRONG, INK, MUTE, SOFT, WASH, hairOnBlack } from "./theme";
+import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH, hairOnBlack } from "./theme";
 
 function sources(dir: string): string[] {
   const out: string[] = [];
@@ -25,6 +25,7 @@ test("terminal colors are the web desk tokens", () => {
   expect(dark).toMatch(/--ink-soft:\s+#9AA0A6/);
   expect(dark).toMatch(/--ink-mute:\s+#7D8389/);
   expect(dark).toMatch(/--accent:\s+#3DD6C4/);
+  expect(dark).toMatch(/--down:\s+#E5533E/);
   expect(dark).toMatch(/--danger:\s+#E94959/);
   expect(dark).toMatch(/--hair:\s+rgba\(255,\s*255,\s*255,\s*0\.09\)/);
   expect(dark).toMatch(/--hair-2:\s+rgba\(255,\s*255,\s*255,\s*0\.15\)/);
@@ -34,6 +35,8 @@ test("terminal colors are the web desk tokens", () => {
   expect(SOFT).toBe("#9AA0A6");
   expect(MUTE).toBe("#7D8389");
   expect(ACCENT).toBe("#3DD6C4");
+  expect(UP).toBe("#3DD6C4");
+  expect(DOWN).toBe("#E5533E");
   expect(DANGER).toBe("#E94959");
   expect(BG).toBe("#000000");
   expect(HAIR).toBe(hairOnBlack(0.09));

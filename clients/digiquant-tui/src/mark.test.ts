@@ -9,6 +9,7 @@ import {
   MARK_WORD,
   REVEAL_MS,
   glintCell,
+  markDirection,
   markElapsed,
   markFilled,
   markLines,
@@ -84,4 +85,17 @@ test("the reveal plays once per process, then one cell glints", () => {
   expect(markElapsed(5_000)).toBe(0);
   expect(markElapsed(5_000 + 40)).toBe(40);
   expect(markElapsed(5_000 + REVEAL_MS + 10)).toBe(REVEAL_MS + 10);
+});
+
+test("the reveal mixes up and down across the filled cells", () => {
+  const seen = new Set<"up" | "down">();
+  const lines = markLines();
+  for (let row = 0; row < lines.length; row++) {
+    const line = lines[row] ?? "";
+    for (let col = 0; col < line.length; col++) {
+      if (line[col] === " ") continue;
+      seen.add(markDirection(row, col));
+    }
+  }
+  expect(seen).toEqual(new Set(["up", "down"]));
 });

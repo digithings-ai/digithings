@@ -6,7 +6,10 @@ import { HERO_PLAYED_KEY, nextHeroLive, type HeroGateView } from "@/lib/hero-pla
 
 /** Pixel lockup for the hero: DIGIQUANT drawn in square cells that grow up from
  *  the baseline, left to right, like bars of a bar chart building the word.
- *  A few cells glint in the accent afterwards and strays flicker once. No CSS
+ *  The rise mixes digiquant up and down so the word reads as price moving
+ *  both ways, then settles to ink. A few cells glint in the accent afterwards
+ *  and strays flicker once. A later load in the tab keeps only that glint.
+ *  No CSS
  *  classes: animations are inline, keyframes live in globals.css, and
  *  [data-dq-anim] switches them off under reduced motion. */
 
@@ -62,12 +65,14 @@ function build(): { letters: Cell[]; strays: Cell[] } {
             transformOrigin: "50% 100%",
             animation: glint ? `${rise}, ${glintAnim}` : rise,
             ["--dq-glint" as string]: glintAnim,
+            ["--dq-cell" as string]: rand() < 0.5 ? "var(--up)" : "var(--down)",
           } as CSSProperties,
         });
       }
     }
     x += 9;
   }
+  mixDirections(letters);
   const strays: Cell[] = [];
   while (strays.length < 60) {
     const px = Math.floor(rand() * WIDTH);
@@ -81,10 +86,27 @@ function build(): { letters: Cell[]; strays: Cell[] } {
       style: {
         opacity: 0,
         animation: `dq-stray ${60 + Math.floor(rand() * 140)}ms linear ${Math.floor(rand() * 1400)}ms backwards`,
+        ["--dq-cell" as string]: rand() < 0.5 ? "var(--up)" : "var(--down)",
       },
     });
   }
+  mixDirections(strays);
   return { letters, strays };
+}
+
+function cellTone(cell: Cell): string {
+  return String((cell.style as Record<string, string>)["--dq-cell"] ?? "");
+}
+
+/** The rise has to show both sides of the pair, not a run of one color. */
+function mixDirections(cells: Cell[]) {
+  if (cells.length < 2) return;
+  if (!cells.some((cell) => cellTone(cell) === "var(--up)")) {
+    (cells[0].style as Record<string, string>)["--dq-cell"] = "var(--up)";
+  }
+  if (!cells.some((cell) => cellTone(cell) === "var(--down)")) {
+    (cells[1].style as Record<string, string>)["--dq-cell"] = "var(--down)";
+  }
 }
 
 const CELLS = build();

@@ -207,6 +207,8 @@ export {
   PRICE_CHART_DEMO,
   EQUITY_CURVE_DEMO,
   DRAWDOWN_DEMO,
+  DIGIQUANT_CHART,
+  readDigiquantChartScale,
   type PriceChartProps,
   type EquityCurveProps,
   type DrawdownPlotProps,
@@ -218,6 +220,7 @@ export {
   type ChartTip,
   type UseLightweightChartConfig,
   type UseLightweightChartResult,
+  type DigiquantChartScale,
 } from "./components/finance-charts";
 
 // finance-composites family (#1450)

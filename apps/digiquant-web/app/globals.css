@@ -45,12 +45,13 @@
    rects carry inline animations; [data-dq-anim] lets reduced motion switch them
    off. Keyframes only, no classes. */
 @keyframes dq-rise {
-  from { opacity: 0; transform: scaleY(0); }
-  to { opacity: 1; transform: scaleY(1); }
+  from { opacity: 0; transform: scaleY(0); fill: var(--dq-cell, var(--up)); }
+  72% { fill: var(--dq-cell, var(--up)); }
+  to { opacity: 1; transform: scaleY(1); fill: currentColor; }
 }
 @keyframes dq-stray {
-  0%, 100% { opacity: 0; }
-  1%, 99% { opacity: 0.25; }
+  0%, 100% { opacity: 0; fill: var(--dq-cell, var(--up)); }
+  1%, 99% { opacity: 0.25; fill: var(--dq-cell, var(--up)); }
 }
 @keyframes dq-glint {
   0% { fill: var(--accent); }
@@ -145,7 +146,7 @@ body {
 .hero-construct__x,
 .hero-construct__y {
   fill: none;
-  stroke: #5a6570;
+  stroke: var(--chart-axis, var(--ink-mute));
   stroke-width: 0.35;
   stroke-linecap: square;
   vector-effect: non-scaling-stroke;
@@ -162,7 +163,7 @@ body {
 }
 .hero-construct__grid {
   fill: none;
-  stroke: #1a1f24;
+  stroke: var(--chart-grid, var(--hair));
   stroke-width: 0.2;
   vector-effect: non-scaling-stroke;
   opacity: 0;

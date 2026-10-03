@@ -71,7 +71,7 @@ export function Candles({ bars, height = 160 }: { bars: Bar[]; height?: number }
       </svg>
       {vmax > 0 ? (
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ height: 28 }} role="img" aria-label="volume">
-          {ok.map((b, i) => (fin(b.v) ? <rect key={`${b.t}:${i}`} x={i * w + w * 0.2} width={w * 0.6} y={100 - (b.v / vmax) * 100} height={(b.v / vmax) * 100} fill="var(--ink-mute)" /> : null))}
+          {ok.map((b, i) => (fin(b.v) ? <rect key={`${b.t}:${i}`} x={i * w + w * 0.2} width={w * 0.6} y={100 - (b.v / vmax) * 100} height={(b.v / vmax) * 100} fill={b.c >= b.o ? "var(--up)" : "var(--down)"} /> : null))}
         </svg>
       ) : null}
       <div className="chart-x mono"><span>{ok[0].t}</span><span>{ok[ok.length - 1].t}</span></div>
