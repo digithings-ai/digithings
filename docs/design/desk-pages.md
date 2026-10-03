@@ -7,7 +7,7 @@ The component set is the gloomberb pane body (stat, then table or chart, then an
 Invite-only desks are not on this list. Do not invent rows, prices, or sessions.
 
 - [x] `/brief` Brief — stat (NAV, day, since inception, invested, overlay) and a session table when `session_events` has rows. Live marks: stat, plus a symbol table when `universe` has names. Decision: the lead and body, or the empty sentence. Signals, risks, and movers: a table, or the empty sentence. Run health: a stat, or the empty sentence. No chart: none of these reads return a series.
-- [ ] `/portfolio` Portfolio — stat from the envelope (NAV tip, invested, cash). Sleeves: table. Movers: table. Book: table from allocation rows. NAV: chart from `points` when that array has two or more values, otherwise the empty sentence, plus the point table. Drawdown: stat (max, current) and a chart only when `series` has values.
+- [x] `/portfolio` Portfolio — stat from the envelope (NAV tip, invested, cash). Sleeves: table. Movers: table. Book: table from allocation rows. NAV: chart from `points` when that array has two or more values, otherwise the empty sentence, plus the point table. Drawdown: stat (max, current) and a chart only when `series` has values.
 - [ ] `/portfolio/holdings` Holdings — table of the enriched book rows, or the empty sentence.
 - [ ] `/portfolio/attribution` Attribution — table of sleeves and names, or the empty sentence.
 - [ ] `/portfolio/ledger` Ledger — table of position events, and a cash table, or the empty sentence for a block with no rows.
