@@ -16,6 +16,12 @@ test("the header is mark, then desk, then the path field", () => {
   expect(src).not.toContain("#14120f");
   expect(src).not.toContain("FX Hub");
   expect(src).not.toContain("12x");
+  const headerEnd = src.indexOf('border={["bottom"]}');
+  const overlay = src.indexOf('position="absolute" top={0} left={0} width="100%" zIndex={8}');
+  const hits = src.indexOf("<PathHits");
+  expect(headerEnd).toBeGreaterThan(mark);
+  expect(overlay).toBeGreaterThan(headerEnd);
+  expect(hits).toBeGreaterThan(overlay);
 });
 
 test("the readme describes the web desk header", () => {

@@ -1,5 +1,7 @@
 /** Pixel DIGIQUANT lockup. Same cells as the web hero (`QuantWordmark`):
  *  nine glyphs, seven columns each, two columns of gap, ten rows.
+ *  The desk header packs eight of those rows into two braille rows so the
+ *  mark sits with the web bar (`h-[14px]` inside `h-8`), on the left.
  *  The columns fill once per process, then one cell glints. */
 
 const GLYPHS: Record<string, string[]> = {
@@ -17,20 +19,22 @@ export const MARK_GLYPHS = GLYPHS;
 export const MARK_WORD = "DIGIQUANT";
 export const MARK_PIXEL_W = MARK_WORD.length * 9 - 2;
 export const MARK_PIXEL_H = 10;
+/** Source rows kept in the header. Four samples per braille row. */
+export const MARK_SAMPLE_Y = [0, 1, 3, 4, 5, 6, 8, 9] as const;
 export const MARK_COLS = Math.ceil(MARK_PIXEL_W / 2);
-export const MARK_ROWS = Math.ceil(MARK_PIXEL_H / 2);
+export const MARK_ROWS = MARK_SAMPLE_Y.length / 4;
 /** One left-to-right pass, about as long as the web rise. */
 export const REVEAL_MS = 1860;
 export const GLINT_EVERY_MS = 6400;
 export const GLINT_MS = 160;
 
-/** Quadrant cells, index = UL<<3 | UR<<2 | LL<<1 | LR. Two pixel rows per cell. */
-const QUADS = [
-  " ", "▗", "▖", "▄",
-  "▝", "▐", "▞", "▟",
-  "▘", "▚", "▌", "▙",
-  "▀", "▜", "▛", "█",
-];
+/** Braille dots, two source columns by four sampled rows. Blank stays a space. */
+const BRAILLE_DOTS = [
+  [0x01, 0x08],
+  [0x02, 0x10],
+  [0x04, 0x20],
+  [0x40, 0x80],
+] as const;
 
 export function markFilled(x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= MARK_PIXEL_W || y >= MARK_PIXEL_H) return false;
@@ -44,8 +48,7 @@ export function markFilled(x: number, y: number): boolean {
   return false;
 }
 
-/** The hero, packed so it sits in the top-right corner of a terminal row.
- *  `limit` is how many pixel columns have filled. The default is the whole word. */
+/** The header mark. `limit` is how many pixel columns have filled. */
 export function markLines(limit = MARK_PIXEL_W): string[] {
   const cap = Math.max(0, Math.min(MARK_PIXEL_W, Math.floor(limit)));
   const lines: string[] = [];
@@ -53,13 +56,14 @@ export function markLines(limit = MARK_PIXEL_W): string[] {
     let line = "";
     for (let col = 0; col < MARK_COLS; col++) {
       const x = col * 2;
-      const y = row * 2;
       let bits = 0;
-      if (x < cap && markFilled(x, y)) bits |= 8;
-      if (x + 1 < cap && markFilled(x + 1, y)) bits |= 4;
-      if (x < cap && markFilled(x, y + 1)) bits |= 2;
-      if (x + 1 < cap && markFilled(x + 1, y + 1)) bits |= 1;
-      line += QUADS[bits] ?? " ";
+      for (let i = 0; i < BRAILLE_DOTS.length; i++) {
+        const y = MARK_SAMPLE_Y[row * 4 + i] ?? -1;
+        const dot = BRAILLE_DOTS[i] ?? [0, 0];
+        if (x < cap && markFilled(x, y)) bits |= dot[0];
+        if (x + 1 < cap && markFilled(x + 1, y)) bits |= dot[1];
+      }
+      line += bits === 0 ? " " : String.fromCharCode(0x2800 + bits);
     }
     lines.push(line);
   }

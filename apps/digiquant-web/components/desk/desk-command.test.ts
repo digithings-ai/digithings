@@ -60,4 +60,13 @@ describe("desk slash field", () => {
     expect(css).toContain(".cmd-list");
     expect(css).not.toMatch(/\.cmd[^\n]*cursor\s*:/);
   });
+
+  it("opens the page list over the desk", () => {
+    const frame = readFileSync(new URL("./desk-frame.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    expect(frame).toContain("relative z-20");
+    expect(frame).toContain("h-8");
+    expect(css).toMatch(/\.cmd-list\s*\{[^}]*position:\s*absolute/s);
+    expect(css).not.toMatch(/\.cmd-list\s*\{[^}]*position:\s*static/s);
+  });
 });

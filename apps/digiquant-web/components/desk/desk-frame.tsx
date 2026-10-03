@@ -12,7 +12,7 @@ export function DeskFrame({ current, children }: { current: string; children: Re
   return (
     <DeskAccess>
       <div className="flex h-full min-h-0 flex-col bg-black font-mono text-ink">
-        <header className="flex h-8 shrink-0 items-center gap-3 border-b border-hair px-3 text-[0.7rem]">
+        <header className="relative z-20 flex h-8 shrink-0 items-center gap-3 border-b border-hair px-3 text-[0.7rem]">
           <Link href="/" className="inline-flex shrink-0 items-center text-ink">
             <QuantWordmark className="block h-[14px] w-auto fill-current text-ink" />
           </Link>
