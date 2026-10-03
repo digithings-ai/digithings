@@ -219,8 +219,9 @@ redact_mapping(
 ) -> dict[str, Any]
 ```
 Returns a deep copy of `payload` with any key whose lowercase form contains a
-redact substring replaced by `"[REDACTED]"`. Recurses into nested dicts and lists.
-If `redact` is `None`, the default substrings are used.
+redact substring replaced by `"[REDACTED]"`. Recurses into nested dicts, lists,
+and tuples (a tuple is written as a JSON array, so leaving it unwalked would
+persist the secret). If `redact` is `None`, the default substrings are used.
 
 ```python
 class AuditEvent(BaseModel):  # pydantic v2, extra=forbid
@@ -404,8 +405,10 @@ already hold a `supabase.Client`.
 (default 500), and is idempotent when `on_conflict` names the row's unique
 key(s). Client/transport errors are caught and surfaced as
 `SupabaseWriteResult(success=False, error=...)` rather than raised — matching
-a per-write success/error result rather than raising. `select` composes PostgREST filters
-(logical AND) and returns decoded `response.data`; failures surface as
+a per-write success/error result rather than raising. `rows` on that failure
+is the number of rows whose batches already executed (earlier chunks are not
+rolled back); a failure on the first batch reports `rows=0`. `select` composes
+PostgREST filters (logical AND) and returns decoded `response.data`; failures surface as
 `SupabaseReadResult(success=False, error=...)`.
 
 **Audit (security).** Every successful upsert emits one redacted audit line via
