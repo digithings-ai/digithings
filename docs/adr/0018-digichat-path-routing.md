@@ -45,7 +45,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 
 - Cloudflare Pages `digithings-ai`: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai`; `_headers` `frame-src` allows that origin.
 - digichat Container: `DIGICHAT_EMBED_HOSTS`, `DIGICHAT_EMBED_TENANTS` (digithings + occ → `digigraph` with OCC `digisearchIndex: occ_help` + `vaultPathPrefix`); `DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai`, `DIGIKEY_URL=https://key.digithings.ai`, digikey BFF secrets.
-- Profile A stack Container: public `graph.` / `key.` / `search.` hostnames (`search.digithings.ai` → digisearch `:8002`, JWT `digisearch:query`); digivault and LiteLLM stay loopback-only. See [`apps/digithings-stack-cloudflare/`](../../apps/digithings-stack-cloudflare/README.md).
+- Profile A stack Container: see [`apps/digithings-stack-cloudflare/`](../../apps/digithings-stack-cloudflare/README.md).
 - Runbook: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
 
 ## Consequences
