@@ -137,7 +137,8 @@ The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any si
    `recordings/dict-<UTC stamp>-<8 hex>.wav`.
 2. **Transcribe** (`transcribe.py`). `whisper-cli` (or the `whisper-cpp` alias) with
    `-m <model> -f <wav> -l en -nt` (multilingual catalog models use `-l auto`). The
-   model is the selected local file: the weights under `models_dir`, an absolute path
+   model is the saved `stt_model` (default `ggml-base.en` when nothing is saved):
+   the weights under `models_dir`, an absolute path
    (that file, not a same-named file under `models_dir`), or the same filename already
    installed under LM Studio, Ollama (`OLLAMA_MODELS`), or MLX Studio (case does not
    matter). A missing file raises `model <id> is not installed locally: <path>`,
@@ -220,9 +221,13 @@ the wav path, the paste result, and the history path all go to stderr.
    or `--selection` (macOS, in order: focused element's Accessibility selected
    text in the captured app when `--focus-name` / `--focus-bundle` is set, else the
    frontmost app; then Ghostty's selection pasteboard when that target is Ghostty;
-   then Cmd+C via osascript only when the clipboard *changes*. A captured app is
-   activated before that Command-C, with the same argv rule as paste: no leading
-   dash. Linux: primary),
+   then Cmd+C via osascript. When `pbcopy` is available a private marker is written
+   first, and the copy counts only when the clipboard then differs from that marker,
+   including a selection that was already on the clipboard. The marker is never
+   spoken. If the clipboard is still the marker, nothing was selected: the previous
+   clipboard is restored and is not spoken. Without `pbcopy`, the copy counts only
+   when the clipboard changes. A captured app is activated before that Command-C,
+   with the same argv rule as paste: no leading dash. Linux: primary),
    or `--clipboard-or-history` (clipboard only; **no** history fallback — not the hotkey path).
    Hammerspoon speak uses `--selection`.
 2. **Piper** (`speak.py`). `piper --model <voice.onnx> --output_file <speak-…wav>` with text
@@ -243,14 +248,16 @@ the wav path, the paste result, and the history path all go to stderr.
 
 | Frontmost app | Step 1: AX selected text | Step 2: Ghostty pasteboard | Step 3: Cmd+C change-detect |
 | --- | --- | --- | --- |
-| Ghostty | Miss (terminal grid exposes no `AXSelectedText`; osascript's `missing value` is filtered, never spoken) | **Hit** — `pbpaste -pboard com.mitchellh.ghostty.selection` (copy-on-select) | Fallback when the selection pasteboard is empty (otherwise never reached; clipboard untouched) |
+| Ghostty | Miss (terminal grid exposes no `AXSelectedText`; osascript's `missing value` is filtered, never spoken) | **Hit** — `pbpaste -pboard com.mitchellh.ghostty.selection` (copy-on-select) | Fallback when the selection pasteboard is empty (otherwise never reached; general clipboard untouched) |
 | TextEdit / Notes / Mail (NSText) | **Hit** — focused text view's `AXSelectedText` in the captured app | Skipped (not Ghostty) | Fallback: activate that app, then Cmd+C |
 | Safari / Chrome | Hit in text fields; miss on page content | Skipped | **Hit** — activate the captured app, then Cmd+C |
 | Grok Bot / other apps | Hit when a text field holds the selection | Skipped | **Hit** — activate the captured app, then Cmd+C |
 
-An unchanged general clipboard at step 3 is empty selection, never readout:
-leftover dictation or coding replies are not spoken, and no `kind:dict` history
-is consulted. Every step fails soft to the next; all three empty is exit 1.
+Step 3 speaks the text Command-C wrote after the marker, not whatever was already
+on the clipboard. A clipboard that is still the marker is empty selection: the
+previous clipboard is put back and is not spoken. Leftover dictation or coding
+replies are not spoken, and no `kind:dict` history is consulted. Every step fails
+soft to the next; all three empty is exit 1.
 
 stdout is the spoken text. Missing piper, voice, player, or empty selection → exit 1,
 one line on stderr. Hotkey (`--selection`) soft-fails when nothing is selected — never
@@ -276,7 +283,7 @@ Required for exit 0:
 
 | id | Ready when |
 | --- | --- |
-| `whisper-cli` | Executable on `PATH` |
+| `whisper-cli` | `whisper-cli` or the `whisper-cpp` alias on `PATH`, otherwise `~/.local/bin/whisper-cli` |
 | `piper` | Executable on `PATH`, otherwise `~/.local/bin/piper` |
 | `capture` | `sox` or `ffmpeg` on `PATH` |
 | `models` | Models directory exists and contains the configured STT file (default `ggml-base.en.bin`) |
