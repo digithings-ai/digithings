@@ -8,11 +8,11 @@ import pytest
 from digivoice.history import append_entry, dict_entry
 from digivoice.opentui import opentui_argv
 from digivoice.paths import resolve_paths
-from digivoice.settings import load_settings
+from digivoice.settings import load_settings, save_settings
 from digivoice.status import system_log_path
 from digivoice.tui_bridge import cancel_download, dispatch, run_download
 
-from tests.dvo.fakes import FakeProbe, FakeRunner
+from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
 
 pytestmark = pytest.mark.unit
 
@@ -292,6 +292,7 @@ def test_bridge_restart_does_not_stop_and_update_stays_a_note(tmp_path: Path) ->
     )
     assert "digivoice update" in update["note"]
     assert "failed" in update["note"]
+    assert update["ok"] is False
     assert "not wired yet" not in update["note"]
     assert "stopped" not in update
     assert "exit" not in update
@@ -526,5 +527,102 @@ def test_bridge_update_exception_is_a_note(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr("digivoice.tui_bridge.run_install", boom)
     update = dispatch({"op": "update"}, platform="linux", home=tmp_path, env=_env(tmp_path))
     assert update["note"] == "update broke"
+    assert update["ok"] is False
     assert "exit" not in update
     assert "stopped" not in update
+
+
+def test_chooser_opens_on_the_saved_row(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    current = load_settings(paths)
+    save_settings(
+        paths,
+        current.model_copy(update={"paste_on_stop": False, "banner_position": "center"}),
+    )
+    model = dispatch(
+        {"op": "rows", "path": "/settings/speech/model"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert model["rows"][model["selected"]]["choice"] == "ggml-base.en"
+    paste = dispatch(
+        {"op": "rows", "path": "/settings/speech/paste"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert paste["rows"][paste["selected"]]["choice"] == "off"
+    position = dispatch(
+        {"op": "rows", "path": "/settings/banner/position"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert position["rows"][position["selected"]]["choice"] == "center"
+
+
+def test_catalog_copy_under_mlx_is_selected_not_downloaded(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    weight = tmp_path / ".mlxstudio" / "models" / "whisper" / "GGML-tiny.en.bin"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"tiny")
+    voice = tmp_path / ".lmstudio" / "models" / "en_US-amy-medium.onnx"
+    voice.parent.mkdir(parents=True)
+    voice.write_bytes(b"amy")
+    rows = dispatch(
+        {"op": "rows", "path": "/settings/speech/model"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    index = next(i for i, row in enumerate(rows) if row["path"].endswith("ggml-tiny.en"))
+    assert rows[index]["downloaded"] is True
+    saved = dispatch(
+        {"op": "apply", "path": "/settings/speech/model", "index": index},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert saved.get("download") is not True
+    assert saved["stay"] is True
+    paths = resolve_paths("linux", tmp_path, env)
+    assert load_settings(paths).stt_model == "ggml-tiny.en"
+    assert weight.read_bytes() == b"tiny"
+    voices = dispatch(
+        {"op": "rows", "path": "/settings/speech/voice"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    amy = next(i for i, row in enumerate(voices) if row["choice"] == "en_US-amy-medium.onnx")
+    assert voices[amy]["downloaded"] is True
+    picked = dispatch(
+        {"op": "apply", "path": "/settings/speech/voice", "index": amy},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert picked.get("download") is not True
+    assert picked["stay"] is True
+    assert load_settings(paths).tts_voice == "en_US-amy-medium.onnx"
+
+
+def test_reload_failure_is_not_reported_as_success(tmp_path: Path) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    hs = bindir / "hs"
+    hs.write_text("#!/bin/sh\n", encoding="utf-8")
+    hs.chmod(0o755)
+    env = {"DIGIVOICE_DATA_DIR": str(tmp_path), "PATH": str(bindir)}
+    result = dispatch(
+        {"op": "reload"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+        runner=FakeRunner(responses={"hs": FakeReply(code=1, stderr="nope")}),
+    )
+    assert result["ok"] is False
+    assert "reload failed" in result["note"]
+    assert "reloaded" not in result["note"]

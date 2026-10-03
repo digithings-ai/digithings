@@ -1290,6 +1290,117 @@ test("history logs and doctor stay inside the page", async () => {
   }
 })
 
+test("a chooser opens on the saved row", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    rows(request) {
+      if (request.path === "/settings") {
+        return {
+          path: request.path,
+          rows: [{ action: "speech", path: "/settings/speech", meta: "", kind: "dir", name: "speech" }],
+        }
+      }
+      if (request.path === "/settings/speech") {
+        return { path: request.path, rows: SPEECH_ROWS }
+      }
+      return {
+        path: request.path,
+        selected: 1,
+        rows: [
+          { action: "Tiny", name: "Tiny", path: `${request.path}/ggml-tiny.en`, meta: "English", kind: "choice" },
+          { action: "Base", name: "Base", path: `${request.path}/ggml-base.en`, meta: "English", kind: "choice" },
+        ],
+      }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("│ /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/speech"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("/model"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("│ Base"))
+    const frame = setup.captureCharFrame()
+    assert.match(frame, /│ Base/)
+    assert.doesNotMatch(frame, /│ Tiny/)
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("a failed reload shows the report", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    system() {
+      return {
+        title: "System",
+        path: "/system",
+        rows: [{ action: "Reload", path: "/reload", meta: "", kind: "dir", name: "Reload" }],
+      }
+    },
+    reload() {
+      return { note: "hammerspoon .. reload failed (nope)", ok: false }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("│ /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("│ /reload"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("reloading"))
+    await settle(setup)
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("reload failed"))
+    const frame = setup.captureCharFrame()
+    assert.match(frame, /reload failed/)
+    assert.doesNotMatch(frame, /reloaded/)
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
+test("an update that is not ok stays in the page", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 56 })
+  const api = session({
+    system() {
+      return {
+        title: "System",
+        path: "/system",
+        rows: [{ action: "Update", path: "/system/update", meta: "", kind: "dir", name: "Update" }],
+      }
+    },
+    update() {
+      return { note: "update broke", ok: false }
+    },
+  })
+  try {
+    const app = mount(setup, api)
+    await setup.waitForFrame((value) => value.includes("│ /history"))
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressArrow("down")
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("│ /update"))
+    setup.mockInput.pressEnter()
+    await setup.waitForFrame((value) => value.includes("updating"))
+    await settle(setup)
+    await settle(setup)
+    await setup.waitForFrame((value) => value.includes("update broke"))
+    assert.equal(app.restarting, false)
+    assert.ok(!api.calls.some((call) => call.op === "restart"))
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
+})
+
 test("SIGHUP closes without quitting", () => {
   const api = session()
   assert.equal(onHangup(api), 0)

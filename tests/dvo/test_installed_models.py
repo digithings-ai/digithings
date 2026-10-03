@@ -147,3 +147,10 @@ def test_catalog_file_is_not_listed_twice(tmp_path: Path) -> None:
     (root / "qwen2.5-1.5b-instruct-q4_k_m.gguf").write_bytes(b"GGUF")
     found = discover_installed_models(tmp_path, {})
     assert found == []
+
+
+def test_catalog_file_with_different_case_is_not_listed_twice(tmp_path: Path) -> None:
+    root = tmp_path / ".mlxstudio" / "models" / "whisper"
+    root.mkdir(parents=True)
+    (root / "GGML-small.en.bin").write_bytes(b"x")
+    assert discover_installed_models(tmp_path, {}) == []

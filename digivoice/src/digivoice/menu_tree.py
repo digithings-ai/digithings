@@ -3,9 +3,10 @@
 A value is saved only when that chooser is picked. Enter on the parent
 does not toggle or cycle. After a choice or cancel, the parent stays on
 the row that was opened. A model row opens the catalog. Size and the
-recommended flag are on each row. A file already in the models directory
-is marked downloaded. The numbered menu still asks before it fetches a
-missing speech or rewrite file. Esc goes up. The numbered ``setup`` wizard
+recommended flag are on each row. A chooser opens on the saved row. A file
+in the models directory, or the same filename under LM Studio, Ollama, or
+MLX, is marked downloaded. The numbered menu still asks before it fetches
+a missing speech or rewrite file. Esc goes up. The numbered ``setup`` wizard
 stays for pipes and agents.
 """
 
@@ -21,7 +22,7 @@ from pydantic import BaseModel, ConfigDict
 
 from digivoice.bindings import binding_conflict, binding_warning, parse_binding, set_hotkey_capture
 from digivoice.catalog import REWRITE_CATALOG, STT_CATALOG, VOICE_CATALOG, CatalogModel, find_voice
-from digivoice.installed_models import InstalledModel, discover_installed_models
+from digivoice.installed_models import InstalledModel, discover_installed_models, local_filenames
 from digivoice.models import VoicePaths
 from digivoice.nav import norm_path
 from digivoice.paths import DEFAULT_MODEL
@@ -121,6 +122,7 @@ def rows_at(
     path: str,
     models_dir: Path | None = None,
     installed: Sequence[InstalledModel] | None = None,
+    on_disk: set[str] | None = None,
 ) -> list[TreeRow]:
     """Rows for one settings path. Unknown paths are empty."""
     here = _norm(path)
@@ -170,9 +172,9 @@ def rows_at(
             ),
         ]
     if here == "/settings/speech/model":
-        return _model_choices("stt_model", installed or (), models_dir)
+        return _model_choices("stt_model", installed or (), models_dir, on_disk)
     if here == "/settings/speech/voice":
-        return _voice_choices(settings, models_dir)
+        return _voice_choices(settings, models_dir, on_disk)
     if here == "/settings/speech/paste":
         return _bool_choices(
             "paste_on_stop",
@@ -209,7 +211,7 @@ def rows_at(
     if here == "/settings/rewrite/style":
         return _style_choices()
     if here == "/settings/rewrite/model":
-        return _model_choices("rewrite_model", installed or (), models_dir)
+        return _model_choices("rewrite_model", installed or (), models_dir, on_disk)
     if here == "/settings/banner":
         return [
             TreeRow(
@@ -381,10 +383,24 @@ def _on_disk(models_dir: Path | None, filename: str) -> bool:
     return (Path(models_dir) / Path(filename).name).is_file()
 
 
+def _ready(
+    models_dir: Path | None,
+    filename: str,
+    on_disk: set[str] | None = None,
+) -> bool:
+    """True when the models directory or an install root already has this file."""
+    if _on_disk(models_dir, filename):
+        return True
+    if not filename or not on_disk:
+        return False
+    return Path(filename).name.casefold() in on_disk
+
+
 def _model_choices(
     field: str,
     installed: Sequence[InstalledModel] = (),
     models_dir: Path | None = None,
+    on_disk: set[str] | None = None,
 ) -> list[TreeRow]:
     catalog = STT_CATALOG if field == "stt_model" else REWRITE_CATALOG
     kind = "stt" if field == "stt_model" else "rewrite"
@@ -409,7 +425,7 @@ def _model_choices(
                 value=size,
                 choice=stored,
                 explain=_plain(item.best_for),
-                downloaded=_on_disk(models_dir, item.filename),
+                downloaded=_ready(models_dir, item.filename, on_disk),
             )
         )
     for item in installed:
@@ -431,7 +447,11 @@ def _model_choices(
     return rows
 
 
-def _voice_choices(settings: VoiceSettings, models_dir: Path | None) -> list[TreeRow]:
+def _voice_choices(
+    settings: VoiceSettings,
+    models_dir: Path | None,
+    on_disk: set[str] | None = None,
+) -> list[TreeRow]:
     """One row per Piper voice. `auto` is the saved empty value."""
     rows: list[TreeRow] = []
     seen: set[str] = set()
@@ -458,14 +478,14 @@ def _voice_choices(settings: VoiceSettings, models_dir: Path | None) -> list[Tre
             item.filename,
             _display_name(item.title),
             "English",
-            downloaded=_on_disk(models_dir, item.filename),
+            downloaded=_ready(models_dir, item.filename, on_disk),
         )
     if models_dir is not None and models_dir.is_dir():
         for path in sorted(models_dir.glob("*.onnx")):
             add(path.name, path.stem, "Installed Piper voice", downloaded=True)
     current = (settings.tts_voice or "").strip()
     if current:
-        present = Path(current).expanduser().is_file() or _on_disk(models_dir, current)
+        present = Path(current).expanduser().is_file() or _ready(models_dir, current, on_disk)
         add(current, Path(current).stem or current, "Saved Piper voice", downloaded=present)
     return rows
 
@@ -501,7 +521,11 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
     return 0
 
 
-def _pending_download(paths: VoicePaths, row: TreeRow) -> CatalogModel | None:
+def _pending_download(
+    paths: VoicePaths,
+    row: TreeRow,
+    on_disk: set[str] | None = None,
+) -> CatalogModel | None:
     """Catalog file the OpenTUI download page should fetch. None when it is on disk."""
     if row.field == "tts_voice":
         if not row.choice or row.choice == "auto":
@@ -509,21 +533,23 @@ def _pending_download(paths: VoicePaths, row: TreeRow) -> CatalogModel | None:
         entry = find_voice(row.choice)
         if entry is None:
             return None
-        dest = Path(paths.models_dir) / entry.filename
-        if dest.is_file():
+        if _ready(Path(paths.models_dir), entry.filename, on_disk):
             return None
         return entry
-    return _missing_catalog(paths, row)
+    return _missing_catalog(paths, row, on_disk)
 
 
-def _missing_catalog(paths: VoicePaths, row: TreeRow) -> CatalogModel | None:
+def _missing_catalog(
+    paths: VoicePaths,
+    row: TreeRow,
+    on_disk: set[str] | None = None,
+) -> CatalogModel | None:
     if row.field not in {"stt_model", "rewrite_model"}:
         return None
     entry = _catalog_entry(row.field, row.choice)
     if entry is None:
         return None
-    dest = Path(paths.models_dir) / entry.filename
-    if dest.is_file():
+    if _ready(Path(paths.models_dir), entry.filename, on_disk):
         return None
     return entry
 
@@ -619,20 +645,23 @@ def browse_settings(
     start: str = "/settings",
     on_path: Callable[[str], None] | None = None,
     installed: Sequence[InstalledModel] | None = None,
+    home: Path | None = None,
 ) -> None:
     """Walk ``/settings/...``. Esc at the root returns to the caller."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     settings = load_settings(paths)
     models_dir = Path(paths.models_dir)
+    root = home or Path.home()
+    present = local_filenames(root, os.environ)
     if installed is None:
-        installed = discover_installed_models(Path.home(), os.environ)
+        installed = discover_installed_models(root, os.environ)
     stack = _stack_for(settings, start, models_dir, installed)
     # Parent screens remember the row that was opened. A redraw does not jump to 0.
     cursors: dict[str, int] = {}
     while stack:
         path = stack[-1]
-        rows = rows_at(settings, path, models_dir, installed)
+        rows = rows_at(settings, path, models_dir, installed, present)
         if not rows:
             stack.pop()
             continue
@@ -701,7 +730,7 @@ def browse_settings(
         if nxt is None:
             continue
         if row.kind == "choice":
-            missing = _missing_catalog(paths, row)
+            missing = _missing_catalog(paths, row, present)
             if missing is not None:
                 if install is None:
                     stdout.write(f"  {missing.filename} is not on disk\n")

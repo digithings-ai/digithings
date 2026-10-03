@@ -15,8 +15,8 @@ from digivoice.doctor import doctor_checks
 from digivoice.history import delete_entry, read_history
 from digivoice.home import HOME_BLOCKS, build_context_lines, build_status_line
 from digivoice.install import FetchFn, render_install, run_install
-from digivoice.installed_models import discover_installed_models
-from digivoice.menu_tree import TreeRow, _changed, _pending_download, rows_at
+from digivoice.installed_models import discover_installed_models, local_filenames
+from digivoice.menu_tree import TreeRow, _changed, _list_cursor, _pending_download, rows_at
 from digivoice.models import HistoryEntry
 from digivoice.nav import norm_path
 from digivoice.opentui import NAV_FOOTER
@@ -48,15 +48,22 @@ def _row(row: TreeRow, path: str) -> dict[str, Any]:
     }
 
 
-def _settings_rows(paths: Any, path: str) -> list[dict[str, Any]]:
+def _bundle(
+    paths: Any,
+    path: str,
+    home: Path,
+    env: dict[str, str],
+) -> tuple[Any, list[TreeRow], set[str], list[dict[str, Any]]]:
+    """Settings, tree rows, install-root names, and the JSON rows for one path."""
+    present = local_filenames(home, env)
     settings = load_settings(paths)
-    installed = discover_installed_models(Path.home(), dict(os_environ()))
-    rows = rows_at(settings, path, Path(paths.models_dir), installed)
-    return [_row(row, path) for row in rows]
+    installed = discover_installed_models(home, env)
+    tree = rows_at(settings, path, Path(paths.models_dir), installed, present)
+    return settings, tree, present, [_row(row, path) for row in tree]
 
 
-def os_environ() -> dict[str, str]:
-    return dict(os.environ)
+def _settings_rows(paths: Any, path: str, home: Path, env: dict[str, str]) -> list[dict[str, Any]]:
+    return _bundle(paths, path, home, env)[3]
 
 
 def _history_page(paths: Any, page: int) -> dict[str, Any]:
@@ -162,7 +169,7 @@ def _update_note(
     machine: str | None,
     adapter_source: Path | None,
     tui_root: Path | None,
-) -> str:
+) -> tuple[str, bool]:
     """Run the local update. A failure is the note, not a raised error."""
     try:
         report = run_install(
@@ -178,8 +185,8 @@ def _update_note(
             adapter_source=adapter_source,
         )
     except Exception as exc:
-        return str(exc).strip() or exc.__class__.__name__
-    return render_install(report, heading="digivoice update").strip()
+        return str(exc).strip() or exc.__class__.__name__, False
+    return render_install(report, heading="digivoice update").strip(), report.ok
 
 
 def dispatch(
@@ -215,7 +222,13 @@ def dispatch(
         }
     if op == "rows":
         path = norm_path(str(req.get("path") or "/settings"))
-        return {"footer": footer, "path": path, "rows": _settings_rows(paths, path)}
+        settings, tree, _present, payload = _bundle(paths, path, home, env)
+        return {
+            "footer": footer,
+            "path": path,
+            "rows": payload,
+            "selected": _list_cursor(settings, path, tree),
+        }
     active = runner or run_command
     if op == "apply":
         return _apply(paths, req, platform=platform, home=home, env=env, runner=active)
@@ -259,28 +272,26 @@ def dispatch(
     if op == "reload":
         result = run_reload(platform, home, env, runner=active)
         note = result.stdout.strip() or result.stderr.strip() or "reload finished"
-        return {"footer": footer, "note": note}
+        return {"footer": footer, "note": note, "ok": result.code == 0}
     if op == "reset":
         save_settings(paths, default_settings())
         return {"footer": footer, "note": "settings reset"}
     if op == "restart":
         return {"footer": footer, "restart": True}
     if op == "update":
-        return {
-            "footer": footer,
-            "note": _update_note(
-                platform,
-                home,
-                env,
-                paths,
-                probe=probe,
-                runner=runner,
-                fetch=fetch,
-                machine=machine,
-                adapter_source=adapter_source,
-                tui_root=tui_root,
-            ),
-        }
+        note, ok = _update_note(
+            platform,
+            home,
+            env,
+            paths,
+            probe=probe,
+            runner=runner,
+            fetch=fetch,
+            machine=machine,
+            adapter_source=adapter_source,
+            tui_root=tui_root,
+        )
+        return {"footer": footer, "note": note, "ok": ok}
     if op == "quit":
         report = stop_home_control(platform, home, env, runner=run_command)
         return {"footer": footer, "exit": 0, "stopped": True, "note": report.summary}
@@ -324,10 +335,12 @@ def _open_path(
             "paging": False,
         }
     if start.startswith("/settings"):
+        settings, tree, _present, payload = _bundle(paths, start, home, env)
         return {
             "title": start.rsplit("/", 1)[-1],
             "path": start,
-            "rows": _settings_rows(paths, start),
+            "rows": payload,
+            "selected": _list_cursor(settings, start, tree),
             "paging": False,
         }
     if start.startswith("/history"):
@@ -356,9 +369,7 @@ def _apply(
     runner: CommandRunner,
 ) -> dict[str, Any]:
     path = norm_path(str(req.get("path") or "/settings"))
-    settings = load_settings(paths)
-    installed = discover_installed_models(Path.home(), dict(os_environ()))
-    rows = rows_at(settings, path, Path(paths.models_dir), installed)
+    settings, rows, present, _payload = _bundle(paths, path, home, env)
     index = int(req.get("index") or 0)
     if not rows or not 0 <= index < len(rows):
         return {"error": "no row"}
@@ -367,7 +378,7 @@ def _apply(
         child = f"{path}/{row.name}"
         return {
             "open": child,
-            "rows": _settings_rows(paths, child),
+            "rows": _settings_rows(paths, child, home, env),
             "title": row.name,
             "path": child,
         }
@@ -391,7 +402,7 @@ def _apply(
             return {
                 "saved": False,
                 "note": warning,
-                "rows": _settings_rows(paths, path),
+                "rows": _settings_rows(paths, path, home, env),
             }
         nxt = _changed(settings, row, cleaned)
         if nxt is None:
@@ -400,12 +411,12 @@ def _apply(
         armed = run_reload(platform, home, env, runner=runner)
         return {
             "saved": True,
-            "rows": _settings_rows(paths, path),
+            "rows": _settings_rows(paths, path, home, env),
             "reload": armed.stdout.strip() or armed.stderr.strip() or "reload finished",
         }
     if row.kind != "choice":
         return {"note": row.explain}
-    pending = _pending_download(paths, row)
+    pending = _pending_download(paths, row, present)
     if pending is not None:
         return {
             "download": True,
@@ -425,14 +436,14 @@ def _apply(
             "stay": True,
             "path": path,
             "index": index,
-            "rows": _settings_rows(paths, path),
+            "rows": _settings_rows(paths, path, home, env),
             "title": path.rsplit("/", 1)[-1],
         }
     parent = path.rsplit("/", 1)[0] or "/settings"
     return {
         "saved": True,
         "path": parent,
-        "rows": _settings_rows(paths, parent),
+        "rows": _settings_rows(paths, parent, home, env),
         "title": parent.rsplit("/", 1)[-1],
     }
 
@@ -460,27 +471,19 @@ def run_download(
     """Stream progress, then ok or error. A failure does not select the model."""
     path = norm_path(str(req.get("path") or "/settings"))
     index = int(req.get("index") or 0)
-    settings = load_settings(paths)
-    installed = discover_installed_models(home or Path.home(), dict(env or {}))
-    models_dir = Path(paths.models_dir)
-    rows = rows_at(settings, path, models_dir, installed)
+    root = home or Path.home()
+    table = dict(env or {})
+    settings, rows, present, payload = _bundle(paths, path, root, table)
     if not rows or not 0 <= index < len(rows):
         emit({"error": "no row"})
         return
     row = rows[index]
-    pending = _pending_download(paths, row)
+    pending = _pending_download(paths, row, present)
     if pending is None:
         nxt = _changed(settings, row, None)
         if nxt is not None:
             save_settings(paths, nxt)
-        emit(
-            {
-                "ok": True,
-                "rows": _settings_rows(paths, path),
-                "path": path,
-                "index": index,
-            }
-        )
+        emit({"ok": True, "rows": payload, "path": path, "index": index})
         return
 
     def progress(got: int, total: int | None) -> None:
@@ -491,19 +494,12 @@ def run_download(
     except Exception as exc:
         emit({"error": f"could not install {pending.filename}: {exc}"})
         return
-    fresh = rows_at(load_settings(paths), path, models_dir, installed)
+    fresh_settings, fresh, _present, payload = _bundle(paths, path, root, table)
     chosen = fresh[index] if 0 <= index < len(fresh) else row
-    nxt = _changed(load_settings(paths), chosen, None)
+    nxt = _changed(fresh_settings, chosen, None)
     if nxt is not None:
         save_settings(paths, nxt)
-    emit(
-        {
-            "ok": True,
-            "rows": _settings_rows(paths, path),
-            "path": path,
-            "index": index,
-        }
-    )
+    emit({"ok": True, "rows": payload, "path": path, "index": index})
 
 
 def main(argv: list[str] | None = None) -> int:
