@@ -3,17 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DeskChat } from "./desk-chat";
 
 describe("desk chat", () => {
-  it("renders the digichat thread and the three official reads", () => {
+  it("renders one loading line and no read footer or inner sidebar", () => {
     const html = renderToStaticMarkup(<DeskChat />);
-    expect(html).toContain('aria-label="Conversations"');
-    expect(html).toContain("Ask digichat…");
-    expect(html).toContain("Chat · sessions");
-    expect(html).toContain("/chat/sessions");
-    expect(html).toContain("Chat · thread");
-    expect(html).toContain("/chat/sessions/current");
-    expect(html).toContain("Chat · transcript");
-    expect(html).toContain("/chat/sessions/current/messages");
     expect(html).toContain("loading…");
+    expect(html).toContain('class="rail"');
+    expect(html).not.toContain('aria-label="Conversations"');
+    expect(html).not.toContain("Chat · sessions");
+    expect(html).not.toContain("Chat · thread");
+    expect(html).not.toContain("Chat · transcript");
+    expect(html).not.toContain("digichat-thread-list");
     expect(html).not.toContain("scripted story");
     expect(html).not.toContain("scripted demo");
     expect(html).not.toContain("99.909");

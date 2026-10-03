@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState, type KeyboardEvent } from "react";
 import { Button } from "@digithings/ui/ui";
+import { useChatDesk } from "./chat-desk";
+import { ChatThreadRows } from "./chat-threads";
 import { useDeskAccess } from "./desk-access";
 import { canOpenDeskPath, sectionOf, type NavNode } from "./desk-manifest";
 import { deskHref } from "./paths";
@@ -50,6 +52,22 @@ function PathLink({
     >
       {body}
     </Link>
+  );
+}
+
+/** Real threads for this route only. Page links still close the phone drawer. */
+function RailThreads({ onNavigate }: { onNavigate?: () => void }) {
+  const chat = useChatDesk();
+  if (!chat) return null;
+  return (
+    <ChatThreadRows
+      threads={chat.threads}
+      activeId={chat.activeId}
+      onSelect={(id) => {
+        chat.select(id);
+        onNavigate?.();
+      }}
+    />
   );
 }
 
@@ -191,6 +209,7 @@ export function DeskRail({
             })}
           </div>
         ))}
+        {current === "/tools/chat" ? <RailThreads onNavigate={onNavigate} /> : null}
       </nav>
     </aside>
   );
