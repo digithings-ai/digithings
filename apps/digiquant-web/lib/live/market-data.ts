@@ -105,6 +105,36 @@ export async function fetchCloseSeries(
 }
 
 /**
+ * Raw `/v1/market/closes` rows for one ticker. The hero chart turns a row into
+ * a candle only when open, high, low, and close are all present. A close-only
+ * row is not a candle. Empty when unconfigured or the request fails.
+ */
+export async function fetchMarketCandleRows(
+  ticker: string,
+  fromDate: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>[]> {
+  const base = marketDataBaseUrl();
+  const symbol = ticker.trim();
+  if (!base || !symbol) return [];
+  try {
+    const query = `tickers=${encodeURIComponent(symbol)}&from=${encodeURIComponent(fromDate)}`;
+    const res = await fetch(`${base}/v1/market/closes?${query}`, { signal });
+    if (!res.ok) {
+      console.error("fetchMarketCandleRows:", res.status);
+      return [];
+    }
+    const body = (await res.json()) as { rows?: unknown };
+    if (!Array.isArray(body.rows)) return [];
+    return body.rows.filter((row): row is Record<string, unknown> => !!row && typeof row === "object");
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    console.error("fetchMarketCandleRows:", err);
+    return [];
+  }
+}
+
+/**
  * `from` for the Lane 1 seed request: `now` minus {@link SEED_LOOKBACK_DAYS}
  * (UTC). Stays in the past by construction, so the Worker's as_of-bounded `to`
  * always leaves a non-empty range for the latest closes to land in.

@@ -12,7 +12,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchBenchmarkHistory, fetchCloseSeries, seedFromWorker, seedWindowStart } from "./market-data";
+import {
+  fetchBenchmarkHistory,
+  fetchCloseSeries,
+  fetchMarketCandleRows,
+  seedFromWorker,
+  seedWindowStart,
+} from "./market-data";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MARKET_URL = "https://graph.digithings.ai";
@@ -258,6 +264,35 @@ describe("fetchCloseSeries", () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "bad" }, false, 400)));
     expect(await fetchCloseSeries(["SPY"], "2026-09-01")).toEqual(new Map());
     expect(errorSpy).toHaveBeenCalledWith("fetchCloseSeries:", 400);
+  });
+});
+
+describe("fetchMarketCandleRows", () => {
+  it("returns the worker rows, including a close that has no open", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", MARKET_URL);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          rows: [
+            { date: "2026-09-10", ticker: "SPY", close: 660 },
+            { date: "2026-09-11", ticker: "GLD", open: 240, high: 244, low: 238, close: 242, volume: 8 },
+          ],
+        }),
+      ),
+    );
+    expect(await fetchMarketCandleRows("SPY", "2026-09-01")).toEqual([
+      { date: "2026-09-10", ticker: "SPY", close: 660 },
+      { date: "2026-09-11", ticker: "GLD", open: 240, high: 244, low: 238, close: 242, volume: 8 },
+    ]);
+  });
+
+  it("returns nothing when the market URL is unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKET_DATA_URL", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await fetchMarketCandleRows("SPY", "2026-09-01")).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
