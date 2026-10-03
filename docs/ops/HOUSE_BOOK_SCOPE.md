@@ -86,14 +86,14 @@ script is house-owned).
 | Relying on RLS alone for the dashboard | RLS may allow overlay; UI must still `houseBook()` |
 | Test `_FakeQuery` treating missing column as house | **Test-only**; production PostgREST `eq` matches only equal rows |
 | Overlay `--execute` with persist off | Refuses / finishes `persist_disabled` — not a remaining-hop proof |
-| Staged cutover **113** (drop legacy `UNIQUE(date)`) | Not auto-applied; do not copy to top-level or apply on `core` while `main` writers still upsert `on_conflict=date`. [#3331](https://github.com/digithings-ai/digithings/pull/3331) stamps house `workspace_id` on those writers but **does not** widen the conflict target. `pipeline-dashboard.yml` checks out `ref: main` even when the schedule event is on default `develop`. |
+| Staged cutover **113** (drop legacy `UNIQUE(date)`) | Not auto-applied; do not copy to top-level or apply on `core` while `main` writers still upsert `on_conflict=date`. [#3331](https://github.com/digithings-ai/digithings/pull/3331) stamps house `workspace_id` on those writers but **does not** widen the conflict target. There is no `pipeline-dashboard.yml`. The live house job is `pipeline-digiquant.yml` (`house-run-09`). `apps/digithings-cron/src/jobs.ts` `cj()` still pins container checkout to `codeRef: "main"` (GitHub override `ref` stays `develop`). |
 | Main house GHA vs develop tenancy writers | Live cron executes **main**. Develop already stamps via `house_workspace_id()` and upserts `on_conflict=workspace_id,date` — that is not what the scheduled job runs. Do not assume a green develop unit run proves the house publish. |
 | Booked positions, missing commit ledger | Operator recovery: `python digiquant/scripts/research/recover_commit_ledger.py --date YYYY-MM-DD` (then `--apply`). Reads house `positions` / `nav_history`; calls `append_commit_chain`. Do not re-run the LLM pipeline. Do not `workflow_dispatch`. |
 | `DIGIQUANT_OVERLAY_PERSIST=1` (a retired alias is also read) before 113 on target | Persist-on still cannot prove a private overlay book while legacy uniques collide |
 
 ## nav_history write order (provisional window)
 
-`nav_history` is written twice on a daily run, in order:
+`nav_history` is written twice on a house run, in order:
 
 1. **commit `commit_io.book_portfolio`** may upsert a **provisional** arithmetic-chain
    NAV for the date. (Legacy `portfolio_materialize.py` has the same shape but is
@@ -102,10 +102,11 @@ script is house-owned).
    NAV — the sole source of truth (SSOT) for NAV.
 
 Between those steps a dashboard reader that queries `nav_history` can see the
-provisional value for hours (the book runs ~12:00–14:00 UTC; the engine writer
-~22:00–23:00 UTC). Treat a date's `nav_history` row as provisional until the
-engine writer for that date has completed; after the overwrite the engine NAV is
-authoritative. Do not publish or quote the arithmetic-chain value as a settled NAV.
+provisional value (the only enabled house job is `house-run-09` at 09:17 UTC
+Monday; research-metrics / the engine NAV writer is 22:05 UTC daily). Treat a
+date's `nav_history` row as provisional until the engine writer for that date
+has completed; after the overwrite the engine NAV is authoritative. Do not
+publish or quote the arithmetic-chain value as a settled NAV.
 
 ## Related
 
