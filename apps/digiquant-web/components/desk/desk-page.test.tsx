@@ -18,6 +18,12 @@ describe("mounted desk pages", () => {
     expect(attribution).toContain("Attribution");
     expect(attribution).toContain('data-route="/attribution"');
 
+    const ledger = renderToStaticMarkup(<DeskPage path="/portfolio/ledger" />);
+    expect(ledger).toContain("Ledger · position events");
+    expect(ledger).toContain('data-route="/ledger?limit=50"');
+    expect(ledger).toContain("Cash ledger");
+    expect(ledger).toContain('data-route="/ledger/cash"');
+
     const pipeline = renderToStaticMarkup(<DeskPage path="/pipeline" />);
     expect(pipeline).toContain('data-block="pl-narrative"');
     expect(pipeline).toContain("Run narrative");
