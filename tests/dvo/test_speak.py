@@ -623,8 +623,80 @@ def test_read_selection_copy_targets_the_captured_app() -> None:
     assert "-" not in typed.argv[3:]
     script = typed.argv[2]
     assert "set frontmost of proc to true" in script
+    assert "key up option" in script
+    assert script.index("key up option") < script.index('keystroke "c"')
+    assert "tell proc" in script
     assert 'keystroke "c"' in script
     assert "frontmost is true" not in script
+
+
+def test_copy_speaks_the_selection_and_an_unchanged_marker_does_not(tmp_path: Path) -> None:
+    """Command-C after Option is released is the selection. The marker is not."""
+    focus_args = ["--focus-name", "Cursor", "--focus-bundle", "com.example.Cursor"]
+
+    def _speak(initial: str, on_copy: str | None) -> tuple[object, FakeRunner, dict[str, str]]:
+        board, pbpaste, pbcopy, osascript = _clipboard_board(initial, on_copy=on_copy)
+        runner = FakeRunner(
+            {
+                "piper": _writes_speak_wav(),
+                "afplay": FakeReply(),
+                "pbpaste": pbpaste,
+                "pbcopy": pbcopy,
+                "osascript": osascript,
+            }
+        )
+        runtime = _speak_runtime(
+            tmp_path,
+            platform="darwin",
+            runner=runner,
+            commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+        )
+        result = run(["speak", "--selection", *focus_args], runtime)
+        return result, runner, board
+
+    spoken, runner, _board = _speak("leftover dictation", "cursor selection")
+    assert spoken.code == 0
+    assert spoken.stdout == "cursor selection\n"
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    script = typed.argv[2]
+    assert "key up option" in script
+    assert script.index("key up option") < script.index('keystroke "c"')
+    assert "tell proc" in script
+    assert typed.argv[3:] == ["com.example.Cursor", "Cursor"]
+
+    silent, _runner, board = _speak("leftover dictation", None)
+    assert silent.code == 1
+    assert "nothing selected" in silent.stderr
+    assert silent.stdout == ""
+    assert board["text"] == "leftover dictation"
+
+
+def test_ax_selected_text_is_used_without_a_clipboard_change() -> None:
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+
+    def osascript(call: object) -> FakeReply:
+        script = " ".join(getattr(call, "argv", []))
+        if "AXSelectedText" in script:
+            return FakeReply(stdout="cursor selection")
+        return FakeReply()
+
+    runner = FakeRunner(
+        {
+            "osascript": osascript,
+            "pbpaste": FakeReply(stdout="leftover dictation"),
+            "pbcopy": FakeReply(),
+        }
+    )
+    probe = FakeProbe(
+        commands={
+            "pbpaste": "/usr/bin/pbpaste",
+            "pbcopy": "/usr/bin/pbcopy",
+            "osascript": "/usr/bin/osascript",
+        }
+    )
+    assert read_selection("darwin", probe, runner, focus) == "cursor selection"
+    assert "pbcopy" not in runner.programs
+    assert not any("keystroke" in " ".join(call.argv) for call in runner.calls)
 
 
 def test_read_selection_uses_the_captured_app() -> None:

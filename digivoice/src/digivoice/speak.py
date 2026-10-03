@@ -36,8 +36,14 @@ _CPU_X86_64 = 0x01000007
 PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
 PLAY_TIMEOUT = 300.0
-COPY_SELECTION_SCRIPT = 'tell application "System Events" to keystroke "c" using command down'
+# The speak hotkey is Left Option. A keystroke sent while Option is still down
+# is not Copy. Release Option, then send a plain Command-C.
+COPY_SELECTION_SCRIPT = """tell application "System Events"
+  key up option
+  keystroke "c" using command down
+end tell"""
 # Same argv rule as paste: bundle id and name follow `-e`, with no leading dash.
+# The keystroke is sent to the captured process, not to whoever is frontmost now.
 ACTIVATE_AND_COPY_SCRIPT = """on run argv
   set targetId to item 1 of argv
   set targetName to item 2 of argv
@@ -48,9 +54,12 @@ ACTIVATE_AND_COPY_SCRIPT = """on run argv
       set proc to first process whose name is targetName
     end if
     set frontmost of proc to true
+    delay 0.2
+    key up option
+    tell proc
+      keystroke "c" using command down
+    end tell
   end tell
-  delay 0.2
-  tell application "System Events" to keystroke "c" using command down
 end run"""
 READ_SOURCE_TIMEOUT = 5.0
 _NOTHING_SELECTED = (
@@ -522,13 +531,15 @@ def read_selection(
     1. the focused element's Accessibility selected text (no clipboard touched);
     2. Ghostty's selection pasteboard, when Ghostty is frontmost (Ghostty's
        copy-on-select writes the highlight there instead of the general clipboard);
-    3. Cmd+C via osascript. When pbcopy is available, a private marker is written
-       first. The copy counts only when the clipboard then differs from that
-       marker, including when the selection is what was already copied. The
-       marker is never spoken. If the clipboard is still the marker, nothing
-       was selected: the previous clipboard is restored and is not spoken.
-       When a focus target was captured, that keystroke is sent to that app
-       (activate, then Command-C), not to whoever is frontmost now.
+    3. Cmd+C via osascript. Option is released first: the speak hotkey is Left
+       Option, and a keystroke sent while it is down is not Copy. When a focus
+       target was captured, that keystroke is sent to that process. When pbcopy
+       is available, a private marker is written first. The copy counts only
+       when the clipboard then differs from that marker, including when the
+       selection is what was already copied. The marker is never spoken. If the
+       clipboard is still the marker, nothing was selected: the previous
+       clipboard is restored and is not spoken. Accessibility text is returned
+       before any of this and does not require the clipboard to change.
 
     Without pbcopy, an unchanged clipboard (including leftover dictation paste)
     is empty selection — never a coding-reply readout.
