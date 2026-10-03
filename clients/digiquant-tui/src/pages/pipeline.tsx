@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockDef } from "../catalog";
 import { COLS, ROWS, type Placement } from "../grid";
 import { DASH, EMPTY_READ, readBlock, type ReadResult } from "../read";
+import { DANGER, INK, MUTE } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
 
 /**
@@ -14,10 +15,6 @@ import { PaneFrame, useFocusedPane } from "./pane";
  * pl-node-document   GET /pipeline/runs/latest/nodes/selected/document
  * pl-call-trace      GET /pipeline/runs/latest/trace
  */
-
-const INK = "#e7e1d6";
-const DIM = "#8a8175";
-const BAD = "#c47a6a";
 
 const PIPELINE_IDS = ["pl-narrative", "pl-artifacts", "pl-canvas", "pl-node-document", "pl-call-trace"] as const;
 type PipelineId = (typeof PIPELINE_IDS)[number];
@@ -32,8 +29,8 @@ function isPipelineId(id: string): id is PipelineId {
 
 function tone(status: ReadResult["status"] | "loading"): string {
   if (status === "ok") return INK;
-  if (status === "empty" || status === "loading") return DIM;
-  return BAD;
+  if (status === "empty" || status === "loading") return MUTE;
+  return DANGER;
 }
 
 function linesOf(read: ReadResult | undefined): string[] {
