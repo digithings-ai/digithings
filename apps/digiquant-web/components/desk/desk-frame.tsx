@@ -65,7 +65,7 @@ export function DeskFrame({ current, children }: { current: string; children: Re
     <DeskAccess>
       <div className="desk-shell flex h-full min-h-0 flex-col bg-black font-mono text-ink" data-drawer={drawer ? "open" : "closed"} style={style}>
         <header className="relative z-50 flex h-8 min-w-0 shrink-0 items-center gap-2 border-b border-hair px-2 text-[0.7rem] sm:gap-3 sm:px-3">
-          <Link href="/" className="inline-flex shrink-0 items-center text-ink">
+          <Link href="/" className="desk-mark inline-flex shrink-0 items-center text-ink">
             <QuantWordmark className="block h-[14px] w-auto fill-current text-ink" />
           </Link>
           <Button

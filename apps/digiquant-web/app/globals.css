@@ -453,6 +453,37 @@ body {
 .desk-shell > header .cmd { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 759px) {
   .desk-pages { display: inline-flex; }
+  /* The path has to stay readable. The mark and the desk name yield. */
+  .desk-shell > header {
+    gap: 0.35rem;
+    padding-inline: 0.4rem;
+  }
+  .desk-mark {
+    flex: 0 0 auto;
+    width: 3.25rem;
+  }
+  .desk-shell > header .desk-mark svg {
+    width: 3.25rem;
+    height: auto;
+  }
+  .desk-pick {
+    flex: 0 1 3.5rem;
+    min-width: 0;
+    max-width: 3.5rem;
+    padding-inline: 0.15rem;
+    overflow: hidden;
+  }
+  .desk-pick .desk-toggle {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .desk-shell > header .cmd {
+    padding-inline: 0.2rem;
+  }
   .rail-size { display: none; }
   .desk-shell .rail {
     position: fixed;
