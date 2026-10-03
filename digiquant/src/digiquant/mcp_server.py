@@ -49,19 +49,29 @@ _ttl: dict[tuple, tuple[float, str]] = {}
 
 
 def _bounded_lookback(lookback: int) -> int:
-    """Clamp a window length to ``0..500``.
+    """Clamp a positive window length to ``1..500``.
 
-    ``rows[-0:]`` is the whole series, and a negative index slices from the
-    front. Both are the wrong window, so non-positive lookbacks become 0
-    (an empty tail) instead of passing through to a Python slice.
+    Callers must reject a non-positive value before slicing. ``rows[-0:]`` is
+    the whole series, and a negative index slices from the front.
+    """
+    return min(int(lookback), _MAX_LOOKBACK)
+
+
+def _lookback_error(lookback: int) -> str | None:
+    """Error envelope for a non-positive lookback, or None when it is usable.
+
+    An empty ``rows`` array is also what a ticker with no bars looks like, so
+    a bad argument is an ``{"error"}`` instead of a silent empty window. The
+    research reader in ``research/data/queries.py`` does not use this envelope;
+    it slices ``_read_r2_window`` itself.
     """
     try:
         n = int(lookback)
     except (TypeError, ValueError):
-        return 0
-    if n < 1:
-        return 0
-    return min(n, _MAX_LOOKBACK)
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    if isinstance(lookback, bool) or n < 1:
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    return None
 
 
 def _tail(rows: list[Any], n: int) -> list[Any]:
@@ -373,6 +383,9 @@ def digiquant_get_price_technicals(
     must carry the glossary entry.
     """
     try:
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
         lookback = _bounded_lookback(lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
@@ -419,13 +432,13 @@ def digiquant_get_macro_series(
     reader-side ``stale``. Task 10 docs must carry the glossary entry.
     """
     try:
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
         lookback = _bounded_lookback(lookback)
         from digiquant.research.data.queries import r2_backend_enabled
 
         if not r2_backend_enabled():
-            if lookback < 1:
-                empty = {sid: {"latest": {}, "window": []} for sid in series_ids}
-                return json.dumps(empty)
             return _supabase_macro(series_ids, lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
@@ -801,6 +814,8 @@ def create_mcp_server(
         symbols: list[str] = json.loads(symbols_json)
         params = json.loads(strategy_params_json) if strategy_params_json else None
         constraints = json.loads(constraints_json) if constraints_json else None
+        if isinstance(n_trials, bool) or int(n_trials) < 1:
+            return json.dumps({"error": "n_trials must be an integer >= 1"})
         from digiquant.graph.pipeline import run_quant_workflow
 
         raw = run_quant_workflow(
