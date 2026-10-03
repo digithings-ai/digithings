@@ -39,7 +39,10 @@ Do not point `LANGSMITH_ENDPOINT` at Langfuse.
   When the global tracer provider is still the SDK proxy, `traceable` installs
   an OTLP HTTP exporter for that endpoint (Langfuse URL first, then
   `DIGI_OTEL_ENDPOINT`, then `OTEL_EXPORTER_OTLP_ENDPOINT`) and the headers from
-  `digibase.otel.resolve_otel_headers`. A provider that is already real is left
+  `digibase.otel.resolve_otel_headers`. The exporter posts to the traces path:
+  `/v1/traces` is appended when the configured path does not already end there,
+  so a Langfuse base of `/api/public/otel` is sent to `/api/public/otel/v1/traces`.
+  Auth headers are unchanged. A provider that is already real is left
   alone. Missing SDK packages leave the in-process span and do not raise.
   Against Langfuse, point the endpoint at `/api/public/otel` and pass the
   public:secret Basic auth via `DIGI_OTEL_HEADERS` / `OTEL_EXPORTER_OTLP_HEADERS`

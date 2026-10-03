@@ -343,10 +343,31 @@ def test_langfuse_otlp_endpoint_installs_exporter(monkeypatch: pytest.MonkeyPatc
         return "ok"
 
     assert fn() == "ok"
-    assert constructed["endpoint"] == endpoint
+    assert constructed["endpoint"] == f"{endpoint}/v1/traces"
     assert constructed["headers"] == {"Authorization": "Basic abc"}
     assert "provider" in constructed
     assert spans[0]["name"] == "digitrace.langfuse-span"
+
+
+@pytest.mark.unit
+def test_traces_endpoint_appends_v1_traces_once() -> None:
+    """The Langfuse base path 404s; a URL that already has the traces path stays put."""
+    assert (
+        trace_mod._traces_endpoint("https://cloud.langfuse.com/api/public/otel")
+        == "https://cloud.langfuse.com/api/public/otel/v1/traces"
+    )
+    assert (
+        trace_mod._traces_endpoint("https://cloud.langfuse.com/api/public/otel/")
+        == "https://cloud.langfuse.com/api/public/otel/v1/traces"
+    )
+    already = "http://otel:4318/v1/traces"
+    assert trace_mod._traces_endpoint(already) == already
+    assert trace_mod._traces_endpoint("http://otel:4318") == "http://otel:4318/v1/traces"
+    # Userinfo stays on the URL. Header auth is a separate argument and is not dropped.
+    assert (
+        trace_mod._traces_endpoint("https://user:pass@cloud.langfuse.com/api/public/otel")
+        == "https://user:pass@cloud.langfuse.com/api/public/otel/v1/traces"
+    )
 
 
 @pytest.mark.unit

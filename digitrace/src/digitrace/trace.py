@@ -21,6 +21,7 @@ import os
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any, TypeVar
+from urllib.parse import urlsplit, urlunsplit
 
 from digibase.otel import resolve_otel_headers
 
@@ -53,6 +54,24 @@ _EXPORTER_LOCK = threading.Lock()
 # After a Langfuse OTLP endpoint, the generic OTEL vars. Status treats all
 # four as "export on"; the exporter has to use the same order.
 _GENERIC_OTLP_ENVS = ("DIGI_OTEL_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+
+# OTLP/HTTP traces. The exporter posts to the URL it is given and does not
+# append this when the configured path is already non-empty, so
+# ``.../api/public/otel`` would 404 on cloud.langfuse.com.
+_TRACES_PATH = "/v1/traces"
+
+
+def _traces_endpoint(endpoint: str) -> str:
+    """Return *endpoint* with ``/v1/traces`` on the path when it is missing.
+
+    A value that already ends in that path is unchanged, so it is not doubled.
+    Query and userinfo are kept; this does not touch auth headers.
+    """
+    parts = urlsplit(endpoint.strip())
+    path = parts.path.rstrip("/")
+    if not path.endswith(_TRACES_PATH):
+        path = f"{path}{_TRACES_PATH}"
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
 
 
 def _export_endpoint() -> str:
@@ -93,7 +112,7 @@ def _ensure_otlp_exporter() -> None:
             return
         try:
             headers = resolve_otel_headers() or None
-            exporter = OTLPSpanExporter(endpoint=endpoint, headers=headers)
+            exporter = OTLPSpanExporter(endpoint=_traces_endpoint(endpoint), headers=headers)
             sdk_provider = TracerProvider()
             sdk_provider.add_span_processor(BatchSpanProcessor(exporter))
             otel_trace.set_tracer_provider(sdk_provider)
