@@ -194,8 +194,10 @@ export function ProductStage() {
         publish(blocked);
         return;
       }
-      const win = frame.contentWindow;
-      if (win) win.postMessage({ type: DESK_GO_TYPE, path: next }, window.location.origin);
+      if (frame) {
+        const win = frame.contentWindow;
+        if (win) win.postMessage({ type: DESK_GO_TYPE, path: next }, window.location.origin);
+      }
       publish("touring");
     };
 
