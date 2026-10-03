@@ -29,11 +29,13 @@ calendar, so the same rule consolidates any asset's ladder. There is no
 **The rule, exactly as ruled.**
 
 1. An indicator **captures** a level iff its best grid row has
-   ``separation >= CAPTURE_BAR`` (0.5 z-units), is **sign-correct**
-   (``separation > 0``) and is **not degenerate** (one window side's mean never
-   leaves the +/-``DEGENERATE_MEAN_ABS`` dead zone). ``abs()`` is never applied
-   to the metric: a leg that votes rich at the bottoms must not be rewarded for
-   doing so loudly. The bar is inclusive at exactly ``CAPTURE_BAR``.
+   ``separation >= capture_bar`` (``CAPTURE_BAR`` = 0.5 z-units is the frozen
+   default and the bar every count below is read at unless the caller supplies
+   another), is **sign-correct** (``separation > 0``) and is **not degenerate**
+   (one window side's mean never leaves the +/-``DEGENERATE_MEAN_ABS`` dead zone).
+   ``abs()`` is never applied to the metric: a leg that votes rich at the bottoms
+   must not be rewarded for doing so loudly. The bar is inclusive at exactly
+   ``capture_bar``.
 2. A level **qualifies** iff its capture count is at least as large as at *every*
    coarser level — it loses nothing relative to the coarser calibrations. The
    coarsest level therefore always qualifies, so a ladder is never undecidable.
@@ -70,12 +72,23 @@ CAPTURE_BAR = 0.5
 # so a separation resting on it is one-sided and is not a capture.
 DEGENERATE_MEAN_ABS = 0.06
 
-CAPTURE_RULE = (
-    "An indicator CAPTURES a level iff its best grid row has separation >= "
-    f"{CAPTURE_BAR} z-units AND is sign-correct (separation > 0, abs() never "
-    f"applied) AND is not degenerate (neither window side's mean inside "
-    f"+/-{DEGENERATE_MEAN_ABS}). An unscoreable leg never captures."
-)
+
+def _capture_rule_at(capture_bar: float) -> str:
+    """The capture rule as it reads at ``capture_bar``.
+
+    A ``SensitivityChoice`` states the rule it actually applied, so a choice made
+    at a caller-supplied bar cannot ship the frozen 0.5 text it was not decided
+    under. At the frozen default this returns exactly ``CAPTURE_RULE``.
+    """
+    return (
+        "An indicator CAPTURES a level iff its best grid row has separation >= "
+        f"{capture_bar} z-units AND is sign-correct (separation > 0, abs() never "
+        f"applied) AND is not degenerate (neither window side's mean inside "
+        f"+/-{DEGENERATE_MEAN_ABS}). An unscoreable leg never captures."
+    )
+
+
+CAPTURE_RULE = _capture_rule_at(CAPTURE_BAR)
 
 CHOICE_RULE = (
     "Sensitivity crank: a lower min_move_pct yields MORE turns, so a smaller "
@@ -175,8 +188,18 @@ class IndicatorCaptureRow(BaseModel):
 
     @property
     def captures(self) -> bool:
-        """Does this row capture its level at the frozen bar?"""
-        return captures_level(self)
+        """Does this row capture its level at the FROZEN bar? (the 0.5 default view)
+
+        This is the frozen default's own reading of the row. A decision made at
+        another bar must use :meth:`captures_at` instead — otherwise the count,
+        the choice and the evidence table would be decided at one bar and labelled
+        with another.
+        """
+        return self.captures_at(CAPTURE_BAR)
+
+    def captures_at(self, capture_bar: float) -> bool:
+        """Does this row capture its level at ``capture_bar``?"""
+        return captures_level(self, capture_bar=capture_bar)
 
 
 class SensitivityLevelRow(BaseModel):
@@ -234,13 +257,26 @@ class SensitivityLevelRow(BaseModel):
 
     @property
     def capturing(self) -> tuple[str, ...]:
-        """Names of the indicators that capture this level, in the caller's order."""
-        return tuple(row.name for row in self.indicators if row.captures)
+        """Names capturing at the FROZEN bar (the 0.5 default view); caller order."""
+        return self.capturing_at(CAPTURE_BAR)
+
+    def capturing_at(self, capture_bar: float) -> tuple[str, ...]:
+        """Names of the indicators that capture this level at ``capture_bar``."""
+        return tuple(row.name for row in self.indicators if row.captures_at(capture_bar))
 
     @property
     def capture_count(self) -> int:
-        """How many indicators capture this level."""
-        return sum(1 for row in self.indicators if row.captures)
+        """How many indicators capture this level at the FROZEN bar."""
+        return self.capture_count_at(CAPTURE_BAR)
+
+    def capture_count_at(self, capture_bar: float) -> int:
+        """How many indicators capture this level at ``capture_bar``.
+
+        The bar-aware form is what :func:`select_sensitivity_level` reads, so a
+        choice made at a caller-supplied bar reports that bar's counts. The
+        ``capture_count`` property above stays the frozen 0.5 view.
+        """
+        return sum(1 for row in self.indicators if row.captures_at(capture_bar))
 
 
 class IndicatorDrop(BaseModel):
@@ -260,7 +296,8 @@ class IndicatorDrop(BaseModel):
         min_length=1,
         description=(
             "Why it fails here, most fundamental first: unscoreable, negative (sign-flipped), "
-            "degenerate (one side dead), below the capture bar"
+            "degenerate (one side dead), below the capture bar. Every comparison is at the "
+            "bar this choice was made at, so the number printed is the number applied"
         ),
     )
 
@@ -272,12 +309,19 @@ class FinerLevelDrops(BaseModel):
 
     min_move_pct: float = Field(..., ge=0.0, description="The finer level in question")
     n_turns: int = Field(..., ge=0, description="Turns found at that finer level")
-    capture_count: int = Field(..., ge=0, description="How many indicators capture the finer level")
+    capture_count: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "How many indicators capture the finer level, at the bar this choice was made at"
+        ),
+    )
     qualifies: bool = Field(
         ...,
         description=(
-            "Whether the finer level qualifies under the choice rule; False is exactly the "
-            "evidence that the chosen level is the finest one the indicators can still capture"
+            "Whether the finer level qualifies under the choice rule at the bar this choice "
+            "was made at; False is exactly the evidence that the chosen level is the finest "
+            "one the indicators can still capture"
         ),
     )
     dropped: tuple[IndicatorDrop, ...] = Field(
@@ -291,7 +335,13 @@ class SensitivityChoice(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True)
 
     capture_bar: float = Field(
-        ..., gt=0.0, description="The capture bar in z-units this choice was made at"
+        ...,
+        gt=0.0,
+        description=(
+            "The capture bar in z-units this choice was made at. It is the bar every "
+            "verdict, count, qualifies flag and drop reason below was decided at, not a "
+            "label: CAPTURE_BAR when the caller did not supply one"
+        ),
     )
     chosen_min_move_pct: float = Field(
         ..., ge=0.0, description="The chosen level's magnitude filter"
@@ -340,9 +390,23 @@ def row_is_degenerate(
 
 
 def captures_level(row: IndicatorCaptureRow, *, capture_bar: float = CAPTURE_BAR) -> bool:
-    """The frozen capture test: at the bar, sign-correct, and not one-sided."""
+    """The frozen capture test, evaluated AT ``capture_bar``.
+
+    Three conjuncts, each the owner's own wording: the separation reaches the bar
+    (inclusive), the vote runs the right way, and neither window side is dead.
+    ``capture_bar`` is a real input, not a label — callers that consolidate at
+    another bar get that bar's verdicts.
+    """
     if row.separation is None or capture_bar <= 0.0:
         return False
+    # `separation > 0.0` is the sign-correctness conjunct. It is provably implied by
+    # the bar conjunct above for every positive bar (separation >= capture_bar > 0),
+    # so it carries no verdict today and will read as dead code to the next reader.
+    # It is retained deliberately: it is the one line in this body that says a vote
+    # which runs backwards is NOT rescued by magnitude, which is the failure mode
+    # `abs()` would introduce. Delete it as redundant and the next edit that lowers
+    # or symmetrises the bar (`abs(separation) >= capture_bar`) admits every mirrored
+    # leg with no remaining trace of the rule that forbade it.
     return row.separation >= capture_bar and row.separation > 0.0 and not row.degenerate
 
 
@@ -373,19 +437,26 @@ def _drop_reason(row: IndicatorCaptureRow | None, capture_bar: float, min_move_p
     return f"below the capture bar: separation {row.separation:+.4f} < {capture_bar}"
 
 
-def _qualifying(ordered: Sequence[SensitivityLevelRow]) -> tuple[SensitivityLevelRow, ...]:
+def _qualifying(
+    ordered: Sequence[SensitivityLevelRow], *, capture_bar: float
+) -> tuple[SensitivityLevelRow, ...]:
     """Levels whose capture count loses nothing against every coarser level.
 
     Walked coarsest-first, which is what makes "less sensitive" mean "already
     visited": the running best is the max capture count strictly coarser than the
     level under test, and the coarsest level has none, so it always qualifies.
+
+    The running max is over EVERY coarser level, not just the one before it. A
+    ladder may dip and recover (counts [4, 1, 3]), and a recovered level must not
+    be admitted by beating only the rung it recovered from — it still has to hold
+    the best count any coarser level reached.
     """
     qualifying: list[SensitivityLevelRow] = []
     best_coarser = -1
     for level in ordered:
-        if level.capture_count >= best_coarser:
+        if level.capture_count_at(capture_bar) >= best_coarser:
             qualifying.append(level)
-        best_coarser = max(best_coarser, level.capture_count)
+        best_coarser = max(best_coarser, level.capture_count_at(capture_bar))
     return tuple(qualifying)
 
 
@@ -397,8 +468,15 @@ def select_sensitivity_level(
     """Consolidate a sensitivity ladder into one level, with the evidence attached.
 
     ``level_rows`` may arrive in any order; it is read coarsest-first. Raises
-    ``ValueError`` on an empty ladder or on two levels sharing a ``min_move_pct``
-    (which would make "coarser than" ambiguous).
+    ``ValueError`` on an empty ladder, on two levels sharing a ``min_move_pct``
+    (which would make "coarser than" ambiguous), or on a non-positive
+    ``capture_bar``.
+
+    ``capture_bar`` is threaded through the whole decision — every capture
+    verdict, every capture count, the qualifying set, the chosen level and every
+    drop reason is evaluated AT that bar, and the returned choice records the bar
+    it was actually made at. ``CAPTURE_BAR`` (0.5) remains the frozen default; a
+    bar supplied here overrides it rather than merely annotating a 0.5 decision.
 
     Pure: no I/O, no series, no asset. The caller supplies the numbers it scored.
     """
@@ -417,7 +495,7 @@ def select_sensitivity_level(
             )
         seen.add(level.min_move_pct)
 
-    qualifying = _qualifying(ordered)
+    qualifying = _qualifying(ordered, capture_bar=capture_bar)
     if not qualifying:  # unreachable: the coarsest level always qualifies
         raise ValueError(
             "no level qualifies: the coarsest level has no coarser level to lose against, so "
@@ -425,14 +503,19 @@ def select_sensitivity_level(
         )
     # Among qualifiers: the largest capture count wins, and the coarser level
     # whenever the counts tie — the pair sorts capture count first, magnitude
-    # second.
-    chosen = max(qualifying, key=lambda level: (level.capture_count, level.min_move_pct))
-    chosen_names = set(chosen.capturing)
+    # second. Both counts are read at ``capture_bar``, so a caller-supplied bar
+    # decides the choice rather than only annotating it.
+    chosen = max(
+        qualifying,
+        key=lambda level: (level.capture_count_at(capture_bar), level.min_move_pct),
+    )
+    chosen_names = set(chosen.capturing_at(capture_bar))
 
     finer_rows = tuple(level for level in ordered if level.min_move_pct < chosen.min_move_pct)
+    qualifying_pcts = {level.min_move_pct for level in qualifying}
     dropped_by_level: list[FinerLevelDrops] = []
     for level in finer_rows:
-        finer_names = set(level.capturing)
+        finer_names = set(level.capturing_at(capture_bar))
         by_name = {row.name: row for row in level.indicators}
         drops = tuple(
             IndicatorDrop(
@@ -451,8 +534,8 @@ def select_sensitivity_level(
             FinerLevelDrops(
                 min_move_pct=level.min_move_pct,
                 n_turns=level.n_turns,
-                capture_count=level.capture_count,
-                qualifies=level in qualifying,
+                capture_count=level.capture_count_at(capture_bar),
+                qualifies=level.min_move_pct in qualifying_pcts,
                 dropped=drops,
             )
         )
@@ -461,12 +544,14 @@ def select_sensitivity_level(
         capture_bar=capture_bar,
         chosen_min_move_pct=chosen.min_move_pct,
         chosen_n_turns=chosen.n_turns,
-        capture_count=chosen.capture_count,
-        capturing_indicators=chosen.capturing,
-        non_capturing_indicators=tuple(row.name for row in chosen.indicators if not row.captures),
+        capture_count=chosen.capture_count_at(capture_bar),
+        capturing_indicators=chosen.capturing_at(capture_bar),
+        non_capturing_indicators=tuple(
+            row.name for row in chosen.indicators if not row.captures_at(capture_bar)
+        ),
         level_rows=ordered,
         dropped_at_finer_levels=tuple(dropped_by_level),
-        capture_rule=CAPTURE_RULE,
+        capture_rule=_capture_rule_at(capture_bar),
         choice_rule=CHOICE_RULE,
         rationale=RATIONALE,
     )

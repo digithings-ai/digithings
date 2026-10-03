@@ -15,7 +15,9 @@ Pins that matter here, in order of importance:
   inclusive at exactly 0.5; a negative separation never captures (``abs()`` is
   forbidden — that would reward a leg voting backwards); a one-sided pass
   (one window mean inside the +/-0.06 dead zone) never captures, however high
-  its separation; an unscoreable leg never captures.
+  its separation; an unscoreable leg never captures. 0.5 is the FROZEN DEFAULT,
+  not a hard-wired constant: a bar the caller supplies must decide the verdict,
+  the count, the choice and the drop reasons — never merely label them.
 - **The choice: finest that does not lose** (b). A level qualifies when its
   capture count is at least as large as at EVERY coarser level, and the rule
   takes the most sensitive qualifier.
@@ -44,9 +46,11 @@ from pathlib import Path
 import pytest
 from digiquant.strategies.sdca.sensitivity_consolidate import (
     CAPTURE_BAR,
+    CAPTURE_RULE,
     DEGENERATE_MEAN_ABS,
     IndicatorCaptureRow,
     SensitivityLevelRow,
+    captures_level,
     row_is_degenerate,
     select_sensitivity_level,
 )
@@ -160,6 +164,71 @@ def test_dead_zone_means_a_one_sided_pass_never_captures() -> None:
     assert just_outside.captures is True
 
 
+def test_the_caller_supplied_capture_bar_is_the_bar_the_choice_is_made_at() -> None:
+    """``capture_bar`` decides; it is not just a label on a frozen 0.5 decision.
+
+    The ladder's two rungs agree at the frozen bar — every leg clears 0.5 at both,
+    so nothing is dropped — but they disagree at a caller-supplied 0.7: ``mid``
+    (0.60) falls out of both levels and ``edge`` falls out of the finer one. So a
+    choice made at 0.7 must (i) move a capture verdict, (ii) move the counts the
+    choice is built from, and (iii) print the bar it actually used in the evidence
+    it attaches — while the frozen default still decides at 0.5 and says so.
+    """
+    ladder = [
+        _level(15.0, [_row("high", 0.9), _row("edge", 0.75), _row("mid", 0.6)]),
+        _level(5.0, [_row("high", 0.9), _row("edge", 0.6), _row("mid", 0.55)]),
+    ]
+    coarse, fine = ladder
+
+    # At the frozen bar: all three legs clear 0.5 at both rungs, so the choice ties
+    # and the coarser tie-break takes 15% — and the finer rung costs nothing.
+    at_frozen_bar = select_sensitivity_level(ladder)
+    assert at_frozen_bar.capture_bar == CAPTURE_BAR
+    assert at_frozen_bar.chosen_min_move_pct == 15.0
+    assert at_frozen_bar.capture_count == 3
+    assert at_frozen_bar.capturing_indicators == ("high", "edge", "mid")
+    assert at_frozen_bar.dropped_at_finer_levels[0].capture_count == 3
+    assert at_frozen_bar.dropped_at_finer_levels[0].dropped == ()
+
+    # (i) The verdict is evaluated at the bar the caller asked for, not at the
+    # frozen one. A level's own ``capturing`` stays the frozen-bar view; the
+    # bar-aware view is what a choice at 0.7 is allowed to read.
+    assert captures_level(_row("mid", 0.6)) is True  # clears the frozen 0.5
+    assert captures_level(_row("mid", 0.6), capture_bar=0.7) is False
+    assert coarse.capturing == ("high", "edge", "mid")
+    assert coarse.capturing_at(0.7) == ("high", "edge")
+    assert fine.capturing == ("high", "edge", "mid")
+    assert fine.capturing_at(0.7) == ("high",)
+    assert coarse.capture_count_at(0.7) == 2
+
+    raised = select_sensitivity_level(ladder, capture_bar=0.7)
+    # (ii) The count the choice is built from, and the sets behind it, are the
+    # caller-supplied bar's — three captures become two, so the choice cannot be
+    # 0.5's verdict wearing a 0.7 label.
+    assert raised.capture_bar == 0.7
+    assert raised.chosen_min_move_pct == 15.0
+    assert raised.capture_count == 2
+    assert raised.capturing_indicators == ("high", "edge")
+    assert raised.non_capturing_indicators == ("mid",)
+
+    # (iii) The evidence table is scored at the same bar, and its numbers are
+    # consistent with it: `edge` is reported as dropped for falling short of 0.7,
+    # never for falling short of a 0.5 it was never held to.
+    (cost,) = raised.dropped_at_finer_levels
+    assert cost.min_move_pct == 5.0
+    assert cost.capture_count == 1
+    assert [drop.name for drop in cost.dropped] == ["edge"]
+    below = cost.dropped[0]
+    assert below.separation_at_chosen_level == 0.75
+    assert below.separation_at_finer_level == 0.6
+    assert "+0.6000 < 0.7" in below.reason
+    assert "0.5" not in below.reason
+    # The rule the artifact carries names the bar it was decided at, and the
+    # frozen text is still what a frozen-bar choice records.
+    assert "0.7" in raised.capture_rule
+    assert at_frozen_bar.capture_rule == CAPTURE_RULE
+
+
 # --------------------------------------------------------------------------- #
 # (b) the choice: the finest level that does not lose capture count
 # --------------------------------------------------------------------------- #
@@ -186,6 +255,19 @@ def test_refuses_a_finer_level_that_loses_capture_count() -> None:
     choice = select_sensitivity_level(ladder)
     assert choice.chosen_min_move_pct == 15.0
     assert choice.capture_count == 4
+    # The counts are NOT monotone across the ladder — [4, 1, 3] — and 5% recovers
+    # most of what 10% lost. That is what makes this fixture the ONLY one that can
+    # tell "at least as many captures as at EVERY coarser level" from the weaker
+    # "at least as many as at the immediately preceding level": 5% beats its direct
+    # predecessor (3 > 1) but still loses to the coarsest rung (3 < 4). Both rungs
+    # finer than the choice are therefore reported as NON-qualifying, and neither
+    # `chosen` nor `capture_count` above can see the difference — only the flags
+    # the ladder's finer rows carry.
+    ten, five = choice.dropped_at_finer_levels
+    assert ten.min_move_pct == 10.0
+    assert ten.qualifies is False  # 1 capture against the coarsest rung's 4
+    assert five.min_move_pct == 5.0
+    assert five.qualifies is False  # 3 captures — above 10%'s 1, below 15%'s 4
 
 
 def test_the_coarsest_level_does_not_win_when_a_finer_level_captures_more() -> None:
