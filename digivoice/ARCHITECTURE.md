@@ -85,7 +85,8 @@ commands write.
    16-bit, which is what whisper.cpp wants, so nothing has to resample. The file is
    `recordings/dict-<UTC stamp>-<8 hex>.wav`.
 2. **Transcribe** (`transcribe.py`). `whisper-cli` (or the `whisper-cpp` alias) with
-   `-m <models_dir>/ggml-base.en.bin -f <wav> -l en -nt`. stdout is the transcript; the
+   `-m <models_dir>/<stt_model>.bin -f <wav> -l en -nt`. `stt_model` comes from
+   settings (default `ggml-base.en` → `ggml-base.en.bin`). stdout is the transcript; the
    banner chatter goes to stderr. Segment timestamps are stripped and whitespace is
    collapsed into one line.
 3. **Rewrite** (`rewrite.py`, optional). When `rewrite_enabled`: local ollama / llama.cpp with a preset (email / SMS / professional / coding / blog). Auto-route from the focused app when enabled (match table is `rewrite_app_routes` in settings, not hard-coded paths). Fail soft — raw transcript on error. Disabled by default. `--no-rewrite` skips.
@@ -100,7 +101,8 @@ Recording modes:
 | `--toggle` | 30min safety (no UX limit) | Yes — stop-file (default `{data_dir}/dict.stop`), SIGINT/SIGTERM, or ~10s silence pause (sox). |
 | neither | 30s | No. |
 
-`--seconds N` overrides the cap. Hold / default use the bounded `CommandRunner` path.
+`--seconds N` overrides the cap. Hold / default use the bounded `CommandRunner` path (`sox … trim 0 N` or
+`ffmpeg … -t N`; `rec` is not a sox effect).
 Toggle with the real runner uses `Popen`: open-ended sox/ffmpeg, poll for the stop-file or
 signal, SIGINT the recorder process group so the wav header stays valid, then continue the
 pipeline. Injected fake runners keep the bounded path so unit tests need no signals.
@@ -188,7 +190,7 @@ Required for exit 0:
 | `whisper-cli` | Executable on `PATH` |
 | `piper` | Executable on `PATH`, otherwise `~/.local/bin/piper` |
 | `capture` | `sox` or `ffmpeg` on `PATH` |
-| `models` | Models directory exists and contains `ggml-base.en.bin` |
+| `models` | Models directory exists and contains the configured `stt_model` file (default `ggml-base.en.bin`) |
 
 Always informational:
 

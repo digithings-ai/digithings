@@ -8,12 +8,12 @@ from pathlib import Path
 
 from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
-    DEFAULT_MODEL,
-    DEFAULT_MODEL_FILE,
     linux_data_dir,
     mac_data_dir,
     piper_fallback,
     resolve_paths,
+    resolve_stt_model_path,
+    stt_model_id,
 )
 from digivoice.probe import CommandProbe
 from digivoice.rewrite import rewrite_doctor_detail
@@ -29,25 +29,26 @@ def _tool(check_id: str, found: str | None, missing: str) -> DoctorCheck:
     return DoctorCheck(id=check_id, status="missing", detail=missing)
 
 
-def _models(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
+def _models(paths: VoicePaths, probe: CommandProbe, settings: VoiceSettings) -> DoctorCheck:
     models_dir = paths.models_dir
-    model_path = str(Path(models_dir) / DEFAULT_MODEL_FILE)
+    label = stt_model_id(settings.stt_model)
+    model_path = str(resolve_stt_model_path(paths, settings.stt_model))
     if not probe.is_dir(models_dir):
         return DoctorCheck(
             id="models",
             status="missing",
-            detail=f"default model {DEFAULT_MODEL}: directory missing: {models_dir}",
+            detail=f"stt model {label}: directory missing: {models_dir}",
         )
     if not probe.is_file(model_path):
         return DoctorCheck(
             id="models",
             status="missing",
-            detail=f"default model {DEFAULT_MODEL} missing: {model_path}",
+            detail=f"stt model {label} missing: {model_path}",
         )
     return DoctorCheck(
         id="models",
         status="ok",
-        detail=f"{DEFAULT_MODEL} at {model_path}",
+        detail=f"{label} at {model_path}",
     )
 
 
@@ -151,6 +152,7 @@ def doctor_checks(
     probe: CommandProbe,
 ) -> list[DoctorCheck]:
     paths = resolve_paths(platform, home, env)
+    settings = load_settings(paths)
     piper_home = str(piper_fallback(home))
     piper = probe.lookup("piper")
     if piper is None and probe.executable(piper_home):
@@ -167,7 +169,7 @@ def doctor_checks(
         _tool("sox", sox, "not on PATH"),
         _tool("ffmpeg", ffmpeg, "not on PATH"),
         _tool("capture", sox or ffmpeg, "need sox or ffmpeg for microphone capture"),
-        _models(paths, probe),
+        _models(paths, probe, settings),
         _settings_check(paths),
         _hotkeys_check(),
         _hammerspoon_check(home, paths, probe),

@@ -1,8 +1,9 @@
-"""Transcribe a wav with whisper-cli and the ggml-base.en weights.
+"""Transcribe a wav with whisper-cli and the configured STT weights.
 
-`whisper-cpp` is accepted as an alias because distributions disagree on the
-binary name. stdout carries the transcript; the banner and model loading chatter
-go to stderr, so only stdout is parsed.
+Default model id is `ggml-base.en` (`ggml-base.en.bin`). `settings.stt_model`
+selects another local ggml file. `whisper-cpp` is accepted as an alias because
+distributions disagree on the binary name. stdout carries the transcript; the
+banner and model loading chatter go to stderr, so only stdout is parsed.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import Transcript
-from digivoice.paths import DEFAULT_MODEL, DEFAULT_MODEL_FILE, VoicePaths
+from digivoice.paths import VoicePaths, resolve_stt_model_path, stt_model_id
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
 
@@ -59,8 +60,8 @@ def clean_transcript(raw: str) -> str:
     return " ".join(without_markers.split())
 
 
-def model_file(paths: VoicePaths) -> Path:
-    return Path(paths.models_dir) / DEFAULT_MODEL_FILE
+def model_file(paths: VoicePaths, model_id: str | None = None) -> Path:
+    return resolve_stt_model_path(paths, model_id)
 
 
 def transcribe(
@@ -68,17 +69,22 @@ def transcribe(
     probe: CommandProbe,
     runner: CommandRunner,
     wav_path: str,
+    model_id: str | None = None,
 ) -> Transcript:
-    """Run whisper-cli over `wav_path` and return the transcript text."""
+    """Run whisper-cli over `wav_path` and return the transcript text.
+
+    `model_id` is `settings.stt_model` (default `ggml-base.en`).
+    """
     binary = select_whisper(probe)
     if binary is None:
         raise TranscribeError(
             "whisper-cli not on PATH (whisper.cpp binary name is whisper-cli, "
             "whisper-cpp also accepted)"
         )
-    model = model_file(paths)
+    label = stt_model_id(model_id)
+    model = model_file(paths, model_id)
     if not model.is_file():
-        raise TranscribeError(f"default model {DEFAULT_MODEL} missing: {model}")
+        raise TranscribeError(f"stt model {label} missing: {model}")
     argv = whisper_argv(binary, model, Path(wav_path))
     result = runner(argv, timeout=TRANSCRIBE_TIMEOUT)
     if result.code != 0:
@@ -89,7 +95,7 @@ def transcribe(
         raise EmptyTranscriptError("whisper-cli returned no text; nothing was recognized")
     return Transcript(
         text=text,
-        model=DEFAULT_MODEL,
+        model=label,
         model_path=str(model),
         wav_path=wav_path,
         argv=list(argv),

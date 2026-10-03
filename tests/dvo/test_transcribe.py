@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import VoicePaths
-from digivoice.paths import DEFAULT_MODEL_FILE, resolve_paths
+from digivoice.paths import DEFAULT_MODEL_FILE, resolve_paths, resolve_stt_model_path
 from digivoice.probe import real_probe
 from digivoice.transcribe import (
     LANGUAGE,
@@ -125,3 +125,25 @@ def test_silence_markers_are_an_empty_take(paths: VoicePaths, raw: str) -> None:
 
 def test_silence_marker_next_to_speech_is_dropped() -> None:
     assert clean_transcript("[BLANK_AUDIO] ship it. [ Silence ]") == "ship it."
+
+
+def test_resolve_stt_model_path_maps_ids_and_filenames(paths: VoicePaths) -> None:
+    models = Path(paths.models_dir)
+    assert resolve_stt_model_path(paths) == models / "ggml-base.en.bin"
+    assert resolve_stt_model_path(paths, "ggml-small.en") == models / "ggml-small.en.bin"
+    assert resolve_stt_model_path(paths, "ggml-small.en.bin") == models / "ggml-small.en.bin"
+    assert resolve_stt_model_path(paths, "subdir/custom.bin") == models / "subdir/custom.bin"
+    assert resolve_stt_model_path(paths, "/abs/weights.bin") == Path("/abs/weights.bin")
+
+
+def test_transcribe_uses_the_configured_stt_model(paths: VoicePaths) -> None:
+    model = Path(paths.models_dir) / "ggml-small.en.bin"
+    model.parent.mkdir(parents=True, exist_ok=True)
+    model.write_bytes(b"fake weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship it.\n")})
+    result = transcribe(paths, WHISPER, runner, "/tmp/a.wav", model_id="ggml-small.en")
+    assert result.text == "ship it."
+    assert result.model == "ggml-small.en"
+    assert result.model_path == str(model)
+    argv = runner.call_for("whisper-cli").argv
+    assert argv[argv.index("-m") + 1] == str(model)

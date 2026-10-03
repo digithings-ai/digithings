@@ -14,6 +14,31 @@ DEFAULT_MODEL = "ggml-base.en"
 DEFAULT_MODEL_FILE = "ggml-base.en.bin"
 
 
+def stt_model_id(model_id: str | None = None) -> str:
+    """Stable id for logs/doctor: `ggml-small.en.bin` → `ggml-small.en`."""
+    text = (model_id or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    name = Path(text).expanduser().name
+    for suffix in (".bin", ".gguf"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def resolve_stt_model_path(paths: VoicePaths, model_id: str | None = None) -> Path:
+    """Weights file for `settings.stt_model` (or the default).
+
+    `ggml-base.en` → `<models_dir>/ggml-base.en.bin`. A `.bin`/`.gguf` name is
+    used under the models dir; an absolute path is used as-is.
+    """
+    text = (model_id or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    candidate = Path(text).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    if text.endswith((".bin", ".gguf")):
+        return Path(paths.models_dir) / text
+    return Path(paths.models_dir) / f"{text}.bin"
+
+
 def mac_data_dir(home: Path) -> Path:
     return home / "Library" / "Application Support" / APP_DIR_NAME
 
