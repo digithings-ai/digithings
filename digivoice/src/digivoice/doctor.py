@@ -11,7 +11,6 @@ from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
     DEFAULT_MODEL,
     linux_data_dir,
-    local_bin,
     mac_data_dir,
     piper_fallback,
     resolve_paths,
@@ -20,7 +19,7 @@ from digivoice.probe import CommandProbe
 from digivoice.rewrite import rewrite_doctor_detail
 from digivoice.runner import run_command
 from digivoice.settings import HOTKEYS_DOCS, VoiceSettings, load_settings, settings_path
-from digivoice.transcribe import model_file
+from digivoice.transcribe import model_file, select_whisper
 
 _REQUIRED = frozenset({"whisper-cli", "piper", "capture", "models"})
 
@@ -186,13 +185,8 @@ def _rewrite_check(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
 
 
 def _whisper_binary(home: Path, probe: CommandProbe) -> str | None:
-    found = probe.lookup("whisper-cli")
-    if found:
-        return found
-    fallback = str(local_bin(home) / "whisper-cli")
-    if probe.executable(fallback):
-        return fallback
-    return None
+    """Same binary transcribe will run: whisper-cli, else whisper-cpp, else ~/.local/bin."""
+    return select_whisper(probe, home)
 
 
 def doctor_checks(
@@ -212,7 +206,7 @@ def doctor_checks(
         _tool(
             "whisper-cli",
             _whisper_binary(home, probe),
-            "not on PATH (whisper.cpp binary name is whisper-cli)",
+            "not on PATH (whisper.cpp binary name is whisper-cli, whisper-cpp also accepted)",
         ),
         _tool("piper", piper, f"not on PATH and not executable at {piper_home}"),
         _tool("sox", sox, "not on PATH"),
