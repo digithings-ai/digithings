@@ -65,6 +65,7 @@ def _make_app() -> FastAPI:
 def test_unblocked_token_passes(monkeypatch):
     token, _jti = _issue_and_configure(monkeypatch)
     monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
+    monkeypatch.setenv("DIGIKEY_REQUIRE_BLOCKLIST", "0")
     from digikey import blocklist
 
     blocklist.reset_client_cache()
@@ -126,6 +127,7 @@ def test_redis_unreachable_returns_503(monkeypatch):
 def test_unset_url_is_passthrough(monkeypatch):
     token, _jti = _issue_and_configure(monkeypatch)
     monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
+    monkeypatch.setenv("DIGIKEY_REQUIRE_BLOCKLIST", "0")
     from digikey import blocklist
 
     blocklist.reset_client_cache()
@@ -133,3 +135,22 @@ def test_unset_url_is_passthrough(monkeypatch):
     client = TestClient(_make_app())
     r = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
+
+
+@pytest.mark.unit
+def test_unset_url_fails_closed_when_requirement_default(monkeypatch):
+    """The old default treated a missing Redis URL as 'not revoked'."""
+    token, _jti = _issue_and_configure(monkeypatch)
+    monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
+    monkeypatch.delenv("DIGIKEY_REQUIRE_BLOCKLIST", raising=False)
+    from digikey import blocklist
+
+    blocklist.reset_client_cache()
+
+    client = TestClient(_make_app())
+    r = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 503
+    assert r.json() == {
+        "code": "auth_backend_unavailable",
+        "message": "Auth backend temporarily unavailable",
+    }

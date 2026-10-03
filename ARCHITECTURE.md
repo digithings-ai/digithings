@@ -331,7 +331,7 @@ Machine clients use `grant_type=api_key` with a `dgk_live_` key for the same exc
 
 ### Known Gaps
 
-- **JWT revocation depends on the blocklist backend:** digikey writes revoked `jti` values to a Redis blocklist with a per-entry TTL, and protected services reject a blocklisted `jti` (ADR-0007). Compose sets `DIGIKEY_REQUIRE_BLOCKLIST=1` and a `digikey-blocklist-redis` URL, so an unreachable Redis fails closed with `503 auth_backend_unavailable`. A deployment that leaves both `DIGIKEY_BLOCKLIST_REDIS_URL` and `DIGIKEY_REQUIRE_BLOCKLIST` unset keeps pre-revocation behavior (tokens valid until `exp`).
+- **JWT revocation depends on the blocklist backend:** digikey writes revoked `jti` values to a Redis blocklist with a per-entry TTL, and protected services reject a blocklisted `jti` (ADR-0007). The code default is fail-closed: an unset `DIGIKEY_BLOCKLIST_REDIS_URL` returns `503 auth_backend_unavailable` unless `DIGIKEY_REQUIRE_BLOCKLIST=0`. Compose and the Cloudflare stack entrypoint set the Redis URL and leave the requirement on. An unreachable Redis fails closed the same way.
 - **Multi-tenant incomplete:** `X-Digi-Tenant` is propagated but tenant isolation within digisearch and digiquant is not enforced at the data layer today.
 - **digibase credential broker not shipped:** Each service holds its own raw `DATABASE_URL` / `REDIS_URL`. Central credential rotation is Phase 1 of the digibase service roadmap.
 
@@ -409,7 +409,7 @@ Human-in-the-loop interrupt before code execution is supported via `DIGI_INTERRU
 
 | Risk | Severity | Mitigation Today | Roadmap Fix |
 |------|----------|-----------------|-------------|
-| JWT revocation off when blocklist unset | Medium | Short-lived tokens; Redis `jti` blocklist (ADR-0007); Compose sets `DIGIKEY_REQUIRE_BLOCKLIST=1` and fails closed | Durable/HA Redis; alert on blocklist unavailability |
+| JWT revocation skipped when `DIGIKEY_REQUIRE_BLOCKLIST=0` | Medium | Code default is fail-closed; Redis `jti` blocklist (ADR-0007); Compose and the Cloudflare entrypoint set the URL and leave the requirement on | Durable/HA Redis; alert on blocklist unavailability |
 | Unsandboxed code execution | High | Off by default (`DIGI_ALLOW_CODE_EXEC`); loopback-only network | gVisor or subprocess sandboxing |
 | Multi-tenant incomplete | Medium | Network isolation; per-key scopes | digibase + per-tenant index isolation |
 | Ephemeral JWKS rotates on restart | Medium | Dev-only (`DIGIKEY_ALLOW_EPHEMERAL_KEY=1`); use PEM or stable key in production | Vault/KMS-backed signing keys |
@@ -502,8 +502,8 @@ make seed-digisearch-edgar-dev                # ingest into edgar_dev index
 | `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `1` permits ephemeral JWKS (local dev only) | Set to `1` for local; use stable key in prod |
 | `DIGIKEY_PRIVATE_KEY_PEM` | RS256 private key for stable JWT signing | Required for production (not ephemeral) |
 | `DIGIKEY_LITELLM_PROXY_KEY` | Injected into token exchange response | Set to same as LITELLM_MASTER_KEY for funnel |
-| `DIGIKEY_BLOCKLIST_REDIS_URL` | Redis URL backing the JWT `jti` revocation blocklist (ADR-0007) | Recommended for production; required when `DIGIKEY_REQUIRE_BLOCKLIST=1` |
-| `DIGIKEY_REQUIRE_BLOCKLIST` | `1` makes an unset/unreachable blocklist fail closed (503) | Set to `1` in production (Compose default) |
+| `DIGIKEY_BLOCKLIST_REDIS_URL` | Redis URL backing the JWT `jti` revocation blocklist (ADR-0007) | Required in production (the requirement defaults on) |
+| `DIGIKEY_REQUIRE_BLOCKLIST` | `1` (the code default) makes an unset/unreachable blocklist fail closed (503) | Leave unset or `1` in production; `0` is the local-dev opt-out |
 | `AUTH_SECRET` | Next-Auth signing secret for digichat | Required for digichat |
 | `AUTH_URL` | Full public URL of digichat (must match browser origin) | Required for digichat |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password for digichat-DB | Required for `digichat` profile |

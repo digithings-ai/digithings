@@ -431,7 +431,7 @@ When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), 
 3. `rehydrate_blocklist_from_db()` repopulates Redis on startup for revoked API keys **and** revoked BFF subjects.
 4. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
 
-When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Production stacks must set `DIGIKEY_BLOCKLIST_REDIS_URL`.
+When Redis is **unset**, checks fail closed (`BlocklistUnavailable` / HTTP 503) unless `DIGIKEY_REQUIRE_BLOCKLIST=0`. That opt-out is for local dev and the unit suite (`make stack-local` sets it). Production stacks set `DIGIKEY_BLOCKLIST_REDIS_URL` and leave the requirement on.
 
 **Subject revocation scope and limits (#3917).** `POST /v1/admin/bff-sessions/revoke` operates on the bare subject. `JtiIssuedRow` has no tenant column, so a subject revoke is deployment-global — acceptable because subjects are unique and the route is admin-gated, but it is not tenant-scoped. Revocation blocks **already-issued** tokens; it does not prevent a holder of the shared `DIGIKEY_BFF_TOKEN` from minting a new JWT for the same subject, so a compromised BFF secret still requires rotation.
 
@@ -487,7 +487,7 @@ SQLite cannot support multi-instance digikey. Postgres is required for any horiz
 
 ### Revocation check latency (Redis blocklist)
 
-When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, consumers call `blocklist.is_blocked(jti)` on each protected request (typically one Redis `EXISTS` or `SISMEMBER`). This adds sub-millisecond latency but closes the pre-ADR-0007 gap where revoked keys stayed valid until JWT `exp`. When Redis is unset, validation remains purely cryptographic with no blocklist round-trip (dev-only).
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, consumers call `blocklist.is_blocked(jti)` on each protected request (typically one Redis `EXISTS`). This adds sub-millisecond latency but closes the pre-ADR-0007 gap where revoked keys stayed valid until JWT `exp`. When Redis is unset and `DIGIKEY_REQUIRE_BLOCKLIST=0`, validation stays purely cryptographic. The code default is the opposite: an unset URL fails the request.
 
 ### JWKS caching
 

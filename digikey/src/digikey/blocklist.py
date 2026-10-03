@@ -3,9 +3,10 @@
 Thin wrapper over redis-py. Keys are named ``jti:<uuid>`` and written with
 per-entry TTL equal to the token's remaining lifetime so Redis self-cleans.
 
-Configuration: ``DIGIKEY_BLOCKLIST_REDIS_URL``. When unset, ``is_blocked()``
-returns ``False`` and ``write_blocklist_bulk()`` is a no-op — deployments
-without Redis keep the pre-revocation behavior.
+Configuration: ``DIGIKEY_BLOCKLIST_REDIS_URL``. The default is fail-closed:
+an unset URL raises ``BlocklistUnavailable`` unless ``DIGIKEY_REQUIRE_BLOCKLIST``
+is explicitly ``0`` (local dev and the unit suite). Compose and the Cloudflare
+stack entrypoint set the URL and leave the requirement on.
 
 On a Redis connection/communication failure in ``is_blocked()``, this module
 re-raises ``BlocklistUnavailable``; ``DigiAuthMiddleware`` converts that to an
@@ -38,7 +39,7 @@ def _redis_url() -> str:
 
 def require_blocklist_enabled() -> bool:
     """When true, consumers must have Redis configured and reachable (fail-closed)."""
-    return os.environ.get("DIGIKEY_REQUIRE_BLOCKLIST", "0").strip().lower() in (
+    return os.environ.get("DIGIKEY_REQUIRE_BLOCKLIST", "1").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -81,12 +82,19 @@ def write_blocklist_bulk(entries: list[tuple[str, int]]) -> int:
     """Push ``(jti, ttl_sec)`` entries to Redis in a single pipeline.
 
     Entries with ``ttl_sec <= 0`` are skipped (the token is already expired).
-    Returns the number of entries actually written. No-op if Redis unconfigured.
+    Returns the number of entries actually written. When Redis is unconfigured
+    and the requirement is off, this is a no-op. When the requirement is on,
+    a missing client raises ``BlocklistUnavailable`` so a revoke cannot commit
+    ``revoked_at`` without blocklisting the live ``jti`` values.
     """
     if not entries:
         return 0
     client = _get_client()
     if client is None:
+        if require_blocklist_enabled():
+            raise BlocklistUnavailable(
+                "DIGIKEY_REQUIRE_BLOCKLIST=1 but DIGIKEY_BLOCKLIST_REDIS_URL is unset"
+            )
         return 0
     pipe = client.pipeline(transaction=False)
     written = 0
@@ -108,7 +116,9 @@ def is_blocked(jti: str) -> bool:
     """Return True if this jti is in the blocklist.
 
     Raises :class:`BlocklistUnavailable` if the Redis URL is configured but the
-    backend is unreachable. Returns ``False`` when the URL is unset.
+    backend is unreachable, and when the URL is unset while the blocklist is
+    required. Returns ``False`` only when the URL is unset and
+    ``DIGIKEY_REQUIRE_BLOCKLIST=0``.
     """
     if not jti:
         return False

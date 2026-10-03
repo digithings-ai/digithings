@@ -90,6 +90,8 @@ services:
       DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://digikey:8005}
       DIGIKEY_AUDIENCE: ${DIGIKEY_AUDIENCE:-digi-ecosystem}
       DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
+      DIGIKEY_BLOCKLIST_REDIS_URL: ${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
+      DIGIKEY_REQUIRE_BLOCKLIST: ${DIGIKEY_REQUIRE_BLOCKLIST:-1}
     volumes:
       - digivault_data:/data/vault
     depends_on:
@@ -156,6 +158,8 @@ services:
       DIGIKEY_ISSUER: ${DIGIKEY_ISSUER:-http://digikey:8005}
       DIGIKEY_AUDIENCE: ${DIGIKEY_AUDIENCE:-digi-ecosystem}
       DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
+      DIGIKEY_BLOCKLIST_REDIS_URL: ${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
+      DIGIKEY_REQUIRE_BLOCKLIST: ${DIGIKEY_REQUIRE_BLOCKLIST:-1}
       OPENAI_API_BASE: http://litellm:4000/v1
       DIGI_CONFIG_PATH: /app/config
       # Local Profile A has no D1 — use the no-get_note project config. Cloudflare
