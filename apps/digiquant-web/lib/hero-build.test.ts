@@ -1,3 +1,4 @@
+import { DIGIQUANT_CHART } from "@digithings/ui/chart-scale";
 import { describe, expect, it } from "vitest";
 import {
   BUILD_COLUMNS,
@@ -102,8 +103,8 @@ describe("hero build clock", () => {
       }
     }
     const bb = heroIndicatorStrokes(bars, "bollinger-bands");
-    const basis = bb.find((s) => s.color === "#ff9800");
-    const band = bb.find((s) => s.color === "#5b9cf6");
+    const basis = bb.find((s) => s.color === DIGIQUANT_CHART.bollingerBasis);
+    const band = bb.find((s) => s.color === DIGIQUANT_CHART.bollingerBand);
     expect(basis).toBeDefined();
     expect(band).toBeDefined();
     if (basis && band) {
