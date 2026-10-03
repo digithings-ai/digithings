@@ -1218,23 +1218,32 @@ def _macho(cpu: str) -> bytes:
     return struct.pack("<II", 0xFEEDFACF, code)
 
 
-def test_arm64_install_copies_same_arch_espeak_beside_the_binary(
+_TERMINATOR = b"espeak_TextToPhonemesWithTerminator"
+
+
+def _espeak(cpu: str, payload: bytes) -> bytes:
+    return _macho(cpu) + payload + _TERMINATOR
+
+
+def test_arm64_install_keeps_piper_espeak_ahead_of_homebrew(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     libdir = tmp_path / "homebrew" / "lib"
     libdir.mkdir(parents=True)
-    library = libdir / "libespeak-ng.1.dylib"
-    library.write_bytes(_macho("arm64") + b"espeak")
+    homebrew = libdir / "libespeak-ng.1.dylib"
+    homebrew.write_bytes(_macho("arm64") + b"homebrew")
     monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
     home = tmp_path / "home"
     tui = _tui(tmp_path / "tui")
     runner = _runner(tui)
+    matching = _espeak("arm64", b"piper-espeak")
     bodies = _darwin_bodies(
         {
             "piper/piper": _macho("arm64") + b"piper",
             "piper/espeak-ng-data/phontab": b"data",
             "piper/lib/libpiper_phonemize.1.dylib": _macho("arm64") + b"phon",
             "piper/lib/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"ort",
+            "piper/lib/libespeak-ng.1.dylib": matching,
         }
     )
     report, fetched = _install(
@@ -1249,7 +1258,8 @@ def test_arm64_install_copies_same_arch_espeak_beside_the_binary(
     assert PIPER_DARWIN in fetched
     real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
     beside = real / "libespeak-ng.1.dylib"
-    assert beside.read_bytes() == library.read_bytes()
+    assert beside.read_bytes() == matching
+    assert beside.read_bytes() != homebrew.read_bytes()
     assert _step(report, "espeak").status == "present"
     assert _step(report, "espeak").detail == str(beside)
     assert ["install", "espeak-ng"] not in _brew_verbs(runner)
@@ -1278,6 +1288,7 @@ def test_arm64_update_replaces_an_x86_64_vendor_piper(
             "piper/piper": _macho("arm64") + b"new",
             "piper/lib/libpiper_phonemize.1.dylib": _macho("arm64") + b"phon",
             "piper/lib/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"ort",
+            "piper/lib/libespeak-ng.1.dylib": _espeak("arm64", b"espeak"),
         }
     )
     report, fetched = _install(
@@ -1344,6 +1355,7 @@ def _phonemize_zip(cpu: str, payload: bytes) -> bytes:
         {
             "macos-arm64/libpiper_phonemize.1.dylib": _macho(cpu) + payload,
             "macos-arm64/libonnxruntime.1.14.1.dylib": _macho(cpu) + b"ort",
+            "macos-arm64/libespeak-ng.1.dylib": _espeak(cpu, b"espeak"),
         }
     )
 
@@ -1360,6 +1372,7 @@ def test_arm64_install_copies_phonemize_nested_in_the_piper_archive(
             "piper/piper": _macho("arm64") + b"piper",
             "piper/nested/libpiper_phonemize.1.dylib": library,
             "piper/nested/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"ort",
+            "piper/nested/libespeak-ng.1.dylib": _espeak("arm64", b"espeak"),
             "piper/espeak-ng-data/phontab": b"data",
         }
     )
@@ -1480,8 +1493,10 @@ def test_arm64_install_uses_the_arm64_member_when_the_jar_has_both(tmp_path: Pat
         {
             "macos-amd64/libpiper_phonemize.1.dylib": _macho("x86_64") + b"x86-phon",
             "macos-amd64/libonnxruntime.1.14.1.dylib": _macho("x86_64") + b"x86-ort",
+            "macos-amd64/libespeak-ng.1.dylib": _espeak("x86_64", b"x86-espeak"),
             "macos-arm64/libpiper_phonemize.1.dylib": arm_phon,
             "macos-arm64/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"arm-ort",
+            "macos-arm64/libespeak-ng.1.dylib": _espeak("arm64", b"arm-espeak"),
         }
     )
     report, _fetched = _install(
@@ -1498,8 +1513,60 @@ def test_arm64_install_uses_the_arm64_member_when_the_jar_has_both(tmp_path: Pat
     onnx = real / "libonnxruntime.1.14.1.dylib"
     assert beside.read_bytes() == arm_phon
     assert onnx.read_bytes().endswith(b"arm-ort")
+    espeak = real / "libespeak-ng.1.dylib"
+    assert espeak.read_bytes().endswith(b"arm-espeak" + _TERMINATOR)
+    assert b"x86-espeak" not in espeak.read_bytes()
     assert _step(report, "phonemize").status == "installed"
     assert _step(report, "phonemize").detail == str(beside)
+
+
+def test_arm64_update_replaces_homebrew_espeak_with_the_jar_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "homebrew" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64") + b"homebrew")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    home = tmp_path / "home"
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    real.mkdir(parents=True)
+    binary = real / "piper"
+    binary.write_bytes(_macho("arm64") + b"piper")
+    binary.chmod(0o755)
+    (real / "libpiper_phonemize.1.dylib").write_bytes(_macho("arm64") + b"phon")
+    (real / "libonnxruntime.1.14.1.dylib").write_bytes(_macho("arm64") + b"ort")
+    (real / "libespeak-ng.1.dylib").write_bytes(_macho("arm64") + b"homebrew")
+    link = home / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(binary)
+    stamp_path = vendor_dir(home) / "install.json"
+    stamp_path.write_text(
+        InstallStamp(piper="2023.11.14-2", espeak="brew").model_dump_json(),
+        encoding="utf-8",
+    )
+    tui = _tui(tmp_path / "tui")
+    runner = _runner(tui)
+    bodies = _darwin_bodies()
+    bodies[PHONEMIZE_MACOS_ARM64_URL] = _phonemize_zip("arm64", b"kept")
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=runner,
+        refresh=True,
+        adapter_source=_lua_tree(tmp_path / "lua"),
+    )
+    beside = real / "libespeak-ng.1.dylib"
+    assert _TERMINATOR in beside.read_bytes()
+    assert b"homebrew" not in beside.read_bytes()
+    assert PHONEMIZE_MACOS_ARM64_URL in fetched
+    assert PIPER_DARWIN not in fetched
+    assert _step(report, "espeak").detail == str(beside)
+    assert ["upgrade", "espeak-ng"] not in _brew_verbs(runner)
+    assert ["install", "espeak-ng"] not in _brew_verbs(runner)
 
 
 def test_arm64_install_does_not_copy_an_x86_64_phonemize(tmp_path: Path) -> None:

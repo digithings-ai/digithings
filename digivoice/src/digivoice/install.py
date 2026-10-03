@@ -3,9 +3,11 @@
 `digivoice install` fetches bun, the OpenTUI packages, whisper-cli, Piper, sox,
 `ggml-base.en.bin`, and the Lessac Piper voice, then copies this checkout's
 banner adapter into `~/.hammerspoon/digivoice`. On an arm64 Mac it installs
-the native arm64 Piper build, a same-arch `libespeak-ng.1.dylib`, and a
-same-arch `libpiper_phonemize.1.dylib` beside that binary. A missing
-same-arch espeak library is `brew install espeak-ng`. On a
+the native arm64 Piper build and a same-arch `libpiper_phonemize.1.dylib`
+beside that binary. The `libespeak-ng.1.dylib` beside it is the piper-jni
+`macos-arm64` member, which exports `espeak_TextToPhonemesWithTerminator`.
+Homebrew espeak-ng is not copied over that library. When that member is
+absent, a missing same-arch espeak library is `brew install espeak-ng`. On a
 terminal it asks first:
 auto installs that default set, or the user picks local speech, voice, and
 rewrite models. A pick does not delete models already on disk. `digivoice
@@ -42,6 +44,7 @@ from digivoice.reload import reload_hammerspoon
 from digivoice.runner import CommandRunner, error_tail
 from digivoice.settings import load_settings, save_settings
 from digivoice.speak import (
+    espeak_exports_terminator,
     find_espeak_library,
     library_matches_binary,
     macho_cpu,
@@ -63,9 +66,12 @@ PIPER_MACOS_ARM64_URL = (
 )
 # That arm64 archive links @rpath/libpiper_phonemize.1.dylib and does not
 # ship the file (its CMake install copies *.so and *.dll only). This jar's
-# macos-arm64 member is thin Mach-O arm64. The same jar also has macos-amd64
-# copies of the same filenames, and those are Mach-O x86_64. Install must
-# copy the arm64 member. The arm64 phonemize library's install name is
+# macos-arm64 member is thin Mach-O arm64. That member's libespeak-ng.1.dylib
+# exports espeak_TextToPhonemesWithTerminator. Homebrew espeak-ng 1.52 does
+# not, so it is not copied over the jar library. The same jar also has
+# macos-amd64 copies of the same filenames, and those are Mach-O x86_64,
+# including an espeak that has the symbol. Install must copy the arm64
+# member. The arm64 phonemize library's install name is
 # @rpath/libpiper_phonemize.1.dylib. The jar also ships arm64
 # libonnxruntime.1.14.1.dylib, which piper and phonemize both load.
 PHONEMIZE_MACOS_ARM64_URL = (
@@ -74,7 +80,8 @@ PHONEMIZE_MACOS_ARM64_URL = (
 )
 _PHONEMIZE_LIBRARY = "libpiper_phonemize.1.dylib"
 _ONNX_LIBRARY = "libonnxruntime.1.14.1.dylib"
-_ARM64_PIPER_LIBRARIES = (_PHONEMIZE_LIBRARY, _ONNX_LIBRARY)
+_ESPEAK_LIBRARY = "libespeak-ng.1.dylib"
+_ARM64_PIPER_LIBRARIES = (_PHONEMIZE_LIBRARY, _ONNX_LIBRARY, _ESPEAK_LIBRARY)
 VOICE_NAME = "en_US-lessac-medium"
 INSTALL_TIMEOUT = 600.0
 _BUN_RELEASE = f"https://github.com/oven-sh/bun/releases/download/bun-v{BUN_VERSION}"
@@ -702,7 +709,7 @@ def _install_phonemize(home: Path, probe: CommandProbe, fetch: FetchFn) -> Insta
     if binary is None or macho_cpu(Path(binary).resolve()) != "arm64":
         return InstallStep(id="phonemize", status="present", detail="piper is not arm64")
     missing = [
-        name for name in _ARM64_PIPER_LIBRARIES if _copy_piper_library(home, binary, name) is None
+        name for name in _ARM64_PIPER_LIBRARIES if not _library_satisfied(home, binary, name)
     ]
     if not missing:
         return InstallStep(
@@ -717,6 +724,8 @@ def _install_phonemize(home: Path, probe: CommandProbe, fetch: FetchFn) -> Insta
             candidates = _named_files(staging, name)
             if not candidates:
                 raise InstallError(f"archive did not contain {name}")
+            if name == _ESPEAK_LIBRARY:
+                _remove_espeak_without_terminator(binary)
             placed = _place_first_matching(binary, candidates, name)
             if placed is None:
                 raise InstallError(f"{name} is not the same architecture as piper")
@@ -744,13 +753,58 @@ def _named_files(root: Path, name: str) -> list[Path]:
     return [path for path in root.rglob(name) if path.is_file() and path.name == name]
 
 
+def _library_satisfied(home: Path, binary: str, name: str) -> bool:
+    if name == _ESPEAK_LIBRARY:
+        return _place_terminator_espeak(home, binary) is not None
+    return _copy_piper_library(home, binary, name) is not None
+
+
+def _place_terminator_espeak(home: Path, binary: str) -> Path | None:
+    """Same-arch espeak beside piper that exports the phonemize symbol."""
+    ready = _terminator_beside(binary)
+    if ready is not None:
+        return ready
+    _remove_espeak_without_terminator(binary)
+    return _place_first_matching(
+        binary,
+        _named_files(vendor_dir(home) / "piper", _ESPEAK_LIBRARY),
+        _ESPEAK_LIBRARY,
+    )
+
+
+def _terminator_beside(binary: str) -> Path | None:
+    path = Path(binary)
+    if not path.exists():
+        return None
+    dest = path.resolve().parent / _ESPEAK_LIBRARY
+    if not dest.is_file() or not library_matches_binary(binary, dest):
+        return None
+    cpu = macho_cpu(path.resolve())
+    if cpu is None or macho_cpu(dest) != cpu or not espeak_exports_terminator(dest):
+        return None
+    return dest
+
+
+def _remove_espeak_without_terminator(binary: str) -> None:
+    """Drop a same-arch espeak that phonemize cannot call, so a match can replace it."""
+    path = Path(binary)
+    if not path.exists():
+        return
+    dest = path.resolve().parent / _ESPEAK_LIBRARY
+    if dest.is_file() and not espeak_exports_terminator(dest):
+        dest.unlink()
+
+
 def _place_first_matching(binary: str, candidates: list[Path], name: str) -> Path | None:
     """Copy the first candidate whose Mach-O cpu matches `binary`.
 
     A jar can hold an x86_64 and an arm64 file under the same name. The first
-    directory entry is not the architecture.
+    directory entry is not the architecture. espeak also has to export
+    `espeak_TextToPhonemesWithTerminator`.
     """
     for path in candidates:
+        if name == _ESPEAK_LIBRARY and not espeak_exports_terminator(path):
+            continue
         placed = place_macho_library(binary, path, name)
         if placed is not None:
             return placed
@@ -777,8 +831,15 @@ def _install_espeak(
     refresh: bool,
     machine: str,
 ) -> InstallStep:
-    """macOS Piper needs a same-arch libespeak-ng beside the real binary."""
+    """macOS Piper needs a same-arch libespeak-ng beside the real binary.
+
+    An arm64 library that already exports `espeak_TextToPhonemesWithTerminator`
+    stays. Homebrew is not copied over that file.
+    """
     binary = _find_piper(home, probe) or str(piper_fallback(home))
+    matched = _terminator_beside(binary)
+    if matched is not None:
+        return InstallStep(id="espeak", status="present", detail=str(matched))
     found = find_espeak_library(home, binary, platform="darwin")
     stamp = _load_stamp(home).espeak
     if found is not None and (not refresh or stamp != "brew"):
