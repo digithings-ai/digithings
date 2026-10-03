@@ -8,6 +8,7 @@ import { holdingsBody } from "../../../../../clients/digiquant-tui/src/pages/hol
 import { ledgerBody } from "../../../../../clients/digiquant-tui/src/pages/ledger-format";
 import { portfolioBody } from "../../../../../clients/digiquant-tui/src/pages/portfolio-format";
 import { tearsheetBody } from "../../../../../clients/digiquant-tui/src/pages/tearsheet-format";
+import { thesesBody } from "../../../../../clients/digiquant-tui/src/pages/theses-format";
 import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
 import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
@@ -493,8 +494,73 @@ function paintTearsheet(id: string, read: OfficialRead | undefined): { status: R
   return { status: read.result.status, blocks: tearsheetBody(id, read.data, read.result), asOf: read.result.asOf };
 }
 
-export function ThesesPage(props: DeskProps) {
-  return page("/portfolio/theses", props);
+/** `/portfolio/theses` only. Later portfolio pages stay on the line read. */
+function ThesesHome() {
+  const path = "/portfolio/theses";
+  const [reads, setReads] = useState<Record<string, OfficialRead>>({});
+  const layout = layoutFor(path);
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
+
+  useEffect(() => {
+    const placements = layoutFor(path);
+    const ac = new AbortController();
+    let cancel = false;
+    for (const placement of placements) {
+      const def = BLOCKS[placement.id];
+      if (!def) continue;
+      void readOfficial(def.route, def.kind, ac.signal).then((result) => {
+        if (cancel) return;
+        setReads((prev) => ({ ...prev, [placement.id]: result }));
+      });
+    }
+    return () => {
+      cancel = true;
+      ac.abort();
+    };
+  }, []);
+
+  return (
+    <div className={PANE_GRID}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const view = paintTheses(placement.id, reads[placement.id]);
+        return (
+          <div
+            key={placement.id}
+            className="min-h-0 min-w-0"
+            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              blocks={view.blocks}
+              tone={tone[view.status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
+              onNext={panes.next}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function paintTheses(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: thesesBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
+export function ThesesPage() {
+  return <ThesesHome />;
 }
 
 export function TearsheetPage() {
@@ -511,6 +577,7 @@ export function PortfolioPages({ path, ...props }: DeskProps & { path: string })
   if (path === "/portfolio/holdings") return <HoldingsHome />;
   if (path === "/portfolio/attribution") return <AttributionHome />;
   if (path === "/portfolio/ledger") return <LedgerHome />;
+  if (path === "/portfolio/theses") return <ThesesHome />;
   if (path === "/portfolio/tearsheet") return <TearsheetHome />;
   if (!isPortfolioPath(path)) return null;
   return page(path, props);
