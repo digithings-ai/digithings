@@ -276,10 +276,6 @@ export function McpCli() {
       onKeyDown={onShellKey}
       className="flex h-[calc(100svh-var(--nav-shell-h,62px))] max-h-[52rem] min-h-[32rem] min-w-0 flex-1 flex-col overflow-hidden border border-hair bg-term-bg font-mono text-[0.74rem] leading-[1.65] text-ink-soft outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-hair"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-2 text-[0.68rem] text-ink-mute">
-        <span>digiquant · mcp</span>
-        <span className="truncate">↑↓ cycle tools · Execute hits the local gateway when that tool is a probe</span>
-      </div>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 px-4 pt-3">
         <p className="m-0 min-w-0 break-words text-ink">
           {PROMPT}

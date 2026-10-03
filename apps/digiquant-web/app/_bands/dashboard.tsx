@@ -10,7 +10,6 @@ export function DashboardBand() {
     <Band
       id="dashboard"
       fill
-      status="desk"
       title="Self-hosted, or hosted"
       takeaway="The terminal and the hosted desk are the same product."
     >
