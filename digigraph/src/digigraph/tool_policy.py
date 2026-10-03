@@ -42,13 +42,31 @@ def strip_web_search_tools(names: frozenset[str]) -> frozenset[str]:
 
 # Catalog ids / slash aliases → orchestrator tools to strip (#3733).
 _DISABLE_TOOL_ALIASES: dict[str, frozenset[str]] = {
-    "digisearch": frozenset({"digisearch", "digisearch_fetch_all"}),
-    "search": frozenset({"digisearch", "digisearch_fetch_all"}),
+    "digisearch": frozenset({"digisearch_semantic", "digisearch_fetch_all"}),
+    "digisearch_semantic": frozenset({"digisearch_semantic", "digisearch_fetch_all"}),
+    "search": frozenset({"digisearch_semantic", "digisearch_fetch_all"}),
     "digivault": frozenset({"digivault_search_notes", "digivault_get_note"}),
     "vault": frozenset({"digivault_search_notes", "digivault_get_note"}),
     "docs": frozenset({"digivault_search_notes", "digivault_get_note"}),
     "digivault_search_notes": frozenset({"digivault_search_notes", "digivault_get_note"}),
 }
+
+
+# Pre-rename tool ids → canonical ids (#4995). A tenant allow-list, env var or
+# project config written before the rename still says "digisearch"; the registry
+# only knows "digisearch_semantic", so an uncanonicalised allow-list would deny
+# search silently. Kept for one release, then removed with the tables above.
+_LEGACY_TOOL_ALIASES: dict[str, str] = {"digisearch": "digisearch_semantic"}
+
+
+def canonical_tool_names(names: frozenset[str] | None) -> frozenset[str] | None:
+    """Map pre-rename tool ids onto their canonical ids. ``None`` stays ``None``."""
+    if names is None:
+        return None
+    mapped = {_LEGACY_TOOL_ALIASES.get(n, n) for n in names}
+    if mapped == set(names):
+        return names
+    return frozenset(mapped)
 
 
 def expand_disabled_tool_tokens(tokens: list[str] | tuple[str, ...] | None) -> frozenset[str]:
@@ -173,8 +191,12 @@ def allowed_tool_names_for_workflow(
                 base = None
 
     with_web = apply_web_search_opt_in(base, enable_web_search=bool(req.enable_web_search))
+    # Canonicalise legacy tool names BEFORE disabled subtraction, per
+    # ruling 2 rationale: "a legacy allow-list token must become the canonical
+    # name before any comparison against disabled tools."
+    result = canonical_tool_names(with_web)
     disabled = expand_disabled_tool_tokens(req.disabled_tools)
-    result = apply_disabled_tools(with_web, disabled)
+    result = apply_disabled_tools(result, disabled)
     if req.force_tool:
         from digigraph.retrieval import resolve_force_tool
 
@@ -182,6 +204,7 @@ def allowed_tool_names_for_workflow(
         if forced_name and result is not None:
             # Re-add only the locate tool — not fetch_all / get_note siblings.
             result = result | {forced_name}
+    result = canonical_tool_names(result)
     return result
 
 
