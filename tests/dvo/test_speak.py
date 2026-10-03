@@ -255,6 +255,40 @@ def test_darwin_speak_prefers_the_same_arch_library_beside_piper(
     assert call.env["DYLD_LIBRARY_PATH"].split(":") == [str(real)]
 
 
+def test_darwin_speak_loads_the_espeak_beside_an_arm64_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64") + b"homebrew")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "vendor" / "piper"
+    real.mkdir(parents=True)
+    piper = real / "piper"
+    piper.write_bytes(_macho("arm64"))
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(_macho("arm64") + b"beside")
+    link = tmp_path / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(piper)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(link)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert call.env["DYLD_LIBRARY_PATH"].split(":")[0] == str(real)
+    assert str(libdir) not in call.env["DYLD_LIBRARY_PATH"].split(":")
+
+
 def test_play_argv_per_player() -> None:
     assert play_argv("afplay", "/usr/bin/afplay", Path("/a.wav")) == ["/usr/bin/afplay", "/a.wav"]
     assert play_argv("aplay", "/usr/bin/aplay", Path("/a.wav"))[0] == "/usr/bin/aplay"

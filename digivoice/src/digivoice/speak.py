@@ -26,6 +26,7 @@ from digivoice.runner import CommandRunner, error_tail
 from digivoice.settings import load_settings
 
 _ESPEAK_LIBRARY = "libespeak-ng.1.dylib"
+_ESPEAK_TERMINATOR = b"espeak_TextToPhonemesWithTerminator"
 _ESPEAK_DATA = "espeak-ng-data"
 _ESPEAK_PHON = "phontab"
 _MH_MAGIC_64 = 0xFEEDFACF
@@ -243,6 +244,19 @@ def place_macho_library(binary: str, library: Path, name: str) -> Path | None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(library, dest, follow_symlinks=True)
     return dest
+
+
+def espeak_exports_terminator(path: Path) -> bool:
+    """True when this espeak-ng exports the phonemize entry point.
+
+    piper-jni's arm64 phonemize calls `espeak_TextToPhonemesWithTerminator`.
+    Homebrew espeak-ng 1.52 does not provide that symbol.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return False
+    return _ESPEAK_TERMINATOR in data
 
 
 def place_espeak_beside(binary: str, library: Path) -> Path | None:
