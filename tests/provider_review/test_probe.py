@@ -1,5 +1,6 @@
 # tests/provider_review/test_probe.py
 """Unit tests for scripts/provider_review/probe.py."""
+
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.provider_review.probe import PROVIDERS, probe_provider, run_probes
+from scripts.provider_review.probe import PROVIDERS, exit_code, probe_provider, run_probes
 
 
 @pytest.mark.unit
@@ -85,8 +86,51 @@ def test_providers_dict_has_eight_entries():
     """PROVIDERS covers exactly the 8 still-probeable providers (github_models retired #1589)."""
     assert len(PROVIDERS) == 8
     expected = {
-        "gemini", "groq", "cerebras", "mistral", "nvidia_nim",
-        "ollama_cloud", "openrouter", "deepseek",
+        "gemini",
+        "groq",
+        "cerebras",
+        "mistral",
+        "nvidia_nim",
+        "ollama_cloud",
+        "openrouter",
+        "deepseek",
     }
     assert set(PROVIDERS.keys()) == expected
     assert "github_models" not in PROVIDERS
+
+
+_RETIRED_MODELS = {
+    "llama-3.3-70b-versatile",
+    "llama-3.3-70b",
+    "meta/llama-3.3-70b-instruct",
+    "rnj-1:cloud",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "deepseek-chat",
+}
+
+_LIVE_MODELS = {
+    "gemini": "gemini-2.5-flash",
+    "groq": "openai/gpt-oss-120b",
+    "cerebras": "openai/gpt-oss-120b",
+    "mistral": "mistral-small-latest",
+    "nvidia_nim": "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "ollama_cloud": "gpt-oss:20b",
+    "openrouter": "openai/gpt-oss-20b:free",
+    "deepseek": "deepseek-v4-flash",
+}
+
+
+@pytest.mark.unit
+def test_probe_models_are_not_retired_ids():
+    """The weekly probe used to call models the providers already 404/410."""
+    for name, config in PROVIDERS.items():
+        assert config["model"] not in _RETIRED_MODELS
+        assert config["model"] == _LIVE_MODELS[name]
+
+
+@pytest.mark.unit
+def test_exit_code_is_nonzero_only_when_a_probe_failed():
+    """A failed probe used to print and still exit 0."""
+    assert exit_code([{"status": "ok"}, {"status": "skipped"}]) == 0
+    assert exit_code([{"status": "ok"}, {"status": "failed"}]) == 1
+    assert exit_code([]) == 0

@@ -129,7 +129,7 @@ export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
 # instance's ephemeral /data and lose every issued API key (#4080).
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
-export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
+export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-1}"
 export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digitrace/src${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="/usr/local/bin:$PATH"
 

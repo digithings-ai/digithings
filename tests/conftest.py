@@ -10,6 +10,10 @@ import pytest
 
 def pytest_configure(config: pytest.Config) -> None:
     """Fail-closed services need JWT settings; unit tests mint tokens locally (no digikey process)."""
+    # blocklist.py defaults DIGIKEY_REQUIRE_BLOCKLIST to fail-closed. The suite
+    # has no Redis, so opt out before any app import. Tests that prove the
+    # default delete this variable.
+    os.environ.setdefault("DIGIKEY_REQUIRE_BLOCKLIST", "0")
     if os.environ.get("DIGI_STRICT_BACKEND_TESTS") == "1":
         os.environ.pop("DIGISEARCH_ALLOW_STUB", None)
     else:
