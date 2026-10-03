@@ -6,6 +6,25 @@ Speech stays on the machine. digivoice does not call a cloud STT or TTS service,
 
 Dictation and speech are live: microphone → wav → `whisper-cli` with `ggml-base.en` → paste + history; Piper playback for `speak` with history `kind:speak`.
 
+## Install
+
+macOS is the desktop this app runs on. Hotkeys and paste go through Hammerspoon. There is no Windows or Linux package for those hotkeys.
+
+From the repository root:
+
+```bash
+uv tool install --editable ./digivoice
+digivoice install
+```
+
+The first command installs the `digivoice` tool from this checkout (the Hammerspoon adapter is copied from that tree). The second command opens the install wizard in a terminal.
+
+**Auto** installs the local toolchain (bun, OpenTUI, whisper-cli, Piper, sox, and the Hammerspoon adapter) plus the default speech model `ggml-base.en.bin` and the default Piper voice (Lessac). It does not download a rewrite model, and it does not call a cloud STT or TTS service.
+
+**Pick** asks which local speech, voice, and rewrite models to download. Models already on disk stay. Choosing a model does not delete one you did not choose.
+
+A script, `digivoice install --auto`, or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` skips the wizard and installs the auto set. `digivoice update` refreshes that same default set and does not open the wizard.
+
 ## Requirements
 
 - Python 3.12+
@@ -16,7 +35,7 @@ Dictation and speech are live: microphone → wav → `whisper-cli` with `ggml-b
 - `sox` or `ffmpeg` for microphone capture; `afplay` (macOS) or `aplay`/`ffplay` (Linux) for playback
 - Default dictation model `ggml-base.en` (snappy push-to-talk), stored as `ggml-base.en.bin`
 
-`digivoice install` fetches that local set: bun and the OpenTUI packages, whisper-cli, Piper, sox, `ggml-base.en.bin`, and the Lessac voice. It does not download a rewrite model and it does not call a cloud STT or TTS service. A failed step does not stop the rest; the command exits 1 when any step failed.
+`digivoice install` fetches that local set when you choose auto, or when a script runs it with no terminal: bun and the OpenTUI packages, whisper-cli, Piper, sox, `ggml-base.en.bin`, and the Lessac voice. It does not download a rewrite model on that path and it does not call a cloud STT or TTS service. A failed step does not stop the rest; the command exits 1 when any step failed. The wizard's pick path can also download a local rewrite file you choose, and it leaves models already on disk in place.
 
 Linux runs `doctor`, `dict`, `speak`, and `history` with a sound card and ALSA. Paste is skipped there — the transcript is on stdout. A Linux box with no microphone fails with a message and exit 1 instead of hanging.
 
@@ -80,7 +99,8 @@ Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digi
 | `digivoice speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | Piper synthesis + local playback. Appends `{kind:"speak", text}`. Exit 0 on success. |
 | `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
 | `digivoice settings` / `setup` | `settings` shows or changes `settings.json` (models, rewrite on/off + preset + model + runner + auto-route, paste_on_stop, word_detection / spelling_detection stubs default off, live_banner, banner_position, banner_animations). `--json` for agents. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys / Hardware stub / Review & save / Doctor / Quit, arrow keys + Enter on a TTY); `setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`) prints current values + the menu tree with no prompts, exit 0. |
-| `digivoice update` | Refreshes bun, OpenTUI, whisper-cli, Piper, sox, and the default local models when they are missing or older than the pin, then copies the Hammerspoon adapter into `~/.hammerspoon/digivoice` and runs `hs.reload()`. Exit 1 when a step fails. |
+| `digivoice install` | On a terminal, the install wizard. Auto installs the default toolchain, `ggml-base.en.bin`, and the Lessac voice. Pick downloads the local speech, voice, and rewrite models you choose and does not delete models already on disk. `--auto`, a pipe, or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` installs the auto set with no prompts. |
+| `digivoice update` | Refreshes bun, OpenTUI, whisper-cli, Piper, sox, and the default local models when they are missing or older than the pin, then copies the Hammerspoon adapter into `~/.hammerspoon/digivoice` and runs `hs.reload()`. No wizard. Exit 1 when a step fails. |
 | `digivoice cancel` | Creates the cancel-file: a running `dict` discards its take (no paste, no history entry, wav deleted). Esc in the Hammerspoon sample does the same. |
 | `digivoice status` | Prints the `status.json` snapshot the banner reads. |
 

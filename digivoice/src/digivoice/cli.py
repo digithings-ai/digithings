@@ -10,14 +10,14 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, TextIO
 
 from digivoice import history as history_log
 from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
 from digivoice.focus import FocusTarget, capture_frontmost, focus_target
-from digivoice.install import render_install, run_install
+from digivoice.install import render_install, run_install, run_install_wizard
 from digivoice.menu_tree import rows_at
 from digivoice.models import CliResult, PasteResult, VoicePaths
 from digivoice.nav import norm_path, section_of
@@ -241,9 +241,14 @@ def build_parser() -> _Parser:
         dest="print_only",
         help="Print current settings + menu tree (no prompts; same as env noninteractive)",
     )
-    sub.add_parser(
+    install_cmd = sub.add_parser(
         "install",
-        help="Install bun, OpenTUI, whisper-cli, Piper, sox, and the default local models",
+        help="Install the local toolchain and models (a wizard on a terminal)",
+    )
+    install_cmd.add_argument(
+        "--auto",
+        action="store_true",
+        help="Install the default local models with no prompts",
     )
     sub.add_parser(
         "update",
@@ -375,16 +380,35 @@ def _home(runtime: Runtime) -> CliResult:
     return CliResult(code=code, stdout="", stderr="")
 
 
-def _install(runtime: Runtime) -> CliResult:
+def _install_prompts(args: argparse.Namespace, runtime: Runtime, stdin: TextIO) -> bool:
+    """A terminal gets the wizard. Scripts, --auto, and update do not."""
+    if bool(getattr(args, "auto", False)):
+        return False
+    if runtime.env.get("DIGIVOICE_INSTALL_NONINTERACTIVE", ""):
+        return False
+    try:
+        return bool(stdin.isatty())
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def _install(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    models_dir = Path(paths.models_dir)
+    selection = None
+    if _install_prompts(args, runtime, sys.stdin):
+        selection = run_install_wizard(sys.stdin, sys.stdout, models_dir=models_dir)
+        if selection is None:
+            return CliResult(code=0, stdout="digivoice install: cancelled\n", stderr="")
     report = run_install(
         home=runtime.home,
         platform=runtime.platform,
         machine=platform.machine(),
         probe=runtime.probe,
         runner=runtime.runner or run_command,
-        models_dir=Path(paths.models_dir),
+        models_dir=models_dir,
         tui_root=tui_root(),
+        selection=selection,
     )
     code = 0 if report.ok else 1
     return CliResult(code=code, stdout=render_install(report), stderr="")
@@ -987,7 +1011,7 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     if command == "system":
         return _system(runtime)
     if command == "install":
-        return _install(runtime)
+        return _install(args, runtime)
     if command == "update":
         return _update(runtime)
     if command == "uninstall":

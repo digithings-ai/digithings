@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from digivoice.catalog import find_stt
+from digivoice.catalog import find_rewrite, find_stt, find_voice
 from digivoice.cli import Runtime, run
 from digivoice.install import (
     adapter_source_dir,
@@ -17,12 +17,14 @@ from digivoice.install import (
     hammerspoon_adapter_dir,
     piper_archive_url,
     run_install,
+    run_install_wizard,
     voice_urls,
     whisper_archive_url,
 )
-from digivoice.models import InstallReport, InstallStamp, InstallStep
+from digivoice.models import InstallReport, InstallSelection, InstallStamp, InstallStep, VoicePaths
 from digivoice.paths import DEFAULT_MODEL_FILE, vendor_dir
 from digivoice.reload import reload_hammerspoon
+from digivoice.settings import default_settings, load_settings, save_settings
 
 from tests.dvo.fakes import FakeCall, FakeProbe, FakeReply, FakeRunner
 
@@ -119,6 +121,7 @@ def _install(
     fail_urls: set[str] | None = None,
     refresh: bool = False,
     adapter_source: Path | None = None,
+    selection: InstallSelection | None = None,
 ) -> tuple[InstallReport, list[str]]:
     fetched: list[str] = []
     blocked = fail_urls or set()
@@ -143,6 +146,7 @@ def _install(
         fetch=fetch,
         refresh=refresh,
         adapter_source=adapter_source,
+        selection=selection,
     )
     return report, fetched
 
@@ -348,6 +352,7 @@ def test_cli_install_uses_the_report(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     assert seen["platform"] == "linux"
     assert seen["machine"]
     assert "fetch" not in seen
+    assert seen["selection"] is None
 
 
 def _lua_tree(path: Path, text: str = "-- status icon only\n") -> Path:
@@ -713,6 +718,7 @@ def test_cli_update_refreshes_the_install(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert result.code == 0
     assert seen["refresh"] is True
     assert "fetch" not in seen
+    assert "selection" not in seen
     assert result.stdout.startswith("digivoice update\n")
     assert ".hammerspoon/digivoice" in result.stdout
     for path in ("/update", "/system/update"):
@@ -735,3 +741,313 @@ def test_cli_update_exits_1_when_a_step_fails(
     result = run(["update"], Runtime(platform="linux", home=tmp_path, env={}, probe=FakeProbe()))
     assert result.code == 1
     assert "digivoice update: one or more steps failed" in result.stdout
+
+
+class _Tty(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def _voice_paths(home: Path) -> VoicePaths:
+    return VoicePaths(
+        data_dir=str(home),
+        models_dir=str(home / "models"),
+        recordings_dir=str(home / "recordings"),
+        history_file=str(home / "history.jsonl"),
+    )
+
+
+def test_explicit_auto_matches_the_default_install(tmp_path: Path) -> None:
+    kwargs = {
+        "platform": "linux",
+        "machine": "aarch64",
+        "bodies": _linux_bodies(),
+        "probe": FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        "adapter_source": _lua_tree(tmp_path / "lua"),
+    }
+    _, fetched_default = _install(tmp_path / "default", _tui(tmp_path / "tui-default"), **kwargs)
+    _, fetched_auto = _install(
+        tmp_path / "auto",
+        _tui(tmp_path / "tui-auto"),
+        selection=InstallSelection(auto=True),
+        **kwargs,
+    )
+    assert fetched_auto == fetched_default
+    assert all(not url.casefold().endswith(".gguf") for url in fetched_auto)
+
+
+def test_pick_downloads_chosen_models_and_keeps_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.install.urlopen", _block_network)
+    home = tmp_path / "home"
+    models = home / "models"
+    models.mkdir(parents=True)
+    (models / "ggml-tiny.en.bin").write_bytes(b"tiny-stays")
+    (models / "notes.gguf").write_bytes(b"notes-stay")
+    small = find_stt("ggml-small.en")
+    medium = find_stt("ggml-medium.en")
+    amy = find_voice("en_US-amy-medium.onnx")
+    qwen = find_rewrite("qwen2.5-0.5b-instruct-q4_k_m")
+    assert small is not None and medium is not None and amy is not None and qwen is not None
+    bodies = _linux_bodies()
+    bodies[small.url] = b"small"
+    bodies[medium.url] = b"medium"
+    bodies[amy.url] = b"amy"
+    bodies[amy.sidecar_url] = b"{amy}"
+    bodies[qwen.url] = b"qwen"
+    tui = _tui(tmp_path / "tui")
+    source = _lua_tree(tmp_path / "lua")
+    report, fetched = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        adapter_source=source,
+        selection=InstallSelection(
+            auto=False,
+            speech=["ggml-small.en", "ggml-medium.en"],
+            voice=["en_US-amy-medium.onnx"],
+            rewrite=["qwen2.5-0.5b-instruct-q4_k_m"],
+        ),
+    )
+    assert report.ok
+    assert _step(report, "stt:ggml-small.en").status == "installed"
+    assert (models / "ggml-tiny.en.bin").read_bytes() == b"tiny-stays"
+    assert (models / "notes.gguf").read_bytes() == b"notes-stay"
+    assert (models / "ggml-small.en.bin").read_bytes() == b"small"
+    assert (models / "ggml-medium.en.bin").read_bytes() == b"medium"
+    assert (models / "en_US-amy-medium.onnx").read_bytes() == b"amy"
+    assert (models / "en_US-amy-medium.onnx.json").read_bytes() == b"{amy}"
+    assert (models / qwen.filename).read_bytes() == b"qwen"
+    assert not (models / DEFAULT_MODEL_FILE).exists()
+    assert not (models / "en_US-lessac-medium.onnx").exists()
+    assert STT_URL not in fetched
+    assert VOICE_ONNX not in fetched
+    assert qwen.url in fetched
+    assert all("openrouter" not in url and "api.openai.com" not in url for url in fetched)
+    settings = load_settings(_voice_paths(home))
+    assert settings.stt_model == "ggml-small.en"
+    assert settings.tts_voice == "en_US-amy-medium.onnx"
+    assert settings.rewrite_model == qwen.filename
+    assert settings.rewrite_enabled is False
+    _refresh, fetched_again = _install(
+        home,
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        adapter_source=source,
+        refresh=True,
+    )
+    assert fetched_again == [STT_URL, VOICE_ONNX, VOICE_JSON]
+    assert (models / "ggml-tiny.en.bin").read_bytes() == b"tiny-stays"
+    assert (models / "notes.gguf").read_bytes() == b"notes-stay"
+    assert (models / "ggml-small.en.bin").read_bytes() == b"small"
+    assert (models / qwen.filename).read_bytes() == b"qwen"
+    assert (models / DEFAULT_MODEL_FILE).read_bytes() == b"ggml-base"
+
+
+def test_pick_does_not_replace_a_model_already_on_disk(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    models = home / "models"
+    models.mkdir(parents=True)
+    (models / "ggml-small.en.bin").write_bytes(b"already-small")
+    (models / "en_US-amy-medium.onnx").write_bytes(b"keep-onnx")
+    medium = find_stt("ggml-medium.en")
+    amy = find_voice("en_US-amy-medium.onnx")
+    assert medium is not None and amy is not None
+    bodies = _linux_bodies()
+    bodies[medium.url] = b"medium"
+    bodies[amy.sidecar_url] = b"{amy}"
+    _report, fetched = _install(
+        home,
+        _tui(tmp_path / "tui"),
+        platform="linux",
+        machine="aarch64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        adapter_source=_lua_tree(tmp_path / "lua"),
+        selection=InstallSelection(
+            auto=False,
+            speech=["ggml-small.en", "ggml-medium.en"],
+            voice=["en_US-amy-medium.onnx"],
+        ),
+    )
+    assert (models / "ggml-small.en.bin").read_bytes() == b"already-small"
+    assert (models / "en_US-amy-medium.onnx").read_bytes() == b"keep-onnx"
+    assert (models / "en_US-amy-medium.onnx.json").read_bytes() == b"{amy}"
+    small = find_stt("ggml-small.en")
+    assert small is not None
+    assert small.url not in fetched
+    assert amy.url not in fetched
+    assert amy.sidecar_url in fetched
+    assert medium.url in fetched
+    assert _step(_report, "stt:ggml-small.en").status == "present"
+
+
+def test_pick_keeps_settings_it_does_not_change(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    qwen = find_rewrite("qwen2.5-0.5b-instruct-q4_k_m")
+    assert qwen is not None
+    save_settings(
+        _voice_paths(home),
+        default_settings().model_copy(update={"banner_pinned": True, "rewrite_enabled": True}),
+    )
+    bodies = _linux_bodies()
+    bodies[qwen.url] = b"qwen"
+    _install(
+        home,
+        _tui(tmp_path / "tui"),
+        platform="linux",
+        machine="aarch64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        adapter_source=_lua_tree(tmp_path / "lua"),
+        selection=InstallSelection(auto=False, rewrite=["qwen2.5-0.5b-instruct-q4_k_m"]),
+    )
+    settings = load_settings(_voice_paths(home))
+    assert settings.banner_pinned is True
+    assert settings.rewrite_enabled is True
+    assert settings.rewrite_model == qwen.filename
+    assert settings.stt_model == "ggml-base.en"
+    assert settings.tts_voice is None
+
+
+def test_unknown_model_fails_that_step_and_leaves_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.install.urlopen", _block_network)
+    home = tmp_path / "home"
+    models = home / "models"
+    models.mkdir(parents=True)
+    (models / "ggml-tiny.en.bin").write_bytes(b"tiny-stays")
+    report, fetched = _install(
+        home,
+        _tui(tmp_path / "tui"),
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+        adapter_source=_lua_tree(tmp_path / "lua"),
+        selection=InstallSelection(auto=False, speech=["not-a-real-model"]),
+    )
+    assert not report.ok
+    failed = _step(report, "stt:not-a-real-model")
+    assert failed.status == "failed"
+    assert "no local stt model" in failed.detail
+    assert (models / "ggml-tiny.en.bin").read_bytes() == b"tiny-stays"
+    assert _step(report, "adapter").status == "installed"
+    assert STT_URL not in fetched
+
+
+def test_wizard_auto_is_the_defaults(tmp_path: Path) -> None:
+    out = io.StringIO()
+    picked = run_install_wizard(io.StringIO("auto\n"), out, models_dir=tmp_path)
+    assert picked == InstallSelection(auto=True)
+    text = out.getvalue()
+    assert "macOS" in text
+    assert "Hammerspoon" in text
+    assert "1) Auto" in text
+    assert "2) Pick" in text
+
+
+def test_wizard_pick_reads_speech_voice_and_rewrite(tmp_path: Path) -> None:
+    (tmp_path / "ggml-tiny.en.bin").write_bytes(b"x")
+    out = io.StringIO()
+    picked = run_install_wizard(io.StringIO("2\n1,3\n2\n\n"), out, models_dir=tmp_path)
+    assert picked is not None
+    assert picked.auto is False
+    assert picked.speech == ["ggml-tiny.en", "ggml-small.en"]
+    assert picked.voice == ["en_US-amy-medium.onnx"]
+    assert picked.rewrite == []
+    text = out.getvalue()
+    assert "ggml-tiny.en.bin · on disk" in text
+    assert "ggml-base.en.bin · on disk" not in text
+    assert "Lessac medium (default)" in text
+
+
+def test_wizard_blank_or_eof_cancels(tmp_path: Path) -> None:
+    assert run_install_wizard(io.StringIO("\n"), io.StringIO(), models_dir=tmp_path) is None
+    assert run_install_wizard(io.StringIO("pick\n1\n"), io.StringIO(), models_dir=tmp_path) is None
+    out = io.StringIO()
+    picked = run_install_wizard(io.StringIO("nope\nauto\n"), out, models_dir=tmp_path)
+    assert picked == InstallSelection(auto=True)
+    assert "Enter 1 or auto" in out.getvalue()
+
+
+def test_cli_tty_wizard_picks_models(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_run_install(**kwargs: object) -> InstallReport:
+        seen.update(kwargs)
+        return InstallReport(steps=[InstallStep(id="stt", status="present", detail="ok")])
+
+    monkeypatch.setattr("digivoice.cli.run_install", fake_run_install)
+    monkeypatch.setattr("digivoice.cli.sys.stdin", _Tty("pick\n2\n1\n1\n"))
+    monkeypatch.setattr("digivoice.cli.sys.stdout", io.StringIO())
+    result = run(
+        ["install"],
+        Runtime(platform="darwin", home=tmp_path, env={}, probe=FakeProbe(), runner=FakeRunner()),
+    )
+    assert result.code == 0
+    selection = seen["selection"]
+    assert isinstance(selection, InstallSelection)
+    assert selection.auto is False
+    assert selection.speech == ["ggml-base.en"]
+    assert selection.voice == ["en_US-lessac-medium.onnx"]
+    assert selection.rewrite == ["qwen2.5-0.5b-instruct-q4_k_m"]
+
+
+def test_cli_auto_and_noninteractive_skip_the_wizard(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_run_install(**kwargs: object) -> InstallReport:
+        seen.update(kwargs)
+        return InstallReport(steps=[InstallStep(id="stt", status="installed", detail="ok")])
+
+    monkeypatch.setattr("digivoice.cli.run_install", fake_run_install)
+    stdout = io.StringIO()
+    monkeypatch.setattr("digivoice.cli.sys.stdout", stdout)
+
+    def run_install_argv(argv: list[str], env: dict[str, str]) -> None:
+        seen.clear()
+        monkeypatch.setattr("digivoice.cli.sys.stdin", _Tty("pick\n1\n1\n1\n"))
+        result = run(
+            argv,
+            Runtime(
+                platform="darwin",
+                home=tmp_path,
+                env=env,
+                probe=FakeProbe(),
+                runner=FakeRunner(),
+            ),
+        )
+        assert result.code == 0
+        assert seen["selection"] is None
+        assert "cancelled" not in result.stdout
+
+    run_install_argv(["install", "--auto"], {})
+    run_install_argv(["install"], {"DIGIVOICE_INSTALL_NONINTERACTIVE": "1"})
+
+
+def test_cli_wizard_cancel_does_not_install(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_run_install(**kwargs: object) -> InstallReport:
+        raise AssertionError("install ran")
+
+    monkeypatch.setattr("digivoice.cli.run_install", fake_run_install)
+    monkeypatch.setattr("digivoice.cli.sys.stdin", _Tty("\n"))
+    monkeypatch.setattr("digivoice.cli.sys.stdout", io.StringIO())
+    result = run(
+        ["install"],
+        Runtime(platform="darwin", home=tmp_path, env={}, probe=FakeProbe()),
+    )
+    assert result.code == 0
+    assert result.stdout == "digivoice install: cancelled\n"
