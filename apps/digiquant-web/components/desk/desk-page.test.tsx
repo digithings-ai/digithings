@@ -39,9 +39,18 @@ describe("mounted desk pages", () => {
     expect(tearsheet).toContain('data-route="/benchmarks"');
 
     const pipeline = renderToStaticMarkup(<DeskPage path="/pipeline" />);
-    expect(pipeline).toContain('data-block="pl-narrative"');
+    expect(pipeline).toContain("Run health");
+    expect(pipeline).toContain('data-route="/pipeline/runs/latest/health"');
     expect(pipeline).toContain("Run narrative");
-    expect(pipeline).not.toContain("Run health");
+    expect(pipeline).toContain('data-route="/pipeline/runs/latest/narrative"');
+    expect(pipeline).toContain("Artifact ledger");
+    expect(pipeline).toContain('data-route="/pipeline/runs/latest/artifacts"');
+    expect(pipeline).toContain("Graph · nodes");
+    expect(pipeline).toContain('data-route="/pipeline/runs/latest/graph"');
+    expect(pipeline).toContain("Node document");
+    expect(pipeline).toContain('data-route="/pipeline/runs/latest/nodes/selected/document"');
+    expect(pipeline).toContain("Call trace");
+    expect(pipeline).toContain('data-route="/pipeline/runs/latest/trace"');
 
     const strategies = renderToStaticMarkup(<DeskPage path="/strategies" />);
     expect(strategies).toContain('data-route="/strategies/summary"');
