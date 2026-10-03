@@ -9,7 +9,6 @@ export function McpBand() {
     <Band
       id="mcp"
       fill
-      status="from the repo"
       title="The tools are MCP tools"
       takeaway={`Every capability in digiquant is a tool on one MCP server you run yourself: ${MCP_TOOLS.length} of them. The dashboard chat calls the read-scope tools; your own client can call all of them.`}
     >

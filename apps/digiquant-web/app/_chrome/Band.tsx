@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { Reveal } from "@digithings/ui";
-import { Badge } from "@digithings/ui/ui";
 import { BANDS, type BandId } from "../_bands/registry";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -14,7 +13,6 @@ export function Band({
   id,
   title,
   takeaway,
-  status,
   fill = false,
   plain = false,
   children,
@@ -22,7 +20,6 @@ export function Band({
   id: BandId;
   title: string;
   takeaway: string;
-  status?: string;
   fill?: boolean;
   /** Skip the reveal transform. Sticky children (the workflow deck) cannot pin inside it. */
   plain?: boolean;
@@ -40,7 +37,6 @@ export function Band({
               <span aria-hidden="true" className="section-eyebrow__tick" />
               {pad2(index + 1)} / {label}
             </p>
-            {status ? <Badge variant="neutral">{status}</Badge> : null}
           </div>
           <h2
             id={`${id}-h`}

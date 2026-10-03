@@ -10,7 +10,6 @@ export function TearsheetsBand() {
       id="tearsheets"
       title="Tearsheets"
       takeaway="The tape is the live price feed. Each strategy ends in a backtest tearsheet. Unpublished statistics stay an em dash."
-      status="backtest only"
     >
       <div className="flex min-w-0 flex-col gap-2">
         <MarketBarShell />

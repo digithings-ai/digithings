@@ -11,6 +11,11 @@ describe("McpBand", () => {
     expect(html).toContain(MCP_TOOLS[0].name);
     expect(html).toContain("demo · not executed");
     expect(html).toContain("Execute");
+    expect(html).toContain("05 / mcp");
+    expect(html).toContain("The tools are MCP tools");
+    expect(html).not.toContain("digiquant · mcp");
+    expect(html).not.toContain("↑↓ cycle tools");
+    expect(html).not.toContain("from the repo");
     expect(html).not.toContain("connection succeeded");
   });
 });
