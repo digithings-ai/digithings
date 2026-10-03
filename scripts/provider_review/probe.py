@@ -8,6 +8,7 @@ Usage:
     python scripts/provider_review/probe.py
     # writes /tmp/review/probe-results.json
 """
+
 from __future__ import annotations
 
 import json
@@ -33,12 +34,12 @@ PROVIDERS: dict[str, dict] = {
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "api_key_env": "GROQ_API_KEY",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
     },
     "cerebras": {
         "base_url": "https://api.cerebras.ai/v1",
         "api_key_env": "CEREBRAS_API_KEY",
-        "model": "llama-3.3-70b",
+        "model": "openai/gpt-oss-120b",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1",
@@ -48,22 +49,22 @@ PROVIDERS: dict[str, dict] = {
     "nvidia_nim": {
         "base_url": "https://integrate.api.nvidia.com/v1",
         "api_key_env": "NVIDIA_API_KEY",
-        "model": "meta/llama-3.3-70b-instruct",
+        "model": "nvidia/llama-3.3-nemotron-super-49b-v1",
     },
     "ollama_cloud": {
         "base_url": "https://ollama.com/v1",
         "api_key_env": "OLLAMA_API_KEY",
-        "model": "rnj-1:cloud",
+        "model": "gpt-oss:20b",
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "openai/gpt-oss-20b:free",
     },
     "deepseek": {
         "base_url": "https://api.deepseek.com/v1",
         "api_key_env": "DEEPSEEK_API_KEY",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
     },
     # github_models removed — platform fully retired 2026-07-30 (#1589).
 }
@@ -115,11 +116,16 @@ def probe_provider(name: str, config: dict) -> dict:
 
 
 def run_probes(output_path: str = "/tmp/review/probe-results.json") -> list[dict]:
-    """Probe all providers and write results JSON. Always exits 0."""
+    """Probe all providers and write results JSON. Does not itself exit."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     results = [probe_provider(name, cfg) for name, cfg in PROVIDERS.items()]
     Path(output_path).write_text(json.dumps(results, indent=2))
     return results
+
+
+def exit_code(results: list[dict]) -> int:
+    """Non-zero when any configured provider failed. Skips are not failures."""
+    return 1 if any(row.get("status") == "failed" for row in results) else 0
 
 
 if __name__ == "__main__":
@@ -127,5 +133,10 @@ if __name__ == "__main__":
     for r in results:
         status = r["status"].upper()
         latency = f"{r['latency_ms']}ms" if r["latency_ms"] is not None else "—"
-        suffix = f" ({r['error'][:80]})" if r.get("error") else (f" — {r['reason']}" if r.get("reason") else "")
+        suffix = (
+            f" ({r['error'][:80]})"
+            if r.get("error")
+            else (f" — {r['reason']}" if r.get("reason") else "")
+        )
         print(f"  {status:7} {r['provider']:<15} {latency}{suffix}")
+    raise SystemExit(exit_code(results))
