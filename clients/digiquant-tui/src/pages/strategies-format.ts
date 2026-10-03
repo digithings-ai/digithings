@@ -5,7 +5,8 @@ import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
  * Strategies desk panes.
  * Index: a summary stat, the catalog table, and the deployments table.
  * Detail: overview, parameters, the track record, and runs.
- * The tearsheet pane stays on its own sheet. Deploy stays the line read.
+ * Deploy: a targets table, a plan-steps table, and draft fields.
+ * The tearsheet pane stays on its own sheet. A draft is not an order.
  */
 
 const BARS = "▁▂▃▄▅▆▇█";
@@ -31,11 +32,16 @@ const NO_PARAMETERS = "No parameters.";
 const NO_RUNS = "No runs.";
 const NOT_AVAILABLE = "Not available.";
 
+const NO_TARGETS = "No targets.";
+const NO_STEPS = "No deploy steps.";
+
 const STRATEGY_IDS = ["st-kpis", "st-catalog", "st-deployments"] as const;
 const DETAIL_IDS = ["st-overview", "st-parameters", "st-track-record", "st-runs"] as const;
+const DEPLOY_IDS = ["st-targets", "st-deploy-flow", "st-deploy-draft"] as const;
 
 type StrategyId = (typeof STRATEGY_IDS)[number];
 type DetailId = (typeof DETAIL_IDS)[number];
+type DeployId = (typeof DEPLOY_IDS)[number];
 
 const OVERVIEW_FIELDS: { key: string; label: string }[] = [
   { key: "id", label: "id" },
@@ -47,6 +53,14 @@ const OVERVIEW_FIELDS: { key: string; label: string }[] = [
   { key: "targets", label: "targets" },
   { key: "related_thesis", label: "related thesis" },
   { key: "execution", label: "execution" },
+];
+
+const DRAFT_FIELDS: { key: string; label: string }[] = [
+  { key: "target_kind", label: "target kind" },
+  { key: "paper_capital", label: "paper capital" },
+  { key: "broker", label: "broker" },
+  { key: "portfolio", label: "portfolio" },
+  { key: "schedule", label: "schedule" },
 ];
 
 const CARD_FIELDS: { key: string; label: string }[] = [
@@ -70,6 +84,10 @@ function isStrategyId(id: string): id is StrategyId {
 
 function isDetailId(id: string): id is DetailId {
   return (DETAIL_IDS as readonly string[]).includes(id);
+}
+
+function isDeployId(id: string): id is DeployId {
+  return (DEPLOY_IDS as readonly string[]).includes(id);
 }
 
 function rec(value: unknown): Record<string, unknown> | null {
@@ -359,6 +377,71 @@ function paintDetail(id: DetailId, data: Record<string, unknown>): PaneBody | nu
   }
 }
 
+function paintTargets(data: Record<string, unknown>): PaneBody | null {
+  if (!("targets" in data)) return null;
+  const rows = objectRows(data.targets, (row) => {
+    const target = named(row.target);
+    if (!target) return null;
+    return [target, cell(row.description), cell(row.status)];
+  });
+  const list = table(["target", "what it is", "status"], rows);
+  return list ? { blocks: [list] } : sentence(storeSentence(NO_TARGETS, data));
+}
+
+function paintSteps(data: Record<string, unknown>): PaneBody | null {
+  if (!("steps" in data)) return null;
+  const rows = objectRows(data.steps, (row) => {
+    const label = named(row.label);
+    if (!label) return null;
+    return [label, cell(row.state), cell(row.status), cell(row.detail)];
+  });
+  const list = table(["step", "state", "status", "detail"], rows);
+  return list ? { blocks: [list] } : sentence(storeSentence(NO_STEPS, data));
+}
+
+/** Draft fields only. An order key on the payload is not a row and not a number. */
+function paintDraft(data: Record<string, unknown>): PaneBody | null {
+  const known = DRAFT_FIELDS.some((field) => field.key in data) || "notice" in data;
+  if (!known) return null;
+  const blocks: PaneBlock[] = [];
+  const note = noticeLine(data.notice);
+  if (note) blocks.push({ kind: "sentence", text: note });
+  const pairs = presentPairs(DRAFT_FIELDS, data, (key, value) => (key.length > 0 ? cell(value) : DASH));
+  if (pairs.length === 0) return blocks.length > 0 ? { blocks } : sentence(EMPTY_READ);
+  if (pairs.length <= 4) {
+    const head = stat(pairs);
+    if (head) blocks.push(head);
+    return { blocks };
+  }
+  const list = table(["field", "value"], pairs);
+  if (list) blocks.push(list);
+  return blocks.length > 0 ? { blocks } : sentence(EMPTY_READ);
+}
+
+function paintDeploy(id: DeployId, data: Record<string, unknown>): PaneBody | null {
+  switch (id) {
+    case "st-targets":
+      return paintTargets(data);
+    case "st-deploy-flow":
+      return paintSteps(data);
+    case "st-deploy-draft":
+      return paintDraft(data);
+    default: {
+      const exhaustive: never = id;
+      return sentence(String(exhaustive));
+    }
+  }
+}
+
+function deployBody(id: DeployId, data: unknown, result: ReadResult): PaneBody {
+  if (data == null) return sentence(EMPTY_READ);
+  const row = rec(data);
+  if (!row) return textBody(result);
+  const painted = paintDeploy(id, row);
+  if (!painted) return textBody(result);
+  return withProvenance(result, painted);
+}
+
 function detailBody(id: DetailId, data: unknown, result: ReadResult): PaneBody {
   if (data == null) return sentence(EMPTY_READ);
   const row = rec(data);
@@ -387,6 +470,7 @@ function paint(id: StrategyId, data: Record<string, unknown>): PaneBody {
 export function strategiesBody(id: string, data: unknown, result: ReadResult): PaneBody {
   if (result.status === "error" || result.status === "stub") return textBody(result);
   if (isDetailId(id)) return detailBody(id, data, result);
+  if (isDeployId(id)) return deployBody(id, data, result);
   if (!isStrategyId(id)) return textBody(result);
   if (id === "st-deployments") {
     const row = rec(data);

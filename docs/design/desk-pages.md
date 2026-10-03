@@ -16,7 +16,7 @@ Invite-only desks are not on this list. Do not invent rows, prices, or sessions.
 - [x] `/pipeline` Pipeline — run-health stat. Narrative sentence. Artifact table. Graph as a node table (no canvas). Node document sentence. Call-trace table. Empty sentence per block when that read is empty.
 - [x] `/strategies` Strategies — summary stat, catalog table, deployments table. An empty deployment store stays its empty sentence.
 - [x] `/strategies/detail` Detail — overview fields as a stat or table. Parameters table. Track record: stat from the card, table of points, and a chart only when `points` has two or more values. Runs table. Empty sentence when a store is empty.
-- [ ] `/strategies/deploy` Deploy — targets table, plan steps table, draft fields. Empty sentence when a list is empty. The draft is not an order.
+- [x] `/strategies/deploy` Deploy — targets table, plan steps table, draft fields. Empty sentence when a list is empty. The draft is not an order.
 - [ ] `/tools/terminal` Terminal — not drawn in this terminal. Web keeps the existing link. No invented quotes.
 - [ ] `/tools/charts` Charts — not drawn in this terminal. Web chart stays on bars the API returns. No invented prices.
 - [x] `/tools/chat` digichat — threads in the desk rail. One sentence when digichat is not configured. No second sidebar and no read footer. No invented messages.

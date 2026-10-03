@@ -18,6 +18,7 @@ import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const INDEX_PATH = "/strategies";
 const DETAIL_IDS = new Set(["st-overview", "st-parameters", "st-track-record", "st-runs"]);
+const DEPLOY_IDS = new Set(["st-targets", "st-deploy-flow", "st-deploy-draft"]);
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 type BlockId =
@@ -437,7 +438,8 @@ function StrategiesDesk({
         const def = BLOCKS[placement.id];
         if (!def) return null;
         const read = reads[placement.id];
-        const formatted = read && DETAIL_IDS.has(placement.id) ? paintDetail(placement.id, read) : null;
+        const formatted =
+          read && (DETAIL_IDS.has(placement.id) || DEPLOY_IDS.has(placement.id)) ? paintDetail(placement.id, read) : null;
         const status = formatted?.status ?? read?.result.status ?? "loading";
         const body = read
           ? strategyBlockBody(placement.id, read.data, read.result)
