@@ -204,6 +204,29 @@ def test_installed_model_is_selected_without_a_download(tmp_path: Path) -> None:
     assert load_settings(paths).stt_model == "ggml-tiny.en"
 
 
+def test_install_root_model_is_selected_without_a_download(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    weight = tmp_path / ".mlxstudio" / "models" / "whisper" / "GGML-tiny.en.bin"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"x")
+    calls: list[str] = []
+
+    def install(paths, entry, stdout):
+        calls.append(entry.id)
+        return entry.filename
+
+    browse_settings(
+        paths,
+        io.StringIO("1\n1\n1\n\n\n"),
+        io.StringIO(),
+        install=install,
+        home=tmp_path,
+    )
+    assert calls == []
+    assert load_settings(paths).stt_model == "ggml-tiny.en"
+    assert weight.read_bytes() == b"x"
+
+
 def test_browse_esc_at_the_root_changes_nothing(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     browse_settings(paths, io.StringIO("\n"), io.StringIO())

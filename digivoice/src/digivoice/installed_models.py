@@ -82,7 +82,7 @@ def discover_installed_models(
 ) -> list[InstalledModel]:
     """Scan install roots. ``finder`` is injected in tests so the apps need not be present."""
     walk = finder or default_finder
-    catalog_names = {item.filename for item in (*STT_CATALOG, *REWRITE_CATALOG)}
+    catalog_names = {item.filename.casefold() for item in (*STT_CATALOG, *REWRITE_CATALOG)}
     found: list[InstalledModel] = []
     seen: set[str] = set()
     for source, root in install_roots(home, env):
@@ -108,7 +108,7 @@ def _from_file(
     if _is_ollama_manifest(path) or _is_ollama_blob(path):
         return None
     name = path.name
-    if name in catalog_names or name.startswith("."):
+    if name.casefold() in catalog_names or name.startswith("."):
         return None
     lower = name.casefold()
     if lower.endswith(_SKIP_SUFFIXES) or lower.endswith((".partial", ".download")):
@@ -185,7 +185,7 @@ def _ollama_manifest(
     blob = root / "blobs" / digest.replace(":", "-", 1)
     if not blob.is_file() or not _starts_with_gguf(blob):
         return None
-    if blob.name in catalog_names:
+    if blob.name.casefold() in catalog_names:
         return None
     resolved = _remember(blob, seen)
     if resolved is None:
@@ -213,6 +213,32 @@ def _starts_with_gguf(path: Path) -> bool:
             return handle.read(4) == _GGUF_MAGIC
     except OSError:
         return False
+
+
+def local_filenames(home: Path, env: Mapping[str, str] | None = None) -> set[str]:
+    """Casefolded file names under install roots.
+
+    A catalog row is already on disk when this set contains its filename,
+    even if the models directory does not. A partial is not an installed file.
+    """
+    names: set[str] = set()
+    for _source, root in install_roots(home, env):
+        if not root.is_dir():
+            continue
+        try:
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                name = path.name
+                if not name or name.startswith("."):
+                    continue
+                folded = name.casefold()
+                if folded.endswith(".partial") or folded.endswith(".download"):
+                    continue
+                names.add(folded)
+        except OSError:
+            continue
+    return names
 
 
 def find_local_weight(

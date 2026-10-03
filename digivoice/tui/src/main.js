@@ -34,7 +34,7 @@ async function start() {
     renderer.destroy()
     if (restart) {
       replaceWithPython()
-      process.exit(0)
+      return
     }
     process.exit(code)
   } catch (error) {

@@ -136,6 +136,14 @@ function inSettings(path) {
   return String(path || "").startsWith("/settings")
 }
 
+function chosenIndex(rows, selected) {
+  const count = Array.isArray(rows) ? rows.length : 0
+  if (!count || !Number.isInteger(selected)) return 0
+  if (selected < 0) return 0
+  if (selected >= count) return count - 1
+  return selected
+}
+
 function headerFor(screen) {
   if (!screen) return ""
   if (screen.header) return screen.header
@@ -854,7 +862,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       path,
       header: headerFor({ path, kind }),
       rows: opened.rows || boot.home || [],
-      selected: 0,
+      selected: chosenIndex(opened.rows || boot.home || [], opened.selected),
       paging: Boolean(opened.paging),
       page: opened.page || 1,
       pages: opened.pages || 1,
@@ -1061,14 +1069,15 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     if (row.path === "/reload" || row.action === "Reload") {
       stack.push({ ...screen })
-      await runBusy("reloading", "/reload", () => session.call({ op: "reload" }))
+      const result = await runBusy("reloading", "/reload", () => session.call({ op: "reload" }))
+      const note = String((result && result.note) || "").trim()
       screen = {
         ...screen,
         kind: "done",
         header: "/reload",
         path: "/reload",
         rows: [],
-        body: "reloaded",
+        body: note || (result && result.ok === false ? "reload failed" : "reloaded"),
         notice: "",
         paging: false,
       }
@@ -1105,7 +1114,9 @@ export function mountDigivoice(renderer, session, options = {}) {
           paging: false,
         }
         renderList()
-        if (!/failed/i.test(note)) {
+        const failed =
+          result && typeof result.ok === "boolean" ? result.ok === false : /failed/i.test(note)
+        if (!failed) {
           await wait(FRAME_MS)
           await session.call({ op: "restart" })
           restarting = true
@@ -1150,7 +1161,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       path: next,
       header: next,
       rows: result.rows || [],
-      selected: 0,
+      selected: chosenIndex(result.rows || [], result.selected),
       paging: false,
       kind: "settings",
       body: "",
