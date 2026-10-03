@@ -468,6 +468,51 @@ body {
     transform: none;
     visibility: visible;
   }
+  /* Wide layout keeps the 12 by 12 mosaic. A phone stacks each pane. */
+  .desk-main {
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+  .desk-mosaic {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+  .desk-mosaic > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    flex: none;
+  }
+  .desk-mosaic section {
+    height: auto;
+    max-width: 100%;
+    overflow: visible;
+  }
+  .desk-pane-body {
+    flex: none;
+    height: auto;
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+  .desk-pane-body .whitespace-pre {
+    white-space: pre-wrap;
+  }
+  .desk-pane-table {
+    table-layout: fixed;
+    width: 100%;
+    max-width: 100%;
+  }
+  .desk-pane-table th,
+  .desk-pane-table td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 .nav-title {
   font: 0.6875rem/1 var(--mono);
