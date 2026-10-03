@@ -19,7 +19,7 @@ import { BriefPage } from "./pages/brief";
 import { PipelinePage } from "./pages/pipeline";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
-import { deskForPath, railLine } from "./rail";
+import { deskForPath, railLine, stepRailCols, RAIL_COLS_DEFAULT } from "./rail";
 import { readBlock, type ReadResult } from "./read";
 import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
 
@@ -188,6 +188,7 @@ export function App() {
   const [hitIndex, setHitIndex] = useState(0);
   const [deskOpen, setDeskOpen] = useState(false);
   const [deskCursor, setDeskCursor] = useState(() => deskIndex(publicDeskId(start)));
+  const [railCols, setRailCols] = useState(RAIL_COLS_DEFAULT);
   const [note, setNote] = useState("");
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
 
@@ -375,6 +376,11 @@ export function App() {
       }
       return;
     }
+    if (name === "[" || name === "]" || key.sequence === "[" || key.sequence === "]") {
+      const wider = name === "]" || key.sequence === "]";
+      setRailCols((current) => stepRailCols(current, wider ? 1 : -1));
+      return;
+    }
     if (name === "escape") {
       setFocus(-1);
       setNote("");
@@ -441,6 +447,7 @@ export function App() {
         ? "↑↓ desk   enter   esc   d close"
         : [
             catalog ? (selected ? "tab block   arrows move   shift+arrows resize" : "↑↓ page   → block") : "↑↓ page",
+            "[ ] sidebar",
             "d desk",
             "/ path",
             "q quit",
@@ -490,9 +497,16 @@ export function App() {
         <box height={1} border={["bottom"]} borderColor={HAIR} />
       </box>
       <box flexGrow={1} flexDirection="row">
-        <box width={36} border={["right"]} borderColor={HAIR_STRONG} flexDirection="column" flexShrink={0}>
-          <box height={1} paddingLeft={1} paddingRight={1} border={["bottom"]} borderColor={HAIR}>
+        <box width={railCols} border={["right"]} borderColor={HAIR_STRONG} flexDirection="column" flexShrink={0}>
+          <box height={1} paddingLeft={1} border={["bottom"]} borderColor={HAIR} flexDirection="row">
             <text fg={MUTE}>~/pages</text>
+            <box flexGrow={1} />
+            <box paddingLeft={1} onMouseDown={() => setRailCols((current) => stepRailCols(current, -1))}>
+              <text fg={SOFT}>−</text>
+            </box>
+            <box paddingLeft={1} paddingRight={1} onMouseDown={() => setRailCols((current) => stepRailCols(current, 1))}>
+              <text fg={SOFT}>+</text>
+            </box>
           </box>
           {rows.map((row) =>
             row.kind === "title" ? (

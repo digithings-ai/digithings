@@ -84,6 +84,19 @@ export function railPaths(id: string): string[] {
   return railRows(id).flatMap((row) => (row.kind === "page" ? [row.path] : []));
 }
 
+/** Column widths for the public rail. Same larger/smaller steps as the web desk. */
+export const RAIL_COLS = [24, 36, 48, 60] as const;
+
+export const RAIL_COLS_DEFAULT = 36;
+
+export function stepRailCols(current: number, dir: -1 | 1): number {
+  const widths: readonly number[] = RAIL_COLS;
+  const index = widths.indexOf(current);
+  const at = index >= 0 ? index : widths.indexOf(RAIL_COLS_DEFAULT);
+  const next = Math.min(widths.length - 1, Math.max(0, at + dir));
+  return widths[next] ?? RAIL_COLS_DEFAULT;
+}
+
 export function railLine(row: RailPage): string {
   const tri = row.folder ? "▾" : "▸";
   const pad = row.depth ? "  " : "";

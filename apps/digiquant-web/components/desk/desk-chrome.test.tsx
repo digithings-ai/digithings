@@ -86,7 +86,10 @@ describe("desk chrome", () => {
       return html.includes(`href="${bare}"`) || html.includes(`href="${bare}/"`);
     };
     expect(html).toContain('class="rail"');
+    expect(html).toContain('id="desk-rail"');
     expect(html).toContain("~/pages");
+    expect(html).toContain('aria-label="Make the sidebar smaller"');
+    expect(html).toContain('aria-label="Make the sidebar larger"');
     expect(html).toContain('class="nav-row"');
     expect(html).toContain('class="nav-tri');
     expect(html).toContain('class="nav-path"');
@@ -115,6 +118,12 @@ describe("desk chrome", () => {
     expect(picker).toContain('event.key === "d"');
     expect(picker).toContain("deskHomeHref");
     expect(css).toContain(".rail {");
+    expect(css).toContain("--rail-w");
+    expect(css).toContain('data-drawer="open"');
+    const frame = readFileSync(new URL("./desk-frame.tsx", import.meta.url), "utf8");
+    expect(frame).toContain('aria-controls="desk-rail"');
+    expect(frame).toContain("stepRailWidth");
+    expect(frame).not.toMatch(/cursor-/);
     expect(css).toContain(".nav-row {");
     expect(css).toContain(".nav-tri {");
     expect(css).toContain(".nav-path {");

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { navFromDesk } from "../../../apps/digiquant-web/components/desk/desk-manifest";
-import { grantedDesk, railLine, railPaths, railRows } from "./rail";
+import { RAIL_COLS, RAIL_COLS_DEFAULT, grantedDesk, railLine, railPaths, railRows, stepRailCols } from "./rail";
 
 function webPaths(id: string): string[] {
   const desk = grantedDesk(id);
@@ -46,6 +46,13 @@ test("the baseline rail is the web sidebar, in order", () => {
   const charts = rows.find((row) => row.path === "/tools/charts");
   expect(charts && railLine(charts)).toBe("▸ /tools/charts [soon]");
   expect(railRows("baseline").some((row) => row.kind === "title" && row.text === "tools")).toBe(true);
+});
+
+test("the rail steps larger and smaller and stops at the ends", () => {
+  expect(stepRailCols(RAIL_COLS_DEFAULT, 1)).toBe(48);
+  expect(stepRailCols(RAIL_COLS_DEFAULT, -1)).toBe(24);
+  expect(stepRailCols(RAIL_COLS[0], -1)).toBe(RAIL_COLS[0]);
+  expect(stepRailCols(RAIL_COLS[RAIL_COLS.length - 1], 1)).toBe(RAIL_COLS[RAIL_COLS.length - 1]);
 });
 
 test("the FX rail is the FX desk, not a second menu", () => {

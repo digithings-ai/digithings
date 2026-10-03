@@ -12,6 +12,8 @@ test("the header is mark, then desk, then the path field", () => {
   expect(src).toContain('name === "d"');
   expect(src).toContain("searchCommandPages");
   expect(src).toContain("isPublicPage");
+  expect(src).toContain("stepRailCols");
+  expect(src).toContain("[ ] sidebar");
   expect(src).not.toContain("#d4b483");
   expect(src).not.toContain("#14120f");
   expect(src).not.toContain("FX Hub");
