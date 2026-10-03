@@ -1,5 +1,6 @@
 import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
 import { deskHref } from "./paths";
+import { isInviteSurface, isPublicDeskChrome } from "./public-surface";
 import { WEB_SLOTS } from "./web-slots";
 
 /** Caller entitlements from GET /access/manifest. The worker decides access. */
@@ -41,7 +42,7 @@ const OPENABLE = new Set<string>([...PAGES.map((page) => page.path), ...WEB_SLOT
 
 /** A manifest page the web desk already has a route for. */
 export function canOpenDeskPath(path: string): boolean {
-  return OPENABLE.has(path);
+  return OPENABLE.has(path) && !isInviteSurface(path);
 }
 
 /** Browser path (`/app/fx/ideas/`) → the manifest path (`/fx/ideas`). */
@@ -170,11 +171,12 @@ export function findDeskId(manifest: Manifest, path: string, prefer?: string | n
 /** The granted desk that owns the path, else the stored desk, else the first granted desk. */
 export function selectDesk(manifest: Manifest | null, prefer: string | null): ManifestDesk | null {
   if (!manifest) return null;
-  const granted = manifest.desks.find((desk) => desk.access === "granted");
+  const desks = manifest.desks.filter((desk) => isPublicDeskChrome(desk));
+  const granted = desks.find((desk) => desk.access === "granted");
   return (
-    manifest.desks.find((desk) => desk.id === prefer && desk.access === "granted") ??
+    desks.find((desk) => desk.id === prefer && desk.access === "granted") ??
     granted ??
-    manifest.desks[0] ??
+    desks[0] ??
     null
   );
 }

@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
 import { DeskCommand } from "./desk-command";
 import { searchDeskPages } from "./desk-command-search";
+import { publicCatalogPages } from "./public-surface";
 import { deskHref } from "./paths";
 
 describe("desk slash field", () => {
@@ -18,11 +18,13 @@ describe("desk slash field", () => {
   it("lists OpenTUI pages plus Terminal, Charts, and digichat", () => {
     const hits = searchDeskPages("");
     expect(hits.map((hit) => hit.path)).toEqual([
-      ...PAGES.map((page) => page.path),
+      ...publicCatalogPages().map((page) => page.path),
       "/tools/terminal",
       "/tools/charts",
       "/tools/chat",
     ]);
+    expect(hits.some((hit) => hit.path === "/fx" || hit.path.startsWith("/fx/"))).toBe(false);
+    expect(JSON.stringify(hits)).not.toMatch(/fx hub|12x/i);
     expect(hits.map((hit) => hit.href)).toEqual(hits.map((hit) => deskHref(hit.path)));
     expect(hits.some((hit) => hit.path.includes("luxalgo") || hit.label === "LuxAlgo")).toBe(false);
   });
@@ -40,6 +42,8 @@ describe("desk slash field", () => {
     expect(searchDeskPages("digichat")[0]?.href).toBe("/app/tools/chat/");
     expect(searchDeskPages("/app/tools/terminal/").map((hit) => hit.label)).toEqual(["Terminal"]);
     expect(searchDeskPages("luxalgo")).toEqual([]);
+    expect(searchDeskPages("fx")).toEqual([]);
+    expect(searchDeskPages("12x")).toEqual([]);
   });
 
   it("keeps the draft field classes and the slash binding", () => {

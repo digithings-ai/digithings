@@ -108,6 +108,8 @@ export const DESKS: DeskDef[] = [
     label: "FX Hub",
     blurb: "FX ideas, levels and rates. Invite-only (12x group).",
     group: "12x",
+    /** Omitted until the caller is in the 12x group. No public locked teaser. */
+    hidden: true,
     pages: [
       { path: "/fx", label: "FX Hub", status: "soon", blocks: [b("fx-summary", "/fx/summary"), b("fx-pairs", "/fx/pairs"), b("fx-levels", "/fx/levels"), b("fx-pair-path", "/fx/pairs/{pair}/path"), b("fx-sessions", "/fx/sessions")] },
       { path: "/fx/ideas", label: "Ideas", blocks: [b("fx-ideas", "/fx/ideas"), b("fx-idea-detail", "/fx/ideas/{pair}"), b("fx-flags", "/fx/flags/{pair}"), b("fx-pair-path", "/fx/pairs/{pair}/path")] },

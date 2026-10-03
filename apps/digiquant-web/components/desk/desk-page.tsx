@@ -6,8 +6,8 @@ import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
 import { DeskFrame } from "./desk-frame";
 import { DeskView } from "./desk-view";
 import { BriefPage } from "./pages/brief";
-import { FxDesk, isFxPath } from "./pages/fx";
 import { PipelinePage } from "./pages/pipeline";
+import { isInviteSurface } from "./public-surface";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
 import { readDeskBlock } from "./read-block";
@@ -15,7 +15,7 @@ import { readDeskBlock } from "./read-block";
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
 function isMountedPath(path: string): boolean {
-  return path === "/brief" || path === "/pipeline" || isPortfolioPath(path) || STRATEGY_PATHS.has(path) || isFxPath(path);
+  return path === "/brief" || path === "/pipeline" || isPortfolioPath(path) || STRATEGY_PATHS.has(path);
 }
 
 /** Pages that paint their own blocks. Everything else stays on the catalog grid. */
@@ -24,7 +24,6 @@ function mountedPage(path: string): ReactNode | null {
   if (isPortfolioPath(path)) return <PortfolioPages path={path} />;
   if (path === "/pipeline") return <PipelinePage />;
   if (STRATEGY_PATHS.has(path)) return <StrategiesPages path={path} />;
-  if (isFxPath(path)) return <FxDesk path={path} />;
   return null;
 }
 
@@ -34,7 +33,7 @@ export function DeskPage({ path }: { path: string }) {
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
 
   useEffect(() => {
-    if (isMountedPath(path)) return;
+    if (isMountedPath(path) || isInviteSurface(path)) return;
     const placements = layoutFor(path);
     const ac = new AbortController();
     let cancel = false;
@@ -51,6 +50,13 @@ export function DeskPage({ path }: { path: string }) {
     };
   }, [path]);
 
+  if (isInviteSurface(path)) {
+    return (
+      <DeskFrame current="/brief">
+        <p className="m-0 px-3 py-6 text-[0.75rem] leading-[1.5] text-ink-mute">This page is not on the public desk.</p>
+      </DeskFrame>
+    );
+  }
   if (page) {
     return <DeskFrame current={path}>{page}</DeskFrame>;
   }

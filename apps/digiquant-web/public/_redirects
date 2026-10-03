@@ -39,8 +39,6 @@
 /dashboard/tools/terminal/ /app/tools/terminal/ 308
 /dashboard/tools/charts /app/tools/charts/ 308
 /dashboard/tools/charts/ /app/tools/charts/ 308
-/dashboard/fx/settings /app/fx/settings/ 308
-/dashboard/fx/settings/ /app/fx/settings/ 308
 /dashboard/performance /app/performance/ 308
 /dashboard/performance/ /app/performance/ 308
 /dashboard/strategies /app/strategies/ 308
@@ -49,18 +47,10 @@
 /dashboard/tools/chat/ /app/tools/chat/ 308
 /dashboard/portfolio /app/portfolio/ 308
 /dashboard/portfolio/ /app/portfolio/ 308
-/dashboard/fx/ideas /app/fx/ideas/ 308
-/dashboard/fx/ideas/ /app/fx/ideas/ 308
-/dashboard/fx/rates /app/fx/rates/ 308
-/dashboard/fx/rates/ /app/fx/rates/ 308
-/dashboard/fx/watch /app/fx/watch/ 308
-/dashboard/fx/watch/ /app/fx/watch/ 308
 /dashboard/pipeline /app/pipeline/ 308
 /dashboard/pipeline/ /app/pipeline/ 308
 /dashboard/brief /app/brief/ 308
 /dashboard/brief/ /app/brief/ 308
-/dashboard/fx /app/fx/ 308
-/dashboard/fx/ /app/fx/ 308
 /dashboard /app 308
 /dashboard/ /app 308
 /dashboard/* /app 308

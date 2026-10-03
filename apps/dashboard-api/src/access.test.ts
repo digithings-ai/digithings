@@ -45,10 +45,11 @@ describe("buildManifest", () => {
     const live = page(m, "baseline", "/brief").blocks.find((k) => k.id === "live")!;
     expect(live).toMatchObject({ access: "locked", reason: "Requires brief" });
   });
-  it("fx desk is locked to non-members, and everything beneath it", () => {
+  it("fx desk is omitted until the caller is in the 12x group", () => {
     const m = buildManifest({ tier: "enterprise", groups: [] });
-    expect(desk(m, "fx")).toMatchObject({ access: "locked", reason: "Requires the 12x group" });
-    expect(desk(m, "fx").pages.every((p) => p.access === "locked" && p.blocks.every((k) => k.access === "locked"))).toBe(true);
+    expect(m.desks.find((d) => d.id === "fx")).toBeUndefined();
+    expect(JSON.stringify(m)).not.toMatch(/fx hub/i);
+    expect(m.caller.groups).not.toContain("12x");
   });
   it("12x member on free tier gets the fx desk", () => {
     const m = buildManifest({ tier: "free", groups: ["12x"] });

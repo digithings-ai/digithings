@@ -1,10 +1,12 @@
-import { PAGES, pageByPath } from "../../../../clients/digiquant-tui/src/catalog";
+import { pageByPath } from "../../../../clients/digiquant-tui/src/catalog";
+import { isInviteSurface, publicCatalogPages } from "./public-surface";
 
-/** /app and /app/ are the brief. Every other slug is a terminal page path. */
+/** /app and /app/ are the brief. Invite-only paths are not public routes. */
 export function deskPathFromSlug(slug: string[] | undefined): string | null {
   if (!slug || slug.length === 0) return "/brief";
   const path = `/${slug.join("/")}`;
-  return pageByPath(path) ? path : null;
+  if (!pageByPath(path) || isInviteSurface(path)) return null;
+  return path;
 }
 
 export function deskHref(path: string): string {
@@ -12,7 +14,7 @@ export function deskHref(path: string): string {
 }
 
 export function deskStaticParams(): { slug: string[] }[] {
-  return PAGES.map((page) => ({ slug: page.path.split("/").filter(Boolean) }));
+  return publicCatalogPages().map((page) => ({ slug: page.path.split("/").filter(Boolean) }));
 }
 
 export function isDeskPath(path: string): boolean {

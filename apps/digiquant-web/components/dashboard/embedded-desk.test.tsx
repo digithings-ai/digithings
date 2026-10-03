@@ -18,7 +18,7 @@ import {
   shouldYieldToUser,
   stopFromPath,
 } from "./desk-walk";
-import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
+import { publicCatalogPages } from "@/components/desk/public-surface";
 import { screenKind } from "./terminal-screen";
 import {
   HOSTED_COPY,
@@ -65,7 +65,7 @@ const shell = [
   { label: "/brief", href: "/app/brief" },
   { label: "/portfolio", href: "/app/portfolio" },
   { label: "/pipeline", href: "/app/pipeline" },
-  { label: "/fx", href: "/app/fx" },
+  { label: "/strategies", href: "/app/strategies" },
 ];
 
 describe("desk walk", () => {
@@ -225,23 +225,29 @@ describe("surface tour", () => {
   it("tours every terminal page, including strategies, and wraps", () => {
     expect(nextTerminalPath("/brief")).toBe("/portfolio");
     expect(nextTerminalPath("/strategies")).toBe("/strategies/detail");
+    expect(nextTerminalPath("/strategies/deploy")).toBe("/brief");
+    expect(prevTerminalPath("/brief")).toBe("/strategies/deploy");
+    expect(nextTerminalPath("/fx")).toBe("/brief");
     expect(nextTerminalPath("/fx/settings")).toBe("/brief");
-    expect(prevTerminalPath("/brief")).toBe("/fx/settings");
     expect(nextWebPath("/app")).toBe("/portfolio");
     expect(nextWebPath("/app/brief/")).toBe("/portfolio");
     expect(nextWebPath("/app/strategies/")).toBe("/strategies/detail");
+    const pages = publicCatalogPages();
     const seen = new Set<string>();
     let path = "/brief";
-    for (let i = 0; i < PAGES.length; i += 1) {
+    for (let i = 0; i < pages.length; i += 1) {
       seen.add(path);
       path = nextTerminalPath(path);
     }
-    expect(seen.size).toBe(PAGES.length);
+    expect(seen.size).toBe(pages.length);
     expect(path).toBe("/brief");
+    expect(seen.has("/fx")).toBe(false);
   });
 
-  it("draws a real screen for every OpenTUI page and not for a web-only slot", () => {
-    for (const page of PAGES) expect(screenKind(page.path)).not.toBe("undrawn");
+  it("draws a real screen for every public page and not for a web-only or invite path", () => {
+    for (const page of publicCatalogPages()) expect(screenKind(page.path)).not.toBe("undrawn");
+    expect(screenKind("/fx")).toBe("undrawn");
+    expect(screenKind("/fx/ideas")).toBe("undrawn");
     expect(screenKind("/tools/charts")).toBe("undrawn");
     expect(screenKind("/tools/chat")).toBe("undrawn");
   });
@@ -253,7 +259,7 @@ describe("surface tour", () => {
       { label: "Pipeline", href: "/#pipeline" },
     ], { pathname: "/app/brief" });
     expect(nextDeskAnchor(doc)?.getAttribute("href")).toBe("/app/portfolio");
-    const last = docWith(shell, { pathname: "/app/fx" });
+    const last = docWith(shell, { pathname: "/app/strategies" });
     expect(nextDeskAnchor(last)?.getAttribute("href")).toBe("/app/brief");
   });
 });
@@ -280,6 +286,7 @@ describe("DashboardBand", () => {
     expect(html).not.toContain("legacy_estimate");
     expect(html).not.toContain("sample run");
     expect(html).not.toContain("Take control");
+    expect(html).not.toMatch(/fx hub|12x terminal/i);
     expect(html).not.toMatch(/\$\d|\bFree\b|Coming soon/);
   });
 });
