@@ -56,6 +56,15 @@ describe("resolveEmbedSeededTenant", () => {
     expect(seeded.placeholder).toBe("Ask about tickets");
   });
 
+  it("keeps the tenant welcome when the URL welcome is empty or absent", () => {
+    const tenant = { ...base, welcome: "OCC help centre" };
+    const empty = resolveEmbedSeededTenant(tenant, { welcome: "" }).seeded;
+    expect(empty.welcome).toBe("OCC help centre");
+    const absent = resolveEmbedSeededTenant(tenant, {}).seeded;
+    expect(absent.welcome).toBe("OCC help centre");
+    expect(tenant.welcome).toBe("OCC help centre");
+  });
+
   it("parses a valid theme override without mutating the input tenant", () => {
     const before = structuredClone(base);
     const { seeded, urlTheme } = resolveEmbedSeededTenant(base, { theme: "light" });

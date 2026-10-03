@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any — dynamically loaded module
@@ -256,23 +257,37 @@ _OCC_ZAMMAD_PREFIXED_TOOLS = (
     "zammad_ticket_report",
 )
 
+_OCC_BARE_TOOL_NAMES = (
+    "aggregate_tickets",
+    "search_tickets",
+    "get_ticket",
+    "ticket_report",
+)
+
+
+def _prompt_tokens(prompt: str) -> frozenset[str]:
+    """Whole identifier tokens: ``zammad_get_tickets`` never satisfies ``zammad_get_ticket``."""
+    return frozenset(re.findall(r"[A-Za-z0-9_]+", prompt))
+
+
+def test_prompt_tokens_require_whole_tool_names() -> None:
+    tokens = _prompt_tokens("call zammad_get_tickets and zammad_get_ticket_x, never get_ticket")
+    assert "zammad_get_tickets" in tokens
+    assert "zammad_get_ticket_x" in tokens
+    assert "zammad_get_ticket" not in tokens
+    assert "get_ticket" in tokens
+
 
 def test_real_blobs_occ_prompt_uses_zammad_prefixed_tool_names(ccm: Any) -> None:
     """OCC recipes must name the prefixed tools the runtime actually exposes (#4750)."""
     raw = _load_raw_corpus_maps(ccm)
     prompt = raw["compose"]["occ"]["researchSystemPrompt"]
     assert isinstance(prompt, str) and prompt.strip()
+    tokens = _prompt_tokens(prompt)
     for name in _OCC_ZAMMAD_PREFIXED_TOOLS:
-        assert name in prompt, f"OCC prompt missing prefixed tool {name!r}"
-    for bare in (
-        "aggregate_tickets",
-        "search_tickets",
-        "get_ticket",
-        "ticket_report",
-    ):
-        assert bare not in prompt.replace(f"zammad_{bare}", ""), (
-            f"OCC prompt still teaches bare tool name {bare!r}"
-        )
+        assert name in tokens, f"OCC prompt missing prefixed tool {name!r}"
+    for bare in _OCC_BARE_TOOL_NAMES:
+        assert bare not in tokens, f"OCC prompt still teaches bare tool name {bare!r}"
 
 
 def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
