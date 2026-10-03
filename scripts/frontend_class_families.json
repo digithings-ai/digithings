@@ -38,7 +38,9 @@
     "scripted",
     "cmd",
     "rail",
-    "nav"
+    "nav",
+    "pixel",
+    "integrations"
   ],
   "dashboard": [
     "acct",
@@ -67,6 +69,7 @@
     "dtc",
     "light"
   ],
+  "_dq_pixel": "digiquant-web .pixel-* and .integrations-* are the digithings wordmark rules the integrations band reuses (same composition as digithings-web .pixel-*). App-local landing CSS. The band's look stays where it is; this entry only names the families the census already sees.",
   "_dq_desk": "digiquant-web .scripted-* is the one-rule row-gap under the scripted digichat thread: the slot name aui_message-group cannot be an arbitrary Tailwind variant (the underscore becomes a space and the stylesheet fails to parse). .desk-* and .cell-* are the embedded terminal mosaic in terminal-desk.module.css. App-local landing composition, same status as digithings-web .pixel-* / .section-*. .cmd / .cmd-in / .cmd-list are the desk path field ported from the terminal draft. .rail / .nav-row / .nav-tri / .nav-path are the folder sidebar from the same draft. .desk-pick / .desk-list are the desk selector.",
   "_landing": "digithings-web .pixel-* (PixelField/PixelWordmark), .hero-* (the staged hero entrance) and .section-* (the numbered section eyebrow + gutter rail) are the home landing's own composition (#4895 / #4424), owner-picked; app-local like .whyx-*. If the landing's pixel mark or section eyebrow is promoted into @digithings/ui, delete the matching entry with the app block.",
   "_stack": "digithings-web .stack-* is the /variants/mixed stack showcase (branch claude/home-variants): the bento grid as a map with a travelling focus, pinned by .stack-pin and dimmed per .stack-cell.is-active. Exploration only \u2014 if the showcase is picked it moves into @digithings/ui (data-layout styles + component + tests) and this entry is deleted with the app block.",

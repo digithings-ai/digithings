@@ -103,6 +103,13 @@ function inkCells(): { row: number; col: number }[] {
   return ink;
 }
 
+/** Stable up/down for one header cell during the reveal. Both sides occur. */
+export function markDirection(row: number, col: number): "up" | "down" {
+  let n = Math.imul(row + 1, 0x9e3779b1) ^ Math.imul(col + 1, 0x85ebca6b);
+  n = Math.imul(n ^ (n >>> 13), 0xc2b2ae35);
+  return (n >>> 0) % 2 === 0 ? "up" : "down";
+}
+
 /** One non-space cell, after the reveal. Null while the word is still filling. */
 export function glintCell(elapsedMs: number): { row: number; col: number } | null {
   if (elapsedMs < REVEAL_MS) return null;
