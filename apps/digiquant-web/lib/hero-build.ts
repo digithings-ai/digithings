@@ -1,4 +1,4 @@
-import { DIGIQUANT_CHART } from "@digithings/ui/chart-scale";
+import { DIGIQUANT_CHART, type DigiquantChartScale } from "@digithings/ui/chart-scale";
 
 /** Shared clock for the hero's build-in. The wordmark's pixel columns and the chart's
  *  construct both use this module; wordmark columns still rise on BUILD_* below. */
@@ -97,7 +97,7 @@ export type HeroStroke = { color: string; points: HeroPoint[] };
 export type HeroOverlay = "bollinger-bands" | "vwap" | "supertrend";
 
 /** Match the native inputs QuantField adds when the sweep hands off.
- *  Colors are the kit chart scale (digiquant up / down), not a second pair. */
+ *  Study colors are the kit indicator palette. Candles stay on up / down. */
 export const SMA_COLOR = DIGIQUANT_CHART.sma;
 export const EMA_COLOR = DIGIQUANT_CHART.ema;
 export const SMA_LENGTH = 20;
@@ -283,24 +283,27 @@ function supertrendStrokes(bars: readonly HeroBar[]): HeroStroke[] {
 }
 
 /** Native-indicator inputs that match `heroIndicatorStrokes` for this overlay. */
-export function heroOverlayInputs(overlay: HeroOverlay): Record<string, number | string | boolean> {
+export function heroOverlayInputs(
+  overlay: HeroOverlay,
+  scale: DigiquantChartScale = DIGIQUANT_CHART,
+): Record<string, number | string | boolean> {
   if (overlay === "bollinger-bands") {
     return {
       length: SMA_LENGTH,
       mult: 2,
-      basisColor: BB_BASIS,
-      color: BB_BAND,
+      basisColor: scale.bollingerBasis,
+      color: scale.bollingerBand,
       fillColor: "rgba(0,0,0,0)", // canon-allow: transparent band fill
     };
   }
   if (overlay === "supertrend") {
-    return { atrLength: 10, mult: 3, upColor: LINE_UP, downColor: LINE_DOWN };
+    return { atrLength: 10, mult: 3, upColor: scale.supertrendUp, downColor: scale.supertrendDown };
   }
   return {
     anchor: "Session",
     source: "HLC3",
-    bullColor: DIGIQUANT_CHART.vwap,
-    bearColor: DIGIQUANT_CHART.vwap,
+    bullColor: scale.vwap,
+    bearColor: scale.vwap,
     band1: false,
     fill: false,
   };

@@ -1,9 +1,12 @@
 /**
- * One digiquant chart scale. Positive and negative price moves use the
+ * One digiquant chart scale. Candles, volume, and price moves use the
  * design-canon pair already declared as `--up` and `--down` in
- * `@digithings/design/tokens.css`. Studies that are not themselves a
- * direction still draw from that pair, so a chart does not invent a second
- * green and red. Grid and axis stay on the neutral hair and mute tokens.
+ * `@digithings/design/tokens.css` (dark teal `#3DD6C4` / red `#E5533E`,
+ * light `#0C7C71` / `#B2452E`).
+ *
+ * Studies use a teal-led palette — spring, cyan, yellow, lime, orange,
+ * green, azure — so each indicator keeps its own hue. Grid and axis stay
+ * on the neutral hair and mute tokens.
  *
  * Canvas engines need a resolved color. `DIGIQUANT_CHART` is the dark-theme
  * snapshot (the same fallback `readFinancePalette` uses). Call
@@ -40,13 +43,13 @@ export const DIGIQUANT_CHART: DigiquantChartScale = {
   candleDown: role("--chart-candle-down", "#E5533E"),
   volumeUp: role("--chart-volume-up", "#3DD6C4"),
   volumeDown: role("--chart-volume-down", "#E5533E"),
-  sma: role("--chart-sma", "#3DD6C4"),
-  ema: role("--chart-ema", "#E5533E"),
-  vwap: role("--chart-vwap", "#3DD6C4"),
-  bollingerBasis: role("--chart-bollinger", "#E5533E"),
-  bollingerBand: role("--chart-bollinger-band", "#3DD6C4"),
-  supertrendUp: role("--chart-supertrend-up", "#3DD6C4"),
-  supertrendDown: role("--chart-supertrend-down", "#E5533E"),
+  sma: role("--chart-sma", "#1EC98A"),
+  ema: role("--chart-ema", "#5AD4F0"),
+  vwap: role("--chart-vwap", "#F0D44A"),
+  bollingerBasis: role("--chart-bollinger", "#B0DC3A"),
+  bollingerBand: role("--chart-bollinger-band", "#F09238"),
+  supertrendUp: role("--chart-supertrend-up", "#54DC62"),
+  supertrendDown: role("--chart-supertrend-down", "#6A96F0"),
   grid: role("--chart-grid", "rgba(255, 255, 255, 0.09)"),
   axis: role("--chart-axis", "#7D8389"),
 };

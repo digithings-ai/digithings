@@ -10,9 +10,7 @@ import {
   heroOverlayInputs,
   paddedPriceWindow,
   revealYDomain,
-  EMA_COLOR,
   EMA_LENGTH,
-  SMA_COLOR,
   SMA_LENGTH,
   type HeroBar,
   type HeroOverlay,
@@ -186,9 +184,11 @@ export function QuantField() {
 
     const mountStudies = () => {
       if (!chart || sma) return;
-      sma = chart.addNativeIndicator("sma", { inputs: { length: SMA_LENGTH, color: SMA_COLOR } });
-      ema = chart.addNativeIndicator("ema", { inputs: { length: EMA_LENGTH, color: EMA_COLOR } });
-      overlayInd = chart.addNativeIndicator(picked.type, { inputs: heroOverlayInputs(overlayKind) });
+      sma = chart.addNativeIndicator("sma", { inputs: { length: SMA_LENGTH, color: scale.sma } });
+      ema = chart.addNativeIndicator("ema", { inputs: { length: EMA_LENGTH, color: scale.ema } });
+      overlayInd = chart.addNativeIndicator(picked.type, {
+        inputs: heroOverlayInputs(overlayKind, scale),
+      });
     };
 
     const fadeIn = () => {
