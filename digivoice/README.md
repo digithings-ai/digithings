@@ -10,20 +10,15 @@ Dictation and speech are live: microphone → wav → `whisper-cli` with `ggml-b
 
 macOS is the desktop this app runs on. Hotkeys and paste go through Hammerspoon. There is no Windows or Linux package for those hotkeys.
 
-From the repository root:
+From the repository root, one command installs the tool, the auto toolchain, and reloads Hammerspoon. It exits 0 when that finishes. It does not open the wizard and it does not leave a TUI running:
 
 ```bash
-uv tool install --editable ./digivoice
-digivoice install
+uv tool install --editable ./digivoice && export PATH="$HOME/.local/bin:$PATH" && digivoice install --auto
 ```
 
-The first command installs the `digivoice` tool from this checkout (the Hammerspoon adapter is copied from that tree). The second command opens the install wizard in a terminal.
+`uv tool install --editable` puts `digivoice` on `PATH` from this checkout (`~/.local/bin`), which is required because the Hammerspoon adapter is copied from that tree. `digivoice install --auto` is the existing non-interactive install: bun, OpenTUI, whisper-cli, Piper, sox, `ggml-base.en.bin`, the Lessac voice, and the Hammerspoon adapter, then `hs.reload()` so the hotkeys are live. On an arm64 Mac it installs the native arm64 Piper build and a same-arch `libespeak-ng.1.dylib` beside that binary. A missing same-arch library is `brew install espeak-ng`. It does not download a rewrite model, and it does not call a cloud STT or TTS service.
 
-**Auto** installs the local toolchain (bun, OpenTUI, whisper-cli, Piper, sox, and the Hammerspoon adapter) plus the default speech model `ggml-base.en.bin` and the default Piper voice (Lessac). On an arm64 Mac it installs the native arm64 Piper build and a same-arch `libespeak-ng.1.dylib` beside that binary. A missing same-arch library is `brew install espeak-ng`. It does not download a rewrite model, and it does not call a cloud STT or TTS service.
-
-**Pick** asks which local speech, voice, and rewrite models to download. Models already on disk stay. Choosing a model does not delete one you did not choose.
-
-A script, `digivoice install --auto`, or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` skips the wizard and installs the auto set. `digivoice update` refreshes that same default set and does not open the wizard.
+`digivoice install` on a terminal is still the wizard. **Auto** there is the same default set. **Pick** asks which local speech, voice, and rewrite models to download. Models already on disk stay. Choosing a model does not delete one you did not choose. A pipe or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` skips the wizard and installs the auto set, the same path as `--auto`. `digivoice update` refreshes that same default set and does not open the wizard.
 
 ## Requirements
 
