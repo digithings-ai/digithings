@@ -8,9 +8,8 @@ export function ChatBand() {
     <Band
       id="chat"
       fill
-      status="scripted · not a live session"
       title="From a chat to a tested strategy"
-      takeaway="An agent takes an idea from digichat, runs it through the backtester and optimizer, and reports each result for you to inspect. Scripted, not live: the builder lives in the dashboard."
+      takeaway="digichat takes a trend-following idea through the indicators, the strategy components, a viability check, an optimization pass, and the backtest, and posts each result in the thread. The same sidebar holds a research note, a trade journal, and the daily digest."
     >
       <div className="mx-auto flex w-full max-w-[64rem] flex-1 flex-col">
         <ScriptedDigichatSession />
