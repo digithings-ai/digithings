@@ -10,12 +10,14 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
 import { DASH, EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { strategiesBody } from "../../../../../clients/digiquant-tui/src/pages/strategies-format";
+import { strategySheetBody } from "../../../../../clients/digiquant-tui/src/pages/strategy-sheet";
 import { shapeLines, strategyBlocks, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
 import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const INDEX_PATH = "/strategies";
+const DETAIL_IDS = new Set(["st-overview", "st-parameters", "st-track-record", "st-runs"]);
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 type BlockId =
@@ -50,7 +52,8 @@ export type StrategyBlockBody =
   | { type: "table"; head: string[]; rows: string[][] }
   | { type: "fields"; notice: string | null; lead: string | null; lede: string | null; rows: { label: string; value: string }[] }
   | { type: "steps"; steps: { label: string; meta: string; detail: string | null }[] }
-  | { type: "track"; headline: string | null; why: string | null; rows: { label: string; value: string }[]; points: { date: string; value: string }[] };
+  | { type: "track"; headline: string | null; why: string | null; rows: { label: string; value: string }[]; points: { date: string; value: string }[] }
+  | { type: "sheet"; rows: { label: string; value: string }[]; chart: string | null; trades: string[][] };
 
 const tone: Record<ReadResult["status"] | "loading", string> = {
   ok: "text-ink",
@@ -326,6 +329,7 @@ function paint(id: BlockId, data: unknown): StrategyBlockBody | null {
 
 /** One block body. Stub and error envelopes stay the official lines. */
 export function strategyBlockBody(id: string, data: unknown, result: ReadResult): StrategyBlockBody {
+  if (id === "st-tearsheet") return strategySheetBody(data);
   if (result.status === "error" || result.status === "stub" || data == null) return textBody(result);
   if (!isBlockId(id)) return textBody(result);
   return paint(id, data) ?? textBody(result);
@@ -407,6 +411,16 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead
   );
 }
 
+function paintDetail(id: string, read: OfficialRead): { status: ReadResult["status"]; blocks: PaneBody; asOf: string | null } {
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
 function StrategiesDesk({
   path,
   reads,
@@ -423,7 +437,8 @@ function StrategiesDesk({
         const def = BLOCKS[placement.id];
         if (!def) return null;
         const read = reads[placement.id];
-        const status = read?.result.status ?? "loading";
+        const formatted = read && DETAIL_IDS.has(placement.id) ? paintDetail(placement.id, read) : null;
+        const status = formatted?.status ?? read?.result.status ?? "loading";
         const body = read
           ? strategyBlockBody(placement.id, read.data, read.result)
           : ({ type: "text", lines: ["loading…"] } satisfies StrategyBlockBody);
@@ -431,6 +446,8 @@ function StrategiesDesk({
           body.type === "text"
             ? []
             : (read?.result.lines.filter((line) => line.startsWith("source  ") || line.startsWith("marks  ")) ?? []);
+        const blocks = formatted?.blocks ?? strategyBlocks(body, provenance);
+        const asOf = formatted ? formatted.asOf : (read?.result.asOf ?? null);
         return (
           <div
             key={`${path}:${placement.id}`}
@@ -440,8 +457,8 @@ function StrategiesDesk({
             <DeskPane
               title={def.title}
               route={def.route}
-              asOf={read?.result.asOf ?? null}
-              blocks={strategyBlocks(body, provenance)}
+              asOf={asOf}
+              blocks={blocks}
               tone={tone[status]}
               focused={panes.focus === placement.id}
               onFocus={() => panes.focusAt(placement.id)}

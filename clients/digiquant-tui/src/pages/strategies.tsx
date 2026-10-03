@@ -19,6 +19,7 @@ const INDEX_PATH = "/strategies";
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
+const DETAIL_IDS = new Set(["st-overview", "st-parameters", "st-track-record", "st-runs"]);
 
 type BlockId =
   | "st-kpis"
@@ -442,6 +443,16 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, Loaded>; lay
   );
 }
 
+function paintDetail(id: string, read: Loaded): { status: ReadResult["status"]; blocks: PaneBody; asOf: string | null } {
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
 function StrategiesDesk({
   path,
   reads,
@@ -458,7 +469,8 @@ function StrategiesDesk({
         const def = BLOCKS[placement.id];
         if (!def) return null;
         const read = reads[placement.id];
-        const status = read?.result.status ?? "loading";
+        const formatted = read && DETAIL_IDS.has(placement.id) ? paintDetail(placement.id, read) : null;
+        const status = formatted?.status ?? read?.result.status ?? "loading";
         const structured = read
           ? strategyBlockBody(placement.id, read.data, read.result)
           : ({ type: "text", lines: ["loading…"] } satisfies StrategyBlockBody);
@@ -466,6 +478,8 @@ function StrategiesDesk({
           structured.type === "text"
             ? []
             : (read?.result.lines.filter((line) => line.startsWith("source  ") || line.startsWith("marks  ")) ?? []);
+        const blocks = formatted?.blocks ?? strategyBlocks(structured, provenance);
+        const asOf = formatted ? formatted.asOf : (read?.result.asOf ?? null);
         return (
           <box
             key={`${path}:${placement.id}`}
@@ -478,9 +492,9 @@ function StrategiesDesk({
           >
             <PaneFrame
               title={def.title}
-              status={read?.result.asOf ? `as of ${read.result.asOf}` : def.route}
+              status={asOf ? `as of ${asOf}` : def.route}
               focused={index === focus}
-              blocks={strategyBlocks(structured, provenance)}
+              blocks={blocks}
               ink={tone(status)}
             />
           </box>
