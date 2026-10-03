@@ -9,6 +9,7 @@ import { attributionBody } from "./attribution-format";
 import { holdingsBody } from "./holdings-format";
 import { ledgerBody } from "./ledger-format";
 import { portfolioBody } from "./portfolio-format";
+import { tearsheetBody } from "./tearsheet-format";
 import { shapeLines, type PaneBody } from "./shape";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
@@ -459,12 +460,79 @@ export function LedgerPage(props: DeskProps) {
   return <LedgerHome api={props.api ?? API} />;
 }
 
+/** `/portfolio/tearsheet` only. `/performance` stays on the line read. */
+function TearsheetHome({ api }: { api: string }) {
+  const path = "/portfolio/tearsheet";
+  const [reads, setReads] = useState<Record<string, Loaded>>({});
+  const layout = layoutFor(path);
+  const [focus, setFocus] = useFocusedPane(layout.length, path);
+
+  useEffect(() => {
+    const placements = layoutFor(path);
+    const ac = new AbortController();
+    let cancel = false;
+    for (const placement of placements) {
+      const def = BLOCKS[placement.id];
+      if (!def) continue;
+      void loadPortfolio(api, def.route, def.kind, ac.signal).then((result) => {
+        if (cancel) return;
+        setReads((prev) => ({ ...prev, [placement.id]: result }));
+      });
+    }
+    return () => {
+      cancel = true;
+      ac.abort();
+    };
+  }, [api]);
+
+  return (
+    <box width="100%" height="100%" position="relative">
+      {layout.map((placement, index) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const read = reads[placement.id];
+        const view = paintTearsheet(placement.id, read);
+        return (
+          <box
+            key={placement.id}
+            position="absolute"
+            left={share(placement.x - 1, COLS)}
+            top={share(placement.y - 1, ROWS)}
+            width={share(placement.w, COLS)}
+            height={share(placement.h, ROWS)}
+            onMouseDown={() => setFocus(index)}
+          >
+            <PaneFrame
+              title={def.title}
+              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              focused={index === focus}
+              blocks={view.blocks}
+              ink={tone(view.status)}
+            />
+          </box>
+        );
+      })}
+    </box>
+  );
+}
+
+function paintTearsheet(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub") {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: tearsheetBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
 export function ThesesPage(props: DeskProps) {
   return page("/portfolio/theses", props);
 }
 
 export function TearsheetPage(props: DeskProps) {
-  return page("/portfolio/tearsheet", props);
+  return <TearsheetHome api={props.api ?? API} />;
 }
 
 export function PerformancePage(props: DeskProps) {
@@ -477,6 +545,7 @@ export function PortfolioPages({ path, ...props }: DeskProps & { path: string })
   if (path === "/portfolio/holdings") return <HoldingsHome api={props.api ?? API} />;
   if (path === "/portfolio/attribution") return <AttributionHome api={props.api ?? API} />;
   if (path === "/portfolio/ledger") return <LedgerHome api={props.api ?? API} />;
+  if (path === "/portfolio/tearsheet") return <TearsheetHome api={props.api ?? API} />;
   if (!isPortfolioPath(path)) return null;
   return page(path, props);
 }
