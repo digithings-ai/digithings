@@ -238,15 +238,34 @@ def _rrf_merge_results(
     return merged[:top_k] if top_k else merged
 
 
-def _response_is_exhaustive(response: SearchResponse, window: int) -> bool:
-    """True when *response* holds every hit that leg can return for this window.
+def _leg_is_complete(response: SearchResponse, page_size: int) -> bool:
+    """True when *response* holds every match that leg can return.
 
-    A reported ``total_count`` wins. Otherwise a short page means the leg had
-    nothing left. A full page with no total is not proof the leg is finished.
+    A reported total wins. A short page with no total means the leg stopped
+    early. A full page with no total is not the end of the leg.
     """
     if response.total_count is not None:
         return len(response.results) >= response.total_count
-    return len(response.results) < window
+    return len(response.results) < max(page_size, 1)
+
+
+def _read_fanout_leg(query: Query, index_name: str) -> SearchResponse:
+    """Read one leg from the start, then the rest of it when a total is known.
+
+    Fusing ``skip + top_k`` hits makes the candidate set grow with the page.
+    A shared chunk that sits just outside the first page then picks up another
+    RRF term and can put an earlier hit on the next page as well.
+    """
+    page_size = max(int(query.top_k or 0), 1)
+    probe = replace(query, skip=0, top_k=page_size, include_total_count=True)
+    first = _query_single_index(probe, index_name)
+    total = first.total_count
+    if total is None or len(first.results) >= total or total <= page_size:
+        return first
+    return _query_single_index(
+        replace(query, skip=0, top_k=int(total), include_total_count=True),
+        index_name,
+    )
 
 
 def _query_single_index(query: Query, index_name: str) -> SearchResponse:
@@ -362,16 +381,12 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    # Skip applies to the fused list. Each leg is read from the start for
-    # skip+top_k hits; slicing per leg would drop a document that only ranks
-    # first in one index.
+    # One fused ranking for every page. Each leg is read in full when it
+    # reports a total, then the same list is sliced. Growing the per-leg
+    # window with skip changes RRF scores and repeats an earlier hit.
     skip = max(int(query.skip or 0), 0)
     page_size = max(int(query.top_k or 0), 0)
-    window = skip + page_size
-    leg = replace(query, skip=0, top_k=window or query.top_k)
-    responses = [_query_single_index(leg, name) for name in names]
-    # Do not cap the merge here. A complete leg list can be longer than the
-    # page window, and the deduped length is the total only in that case.
+    responses = [_read_fanout_leg(query, name) for name in names]
     merged = _rrf_merge_results(
         [response.results for response in responses],
         top_k=None,
@@ -387,7 +402,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     ]
     total_count = None
     if query.include_total_count and all(
-        _response_is_exhaustive(response, window) for response in responses
+        _leg_is_complete(response, page_size) for response in responses
     ):
         total_count = len(merged)
     return _maybe_rerank(

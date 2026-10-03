@@ -19,7 +19,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digisearch.core.models import Chunk, Document
 from digisearch.embedding.base import EmbeddingProvider
-from digisearch.ingest_paths import assert_within_ingest_root, resolve_ingest_source
+from digisearch.ingest_paths import (
+    assert_hardlink_within_ingest_root,
+    assert_within_ingest_root,
+    resolve_ingest_source,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,8 @@ def _reject_sidecar_outside_root(source_path: Path) -> None:
     if not side.is_file():
         return
     try:
-        assert_within_ingest_root(side)
+        resolved = assert_within_ingest_root(side)
+        assert_hardlink_within_ingest_root(resolved)
     except ValueError as exc:
         raise IngestError(str(exc), code="ingest_source_rejected", http_status=400) from exc
 
