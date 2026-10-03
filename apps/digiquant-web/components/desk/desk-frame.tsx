@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@digithings/ui/ui";
 import { QuantWordmark } from "@/app/_chrome/QuantWordmark";
@@ -26,28 +26,42 @@ function useNarrowDesk() {
   return narrow;
 }
 
+/* The server snapshot is the default width, so the hydrated rail matches.
+   The client snapshot reads the saved width after mount. */
+const railListeners = new Set<() => void>();
+
+function subscribeRailWidth(onStoreChange: () => void): () => void {
+  railListeners.add(onStoreChange);
+  return () => {
+    railListeners.delete(onStoreChange);
+  };
+}
+
+function readRailWidth(): number {
+  const saved = Number(window.localStorage.getItem(STORAGE));
+  const widths: readonly number[] = RAIL_WIDTHS;
+  return widths.includes(saved) ? saved : RAIL_WIDTH_DEFAULT;
+}
+
+function railWidthServerSnapshot(): number {
+  return RAIL_WIDTH_DEFAULT;
+}
+
+function writeRailWidth(next: number): void {
+  window.localStorage.setItem(STORAGE, String(next));
+  for (const listener of railListeners) listener();
+}
+
 /** Shared desk chrome. One page rail: resizable on a wide layout, a drawer on a phone. */
 export function DeskFrame({ current, children }: { current: string; children: ReactNode }) {
   const narrow = useNarrowDesk();
-  const [width, setWidth] = useState(RAIL_WIDTH_DEFAULT);
-  const [ready, setReady] = useState(false);
+  const width = useSyncExternalStore(subscribeRailWidth, readRailWidth, railWidthServerSnapshot);
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const saved = Number(window.localStorage.getItem(STORAGE));
-    const widths: readonly number[] = RAIL_WIDTHS;
-    if (widths.includes(saved)) setWidth(saved);
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    window.localStorage.setItem(STORAGE, String(width));
-  }, [ready, width]);
-
-  useEffect(() => {
+  const [prevNarrow, setPrevNarrow] = useState(narrow);
+  if (narrow !== prevNarrow) {
+    setPrevNarrow(narrow);
     if (!narrow) setOpen(false);
-  }, [narrow]);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -90,8 +104,8 @@ export function DeskFrame({ current, children }: { current: string; children: Re
             current={current}
             onNavigate={() => setOpen(false)}
             collapsed={narrow && !open}
-            onNarrower={() => setWidth((value) => stepRailWidth(value, -1))}
-            onWider={() => setWidth((value) => stepRailWidth(value, 1))}
+            onNarrower={() => writeRailWidth(stepRailWidth(width, -1))}
+            onWider={() => writeRailWidth(stepRailWidth(width, 1))}
             narrowDisabled={width === RAIL_WIDTHS[0]}
             wideDisabled={width === RAIL_WIDTHS[RAIL_WIDTHS.length - 1]}
           />
