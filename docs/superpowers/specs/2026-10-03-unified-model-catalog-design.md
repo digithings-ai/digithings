@@ -29,7 +29,7 @@ Today **at least eleven files across nine lists** answer "what models does this 
 
 Plus `apps/digithings-web/functions/api/byok/test.ts` and `apps/digithings-web/lib/providerSettings.ts:5` (a legacy Pages surface with its own `ProviderId` union) — out of scope, listed so the inventory is honest.
 
-**What this PR does.** Generates a normalized snapshot of ten providers from models.dev into `config/model-catalog.json` + a generated TypeScript module, serves catalog-backed model tiers in digichat's BYOK picker for the providers that have no list today, prunes BYOK fallback ids the catalog proves are retired, and adds a coverage test that fails when a pinned id stops existing upstream.
+**What this PR does.** Generates a normalized snapshot of ten providers from models.dev into `config/model-catalog.json` + a generated TypeScript module, serves catalog-backed model tiers in digichat's BYOK picker for the providers that have no list today, **records** the six BYOK fallback ids the catalog proves are retired (as reasoned exemptions, not silent swaps — see [D11](#decisions)), and adds a coverage test that fails when a pinned id stops existing upstream.
 
 **What this PR explicitly does not do.** It does not generate `config/litellm.yaml` (deliberate routing policy, not catalog data), does not touch digillm's runtime (no file reads, no new hard deps), and does not touch `scripts/refresh_model_routes.py` (see [Out of scope](#out-of-scope)).
 
@@ -42,7 +42,7 @@ Plus `apps/digithings-web/functions/api/byok/test.ts` and `apps/digithings-web/l
 | "models.dev as the single source of truth" | models.dev is the single source for **capability + pricing + context metadata**. It is explicitly **not** the source of truth for route-suffix spellings (`:free`, `:cloud`), OpenRouter alias pairs, or the full OpenRouter surface — measured: its `openrouter` slice is 390 entries and does not carry our `:free` slugs consistently, and its `ollama-cloud` ids carry no `:cloud` tag. | models.dev is a curated DB, not a live route registry. Treating it as one produces false coverage failures. |
 | "replace individual provider endpoints" | The OpenRouter live `GET /api/v1/models` call is **kept**. It is demoted from *only source* to *liveness cross-check* for OpenRouter, whose tiers and prices are blended per-infra and change faster than a refresh cycle. | OpenRouter is the only source that answers "can I call this right now, at what price". Removing it would make the picker confidently wrong. |
 | "replace hand-maintained model lists" | `config/byok-providers.json`, `config/litellm.yaml`, `config/digiquant_models.yaml` stay hand-maintained. The catalog **validates** them; it does not generate them. | These files encode routing policy (tier assignment, `requiresModel`, phase pins, strict no-fallback routing), not fetched facts. Generating them would automate a judgement call. |
-| — | Six BYOK `fallbackModels` ids are **replaced** (5 retired upstream, 1 renamed), not exempted. | The catalog proves it. See [D11](#decisions). |
+| — | The six BYOK `fallbackModels` ids the catalog proves are retired are **exempted, not replaced**. The swap is a follow-up. | Every `fallbackModels` entry must also be a `model_name` in `config/litellm.yaml` (`test_every_advertised_byok_preset_is_a_litellm_model_group`, #3605), so replacing one is a routing change to an upstream slug that cannot be confirmed without a provider key. See [D11](#decisions). |
 
 ---
 
@@ -60,7 +60,7 @@ Plus `apps/digithings-web/functions/api/byok/test.ts` and `apps/digithings-web/l
 | **D8** | Coverage test: strict or advisory? | **Scoped by confidence.** *Strict* (fails CI) for `config/byok-providers.json` `fallbackModels` — five first-party providers, ids we control, with a committed exemption list for structurally-unmappable ids. *Advisory* (warns, does not fail) for the 149 litellm route spellings, because the `:free`/`:cloud`/alias-pair surface is exactly where models.dev is empirically incomplete. |
 | **D9** | Does `OPEN_WEIGHT_PUBLISHER_PREFIXES` survive? | **Yes — unioned, not replaced.** `OpenRouterCatalogEntry` (`openrouter-catalog.ts:7-13`) has no `open_weights` field, so live entries still need the prefix list. `isOpenSource()` (`:60-63`) becomes `hugging_face_id || prefixMatch || catalogOpenWeights`. Catalog-only coverage would have shrunk the `opensource` bucket by up to 216 entries (only 174 of 390 openrouter rows are `open_weights: true`). |
 | **D10** | Ordering in the picker's `modelOptions` IIFE? | Unchanged precedence, with one new lowest-priority tier. (1) live OpenRouter buckets → (2) key-scoped `models[]` from the post-key ping → (3) **catalog buckets, only when (1) and (2) are both empty** → (4) `byokModelPresets()`. Also: an empty bucket at the active tier falls through to (4). Putting the catalog above the key-scoped list would let a user pick a model their key cannot call. |
-| **D11** | The six dead BYOK pins? | **Replace** them in `config/byok-providers.json` `fallbackModels` and the vendored `infra/digichat-release/` copy (concrete before/after ids in [Components touched](#components-touched)). Five are retired upstream; `grok-4-3` is a **rename** to `grok-4.3`. `fallbackModels` feeds `llm_auth.py:309-341` `byok_default_model_refusal`, whose whole job is to hand the user a working alternative — pointing at a retired model is a bug, not a fallback. |
+| **D11** | The six dead BYOK pins? | **Record them as reasoned exemptions; do not replace them here.** The catalog proves all six are retired (five genuinely, `grok-4-3` because xAI publishes `grok-4.3`), and that is a real bug — `fallbackModels` feeds `llm_auth.py:309-341` `byok_default_model_refusal`, whose whole job is to hand the user a working alternative. But every `fallbackModels` entry must *also* be a `model_name` in `config/litellm.yaml` (`test_every_advertised_byok_preset_is_a_litellm_model_group`, #3605), so a swap is a **routing change**, not a catalog edit: it needs a new LiteLLM group whose `litellm_params.model` points at the successor slug, and that slug cannot be confirmed against a live provider without a provider key. Shipping a guessed one is a 500 on every BYOK chat that picks it — a worse outcome than an exhausted fallback. So each entry is exempted with the specific replacement it waits on (see `docs/MODEL_CATALOG.md`), and the swap is tracked as a follow-up that a maintainer with provider keys can execute. |
 | **D12** | Does digillm consume the catalog at runtime? | **No.** `digillm/AGENTS.md`: hard deps are `openai` + `pydantic`, no file reads, importable standalone. Consumption is test-only, extending `tests/config/test_litellm_house_models.py:208-211` (which already pins `_BYOK_CATALOG_API_BASES` against `byok-providers.json`) with a provider-set assertion. |
 
 ---
@@ -160,24 +160,28 @@ Evaluated top-down, first match wins — the same order as `tierFor()` (`openrou
 
 ### `config/model-catalog-exemptions.json` (hand-maintained)
 
-The coverage test's escape hatch, reviewed like any other config:
+The coverage test's escape hatch, reviewed like any other config. Shape as shipped — a
+`_comment` documenting the schema, then the entries, each keyed by `id` + `provider` + `reason`:
 
 ```json
-[
-  {
-    "id": "omniroute/auto",
-    "provider": "openrouter",
-    "reason": "LiteLLM router, not a model. Never enumerable by any catalog."
-  },
-  {
-    "id": "ollama/deepseek-r1:14b",
-    "provider": "ollama",
-    "reason": "Local Ollama daemon, per-machine. Out of catalog scope by design."
-  }
-]
+{
+  "_comment": "Coverage-test exemptions. Each names one pinned id the catalog does not carry …",
+  "exemptions": [
+    {
+      "id": "claude-sonnet-4-20250514",
+      "provider": "anthropic",
+      "reason": "LITELLM_MODEL_GROUP_PINNED: replacing it needs a LiteLLM model group routing claude-sonnet-4-5 …"
+    }
+  ]
+}
 ```
 
-Every entry needs a `reason`. `--check` fails if an entry no longer needs to exist (i.e. its id now resolves) — exemptions are not allowed to silently accumulate.
+All six shipped entries are the retired BYOK `fallbackModels` ids from [D11](#decisions). Every entry
+needs a non-empty `reason` **and** a `provider` — an unscoped exemption would excuse the same id on
+every provider. `--check` fails if an entry no longer needs to exist, scoped to that entry's own
+provider (ids repeat across providers, so an unscoped check would call a stale pin resolved because
+*another* provider happens to carry a similarly-named model) — exemptions are not allowed to silently
+accumulate.
 
 ### `apps/digichat/src/lib/model-catalog.generated.ts` (generated)
 
@@ -281,7 +285,7 @@ The `all` slice is **not** capped and **is** sorted by `id` ascending. The live 
 
 | File | Change |
 |---|---|
-| `config/byok-providers.json` | **Replace 6 `fallbackModels` ids the catalog proves are retired or renamed.** All replacements below are verified present in the catalog's current slice:<br>• anthropic `claude-sonnet-4-20250514` → `claude-sonnet-4-5`<br>• anthropic `claude-haiku-4-20250514` → `claude-haiku-4-5`<br>• anthropic `claude-opus-4-20250514` → `claude-opus-4-5`<br>• gemini `gemini/gemini-2.0-flash` → `gemini/gemini-2.5-flash`<br>• openrouter `google/gemini-2.0-flash` → `google/gemini-2.5-flash`<br>• xai `grok-4-3` → `grok-4.3` (**a rename, not a retirement** — models.dev carries the dotted spelling; xai has no `-4-3`)<br>Order within each `fallbackModels` list is preserved. |
+| `config/byok-providers.json` | **Unchanged, deliberately.** The catalog proves 6 `fallbackModels` ids are retired (5 genuinely; xai's `grok-4-3` because models.dev carries only the dotted `grok-4.3`), and that is a real defect — but replacing one is a `config/litellm.yaml` **routing** change (#3605 pins every `fallbackModels` entry to a `model_name`), and the successor slug cannot be confirmed against a live provider without a provider key. So they are recorded in `config/model-catalog-exemptions.json` with the replacement each waits on; the swap is a follow-up ([D11](#decisions)). |
 | `infra/digichat-release/config/byok-providers.json` | Same 6 replacements. Must stay byte-identical to `config/byok-providers.json` or `TestByokCatalogVendoredCopy` fails. |
 | `apps/digichat/src/app/api/byok/models/route.ts` | `:80-86` guard widens from `provider !== "openrouter"` to `!BYOK_PROVIDER_LIST.includes(provider)` → still `400 unsupported_provider`. Response **widens** — `ok`, `free`, `opensource`, `flagship`, `all` unchanged; `provider`, `source`, `fetchedAt` added. openrouter keeps the live path including `MAX_RESPONSE_BYTES`. |
 | `apps/digichat/src/app/api/byok/models/route.test.ts` | `:42-47` `it("returns 400 for any provider other than openrouter")` is invalidated by the widened allowlist. Replaced with: 400 for an unknown provider id; 200 + catalog buckets for each of the 5; openrouter still takes the live path. |
@@ -387,7 +391,7 @@ An adversarial fresh-context review produced 16 findings (2 blockers, 8 major, 3
 
 | # | Sev | Finding | Resolution |
 |---|---|---|---|
-| 1 | blocker | The coverage test as first drafted was **red on commit**: 6 of 15 BYOK `fallbackModels` do not resolve, and the "`presets ⊆ catalog ∧ ⊇ fallbackModels`" assertion is arithmetically unsatisfiable. | Coverage is now **scoped** ([D8](#decisions)): strict for BYOK fallbacks, advisory for litellm spellings. The unsatisfiable assertion is gone. The 6 ids are **replaced** with verified-present ids ([D11](#decisions); 5 retired, 1 rename). Also corrected: "the suffix rule `refresh_model_routes.py` uses" is `_is_listed_live` (`:224-234`), a live-list comparison that does not author-strip — the matcher specified here is a new, explicitly defined author-strip. |
+| 1 | blocker | The coverage test as first drafted was **red on commit**: 6 of 15 BYOK `fallbackModels` do not resolve, and the "`presets ⊆ catalog ∧ ⊇ fallbackModels`" assertion is arithmetically unsatisfiable. | Coverage is now **scoped** ([D8](#decisions)): strict for BYOK fallbacks, advisory for litellm spellings. The unsatisfiable assertion is gone. The 6 ids are **exempted with the specific replacement each waits on** ([D11](#decisions)) — replacing them is a `config/litellm.yaml` routing change that needs a provider key to confirm the upstream slug. Also corrected: "the suffix rule `refresh_model_routes.py` uses" is `_is_listed_live` (`:224-234`), a live-list comparison that does not author-strip — the matcher specified here is a new, explicitly defined author-strip. |
 | 2 | blocker | Self-contradiction on `OPEN_WEIGHT_PUBLISHER_PREFIXES` — the table said "deleted", Approach D said "let us delete", the draft's self-review said "survives, unioned". | **Unioned, not deleted** ([D9](#decisions)). Verified: `OpenRouterCatalogEntry` (`:7-13`) has no `open_weights`, so live entries still need the prefix list; catalog-only coverage would shrink the `opensource` bucket by up to 216 entries. The union site is named: `isOpenSource()` (`:60-63`). |
 | 3 | major | Dropping the openrouter gate on `tieredOptions` (`:237`) would put the catalog **above** the key-scoped list in the `:252-271` IIFE — reproducing the exact "membership ≠ key-scoped availability" conflation the spec claims to fix. `if (tieredOptions)` is also truthy with empty buckets, so the claimed presets fallback did not exist. | The live-tier gate stays **openrouter-only**; catalog tiers are **tier 3**, used only when tiers 1 and 2 are both empty ([D10](#decisions)). The empty-bucket fallback is added to the Modified list. The full ordering is stated. |
 | 4 | major | `byokModelPresets()` derivation from the catalog breaks its exact `toEqual` parity test, changes its return shape, and would make `byok-cli-flow.tsx:595`'s placeholder an arbitrary id. | **Not done.** `use-byok-key.ts` and its parity test are untouched and listed under "Untouched, on purpose" with the reason. |

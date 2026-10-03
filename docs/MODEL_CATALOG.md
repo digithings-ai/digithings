@@ -8,7 +8,8 @@
 One normalized, vendored snapshot of per-model metadata — price, context
 window, modalities, tool-call / structured-output / reasoning / vision
 capability, open-weight flag — for the ten providers this repo routes to.
-It replaces a dozen hand-maintained lists that had to be kept in sync by hand.
+It **validates** a dozen hand-maintained lists that had to be kept in sync by
+hand, against one normalized snapshot — it does not generate or replace them.
 
 ---
 
@@ -131,8 +132,9 @@ registry. Do not treat it as one:
 
 - **Route-suffix spellings.** Its `openrouter` slice is 390 rows and does not
   carry our `:free` slugs consistently (`liquid/lfm-2.5-2.6b:free` and friends
-  miss). 38 of our 149 litellm routes miss for this and related reasons, which
-  is why that check warns instead of failing.
+  miss). 48 of our 149 litellm route entries miss for this and related reasons —
+  33 of the 88 distinct ids involved, which is why that check warns instead of
+  failing.
 - **OpenRouter alias pairs.** `config/litellm.yaml` registers bare and
   `openrouter/`-prefixed aliases for the same upstream; only one resolves.
 - **`ollama-cloud` `:cloud` tags.** Our aliases read `qwen3.5:cloud`; models.dev

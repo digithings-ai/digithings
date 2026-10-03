@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -109,6 +111,82 @@ def strip_author(model_id: str) -> str:
     """
     return model_id.split("/", 1)[1] if "/" in model_id else model_id
 
+
+#: The LiteLLM configs a BYOK-routable `model_name` can be declared in. The
+#: overlays are included because a group only has to exist in one of them to be
+#: routable, and dropping them would silently shrink the routable surface.
+LITELLM_CONFIG_PATHS = (
+    "litellm.yaml",
+    "litellm.dev.yaml",
+    "litellm.cheaperinference.yaml",
+    "litellm.omniroute.yaml",
+)
+
+
+def routable_byok_model_ids(*, config_dir: Path | None = None) -> dict[str, list[str]]:
+    """Model ids the house can actually serve for each BYOK provider.
+
+    ``config/litellm.yaml`` routes strictly -- no ``fallbacks`` (:6) -- so a
+    model id with no declared ``model_name`` is unservable, and offering it in
+    the picker is a 500 on every BYOK chat that selects it. models.dev is a
+    curated metadata database, not a routing registry: of anthropic's 16
+    catalog rows, *zero* have a LiteLLM group, while the 3 ids that do
+    (``claude-*-4-20250514``) are ones models.dev does not carry.
+
+    So the routable set is read from the LiteLLM configs themselves rather than
+    declared a second time here. A group counts for a provider when it is
+    ``api_key``-capable *and* its ``configurable_clientside_auth_params``
+    ``api_base`` regex matches that provider's ``baseUrl`` in
+    ``config/byok-providers.json``. That is the same regex-vs-host rule
+    ``tests/config/test_litellm_house_models.py`` already applies, so there is
+    one notion of routability in the repo rather than two.
+
+    The ollama-cloud groups are api_key-capable but route to a house proxy
+    rather than a BYOK host, so they are deliberately excluded -- a local
+    Ollama id has no business in a cloud provider's picker.
+
+    Read from committed repo files, never from the network, so ``--check``
+    stays offline and ``--offline`` does not churn.
+    """
+    root = config_dir or REPO_ROOT / "config"
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover - pyyaml is a workspace dev dep
+        return {}
+
+    hosts: dict[str, str] = {}
+    for entry in json.loads((root / "byok-providers.json").read_text(encoding="utf-8")):
+        hosts[str(entry["id"])] = str(entry["baseUrl"])
+
+    routable: dict[str, set[str]] = {provider: set() for provider in hosts}
+    for name in LITELLM_CONFIG_PATHS:
+        path = root / name
+        if not path.is_file():
+            continue
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for group in data.get("model_list") or []:
+            if not isinstance(group, dict):
+                continue
+            model_name = group.get("model_name")
+            if not isinstance(model_name, str) or not model_name.strip():
+                continue
+            params = group.get("litellm_params")
+            if not isinstance(params, dict):
+                continue
+            client_side = params.get("configurable_clientside_auth_params")
+            if not isinstance(client_side, list) or "api_key" not in client_side:
+                continue
+            api_bases = [
+                str(param.get("api_base"))
+                for param in client_side
+                if isinstance(param, dict) and param.get("api_base")
+            ]
+            for provider, host in hosts.items():
+                if any(re.search(pattern, host) for pattern in api_bases):
+                    routable[provider].add(strip_author(model_name))
+    return {provider: sorted(ids) for provider, ids in sorted(routable.items())}
+
+
 #: Carried over from ``FLAGSHIP_PROMPT_PRICE_FLOOR_USD_PER_1M``
 #: (``openrouter-catalog.ts:34``). A price floor rather than a model-name list is
 #: what lets the catalog derive the tier instead of maintaining a second name list
@@ -145,8 +223,18 @@ def _utc_now_iso() -> str:
 
 
 def _positive_int(value: object) -> int | None:
-    """A positive integer, or ``None`` for absent, non-numeric, or zero."""
+    """A positive integer, or ``None`` for absent, non-numeric, or zero.
+
+    ``math.isfinite`` is load-bearing, not defensive noise: JSON spells an
+    overflowing literal as ``1e999``, which ``json.loads`` hands back as
+    ``inf``, and ``int(inf)`` raises OverflowError -- which would escape as a
+    crash from ``fetch_catalog``'s CatalogRefreshError contract. models.dev is
+    curated, but "curated" is not "cannot emit a typo", and a bad upstream
+    number must degrade to unknown, never abort a refresh.
+    """
     if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    if not math.isfinite(value):
         return None
     # models.dev ships limit.context == 0 for image models (openai
     # chatgpt-image-latest), which is "unknown", not "a zero-length window".
@@ -154,11 +242,18 @@ def _positive_int(value: object) -> int | None:
 
 
 def _cost_usd_per_million(cost: object, key: str) -> float | None:
-    """A non-negative per-million-token price, or ``None`` when absent."""
+    """A finite, non-negative per-million-token price, or ``None`` when absent.
+
+    A non-finite price would otherwise reach ``json.dumps`` as a bare
+    ``Infinity`` token -- which is neither valid JSON nor a valid TypeScript
+    literal, so the generated module would not even parse.
+    """
     if not isinstance(cost, dict):
         return None
     raw = cost.get(key)
     if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+        return None
+    if not math.isfinite(raw):
         return None
     return float(raw) if raw >= 0 else None
 
@@ -255,7 +350,9 @@ def normalize_catalog(payload: dict[str, Any], *, fetched_at: str | None = None)
             continue
         entries = [
             normalized
-            for normalized in (_normalize_model(raw, model_id) for model_id, raw in raw_models.items())
+            for normalized in (
+                _normalize_model(raw, model_id) for model_id, raw in raw_models.items()
+            )
             if normalized is not None
         ]
         models[provider] = sorted(entries, key=lambda entry: entry["id"])
@@ -265,7 +362,9 @@ def normalize_catalog(payload: dict[str, Any], *, fetched_at: str | None = None)
             "schema_version": SCHEMA_VERSION,
             "source": CATALOG_SOURCE,
             "source_url": MODELS_DEV_CATALOG_URL,
-            "fetched_at": fetched_at if isinstance(fetched_at, str) and fetched_at else _utc_now_iso(),
+            "fetched_at": fetched_at
+            if isinstance(fetched_at, str) and fetched_at
+            else _utc_now_iso(),
             "providers": list(CATALOG_PROVIDERS),
         },
         "models": models,
@@ -307,7 +406,11 @@ def _ts_literal(value: Any, *, indent: int | None = None) -> str:
     is indented for review. Both are byte-stable for a given value, which is
     what makes ``--check`` a byte comparison.
     """
-    return json.dumps(value, indent=indent, ensure_ascii=False)
+    # allow_nan=False: a bare Infinity/NaN token is not valid JSON and not a
+    # valid TypeScript literal, so emitting one would produce an artifact that
+    # fails to parse rather than one that fails a check. Raising here is the
+    # loud version of the same signal the normalizer's isfinite guards give.
+    return json.dumps(value, indent=indent, ensure_ascii=False, allow_nan=False)
 
 
 def render_typescript_module(catalog: dict[str, Any]) -> str:
@@ -339,6 +442,9 @@ def render_typescript_module(catalog: dict[str, Any]) -> str:
         "export const MODEL_CATALOG_BYOK_PROVIDER_MAP: Record<string, string> = "
         f"{_ts_literal(BYOK_PROVIDER_TO_CATALOG_PROVIDER)};",
         "",
+        "export const MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS: Record<string, readonly string[]> = "
+        f"{_ts_literal(routable_byok_model_ids(), indent=2)};",
+        "",
         "export const MODEL_CATALOG_BY_PROVIDER: Record<string, readonly ModelCatalogEntry[]> = "
         f"{_ts_literal(models, indent=2)};",
         "",
@@ -361,7 +467,9 @@ def write_artifacts(catalog: dict[str, Any], *, json_path: Path, ts_path: Path) 
         )
     json_path.parent.mkdir(parents=True, exist_ok=True)
     ts_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    json_path.write_text(
+        json.dumps(catalog, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8"
+    )
     ts_path.write_text(render_typescript_module(catalog), encoding="utf-8")
 
 
@@ -417,7 +525,9 @@ def main(argv: list[str] | None = None) -> int:
         catalog = _load_committed_catalog()
         TS_MODULE_PATH.parent.mkdir(parents=True, exist_ok=True)
         TS_MODULE_PATH.write_text(render_typescript_module(catalog), encoding="utf-8")
-        print(f"refresh-model-catalog: re-rendered {TS_MODULE_PATH.name} from the committed catalog")
+        print(
+            f"refresh-model-catalog: re-rendered {TS_MODULE_PATH.name} from the committed catalog"
+        )
         return 0
 
     catalog = normalize_catalog(fetch_catalog(timeout=args.timeout))
@@ -433,14 +543,59 @@ def main(argv: list[str] | None = None) -> int:
 #: Provider-level and per-model keys that must never reach the artifacts. A base
 #: URL in a module the browser bundle imports is an SSRF surface, and an env var
 #: name is a credential-plumbing hint that belongs in config/byok-providers.json.
-FORBIDDEN_KEYS = ("url", "api", "env", "npm", "doc")
+#: Substrings that mark a key as routing/credential plumbing. Matched as
+#: substrings rather than as exact names because the failure this guards
+#: against is any URL- or key-shaped field, and the realistic spellings are
+#: open-ended (`api_base`, `base_url`, `openai_api_key`). Exact-name matching
+#: let `entry.api_base` through to the generic key-set message instead.
+FORBIDDEN_KEY_SUBSTRINGS = (
+    # Substring, not exact match: a routing key can be spelled `api_base`,
+    # `base_url`, or `upstream_url`, and an exact set would miss two of the
+    # three. `token` is deliberately absent -- `max_output_tokens` is a real
+    # column of this catalog, so substring-matching "token" would reject every
+    # row. Credentials do not live in a column named "token" here either: the
+    # catalog is generated from a public upstream, so what we are guarding
+    # against is a base URL or an env-var *name* leaking into it.
+    "url",
+    "api_base",
+    "api_key",
+    "api",
+    "env",
+    "npm",
+    "doc",
+    "secret",
+)
+
+#: The one legitimate exception: `_meta.source_url` names the public models.dev
+#: endpoint the catalog was fetched from. It is provenance, not a route — no
+#: request is ever made to it at runtime — so it is exempt by name rather than
+#: by loosening the rule above.
+FORBIDDEN_KEY_EXEMPTIONS = frozenset({"source_url"})
 
 
-def _resolved_ids(catalog: dict[str, Any]) -> set[str]:
-    """Every catalogued id plus its author-stripped suffix."""
+def _forbidden_keys(mapping: dict[str, Any]) -> set[str]:
+    """Keys in ``mapping`` whose name looks like routing or credential plumbing."""
+    return {
+        key
+        for key in mapping
+        if key not in FORBIDDEN_KEY_EXEMPTIONS
+        and any(token in key.lower() for token in FORBIDDEN_KEY_SUBSTRINGS)
+    }
+
+
+def _resolved_ids(catalog: dict[str, Any], *, provider: str | None = None) -> set[str]:
+    """Every catalogued id plus its author-stripped suffix.
+
+    `provider` narrows to a single models.dev provider key. Callers that judge
+    one provider's pins (the exemption check) must narrow: ids repeat across
+    providers, so an unscoped set reports a stale pin as resolved because some
+    *other* provider happens to carry a similarly-named model.
+    """
     resolved: set[str] = set()
     models = catalog.get("models") if isinstance(catalog.get("models"), dict) else {}
-    for entries in models.values():
+    for key, entries in models.items():
+        if provider is not None and key != provider:
+            continue
         for entry in entries:
             if isinstance(entry, dict) and isinstance(entry.get("id"), str):
                 resolved.add(entry["id"])
@@ -469,6 +624,12 @@ def assert_invariants(catalog: dict[str, Any], *, exemptions_path: Path) -> list
             f"_meta.schema_version is {meta.get('schema_version')!r}, expected {SCHEMA_VERSION}"
         )
 
+    # _meta rides into the same generated module, so it needs the same
+    # no-routing-keys rule the per-model entries get. It was previously
+    # unchecked: `_meta.api_base` passed silently.
+    for key in _forbidden_keys(meta):
+        violations.append(f"_meta carries the routing key {key!r}")
+
     declared = meta.get("providers")
     if not isinstance(declared, list) or declared != sorted(declared):
         violations.append(f"_meta.providers is not sorted: {declared!r}")
@@ -494,22 +655,28 @@ def assert_invariants(catalog: dict[str, Any], *, exemptions_path: Path) -> list
             if not isinstance(entry, dict):
                 continue
             where = f"models.{provider}[{entry.get('id')!r}]"
-            for key in set(entry) & set(FORBIDDEN_KEYS):
+            for key in _forbidden_keys(entry):
                 violations.append(f"{where} carries the routing key {key!r}")
             if set(entry) != set(ENTRY_FIELDS):
                 violations.append(f"{where} key set does not match ENTRY_FIELDS")
             context = entry.get("context_window")
             if context is not None and (not isinstance(context, int) or context <= 0):
-                violations.append(f"{where}.context_window is {context!r}, expected a positive int or null")
+                violations.append(
+                    f"{where}.context_window is {context!r}, expected a positive int or null"
+                )
             for key in ("cost_input_usd_per_million", "cost_output_usd_per_million"):
                 value = entry.get(key)
                 if value is not None and (not isinstance(value, (int, float)) or value < 0):
-                    violations.append(f"{where}.{key} is {value!r}, expected a non-negative number or null")
+                    violations.append(
+                        f"{where}.{key} is {value!r}, expected a non-negative number or null"
+                    )
             for key in ("structured_output", "tool_call", "reasoning", "attachment"):
                 if entry.get(key) not in (None, True, False):
                     violations.append(f"{where}.{key} is not tri-state")
             if entry.get("tier") not in (*TIER_ORDER, None):
-                violations.append(f"{where}.tier is {entry.get('tier')!r}, not a known tier or null")
+                violations.append(
+                    f"{where}.tier is {entry.get('tier')!r}, not a known tier or null"
+                )
 
     violations.extend(_exemption_violations(catalog, exemptions_path))
     return violations
@@ -529,7 +696,6 @@ def _exemption_violations(catalog: dict[str, Any], exemptions_path: Path) -> lis
     if not isinstance(entries, list):
         return [f"{_display(exemptions_path)} has no `exemptions` list"]
 
-    resolved = _resolved_ids(catalog)
     violations: list[str] = []
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
@@ -541,9 +707,34 @@ def _exemption_violations(catalog: dict[str, Any], exemptions_path: Path) -> lis
             continue
         if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
             violations.append(f"exemption {model_id!r} has no non-empty reason")
+        # The exemption is scoped to one provider, so a stale exemption is only
+        # stale *there*. An unscoped check would flag `grok-4-3` as obsolete the
+        # moment xai's local slice carried a dotted `grok-4.3`, and -- worse --
+        # would let an exemption filed for one provider excuse the same id on
+        # another, which is exactly the class of drift the file exists to stop.
+        provider = entry.get("provider")
+        if not isinstance(provider, str) or not provider:
+            violations.append(f"exemption {model_id!r} has no provider")
+            continue
+        catalog_provider = byok_provider_to_catalog_provider(provider)
+        models = catalog.get("models") if isinstance(catalog.get("models"), dict) else {}
+        if catalog_provider is None:
+            # A house or local provider that has no catalogued row at all --
+            # local ollama is the standing example. Nothing upstream can ever
+            # resolve it, so the exemption can never go stale and the scoping
+            # rule has nothing to check.
+            if provider not in models:
+                continue
+            violations.append(
+                f"exemption {model_id!r} names provider {provider!r},"
+                f" which maps to no catalogued provider"
+            )
+            continue
+        resolved = _resolved_ids(catalog, provider=catalog_provider)
         if model_id in resolved or strip_author(model_id) in resolved:
             violations.append(
-                f"exemption {model_id!r} is no longer needed -- the catalog now resolves it"
+                f"exemption {model_id!r} ({provider}) is no longer needed"
+                f" -- the catalog now resolves it"
             )
     return violations
 
@@ -558,7 +749,9 @@ def check_artifacts() -> int:
     if TS_MODULE_PATH.is_file():
         rendered = render_typescript_module(catalog)
         if TS_MODULE_PATH.read_text(encoding="utf-8") != rendered:
-            violations.append(f"{_display(TS_MODULE_PATH)} is out of sync with the committed catalog")
+            violations.append(
+                f"{_display(TS_MODULE_PATH)} is out of sync with the committed catalog"
+            )
             print(f"refresh-model-catalog: {violations[-1]}")
     else:
         violations.append(f"{_display(TS_MODULE_PATH)} is missing")

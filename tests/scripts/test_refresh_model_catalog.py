@@ -335,9 +335,16 @@ def test_rendered_typescript_is_byte_stable_across_runs() -> None:
     # `make model-catalog-check` compares this rendering byte-for-byte, so any
     # run-to-run wobble (dict ordering, a timestamp, a set) would fail CI on a
     # tree nobody touched.
+    #
+    # Each render gets its own parse of the committed JSON, so the two inputs
+    # are distinct objects. Rendering the *same* dict twice would pass even if
+    # render_typescript_module read a clock internally, which is precisely the
+    # failure this exists to catch — the equality would compare two strings that
+    # legitimately differ.
     mod = _load()
-    catalog = _catalog(mod)
-    assert mod.render_typescript_module(catalog) == mod.render_typescript_module(catalog)
+    assert mod.render_typescript_module(
+        mod._load_committed_catalog()
+    ) == mod.render_typescript_module(mod._load_committed_catalog())
 
 
 def test_rendered_typescript_carries_the_catalog_and_no_other_timestamp() -> None:
@@ -443,9 +450,7 @@ def test_main_offline_rewrites_only_the_typescript_module(
     catalog = _catalog(mod)
     json_path.write_text(json.dumps(catalog), encoding="utf-8")
 
-    monkeypatch.setattr(
-        mod, "CATALOG_JSON_PATH", json_path, raising=False
-    )
+    monkeypatch.setattr(mod, "CATALOG_JSON_PATH", json_path, raising=False)
     monkeypatch.setattr(mod, "TS_MODULE_PATH", ts_path, raising=False)
     monkeypatch.setattr(
         mod,
@@ -484,6 +489,9 @@ _EXEMPTION_FILE = {
     "exemptions": [
         {
             "id": "ollama/deepseek-r1:14b",
+            # No catalogued row exists for local ollama, so this exemption can
+            # never go stale -- the scoping rule below has nothing to check.
+            "provider": "ollama",
             "source": "config/model_modes.local.yaml",
             "reason": "local ollama is per-machine, not a catalogued provider",
         }
@@ -578,28 +586,100 @@ def test_assert_invariants_catches_each_violation(
 def test_assert_invariants_flags_an_exemption_without_a_reason(tmp_path: Path) -> None:
     mod = _load()
     exemptions = _write_exemptions(
-        tmp_path, {"exemptions": [{"id": "ollama/x", "source": "config/y.yaml", "reason": "  "}]}
+        tmp_path,
+        {
+            "exemptions": [
+                {
+                    "id": "ollama/x",
+                    "provider": "ollama",
+                    "source": "config/y.yaml",
+                    "reason": "  ",
+                }
+            ]
+        },
     )
     violations = mod.assert_invariants(_catalog(mod), exemptions_path=exemptions)
     assert any("reason" in v for v in violations), violations
 
 
-def test_assert_invariants_flags_an_exemption_that_is_no_longer_needed(tmp_path: Path) -> None:
-    # An exemption that models.dev has caught up with is a stale escape hatch:
-    # leaving it costs nothing today and silently excuses a future real problem
-    # with that same id.
+def test_assert_invariants_flags_an_exemption_without_a_provider(tmp_path: Path) -> None:
+    """An unscoped exemption would excuse the same id on every provider."""
     mod = _load()
     exemptions = _write_exemptions(
         tmp_path,
-        {"exemptions": [{"id": "gpt-5.4", "source": "config/y.yaml", "reason": "stale"}]},
+        {"exemptions": [{"id": "gpt-5.4", "source": "config/y.yaml", "reason": "x"}]},
+    )
+    violations = mod.assert_invariants(_catalog(mod), exemptions_path=exemptions)
+    assert any("has no provider" in v for v in violations), violations
+
+
+def test_exemption_staleness_is_scoped_to_its_own_provider(tmp_path: Path) -> None:
+    """An exemption filed for xai must not be judged by anthropic's slice.
+
+    `grok-4.3` is dotted and `grok-4-3` is dashed; models.dev only carries the
+    dotted form. Under the old all-providers check, adding the dotted id to
+    xai would make this exemption look stale -- and, in the other direction,
+    an anthropic exemption for the same string would have been excused by xai.
+    """
+    mod = _load()
+    catalog = _catalog(mod)
+    catalog["models"]["xai"] = [mod._normalize_model({"id": "grok-4.3"}, "grok-4.3")]
+    exemptions = _write_exemptions(
+        tmp_path,
+        {
+            "exemptions": [
+                {
+                    "id": "grok-4-3",
+                    "provider": "anthropic",
+                    "source": "config/litellm.yaml",
+                    "reason": "pinned to a dashed route the house still declares",
+                }
+            ]
+        },
+    )
+    assert mod.assert_invariants(catalog, exemptions_path=exemptions) == []
+
+    same_provider = _write_exemptions(
+        tmp_path,
+        {
+            "exemptions": [
+                {
+                    "id": "grok-4.3",
+                    "provider": "xai",
+                    "source": "config/litellm.yaml",
+                    "reason": "already catalogued",
+                }
+            ]
+        },
+    )
+    violations = mod.assert_invariants(catalog, exemptions_path=same_provider)
+    assert any("no longer needed" in v for v in violations), violations
+
+
+def test_assert_invariants_flags_an_exemption_that_is_no_longer_needed(tmp_path: Path) -> None:
+    # An exemption that models.dev has caught up with is a stale escape hatch:
+    # leaving it costs nothing today and silently excuses a future real problem
+    # with that same id. `gpt-5.4` is only in the openai slice, so the exemption
+    # has to name `openai` for the scoped check to see it.
+    mod = _load()
+    exemptions = _write_exemptions(
+        tmp_path,
+        {
+            "exemptions": [
+                {
+                    "id": "gpt-5.4",
+                    "provider": "openai",
+                    "source": "config/y.yaml",
+                    "reason": "stale",
+                }
+            ]
+        },
     )
     violations = mod.assert_invariants(_catalog(mod), exemptions_path=exemptions)
     assert any("no longer needed" in v for v in violations), violations
 
 
-def test_check_passes_on_a_consistent_tree(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_passes_on_a_consistent_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     mod = _load()
     catalog = _catalog(mod)
     json_path = tmp_path / "model-catalog.json"
@@ -715,3 +795,49 @@ def test_rendered_typescript_exports_the_byok_provider_map() -> None:
     assert "MODEL_CATALOG_BYOK_PROVIDER_MAP" in rendered
     literal = _literal_after(rendered, "MODEL_CATALOG_BYOK_PROVIDER_MAP: Record<string, string> = ")
     assert literal == dict(mod.BYOK_PROVIDER_TO_CATALOG_PROVIDER)
+
+
+# Task 11 -- the BYOK-routable id set (F2). A catalog entry only becomes a picker
+# option if the house can actually route it: config/litellm.yaml is strict (no
+# `fallbacks`, config/litellm.yaml:6), so an id with no declared `model_name` is
+# unservable, and picking it is a 500 on every BYOK chat that selects it. The
+# routable set is derived from the litellm configs themselves -- a group counts
+# only if it is api_key-capable AND its `api_base` regex matches that provider's
+# host in config/byok-providers.json -- so there is no second notion of routability.
+
+
+def test_routable_byok_ids_exclude_groups_no_provider_host_matches() -> None:
+    # The ollama-cloud groups are api_key-capable but their api_base is a house
+    # proxy, not one of the five BYOK hosts, so they are not BYOK-routable. If
+    # they leaked in, a local-ollama id would be offered in the cloud picker.
+    mod = _load()
+    routable = mod.routable_byok_model_ids()
+    assert set(routable) == {"anthropic", "gemini", "openai", "openrouter", "xai"}
+    flat = [model for models in routable.values() for model in models]
+    assert not any(model.startswith("ollama") for model in flat)
+
+
+def test_routable_byok_ids_cover_every_advertised_fallback_preset() -> None:
+    # The property that makes the picker safe: anything config/byok-providers.json
+    # advertises as a preset is routable, and `strip_author` is applied on both
+    # sides so a `gemini/gemini-2.5-flash` preset matches its `model_name` key.
+    mod = _load()
+    routable = mod.routable_byok_model_ids()
+    providers = json.loads(
+        (REPO_ROOT / "config" / "byok-providers.json").read_text(encoding="utf-8")
+    )
+    missing = [
+        f"{entry['id']}: {model}"
+        for entry in providers
+        for model in entry["fallbackModels"]
+        if mod.strip_author(model) not in routable.get(entry["id"], [])
+    ]
+    assert not missing, "advertised presets the house cannot route:\n" + "\n".join(missing)
+
+
+def test_rendered_typescript_exports_the_routable_byok_model_ids() -> None:
+    mod = _load()
+    rendered = mod.render_typescript_module(_catalog(mod))
+    marker = "MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS: Record<string, readonly string[]> = "
+    assert marker in rendered
+    assert _literal_after(rendered, marker) == mod.routable_byok_model_ids()

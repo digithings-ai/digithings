@@ -112,8 +112,9 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   if (provider !== "openrouter") {
-    // Vendored snapshot: synchronous, offline, and bounded by the generator's
-    // own entry cap, so none of the response-size guards below apply.
+    // Vendored snapshot: synchronous, offline, and already narrowed to the
+    // ids the house can route, so it is a module import rather than an
+    // upstream read — none of the response-size guards below apply.
     const buckets = bucketCatalogEntries(catalogEntriesFor(provider));
     return jsonResponse(
       { ok: true, ...buckets, provider, source: "catalog", fetchedAt: MODEL_CATALOG_FETCHED_AT },

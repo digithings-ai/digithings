@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MODEL_CATALOG_BYOK_PROVIDER_MAP } from "./model-catalog.generated";
+import {
+  MODEL_CATALOG_BYOK_PROVIDER_MAP,
+  MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS,
+} from "./model-catalog.generated";
 import {
   bucketCatalogEntries,
   catalogEntriesFor,
@@ -20,9 +23,9 @@ const entry = (over: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry => ({
   modalities_output: [],
   tool_call: false,
   structured_output: null,
-  reasoning: false,
+  reasoning: null,
   vision: false,
-  attachment: false,
+  attachment: null,
   open_weights: false,
   tier: null,
   ...over,
@@ -30,6 +33,7 @@ const entry = (over: Partial<ModelCatalogEntry> = {}): ModelCatalogEntry => ({
 
 type CatalogJson = {
   _meta: { providers: string[] };
+  models: Record<string, { id: string }[]>;
 };
 
 function loadCatalogJson(): CatalogJson {
@@ -46,16 +50,26 @@ describe("bucketCatalogEntries", () => {
     expect(b.opensource).toEqual([]);
   });
 
-  it("sorts `all` by id ascending", () => {
-    const b = bucketCatalogEntries([entry({ id: "z" }), entry({ id: "a" }), entry({ id: "m" })]);
-    expect(b.all.map((e) => e.id)).toEqual(["a", "m", "z"]);
+  it("inherits the generator's order rather than re-sorting it", () => {
+    // The generator already sorted each provider's rows by id. Re-sorting with
+    // `localeCompare` here would make the picker's order depend on the server's
+    // locale (2 of the 10 providers reorder under `en-CA`), which contradicts
+    // what config/model-catalog.json and docs/MODEL_CATALOG.md promise.
+    const outOfOrder = [entry({ id: "z" }), entry({ id: "a" }), entry({ id: "m" })];
+    expect(bucketCatalogEntries(outOfOrder).all.map((e) => e.id)).toEqual(["z", "a", "m"]);
+    // ...and the committed catalog really is byte-sorted per provider, so the
+    // inherited order is the sorted one in practice.
+    const catalog = loadCatalogJson();
+    for (const rows of Object.values(catalog.models)) {
+      expect(rows.map((r) => r.id)).toEqual([...rows.map((r) => r.id)].sort());
+    }
   });
 
   it("buckets by the precomputed tier without re-deriving it", () => {
     // A cheap open-weight model and a flagship model both come from the
     // generator. The buckets below must agree with `tier`, not with any local
     // price or open-weight rule -- re-deriving here is the drift this module
-    // exists to remove.
+    // exists to remove. Entries are supplied pre-sorted.
     const b = bucketCatalogEntries([
       entry({ id: "a", tier: "opensource" }),
       entry({ id: "b", tier: "flagship" }),
@@ -85,7 +99,6 @@ describe("bucketCatalogEntries", () => {
 
 describe("catalogEntriesFor", () => {
   it("maps gemini to the google catalog provider", () => {
-    expect(catalogEntriesFor("gemini")).toEqual(catalogEntriesFor("gemini"));
     const entries = catalogEntriesFor("gemini");
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.map((e) => e.id)).toContain("gemini-2.5-flash");
@@ -97,11 +110,61 @@ describe("catalogEntriesFor", () => {
     expect(catalogEntriesFor("nope" as BYOKProvider)).toEqual([]);
   });
 
+  it("offers only ids the house has a LiteLLM route for", () => {
+    // The load-bearing filter. models.dev is a curated metadata database, not a
+    // routing registry: offering a catalog id with no declared `model_name` is
+    // a 500 on every BYOK chat that picks it, because config/litellm.yaml
+    // routes strictly with no `fallbacks`.
+    for (const id of BYOK_PROVIDER_LIST) {
+      const routable = new Set(MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS[id] ?? []);
+      for (const e of catalogEntriesFor(id)) {
+        expect(routable, `${id}: ${e.id} is offered but has no LiteLLM model group`)
+          .toContain(e.id);
+      }
+    }
+    // And the filter is not vacuous: google carries 39 catalog rows and only a
+    // handful are routed, so without the intersection almost everything would
+    // be offered.
+    expect(catalogEntriesFor("gemini").length).toBeLessThan(
+      loadCatalogJson().models.google.length,
+    );
+  });
+
+  it("covers every advertised BYOK preset, so no advertised option is lost", () => {
+    // The other side of the same filter: intersecting must not silently drop an
+    // id config/byok-providers.json advertises. Where the two sets are disjoint
+    // (anthropic today: 3 routable ids, none of them in the catalog) the picker
+    // falls back to byokModelPresets instead, so nothing regresses.
+    const presets: Record<string, string[]> = {
+      openai: ["gpt-4o-mini", "gpt-4o", "o4-mini"],
+      xai: ["grok-4-3", "grok-4.5"],
+    };
+    for (const [provider, ids] of Object.entries(presets)) {
+      const offered = new Set(catalogEntriesFor(provider).map((e) => e.id));
+      const routable = new Set(MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS[provider] ?? []);
+      for (const id of ids) {
+        expect(
+          offered.has(id) || routable.has(id),
+          `${provider}: advertised preset ${id} is neither in the catalog nor routed`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("ships no base URL or env var alongside the metadata", () => {
     const serialized = JSON.stringify(catalogEntriesFor("openai"));
     expect(serialized).not.toContain("api.openai.com");
     expect(serialized).not.toContain("OPENAI_API_KEY");
-    expect(serialized).not.toContain("npm");
+    // Field-name assertions, not substring-on-arbitrary-text: `npm` as a
+    // substring can only pass by accident, so it checks nothing. Anchored to the
+    // whole key so `max_output_tokens` (which contains "token") is not a
+    // false positive. The catalog's own schema pins the key set
+    // (tests/config/test_model_catalog.py), so this is the belt to that braces.
+    for (const e of catalogEntriesFor("openai")) {
+      for (const key of Object.keys(e)) {
+        expect(key).not.toMatch(/^(npm|env|api|url|key|token|secret|.*_url|.*_key)$/i);
+      }
+    }
   });
 });
 
