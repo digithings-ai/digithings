@@ -22,16 +22,23 @@ describe("linked routes", () => {
     expect(html).not.toContain(">placeholder<");
   });
 
-  it("shows unpublished strategy statistics as em dashes", async () => {
+  it("shows one tear sheet and leaves unpublished figures as em dashes", async () => {
     const index = renderToStaticMarkup(<StrategiesPage />);
-    expect(index).toContain("unpublished");
+    expect(index).toContain("BTC L/S");
+    expect(index).toContain("ETH L/S");
+    expect(index).toContain("SOL L/S");
+    expect(index).toContain("BTC-SDCA");
     expect(index).toContain("—");
+    expect(index).not.toContain("The official API has not published strategy statistics");
+    expect(index).not.toContain("backtest · illustrative, in-sample");
+    expect(index).not.toContain("Backtest only");
     expect(index).not.toContain(">placeholder<");
 
     const detail = renderToStaticMarkup(await TearsheetPage({ params: Promise.resolve({ id: "btc_slapper" }) }));
     expect(detail).toContain("CAGR");
     expect(detail).toContain("—");
-    expect(detail).toContain("official API");
+    expect(detail).not.toContain("The official API has not published strategy statistics");
+    expect(detail).not.toContain("Backtest only");
     expect(detail).not.toContain(">placeholder<");
   });
 });

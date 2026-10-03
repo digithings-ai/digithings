@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MarketBar, percentPulseGeneration, type MarketBarCell } from "./MarketBar";
+import { MarketBar, percentPulseGeneration, tapeDurationSeconds, type MarketBarCell } from "./MarketBar";
 
 const CELLS: MarketBarCell[] = [
   { symbol: "BTC", value: "63,410", changePct: 0.4 },
@@ -37,12 +37,20 @@ describe("MarketBar", () => {
     }
   });
 
-  it("renders connecting… with no prices and no controls when empty", () => {
+  it("renders a red status and Prices did not load when nothing is quoted", () => {
     const html = renderToStaticMarkup(<MarketBar cells={[]} status="connecting" />);
-    expect(html).toContain("connecting…");
+    expect(html).toContain("Prices did not load.");
+    expect(html).toContain("mb-status-miss");
+    expect(html).not.toContain("mb-live-mark");
     expect(html).not.toContain("[pause]");
     expect(html).not.toContain("mq-row");
-    expect(renderToStaticMarkup(<MarketBar cells={[]} status="offline" />)).toContain("offline");
+    expect(html.replace(/<[^>]+>/g, " ").toLowerCase()).not.toContain("live");
+    const dashes = renderToStaticMarkup(
+      <MarketBar cells={[{ symbol: "SPY", value: null }, { symbol: "QQQ", value: "—" }]} status="live" />,
+    );
+    expect(dashes).toContain("Prices did not load.");
+    expect(dashes).not.toContain("SPY");
+    expect(dashes).not.toContain("[pause]");
   });
 
   it("hides the marquee from AT and carries a plain-text summary, aria-live off", () => {
@@ -53,8 +61,7 @@ describe("MarketBar", () => {
     expect(html).toContain("BTC 63,410 up 0.40%");
     expect(html).toContain("ETH 3,088 down 0.62%");
     expect(html).toContain("SPY 548.21 down 0.20% as of 09-29 source daily close");
-    expect(html).toContain("GOLD no value percent unavailable");
-    expect(html).toContain('data-mb="pct">—');
+    expect(html).not.toContain("GOLD");
     expect(html).toContain('data-mb="pct">0.40%');
     const btc = html.split(">BTC<").length - 1;
     expect(btc).toBe(2);
@@ -76,7 +83,7 @@ describe("MarketBar", () => {
     expect(html).toContain("is-neg");
     expect(html).not.toContain("text-up");
     expect(html).not.toContain("text-down");
-    expect(html).toContain(">—<");
+    expect(html).not.toContain(">GOLD<");
   });
 
   it("never pulses a percent on first paint", () => {
@@ -95,6 +102,18 @@ describe("MarketBar", () => {
     expect(mark).toContain("border-radius: 0");
     expect(mark).not.toContain("50%");
     expect(mark).toContain("var(--up)");
+    const miss = css.match(/\.mb-status-miss\s*\{[^}]*\}/)?.[0] ?? "";
+    expect(miss).toContain("var(--down)");
+    expect(miss).not.toContain("animation");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toContain("animation: none");
+  });
+
+  it("gives each quoted symbol long enough to read", () => {
+    expect(tapeDurationSeconds(1)).toBe(48);
+    expect(tapeDurationSeconds(90)).toBe(720);
+    const html = renderToStaticMarkup(<MarketBar cells={CELLS} status="live" />);
+    expect(html).toContain("--mq-speed:48s");
   });
 
   it("uses no raw colour", () => {
