@@ -114,7 +114,7 @@ commands write.
 
 Each step is `present`, `installed`, or `failed`. Later steps still run after a failure. The process exits 1 when any step failed. Archives that contain `..` or an absolute path are rejected. Tar extraction uses `filter="data"`.
 
-A step that already exists is `present` and is not stamped. The versions this command itself writes live in `~/.local/share/digivoice/vendor/install.json`. Update re-fetches a step when its file is missing or that stamp differs from the pin. A matching stamp stays `present`. Sox that was already on `PATH` (stamp not `brew`) is left alone. Sox, macOS whisper-cli, or espeak-ng that this command installed with Homebrew is `brew upgrade` on update. espeak-ng is a macOS step: a `libespeak-ng.1.dylib` already on the machine is left alone, and a missing one is `brew install espeak-ng`. Linux does not run that step.
+A step that already exists is `present` and is not stamped. The versions this command itself writes live in `~/.local/share/digivoice/vendor/install.json`. Update re-fetches a step when its file is missing or that stamp differs from the pin. A matching stamp stays `present`. Sox that was already on `PATH` (stamp not `brew`) is left alone. Sox, macOS whisper-cli, or espeak-ng that this command installed with Homebrew is `brew upgrade` on update. espeak-ng is a macOS step: a same-arch `libespeak-ng.1.dylib` is copied beside the real Piper binary when one is already on the machine, and a missing one is `brew install espeak-ng`. A library of a different architecture is ignored. On an arm64 Mac, Homebrew's arm64 espeak-ng is not installed for an x86_64 Piper. Linux does not run that step. An arm64 Mac also replaces a vendor Piper whose Mach-O is x86_64, even when the version stamp still matches.
 
 The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any sibling `*.lua` from `digivoice/hammerspoon` into `~/.hammerspoon/digivoice`. A symlink that already points at this checkout is left in place. A real directory is replaced in place, and lua this checkout no longer ships is deleted, so an old copy or close control cannot remain. Then it runs `hs -c hs.reload()`, the same call as System Reload. `hs` absent is a skip, not an error. A non-zero exit that prints `CFMessagePort: dropping corrupt reply Mach message` is success (`hammerspoon .. reloaded`): reload tears the IPC down after the config has loaded. A timeout stays a failure. Any other failed reload marks the adapter step failed after the files are written.
 
@@ -123,8 +123,8 @@ The adapter step copies `init.lua`, `banner_core.lua`, `hotkeys.lua`, and any si
 | bun | `bun` 1.4.2 zip into `~/.local/bin/bun`: `bun-darwin-aarch64`, `bun-darwin-x64`, `bun-linux-aarch64`, `bun-linux-x64` from `https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/`. |
 | opentui | `bun install --cwd digivoice/tui` for `@opentui/core`. `install` is the bun subcommand; `--cwd` follows it. `package.json` has no install script. |
 | whisper-cli | Linux: whisper.cpp `v1.9.2` `whisper-bin-ubuntu-x64.tar.gz` or `whisper-bin-ubuntu-arm64.tar.gz` from `https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/`, extracted under `~/.local/share/digivoice/vendor/whisper`, then `~/.local/bin/whisper-cli` points at that binary so the sibling libraries stay beside it. macOS has no official CLI build: `brew install whisper-cpp`. Missing Homebrew fails that step with that reason. |
-| piper | Piper `2023.11.14-2` tarball (`piper_linux_x86_64`, `piper_linux_aarch64`, `piper_macos_x64`, `piper_macos_aarch64`) from `https://github.com/rhasspy/piper/releases/download/2023.11.14-2/`, under `vendor/piper`, with `~/.local/bin/piper` pointing at the binary. |
-| espeak | macOS only. `libespeak-ng.1.dylib` already beside the resolved Piper binary, under `vendor/piper`, or in Homebrew's lib directories is left in place. Otherwise `brew install espeak-ng`. Missing Homebrew fails that step. Linux does not run this step. |
+| piper | Linux and Intel macOS: Piper `2023.11.14-2` (`piper_linux_x86_64`, `piper_linux_aarch64`, `piper_macos_x64`) from `https://github.com/rhasspy/piper/releases/download/2023.11.14-2/`. arm64 macOS: `piper_macos_aarch64.tar.gz` from `https://github.com/dharmab/piper/releases/download/2024.12.14.1-alpha2/`, because the `2023.11.14-2` file of that name is Mach-O x86_64. Extracted under `vendor/piper`, with `~/.local/bin/piper` pointing at the binary. Update on an arm64 Mac replaces a vendor binary that is still x86_64. |
+| espeak | macOS only. A same-arch `libespeak-ng.1.dylib` already beside the resolved Piper binary wins and is left there. Otherwise a same-arch library under `vendor/piper` or in Homebrew's lib directories is copied beside that real binary (the `~/.local/bin/piper` symlink hides files next to itself). A different architecture is not used. If none matches, `brew install espeak-ng`, except an x86_64 Piper on an arm64 Mac, which Homebrew cannot satisfy. Missing Homebrew fails that step. Linux does not run this step. |
 | sox | Already on `PATH`, otherwise `brew install sox`. Missing Homebrew fails that step. |
 | stt | `ggml-base.en.bin` from `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin` into the models directory. |
 | voice | `en_US-lessac-medium.onnx` and `en_US-lessac-medium.onnx.json` from `https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/`. |
@@ -231,10 +231,11 @@ the wav path, the paste result, and the history path all go to stderr.
    path exists. Otherwise the first `*.onnx` under models. The take errors only when no
    voice file can be found. On macOS the Piper build looks for `@rpath/libespeak-ng.1.dylib`
    in `/usr/local/lib` and `/usr/lib`, which misses Homebrew. speak sets `DYLD_LIBRARY_PATH`
-   to the resolved Piper directory and a `libespeak-ng.1.dylib` already on the machine
-   (beside that binary, under the vendor tree, or Homebrew's lib). When `espeak-ng-data`
-   contains `phontab`, speak passes `--espeak_data` so the `~/.local/bin/piper` symlink
-   does not hide the data bundled next to the real binary.
+   to the directory of a `libespeak-ng.1.dylib` whose Mach-O cpu matches the Piper binary.
+   A library of a different architecture is not added. A same-arch library already beside
+   the real binary wins, so an x86_64 Piper is not pointed at Homebrew's arm64 library.
+   When `espeak-ng-data` contains `phontab`, speak passes `--espeak_data` so the
+   `~/.local/bin/piper` symlink does not hide the data bundled next to the real binary.
 3. **Play.** `afplay` on darwin; `aplay` then `ffplay` on Linux.
 4. **History.** Append `{kind:"speak", text, wav:null}`.
 

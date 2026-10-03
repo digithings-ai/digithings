@@ -19,7 +19,7 @@ digivoice install
 
 The first command installs the `digivoice` tool from this checkout (the Hammerspoon adapter is copied from that tree). The second command opens the install wizard in a terminal.
 
-**Auto** installs the local toolchain (bun, OpenTUI, whisper-cli, Piper, sox, and the Hammerspoon adapter) plus the default speech model `ggml-base.en.bin` and the default Piper voice (Lessac). On macOS it also installs espeak-ng when Piper's `libespeak-ng.1.dylib` is missing. It does not download a rewrite model, and it does not call a cloud STT or TTS service.
+**Auto** installs the local toolchain (bun, OpenTUI, whisper-cli, Piper, sox, and the Hammerspoon adapter) plus the default speech model `ggml-base.en.bin` and the default Piper voice (Lessac). On an arm64 Mac it installs the native arm64 Piper build and a same-arch `libespeak-ng.1.dylib` beside that binary. A missing same-arch library is `brew install espeak-ng`. It does not download a rewrite model, and it does not call a cloud STT or TTS service.
 
 **Pick** asks which local speech, voice, and rewrite models to download. Models already on disk stay. Choosing a model does not delete one you did not choose.
 
@@ -35,7 +35,7 @@ A script, `digivoice install --auto`, or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` sk
 - `sox` or `ffmpeg` for microphone capture; `afplay` (macOS) or `aplay`/`ffplay` (Linux) for playback
 - Default dictation model `ggml-base.en` (snappy push-to-talk), stored as `ggml-base.en.bin`
 
-`digivoice install` fetches that local set when you choose auto, or when a script runs it with no terminal: bun and the OpenTUI packages, whisper-cli, Piper, sox, `ggml-base.en.bin`, and the Lessac voice. On macOS, a missing `libespeak-ng.1.dylib` is `brew install espeak-ng`; a copy already on the machine is left alone. It does not download a rewrite model on that path and it does not call a cloud STT or TTS service. A failed step does not stop the rest; the command exits 1 when any step failed. The wizard's pick path can also download a local rewrite file you choose, and it leaves models already on disk in place.
+`digivoice install` fetches that local set when you choose auto, or when a script runs it with no terminal: bun and the OpenTUI packages, whisper-cli, Piper, sox, `ggml-base.en.bin`, and the Lessac voice. On macOS, a same-arch `libespeak-ng.1.dylib` is copied beside the real Piper binary; a missing one is `brew install espeak-ng`. A library of a different architecture is not used. It does not download a rewrite model on that path and it does not call a cloud STT or TTS service. A failed step does not stop the rest; the command exits 1 when any step failed. The wizard's pick path can also download a local rewrite file you choose, and it leaves models already on disk in place.
 
 Linux runs `doctor`, `dict`, `speak`, and `history` with a sound card and ALSA. Paste is skipped there — the transcript is on stdout. A Linux box with no microphone fails with a message and exit 1 instead of hanging.
 
@@ -100,7 +100,7 @@ Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digi
 | `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
 | `digivoice settings` / `setup` | `settings` shows or changes `settings.json` (models, rewrite on/off + preset + model + runner + auto-route, paste_on_stop, word_detection / spelling_detection stubs default off, live_banner, banner_position, banner_animations). `--json` for agents. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys / Hardware stub / Review & save / Doctor / Quit, arrow keys + Enter on a TTY); `setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`) prints current values + the menu tree with no prompts, exit 0. |
 | `digivoice install` | On a terminal, the install wizard. Auto installs the default toolchain, `ggml-base.en.bin`, and the Lessac voice. Pick downloads the local speech, voice, and rewrite models you choose and does not delete models already on disk. `--auto`, a pipe, or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` installs the auto set with no prompts. |
-| `digivoice update` | Refreshes bun, OpenTUI, whisper-cli, Piper, sox, and the default local models when they are missing or older than the pin. On macOS it installs espeak-ng when `libespeak-ng.1.dylib` is missing, and upgrades that formula when this command installed it. Then it copies the Hammerspoon adapter into `~/.hammerspoon/digivoice` and runs `hs.reload()`. No wizard. Exit 1 when a step fails. |
+| `digivoice update` | Refreshes bun, OpenTUI, whisper-cli, Piper, sox, and the default local models when they are missing or older than the pin. On an arm64 Mac it replaces an x86_64 vendor Piper with the native arm64 build, copies a same-arch `libespeak-ng.1.dylib` beside that binary, and installs espeak-ng when that library is missing. It upgrades the formula when this command installed it. Then it copies the Hammerspoon adapter into `~/.hammerspoon/digivoice` and runs `hs.reload()`. No wizard. Exit 1 when a step fails. |
 | `digivoice cancel` | Creates the cancel-file: a running `dict` discards its take (no paste, no history entry, wav deleted). Esc in the Hammerspoon sample does the same. |
 | `digivoice status` | Prints the `status.json` snapshot the banner reads. |
 
@@ -125,7 +125,7 @@ digivoice speak --clipboard
 digivoice speak --selection              # hotkey path: selection only
 ```
 
-Needs `piper` and a voice file (`DIGIVOICE_PIPER_VOICE` or `*.onnx` under models) plus `afplay` / `aplay` / `ffplay`. On macOS, speak points Piper at `libespeak-ng.1.dylib` already on the machine. stdout is the spoken text; history gets `kind:speak`.
+Needs `piper` and a voice file (`DIGIVOICE_PIPER_VOICE` or `*.onnx` under models) plus `afplay` / `aplay` / `ffplay`. On macOS, speak points Piper at a same-arch `libespeak-ng.1.dylib` already on the machine. stdout is the spoken text; history gets `kind:speak`.
 
 `--selection` is the Hammerspoon speak hotkey path: speak the current selection
 only (on macOS, Cmd+C via osascript counts only when the clipboard changes). Empty
