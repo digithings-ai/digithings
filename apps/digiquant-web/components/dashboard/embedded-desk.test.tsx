@@ -19,7 +19,7 @@ import {
   stopFromPath,
 } from "./desk-walk";
 import { publicCatalogPages } from "@/components/desk/public-surface";
-import { screenKind } from "./terminal-screen";
+import { screenKind, TerminalScreen } from "./terminal-screen";
 import {
   HOSTED_COPY,
   SELF_HOSTED_COPY,
@@ -29,7 +29,6 @@ import {
   nextTerminalPath,
   nextWebPath,
   prevTerminalPath,
-  surfaceFromSlider,
 } from "./surface-tour";
 
 function docWith(
@@ -207,11 +206,10 @@ describe("surface tour", () => {
     expect(copy).not.toMatch(/\$\d|\bFree\b|Coming soon|per month|99\.909|204\.04/);
   });
 
-  it("slides the terminal in from the left and the web app in from the right", () => {
-    expect(surfaceFromSlider(0)).toBe("terminal");
-    expect(surfaceFromSlider(49)).toBe("terminal");
-    expect(surfaceFromSlider(50)).toBe("web");
-    expect(surfaceFromSlider(100)).toBe("web");
+  it("tells the visitor to use the switch", () => {
+    expect(TOUR_CAPTION).toContain("switch");
+    expect(TOUR_CAPTION).toContain("click inside the frame");
+    expect(TOUR_CAPTION).not.toMatch(/slider/i);
   });
 
   it("treats a page rail with no links as a loaded desk", () => {
@@ -250,6 +248,15 @@ describe("surface tour", () => {
     expect(screenKind("/fx/ideas")).toBe("undrawn");
     expect(screenKind("/tools/charts")).toBe("undrawn");
     expect(screenKind("/tools/chat")).toBe("undrawn");
+    const brief = renderToStaticMarkup(<TerminalScreen path="/brief" />);
+    expect(brief).toContain("Brief · scoreboard");
+    expect(brief).not.toContain("01 / Book");
+    expect(brief).not.toMatch(/fx hub|12x/i);
+    const strategies = renderToStaticMarkup(<TerminalScreen path="/strategies" />);
+    expect(strategies).toContain("Strategies · summary");
+    const closed = renderToStaticMarkup(<TerminalScreen path="/fx" />);
+    expect(closed).toContain("This page is not drawn on the terminal.");
+    expect(closed).not.toContain("/fx/summary");
   });
 
   it("clicks the next /app page and skips the landing pipeline link", () => {
@@ -271,7 +278,12 @@ describe("DashboardBand", () => {
     expect(html).toContain('src="/app"');
     expect(html).toContain('title="Hosted digiquant"');
     expect(html).toContain('aria-label="Terminal pages"');
-    expect(html).toContain('data-slot="slider"');
+    expect(html).toContain('data-slot="segmented"');
+    expect(html).toContain('data-showing="web"');
+    expect(html).toContain('aria-pressed="true">Hosted');
+    expect(html).toContain('aria-pressed="false">Self-hosted');
+    expect(html).not.toContain('data-slot="slider"');
+    expect(html).not.toMatch(/slider/i);
     expect(html).toContain(SELF_HOSTED_COPY);
     expect(html).toContain(HOSTED_COPY);
     expect(html).toContain("Opening the web app.");
