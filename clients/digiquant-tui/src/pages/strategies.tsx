@@ -7,12 +7,15 @@
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
-import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
+import { DASH, EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
-import { strategyBlocks } from "./shape";
+import { strategiesBody } from "./strategies-format";
+import { shapeLines, strategyBlocks, type PaneBody } from "./shape";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
+const INDEX_PATH = "/strategies";
+const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -379,7 +382,53 @@ export function StrategiesPages({ path, api = API }: { path: string; api?: strin
   if (!STRATEGY_PATHS.has(path)) return null;
   const reads = state.path === path ? state.reads : {};
   const layout = layoutFor(path);
+  if (path === INDEX_PATH) return <StrategiesIndex reads={reads} layout={layout} />;
   return <StrategiesDesk path={path} reads={reads} layout={layout} />;
+}
+
+function paintIndex(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (id !== "st-deployments" && read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
+/** Terminal strategies index. Summary, catalog, and deployments. Detail and deploy stay on their own pages. */
+function StrategiesIndex({ reads, layout }: { reads: Record<string, Loaded>; layout: ReturnType<typeof layoutFor> }) {
+  const [focus, setFocus] = useFocusedPane(layout.length, INDEX_PATH);
+  return (
+    <box width="100%" height="100%" position="relative" overflow="hidden">
+      {layout.map((placement, index) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const read = reads[placement.id];
+        const view = paintIndex(placement.id, read);
+        return (
+          <box
+            key={`${INDEX_PATH}:${placement.id}`}
+            position="absolute"
+            left={share(placement.x - 1, COLS)}
+            top={share(placement.y - 1, ROWS)}
+            width={share(placement.w, COLS)}
+            height={share(placement.h, ROWS)}
+            onMouseDown={() => setFocus(index)}
+          >
+            <PaneFrame
+              title={def.title}
+              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              focused={index === focus}
+              blocks={view.blocks}
+              ink={tone(view.status)}
+            />
+          </box>
+        );
+      })}
+    </box>
+  );
 }
 
 function StrategiesDesk({
