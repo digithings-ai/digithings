@@ -9,6 +9,7 @@ from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL_FILE, resolve_paths
 from digivoice.probe import real_probe
+from digivoice.settings import VoiceSettings, save_settings
 from digivoice.transcribe import (
     LANGUAGE,
     clean_transcript,
@@ -203,6 +204,24 @@ def test_transcribe_keeps_a_missing_absolute_bin(paths: VoicePaths, tmp_path: Pa
         )
     assert str(missing) in str(excinfo.value)
     assert str(decoy) not in str(excinfo.value)
+
+
+def test_transcribe_runs_the_saved_stt_model_not_the_default(paths: VoicePaths) -> None:
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True, exist_ok=True)
+    saved = models / "ggml-small.en.bin"
+    saved.write_bytes(b"small weights")
+    default = models / DEFAULT_MODEL_FILE
+    default.write_bytes(b"default weights")
+    save_settings(paths, VoiceSettings(stt_model="ggml-small.en"))
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship the notes\n")})
+    result = transcribe(paths, WHISPER, runner, "/tmp/a.wav")
+    assert result.model == "ggml-small.en"
+    assert result.model_path == str(saved)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    assert call.argv[call.argv.index("-m") + 1] == str(saved)
+    assert str(default) not in call.argv
 
 
 def test_transcribe_uses_configured_stt_model(paths: VoicePaths) -> None:
