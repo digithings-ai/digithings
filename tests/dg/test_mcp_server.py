@@ -391,6 +391,44 @@ class TestMcpToolEnforcement:
         assert out["success"] is True
         assert called.get("ran") is True
 
+    def test_workflow_forwards_verified_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The workflow tool must put the caller's JWT on WorkflowRequest.
+
+        chat and thread_state already forward the verified bearer into the
+        in-process HTTP call. workflow authorizes, then builds WorkflowRequest
+        without digi_bearer, so graph state never carries the token and
+        downstream digisearch/digiquant calls go out unauthenticated.
+        """
+        monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
+        token = _mint(scopes=["digigraph:workflow"])
+        seen: dict[str, str | None] = {}
+
+        def _fake_workflow(req: object) -> _FakeWorkflowResult:
+            seen["bearer"] = getattr(req, "digi_bearer", None)
+            return _fake_workflow_result()
+
+        monkeypatch.setattr("digigraph.workflow.run_digigraph_workflow", _fake_workflow)
+        out = json.loads(_call_tool("workflow", _bearer(token), prompt="hi"))
+        assert out["success"] is True
+        assert seen["bearer"] == token
+
+    def test_workflow_forwards_presented_bearer_when_auth_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Auth-off still returns a presented token from the gate; workflow must keep it."""
+        monkeypatch.delenv("DIGI_MCP_REQUIRE_AUTH", raising=False)
+        token = _mint(scopes=["digigraph:workflow"])
+        seen: dict[str, str | None] = {}
+
+        def _fake_workflow(req: object) -> _FakeWorkflowResult:
+            seen["bearer"] = getattr(req, "digi_bearer", None)
+            return _fake_workflow_result()
+
+        monkeypatch.setattr("digigraph.workflow.run_digigraph_workflow", _fake_workflow)
+        out = json.loads(_call_tool("workflow", _bearer(token), prompt="hi"))
+        assert out["success"] is True
+        assert seen["bearer"] == token
+
     def test_workflow_rejects_wrong_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         called: dict[str, bool] = {}
