@@ -53,8 +53,12 @@ describe("mounted desk pages", () => {
     expect(pipeline).toContain('data-route="/pipeline/runs/latest/trace"');
 
     const strategies = renderToStaticMarkup(<DeskPage path="/strategies" />);
-    expect(strategies).toContain('data-route="/strategies/summary"');
     expect(strategies).toContain("Strategies · summary");
+    expect(strategies).toContain('data-route="/strategies/summary"');
+    expect(strategies).toContain("Catalog");
+    expect(strategies).toContain('data-route="/strategies"');
+    expect(strategies).toContain("My deployments");
+    expect(strategies).toContain('data-route="/strategies/deployments"');
 
     const fx = renderToStaticMarkup(<DeskPage path="/fx" />);
     expect(fx).toContain("This page is not on the public desk.");

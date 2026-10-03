@@ -8,12 +8,15 @@
  */
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
-import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import { strategyBlocks } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { DASH, EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
+import { strategiesBody } from "../../../../../clients/digiquant-tui/src/pages/strategies-format";
+import { shapeLines, strategyBlocks, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
 import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
+const INDEX_PATH = "/strategies";
+const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
 type BlockId =
   | "st-kpis"
@@ -356,7 +359,52 @@ export function StrategiesPages({ path }: { path: string }) {
   if (!STRATEGY_PATHS.has(path)) return null;
   const reads = state.path === path ? state.reads : {};
   const layout = layoutFor(path);
+  if (path === INDEX_PATH) return <StrategiesIndex reads={reads} layout={layout} />;
   return <StrategiesDesk path={path} reads={reads} layout={layout} />;
+}
+
+function paintIndex(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (id !== "st-deployments" && read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf };
+}
+
+/** Desk strategies index. Same blocks as the terminal. Detail and deploy stay on their own pages. */
+function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead>; layout: ReturnType<typeof layoutFor> }) {
+  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  return (
+    <div className={PANE_GRID}>
+      {layout.map((placement) => {
+        const def = BLOCKS[placement.id];
+        if (!def) return null;
+        const read = reads[placement.id];
+        const view = paintIndex(placement.id, read);
+        return (
+          <div
+            key={`${INDEX_PATH}:${placement.id}`}
+            className="min-h-0 min-w-0"
+            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+          >
+            <DeskPane
+              title={def.title}
+              route={def.route}
+              asOf={view.asOf}
+              blocks={view.blocks}
+              tone={tone[view.status]}
+              focused={panes.focus === placement.id}
+              onFocus={() => panes.focusAt(placement.id)}
+              onNext={panes.next}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function StrategiesDesk({
