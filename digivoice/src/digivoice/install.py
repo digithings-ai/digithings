@@ -2,9 +2,11 @@
 
 `digivoice install` fetches bun, the OpenTUI packages, whisper-cli, Piper, sox,
 `ggml-base.en.bin`, and the Lessac Piper voice, then copies this checkout's
-banner adapter into `~/.hammerspoon/digivoice`. `digivoice update` refreshes a
-step whose pin changed. Rewrite GGUF stays off. Tests pass `fetch` and `runner`
-so nothing here has to touch the network.
+banner adapter into `~/.hammerspoon/digivoice`. On a terminal it asks first:
+auto installs that default set, or the user picks local speech, voice, and
+rewrite models. A pick does not delete models already on disk. `digivoice
+update` refreshes a step whose pin changed and stays non-interactive. Tests
+pass `fetch` and `runner` so nothing here has to touch the network.
 """
 
 from __future__ import annotations
@@ -17,14 +19,24 @@ import tarfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO
 from urllib.request import Request, urlopen
 
-from digivoice.catalog import find_stt
-from digivoice.models import InstallReport, InstallStamp, InstallStep
+from digivoice.catalog import (
+    REWRITE_CATALOG,
+    STT_CATALOG,
+    VOICE_CATALOG,
+    CatalogModel,
+    find_rewrite,
+    find_stt,
+    find_voice,
+)
+from digivoice.models import InstallReport, InstallSelection, InstallStamp, InstallStep, VoicePaths
 from digivoice.paths import DEFAULT_MODEL, local_bin, piper_fallback, vendor_dir
 from digivoice.probe import CommandProbe
 from digivoice.reload import reload_hammerspoon
 from digivoice.runner import CommandRunner, error_tail
+from digivoice.settings import load_settings, save_settings
 
 FetchFn = Callable[[str, Path], None]
 
@@ -121,14 +133,20 @@ def run_install(
     fetch: FetchFn | None = None,
     refresh: bool = False,
     adapter_source: Path | None = None,
+    selection: InstallSelection | None = None,
 ) -> InstallReport:
     """Install every local piece. A failed step does not skip the rest.
 
     `refresh` is what `digivoice update` passes. A step that is already at the
     pinned version stays. A missing or older step is fetched again.
+
+    `selection` is the wizard choice. Auto, and a missing selection, install
+    the default speech and voice files only. A pick downloads the named local
+    catalog files and leaves every other model file on disk.
     """
     worker = fetch or http_fetch
     source = adapter_source if adapter_source is not None else adapter_source_dir()
+    chosen = selection if selection is not None else InstallSelection()
     steps: list[InstallStep] = []
     _attempt(steps, "bun", lambda: _install_bun(home, platform, machine, probe, worker, refresh))
     _attempt(
@@ -147,10 +165,249 @@ def run_install(
         lambda: _install_piper(home, platform, machine, probe, worker, refresh),
     )
     _attempt(steps, "sox", lambda: _install_sox(home, probe, runner, refresh))
-    _attempt(steps, "stt", lambda: _install_stt(home, models_dir, worker, refresh))
-    _attempt(steps, "voice", lambda: _install_voice(home, models_dir, worker, refresh))
+    if chosen.auto:
+        _attempt(steps, "stt", lambda: _install_stt(home, models_dir, worker, refresh))
+        _attempt(steps, "voice", lambda: _install_voice(home, models_dir, worker, refresh))
+    else:
+        _install_picked(steps, models_dir, worker, chosen)
     _attempt(steps, "adapter", lambda: _install_adapter(home, source, probe, runner))
     return InstallReport(steps=steps)
+
+
+_MODE_TEXT = """\
+digivoice install
+
+macOS is the desktop this app runs on. Hotkeys and paste go through Hammerspoon.
+
+  1) Auto — ggml-base.en.bin, the Lessac voice, and the local toolchain
+  2) Pick — choose local speech, voice, and rewrite models
+
+Auto does not download a rewrite model. A pick does not delete models already on disk.
+Choice [1/auto, 2/pick, or blank to cancel]: """
+
+
+def run_install_wizard(
+    stdin: TextIO,
+    stdout: TextIO,
+    *,
+    models_dir: Path,
+) -> InstallSelection | None:
+    """Ask auto or pick. None means the user cancelled. No network."""
+    while True:
+        stdout.write(_MODE_TEXT)
+        stdout.flush()
+        raw = _read_line(stdin)
+        if raw is None:
+            return None
+        mode = _parse_mode(raw)
+        if mode == "cancel":
+            return None
+        if mode == "auto":
+            return InstallSelection(auto=True)
+        if mode == "pick":
+            break
+        stdout.write("Enter 1 or auto, or 2 or pick.\n")
+    speech = _prompt_catalog(
+        stdin,
+        stdout,
+        "Speech models",
+        STT_CATALOG,
+        models_dir,
+    )
+    if speech is None:
+        return None
+    voice = _prompt_catalog(stdin, stdout, "Voice models", VOICE_CATALOG, models_dir)
+    if voice is None:
+        return None
+    rewrite = _prompt_catalog(
+        stdin,
+        stdout,
+        "Rewrite models (local files only; rewrite stays off until you enable it)",
+        REWRITE_CATALOG,
+        models_dir,
+    )
+    if rewrite is None:
+        return None
+    return InstallSelection(auto=False, speech=speech, voice=voice, rewrite=rewrite)
+
+
+def _read_line(stdin: TextIO) -> str | None:
+    try:
+        raw = stdin.readline()
+    except (OSError, ValueError):
+        return None
+    if raw == "":
+        return None
+    return raw.strip()
+
+
+def _parse_mode(raw: str) -> str | None:
+    text = raw.casefold()
+    if text in {"", "q", "quit", "cancel"}:
+        return "cancel"
+    if text in {"1", "auto"}:
+        return "auto"
+    if text in {"2", "pick"}:
+        return "pick"
+    return None
+
+
+def _parse_indexes(raw: str, count: int) -> list[int] | None:
+    indexes: list[int] = []
+    for part in raw.replace(",", " ").split():
+        if not part.isdigit():
+            return None
+        number = int(part)
+        if number < 1 or number > count:
+            return None
+        index = number - 1
+        if index not in indexes:
+            indexes.append(index)
+    return indexes
+
+
+def _prompt_catalog(
+    stdin: TextIO,
+    stdout: TextIO,
+    title: str,
+    entries: tuple[CatalogModel, ...],
+    models_dir: Path,
+) -> list[str] | None:
+    """Numbers from the catalog. Blank installs none. EOF cancels."""
+    while True:
+        stdout.write(f"\n{title}\n")
+        stdout.write("Numbers separated by commas. Blank installs none of these.\n")
+        for index, entry in enumerate(entries, start=1):
+            on_disk = " · on disk" if _nonempty(models_dir / entry.filename) else ""
+            label = entry.title
+            if entry.id == DEFAULT_MODEL or entry.filename.startswith(f"{VOICE_NAME}."):
+                if "default" not in label.casefold():
+                    label = f"{label} (default)"
+            stdout.write(f"  {index}) {label} · {entry.size_hint} · {entry.filename}{on_disk}\n")
+        stdout.write("Choice: ")
+        stdout.flush()
+        raw = _read_line(stdin)
+        if raw is None:
+            return None
+        if raw == "":
+            return []
+        indexes = _parse_indexes(raw, len(entries))
+        if indexes is None:
+            stdout.write("Enter numbers from the list, separated by commas.\n")
+            continue
+        return [entries[index].id for index in indexes]
+
+
+def _install_picked(
+    steps: list[InstallStep],
+    models_dir: Path,
+    fetch: FetchFn,
+    selection: InstallSelection,
+) -> None:
+    _attempt_catalog(steps, "stt", selection.speech, models_dir, fetch)
+    _attempt_catalog(steps, "voice", selection.voice, models_dir, fetch)
+    _attempt_catalog(steps, "rewrite", selection.rewrite, models_dir, fetch)
+    _apply_pick(models_dir, selection)
+
+
+def _attempt_catalog(
+    steps: list[InstallStep],
+    kind: str,
+    model_ids: list[str],
+    models_dir: Path,
+    fetch: FetchFn,
+) -> None:
+    for model_id in model_ids:
+        step_id = f"{kind}:{model_id}"
+        _attempt(
+            steps,
+            step_id,
+            lambda model_id=model_id, step_id=step_id: _install_catalog_choice(
+                kind, model_id, step_id, models_dir, fetch
+            ),
+        )
+
+
+def _catalog_entry(kind: str, model_id: str) -> CatalogModel:
+    if kind == "stt":
+        entry = find_stt(model_id)
+    elif kind == "voice":
+        entry = find_voice(model_id)
+    else:
+        entry = find_rewrite(model_id)
+    if entry is None:
+        raise InstallError(f"no local {kind} model {model_id}")
+    return entry
+
+
+def _install_catalog_choice(
+    kind: str,
+    model_id: str,
+    step_id: str,
+    models_dir: Path,
+    fetch: FetchFn,
+) -> InstallStep:
+    """Download one catalog file. Other files in the models directory stay."""
+    entry = _catalog_entry(kind, model_id)
+    dest = _safe_model_path(models_dir, entry.filename)
+    pieces: list[tuple[str, Path]] = [(entry.url, dest)]
+    if entry.sidecar_url:
+        pieces.append((entry.sidecar_url, dest.with_name(dest.name + ".json")))
+    pending = [(url, path) for url, path in pieces if not _nonempty(path)]
+    if not pending:
+        return InstallStep(id=step_id, status="present", detail=str(dest))
+    for url, path in pending:
+        _download(fetch, url, path)
+    return InstallStep(id=step_id, status="installed", detail=str(dest))
+
+
+def _safe_model_path(models_dir: Path, filename: str) -> Path:
+    name = Path(filename).name
+    if not name or name != filename or name in {".", ".."}:
+        raise InstallError(f"model filename is not a local file: {filename}")
+    return models_dir / name
+
+
+def _apply_pick(models_dir: Path, selection: InstallSelection) -> None:
+    """Point settings at the first picked file that landed. Leave the rest alone."""
+    if selection.auto:
+        return
+    paths = _paths_for_models(models_dir)
+    current = load_settings(paths)
+    updates: dict[str, str] = {}
+    speech = _first_on_disk(models_dir, "stt", selection.speech)
+    if speech is not None:
+        updates["stt_model"] = speech.id
+    voice = _first_on_disk(models_dir, "voice", selection.voice)
+    if voice is not None:
+        updates["tts_voice"] = voice.filename
+    rewrite = _first_on_disk(models_dir, "rewrite", selection.rewrite)
+    if rewrite is not None:
+        updates["rewrite_model"] = rewrite.filename
+    if not updates:
+        return
+    save_settings(paths, current.model_copy(update=updates))
+
+
+def _first_on_disk(models_dir: Path, kind: str, model_ids: list[str]) -> CatalogModel | None:
+    for model_id in model_ids:
+        try:
+            entry = _catalog_entry(kind, model_id)
+        except InstallError:
+            continue
+        if _nonempty(models_dir / entry.filename):
+            return entry
+    return None
+
+
+def _paths_for_models(models_dir: Path) -> VoicePaths:
+    data = models_dir.parent
+    return VoicePaths(
+        data_dir=str(data),
+        models_dir=str(models_dir),
+        recordings_dir=str(data / "recordings"),
+        history_file=str(data / "history.jsonl"),
+    )
 
 
 def render_install(report: InstallReport, *, heading: str = "digivoice install") -> str:

@@ -66,6 +66,18 @@ class InstallStamp(BaseModel):
     voice: str = ""
 
 
+class InstallSelection(BaseModel):
+    """What `digivoice install` should fetch. Auto is the current default set.
+
+    A pick lists catalog ids. It never names a cloud STT or TTS service.
+    """
+
+    auto: bool = True
+    speech: list[str] = Field(default_factory=list)
+    voice: list[str] = Field(default_factory=list)
+    rewrite: list[str] = Field(default_factory=list)
+
+
 class HistoryEntry(BaseModel):
     """One JSONL line. `ts` is ISO-8601 UTC; `wav` is null when there is no file."""
 
