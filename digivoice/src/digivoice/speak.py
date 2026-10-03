@@ -221,12 +221,12 @@ def library_matches_binary(binary: str, library: Path) -> bool:
     return binary_cpu is not None and binary_cpu == library_cpu
 
 
-def place_espeak_beside(binary: str, library: Path) -> Path | None:
-    """Copy a same-arch Mach-O espeak library next to the real Piper binary.
+def place_macho_library(binary: str, library: Path, name: str) -> Path | None:
+    """Copy a same-arch Mach-O library next to the real Piper binary.
 
     `~/.local/bin/piper` is a symlink, so a library next to that link is not
     the directory dyld searches for the real binary. A matching library already
-    beside the binary is left in place.
+    beside the binary is left in place. A different architecture is not copied.
     """
     if not library_matches_binary(binary, library):
         return None
@@ -237,12 +237,17 @@ def place_espeak_beside(binary: str, library: Path) -> Path | None:
     cpu = macho_cpu(real)
     if cpu is None or macho_cpu(library) != cpu:
         return None
-    dest = real.parent / _ESPEAK_LIBRARY
+    dest = real.parent / name
     if dest.is_file() and macho_cpu(dest) == cpu:
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(library, dest, follow_symlinks=True)
     return dest
+
+
+def place_espeak_beside(binary: str, library: Path) -> Path | None:
+    """Copy a same-arch Mach-O espeak library next to the real Piper binary."""
+    return place_macho_library(binary, library, _ESPEAK_LIBRARY)
 
 
 def find_espeak_library(home: Path, binary: str, *, platform: str) -> Path | None:

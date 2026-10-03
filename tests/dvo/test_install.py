@@ -13,6 +13,7 @@ import pytest
 from digivoice.catalog import find_rewrite, find_stt, find_voice
 from digivoice.cli import Runtime, run
 from digivoice.install import (
+    PHONEMIZE_MACOS_ARM64_URL,
     adapter_source_dir,
     bun_archive_url,
     hammerspoon_adapter_dir,
@@ -1231,6 +1232,8 @@ def test_arm64_install_copies_same_arch_espeak_beside_the_binary(
         {
             "piper/piper": _macho("arm64") + b"piper",
             "piper/espeak-ng-data/phontab": b"data",
+            "piper/lib/libpiper_phonemize.1.dylib": _macho("arm64") + b"phon",
+            "piper/lib/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"ort",
         }
     )
     report, fetched = _install(
@@ -1269,7 +1272,13 @@ def test_arm64_update_replaces_an_x86_64_vendor_piper(
     stamp_path = vendor_dir(home) / "install.json"
     stamp_path.write_text(stamp.model_dump_json(), encoding="utf-8")
     tui = _tui(tmp_path / "tui")
-    bodies = _darwin_bodies({"piper/piper": _macho("arm64") + b"new"})
+    bodies = _darwin_bodies(
+        {
+            "piper/piper": _macho("arm64") + b"new",
+            "piper/lib/libpiper_phonemize.1.dylib": _macho("arm64") + b"phon",
+            "piper/lib/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"ort",
+        }
+    )
     report, fetched = _install(
         home,
         tui,
@@ -1325,6 +1334,130 @@ def test_x86_64_archive_on_arm64_keeps_the_vendor_piper(
     assert "x86_64" in _step(report, "piper").detail
     assert _step(report, "espeak").status == "failed"
     assert ["install", "espeak-ng"] not in _brew_verbs(runner)
+    assert _step(report, "phonemize").detail == "piper is not arm64"
+    assert not (real / "libpiper_phonemize.1.dylib").exists()
+
+
+def _phonemize_zip(cpu: str, payload: bytes) -> bytes:
+    return _zip(
+        {
+            "macos-arm64/libpiper_phonemize.1.dylib": _macho(cpu) + payload,
+            "macos-arm64/libonnxruntime.1.14.1.dylib": _macho(cpu) + b"ort",
+        }
+    )
+
+
+def test_arm64_install_copies_phonemize_nested_in_the_piper_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    library = _macho("arm64") + b"phonemize"
+    bodies = _darwin_bodies(
+        {
+            "piper/piper": _macho("arm64") + b"piper",
+            "piper/nested/libpiper_phonemize.1.dylib": library,
+            "piper/nested/libonnxruntime.1.14.1.dylib": _macho("arm64") + b"ort",
+            "piper/espeak-ng-data/phontab": b"data",
+        }
+    )
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=_runner(tui),
+    )
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    beside = real / "libpiper_phonemize.1.dylib"
+    assert beside.read_bytes() == library
+    assert (real / "libonnxruntime.1.14.1.dylib").read_bytes().startswith(_macho("arm64"))
+    assert PHONEMIZE_MACOS_ARM64_URL not in fetched
+    assert _step(report, "phonemize").status == "present"
+    assert _step(report, "phonemize").detail == str(beside)
+
+
+def test_arm64_install_fetches_phonemize_when_the_archive_lacks_it(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    library = _macho("arm64") + b"fetched"
+    bodies = _darwin_bodies({"piper/piper": _macho("arm64") + b"piper"})
+    bodies[PHONEMIZE_MACOS_ARM64_URL] = _phonemize_zip("arm64", b"fetched")
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=_runner(tui),
+    )
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    beside = real / "libpiper_phonemize.1.dylib"
+    assert beside.read_bytes() == library
+    assert (real / "libonnxruntime.1.14.1.dylib").is_file()
+    assert PHONEMIZE_MACOS_ARM64_URL in fetched
+    assert _step(report, "phonemize").status == "installed"
+    assert _step(report, "phonemize").detail == str(beside)
+    assert not (vendor_dir(home) / "phonemize.incoming").exists()
+
+
+def test_arm64_update_fetches_phonemize_for_an_existing_piper(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    real.mkdir(parents=True)
+    binary = real / "piper"
+    binary.write_bytes(_macho("arm64") + b"piper")
+    binary.chmod(0o755)
+    link = home / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(binary)
+    stamp_path = vendor_dir(home) / "install.json"
+    stamp_path.write_text(InstallStamp(piper="2023.11.14-2").model_dump_json(), encoding="utf-8")
+    tui = _tui(tmp_path / "tui")
+    library = _macho("arm64") + b"update"
+    bodies = _darwin_bodies()
+    bodies[PHONEMIZE_MACOS_ARM64_URL] = _phonemize_zip("arm64", b"update")
+    _report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=_runner(tui),
+        refresh=True,
+        adapter_source=_lua_tree(tmp_path / "lua"),
+    )
+    beside = real / "libpiper_phonemize.1.dylib"
+    assert beside.read_bytes() == library
+    assert PHONEMIZE_MACOS_ARM64_URL in fetched
+    assert PIPER_DARWIN not in fetched
+
+
+def test_arm64_install_does_not_copy_an_x86_64_phonemize(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    bodies = _darwin_bodies({"piper/piper": _macho("arm64") + b"piper"})
+    bodies[PHONEMIZE_MACOS_ARM64_URL] = _phonemize_zip("x86_64", b"wrong")
+    report, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=_runner(tui),
+    )
+    real = home / ".local" / "share" / "digivoice" / "vendor" / "piper" / "piper"
+    assert PHONEMIZE_MACOS_ARM64_URL in fetched
+    assert not (real / "libpiper_phonemize.1.dylib").exists()
+    assert not (real / "libonnxruntime.1.14.1.dylib").exists()
+    assert _step(report, "phonemize").status == "failed"
+    assert "not the same architecture" in _step(report, "phonemize").detail
 
 
 _CHECKOUT_INSTALL = (
