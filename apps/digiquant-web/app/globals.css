@@ -253,7 +253,8 @@ body {
   .pixel-word { width: 616px; }
 }
 
-.integrations-hero .pixel-word { margin-top: 0; }
+/* The website hero glints in ink. This site's accent is teal, and that flash is the wrong mark. */
+.integrations-hero .pixel-word { margin-top: 0; --glint: var(--ink); }
 
 .pixel-word .c { opacity: var(--f); }
 .pixel-word .n { opacity: 0; }

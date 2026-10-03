@@ -1,10 +1,16 @@
 import { CtaLink, Emblem, Marquee } from "@digithings/ui";
+import { DigivoiceHero } from "@/components/integrations/digivoice-hero";
 import { IntegrationMark, integrationHref, type IntegrationId } from "@/components/integrations/marks";
+import { DigichatWordmark } from "../../../../packages/ui/src/components/chat/DigichatWordmark";
 import { PixelWordmark } from "../../../digithings-web/components/landing/PixelWordmark";
+import { QuantWordmark } from "../_chrome/QuantWordmark";
 import { Band } from "../_chrome/Band";
 import { MCP_TOOLS } from "../_mcp";
 
 const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
+
+const BANNER =
+  "block h-auto w-[264px] max-w-full min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]";
 
 const CARD =
   "flex h-auto min-h-full w-full min-w-0 shrink flex-col items-stretch gap-2.5 overflow-hidden bg-surface p-[1.15rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
@@ -36,7 +42,7 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
 /** Modules digiquant actually calls. Emblems exist only where the kit already draws one. */
 const MODULES: { name: string; line: string; emblem?: string }[] = [
   { name: "digigraph", emblem: "digigraph", line: "Orchestrates the research and portfolio runs." },
-  { name: "digichat", emblem: "digichat", line: "The chat where a strategy idea starts." },
+  { name: "digichat", line: "The chat where a strategy idea starts." },
   { name: "digillm", line: "Routes and caches the model calls research and the dashboard make." },
   { name: "digikey", emblem: "digikey", line: "Checks the API token on digiquant requests." },
   { name: "digibase", emblem: "digibase", line: "Shared errors, request handling, and metrics on the API." },
@@ -81,6 +87,17 @@ export function IntegrationsBand() {
           <p className="m-0 max-w-[36rem] text-center text-[1.05rem] leading-[1.55] text-ink-soft">
             The platform that drives the agentic side of digiquant.
           </p>
+          <ul className="m-0 flex w-full list-none flex-col items-center gap-10">
+            <li>
+              <QuantWordmark className={`${BANNER} fill-current text-ink`} />
+            </li>
+            <li className={`${BANNER} [&_svg]:h-auto [&_svg]:w-full`}>
+              <DigichatWordmark />
+            </li>
+            <li>
+              <DigivoiceHero className={BANNER} />
+            </li>
+          </ul>
           <ul className="m-0 grid w-full list-none gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
             {MODULES.map((mod) => (
               <li key={mod.name} className="flex min-w-0 items-start gap-3">
