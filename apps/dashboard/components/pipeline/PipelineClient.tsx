@@ -93,6 +93,20 @@ export default function PipelineClient() {
   const dateExplicit = useRef(Boolean(params.date));
   const [dayLoading, setDayLoading] = useState(true);
   const [dayData, setDayData] = useState<PipelineDayData>(emptyPipelineDay);
+  // The date `dayData`/`dayLoading` currently describe. Resetting on a date change
+  // during render (React's "adjust state when a prop changes" pattern) instead of
+  // in the effect body: it clears the previous day's graph in the SAME render that
+  // shows the new date, rather than a render later — a failed or empty documents
+  // response must never leave yesterday's nodes under today's date. The effect body
+  // must not call setState synchronously (react-hooks/set-state-in-effect); it keeps
+  // the read, its cancellation, the landing-date snap, and the failure path.
+  const [dayDate, setDayDate] = useState(selectedDate);
+
+  if (dayDate !== selectedDate) {
+    setDayDate(selectedDate);
+    setDayLoading(true);
+    setDayData(emptyPipelineDay());
+  }
 
   // Node detail
   const [activeNode, setActiveNode] = useState<LaidOutNode | null>(null);
@@ -109,10 +123,6 @@ export default function PipelineClient() {
   // Load documents for the selected date
   useEffect(() => {
     let cancelled = false;
-    setDayLoading(true);
-    // Drop the previous day's graph before the new read. A failed or empty
-    // documents response must not keep yesterday's nodes under today's date.
-    setDayData(emptyPipelineDay());
 
     void (async () => {
       try {
