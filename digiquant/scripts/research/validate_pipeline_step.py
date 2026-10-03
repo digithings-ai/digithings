@@ -44,10 +44,8 @@ try:
 except ImportError:
     pass
 
-ROOT = Path(__file__).resolve().parent.parent
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-SCHEMAS_DIR = ROOT / "templates" / "schemas"
-DIGEST_SNAPSHOT_SCHEMA = ROOT / "templates" / "digest-snapshot-schema.json"
+from lib.roots import DIGEST_SNAPSHOT_SCHEMA, schema_file  # noqa: E402
 
 
 def _ensure_importable() -> None:
@@ -145,7 +143,7 @@ def validate_payload_schema(payload: Any, doc_type: str, label: str) -> bool:
     if not fname:
         _fail(f"{label}: no schema mapping for doc_type {doc_type}")
         return False
-    schema_path = SCHEMAS_DIR / fname
+    schema_path = schema_file(fname)
     if not schema_path.is_file():
         _fail(f"{label}: missing schema file {schema_path}")
         return False
