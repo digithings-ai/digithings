@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PROVIDER_LABELS,
@@ -6,9 +8,38 @@ import {
   purgeLegacyApiKey,
   readFromStorage,
   validateProviderKey,
+  type ProviderId,
 } from "./providerSettings";
 
+type CatalogEntry = { id: string; fallbackModels: string[] };
+
+function loadCatalog(): CatalogEntry[] {
+  const path = fileURLToPath(new URL("../../../config/byok-providers.json", import.meta.url));
+  return JSON.parse(readFileSync(path, "utf8")) as CatalogEntry[];
+}
+
 describe("providerSettings", () => {
+  it("uses each catalog fallbackModels list, in order", () => {
+    const catalog = loadCatalog();
+    expect(catalog.map((entry) => entry.id).sort()).toEqual(
+      (Object.keys(PROVIDER_MODELS) as ProviderId[]).sort(),
+    );
+    for (const entry of catalog) {
+      const ids = PROVIDER_MODELS[entry.id as ProviderId].map((model) => model.id);
+      expect(ids).toEqual(entry.fallbackModels);
+      expect(ids).not.toContain("meta-llama/llama-3.3-70b-instruct");
+      expect(ids).not.toContain("gpt-4.1-mini");
+      expect(ids).not.toContain("claude-3-5-haiku-20241022");
+      expect(ids).not.toContain("gemini-2.5-flash");
+    }
+  });
+
+  it("sends the selected model when the settings form tests a key", () => {
+    const path = fileURLToPath(new URL("../components/ProviderSettings.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    expect(src).toContain('"X-BYOK-Model": inputModel');
+  });
+
   let store: Map<string, string>;
   let setItemSpy: ReturnType<typeof vi.fn>;
 
