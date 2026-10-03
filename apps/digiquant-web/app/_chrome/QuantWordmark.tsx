@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { BUILD_COLUMNS, BUILD_WORD, columnDelayMs } from "@/lib/hero-build";
 import { HERO_PLAYED_KEY, nextHeroLive, type HeroGateView } from "@/lib/hero-play";
 
@@ -120,7 +120,6 @@ export function QuantWordmark({
 }) {
   const idle = phase === "idle";
   const ref = useRef<SVGSVGElement>(null);
-  const [live, setLive] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -136,8 +135,9 @@ export function QuantWordmark({
     const node = ref.current;
     const started = decision.claim ? performance.now() : (gate?.started ?? performance.now());
     writeGate({ started, node });
+    // Imperative: React must not own this attribute, or the rise is cut off
+    // when the tab is marked played. A later render leaves it in place.
     node?.setAttribute("data-dq-live", "");
-    setLive(true);
     if (!decision.claim) return;
     try {
       if (window.sessionStorage.getItem(HERO_PLAYED_KEY) !== "1") {
@@ -158,7 +158,6 @@ export function QuantWordmark({
       aria-label="digiquant"
       shapeRendering="crispEdges"
       className={className}
-      data-dq-live={live ? "" : undefined}
     >
       {CELLS.letters.map((cell) => (
         <rect
