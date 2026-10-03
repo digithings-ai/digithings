@@ -5,6 +5,7 @@ import {
   GLINT_MS,
   MARK_GLYPHS,
   MARK_PIXEL_W,
+  MARK_SAMPLE_Y,
   MARK_WORD,
   REVEAL_MS,
   glintCell,
@@ -37,25 +38,29 @@ test("the terminal hero uses the web DIGIQUANT cells", () => {
   expect(web).toEqual(MARK_GLYPHS);
 });
 
-test("each quadrant cell unpacks to the same pixels", () => {
+test("the header mark is two braille rows of the web glyphs", () => {
   const lines = markLines();
-  expect(lines).toHaveLength(5);
+  expect(lines).toHaveLength(2);
   expect(lines[0]?.length).toBe(40);
-  const quads = [
-    " ", "▗", "▖", "▄",
-    "▝", "▐", "▞", "▟",
-    "▘", "▚", "▌", "▙",
-    "▀", "▜", "▛", "█",
+  const dots = [
+    [0x01, 0x08],
+    [0x02, 0x10],
+    [0x04, 0x20],
+    [0x40, 0x80],
   ];
   for (let row = 0; row < lines.length; row++) {
     const line = lines[row] ?? "";
     for (let col = 0; col < line.length; col++) {
-      const bits = quads.indexOf(line[col] ?? " ");
+      const ch = line[col] ?? " ";
+      const bits = ch === " " ? 0 : (ch.codePointAt(0) ?? 0) - 0x2800;
       expect(bits).toBeGreaterThanOrEqual(0);
-      expect(markFilled(col * 2, row * 2)).toBe((bits & 8) !== 0);
-      expect(markFilled(col * 2 + 1, row * 2)).toBe((bits & 4) !== 0);
-      expect(markFilled(col * 2, row * 2 + 1)).toBe((bits & 2) !== 0);
-      expect(markFilled(col * 2 + 1, row * 2 + 1)).toBe((bits & 1) !== 0);
+      expect(bits).toBeLessThanOrEqual(0xff);
+      for (let i = 0; i < dots.length; i++) {
+        const y = MARK_SAMPLE_Y[row * 4 + i] ?? -1;
+        const dot = dots[i] ?? [0, 0];
+        expect(markFilled(col * 2, y)).toBe((bits & dot[0]) !== 0);
+        expect(markFilled(col * 2 + 1, y)).toBe((bits & dot[1]) !== 0);
+      }
     }
   }
   expect(markFilled(0, 0)).toBe(true);

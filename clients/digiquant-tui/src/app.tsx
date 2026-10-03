@@ -447,32 +447,33 @@ export function App() {
             <PixelMark />
           </box>
           <box flexGrow={1} flexDirection="column">
-            <box height={1} flexDirection="row" alignItems="center" paddingRight={1}>
-              <box paddingRight={2} onMouseDown={() => (deskOpen ? setDeskOpen(false) : startDesk())}>
-                <text fg={SOFT}>{`desk: ${deskLabelText} ▾`}</text>
-              </box>
-              <box flexGrow={1} onMouseDown={() => startPath()}>
-                {mode === "path" ? (
-                  <input
-                    flexGrow={1}
-                    focused
-                    value={draft}
-                    placeholder="/ go to…"
-                    placeholderColor={MUTE}
-                    backgroundColor={BG}
-                    textColor={INK}
-                    focusedBackgroundColor={WASH}
-                    focusedTextColor={INK}
-                    onInput={onDraft}
-                    onSubmit={go}
-                  />
-                ) : (
-                  <text fg={INK}>{path}</text>
-                )}
+            <box height={MARK_ROWS} flexDirection="column" justifyContent="center">
+              <box height={1} flexDirection="row" alignItems="center" paddingRight={1}>
+                <box paddingRight={2} onMouseDown={() => (deskOpen ? setDeskOpen(false) : startDesk())}>
+                  <text fg={SOFT}>{`desk: ${deskLabelText} ▾`}</text>
+                </box>
+                <box flexGrow={1} onMouseDown={() => startPath()}>
+                  {mode === "path" ? (
+                    <input
+                      flexGrow={1}
+                      focused
+                      value={draft}
+                      placeholder="/ go to…"
+                      placeholderColor={MUTE}
+                      backgroundColor={BG}
+                      textColor={INK}
+                      focusedBackgroundColor={WASH}
+                      focusedTextColor={INK}
+                      onInput={onDraft}
+                      onSubmit={go}
+                    />
+                  ) : (
+                    <text fg={INK}>{path}</text>
+                  )}
+                </box>
               </box>
             </box>
             {deskOpen ? <DeskList current={desk} cursor={deskCursor} onPick={chooseDesk} /> : null}
-            {mode === "path" ? <PathHits hits={hits} selected={selectedHit} onPick={openHit} /> : null}
           </box>
         </box>
         <box height={1} border={["bottom"]} borderColor={HAIR} />
@@ -532,6 +533,11 @@ export function App() {
                 );
               }))
           )}
+          {mode === "path" ? (
+            <box position="absolute" top={0} left={0} width="100%" zIndex={8} backgroundColor={BG}>
+              <PathHits hits={hits} selected={selectedHit} onPick={openHit} />
+            </box>
+          ) : null}
         </box>
       </box>
       <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} flexDirection="row">

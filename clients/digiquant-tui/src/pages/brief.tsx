@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { BLOCKS, layoutFor } from "../catalog";
+import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
-import { EMPTY_READ, STUB_READ, readBlock, type ReadResult } from "../read";
+import { EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE } from "../theme";
+import { briefBlocks } from "./brief-format";
 import { PaneFrame, useFocusedPane } from "./pane";
+import { shapeLines, type PaneBody } from "./shape";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
@@ -19,19 +21,41 @@ const tone = (status: ReadResult["status"] | "loading") => {
   return DANGER;
 };
 
-type Shown = { status: ReadResult["status"] | "loading"; lines: string[]; asOf: string | null };
+type Loaded = { result: ReadResult; data: unknown };
 
-function shown(read: ReadResult | undefined): Shown {
-  if (!read) return { status: "loading", lines: ["loading…"], asOf: null };
-  if (read.status === "stub" || read.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
-    return { status: "stub", lines: [STUB_READ], asOf: null };
+async function loadBrief(api: string, route: string, kind: BlockKind, signal?: AbortSignal): Promise<Loaded> {
+  let res: Response;
+  try {
+    res = await fetch(`${api}${route}`, { signal });
+  } catch {
+    if (signal?.aborted) return { result: { status: "error", lines: [], asOf: null }, data: null };
+    return { result: { status: "error", lines: [`${route}: the official API could not be reached.`], asOf: null }, data: null };
   }
-  if (read.lines.length === 0) return { status: read.status === "ok" ? "empty" : read.status, lines: [EMPTY_READ], asOf: null };
-  return { status: read.status, lines: read.lines.slice(0, 14), asOf: read.asOf };
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  const result = presentResponse(route, res.status, body, kind);
+  if (result.status === "error" || result.status === "stub") return { result, data: null };
+  const data = body && typeof body === "object" && "data" in body ? (body as { data: unknown }).data : null;
+  return { result, data };
+}
+
+function paint(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+  if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
+  if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
+    return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
+  }
+  if (read.result.lines.length === 0 && read.result.status !== "ok") {
+    return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
+  }
+  return { status: read.result.status, blocks: briefBlocks(id, read.data, read.result), asOf: read.result.asOf };
 }
 
 export function BriefPage() {
-  const [reads, setReads] = useState<Record<string, ReadResult>>({});
+  const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(PATH);
   const [focus, setFocus] = useFocusedPane(layout.length);
 
@@ -42,7 +66,7 @@ export function BriefPage() {
     for (const placement of placements) {
       const def = BLOCKS[placement.id];
       if (!def) continue;
-      void readBlock(API, def.route, def.kind, ac.signal).then((result) => {
+      void loadBrief(API, def.route, def.kind, ac.signal).then((result) => {
         if (cancel) return;
         setReads((prev) => ({ ...prev, [placement.id]: result }));
       });
@@ -58,7 +82,7 @@ export function BriefPage() {
       {layout.map((placement, index) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
-        const view = shown(reads[placement.id]);
+        const view = paint(placement.id, reads[placement.id]);
         return (
           <box
             key={placement.id}
@@ -73,7 +97,7 @@ export function BriefPage() {
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
-              lines={view.lines}
+              blocks={view.blocks}
               ink={tone(view.status)}
             />
           </box>
