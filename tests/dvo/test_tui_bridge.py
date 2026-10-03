@@ -8,7 +8,7 @@ import pytest
 from digivoice.history import append_entry, dict_entry
 from digivoice.opentui import opentui_argv
 from digivoice.paths import resolve_paths
-from digivoice.settings import load_settings, save_settings
+from digivoice.settings import VoiceSettings, load_settings, save_settings
 from digivoice.status import system_log_path
 from digivoice.tui_bridge import cancel_download, dispatch, run_download
 
@@ -210,6 +210,46 @@ def test_cancel_download_removes_only_the_partial(tmp_path: Path) -> None:
     assert (models / "ggml-base.en.bin").read_bytes() == b"base"
     assert not (models / "ggml-tiny.en.bin.partial").exists()
     assert not (models / "ggml-tiny.en.bin").exists()
+
+
+def test_speed_chooser_opens_on_the_saved_row(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    paths = resolve_paths("linux", tmp_path, env)
+    save_settings(paths, VoiceSettings(tts_speed=1.75))
+    opened = dispatch(
+        {"op": "rows", "path": "/settings/speech/speed"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    labels = [row["name"] for row in opened["rows"]]
+    assert labels == ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "1.75x", "2x"]
+    assert opened["selected"] == labels.index("1.75x")
+    assert opened["rows"][opened["selected"]]["path"] == "/settings/speech/speed/1.75x"
+    speech = dispatch(
+        {"op": "rows", "path": "/settings/speech"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )["rows"]
+    assert [row["name"] for row in speech] == ["model", "voice", "speed", "paste"]
+    applied = dispatch(
+        {"op": "apply", "path": "/settings/speech/speed", "index": labels.index("0.5x")},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert applied["saved"] is True
+    assert load_settings(paths).tts_speed == 0.5
+    again = dispatch(
+        {"op": "rows", "path": "/settings/speech/speed"},
+        platform="linux",
+        home=tmp_path,
+        env=env,
+    )
+    assert again["selected"] == 0
+    assert "words" not in [row["name"] for row in speech]
+    assert "spelling" not in [row["name"] for row in speech]
 
 
 def test_voice_missing_opens_a_download_and_a_file_selects(tmp_path: Path) -> None:

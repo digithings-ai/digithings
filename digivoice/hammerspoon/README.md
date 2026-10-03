@@ -10,9 +10,9 @@ These are the binds until a row in `settings.json` `hotkey_bindings` is saved. A
 
 | Bind | Action |
 | --- | --- |
-| **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. |
+| **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. If a readout is playing, this key stops that player first and starts dictation only after the speak task has exited. |
 | **Esc** (plain, no modifiers) | Cancel the active dictation: creates the cancel-file; digivoice stops the recorder / whisper / rewrite, deletes the wav, and pastes nothing and logs nothing. Only live while a take is recording, transcribing, or rewriting; Esc is swallowed only when it cancels, otherwise it reaches the focused app. Not used for speech. |
-| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the banner shows processing or error, not the selection). **No** clipboard or `kind:dict` history fallback. |
+| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`, unless a readout is already playing. A tap while it is playing writes `speak.stop`; the player process group is killed and another readout does not start. Soft-fails if nothing is selected (the banner shows processing or error, not the selection). **No** clipboard or `kind:dict` history fallback. |
 
 Do not invent other default binds in this sample. The terminal UI can store another key, including modifiers (`ctrl+shift+space`).
 
@@ -205,7 +205,9 @@ digivoice speak --selection
 1. Select the reply text in the terminal/TUI, then
 2. Double-tap **Left Option** (within ~350ms).
 
-If nothing is selected, digivoice exits 1 with a one-line hint and the banner
-shows it — it will **not** read the clipboard or last dictation from history.
-**Right Option** dict toggle is unchanged. Ctrl+Shift+Option is **not** bound.
+The same double-tap while that readout is playing stops the player and does not
+start another readout. **Right Option** during playback stops the player, then
+starts dictation. If nothing is selected, digivoice exits 1 with a one-line hint
+and the banner shows it — it will **not** read the clipboard or last dictation
+from history. Ctrl+Shift+Option is **not** bound.
 

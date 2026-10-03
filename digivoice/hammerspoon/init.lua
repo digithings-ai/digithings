@@ -98,6 +98,7 @@ local DIGIVOICE = digivoice_bin()
 local DATA_DIR = data_dir()
 local STOP_FILE = DATA_DIR .. "/dict.stop"
 local CANCEL_FILE = DATA_DIR .. "/dict.cancel"
+local SPEAK_STOP_FILE = DATA_DIR .. "/speak.stop"
 local STATUS_FILE = DATA_DIR .. "/status.json"
 local SETTINGS_FILE = DATA_DIR .. "/settings.json"
 local CAPTURE_FILE = DATA_DIR .. "/hotkey.capture"
@@ -737,7 +738,48 @@ local function stop_dict(s)
   render(s)
 end
 
+local function readout_running()
+  return session and session.kind == "speak" and session.task and session.task:isRunning()
+end
+
+--- Ask the speak process to SIGKILL the player group. Do not terminate the CLI:
+--- afplay runs in its own session, so killing digivoice would leave it playing.
+local function stop_readout(s)
+  if not write_file(SPEAK_STOP_FILE, "stop\n") then
+    print("digivoice: could not write " .. SPEAK_STOP_FILE .. "; readout continues")
+    return false
+  end
+  s.local_state = "cancelling"
+  return true
+end
+
+--- Dictation must not start until the speak task has exited, which is after the
+--- player process group is dead.
+local function when_readout_stops(s, then_fn)
+  local waiter
+  waiter = hs.timer.doEvery(0.05, function()
+    if s.task and s.task:isRunning() then
+      return
+    end
+    waiter:stop()
+    if session and session ~= s and session.kind == "dict" and not session.standby then
+      return
+    end
+    then_fn()
+  end)
+end
+
 function M.toggle_dict()
+  if readout_running() then
+    local s = session
+    if s.local_state == "cancelling" then
+      return
+    end
+    if stop_readout(s) then
+      when_readout_stops(s, start_dict)
+    end
+    return
+  end
   local s = session
   if s and s.kind == "dict" and s.task and s.task:isRunning() then
     -- Only the first press after "recording" stops; later presses are ignored.
@@ -760,6 +802,12 @@ function M.speak_selection()
   if session and session.kind == "dict" and not session.standby then
     return
   end
+  -- A second tap while audio is playing stops it and does not start another readout.
+  if readout_running() then
+    stop_readout(session)
+    return
+  end
+  os.remove(SPEAK_STOP_FILE)
   local argv = { "speak", "--selection" }
   for _, part in ipairs(focus_argv()) do
     argv[#argv + 1] = part

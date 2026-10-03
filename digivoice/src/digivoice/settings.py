@@ -17,6 +17,8 @@ from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 
 SETTINGS_FILE_NAME = "settings.json"
+# Playback speed. 1 is normal, 2 is twice as fast, 0.5 is half speed.
+SPEECH_SPEEDS: tuple[float, ...] = (0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
 
 RewritePreset = Literal["email", "sms", "professional", "coding", "blog", "none"]
 RewriteRunnerKind = Literal["auto", "ollama", "llama.cpp"]
@@ -191,11 +193,38 @@ DEFAULT_REWRITE_APP_ROUTES: dict[str, str] = {
 }
 
 
+def speech_speed_choice(value: float) -> str:
+    """Token for a playback speed: ``1``, ``0.5``, ``1.25``."""
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def speech_speed_label(value: float) -> str:
+    """Chooser label: ``1x``, ``0.5x``, ``2x``."""
+    return f"{speech_speed_choice(value)}x"
+
+
+def parse_speech_speed(value: object) -> float:
+    """Snap a settings value onto a playback speed. Anything else is refused."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError("tts_speed expects a playback speed")
+    try:
+        number = float(value)
+    except ValueError as exc:
+        raise ValueError("tts_speed expects a playback speed") from exc
+    for allowed in SPEECH_SPEEDS:
+        if abs(number - allowed) < 1e-6:
+            return allowed
+    choices = ", ".join(speech_speed_choice(item) for item in SPEECH_SPEEDS)
+    raise ValueError(f"tts_speed must be one of {choices}")
+
+
 class VoiceSettings(BaseModel):
     """User-editable digivoice config. Stored as settings.json under the data dir."""
 
     stt_model: str = DEFAULT_MODEL
     tts_voice: str | None = None
+    # Playback speed for a readout. Piper length scale is 1 / tts_speed.
+    tts_speed: float = 1.0
     rewrite_enabled: bool = False
     rewrite_preset: RewritePreset = "none"
     rewrite_model: str | None = None
@@ -222,6 +251,11 @@ class VoiceSettings(BaseModel):
     banner_pinned: bool = False
     # TUI remaps. Saved with the rest of settings.json. Blank keys are rejected.
     hotkey_bindings: HotkeyBindings = Field(default_factory=HotkeyBindings)
+
+    @field_validator("tts_speed", mode="before")
+    @classmethod
+    def _speech_speed_is_a_step(cls, value: object) -> float:
+        return parse_speech_speed(value)
 
     @field_validator("banner_density", mode="before")
     @classmethod
@@ -412,6 +446,7 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         "models / features",
         f"  stt_model:              {settings.stt_model}",
         f"  tts_voice:              {settings.tts_voice or '(auto / DIGIVOICE_PIPER_VOICE)'}",
+        f"  tts_speed:              {speech_speed_label(settings.tts_speed)}",
         f"  rewrite_enabled:        {settings.rewrite_enabled}",
         f"  rewrite_preset:        {settings.rewrite_preset}",
         f"  rewrite_model:         {settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE}",

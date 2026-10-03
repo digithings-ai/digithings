@@ -61,9 +61,9 @@ def test_every_row_explains_itself() -> None:
 
 def test_toggle_opens_a_chooser_and_saves_only_the_pick(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    browse_settings(paths, io.StringIO("1\n3\n\n\n\n"), io.StringIO())
+    browse_settings(paths, io.StringIO("1\n4\n\n\n\n"), io.StringIO())
     assert load_settings(paths).paste_on_stop is True
-    browse_settings(paths, io.StringIO("1\n3\n2\n\n\n"), io.StringIO())
+    browse_settings(paths, io.StringIO("1\n4\n2\n\n\n"), io.StringIO())
     assert load_settings(paths).paste_on_stop is False
 
 
@@ -105,9 +105,9 @@ def test_returning_lands_on_the_same_row(tmp_path: Path, monkeypatch: pytest.Mon
         return real(title, stdin=stdin, stdout=stdout, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr("digivoice.menu_tree.choose", wrapped)
-    browse_settings(_paths(tmp_path), io.StringIO("1\n3\n\n\n\n"), io.StringIO())
-    # settings, speech, paste chooser, speech again (paste is row 2), settings.
-    assert seen[3] == 2
+    browse_settings(_paths(tmp_path), io.StringIO("1\n4\n\n\n\n"), io.StringIO())
+    # settings, speech, paste chooser, speech again (paste is row 3), settings.
+    assert seen[3] == 3
 
 
 def test_rewrite_is_enabled_style_model_and_timeout() -> None:
@@ -143,9 +143,10 @@ def test_banner_pin_is_a_chooser() -> None:
     assert rows[1].value == "off"
 
 
-def test_speech_lists_model_voice_and_paste_only() -> None:
+def test_speech_lists_model_voice_speed_and_paste() -> None:
     rows = rows_at(VoiceSettings(), "/settings/speech")
-    assert [row.name for row in rows] == ["model", "voice", "paste"]
+    assert [row.name for row in rows] == ["model", "voice", "speed", "paste"]
+    assert rows[2].value == "1x"
     assert rows[0].kind == "pick"
     names = [row.name for row in _walk(VoiceSettings())]
     assert "words" not in names
@@ -340,6 +341,27 @@ def test_hotkey_capture_persists_and_blank_cancels(tmp_path: Path) -> None:
     again = load_settings(paths)
     assert again.hotkey_bindings.speak == "Double-tap Left Option"
     assert again.hotkey_bindings.dictation == "ctrl+space"
+
+
+def test_speed_chooser_persists_the_saved_row(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    speeds = rows_at(VoiceSettings(), "/settings/speech/speed")
+    assert [row.name for row in speeds] == [
+        "0.5x",
+        "0.75x",
+        "1x",
+        "1.25x",
+        "1.5x",
+        "1.75x",
+        "2x",
+    ]
+    assert [row.choice for row in speeds] == ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"]
+    assert all(row.as_block("/settings/speech/speed").path.endswith(row.name) for row in speeds)
+    browse_settings(paths, io.StringIO("1\n3\n7\n\n\n"), io.StringIO())
+    assert load_settings(paths).tts_speed == 2.0
+    saved = rows_at(load_settings(paths), "/settings/speech/speed")
+    chosen = next(index for index, row in enumerate(saved) if row.choice == "2")
+    assert chosen == 6
 
 
 def test_voice_pane_opens_selects_and_returns(tmp_path: Path) -> None:

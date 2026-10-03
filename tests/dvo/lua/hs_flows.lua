@@ -974,6 +974,35 @@ function scenarios.reload_reads_saved_hotkeys()
   eq(tasks[1].args[1], "dict", "still dictation")
 end
 
+function scenarios.speak_hotkey_stops_a_readout_without_starting_another()
+  double_tap_left_option()
+  eq(#tasks, 1, "first tap speaks")
+  double_tap_left_option()
+  eq(#tasks, 1, "second tap does not start another readout")
+  check(exists(DATA .. "/speak.stop"), "stop file asks the player to die")
+  eq(tasks[1].terminated, nil, "the CLI is not terminated")
+  eq(tasks[1].killed, false, "the CLI is not killed")
+  eq(press_esc(), false, "Esc still does not cancel speech")
+  check(not exists(DATA .. "/dict.cancel"), "Esc wrote no dict cancel-file")
+  tasks[1]:finish(3, "", "digivoice speak: stopped\n")
+  advance(0.2)
+  double_tap_left_option()
+  eq(#tasks, 2, "a tap with nothing playing speaks again")
+  check(not exists(DATA .. "/speak.stop"), "a new readout clears the stop file")
+end
+
+function scenarios.dict_hotkey_stops_the_readout_before_listening()
+  double_tap_left_option()
+  press_right_option()
+  eq(#tasks, 1, "dictation waits while the readout is still playing")
+  check(exists(DATA .. "/speak.stop"), "the readout is told to stop")
+  check(not exists(DATA .. "/dict.stop"), "listening has not started")
+  tasks[1]:finish(3, "", "digivoice speak: stopped\n")
+  advance(0.1)
+  eq(#tasks, 2, "dictation starts after the readout exits")
+  eq(tasks[2].args[1], "dict", "the next task is dictation")
+end
+
 local run = scenarios[scenario]
 if not run then
   fail("unknown scenario")

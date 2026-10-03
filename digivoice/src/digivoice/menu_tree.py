@@ -30,11 +30,14 @@ from digivoice.reload import run_reload
 from digivoice.settings import (
     LOCAL_REWRITE_MODEL_FILE,
     PRESET_LABELS,
+    SPEECH_SPEEDS,
     VoiceSettings,
     cycle_rewrite_timeout,
     format_rewrite_timeout,
     load_settings,
     save_settings,
+    speech_speed_choice,
+    speech_speed_label,
 )
 from digivoice.tui import MenuBlock, capture_binding, choose
 
@@ -132,7 +135,7 @@ def rows_at(
             TreeRow(
                 name="speech",
                 kind="dir",
-                explain="Dictation model, Piper voice, and what happens when a take stops.",
+                explain="Dictation model, Piper voice, reading speed, and what happens when a take stops.",
             ),
             TreeRow(
                 name="rewrite",
@@ -166,6 +169,12 @@ def rows_at(
                 explain="Piper voice. Enter opens the list.",
             ),
             TreeRow(
+                name="speed",
+                kind="pick",
+                value=speech_speed_label(settings.tts_speed),
+                explain="How fast a readout plays. Enter opens the list.",
+            ),
+            TreeRow(
                 name="paste",
                 kind="pick",
                 value=_on_off(settings.paste_on_stop),
@@ -176,6 +185,8 @@ def rows_at(
         return _model_choices("stt_model", installed or (), models_dir, on_disk)
     if here == "/settings/speech/voice":
         return _voice_choices(settings, models_dir, on_disk)
+    if here == "/settings/speech/speed":
+        return _speed_choices()
     if here == "/settings/speech/paste":
         return _bool_choices(
             "paste_on_stop",
@@ -515,6 +526,20 @@ def _voice_choices(
     return rows
 
 
+def _speed_choices() -> list[TreeRow]:
+    """Playback speeds. The row name is the label (``1x``); the choice is the number."""
+    return [
+        TreeRow(
+            name=speech_speed_label(speed),
+            kind="choice",
+            field="tts_speed",
+            choice=speech_speed_choice(speed),
+            explain="How fast a readout plays.",
+        )
+        for speed in SPEECH_SPEEDS
+    ]
+
+
 def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int:
     here = _norm(path)
     current = ""
@@ -522,6 +547,8 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
         current = settings.stt_model
     elif here == "/settings/speech/voice":
         current = settings.tts_voice or "auto"
+    elif here == "/settings/speech/speed":
+        current = speech_speed_choice(settings.tts_speed)
     elif here == "/settings/speech/paste":
         current = _on_off(settings.paste_on_stop)
     elif here == "/settings/rewrite/enabled":
