@@ -18,7 +18,13 @@ uv tool install --editable ./digivoice && export PATH="$HOME/.local/bin:$PATH" &
 
 `uv tool install --editable` puts `digivoice` on `PATH` from this checkout (`~/.local/bin`), which is required because the Hammerspoon adapter is copied from that tree. `digivoice install --auto` is the existing non-interactive install: bun, OpenTUI, whisper-cli, Piper, sox, `ggml-base.en.bin`, the Lessac voice, and the Hammerspoon adapter, then `hs.reload()` so the hotkeys are live. On an arm64 Mac it installs the native arm64 Piper build and a same-arch `libespeak-ng.1.dylib` beside that binary. A missing same-arch library is `brew install espeak-ng`. It does not download a rewrite model, and it does not call a cloud STT or TTS service.
 
-`digivoice install` on a terminal is still the wizard. **Auto** there is the same default set. **Pick** asks which local speech, voice, and rewrite models to download. Models already on disk stay. Choosing a model does not delete one you did not choose. A pipe or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` skips the wizard and installs the auto set, the same path as `--auto`. `digivoice update` refreshes that same default set and does not open the wizard.
+Once a GitHub release tag exists, the same auto install uses that tag. `<tag>` is the release tag, not a moving branch. The package name is `digivoice` (`digivoice/pyproject.toml`). The repository root is the workspace, so the git URL names `subdirectory=digivoice`. The `digivoice` binary lands in `~/.local/bin`:
+
+```bash
+uv tool install --from "git+https://github.com/digithings-ai/digithings.git@<tag>#subdirectory=digivoice" digivoice && digivoice install --auto
+```
+
+`digivoice install` on a terminal is still the wizard. `--auto` is the non-interactive path in both lines above. **Auto** there is the same default set. **Pick** asks which local speech, voice, and rewrite models to download. Models already on disk stay. Choosing a model does not delete one you did not choose. A pipe or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` skips the wizard and installs the auto set, the same path as `--auto`. `digivoice update` refreshes that same default set and does not open the wizard.
 
 ## Requirements
 

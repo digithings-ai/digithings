@@ -1327,24 +1327,31 @@ def test_x86_64_archive_on_arm64_keeps_the_vendor_piper(
     assert ["install", "espeak-ng"] not in _brew_verbs(runner)
 
 
-_ONE_LINE_INSTALL = (
+_CHECKOUT_INSTALL = (
     'uv tool install --editable ./digivoice && export PATH="$HOME/.local/bin:$PATH"'
     " && digivoice install --auto"
+)
+_RELEASE_INSTALL = (
+    "uv tool install --from "
+    '"git+https://github.com/digithings-ai/digithings.git@<tag>#subdirectory=digivoice"'
+    " digivoice && digivoice install --auto"
 )
 
 
 def test_documented_install_is_one_auto_command() -> None:
-    """The stranger install is one line: tool on PATH, then the existing auto path."""
+    """Checkout and release-tag installs are each one line, and both use --auto."""
     readme = Path(__file__).resolve().parents[2] / "digivoice" / "README.md"
     text = readme.read_text(encoding="utf-8")
     start = text.index("## Install")
     section = text[start : text.index("## Requirements")]
-    fences = [block.strip() for block in section.split("```bash\n")[1:]]
-    command = fences[0].split("```", 1)[0].strip()
-    assert "\n" not in command
-    assert command == _ONE_LINE_INSTALL
-    architecture = Path(__file__).resolve().parents[2] / "digivoice" / "ARCHITECTURE.md"
-    assert _ONE_LINE_INSTALL in architecture.read_text(encoding="utf-8")
+    commands = [block.split("```", 1)[0].strip() for block in section.split("```bash\n")[1:]]
+    assert commands == [_CHECKOUT_INSTALL, _RELEASE_INSTALL]
+    assert all("\n" not in command for command in commands)
+    architecture = (
+        Path(__file__).resolve().parents[2] / "digivoice" / "ARCHITECTURE.md"
+    ).read_text(encoding="utf-8")
+    assert _CHECKOUT_INSTALL in architecture
+    assert _RELEASE_INSTALL in architecture
 
 
 def test_linux_install_does_not_install_espeak(tmp_path: Path) -> None:
