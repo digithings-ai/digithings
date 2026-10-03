@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import shutil
 import struct
+import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,14 +37,15 @@ _CPU_X86_64 = 0x01000007
 PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
 PLAY_TIMEOUT = 300.0
-# The speak hotkey is Left Option. A keystroke sent while Option is still down
-# is not Copy. Release Option, then send a plain Command-C.
+# The speak hotkey is Left Option. Release it, pause so that release lands,
+# then send a plain Command-C. The clipboard read retries after that.
 COPY_SELECTION_SCRIPT = """tell application "System Events"
   key up option
+  delay 0.1
   keystroke "c" using command down
 end tell"""
 # Same argv rule as paste: bundle id and name follow `-e`, with no leading dash.
-# The keystroke is sent to the captured process, not to whoever is frontmost now.
+# Option is released, then Command-C is sent to the captured process.
 ACTIVATE_AND_COPY_SCRIPT = """on run argv
   set targetId to item 1 of argv
   set targetName to item 2 of argv
@@ -56,6 +58,7 @@ ACTIVATE_AND_COPY_SCRIPT = """on run argv
     set frontmost of proc to true
     delay 0.2
     key up option
+    delay 0.1
     tell proc
       keystroke "c" using command down
     end tell
@@ -68,6 +71,9 @@ _NOTHING_SELECTED = (
 # Planted before Command-C so a selection that matches the clipboard still changes it.
 # The marker itself is never spoken. Nothing selected restores the previous clipboard.
 _CLIPBOARD_MARKER = "digivoice-selection-"
+# Command-C returns before the app writes the pasteboard. Read again briefly.
+_COPY_READ_ATTEMPTS = 5
+_COPY_READ_PAUSE = 0.1
 # Accessibility query for the focused element's selected text. Static script, no
 # user text interpolated: every external binary goes through CommandRunner argv.
 AX_SELECTED_TEXT_ARGS: list[str] = [
@@ -501,6 +507,36 @@ def _restore_clipboard(pbcopy: str, runner: CommandRunner, previous: str | None)
     _write_clipboard(pbcopy, runner, previous)
 
 
+def _nothing_selected(focus: FocusTarget | None) -> str:
+    """Empty selection. Names the captured app when both reads missed."""
+    if focus is None or not focus.known:
+        return _NOTHING_SELECTED
+    name = focus.name.strip() or "unknown"
+    bundle = focus.bundle_id.strip() or "unknown"
+    return f"{_NOTHING_SELECTED}; app={name} bundle={bundle}"
+
+
+def _copied_after_marker(
+    platform: str,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    marker: str,
+) -> str | None:
+    """Text Command-C wrote, once the clipboard is no longer `marker`.
+
+    The keystroke returns before the captured app updates the pasteboard, so
+    the first read is often still the marker. Later reads are the selection.
+    The marker itself is never returned.
+    """
+    for attempt in range(_COPY_READ_ATTEMPTS):
+        copied = _clipboard_text(platform, probe, runner)
+        if copied and copied != marker:
+            return copied
+        if attempt + 1 < _COPY_READ_ATTEMPTS:
+            time.sleep(_COPY_READ_PAUSE)
+    return None
+
+
 def _plant_marker(
     pbcopy: str,
     platform: str,
@@ -531,15 +567,17 @@ def read_selection(
     1. the focused element's Accessibility selected text (no clipboard touched);
     2. Ghostty's selection pasteboard, when Ghostty is frontmost (Ghostty's
        copy-on-select writes the highlight there instead of the general clipboard);
-    3. Cmd+C via osascript. Option is released first: the speak hotkey is Left
-       Option, and a keystroke sent while it is down is not Copy. When a focus
-       target was captured, that keystroke is sent to that process. When pbcopy
-       is available, a private marker is written first. The copy counts only
-       when the clipboard then differs from that marker, including when the
-       selection is what was already copied. The marker is never spoken. If the
-       clipboard is still the marker, nothing was selected: the previous
-       clipboard is restored and is not spoken. Accessibility text is returned
-       before any of this and does not require the clipboard to change.
+    3. Cmd+C via osascript. Option is released, then a short pause, then a plain
+       Command-C to the captured process. When pbcopy is available, a private
+       marker is written first. The clipboard is read again until it differs
+       from that marker or the brief retries run out. The first read is often
+       still the marker, because the keystroke returns before the app copies.
+       A later read that differs is the selection, including when that text was
+       already on the clipboard. The marker is never spoken. If every read is
+       still the marker, nothing was selected: the previous clipboard is
+       restored and is not spoken, and the error names the captured app.
+       Accessibility text is returned before any of this and does not require
+       the clipboard to change.
 
     Without pbcopy, an unchanged clipboard (including leftover dictation paste)
     is empty selection — never a coding-reply readout.
@@ -586,18 +624,18 @@ def read_selection(
             reason = error_tail(typed.stderr) or f"exit {typed.code}"
             raise SpeakError(f"could not copy selection ({reason})")
         if marker is not None and pbcopy is not None:
-            copied = _clipboard_text(platform, probe, runner)
-            if copied and copied != marker:
+            copied = _copied_after_marker(platform, probe, runner, marker)
+            if copied:
                 return copied
             _restore_clipboard(pbcopy, runner, before)
-            raise SpeakError(_NOTHING_SELECTED)
+            raise SpeakError(_nothing_selected(focus))
         try:
             after = read_clipboard(platform, probe, runner)
         except SpeakError:
             after = None
         if after and after != before:
             return after
-        raise SpeakError(_NOTHING_SELECTED)
+        raise SpeakError(_nothing_selected(focus))
     for name, argv_extra in (
         ("xclip", ["-o", "-selection", "primary"]),
         ("xsel", ["--primary", "--output"]),
