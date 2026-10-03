@@ -80,7 +80,12 @@ local function advance(seconds)
     else
       nxt.live = false
     end
-    nxt.fn()
+    local ok, err = pcall(nxt.fn)
+    if not ok then
+      -- hs.timer stops a repeating callback after an error (continueOnError is false).
+      nxt.live = false
+      nxt.err = err
+    end
   end
   clock = target
 end
@@ -125,10 +130,28 @@ local function new_canvas(frame)
   function methods.delete(self)
     self.deleted = true
   end
+  -- Real hs.canvas[i] is a proxy. fillColor writes through. Any other attribute
+  -- (including `phase`) raises "unrecognized", which stops the frame timer.
+  local function element_view(el)
+    return setmetatable({}, {
+      __index = el,
+      __newindex = function(_, key, value)
+        if key == "fillColor" then
+          el[key] = value
+          return
+        end
+        error("attribute name " .. tostring(key) .. " unrecognized", 2)
+      end,
+    })
+  end
   setmetatable(c, {
     __index = function(t, k)
       if type(k) == "number" then
-        return rawget(t, "elements")[k]
+        local el = rawget(t, "elements")[k]
+        if el then
+          return element_view(el)
+        end
+        return nil
       end
       return methods[k]
     end,
@@ -580,8 +603,11 @@ function scenarios.animations_toggle()
   local c = live_canvas()
   eq(c[2].type, "rectangle", "grid cells are squares")
   local first = alphas(c)
-  advance(0.3)
-  check(alphas(live_canvas()) ~= first, "recording bars move")
+  advance(0.2)
+  local mid = alphas(live_canvas())
+  check(mid ~= first, "recording bars move")
+  advance(0.2)
+  check(alphas(live_canvas()) ~= mid, "recording bars keep moving")
   tasks[1]:finish(3, "", "")
   advance(0.2)
   write(DATA .. "/settings.json", '{"banner_animations": false}')
