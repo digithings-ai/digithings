@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import struct
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from digivoice.cli import Runtime, run
-from digivoice.errors import SpeakError
+from digivoice.errors import CancelledError, SpeakError
 from digivoice.focus import FocusTarget
 from digivoice.history import append_entry, dict_entry
 from digivoice.paths import resolve_paths
+from digivoice.runner import run_command
 from digivoice.settings import VoiceSettings, save_settings
 from digivoice.speak import (
+    format_length_scale,
+    length_scale_for_speed,
     piper_argv,
     play_argv,
     read_selection,
@@ -21,6 +28,7 @@ from digivoice.speak import (
     select_piper,
     select_player,
     speak,
+    speak_stop_path,
 )
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
@@ -917,3 +925,127 @@ def _sequenced_pbpaste(outputs: list[str]):
         return FakeReply(stdout=remaining.pop(0) if remaining else "")
 
     return _respond
+
+
+def test_piper_length_scale_matches_playback_speed() -> None:
+    assert length_scale_for_speed(1) == 1
+    assert length_scale_for_speed(2) == 0.5
+    assert length_scale_for_speed(0.5) == 2
+    normal = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"), length_scale=1)
+    assert "--length_scale" not in normal
+    fast = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"), length_scale=0.5)
+    assert fast[-2:] == ["--length_scale", format_length_scale(0.5)]
+    slow = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"), length_scale=2)
+    assert slow[-2:] == ["--length_scale", "2"]
+
+
+def test_speak_passes_length_scale_for_a_saved_speed(tmp_path: Path) -> None:
+    runtime = _speak_runtime(tmp_path, platform="linux")
+    paths = resolve_paths("linux", tmp_path, runtime.env)
+    save_settings(paths, VoiceSettings(tts_speed=2))
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="linux",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[-2:] == ["--length_scale", "0.5"]
+    save_settings(paths, VoiceSettings(tts_speed=0.5))
+    slow = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="linux",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert slow.argv_piper[-2:] == ["--length_scale", "2"]
+
+
+def test_cli_stop_file_skips_playback_and_history(tmp_path: Path) -> None:
+    stop = tmp_path / "speak.stop"
+
+    def piper_then_stop(call):
+        wav = next(Path(part) for part in call.argv if part.endswith(".wav"))
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.write_bytes(b"RIFF0000WAVEfmt ")
+        stop.write_text("stop\n", encoding="utf-8")
+        return FakeReply()
+
+    runner = FakeRunner({"piper": piper_then_stop, "aplay": FakeReply()})
+    runtime = _speak_runtime(tmp_path, runner=runner)
+    result = run(["speak", SPOKEN], runtime)
+    assert result.code == 3
+    assert "stopped" in result.stderr
+    assert "aplay" not in runner.programs
+    assert not (tmp_path / "history.jsonl").exists()
+    assert speak_stop_path(resolve_paths("linux", tmp_path, runtime.env)) == stop
+
+
+def test_stop_kills_the_player_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stop file SIGKILLs the player. A status flag alone would leave it running."""
+    monkeypatch.setattr("digivoice.speak.find_espeak_library", lambda *args, **kwargs: None)
+    monkeypatch.setattr("digivoice.speak.find_espeak_data", lambda *args, **kwargs: None)
+    piper = tmp_path / "piper"
+    player = tmp_path / "afplay"
+    pid_path = tmp_path / "player.pid"
+    piper.write_text(
+        "#!/bin/sh\n"
+        "out=\n"
+        "while [ $# -gt 0 ]; do\n"
+        '  if [ "$1" = "--output_file" ]; then out="$2"; shift 2; else shift; fi\n'
+        "done\n"
+        'mkdir -p "$(dirname "$out")"\n'
+        'printf RIFF > "$out"\n'
+        "cat >/dev/null\n",
+        encoding="utf-8",
+    )
+    player.write_text(
+        f"#!/bin/sh\necho $$ > {pid_path}\nexec sleep 5\n",
+        encoding="utf-8",
+    )
+    piper.chmod(0o755)
+    player.chmod(0o755)
+    runtime = _speak_runtime(
+        tmp_path,
+        platform="darwin",
+        commands={"piper": str(piper), "afplay": str(player)},
+    )
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    stop = speak_stop_path(paths)
+
+    def arm() -> None:
+        deadline = time.monotonic() + 4
+        while time.monotonic() < deadline:
+            if pid_path.is_file():
+                stop.write_text("stop\n", encoding="utf-8")
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=arm, daemon=True).start()
+    try:
+        with pytest.raises(CancelledError):
+            speak(
+                paths,
+                runtime.probe,
+                run_command,
+                SPOKEN,
+                platform="darwin",
+                home=tmp_path,
+                env=runtime.env,
+                cancelled=lambda: stop.is_file(),
+            )
+        assert pid_path.is_file()
+        pid = int(pid_path.read_text(encoding="utf-8"))
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        if pid_path.is_file():
+            try:
+                os.kill(int(pid_path.read_text(encoding="utf-8")), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
+                pass

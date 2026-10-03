@@ -40,7 +40,7 @@ from digivoice.settings import (
     settings_public_dict,
     visible_setting_keys,
 )
-from digivoice.speak import read_clipboard, read_selection, speak
+from digivoice.speak import read_clipboard, read_selection, speak, speak_stop_path
 from digivoice.status import (
     CANCELLED_EXIT,
     CancelToken,
@@ -669,6 +669,10 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         return CliResult(code=1, stdout="", stderr=f"digivoice speak: {exc}\n")
     reporter.update("speaking", text=text)
     runner = _runner(runtime)
+    # A stop left over from an earlier readout must not cancel this one.
+    # A stop written while this process is playing still kills the player.
+    stop = CancelToken(speak_stop_path(paths))
+    stop.clear()
     notes: list[str] = []
     try:
         spoken = speak(
@@ -679,7 +683,11 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
             platform=runtime.platform,
             home=runtime.home,
             env=runtime.env,
+            cancelled=stop.requested,
         )
+    except CancelledError:
+        reporter.update("cancelled")
+        return CliResult(code=CANCELLED_EXIT, stdout="", stderr="digivoice speak: stopped\n")
     except VoiceError as exc:
         reporter.update("error", detail=str(exc))
         return CliResult(code=1, stdout="", stderr=f"digivoice speak: {exc}\n")

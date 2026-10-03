@@ -13,17 +13,24 @@ import os
 import shutil
 import struct
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from digivoice.errors import SpeakError
+from digivoice.errors import CancelledError, SpeakError
 from digivoice.focus import FocusTarget
 from digivoice.models import SpeakResult, VoicePaths
 from digivoice.paths import piper_fallback, vendor_dir
 from digivoice.probe import CommandProbe
-from digivoice.runner import CommandRunner, error_tail
+from digivoice.runner import (
+    CANCELLED_CODE,
+    CommandResult,
+    CommandRunner,
+    error_tail,
+    run_command,
+    run_command_cancellable,
+)
 from digivoice.settings import load_settings
 
 _ESPEAK_LIBRARY = "libespeak-ng.1.dylib"
@@ -37,6 +44,7 @@ _CPU_X86_64 = 0x01000007
 PIPER_VOICE_ENV = "DIGIVOICE_PIPER_VOICE"
 PIPER_TIMEOUT = 120.0
 PLAY_TIMEOUT = 300.0
+SPEAK_STOP_FILE_NAME = "speak.stop"
 # The speak hotkey is Left Option. Release it, pause so that release lands,
 # then send a plain Command-C. The clipboard read retries after that.
 COPY_SELECTION_SCRIPT = """tell application "System Events"
@@ -343,16 +351,37 @@ def piper_library_env(platform: str, binary: str, library: Path | None) -> dict[
     return {"DYLD_LIBRARY_PATH": os.pathsep.join(dirs)}
 
 
+def speak_stop_path(paths: VoicePaths) -> Path:
+    """File the speak hotkey writes to stop the player. Playback polls this."""
+    return Path(paths.data_dir) / SPEAK_STOP_FILE_NAME
+
+
+def length_scale_for_speed(speed: float) -> float:
+    """Piper phoneme length. 1 is normal pace; smaller is faster, larger is slower.
+
+    Playback speed 2 (twice as fast) is length scale 0.5. Speed 0.5 is length scale 2.
+    """
+    return 1.0 / speed
+
+
+def format_length_scale(scale: float) -> str:
+    return f"{scale:.6g}"
+
+
 def piper_argv(
     binary: str,
     voice: Path,
     wav: Path,
     *,
     espeak_data: Path | None = None,
+    length_scale: float | None = None,
 ) -> list[str]:
     argv = [binary, "--model", str(voice), "--output_file", str(wav)]
     if espeak_data is not None:
         argv.extend(["--espeak_data", str(espeak_data)])
+    # Piper's default length scale is 1 (normal pace). Omit the flag at 1x.
+    if length_scale is not None and abs(length_scale - 1.0) > 1e-6:
+        argv.extend(["--length_scale", format_length_scale(length_scale)])
     return argv
 
 
@@ -653,6 +682,36 @@ def read_selection(
     raise SpeakError("no selection tool on PATH (need xclip or xsel)")
 
 
+def _run_stage(
+    runner: CommandRunner,
+    argv: list[str],
+    *,
+    stdin: str | None = None,
+    timeout: float | None = None,
+    env: Mapping[str, str] | None = None,
+    cancelled: Callable[[], bool] | None = None,
+) -> CommandResult:
+    """Run one speak stage. The real runner kills the child group when cancelled.
+
+    Injected test runners stay synchronous. A cancel code from either path is a stop.
+    """
+    if cancelled is not None and runner is run_command:
+        return run_command_cancellable(
+            argv,
+            stdin=stdin,
+            timeout=timeout,
+            env=env,
+            cancelled=cancelled,
+        )
+    return runner(argv, stdin=stdin, timeout=timeout, env=env)
+
+
+def _stopped(result: CommandResult, cancelled: Callable[[], bool] | None) -> bool:
+    if result.code == CANCELLED_CODE:
+        return True
+    return cancelled is not None and cancelled()
+
+
 def speak(
     paths: VoicePaths,
     probe: CommandProbe,
@@ -662,6 +721,7 @@ def speak(
     platform: str,
     home: Path,
     env: Mapping[str, str],
+    cancelled: Callable[[], bool] | None = None,
 ) -> SpeakResult:
     """Synthesize `text` with Piper and play it. Returns paths used."""
     cleaned = " ".join(text.split())
@@ -680,20 +740,32 @@ def speak(
     wav.parent.mkdir(parents=True, exist_ok=True)
     library = find_espeak_library(home, binary, platform=platform)
     data = find_espeak_data(home, binary, platform=platform)
-    piper_cmd = piper_argv(binary, voice, wav, espeak_data=data)
-    synthesized = runner(
+    speed = load_settings(paths).tts_speed
+    scale = length_scale_for_speed(speed)
+    piper_cmd = piper_argv(binary, voice, wav, espeak_data=data, length_scale=scale)
+    if cancelled is not None and cancelled():
+        raise CancelledError("stopped")
+    synthesized = _run_stage(
+        runner,
         piper_cmd,
         stdin=cleaned + "\n",
         timeout=PIPER_TIMEOUT,
         env=piper_library_env(platform, binary, library),
+        cancelled=cancelled,
     )
+    if _stopped(synthesized, cancelled):
+        raise CancelledError("stopped")
     if synthesized.code != 0:
         reason = error_tail(synthesized.stderr) or f"exit {synthesized.code}"
         raise SpeakError(f"piper failed ({reason})")
     if not wav.is_file():
         raise SpeakError(f"piper exited 0 but wrote no audio: {wav}")
+    if cancelled is not None and cancelled():
+        raise CancelledError("stopped")
     play_cmd = play_argv(player, player_bin, wav)
-    played = runner(play_cmd, timeout=PLAY_TIMEOUT)
+    played = _run_stage(runner, play_cmd, timeout=PLAY_TIMEOUT, cancelled=cancelled)
+    if _stopped(played, cancelled):
+        raise CancelledError("stopped")
     if played.code != 0:
         reason = error_tail(played.stderr) or f"exit {played.code}"
         raise SpeakError(f"{player} failed ({reason})")
