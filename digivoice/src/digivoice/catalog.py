@@ -1,0 +1,401 @@
+"""Suggested local models for STT, Piper voices, and post-process rewrite.
+
+Setup lists these, then download + wire into the models directory. Files stay
+on this machine — no cloud, URL, or user-hosted OpenAI-style endpoints.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal
+from urllib.request import urlopen
+
+from digivoice.models import VoicePaths
+from digivoice.paths import DEFAULT_MODEL
+from digivoice.settings import LOCAL_REWRITE_MODEL_FILE
+
+Kind = Literal["stt", "rewrite", "voice"]
+ProgressFn = Callable[[int, int | None], None]
+FetchFn = Callable[..., None]
+
+WHISPER_CPP_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogModel:
+    id: str
+    filename: str
+    kind: Kind
+    url: str
+    title: str
+    best_for: str
+    languages: str
+    size_hint: str
+    sidecar_url: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "kind": self.kind,
+            "url": self.url,
+            "title": self.title,
+            "best_for": self.best_for,
+            "languages": self.languages,
+            "size_hint": self.size_hint,
+        }
+
+
+def _whisper(
+    model_id: str, title: str, best_for: str, languages: str, size_hint: str
+) -> CatalogModel:
+    filename = f"{model_id}.bin"
+    return CatalogModel(
+        id=model_id,
+        filename=filename,
+        kind="stt",
+        url=f"{WHISPER_CPP_BASE}/{filename}",
+        title=title,
+        best_for=best_for,
+        languages=languages,
+        size_hint=size_hint,
+    )
+
+
+STT_CATALOG: tuple[CatalogModel, ...] = (
+    _whisper("ggml-tiny.en", "Tiny English", "lowest latency / low-power", "en", "~75 MB"),
+    _whisper(
+        "ggml-base.en",
+        "Base English (default)",
+        "everyday dictation (default)",
+        "en",
+        "~142 MB",
+    ),
+    _whisper(
+        "ggml-small.en",
+        "Small English",
+        "higher accuracy when you can wait",
+        "en",
+        "~466 MB",
+    ),
+    _whisper(
+        "ggml-tiny",
+        "Tiny multilingual",
+        "lowest latency, many languages",
+        "multilingual",
+        "~75 MB",
+    ),
+    _whisper(
+        "ggml-base",
+        "Base multilingual",
+        "everyday dictation, many languages",
+        "multilingual",
+        "~142 MB",
+    ),
+    _whisper(
+        "ggml-small",
+        "Small multilingual",
+        "higher accuracy, many languages",
+        "multilingual",
+        "~466 MB",
+    ),
+    _whisper(
+        "ggml-medium.en",
+        "Medium",
+        "clearer English when you can wait",
+        "en",
+        "~1.5 GB",
+    ),
+    _whisper(
+        "ggml-medium",
+        "Medium",
+        "clearer dictation, many languages",
+        "multilingual",
+        "~1.5 GB",
+    ),
+    _whisper(
+        "ggml-large-v3-turbo",
+        "Large v3 turbo",
+        "fast large model, many languages",
+        "multilingual",
+        "~1.6 GB",
+    ),
+    _whisper(
+        "ggml-large-v3",
+        "Large v3",
+        "highest accuracy, many languages",
+        "multilingual",
+        "~3.1 GB",
+    ),
+)
+
+REWRITE_CATALOG: tuple[CatalogModel, ...] = (
+    CatalogModel(
+        id="qwen2.5-0.5b-instruct-q4_k_m",
+        filename="qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/"
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+        ),
+        title="Qwen2.5 0.5B",
+        best_for="fastest on-device rewrite",
+        languages="multilingual",
+        size_hint="~400 MB",
+    ),
+    CatalogModel(
+        id="qwen2.5-1.5b-instruct-q4_k_m",
+        filename=LOCAL_REWRITE_MODEL_FILE,
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+        ),
+        title="Qwen2.5 1.5B (default)",
+        best_for="everyday rewrite (default)",
+        languages="multilingual",
+        size_hint="~1.1 GB",
+    ),
+    CatalogModel(
+        id="qwen2.5-3b-instruct-q4_k_m",
+        filename="qwen2.5-3b-instruct-q4_k_m.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/"
+            "qwen2.5-3b-instruct-q4_k_m.gguf"
+        ),
+        title="Qwen2.5 3B",
+        best_for="stronger rewrite when you can wait",
+        languages="multilingual",
+        size_hint="~2.0 GB",
+    ),
+    CatalogModel(
+        id="qwen2.5-7b-instruct-q4_k_m",
+        filename="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/"
+            "Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+        ),
+        title="Qwen2.5 7B",
+        best_for="larger rewrite when you have the disk",
+        languages="multilingual",
+        size_hint="~4.7 GB",
+    ),
+    CatalogModel(
+        id="llama-3.2-3b-instruct-q4_k_m",
+        filename="Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/"
+            "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+        ),
+        title="Llama 3.2 3B",
+        best_for="another small instruct model",
+        languages="multilingual",
+        size_hint="~2.0 GB",
+    ),
+    CatalogModel(
+        id="gemma-2-2b-it-q4_k_m",
+        filename="gemma-2-2b-it-Q4_K_M.gguf",
+        kind="rewrite",
+        url=(
+            "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/"
+            "gemma-2-2b-it-Q4_K_M.gguf"
+        ),
+        title="Gemma 2 2B",
+        best_for="small instruct model",
+        languages="multilingual",
+        size_hint="~1.7 GB",
+    ),
+)
+
+
+def stt_model_path(models_dir: str | Path, model_id: str | None) -> Path:
+    """File whisper-cli should open. An absolute local .bin is used as-is."""
+    raw = (model_id or "").strip()
+    if raw:
+        candidate = Path(raw).expanduser()
+        if (
+            candidate.is_absolute()
+            and ".." not in candidate.parts
+            and candidate.suffix.casefold() == ".bin"
+        ):
+            return candidate
+    return Path(models_dir) / stt_filename(model_id)
+
+
+def stt_catalog() -> tuple[CatalogModel, ...]:
+    return STT_CATALOG
+
+
+def rewrite_catalog() -> tuple[CatalogModel, ...]:
+    return REWRITE_CATALOG
+
+
+def find_stt(model_id: str) -> CatalogModel | None:
+    needle = model_id.strip()
+    for item in STT_CATALOG:
+        if item.id == needle or item.filename == needle:
+            return item
+    return None
+
+
+def find_rewrite(model_id: str) -> CatalogModel | None:
+    needle = model_id.strip()
+    for item in REWRITE_CATALOG:
+        if item.id == needle or item.filename == needle:
+            return item
+    return None
+
+
+def stt_filename(model_id: str | None) -> str:
+    raw = (model_id or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    found = find_stt(raw)
+    if found:
+        return found.filename
+    name = Path(raw).name
+    if name.endswith(".bin"):
+        return name
+    return f"{name}.bin"
+
+
+def stt_language(model_id: str | None) -> str:
+    raw = (model_id or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    found = find_stt(raw)
+    if found:
+        return "en" if found.languages == "en" else "auto"
+    name = Path(raw).name.casefold()
+    if name.endswith(".en.bin") or name.endswith(".en") or ".en." in name:
+        return "en"
+    return "auto"
+
+
+def catalog_public() -> dict[str, Any]:
+    return {
+        "stt": [item.as_dict() for item in STT_CATALOG],
+        "rewrite": [item.as_dict() for item in REWRITE_CATALOG],
+    }
+
+
+_PIPER_VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0"
+
+
+def _piper(locale_path: str, filename: str, title: str) -> CatalogModel:
+    url = f"{_PIPER_VOICE_BASE}/{locale_path}/{filename}"
+    return CatalogModel(
+        id=filename,
+        filename=filename,
+        kind="voice",
+        url=url,
+        title=title,
+        best_for="local Piper voice",
+        languages="en",
+        size_hint="~60 MB",
+        sidecar_url=f"{url}.json",
+    )
+
+
+VOICE_CATALOG: tuple[CatalogModel, ...] = (
+    _piper("en/en_US/lessac/medium", "en_US-lessac-medium.onnx", "Lessac medium"),
+    _piper("en/en_US/amy/medium", "en_US-amy-medium.onnx", "Amy medium"),
+    _piper("en/en_GB/alba/medium", "en_GB-alba-medium.onnx", "Alba medium"),
+)
+
+
+def find_voice(name: str) -> CatalogModel | None:
+    needle = Path(name.strip()).name
+    if not needle:
+        return None
+    for item in VOICE_CATALOG:
+        if item.id == needle or item.filename == needle:
+            return item
+    return None
+
+
+def download_partial(dest: Path) -> Path:
+    """Sibling written until the download finishes. Not a selected model file."""
+    return dest.with_name(dest.name + ".partial")
+
+
+def _fetch_url(url: str, dest: Path, progress: ProgressFn | None = None) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    with urlopen(url, timeout=600) as response:
+        total_raw = response.headers.get("Content-Length")
+        total = int(total_raw) if total_raw and total_raw.isdigit() else None
+        got = 0
+        with tmp.open("wb") as handle:
+            while True:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                got += len(chunk)
+                if progress is not None:
+                    progress(got, total)
+    tmp.replace(dest)
+
+
+def _invoke_fetch(fetch: FetchFn, url: str, dest: Path, progress: ProgressFn | None) -> None:
+    try:
+        fetch(url, dest, progress=progress)
+    except TypeError:
+        fetch(url, dest)
+
+
+def install_catalog_model(
+    paths: VoicePaths,
+    entry: CatalogModel,
+    *,
+    fetch: FetchFn | None = None,
+    progress: ProgressFn | None = None,
+) -> str:
+    """Place `entry.filename` under models_dir. Idempotent. Local file only.
+
+    Bytes land in a ``.partial`` sibling and replace the real file only after
+    every piece is on disk. A failure deletes those partials and leaves every
+    other model file alone.
+    """
+    dest = Path(paths.models_dir) / Path(entry.filename).name
+    if dest.is_file():
+        return str(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    worker = fetch or _fetch_url
+    pieces: list[tuple[str, Path]] = [(entry.url, dest)]
+    if entry.sidecar_url:
+        pieces.append((entry.sidecar_url, dest.with_name(dest.name + ".json")))
+    partials = [download_partial(target) for _url, target in pieces]
+    try:
+        for (url, _target), partial in zip(pieces, partials, strict=True):
+            _invoke_fetch(worker, url, partial, progress)
+            if not partial.is_file():
+                raise OSError(f"download did not write {dest}")
+        for (_url, target), partial in zip(pieces, partials, strict=True):
+            partial.replace(target)
+    except Exception:
+        for partial in partials:
+            partial.unlink(missing_ok=True)
+        raise
+    return str(dest)
+
+
+__all__ = [
+    "REWRITE_CATALOG",
+    "STT_CATALOG",
+    "VOICE_CATALOG",
+    "CatalogModel",
+    "catalog_public",
+    "download_partial",
+    "find_rewrite",
+    "find_stt",
+    "find_voice",
+    "install_catalog_model",
+    "rewrite_catalog",
+    "stt_catalog",
+    "stt_filename",
+    "stt_language",
+    "stt_model_path",
+]

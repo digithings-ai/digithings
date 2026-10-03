@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.models import DoctorReport
+from digivoice.paths import resolve_paths
+from digivoice.rewrite import LOCAL_REWRITE_MODEL_FILE
 
 from tests.dvo.fakes import FakeProbe
 
@@ -38,6 +40,24 @@ def _ready() -> FakeProbe:
 
 def _report(probe: FakeProbe) -> DoctorReport:
     return render_doctor(doctor_checks("darwin", HOME, {}, probe))
+
+
+def test_whisper_cpp_without_whisper_cli_is_ready() -> None:
+    report = _report(
+        FakeProbe(
+            commands={
+                "whisper-cpp": "/opt/homebrew/bin/whisper-cpp",
+                "piper": "/opt/homebrew/bin/piper",
+                "sox": "/opt/homebrew/bin/sox",
+            },
+            directories={MODELS},
+            files={MODEL},
+        )
+    )
+    detail = _check(report, "whisper-cli")
+    assert detail.startswith("ok ")
+    assert "/opt/homebrew/bin/whisper-cpp" in detail
+    assert report.ok is True
 
 
 def test_ready_when_default_model_and_tools_exist() -> None:
@@ -97,3 +117,51 @@ def test_rewrite_and_interrupt_are_informational_when_disabled() -> None:
     assert "interrupt" in report.text
     assert "paste + start a new take" in _check(report, "interrupt")
     assert "digivoice cancel" in _check(report, "interrupt")
+
+
+def test_doctor_documents_missing_local_rewrite_model(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    probe = FakeProbe(
+        commands={
+            "whisper-cli": "/usr/bin/whisper-cli",
+            "piper": "/usr/bin/piper",
+            "sox": "/usr/bin/sox",
+        },
+        directories={paths.models_dir},
+        files={f"{paths.models_dir}/ggml-base.en.bin"},
+    )
+    report = render_doctor(
+        doctor_checks("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)}, probe)
+    )
+    detail = next(c for c in report.checks if c.id == "rewrite").detail
+    assert LOCAL_REWRITE_MODEL_FILE in detail
+    assert "missing" in detail.casefold() or "not installed" in detail.casefold()
+    assert "openrouter" not in detail.casefold()
+
+
+def test_detection_check_is_info_and_never_blocks_ok(tmp_path: Path) -> None:
+    from digivoice.settings import VoiceSettings, save_settings
+
+    report = _report(_ready())
+    assert report.ok is True
+    found = next(item for item in report.checks if item.id == "detection")
+    assert found.status == "info"
+    assert "word_detection=false" in found.detail
+
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    env = {"DIGIVOICE_DATA_DIR": str(tmp_path)}
+    save_settings(paths, VoiceSettings(word_detection=True))
+    probe = FakeProbe(
+        commands={
+            "whisper-cli": "/usr/bin/whisper-cli",
+            "piper": "/usr/bin/piper",
+            "sox": "/usr/bin/sox",
+        },
+        directories={paths.models_dir},
+        files={f"{paths.models_dir}/ggml-base.en.bin"},
+    )
+    enabled = render_doctor(doctor_checks("linux", tmp_path, env, probe))
+    assert enabled.ok is True
+    detail = next(item for item in enabled.checks if item.id == "detection").detail
+    assert "word_detection=true" in detail
+    assert "whisper" in detail
