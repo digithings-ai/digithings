@@ -151,12 +151,22 @@ local function hash01(n)
   return x / 2147483648
 end
 
+--- Turn a clock into 0..1. Wall-clock seconds are ~1e9; sin of that raw angle
+--- sticks on some libm builds, which froze the recording meter.
+local function cycle(t, period, phase)
+  return ((t / period) + (phase or 0)) % 1
+end
+
+local function wave(turns)
+  return 0.5 + 0.5 * math.sin(turns * (2 * math.pi))
+end
+
 local function meter_level(col, t)
   local period_a = 0.42 + hash01(col * 17 + 3) * 0.36
   local period_b = 0.28 + hash01(col * 29 + 11) * 0.22
-  local wobble = 0.5 + 0.5 * math.sin((t / period_a + hash01(col * 13 + 5)) * (2 * math.pi))
-  local flutter = 0.5 + 0.5 * math.sin((t / period_b + hash01(col * 19 + 7)) * (2 * math.pi))
-  local flow = 0.5 + 0.5 * math.sin((t / 1.35 - col * 0.22) * (2 * math.pi))
+  local wobble = wave(cycle(t, period_a, hash01(col * 13 + 5)))
+  local flutter = wave(cycle(t, period_b, hash01(col * 19 + 7)))
+  local flow = wave(cycle(t, 1.35, -col * 0.22))
   return clamp01(0.08 + 0.92 * (0.46 * wobble + 0.24 * flutter + 0.30 * flow))
 end
 
@@ -176,7 +186,8 @@ local function sweep_glyph(mark, i, col, t, period)
   if not mark[i] then
     return DIM
   end
-  local pos = (t / period) % 1 * (GRID - 1)
+  -- Stay on the mark (columns 1..3) so the band never parks off to the side.
+  local pos = 1 + cycle(t, period, 0) * 2
   local d = math.abs(col - pos)
   local peak = math.exp(-(d * d) / 0.42)
   return 0.32 + 0.68 * peak
@@ -188,7 +199,7 @@ local function chase(i, t, period)
     return DIM
   end
   local n = #RING
-  local head = (t / period) % 1 * n
+  local head = cycle(t, period, 0) * n
   local dist = math.abs(idx - head)
   if dist > n / 2 then
     dist = n - dist
@@ -202,7 +213,7 @@ local function ripple_glyph(mark, i, row, col, t, period)
     return DIM
   end
   local dist = math.max(math.abs(row - 2), math.abs(col - 2))
-  local x = (t / period - dist * 0.18) % 1
+  local x = cycle(t, period, -dist * 0.18)
   local f = 0.5 * (1 + math.cos(2 * math.pi * x))
   return 0.30 + 0.70 * f
 end
@@ -211,18 +222,18 @@ local function warn_motion(i, row, _, t)
   if not BANG[i] then
     return DIM
   end
-  local cycle = (t / 1.15) % 1
+  local turn = cycle(t, 1.15, 0)
   if row == 4 then
     local f = 0
-    if cycle >= 0.58 then
-      local u = (cycle - 0.58) / 0.42
+    if turn >= 0.58 then
+      local u = (turn - 0.58) / 0.42
       f = math.sin(math.pi * math.min(1, u))
     end
     return 0.25 + 0.75 * f
   end
   local head = 2
-  if cycle < 0.58 then
-    head = (cycle / 0.58) * 2
+  if turn < 0.58 then
+    head = (turn / 0.58) * 2
   end
   local d = math.abs(row - head)
   local peak = math.max(0, 1 - d / 1.05)
@@ -234,7 +245,7 @@ local function idle_motion(i, row, col, t)
     return DIM
   end
   local dist = math.abs(row - 2) + math.abs(col - 2)
-  local x = (t / 2.6 - dist * 0.07) % 1
+  local x = cycle(t, 2.6, -dist * 0.07)
   local f = 0.5 * (1 + math.cos(2 * math.pi * x))
   return 0.20 + 0.42 * f
 end
