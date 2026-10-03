@@ -280,10 +280,23 @@ def test_query_maps_matches_to_results() -> None:
 
     assert [r.chunk.id for r in results] == ["c1", "c2"]
     assert results[0].score == 0.91
-    assert results[0].rank == 0
+    assert results[0].rank == 1
+    assert results[1].rank == 2
     assert results[0].chunk.content == "first chunk"
     assert results[0].chunk.doc_id == "d1"
     assert results[0].chunk.metadata["segment_label"] == "page:12"
+
+
+@pytest.mark.unit
+def test_query_rejects_positive_skip_before_http() -> None:
+    """Vectorize has no offset. skip>0 used to return the first page with no error."""
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(RuntimeError, match="skip"):
+        backend.query(DsQuery(text="hello", top_k=5, skip=1, embedding=[0.2] * 384))
+    assert post.calls == []
 
 
 @pytest.mark.unit

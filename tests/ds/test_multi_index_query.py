@@ -61,6 +61,56 @@ def test_single_index_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     assert [r.chunk.id for r in resp.results] == ["1"]
 
 
+def test_fan_out_applies_skip_after_rrf_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """skip slices the fused list. Per-leg skip would drop b1 and return a2.
+
+    a1 and b1 share rank 1, so the merged order is a1, b1, a2, a3. skip=1, top_k=1
+    is b1. Asking each leg for skip=1, top_k=1 returns a2 from index a and nothing
+    from index b.
+    """
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [
+        _chunk("a1", "alpha one"),
+        _chunk("a2", "alpha two"),
+        _chunk("a3", "alpha three"),
+    ]
+    _stub_index["b"] = [_chunk("b1", "alpha bee")]
+    resp = query_index(Query(text="alpha", top_k=1, skip=1), index_name="a,b")
+    assert [r.chunk.id for r in resp.results] == ["b1"]
+
+
+def test_fan_out_total_count_is_deduped_when_every_leg_is_exhaustive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+    monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)
+    from digisearch.search._stub import _stub_index, query_index
+
+    _stub_index.clear()
+    _stub_index["a"] = [
+        _chunk("a1", "alpha one"),
+        _chunk("a2", "alpha two"),
+        _chunk("a3", "alpha three"),
+    ]
+    _stub_index["b"] = [_chunk("b1", "alpha bee")]
+    resp = query_index(
+        Query(text="alpha", top_k=10, include_total_count=True),
+        index_name="a,b",
+    )
+    assert resp.total_count == 4
+
+    short = query_index(
+        Query(text="alpha", top_k=1, skip=1, include_total_count=True),
+        index_name="a,b",
+    )
+    # Window is 2, but index a has 3 hits, so the fused total is unknown.
+    assert short.total_count is None
+
+
 def test_fan_out_respects_top_k(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
     monkeypatch.delenv("DIGISEARCH_RERANK_ENABLED", raising=False)

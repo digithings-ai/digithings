@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
@@ -237,6 +238,17 @@ def _rrf_merge_results(
     return merged[:top_k] if top_k else merged
 
 
+def _response_is_exhaustive(response: SearchResponse, window: int) -> bool:
+    """True when *response* holds every hit that leg can return for this window.
+
+    A reported ``total_count`` wins. Otherwise a short page means the leg had
+    nothing left. A full page with no total is not proof the leg is finished.
+    """
+    if response.total_count is not None:
+        return len(response.results) >= response.total_count
+    return len(response.results) < window
+
+
 def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     """Route one index name through registered backends (no rerank; caller applies it)."""
     start = time.perf_counter()
@@ -293,7 +305,12 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return SearchResponse(
+            results=[],
+            facets=None,
+            backend=BACKEND_STUB,
+            total_count=0 if query.include_total_count else None,
+        )
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -307,8 +324,7 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     if isinstance(fd.get("structured"), list):
         structured = fd["structured"]
     text_lower = query.text.lower()
-    out: list[Result] = []
-    rank = 0
+    matches: list[Chunk] = []
     for c in chunks:
         if text_lower not in c.content.lower():
             continue
@@ -316,11 +332,13 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
             continue
         if not chunk_matches_workspace(c.metadata, query.workspace_id):
             continue
-        rank += 1
-        out.append(Result(chunk=c, score=0.9, rank=rank))
-        if len(out) >= query.top_k:
-            break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
+        matches.append(c)
+    start = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    page = matches[start : start + page_size]
+    out = [Result(chunk=c, score=0.9, rank=index) for index, c in enumerate(page, start=1)]
+    total = len(matches) if query.include_total_count else None
+    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB, total_count=total)
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
@@ -344,9 +362,38 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    responses = [_query_single_index(query, name) for name in names]
-    merged = _rrf_merge_results([response.results for response in responses], top_k=query.top_k)
-    return _maybe_rerank(query, SearchResponse(results=merged, facets=None, backend="multi"))
+    # Skip applies to the fused list. Each leg is read from the start for
+    # skip+top_k hits; slicing per leg would drop a document that only ranks
+    # first in one index.
+    skip = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    window = skip + page_size
+    leg = replace(query, skip=0, top_k=window or query.top_k)
+    responses = [_query_single_index(leg, name) for name in names]
+    # Do not cap the merge here. A complete leg list can be longer than the
+    # page window, and the deduped length is the total only in that case.
+    merged = _rrf_merge_results(
+        [response.results for response in responses],
+        top_k=None,
+    )
+    page = [
+        Result(
+            chunk=result.chunk,
+            score=result.score,
+            source_doc=result.source_doc,
+            rank=index,
+        )
+        for index, result in enumerate(merged[skip : skip + page_size], start=1)
+    ]
+    total_count = None
+    if query.include_total_count and all(
+        _response_is_exhaustive(response, window) for response in responses
+    ):
+        total_count = len(merged)
+    return _maybe_rerank(
+        query,
+        SearchResponse(results=page, facets=None, backend="multi", total_count=total_count),
+    )
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
