@@ -78,8 +78,11 @@ digivoice speak --selection
 digivoice history --last 20
 digivoice history --grep invoice
 digivoice history --copy-last
+digivoice history --json
 digivoice settings
+digivoice settings get rewrite_enabled
 digivoice settings set rewrite_enabled true
+digivoice logs
 digivoice setup --print
 digivoice setup --json
 digivoice doctor
@@ -92,12 +95,28 @@ Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digi
 | `digivoice doctor` | Checks `whisper-cli`, `piper`, `sox`, `ffmpeg`, `ggml-base.en.bin`, settings validity, hotkey docs, and the Hammerspoon adapter. Prints the history path, the recordings directory, and the macOS and Linux defaults. Exit 0 when whisper-cli, piper, sox or ffmpeg, and the default model file are all present. |
 | `digivoice dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste]` | Records the microphone to `recordings/*.wav`, runs `whisper-cli`, prints the transcript on stdout, appends `{ts, kind:"dict", text, wav}` to the history file, and pastes into the focused app on macOS. `--toggle` stops early when the stop-file is touched or SIGINT/SIGTERM arrives. Exit 0 once a transcript exists. |
 | `digivoice speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | Piper synthesis + local playback. Appends `{kind:"speak", text}`. Exit 0 on success. |
-| `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |
+| `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `digivoice history --json` prints entries and does not open the TUI. |
+| `digivoice settings get KEY` / `digivoice settings set KEY VALUE` | Read or write one key in `settings.json`. Neither opens the TUI. An unknown key exits non-zero and does not write the file. |
+| `digivoice logs` | Prints `system.log`. Never opens the TUI. A missing or empty log prints `No log yet` and exits 0. `digivoice /system/logs` on a TTY still opens the logs screen. |
 | `digivoice settings` / `setup` | `settings` shows or changes `settings.json` (models, rewrite on/off + preset + model + runner + auto-route, paste_on_stop, word_detection / spelling_detection stubs default off, live_banner, banner_position, banner_animations). `--json` for agents. `setup` is the interactive wizard (Models / Post-process / Features / Hotkeys / Hardware stub / Review & save / Doctor / Quit, arrow keys + Enter on a TTY); `setup --print` (or `DIGIVOICE_SETUP_NONINTERACTIVE=1`) prints current values + the menu tree with no prompts, exit 0. |
 | `digivoice install` | On a terminal, the install wizard. Auto installs the default toolchain, `ggml-base.en.bin`, and the Lessac voice. Pick downloads the local speech, voice, and rewrite models you choose and does not delete models already on disk. `--auto`, a pipe, or `DIGIVOICE_INSTALL_NONINTERACTIVE=1` installs the auto set with no prompts. |
 | `digivoice update` | Refreshes bun, OpenTUI, whisper-cli, Piper, sox, and the default local models when they are missing or older than the pin. On an arm64 Mac it replaces an x86_64 vendor Piper with the native arm64 build, copies a same-arch `libespeak-ng.1.dylib` beside that binary, and installs espeak-ng when that library is missing. It upgrades the formula when this command installed it. Then it copies the Hammerspoon adapter into `~/.hammerspoon/digivoice` and runs `hs.reload()`. No wizard. Exit 1 when a step fails. |
 | `digivoice cancel` | Creates the cancel-file: a running `dict` discards its take (no paste, no history entry, wav deleted). Esc in the Hammerspoon sample does the same. |
 | `digivoice status` | Prints the `status.json` snapshot the banner reads. |
+
+### Agents
+
+These commands never open the TUI, including when stdin is a TTY:
+
+```bash
+digivoice install --auto
+digivoice settings get KEY
+digivoice settings set KEY VALUE
+digivoice logs
+digivoice history --json
+```
+
+`digivoice install --auto` installs the auto toolchain with no wizard. An unknown settings key exits non-zero and does not write `settings.json`. `digivoice logs` prints `No log yet` when the log is missing or empty, and exits 0.
 
 ### dict
 
