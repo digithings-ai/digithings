@@ -52,6 +52,8 @@ function M.parse_settings(raw)
     banner_position = M.DEFAULTS.banner_position,
     banner_animations = M.DEFAULTS.banner_animations,
     banner_pinned = M.DEFAULTS.banner_pinned,
+    theme_mode = "system",
+    theme_palette = "",
   }
   if type(raw) ~= "table" then
     return out
@@ -67,6 +69,12 @@ function M.parse_settings(raw)
   end
   if type(raw.banner_pinned) == "boolean" then
     out.banner_pinned = raw.banner_pinned
+  end
+  if raw.theme_mode == "dark" or raw.theme_mode == "light" or raw.theme_mode == "system" then
+    out.theme_mode = raw.theme_mode
+  end
+  if type(raw.theme_palette) == "string" then
+    out.theme_palette = raw.theme_palette
   end
   return out
 end
@@ -602,11 +610,198 @@ M.CHROME = {
   },
 }
 
-function M.theme_colors(theme)
-  if theme == "light" then
-    return M.CHROME.light
+local function json_decode(str)
+  local i, n = 1, #str
+  local function peek()
+    return str:sub(i, i)
   end
-  return M.CHROME.dark
+  local function skip()
+    while i <= n do
+      local c = peek()
+      if c == " " or c == "\n" or c == "\r" or c == "\t" then
+        i = i + 1
+      else
+        break
+      end
+    end
+  end
+  local parse_value
+  local function parse_string()
+    i = i + 1
+    local out = {}
+    while i <= n do
+      local c = peek()
+      if c == '"' then
+        i = i + 1
+        return table.concat(out)
+      end
+      if c == "\\" then
+        local e = str:sub(i + 1, i + 1)
+        local map = { n = "\n", t = "\t", r = "\r", ['"'] = '"', ["\\"] = "\\", ["/"] = "/" }
+        if e == "u" then
+          out[#out + 1] = utf8.char(tonumber(str:sub(i + 2, i + 5), 16) or 0)
+          i = i + 6
+        else
+          out[#out + 1] = map[e] or e
+          i = i + 2
+        end
+      else
+        out[#out + 1] = c
+        i = i + 1
+      end
+    end
+    return nil
+  end
+  local function parse_array()
+    i = i + 1
+    local arr = {}
+    skip()
+    if peek() == "]" then
+      i = i + 1
+      return arr
+    end
+    while i <= n do
+      arr[#arr + 1] = parse_value()
+      skip()
+      if peek() == "]" then
+        i = i + 1
+        return arr
+      end
+      if peek() ~= "," then
+        return nil
+      end
+      i = i + 1
+      skip()
+    end
+    return nil
+  end
+  local function parse_object()
+    i = i + 1
+    local obj = {}
+    skip()
+    if peek() == "}" then
+      i = i + 1
+      return obj
+    end
+    while i <= n do
+      skip()
+      if peek() ~= '"' then
+        return nil
+      end
+      local key = parse_string()
+      skip()
+      if peek() ~= ":" then
+        return nil
+      end
+      i = i + 1
+      obj[key] = parse_value()
+      skip()
+      if peek() == "}" then
+        i = i + 1
+        return obj
+      end
+      if peek() ~= "," then
+        return nil
+      end
+      i = i + 1
+    end
+    return nil
+  end
+  function parse_value()
+    skip()
+    local c = peek()
+    if c == '"' then
+      return parse_string()
+    end
+    if c == "{" then
+      return parse_object()
+    end
+    if c == "[" then
+      return parse_array()
+    end
+    if str:sub(i, i + 3) == "true" then
+      i = i + 4
+      return true
+    end
+    if str:sub(i, i + 4) == "false" then
+      i = i + 5
+      return false
+    end
+    if str:sub(i, i + 3) == "null" then
+      i = i + 4
+      return nil
+    end
+    local start = i
+    while i <= n and peek():match("[%d%+%-%.eE]") do
+      i = i + 1
+    end
+    if i > start then
+      return tonumber(str:sub(start, i - 1))
+    end
+    return nil
+  end
+  local ok, value = pcall(parse_value)
+  if ok and type(value) == "table" then
+    return value
+  end
+  return nil
+end
+
+local function load_theme_registry()
+  local script_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)") or "./"
+  local path = script_dir .. "theme_registry.json"
+  local f = io.open(path, "r")
+  if not f then
+    return nil
+  end
+  local content = f:read("*a")
+  f:close()
+  local data = json_decode(content)
+  if type(data) == "table" and type(data.palettes) == "table" then
+    return data.palettes
+  end
+  return nil
+end
+
+local THEME_REGISTRY = load_theme_registry()
+
+local function hex_to_rgb(hex)
+  hex = (hex or ""):gsub("#", "")
+  if #hex == 3 then
+    hex = hex:sub(1, 1) .. hex:sub(1, 1) .. hex:sub(2, 2) .. hex:sub(2, 2) .. hex:sub(3, 3) .. hex:sub(3, 3)
+  end
+  if #hex ~= 6 then
+    return nil
+  end
+  return {
+    red = tonumber(hex:sub(1, 2), 16) / 255,
+    green = tonumber(hex:sub(3, 4), 16) / 255,
+    blue = tonumber(hex:sub(5, 6), 16) / 255,
+    alpha = 1,
+  }
+end
+
+function M.theme_colors(theme, palette_id)
+  if palette_id == nil or palette_id == "" then
+    if theme == "light" then
+      return M.CHROME.light
+    end
+    return M.CHROME.dark
+  end
+  local palette = THEME_REGISTRY and THEME_REGISTRY[palette_id]
+  local variant = palette and (palette[theme] or palette.dark)
+  if not variant then
+    if theme == "light" then
+      return M.CHROME.light
+    end
+    return M.CHROME.dark
+  end
+  return {
+    bg = hex_to_rgb(variant.neutral) or M.CHROME.dark.bg,
+    text = hex_to_rgb(variant.ink) or M.CHROME.dark.text,
+    border = hex_to_rgb(variant.accent) or M.CHROME.dark.border,
+    accent = hex_to_rgb(variant.primary) or M.CHROME.dark.text,
+  }
 end
 
 --- Square frame for status-grid cell `i` (0-based, row-major): DigiChat-style

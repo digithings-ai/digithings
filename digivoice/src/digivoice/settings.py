@@ -249,6 +249,9 @@ class VoiceSettings(BaseModel):
     banner_animations: bool = True
     # Pin keeps the status banner on screen. Off shows it only during a take.
     banner_pinned: bool = False
+    # Appearance. system follows DIGIVOICE_THEME, then the OS. Empty palette keeps legacy chrome.
+    theme_mode: Literal["dark", "light", "system"] = "system"
+    theme_palette: str = ""
     # TUI remaps. Saved with the rest of settings.json. Blank keys are rejected.
     hotkey_bindings: HotkeyBindings = Field(default_factory=HotkeyBindings)
 
@@ -374,6 +377,14 @@ def parse_setting_value(key: str, raw: str) -> Any:
                 "(no URLs, cloud hosts, or ollama tags)"
             )
         return text
+    if key == "theme_palette":
+        from digivoice.themes import PALETTE_IDS
+
+        if text.lower() in {"", "none", "legacy"}:
+            return ""
+        if text not in PALETTE_IDS:
+            raise ValueError(f"theme_palette must be one of the built-in palettes, got {raw!r}")
+        return text
     bool_keys = {name for name, field in fields.items() if field.annotation is bool}
     if key in bool_keys:
         lower = text.casefold()
@@ -461,6 +472,8 @@ def format_settings_text(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  banner_position:        {settings.banner_position}",
         f"  banner_animations:      {settings.banner_animations}",
         f"  banner_pinned:          {settings.banner_pinned}",
+        f"  theme_mode:             {settings.theme_mode}",
+        f"  theme_palette:          {settings.theme_palette or '(legacy)'}",
         "",
         "paths",
         f"  data_dir:       {paths.data_dir}",

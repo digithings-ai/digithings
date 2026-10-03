@@ -218,7 +218,7 @@ local function build_canvas(s, view, box)
   if not screen then
     return
   end
-  local chrome = core.theme_colors(s.theme)
+  local chrome = core.theme_colors(s.theme, s.theme_palette)
   local canvas_h = box.h
   local origin = s.origin or core.resolve_position(s.config.banner_position, screen:frame(), box, core.MARGIN)
   s.origin = { x = origin.x, y = origin.y }
@@ -512,12 +512,17 @@ local function begin_session(kind)
     end_session(session)
   end
   local config = core.parse_settings(read_json(SETTINGS_FILE))
+  local theme = detect_theme()
+  if config.theme_mode == "light" or config.theme_mode == "dark" then
+    theme = config.theme_mode
+  end
   local s = {
     kind = kind,
     start_ms = now_ms(),
     local_state = "loading",
     config = config,
-    theme = detect_theme(),
+    theme = theme,
+    theme_palette = config.theme_palette,
     task = nil,
     final = nil,
     signature = nil,
@@ -543,8 +548,16 @@ local function start_frames(s)
   end)
   theme_timer = hs.timer.doEvery(2.0, function()
     if session == s then
+      local config = core.parse_settings(read_json(SETTINGS_FILE))
       local theme = detect_theme()
-      if theme ~= s.theme then
+      if config.theme_mode == "light" or config.theme_mode == "dark" then
+        theme = config.theme_mode
+      end
+      local palette = config.theme_palette or ""
+      if theme ~= s.theme or palette ~= s.theme_palette then
+        s.theme = theme
+        s.theme_palette = palette
+        s.config = config
         s.signature = nil
         render(s)
       end

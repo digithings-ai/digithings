@@ -29,10 +29,20 @@ from digivoice.reload import run_reload, stop_home_control
 from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import default_settings, load_settings, save_settings
 from digivoice.status import read_system_log, system_log_path
+from digivoice.themes import system_is_dark, theme_payload
 
 _PAGE = 8
 _DOCTOR_SKIP = frozenset({"tcc", "interrupt", "paths", "detection", "history"})
 _DOCTOR_WIDTH = 60
+
+
+def _theme(paths: Any, env: dict[str, str]) -> dict[str, Any]:
+    settings = load_settings(paths)
+    return theme_payload(
+        settings.theme_palette,
+        settings.theme_mode,
+        system_dark=system_is_dark(env),
+    )
 
 
 def _row(row: TreeRow, path: str) -> dict[str, Any]:
@@ -525,6 +535,8 @@ def main(argv: list[str] | None = None) -> int:
         run_download(paths, req, emit=emit, home=home, env=env)
         return 0
     result = dispatch(req, platform=sys.platform, home=home, env=env)
+    if isinstance(result, dict):
+        result = {**result, "theme": _theme(resolve_paths(sys.platform, home, env), env)}
     sys.stdout.write(json.dumps(result))
     return 0
 

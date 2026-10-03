@@ -44,7 +44,7 @@ def _walk(settings: VoiceSettings, path: str = "/settings") -> list:
 
 def test_settings_root_is_four_folders() -> None:
     rows = rows_at(VoiceSettings(), "/settings")
-    assert [row.name for row in rows] == ["speech", "rewrite", "banner", "hotkeys"]
+    assert [row.name for row in rows] == ["speech", "rewrite", "banner", "hotkeys", "theme"]
     assert all(row.kind == "dir" for row in rows)
 
 
