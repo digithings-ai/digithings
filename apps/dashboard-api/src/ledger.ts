@@ -221,6 +221,11 @@ export function parseLedgerQuery(
   const asOf = input.asOf && input.asOf !== '' ? input.asOf : null;
 
   const tickerRaw = (input.ticker ?? '').trim().toUpperCase();
+  // The value is interpolated into a PostgREST filter. Reject anything that
+  // is not a ticker so `&`, `,`, and `)` cannot add parameters.
+  if (tickerRaw.length > 0 && !/^[A-Z0-9.=-]{1,32}$/.test(tickerRaw)) {
+    return bad('malformed ticker', { ticker: input.ticker });
+  }
   const ticker = tickerRaw.length > 0 ? tickerRaw : null;
 
   let limit = LEDGER_DEFAULT_LIMIT;
@@ -449,6 +454,8 @@ function ledgerEventPath(offset: number, query: LedgerQuery): string {
     `price,thesis_id,reason&workspace_id=eq.${HOUSE_WORKSPACE_ID}` +
     `&order=date.desc&limit=${LEDGER_FETCH_PAGE}&offset=${offset}`;
   if (query.asOf != null) path += `&date=lte.${query.asOf}`;
+  // Horizontal eq keeps any quotes in the value. `ticker=eq.BRK.B` matches;
+  // `ticker=eq."BRK.B"` looks up the quoted string.
   if (query.ticker != null) path += `&ticker=eq.${query.ticker}`;
   return path;
 }

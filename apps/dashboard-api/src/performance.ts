@@ -253,6 +253,7 @@ export interface PerformanceDeps {
     asOf: string | null,
     benchmark: string,
     window: PerformanceWindow,
+    retrievalPin?: string | null,
   ) => Promise<PerformanceBook | null>;
 }
 
@@ -276,6 +277,7 @@ export function registerPerformanceRoutes(
       parsed.query.asOf,
       parsed.query.benchmark,
       parsed.query.window,
+      pin,
     );
     if (!book) {
       return Response.json(errorBody('not_found', 'no committed book', pin), { status: 404 });

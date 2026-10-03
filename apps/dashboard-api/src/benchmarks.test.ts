@@ -156,4 +156,20 @@ describe('registerBenchmarksRoutes', () => {
     expect(body.data.overlap_days).toBe(6);
     expect(body.as_of).toBe('2026-08-28');
   });
+
+  it('forwards retrieval_pin into the book read', async () => {
+    const handlers = new Map<string, (req: Request) => Promise<Response>>();
+    let seen: string | null | undefined;
+    registerBenchmarksRoutes((path, handler) => handlers.set(path, handler), {
+      loadBenchmarksBook: async (_from, _to, pin) => {
+        seen = pin;
+        return null;
+      },
+    });
+    const res = await handlers.get('/benchmarks')!(
+      new Request('https://api.test/benchmarks?retrieval_pin=pin%201'),
+    );
+    expect(res.status).toBe(404);
+    expect(seen).toBe('pin 1');
+  });
 });

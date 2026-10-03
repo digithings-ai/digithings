@@ -10,6 +10,8 @@ import polars as pl
 
 from digigraph.tools.analytics.load import load_dataset
 
+_FILTER_OPS = frozenset({"eq", "ne", "gt", "ge", "lt", "le"})
+
 
 def filter_dataset(
     dataset_path: str | Path,
@@ -24,6 +26,12 @@ def filter_dataset(
         field = f.get("field")
         op = (f.get("op") or "eq").strip().lower()
         val = f.get("value")
+        if op not in _FILTER_OPS:
+            return {
+                "error": f"unknown filter op {op!r}",
+                "dataset_ref": None,
+                "rows": 0,
+            }
         if field not in df.columns:
             continue
         if op == "eq":
