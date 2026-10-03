@@ -137,9 +137,9 @@ For a week-long unattended run:
 One public domain serves marketing + chat shell:
 
 - **Marketing shell:** `digithings.ai` — Cloudflare Pages (`apps/digithings-web/`).
-- **Visitor chat:** `digithings.ai/chat` — Pages iframe → digichat Node `/embed`
-  (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. Tunnel hostname `digichat.digithings.ai`).
-  Backend: digichat → digigraph → digillm → LiteLLM (+ digivault tools).
+- **Visitor chat:** `digithings.ai/chat` — Pages iframe → same-origin digichat `/embed`
+  (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, e.g. `https://digithings.ai`).
+  Backend: Worker → Container (`apps/digichat-cloudflare/`) → digigraph → digillm → LiteLLM (+ digivault tools).
 - digithings has **no Azure**. DataTap digichat ACA is client-only.
 - Operator runbook: [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
 - Product model: [`docs/architecture/digichat-modular-frontend.md`](architecture/digichat-modular-frontend.md) §5.
@@ -149,13 +149,17 @@ Do **not** use `chat.digithings.ai` as the marketing host. Customer digichat `/e
 (DataTap etc.) is separate from digithings’ own marketing chat. Path routing:
 [ADR-0018](adr/0018-digichat-path-routing.md).
 
-The digithings Containers scaffold (`apps/digichat-cloudflare/` +
-`Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it had no deploy path in
-the repo (Containers need Workers Paid, digithings is on Free; routes stayed commented out
-and no workflow built the image) and its `wrangler` devDependency was pulling five `workerd`
-platform binaries into the root lockfile. Recover it from git history if digithings ever
-adopts Workers Paid. digichat Node for digithings runs on operator Compose + Cloudflare Tunnel
-instead.
+The digithings Containers scaffold is **in the tree**: `apps/digichat-cloudflare/`
+(Worker fronting one Cloudflare Container) and repo-root
+`Dockerfile.digichat-cloudflare` (digichat Node image that Worker builds). Zone
+routes in `apps/digichat-cloudflare/wrangler.toml` are **live**, not commented
+out: `digithings.ai/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
+`/api/plan-proof*`, `/api/health`, and `/_dtchat*`. Preferred production host is
+Cloudflare Containers (Workers Paid) — see
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md).
+Operator Compose + Cloudflare Tunnel remains the fallback when Paid is
+unavailable, and the local-dev path
+([`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md)).
 
 ### digithings.ai — static landing page
 
@@ -170,13 +174,14 @@ To update the landing page: edit `apps/digithings-web/`, run the build script lo
 ### digithings.ai/chat — digichat marketing pane
 
 > digithings has **no Azure**. Marketing chat is digithings’ **own** Profile A install:
-> Pages shell + iframe → digichat Node (Tunnel) → digigraph → digillm → LiteLLM (+ digivault).
+> Pages shell + iframe → same-origin `/embed` (Worker → digichat Container) → digigraph → digillm → LiteLLM (+ digivault).
 > DataTap Azure digichat is client-only.
 
 - **Shell:** `digithings.ai/chat` on Cloudflare Pages embeds digichat `/embed` via
-  `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (e.g. `https://digichat.digithings.ai`).
+  `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (e.g. `https://digithings.ai`).
 - **Backend:** digichat BFF → digigraph (not a Pages Function OpenRouter loop).
-- **Operator host:** Compose + Cloudflare Tunnel — see
+- **Production host:** Cloudflare Containers — `apps/digichat-cloudflare/` +
+  `Dockerfile.digichat-cloudflare`. Fallback: Compose + Cloudflare Tunnel — see
   [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
 
 ### Verifying the routing
@@ -184,7 +189,9 @@ To update the landing page: edit `apps/digithings-web/`, run the build script lo
 ```bash
 dig +short A digithings.ai
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
-# Tunnel origin health (operator hostname; adjust if different):
+# Worker → Container health (same origin as Pages; live wrangler route):
+curl -sf https://digithings.ai/api/health | jq .
+# Fallback Tunnel origin (operator hostname; adjust if different):
 curl -sf https://digichat.digithings.ai/api/health | jq .
 ```
 
@@ -227,7 +234,9 @@ curl -sSfI https://digithings.ai/ -o /dev/null
 # 2. Marketing chat shell under /chat (Pages iframe host — 200 expected)
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 
-# 3. digichat Node via Tunnel (adjust hostname if your Tunnel differs)
+# 3. digichat Worker → Container (same-origin live route)
+curl -sf https://digithings.ai/api/health | jq .
+# Fallback Tunnel origin (adjust hostname if your Tunnel differs):
 curl -sf https://digichat.digithings.ai/api/health | jq .
 ```
 
@@ -236,7 +245,7 @@ Browser steps (no one-liner equivalent):
 - **Shell smoke:** open `https://digithings.ai/chat` and confirm the iframe loads digichat `/embed` without console CSP / frame errors.
 - **Vault-grounded round-trip:** ask a digivault-grounded question (e.g. what digigraph orchestrates) and confirm tool activity + answer via digigraph — see the operator checklist in [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
 
-If any check fails, roll back per the deployment target's standard procedure (static landing: revert the offending commit and let Cloudflare Pages redeploy from the connected branch; digichat: redeploy the previous green digichat image / Compose stack on the Tunnel host).
+If any check fails, roll back per the deployment target's standard procedure (static landing: revert the offending commit and let Cloudflare Pages redeploy from the connected branch; digichat: redeploy the previous green Container image via `apps/digichat-cloudflare`, or the previous Compose stack on the Tunnel fallback host).
 
 ## Legacy URL Redirects
 
