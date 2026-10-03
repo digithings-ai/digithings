@@ -24,6 +24,14 @@ describe("mounted desk pages", () => {
     expect(ledger).toContain("Cash ledger");
     expect(ledger).toContain('data-route="/ledger/cash"');
 
+    const tearsheet = renderToStaticMarkup(<DeskPage path="/portfolio/tearsheet" />);
+    expect(tearsheet).toContain("Performance · tearsheet");
+    expect(tearsheet).toContain('data-route="/performance"');
+    expect(tearsheet).toContain("NAV · by date");
+    expect(tearsheet).toContain('data-route="/nav-series"');
+    expect(tearsheet).toContain("Benchmarks · aligned");
+    expect(tearsheet).toContain('data-route="/benchmarks"');
+
     const pipeline = renderToStaticMarkup(<DeskPage path="/pipeline" />);
     expect(pipeline).toContain('data-block="pl-narrative"');
     expect(pipeline).toContain("Run narrative");
