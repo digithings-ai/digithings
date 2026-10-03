@@ -19,6 +19,7 @@ from digivoice.models import Transcript
 from digivoice.paths import DEFAULT_MODEL, VoicePaths, local_bin
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
+from digivoice.settings import load_settings
 
 WHISPER_BINARIES = ("whisper-cli", "whisper-cpp")
 LANGUAGE = "en"
@@ -95,6 +96,15 @@ def model_file(
     return found if found is not None else chosen
 
 
+def _model_choice(paths: VoicePaths, model_id: str | None) -> str:
+    """Explicit id, otherwise the saved ``stt_model``, otherwise the default."""
+    raw = (model_id or "").strip()
+    if raw:
+        return raw
+    saved = load_settings(paths).stt_model.strip()
+    return saved or DEFAULT_MODEL
+
+
 def transcribe(
     paths: VoicePaths,
     probe: CommandProbe,
@@ -111,7 +121,7 @@ def transcribe(
             "whisper-cli not on PATH (whisper.cpp binary name is whisper-cli, "
             "whisper-cpp also accepted)"
         )
-    chosen = model_id or DEFAULT_MODEL
+    chosen = _model_choice(paths, model_id)
     model = model_file(paths, chosen, home=home, env=env)
     if not model.is_file():
         raise TranscribeError(f"model {chosen} is not installed locally: {model}")
