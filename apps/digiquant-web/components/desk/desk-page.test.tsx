@@ -60,6 +60,14 @@ describe("mounted desk pages", () => {
     expect(strategies).toContain("My deployments");
     expect(strategies).toContain('data-route="/strategies/deployments"');
 
+    const deploy = renderToStaticMarkup(<DeskPage path="/strategies/deploy" />);
+    expect(deploy).toContain("Deployment targets");
+    expect(deploy).toContain('data-route="/strategies/targets"');
+    expect(deploy).toContain("Deploy · plan");
+    expect(deploy).toContain('data-route="/strategies/deploy-flow"');
+    expect(deploy).toContain("Target · paper");
+    expect(deploy).toContain('data-route="/strategies/default/deploy-draft"');
+
     const detail = renderToStaticMarkup(<DeskPage path="/strategies/detail" />);
     expect(detail).toContain("Overview");
     expect(detail).toContain('data-route="/strategies/default"');
