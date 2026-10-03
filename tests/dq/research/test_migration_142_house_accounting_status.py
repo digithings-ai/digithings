@@ -63,7 +63,10 @@ def test_migration_142_is_only_142() -> None:
 def test_views_stay_definer_and_house_scoped(sql: str, view: str) -> None:
     body = _view_body(sql, view)
     assert re.search(r"security_invoker\s*=\s*false", body, re.I)
-    assert f"ALTER VIEW public.{view} SET (security_invoker = false);" in sql
+    assert re.search(r"security_barrier\s*=\s*true", body, re.I)
+    assert (
+        f"ALTER VIEW public.{view} SET (security_invoker = false, security_barrier = true);"
+    ) in sql
     assert HOUSE_ID in body
     assert re.search(r"p\.workspace_id\s*=", body, re.I)
     assert re.search(

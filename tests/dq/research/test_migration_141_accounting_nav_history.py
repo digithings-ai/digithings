@@ -60,7 +60,13 @@ def test_history_view_is_security_invoker(sql: str) -> None:
 def test_finalized_nav_stays_definer_but_house_scoped(sql: str) -> None:
     body = _view_body(sql, "public_finalized_nav")
     assert re.search(r"security_invoker\s*=\s*false", body, re.I)
-    assert "ALTER VIEW public.public_finalized_nav SET (security_invoker = false);" in sql
+    assert re.search(r"security_barrier\s*=\s*true", body, re.I)
+    assert (
+        "ALTER VIEW public.public_finalized_nav "
+        "SET (security_invoker = false, security_barrier = true);"
+    ) in sql
+    history = _view_body(sql, "public_accounting_nav_history")
+    assert "security_barrier" not in history.lower()
     assert HOUSE_ID in body
     assert re.search(r"p\.workspace_id\s*=", body, re.I)
     assert re.search(r"status\s*=\s*'final'", body, re.I)

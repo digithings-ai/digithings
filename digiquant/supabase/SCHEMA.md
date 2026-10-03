@@ -118,9 +118,11 @@ the SELECT list is the privacy allowlist; no new tables. After migration **139**
 `public_daily_realized_attribution` are security-definer views. Anon has no SELECT
 on the accounting bases, so the view owner reads `accounting_periods`,
 `accounting_contributions`, and `accounting_holdings`. Migration **141** keeps
-`public_finalized_nav` security definer and limits it to the house workspace.
-Migration **142** does the same for `public_accounting_period_status` and
-`public_daily_realized_attribution`. `public_accounting_nav_history` is not a
+`public_finalized_nav` security definer, sets `security_barrier=true`, and limits
+it to the house workspace. Migration **142** does the same for
+`public_accounting_period_status` and `public_daily_realized_attribution`. The
+barrier runs the house predicate before a caller `WHERE` function, so that
+function does not receive a row the predicate drops. `public_accounting_nav_history` is not a
 definer projection: migration **141** replaces it with `security_invoker=true`,
 finalized house tips preferred, and the legacy `nav_history` scan limited to the
 house workspace before the lag window. Prefer these views for digiquant.io /
@@ -132,10 +134,10 @@ accounting rows.
 
 | View | Purpose |
 |------|---------|
-| `public_accounting_period_status` | House-workspace tip periods (final **and** incomplete/estimated/failed) with `status` + `quality_reasons` — incomplete stays explicit. Security definer (142). |
-| `public_finalized_nav` | House-workspace final tip closing equity only (`source`/`contract` = `finalized_accounting`). Security definer (141). |
+| `public_accounting_period_status` | House-workspace tip periods (final **and** incomplete/estimated/failed) with `status` + `quality_reasons` — incomplete stays explicit. Security definer, `security_barrier=true` (142). |
+| `public_finalized_nav` | House-workspace final tip closing equity only (`source`/`contract` = `finalized_accounting`). Security definer, `security_barrier=true` (141). |
 | `public_accounting_nav_history` | Finalized preferred; dates without a final tip use labeled legacy (`source=legacy_nav_history`, `contract=legacy_estimate`). Same date never mixes sources. `security_invoker=true` after 141; the legacy scan is the house workspace only. |
-| `public_daily_realized_attribution` | House-workspace final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). Security definer (142). |
+| `public_daily_realized_attribution` | House-workspace final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). Security definer, `security_barrier=true` (142). |
 
 **Tip selection / children (#2780):** public tip and final views require the same
 child-completeness gate as Python `select_final_period` /
@@ -1095,8 +1097,8 @@ in the same change.
   `security_invoker=true` after migration **141** (house `nav_history` scan; it reads the
   definer `public_finalized_nav`). `public_finalized_nav` (141),
   `public_accounting_period_status`, and `public_daily_realized_attribution` (142) stay
-  SECURITY DEFINER and are limited to the house workspace, because the accounting bases
-  still lack anon SELECT. `run_*` curated views stay intentional SECURITY DEFINER
+  SECURITY DEFINER with `security_barrier=true` and are limited to the house workspace,
+  because the accounting bases still lack anon SELECT. `run_*` curated views stay intentional SECURITY DEFINER
   (`security_invoker = false`). Supabase's advisor still flags `security_definer_view` on
   the definer views — expected and accepted
   (see root [`SECURITY.md`](../../SECURITY.md) "Accepted advisors (core)"). Migrations
@@ -1125,10 +1127,11 @@ authenticated workspace policies. Migration **117** addresses that pile only:
   - **Invoker public tape DONE:** `public_portfolio_positions`, `public_nav_history`
     (`security_invoker=true`; base tables already grant anon SELECT; column lists stay the
     allowlist).
-  - **Remaining accepted DEFINER** (column allowlist; house workspace on the accounting
-    views; do **not** flip without new anon policies on the base tables):
-    `public_finalized_nav` (141), `public_daily_realized_attribution` (142),
-    `public_accounting_period_status` (142), `run_health`, `run_event_trace`.
+  - **Remaining accepted DEFINER** (column allowlist; house workspace and
+    `security_barrier=true` on the accounting views; do **not** flip without new anon
+    policies on the base tables): `public_finalized_nav` (141),
+    `public_daily_realized_attribution` (142), `public_accounting_period_status` (142),
+    `run_health`, `run_event_trace`.
   - **Invoker after 141:** `public_accounting_nav_history` (`security_invoker=true`;
     legacy `nav_history` is the house workspace only). Not a definer projection.
   - **`atlas_run_health` DROPPED** by 139 (rename-compat alias of `run_health`; live health

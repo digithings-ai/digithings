@@ -9,8 +9,9 @@
 -- Same close as 141's public_finalized_nav: read the post-134 tables
 -- (accounting_periods, accounting_contributions, accounting_holdings).
 -- Migration 135 dropped the olympus_* compatibility views, so naming those
--- views fails and rolls the file back. Keep security_invoker=false. Restrict
--- the published period to the house workspace.
+-- views fails and rolls the file back. Keep security_invoker=false and set
+-- security_barrier=true, so a caller WHERE function does not observe a row the
+-- house predicate drops. Restrict the published period to the house workspace.
 --
 -- House id matches 096/110: 6b753576-ced9-5319-9bfa-c5d0aacd9319.
 -- Column lists and the credible-tip / children-complete predicates match 123.
@@ -18,7 +19,7 @@
 -- (141 already installs that view as security_invoker=true).
 
 CREATE OR REPLACE VIEW public.public_accounting_period_status
-WITH (security_invoker = false) AS
+WITH (security_invoker = false, security_barrier = true) AS
 SELECT
     p.period_date AS date,
     p.status,
@@ -76,17 +77,18 @@ WHERE p.workspace_id = '6b753576-ced9-5319-9bfa-c5d0aacd9319'::uuid
         )
   );
 
-ALTER VIEW public.public_accounting_period_status SET (security_invoker = false);
+ALTER VIEW public.public_accounting_period_status SET (security_invoker = false, security_barrier = true);
 
 COMMENT ON VIEW public.public_accounting_period_status IS
   'House-workspace tip-period status (#2599; day_return #2779; children-complete '
-  '#2780; credible-tip gate #3767). SECURITY DEFINER so anon can read the '
-  'projection without a grant on accounting_periods. workspace_id is the house '
+  '#2780; credible-tip gate #3767). SECURITY DEFINER, security_barrier=true, so '
+  'anon can read the projection without a grant on accounting_periods and a '
+  'caller WHERE function cannot observe a dropped row. workspace_id is the house '
   'book only. A superseder voids a tip unless it is an incomplete/failed '
   'zero-equity tombstone. Incomplete child sets are withheld.';
 
 CREATE OR REPLACE VIEW public.public_daily_realized_attribution
-WITH (security_invoker = false) AS
+WITH (security_invoker = false, security_barrier = true) AS
 SELECT
     c.period_date AS date,
     c.symbol AS ticker,
@@ -145,12 +147,12 @@ WHERE p.workspace_id = '6b753576-ced9-5319-9bfa-c5d0aacd9319'::uuid
         )
   );
 
-ALTER VIEW public.public_daily_realized_attribution SET (security_invoker = false);
+ALTER VIEW public.public_daily_realized_attribution SET (security_invoker = false, security_barrier = true);
 
 COMMENT ON VIEW public.public_daily_realized_attribution IS
   'House-workspace realized per-ticker daily contribution (#2599 / #2780) from '
   'finalized accounting tips with complete children under the credible-tip gate '
-  '(#3767). SECURITY DEFINER. Reads accounting_contributions and '
+  '(#3767). SECURITY DEFINER, security_barrier=true. Reads accounting_contributions and '
   'accounting_periods; the published period is the house workspace only. Does '
   'not include current_book_lookback / position_attribution.';
 

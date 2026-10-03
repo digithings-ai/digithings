@@ -9,7 +9,10 @@
 -- public_finalized_nav stays security definer: anon has no SELECT on the
 -- accounting bases (072/134), and the public chart still needs those columns.
 -- The definer projection is now house-workspace only, so the bypass cannot
--- publish another book.
+-- publish another book. security_barrier=true forces that predicate to run
+-- before a caller's WHERE function, so the function cannot observe a private
+-- row the predicate drops. The history view stays security_invoker and does
+-- not set security_barrier.
 --
 -- public_accounting_nav_history becomes security_invoker=true (same posture as
 -- the 139 public tape) and the legacy nav_history scan is house-scoped inside
@@ -29,7 +32,7 @@
 -- follows the renamed tables by OID; this file must name them too.
 
 CREATE OR REPLACE VIEW public.public_finalized_nav
-WITH (security_invoker = false) AS
+WITH (security_invoker = false, security_barrier = true) AS
 SELECT
     p.period_date AS date,
     p.closing_equity AS nav,
@@ -90,13 +93,14 @@ WHERE p.workspace_id = '6b753576-ced9-5319-9bfa-c5d0aacd9319'::uuid
         )
   );
 
-ALTER VIEW public.public_finalized_nav SET (security_invoker = false);
+ALTER VIEW public.public_finalized_nav SET (security_invoker = false, security_barrier = true);
 
 COMMENT ON VIEW public.public_finalized_nav IS
   'Authoritative public NAV from house-workspace finalized accounting tips with '
   'complete children (#2599 / #2780 / #3767). SECURITY DEFINER so anon can read '
-  'the projection without a grant on the accounting bases. workspace_id is the '
-  'house book only — a private period must not appear on the public tape. '
+  'the projection without a grant on the accounting bases. security_barrier=true. '
+  'workspace_id is the house book only — a private period must not appear on the '
+  'public tape, and a caller WHERE function must not observe one either. '
   'day_return_pct is equity delta (#2779).';
 
 CREATE OR REPLACE VIEW public.public_accounting_nav_history
