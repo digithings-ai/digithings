@@ -13,7 +13,7 @@ export const PROVIDER_MODELS: Record<ProviderId, ProviderModel[]> = {
     { id: "openai/gpt-4o-mini", label: "GPT-4o mini" },
     { id: "openai/gpt-4o", label: "GPT-4o" },
     { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
-    { id: "google/gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+    { id: "google/gemini-2.5-flash", label: "Gemini 2.0 Flash" },
   ],
   openai: [
     { id: "gpt-4o-mini", label: "GPT-4o mini" },
@@ -21,17 +21,17 @@ export const PROVIDER_MODELS: Record<ProviderId, ProviderModel[]> = {
     { id: "o4-mini", label: "o4-mini" },
   ],
   anthropic: [
-    { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-    { id: "claude-haiku-4-20250514", label: "Claude Haiku 4" },
-    { id: "claude-opus-4-20250514", label: "Claude Opus 4" },
+    { id: "claude-sonnet-4-6", label: "Claude Sonnet 4" },
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4" },
+    { id: "claude-opus-4-5", label: "Claude Opus 4" },
   ],
   gemini: [
-    { id: "gemini/gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-    { id: "gemini/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { id: "gemini/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { id: "gemini/gemini-3.5-flash-lite", label: "Gemini 2.0 Flash" },
+    { id: "gemini/gemini-3.5-flash", label: "Gemini 2.5 Flash" },
+    { id: "gemini/gemini-3.7-flash", label: "Gemini 2.5 Pro" },
   ],
   xai: [
-    { id: "grok-4-3", label: "Grok 4.3" },
+    { id: "grok-4.3", label: "Grok 4.3" },
     { id: "grok-4.5", label: "Grok 4.5" },
   ],
 };

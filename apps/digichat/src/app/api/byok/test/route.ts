@@ -120,7 +120,7 @@ export async function POST(req: Request): Promise<Response> {
         // widens, derive the example per provider rather than hardcoding one
         // (#2537 fixed exactly this in digigraph, where a hardcoded
         // openai/… example was offered to four providers serving no such slug).
-        error: `Model is required for ${provider} (e.g. grok-4-3).`,
+        error: `Model is required for ${provider} (e.g. grok-4.3).`,
       },
       400
     );
@@ -251,7 +251,11 @@ async function testGeminiKey(key: string): Promise<TestResult> {
       .map((m) => (m.name ?? "").replace(/^models\//, ""))
       .filter(Boolean)
       .map((id) => ({ id, label: id }));
-    return { ok: true, model: models[0]?.id ?? "gemini-2.0-flash", models };
+    // Fallback used only when Google's own list comes back empty. It has to be a
+    // model that actually serves a fresh BYOK key: Google 404s `gemini-2.0-flash`
+    // ("no longer available to new users") and `gemini-2.5-flash-lite` alike, so
+    // the old default handed back a model id that could only fail. See #5000.
+    return { ok: true, model: models[0]?.id ?? "gemini-3.5-flash-lite", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -269,7 +273,7 @@ async function testXaiKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `x.ai returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
+    return { ok: true, model: data.data?.[0]?.id ?? "grok-4.3" };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }

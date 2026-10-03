@@ -101,7 +101,12 @@ describe("catalogEntriesFor", () => {
   it("maps gemini to the google catalog provider", () => {
     const entries = catalogEntriesFor("gemini");
     expect(entries.length).toBeGreaterThan(0);
-    expect(entries.map((e) => e.id)).toContain("gemini-2.5-flash");
+    // Assert a *routable* id, not merely one models.dev carries: the catalog
+    // still lists gemini-2.5-flash, but `config/litellm.yaml` has no
+    // `model_name` for it, so the routable intersection (#5000) excludes it.
+    // Asserting the unfiltered row here would pass on a member of the catalog
+    // the picker can never route -- the defect F2 of PR #4997 was about.
+    expect(entries.map((e) => e.id)).toContain("gemini-3.5-flash");
   });
 
   it("returns an empty list for a provider the catalog does not carry", () => {
@@ -137,7 +142,7 @@ describe("catalogEntriesFor", () => {
     // falls back to byokModelPresets instead, so nothing regresses.
     const presets: Record<string, string[]> = {
       openai: ["gpt-4o-mini", "gpt-4o", "o4-mini"],
-      xai: ["grok-4-3", "grok-4.5"],
+      xai: ["grok-4.3", "grok-4.5"],
     };
     for (const [provider, ids] of Object.entries(presets)) {
       const offered = new Set(catalogEntriesFor(provider).map((e) => e.id));

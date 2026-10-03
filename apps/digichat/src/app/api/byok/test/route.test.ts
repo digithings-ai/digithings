@@ -226,7 +226,7 @@ describe("POST /api/byok/test", () => {
         headers: {
           "x-byok-key": "not-gemini",
           "x-byok-provider": "gemini",
-          "x-byok-model": "gemini/gemini-2.0-flash",
+          "x-byok-model": "gemini/gemini-3.5-flash-lite",
         },
       })
     );
@@ -296,7 +296,7 @@ describe("POST /api/byok/test", () => {
         headers: {
           "x-byok-key": "not-xai",
           "x-byok-provider": "xai",
-          "x-byok-model": "grok-4-3",
+          "x-byok-model": "grok-4.3",
         },
       })
     );
@@ -373,7 +373,7 @@ describe("POST /api/byok/test", () => {
           headers: {
             "x-byok-key": "AIza-test",
             "x-byok-provider": "gemini",
-            "x-byok-model": "gemini/gemini-2.0-flash",
+            "x-byok-model": "gemini/gemini-3.5-flash-lite",
           },
         }),
       );

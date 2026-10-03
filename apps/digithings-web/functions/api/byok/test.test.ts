@@ -59,7 +59,7 @@ describe("POST /api/byok/test", () => {
 
     it("calls x.ai's own API — never OpenRouter's — for a valid xai- key", async () => {
       fetchMock.mockResolvedValueOnce(
-        jsonFetchResponse({ data: [{ id: "grok-4-3" }] }),
+        jsonFetchResponse({ data: [{ id: "grok-4.3" }] }),
       );
 
       const res = await onRequestPost(
@@ -76,7 +76,7 @@ describe("POST /api/byok/test", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toEqual({ ok: true, model: "grok-4-3" });
+      expect(body).toEqual({ ok: true, model: "grok-4.3" });
     });
 
     it("surfaces an x.ai-flavored error on a failed live test, not an OpenRouter one", async () => {
@@ -104,7 +104,7 @@ describe("POST /api/byok/test", () => {
     });
 
     it("sets Cache-Control: no-store on a successful live-test response", async () => {
-      fetchMock.mockResolvedValueOnce(jsonFetchResponse({ data: [{ id: "grok-4-3" }] }));
+      fetchMock.mockResolvedValueOnce(jsonFetchResponse({ data: [{ id: "grok-4.3" }] }));
       const res = await onRequestPost(
         request({ "x-byok-key": "xai-realkey", "x-byok-provider": "xai" }),
       );
@@ -251,19 +251,19 @@ describe("POST /api/byok/test", () => {
         request({
           "x-byok-key": "sk-or-realkey",
           "x-byok-provider": "openrouter",
-          "x-byok-model": "google/gemini-2.0-flash",
+          "x-byok-model": "google/gemini-2.5-flash",
         }),
       );
-      expect(await openrouter.json()).toEqual({ ok: true, model: "google/gemini-2.0-flash" });
+      expect(await openrouter.json()).toEqual({ ok: true, model: "google/gemini-2.5-flash" });
 
       const gemini = await onRequestPost(
         request({
           "x-byok-key": "AIza-realkey",
           "x-byok-provider": "gemini",
-          "x-byok-model": "gemini/gemini-2.5-pro",
+          "x-byok-model": "gemini/gemini-3.7-flash",
         }),
       );
-      expect(await gemini.json()).toEqual({ ok: true, model: "gemini/gemini-2.5-pro" });
+      expect(await gemini.json()).toEqual({ ok: true, model: "gemini/gemini-3.7-flash" });
     });
 
     it("falls back to the catalog's first model when the caller sends none", async () => {
@@ -278,7 +278,7 @@ describe("POST /api/byok/test", () => {
         request({ "x-byok-key": "AIza-realkey", "x-byok-provider": "gemini" }),
       );
       const body = await gemini.json();
-      expect(body.model).toBe("gemini/gemini-2.0-flash");
+      expect(body.model).toBe("gemini/gemini-3.5-flash-lite");
       expect(body.model).not.toBe("gemini-2.5-flash");
     });
 
