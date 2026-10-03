@@ -3,8 +3,9 @@
 `digivoice install` fetches bun, the OpenTUI packages, whisper-cli, Piper, sox,
 `ggml-base.en.bin`, and the Lessac Piper voice, then copies this checkout's
 banner adapter into `~/.hammerspoon/digivoice`. On an arm64 Mac it installs
-the native arm64 Piper build and a same-arch `libespeak-ng.1.dylib` beside
-that binary. A missing same-arch library is `brew install espeak-ng`. On a
+the native arm64 Piper build, a same-arch `libespeak-ng.1.dylib`, and a
+same-arch `libpiper_phonemize.1.dylib` beside that binary. A missing
+same-arch espeak library is `brew install espeak-ng`. On a
 terminal it asks first:
 auto installs that default set, or the user picks local speech, voice, and
 rewrite models. A pick does not delete models already on disk. `digivoice
@@ -40,7 +41,13 @@ from digivoice.probe import CommandProbe
 from digivoice.reload import reload_hammerspoon
 from digivoice.runner import CommandRunner, error_tail
 from digivoice.settings import load_settings, save_settings
-from digivoice.speak import find_espeak_library, macho_cpu, place_espeak_beside
+from digivoice.speak import (
+    find_espeak_library,
+    library_matches_binary,
+    macho_cpu,
+    place_espeak_beside,
+    place_macho_library,
+)
 
 FetchFn = Callable[[str, Path], None]
 
@@ -54,6 +61,18 @@ PIPER_MACOS_ARM64_URL = (
     "https://github.com/dharmab/piper/releases/download/"
     "2024.12.14.1-alpha2/piper_macos_aarch64.tar.gz"
 )
+# That arm64 archive links @rpath/libpiper_phonemize.1.dylib and does not
+# ship the file (its CMake install copies *.so and *.dll only). This jar's
+# macos-arm64 build is Mach-O arm64, install name @rpath/libpiper_phonemize.1.dylib,
+# and exports the piper phonemize symbols that binary links. It also ships
+# arm64 libonnxruntime.1.14.1.dylib, which piper and phonemize both load.
+PHONEMIZE_MACOS_ARM64_URL = (
+    "https://github.com/GiviMAD/piper-jni/releases/download/"
+    "piper_jni_1.2.0-a0f09cd/piper-jni-1.2.0-a0f09cd.jar"
+)
+_PHONEMIZE_LIBRARY = "libpiper_phonemize.1.dylib"
+_ONNX_LIBRARY = "libonnxruntime.1.14.1.dylib"
+_ARM64_PIPER_LIBRARIES = (_PHONEMIZE_LIBRARY, _ONNX_LIBRARY)
 VOICE_NAME = "en_US-lessac-medium"
 INSTALL_TIMEOUT = 600.0
 _BUN_RELEASE = f"https://github.com/oven-sh/bun/releases/download/bun-v{BUN_VERSION}"
@@ -177,6 +196,12 @@ def run_install(
         "piper",
         lambda: _install_piper(home, platform, machine, probe, worker, refresh),
     )
+    if platform == "darwin" and _arch(machine) == "aarch64":
+        _attempt(
+            steps,
+            "phonemize",
+            lambda: _install_phonemize(home, probe, worker),
+        )
     if platform == "darwin":
         _attempt(
             steps,
@@ -663,6 +688,74 @@ def _install_piper(
     link = _link_binary(piper_fallback(home), binary)
     _remember(home, piper=PIPER_TAG)
     return InstallStep(id="piper", status="installed", detail=link)
+
+
+def _install_phonemize(home: Path, probe: CommandProbe, fetch: FetchFn) -> InstallStep:
+    """Put same-arch Piper dylibs beside the real arm64 binary.
+
+    The dharmab archive is searched first. A missing library is taken from
+    the arm64 piper-jni jar. An x86_64 library is not copied.
+    """
+    binary = _find_piper(home, probe)
+    if binary is None or macho_cpu(Path(binary).resolve()) != "arm64":
+        return InstallStep(id="phonemize", status="present", detail="piper is not arm64")
+    missing = [
+        name for name in _ARM64_PIPER_LIBRARIES if _copy_piper_library(home, binary, name) is None
+    ]
+    if not missing:
+        return InstallStep(
+            id="phonemize",
+            status="present",
+            detail=str(Path(binary).resolve().parent / _PHONEMIZE_LIBRARY),
+        )
+    staging = vendor_dir(home) / "phonemize.incoming"
+    try:
+        _extract_url(fetch, PHONEMIZE_MACOS_ARM64_URL, staging)
+        for name in missing:
+            found = _find_file(staging, name)
+            if found is None:
+                raise InstallError(f"archive did not contain {name}")
+            placed = place_macho_library(binary, found, name)
+            if placed is None:
+                raise InstallError(f"{name} is not the same architecture as piper")
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+    return InstallStep(
+        id="phonemize",
+        status="installed",
+        detail=str(Path(binary).resolve().parent / _PHONEMIZE_LIBRARY),
+    )
+
+
+def _copy_piper_library(home: Path, binary: str, name: str) -> Path | None:
+    """A same-arch library already beside piper, or one copied out of vendor/piper."""
+    beside = _beside_matching(binary, name)
+    if beside is not None:
+        return beside
+    vendor = vendor_dir(home) / "piper"
+    if not vendor.is_dir():
+        return None
+    for path in vendor.rglob(name):
+        if not path.is_file() or path.name != name:
+            continue
+        placed = place_macho_library(binary, path, name)
+        if placed is not None:
+            return placed
+    return None
+
+
+def _beside_matching(binary: str, name: str) -> Path | None:
+    path = Path(binary)
+    if not path.exists():
+        return None
+    dest = path.resolve().parent / name
+    if not dest.is_file() or not library_matches_binary(binary, dest):
+        return None
+    cpu = macho_cpu(path.resolve())
+    if cpu is None or macho_cpu(dest) != cpu:
+        return None
+    return dest
 
 
 def _install_espeak(
