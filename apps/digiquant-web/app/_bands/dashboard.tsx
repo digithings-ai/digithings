@@ -1,11 +1,10 @@
 "use client";
 
 import { ProductStage } from "@/components/dashboard/product-stage";
-import { HOSTED_COPY, SELF_HOSTED_COPY, TOUR_CAPTION } from "@/components/dashboard/surface-tour";
 import { Band } from "../_chrome/Band";
 
-/** The product band, above the pipeline. A switch shows either the self-hosted
- *  terminal screens or the hosted web desk. One surface is in the frame. */
+/** The product band, above the pipeline. The terminal and the hosted desk
+ *  stay on screen together and tour the same page. */
 export function DashboardBand() {
   return (
     <Band
@@ -13,7 +12,7 @@ export function DashboardBand() {
       fill
       status="desk"
       title="Self-hosted, or hosted"
-      takeaway={`${SELF_HOSTED_COPY} ${HOSTED_COPY} ${TOUR_CAPTION}`}
+      takeaway="The terminal and the hosted desk are the same product."
     >
       <ProductStage />
     </Band>
