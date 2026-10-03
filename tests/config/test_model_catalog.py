@@ -124,7 +124,12 @@ def test_every_byok_fallback_model_exists_in_the_catalog() -> None:
 
     xai's was `grok-4-3`, which models.dev only carries as `grok-4.3`; the
     anthropic pins were dated `-4` ids whose generation models.dev no longer
-    lists at all. All six were replaced in this change rather than exempted.
+    lists at all. All six are **exempted, not replaced** — every `fallbackModels`
+    entry must also be a `model_name` in `config/litellm.yaml`
+    (`test_every_advertised_byok_preset_is_a_litellm_model_group`, #3605), so
+    swapping one is a routing change to an upstream slug that cannot be verified
+    without a provider key. See the D11 row in the spec's decision table and
+    `docs/MODEL_CATALOG.md` for what each replacement would take.
     """
     generator = _load_generator()
     exempt_ids = {e["id"] for e in load_exemptions()}
@@ -203,7 +208,7 @@ def test_generated_typescript_module_is_in_sync() -> None:
     """
     generator = _load_generator()
     expected = generator.render_typescript_module(load_catalog())
-    on_disk = (REPO_ROOT / "apps" / "digichat" / "src" / "lib" / "model-catalog.generated.ts")
+    on_disk = REPO_ROOT / "apps" / "digichat" / "src" / "lib" / "model-catalog.generated.ts"
     assert on_disk.is_file(), f"{on_disk} is missing — run `make model-catalog`"
     assert on_disk.read_text(encoding="utf-8") == expected, (
         "model-catalog.generated.ts is stale — run `make model-catalog`"

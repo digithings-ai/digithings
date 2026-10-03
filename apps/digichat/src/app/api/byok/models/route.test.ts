@@ -49,7 +49,7 @@ describe("GET /api/byok/models", () => {
   it("serves every non-openrouter BYOK provider from the vendored catalog, without fetching", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     try {
-      for (const provider of ["openai", "anthropic", "gemini", "xai"]) {
+      for (const provider of ["openai", "gemini", "xai"]) {
         const res = await GET(req(`/api/byok/models?provider=${provider}`));
         expect(res.status).toBe(200);
         const body = await res.json();
@@ -58,7 +58,27 @@ describe("GET /api/byok/models", () => {
         expect(body.source).toBe("catalog");
         expect(typeof body.fetchedAt).toBe("string");
         expect(Array.isArray(body.all)).toBe(true);
+        // Not just `isArray` — an empty bucket array passes that trivially and
+        // would let a broken catalogEntriesFor (or a stub that returned [])
+        // satisfy this test. These providers each have routable ids the house
+        // can actually serve, so the counts are the assertion that matters.
+        expect(body.all.length).toBeGreaterThan(0);
       }
+      // Spot-check one known routable id so a filter that returns the *wrong*
+      // provider's rows still fails: xai's catalog carries grok-4.3 (dotted) and
+      // the litellm route for it is grok-4-3 (dashed), so only grok-4.5 survives.
+      const xai = await (await GET(req("/api/byok/models?provider=xai"))).json();
+      expect(xai.all.map((m: { id: string }) => m.id)).toEqual(["grok-4.5"]);
+
+      // anthropic is the deliberate empty case, and the empty result is the
+      // finding: all three ids the house routes for anthropic are the pinned
+      // claude-*-4-20250514 ids, which models.dev no longer carries, so none of
+      // its 16 catalog rows is servable. The picker therefore falls back to
+      // byokModelPresets for anthropic — correct, and asserted here so that a
+      // future models.dev row for anthropic (or a new litellm route) shows up
+      // as this count moving off zero.
+      const anthropic = await (await GET(req("/api/byok/models?provider=anthropic"))).json();
+      expect(anthropic.all).toEqual([]);
       // The catalog path is a local read: an upstream fetch here would mean this
       // route had become a fetch proxy for arbitrary provider hosts.
       expect(fetchSpy).not.toHaveBeenCalled();

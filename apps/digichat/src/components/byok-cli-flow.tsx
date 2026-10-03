@@ -315,7 +315,16 @@ export function ByokCliFlow({
           ? catalogTieredOptions.all.filter((m) => customIds.has(m.id))
           : catalogTieredOptions[tier];
       if (list.length > 0) {
-        return [...list.map((m) => m.id), CUSTOM_MODEL];
+        // The "" sentinel ("(provider default)") is only meaningful for a
+        // provider whose upstream picks a model when none is named — openai
+        // is the only one (config/byok-providers.json). Every other branch
+        // below guards on byokRequiresModel before prepending it, so this one
+        // has to as well: without the guard, loading a catalog list for openai
+        // silently removed the one option that needs no model id at all.
+        const ids = list.map((m) => m.id);
+        return byokRequiresModel(provider)
+          ? [...ids, CUSTOM_MODEL]
+          : ["", ...ids, CUSTOM_MODEL];
       }
     }
     const presets = [...byokModelPresets(provider)];

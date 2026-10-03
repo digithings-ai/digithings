@@ -162,6 +162,54 @@ describe("ByokCliFlow", () => {
     expect(modelCalls.some(([u]) => String(u).includes("provider=xai"))).toBe(true);
   });
 
+  // #4994 review finding 1 — openai is the only BYOK provider with
+  // requiresModel: false, so its picker is the only one that offers the ""
+  // ("(provider default)") sentinel. Every other branch of modelOptions
+  // guards on byokRequiresModel before prepending it; the catalog branch did
+  // not, so as soon as a catalog list loaded for openai the sentinel vanished
+  // and the one option that works without naming a model became unselectable.
+  // The ping here returns no `models` array so the catalog branch is the only
+  // tiered list in play (a real openai catalog equals its presets today, so
+  // the branch is unreachable without a mocked payload — this is the guard for
+  // the day litellm.yaml grows a routable openai model outside the presets).
+  it("keeps (provider default) for openai once the catalog list loads", async () => {
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/byok/models")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              provider: "openai",
+              source: "catalog",
+              free: [],
+              opensource: [],
+              flagship: [{ id: "gpt-5.4", label: "GPT-5.4" }],
+              all: [{ id: "gpt-5.4", label: "GPT-5.4" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true, model: "gpt-4o-mini" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("openai"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "sk-test-1234" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    // The catalog entry is what proves the catalog branch won.
+    expect(await screen.findByText("GPT-5.4")).toBeInTheDocument();
+    expect(screen.getByText("(provider default)")).toBeInTheDocument();
+  });
+
   // #4994 — catalog membership is not key-scoped availability. The key-step
   // ping returns exactly what this key may call, so it must stay above the
   // catalog in modelOptions' precedence; otherwise a user whose key can see

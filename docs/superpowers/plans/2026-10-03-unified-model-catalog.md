@@ -217,7 +217,7 @@ Phase 1 is self-contained: generator, artifacts, tests, CI, and the config fix. 
 
 - [ ] **Step 2:** Add `render_typescript_module`. It emits, in order: the "do not edit" header, `import type { ModelCatalogEntry } from "./model-catalog";`, `MODEL_CATALOG_SCHEMA_VERSION`, `MODEL_CATALOG_PROVIDERS`, `MODEL_CATALOG_BY_PROVIDER`, `MODEL_CATALOG_META`. Use `json.dumps(value, indent=2, sort_keys=False)` for the record bodies so the output is byte-stable across runs — **no timestamps inside the TS module** except the `fetchedAt` string taken verbatim from `_meta`, which changes only when the catalog is actually refreshed.
 
-- [ ] **Step 3:** Create `config/model-catalog-exemptions.json` with the two entries from the spec. Anything upstream does not need must be removable, and every entry needs a non-empty `reason` — both are asserted in Task 4.
+- [ ] **Step 3:** Create `config/model-catalog-exemptions.json` — shape and `_comment` per the spec's data model. The entries themselves are filled in by Task 5. Anything upstream does not need must be removable, and every entry needs a non-empty `reason` and a `provider` — all three are asserted in Task 4.
 
 - [ ] **Step 4:** Add a failing test that `write_artifacts` refuses to write when normalization produced zero models (a models.dev schema change must not commit an empty catalog that reads as "these providers have no models"), then implement:
 
@@ -366,49 +366,50 @@ Phase 1 is self-contained: generator, artifacts, tests, CI, and the config fix. 
 
   Assert `len(missing) > 0` deliberately: if a future models.dev release starts covering every route spelling, this test tells us to promote it to strict, rather than leaving a permanently-vacuous check.
 
-- [ ] **Step 5:** Run it. It must be **green** — if the strict test is red, the six ids from Task 5 have not been replaced yet; do not paper over it with an exemption.
+- [ ] **Step 5:** Run it. The strict test is expected to be **red** on the six ids from Task 5 — that red is the finding, and Task 5's job is to record them as reasoned exemptions, not to weaken the assertion.
 
 - [ ] **Step 6:** `pytest tests/config/test_model_catalog.py -q` → green.
 
 ---
 
-## Task 5 — Replace the six dead BYOK fallback ids
+## Task 5 — Record the six dead BYOK fallback ids as reasoned exemptions
+
+> **Rewritten during implementation.** The first draft of this task replaced the six ids in
+> `config/byok-providers.json`. That does not work, and finding out why is the most useful thing
+> this task produced: `tests/config/test_litellm_house_models.py:151`
+> (`test_every_advertised_byok_preset_is_a_litellm_model_group`, #3605) requires every
+> `fallbackModels` entry to *also* be a `model_name` in `config/litellm.yaml`. A retired pin is
+> therefore not a catalog edit — it is a **routing** change that needs a new LiteLLM group whose
+> `litellm_params.model` points at the successor slug, and that slug cannot be confirmed against a
+> live provider without a provider key. Shipping a guessed one is a 500 on every BYOK chat that
+> picks it, which is worse than an exhausted fallback. See spec [D11](../specs/2026-10-03-unified-model-catalog-design.md#decisions).
 
 **Files**
-- Modify: `config/byok-providers.json`
-- Modify: `infra/digichat-release/config/byok-providers.json`
+- Create: `config/model-catalog-exemptions.json`
 
 **Steps**
 
-- [ ] **Step 1:** In `config/byok-providers.json`, replace exactly these ids, preserving list order:
+- [x] **Step 1:** Record all six in `config/model-catalog-exemptions.json`, each with its `provider`
+      and a `reason` naming the specific replacement it waits on:
 
-  | Provider | From | To |
+  | Provider | Exempted id | What it waits on |
   |---|---|---|
-  | openrouter | `google/gemini-2.0-flash` | `google/gemini-2.5-flash` |
-  | anthropic | `claude-sonnet-4-20250514` | `claude-sonnet-4-5` |
-  | anthropic | `claude-haiku-4-20250514` | `claude-haiku-4-5` |
-  | anthropic | `claude-opus-4-20250514` | `claude-opus-4-5` |
-  | gemini | `gemini/gemini-2.0-flash` | `gemini/gemini-2.5-flash` |
-  | xai | `grok-4-3` | `grok-4.3` |
+  | openrouter | `google/gemini-2.0-flash` | a `google/gemini-2.5-flash` LiteLLM group routing `openrouter/google/gemini-2.5-flash` |
+  | anthropic | `claude-sonnet-4-20250514` | models.dev carries **no Claude 4 generation at all**; the group would route `-4-5` |
+  | anthropic | `claude-haiku-4-20250514` | as above (`claude-haiku-4-5`) |
+  | anthropic | `claude-opus-4-20250514` | as above (`claude-opus-4-5`) |
+  | gemini | `gemini/gemini-2.0-flash` | Google's catalogued range starts at `gemini-2.5-flash` |
+  | xai | `grok-4-3` | xAI publishes `grok-4.3` (dotted), like the `grok-4.5` this repo already routes |
 
-  Five are retired upstream; `grok-4-3` → `grok-4.3` is a **rename** — xai has no dash spelling in the catalog.
+- [x] **Step 2:** `assert_invariants` refuses an exemption with no `reason`, no `provider`, or one the
+      catalog now resolves **for that provider** — so the list cannot silently become decorative.
 
-- [ ] **Step 2:** Mirror the file exactly:
+- [x] **Step 3:** Re-run `pytest tests/config/test_model_catalog.py -q` → green, with the six
+      exemptions load-bearing rather than hidden behind a weakened assertion.
 
-  ```bash
-  cp config/byok-providers.json infra/digichat-release/config/byok-providers.json
-  ```
-
-- [ ] **Step 3:** Verify the vendored-copy guard still passes and the parity tests are unaffected:
-
-  ```bash
-  pytest tests/dg/test_llm_auth.py -q -k VendoredCopy
-  cd apps/digichat && npm run test -- --run use-byok-key.catalog-parity byok-providers.catalog-parity
-  ```
-
-  `use-byok-key.catalog-parity.test.ts:79-84` asserts `byokModelPresets(provider) === fallbackModels`. Because both sides change together, it stays green — which is exactly why it is a parity test and not a liveness test.
-
-- [ ] **Step 4:** Re-run `pytest tests/config/test_model_catalog.py -q` → the strict coverage test now passes with zero exemptions needed for BYOK.
+- [ ] **Step 4 (deferred, needs provider keys):** file the follow-up issue that swaps each id once a
+      maintainer can confirm the upstream slug against a live provider. Not in this PR — it changes
+      routing, not the catalog.
 
 ---
 

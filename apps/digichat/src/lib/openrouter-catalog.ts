@@ -67,7 +67,15 @@ function isFree(entry: OpenRouterCatalogEntry): boolean {
 /** Union of the three open-weight signals, none of which subsumes the others:
  * OpenRouter's `hugging_face_id`, the models.dev catalog's `open_weights`, and the
  * hand-maintained publisher-prefix allowlist. `catalogOpenWeights` defaults to false
- * so every existing live-path caller is unchanged. */
+ * so every existing live-path caller is unchanged.
+ *
+ * Honest scoping, since only two of the three are reachable in production today: the
+ * sole call site that buckets rows (`bucketOpenRouterModels`, below) feeds live
+ * OpenRouter rows, which carry no `open_weights`. Catalog-sourced rows get their tier
+ * precomputed by `scripts/refresh_model_catalog.py`, which unions the catalog flag
+ * with its own open-weight signal at generation time. This parameter is what lets
+ * those two share one rule instead of the generator and this module keeping separate
+ * copies of it; nothing passes `true` yet. */
 export function isOpenSource(
   entry: OpenRouterCatalogEntry,
   catalogOpenWeights = false,

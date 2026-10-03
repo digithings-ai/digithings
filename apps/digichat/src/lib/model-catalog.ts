@@ -14,6 +14,7 @@ import {
   MODEL_CATALOG_BY_PROVIDER,
   MODEL_CATALOG_BYOK_PROVIDER_MAP,
   MODEL_CATALOG_META,
+  MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS,
 } from "./model-catalog.generated";
 import type { ByokModelOption, BYOKProvider } from "@/hooks/use-byok-key";
 
@@ -31,9 +32,14 @@ export type ModelCatalogEntry = {
   /** `null` when models.dev omitted the field -- distinct from a stated `false`. */
   tool_call: boolean | null;
   structured_output: boolean | null;
-  reasoning: boolean;
+  /** `null` when models.dev omitted the field. All three of `reasoning`,
+   * `attachment` and `open_weights` are tri-state upstream: the generator emits
+   * `null` for an absent flag, so these are `boolean | null` too. Typing them
+   * as plain `boolean` would let the first refresh that sees an omitted flag
+   * land a red `next build` while `--check` still reports the artifacts in sync. */
+  reasoning: boolean | null;
   vision: boolean;
-  attachment: boolean;
+  attachment: boolean | null;
   open_weights: boolean;
   tier: "free" | "opensource" | "flagship" | null;
 };
@@ -63,28 +69,50 @@ const toOption = (entry: ModelCatalogEntry): ByokModelOption => ({
 });
 
 /**
- * Catalog rows for a BYOK provider. An unknown or unmapped provider yields
- * `[]` rather than throwing -- a suggestion list is not worth breaking a picker.
+ * Catalog rows for a BYOK provider that the house can actually route.
+ *
+ * models.dev is a curated metadata database, not a routing registry, so
+ * membership in the catalog is **not** evidence that a model is servable:
+ * `config/litellm.yaml` routes strictly (no `fallbacks`), so an id with no
+ * declared `model_name` is a 500 waiting to happen, and of anthropic's 16
+ * catalog rows *zero* have a LiteLLM group. The routable set is generated from
+ * the LiteLLM configs themselves (`MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS`), so
+ * this filter is an intersection, not a second opinion about routability.
+ *
+ * A provider whose routable set is empty -- anthropic today -- yields `[]`,
+ * which the picker treats as "no catalog list" and falls back to
+ * `byokModelPresets`. That is today's behaviour for those providers, unchanged.
+ *
+ * An unknown or unmapped provider yields `[]` rather than throwing -- a
+ * suggestion list is not worth breaking a picker.
  */
 export function catalogEntriesFor(byokProvider: string): readonly ModelCatalogEntry[] {
   const catalogProvider = BYOK_PROVIDER_TO_CATALOG_PROVIDER[
     byokProvider as BYOKProvider
   ];
   if (!catalogProvider) return [];
-  return MODEL_CATALOG_BY_PROVIDER[catalogProvider] ?? [];
+  const routable = new Set(
+    MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS[byokProvider as BYOKProvider] ?? [],
+  );
+  const entries = MODEL_CATALOG_BY_PROVIDER[catalogProvider] ?? [];
+  // The generated ids and the generated routable ids are both author-prefixed
+  // the same way, so this is a plain set membership -- no suffix matching.
+  return entries.filter((entry) => routable.has(entry.id));
 }
 
 /**
- * Bucket by the tier the generator computed. `all` is sorted by id so the
- * picker's order is stable across refreshes; an unclassified entry (no price, or
- * upstream omitted one) appears in `all` only, never guessed into a bucket.
+ * Bucket by the tier the generator computed. The generator already sorted each
+ * provider's rows by id, so the order is inherited rather than re-derived: a
+ * `localeCompare` here would make the picker's order depend on the server's
+ * locale (2 of 10 providers reorder under `en-CA`), which is not what
+ * `config/model-catalog.json` and `docs/MODEL_CATALOG.md` promise.
+ * An unclassified entry (no price, or upstream omitted one) appears in `all`
+ * only, never guessed into a bucket.
  */
 export function bucketCatalogEntries(
   entries: readonly ModelCatalogEntry[],
 ): ModelCatalogBuckets {
-  const all = [...entries]
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map(toOption);
+  const all = entries.map(toOption);
   const inTier = (tier: NonNullable<ModelCatalogEntry["tier"]>) =>
     all.filter((option) => option.tier === tier);
   return {
