@@ -122,10 +122,12 @@ describe("desk chrome", () => {
     expect(css).toContain('data-drawer="open"');
     expect(css).toContain(".desk-mosaic");
     expect(css).toContain(".desk-pane-body");
+    expect(css).toContain(".desk-mark");
     const pane = readFileSync(new URL("./pages/pane.tsx", import.meta.url), "utf8");
     expect(pane).toContain("desk-mosaic");
     expect(pane).toContain("desk-pane-body");
     const frame = readFileSync(new URL("./desk-frame.tsx", import.meta.url), "utf8");
+    expect(frame).toContain("desk-mark");
     expect(frame).toContain('aria-controls="desk-rail"');
     expect(frame).toContain("stepRailWidth");
     expect(frame).not.toMatch(/cursor-/);
