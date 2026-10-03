@@ -120,6 +120,11 @@ describe("desk chrome", () => {
     expect(css).toContain(".rail {");
     expect(css).toContain("--rail-w");
     expect(css).toContain('data-drawer="open"');
+    expect(css).toContain(".desk-mosaic");
+    expect(css).toContain(".desk-pane-body");
+    const pane = readFileSync(new URL("./pages/pane.tsx", import.meta.url), "utf8");
+    expect(pane).toContain("desk-mosaic");
+    expect(pane).toContain("desk-pane-body");
     const frame = readFileSync(new URL("./desk-frame.tsx", import.meta.url), "utf8");
     expect(frame).toContain('aria-controls="desk-rail"');
     expect(frame).toContain("stepRailWidth");

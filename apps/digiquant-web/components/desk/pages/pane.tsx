@@ -6,8 +6,9 @@ import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../client
 
 export const PANE_HINT = "[tab] next";
 
-/** 12×12 mosaic. One hairline between panes, not a second frame plus a gutter. */
-export const PANE_GRID = "grid h-full min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-px bg-hair p-px";
+/** 12×12 mosaic. One hairline between panes, not a second frame plus a gutter.
+ *  On a phone, `.desk-mosaic` stacks each pane to the full width. */
+export const PANE_GRID = "desk-mosaic grid h-full min-h-0 w-full min-w-0 flex-1 grid-cols-12 grid-rows-12 gap-px bg-hair p-px";
 
 const PANE_META = "font-mono text-[0.6875rem] font-normal tracking-[0.04em]";
 const PANE_COPY = "font-mono text-[0.75rem] leading-[1.45] tabular-nums";
@@ -38,7 +39,7 @@ function BlockView({ block }: { block: PaneBlock }) {
       return <p className="m-0 whitespace-pre">{block.text}</p>;
     case "table":
       return (
-        <table className="w-full border-collapse text-left">
+        <table className="desk-pane-table w-full border-collapse text-left">
           {block.columns.length ? (
             <thead>
               <tr>
@@ -112,7 +113,7 @@ export function DeskPane({
           <span className="truncate">{title}</span>
         </Button>
       </header>
-      <div className={`flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
+      <div className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
       <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
         <span className="truncate tabular-nums">{status}</span>
         {focused ? (
