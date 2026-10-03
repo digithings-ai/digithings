@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
@@ -237,6 +238,36 @@ def _rrf_merge_results(
     return merged[:top_k] if top_k else merged
 
 
+def _leg_is_complete(response: SearchResponse, page_size: int) -> bool:
+    """True when *response* holds every match that leg can return.
+
+    A reported total wins. A short page with no total means the leg stopped
+    early. A full page with no total is not the end of the leg.
+    """
+    if response.total_count is not None:
+        return len(response.results) >= response.total_count
+    return len(response.results) < max(page_size, 1)
+
+
+def _read_fanout_leg(query: Query, index_name: str) -> SearchResponse:
+    """Read one leg from the start, then the rest of it when a total is known.
+
+    Fusing ``skip + top_k`` hits makes the candidate set grow with the page.
+    A shared chunk that sits just outside the first page then picks up another
+    RRF term and can put an earlier hit on the next page as well.
+    """
+    page_size = max(int(query.top_k or 0), 1)
+    probe = replace(query, skip=0, top_k=page_size, include_total_count=True)
+    first = _query_single_index(probe, index_name)
+    total = first.total_count
+    if total is None or len(first.results) >= total or total <= page_size:
+        return first
+    return _query_single_index(
+        replace(query, skip=0, top_k=int(total), include_total_count=True),
+        index_name,
+    )
+
+
 def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     """Route one index name through registered backends (no rerank; caller applies it)."""
     start = time.perf_counter()
@@ -293,7 +324,12 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return SearchResponse(
+            results=[],
+            facets=None,
+            backend=BACKEND_STUB,
+            total_count=0 if query.include_total_count else None,
+        )
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -307,8 +343,7 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     if isinstance(fd.get("structured"), list):
         structured = fd["structured"]
     text_lower = query.text.lower()
-    out: list[Result] = []
-    rank = 0
+    matches: list[Chunk] = []
     for c in chunks:
         if text_lower not in c.content.lower():
             continue
@@ -316,11 +351,13 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
             continue
         if not chunk_matches_workspace(c.metadata, query.workspace_id):
             continue
-        rank += 1
-        out.append(Result(chunk=c, score=0.9, rank=rank))
-        if len(out) >= query.top_k:
-            break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
+        matches.append(c)
+    start = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    page = matches[start : start + page_size]
+    out = [Result(chunk=c, score=0.9, rank=index) for index, c in enumerate(page, start=1)]
+    total = len(matches) if query.include_total_count else None
+    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB, total_count=total)
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
@@ -344,9 +381,34 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    responses = [_query_single_index(query, name) for name in names]
-    merged = _rrf_merge_results([response.results for response in responses], top_k=query.top_k)
-    return _maybe_rerank(query, SearchResponse(results=merged, facets=None, backend="multi"))
+    # One fused ranking for every page. Each leg is read in full when it
+    # reports a total, then the same list is sliced. Growing the per-leg
+    # window with skip changes RRF scores and repeats an earlier hit.
+    skip = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    responses = [_read_fanout_leg(query, name) for name in names]
+    merged = _rrf_merge_results(
+        [response.results for response in responses],
+        top_k=None,
+    )
+    page = [
+        Result(
+            chunk=result.chunk,
+            score=result.score,
+            source_doc=result.source_doc,
+            rank=index,
+        )
+        for index, result in enumerate(merged[skip : skip + page_size], start=1)
+    ]
+    total_count = None
+    if query.include_total_count and all(
+        _leg_is_complete(response, page_size) for response in responses
+    ):
+        total_count = len(merged)
+    return _maybe_rerank(
+        query,
+        SearchResponse(results=page, facets=None, backend="multi", total_count=total_count),
+    )
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
