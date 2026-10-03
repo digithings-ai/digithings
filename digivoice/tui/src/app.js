@@ -54,6 +54,8 @@ function summaryKind(summary) {
   return "info"
 }
 
+let activeTheme = null
+
 function statusLine(text, truecolor) {
   const parts = statusParts(text)
   const chunks = [fg(mutedColor(truecolor))(`${parts.mark} `)]
@@ -65,8 +67,19 @@ function statusLine(text, truecolor) {
 
 function rgbaOf(color) {
   if (!color) return null
+  if (Array.isArray(color.rgb)) return RGBA.fromInts(color.rgb[0], color.rgb[1], color.rgb[2])
   if (color.rgb != null) return RGBA.fromInts(color.rgb, color.rgb, color.rgb)
   return RGBA.fromIndex(color.cube)
+}
+
+function hexChannels(hex) {
+  if (!hex || typeof hex !== "string") return null
+  let body = hex.replace("#", "")
+  if (body.length === 3) body = body.split("").map((ch) => ch + ch).join("")
+  if (body.length !== 6) return null
+  const value = Number.parseInt(body, 16)
+  if (Number.isNaN(value)) return null
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
 }
 
 function paintCells(cells) {
@@ -82,7 +95,11 @@ function paintCells(cells) {
   return new StyledText(chunks)
 }
 
-function mutedColor(truecolor) {
+function mutedColor(truecolor, theme = activeTheme) {
+  if (theme && theme.active && truecolor) {
+    const rgb = hexChannels(theme.text)
+    if (rgb) return RGBA.fromInts(rgb[0], rgb[1], rgb[2])
+  }
   if (truecolor) return RGBA.fromInts(175, 175, 175)
   return RGBA.fromIndex(145)
 }
@@ -122,7 +139,11 @@ function middleEllipsis(text, width) {
   return `${value.slice(0, head)}…${value.slice(value.length - tail)}`
 }
 
-function barColor(truecolor) {
+function barColor(truecolor, theme = activeTheme) {
+  if (theme && theme.active && truecolor) {
+    const rgb = hexChannels(theme.accent)
+    if (rgb) return RGBA.fromInts(rgb[0], rgb[1], rgb[2])
+  }
   if (truecolor) return RGBA.fromInts(36, 36, 40)
   return RGBA.fromIndex(236)
 }
@@ -242,6 +263,9 @@ export function mountDigivoice(renderer, session, options = {}) {
   const truecolor =
     options.truecolor ??
     ["truecolor", "24bit"].includes(String(process.env.COLORTERM || "").toLowerCase())
+  function takeTheme(result) {
+    if (result && result.theme) activeTheme = result.theme.active ? result.theme : null
+  }
   const cols = options.cols ?? 100
   let tMs = options.tMs ?? 0
   const animate = options.animate !== false && options.tMs == null
@@ -411,7 +435,8 @@ export function mountDigivoice(renderer, session, options = {}) {
     const termH = Math.max(0, renderer.height || 0)
     const scale = pixelScale({ cols: termW, rows: termH, letters: 9 })
     const drawCols = scale === 1 ? frameWidth : termW
-    const drawn = wordmarkLines("DIGIVOICE", { cols: drawCols, rows: termH, tMs, truecolor, scale })
+    const ink = activeTheme && activeTheme.active ? hexChannels(activeTheme.accent) : null
+    const drawn = wordmarkLines("DIGIVOICE", { cols: drawCols, rows: termH, tMs, truecolor, scale, ink })
     const markWidth = drawn.lines[0]?.length ?? 0
     const nextFrame = Math.max(frameWidth, Math.min(termW, markWidth + 2))
     if (frame.width !== nextFrame) frame.width = nextFrame
@@ -576,6 +601,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     Promise.resolve(session.call({ op: "apply", path, index, text }))
       .then((result) => {
+        takeTheme(result)
         screen = {
           ...screen,
           rows: result.rows || screen.rows,
@@ -841,6 +867,7 @@ export function mountDigivoice(renderer, session, options = {}) {
 
   async function openBoot() {
     const boot = await session.call({ op: "boot", start: options.start || "/" })
+    takeTheme(boot)
     const opened = boot.screen || {}
     statusText = boot.status || ""
     homeRows = boot.home || opened.rows || []
@@ -915,6 +942,7 @@ export function mountDigivoice(renderer, session, options = {}) {
         index: confirmIndex,
         confirm: true,
       })
+      takeTheme(saved)
       confirmIndex = null
       if (saved.error) {
         screen = { ...screen, notice: saved.error, body: "" }
@@ -1242,6 +1270,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
     if (row.kind === "choice") {
       const result = await session.call({ op: "apply", path: screen.path, index: screen.selected })
+      takeTheme(result)
       if (result.download) {
         beginDownload(result)
         return

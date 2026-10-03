@@ -39,6 +39,7 @@ from digivoice.settings import (
     speech_speed_choice,
     speech_speed_label,
 )
+from digivoice.themes import PALETTE_IDS
 from digivoice.tui import MenuBlock, capture_binding, choose
 
 InstallFn = Callable[[VoicePaths, CatalogModel, TextIO | None], str]
@@ -151,6 +152,11 @@ def rows_at(
                 name="hotkeys",
                 kind="dir",
                 explain="Mac key binds. Enter a row, then type the key.",
+            ),
+            TreeRow(
+                name="theme",
+                kind="dir",
+                explain="Palette for the banner and this terminal. Mode stays dark, light, or system.",
             ),
         ]
     if here == "/settings/speech":
@@ -278,6 +284,35 @@ def rows_at(
             "banner_animations",
             "Animate the banner mark.",
             "Hold a still frame.",
+        )
+    if here == "/settings/theme":
+        palette = settings.theme_palette or "legacy"
+        return [
+            TreeRow(
+                name="mode",
+                kind="pick",
+                value=settings.theme_mode,
+                explain="dark, light, or system. system follows DIGIVOICE_THEME, then the OS.",
+            ),
+            TreeRow(
+                name="palette",
+                kind="pick",
+                value=palette,
+                explain="Named OpenCode palette. legacy keeps the built-in banner chrome.",
+            ),
+        ]
+    if here == "/settings/theme/mode":
+        return _named_choices(
+            "theme_mode",
+            ("dark", "light", "system"),
+            "Which appearance mode the banner and the terminal use.",
+        )
+    if here == "/settings/theme/palette":
+        names = ("legacy",) + PALETTE_IDS
+        return _named_choices(
+            "theme_palette",
+            names,
+            "One palette for the banner and the terminal.",
         )
     if here == "/settings/hotkeys":
         bindings = settings.hotkey_bindings
@@ -568,6 +603,10 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
         current = settings.banner_position
     elif here == "/settings/banner/animations":
         current = _on_off(settings.banner_animations)
+    elif here == "/settings/theme/mode":
+        current = settings.theme_mode
+    elif here == "/settings/theme/palette":
+        current = settings.theme_palette or "legacy"
     else:
         return 0
     for index, row in enumerate(rows):
@@ -616,6 +655,8 @@ def _changed(settings: VoiceSettings, row: TreeRow, typed: str | None) -> VoiceS
             return None
         if row.field == "tts_voice" and row.choice == "auto":
             data[row.field] = None
+        elif row.field == "theme_palette" and row.choice == "legacy":
+            data[row.field] = ""
         elif row.field in _BOOL_FIELDS:
             data[row.field] = row.choice == "on"
         else:

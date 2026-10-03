@@ -106,6 +106,8 @@ FEATURE_FIELDS = (
     "live_banner",
     "banner_position",
     "banner_animations",
+    "theme_mode",
+    "theme_palette",
 )
 
 
@@ -171,6 +173,8 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  live_banner ........ {str(settings.live_banner).lower()}",
         f"  banner_position .... {settings.banner_position}",
         f"  banner_animations .. {str(settings.banner_animations).lower()}",
+        f"  theme_mode ......... {settings.theme_mode}",
+        f"  theme_palette ...... {settings.theme_palette or '(legacy)'}",
         "",
         "— Hotkeys (locked sample) —",
     ]
@@ -559,6 +563,8 @@ def _edit_features(
             f"live_banner [{str(working['live_banner']).lower()}]",
             f"banner_position [{working['banner_position']}]",
             f"banner_animations [{str(working['banner_animations']).lower()}]",
+            f"theme_mode [{working.get('theme_mode', 'system')}]",
+            f"theme_palette [{working.get('theme_palette') or '(legacy)'}]",
             "Back",
         ]
         picked = choose(
@@ -600,6 +606,28 @@ def _edit_features(
             value = _prompt_bool("banner_animations", working["banner_animations"], stdin, stdout)
             if value is not None:
                 working["banner_animations"] = value
+        elif picked == 6:
+            value = _prompt_literal(
+                "theme_mode",
+                working.get("theme_mode", "system"),
+                ("dark", "light", "system"),
+                stdin,
+                stdout,
+            )
+            if value is not None:
+                working["theme_mode"] = value
+        elif picked == 7:
+            from digivoice.themes import PALETTE_IDS
+
+            value = _prompt_literal(
+                "theme_palette",
+                working.get("theme_palette") or "(legacy)",
+                ("(legacy)",) + PALETTE_IDS,
+                stdin,
+                stdout,
+            )
+            if value is not None:
+                working["theme_palette"] = "" if value == "(legacy)" else value
 
 
 def _show_hotkeys(stdout: TextIO | None = None, stdin: TextIO | None = None) -> None:

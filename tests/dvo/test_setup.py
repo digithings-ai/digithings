@@ -129,7 +129,8 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
     # Features → banner_position → top-left → Back → Review & save → Save → Quit
-    fake_in = io.StringIO("3\n5\n2\n7\n5\n1\n7\n")
+    # theme_mode and theme_palette sit before Back, so Back is item 9.
+    fake_in = io.StringIO("3\n5\n2\n9\n5\n1\n7\n")
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
     assert load_settings(paths).banner_position == "top-left"

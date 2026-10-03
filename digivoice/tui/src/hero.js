@@ -118,7 +118,17 @@ function voiceCubes(grid, tMs, scale) {
   return cubes
 }
 
-function colorOf(bright, truecolor) {
+function colorOf(bright, truecolor, ink) {
+  if (ink && truecolor) {
+    const scale = bright ? 1 : 0.62
+    return {
+      rgb: [
+        Math.round(ink[0] * scale),
+        Math.round(ink[1] * scale),
+        Math.round(ink[2] * scale),
+      ],
+    }
+  }
   const shade = bright ? LIT_SHADE : REST_SHADE
   return truecolor ? { rgb: shade.rgb } : { cube: shade.cube }
 }
@@ -130,7 +140,7 @@ function colorOf(bright, truecolor) {
  * each column while a level rises and falls. Gaps stay empty.
  */
 export function wordmarkLines(word = "DIGIVOICE", options = {}) {
-  const { cols = 100, rows, tMs = BUILD_MS, truecolor = false } = options
+  const { cols = 100, rows, tMs = BUILD_MS, truecolor = false, ink = null } = options
   const letters = word.toUpperCase()
   const count = Math.max(1, letters.length)
   const scale = options.scale ?? pixelScale({ cols, rows, letters: count })
@@ -151,15 +161,15 @@ export function wordmarkLines(word = "DIGIVOICE", options = {}) {
       if (topOn && botOn) {
         cells.push({
           ch: "▀",
-          color: colorOf(brightAt.get(`${x},${y}`) === true, truecolor),
-          bg: colorOf(brightAt.get(`${x},${y + 1}`) === true, truecolor),
+          color: colorOf(brightAt.get(`${x},${y}`) === true, truecolor, ink),
+          bg: colorOf(brightAt.get(`${x},${y + 1}`) === true, truecolor, ink),
         })
         continue
       }
       const yOn = topOn ? y : y + 1
       cells.push({
         ch: topOn ? "▀" : "▄",
-        color: colorOf(brightAt.get(`${x},${yOn}`) === true, truecolor),
+        color: colorOf(brightAt.get(`${x},${yOn}`) === true, truecolor, ink),
       })
     }
     lines.push(cells)
