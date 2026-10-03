@@ -1,6 +1,19 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
-import { MARK_GLYPHS, MARK_WORD, markFilled, markLines } from "./mark";
+import {
+  GLINT_EVERY_MS,
+  GLINT_MS,
+  MARK_GLYPHS,
+  MARK_PIXEL_W,
+  MARK_WORD,
+  REVEAL_MS,
+  glintCell,
+  markElapsed,
+  markFilled,
+  markLines,
+  resetMarkClock,
+  revealedColumns,
+} from "./mark";
 
 test("the terminal hero uses the web DIGIQUANT cells", () => {
   const src = readFileSync(
@@ -47,4 +60,23 @@ test("each quadrant cell unpacks to the same pixels", () => {
   }
   expect(markFilled(0, 0)).toBe(true);
   expect(markFilled(6, 0)).toBe(false);
+});
+
+test("the reveal plays once per process, then one cell glints", () => {
+  expect(markLines(0).every((line) => line.trim() === "")).toBe(true);
+  expect(revealedColumns(0)).toBe(0);
+  expect(revealedColumns(REVEAL_MS)).toBe(MARK_PIXEL_W);
+  expect(markLines(MARK_PIXEL_W)).toEqual(markLines());
+  expect(glintCell(0)).toBeNull();
+  expect(glintCell(REVEAL_MS + GLINT_EVERY_MS - 1)).toBeNull();
+  const glint = glintCell(REVEAL_MS + GLINT_EVERY_MS);
+  expect(glint).not.toBeNull();
+  const full = markLines();
+  expect(full[glint?.row ?? 0]?.[glint?.col ?? 0]).not.toBe(" ");
+  expect(glintCell(REVEAL_MS + GLINT_EVERY_MS + GLINT_MS)).toBeNull();
+
+  resetMarkClock();
+  expect(markElapsed(5_000)).toBe(0);
+  expect(markElapsed(5_000 + 40)).toBe(40);
+  expect(markElapsed(5_000 + REVEAL_MS + 10)).toBe(REVEAL_MS + 10);
 });

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { HashScrollManager, MotionProvider, ThemeProvider } from "@digithings/ui";
 import { SiteChrome } from "@/components/site-chrome";
+import { HERO_PLAYED_SCRIPT } from "@/lib/hero-play";
 
 // Self-hosted at build time by next/font, so no request leaves for Google at runtime.
 // Inter is the sans/display voice (headings, prose); JetBrains Mono is the chrome voice
@@ -71,6 +72,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
             the strategy deck); removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
+        {/* Later loads in this tab skip the pixel-mark rise. The first load still plays it. */}
+        <script dangerouslySetInnerHTML={{ __html: HERO_PLAYED_SCRIPT }} />
         
         <meta name="theme-color" content="#000000" />{/* canon-allow: page canvas is solid black, see globals.css */}
       </head>

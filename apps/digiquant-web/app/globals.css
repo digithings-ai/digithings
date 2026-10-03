@@ -55,8 +55,23 @@
   0% { fill: var(--accent); }
   6%, 100% { fill: currentColor; }
 }
+/* A later load in the same tab keeps the glint and drops the rise. The live
+   mark (data-dq-live) is the one already playing, so this does not cut it off. */
+html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-build] {
+  animation: var(--dq-glint, none) !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
+  animation: none !important;
+  opacity: 0 !important;
+}
 @media (prefers-reduced-motion: reduce) {
-  [data-dq-anim] { animation: none !important; }
+  [data-dq-anim],
+  html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-build],
+  html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
+    animation: none !important;
+  }
 }
 
 :root[data-theme] {

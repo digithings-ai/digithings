@@ -7,7 +7,8 @@
  * Gaps stay empty. One color mode per cell: 38;2 only when truecolor is on,
  * otherwise 38;5. Never both.
  *
- * The settled word is the mark. The scramble is how it plays.
+ * The settled word is the mark. The scramble plays once per session, then one
+ * letter flashes. It does not loop.
  */
 
 export const WORD = "DIGICHAT";
@@ -20,6 +21,10 @@ export const FLASH_MS = 200;
 export const CYCLE_MS = SPIN_MS + 8 * LOCK_MS + HOLD_MS;
 /** Inside the hold, after the last lock flash. */
 export const SETTLED_MS = 2000;
+/** Quiet stretch between single-letter flashes after the scramble. */
+export const IDLE_GAP_MS = 6400;
+export const WORDMARK_SESSION_KEY = "digichat:wordmark-played";
+export const WORDMARK_CLOCK_HOST = "__digichatWordmarkClock";
 
 export const POOL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?#$%&*+-=/<>().,:;@";
 
@@ -152,6 +157,58 @@ export function slotsAt(tMs: number, word = WORD): SlotFrame[] {
   return frames;
 }
 
+/** Settled word. One letter flashes, then the word rests. Characters never scramble. */
+export function idleSlots(idleElapsed: number, word = WORD): SlotFrame[] {
+  const base = slotsAt(SETTLED_MS, word);
+  const span = IDLE_GAP_MS + FLASH_MS;
+  const elapsed = Number.isFinite(idleElapsed) ? Math.max(0, idleElapsed) : 0;
+  if (elapsed % span < IDLE_GAP_MS) return base;
+  const index = Math.floor(elapsed / span) % Math.max(1, base.length);
+  return base.map((slot, i) => (i === index ? { ch: slot.ch, shade: "flash" } : slot));
+}
+
+/**
+ * One scramble from t=0 when `full` is set. After CYCLE_MS, or when `full` is
+ * clear, only the idle flash remains.
+ */
+export function heroSlots(elapsedMs: number, full: boolean, word = WORD): SlotFrame[] {
+  const elapsed = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
+  if (full && elapsed < CYCLE_MS) return slotsAt(elapsed, word);
+  return idleSlots(full ? elapsed - CYCLE_MS : elapsed, word);
+}
+
+export type WordmarkStore = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+};
+
+export type WordmarkClock = { origin: number; full: boolean };
+
+/** First call in a tab plays the scramble and records it. A later call does not. */
+export function readFullPlay(store: WordmarkStore | null): boolean {
+  if (!store) return true;
+  try {
+    if (store.getItem(WORDMARK_SESSION_KEY) === "1") return false;
+    store.setItem(WORDMARK_SESSION_KEY, "1");
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export function ensureWordmarkClock(
+  now: number,
+  store: WordmarkStore | null,
+  current: WordmarkClock | null,
+): WordmarkClock {
+  if (current) return current;
+  return { origin: now, full: readFullPlay(store) };
+}
+
+export function wordmarkSample(now: number, clock: WordmarkClock): { elapsed: number; full: boolean } {
+  return { elapsed: Math.max(0, now - clock.origin), full: clock.full };
+}
+
 function colorOf(shade: ShadeName, truecolor: boolean): CellColor {
   const tone = SHADES[shade];
   return truecolor ? { rgb: tone.rgb } : { cube: tone.cube };
@@ -181,16 +238,10 @@ function gridFor(frames: readonly SlotFrame[], gap: number): Pixel[][] {
 
 const BLANK: WordCell = { ch: " ", color: null };
 
-export function wordmarkLines(
-  word = WORD,
-  { cols = 100, tMs = SETTLED_MS, truecolor = false, gap }: {
-    cols?: number;
-    tMs?: number;
-    truecolor?: boolean;
-    gap?: number;
-  } = {},
+function linesFor(
+  frames: readonly SlotFrame[],
+  { cols = 100, truecolor = false, gap }: { cols?: number; truecolor?: boolean; gap?: number } = {},
 ): { lines: WordCell[][]; gap: number; rows: number } {
-  const frames = slotsAt(tMs, word);
   const count = frames.filter((frame) => frame.ch && GLYPHS[frame.ch]).length;
   const usedGap = gap ?? letterGap(cols, Math.max(1, count));
   const grid = gridFor(frames, count > 1 ? usedGap : 0);
@@ -226,13 +277,34 @@ export function wordmarkLines(
   return { lines, gap: usedGap, rows: lines.length };
 }
 
+export function wordmarkLines(
+  word = WORD,
+  { cols = 100, tMs = SETTLED_MS, truecolor = false, gap }: {
+    cols?: number;
+    tMs?: number;
+    truecolor?: boolean;
+    gap?: number;
+  } = {},
+): { lines: WordCell[][]; gap: number; rows: number } {
+  return linesFor(slotsAt(tMs, word), { cols, truecolor, gap });
+}
+
+export function heroWordmarkLines(
+  word = WORD,
+  { cols = 100, elapsed = 0, full = false, truecolor = false, gap }: {
+    cols?: number;
+    elapsed?: number;
+    full?: boolean;
+    truecolor?: boolean;
+    gap?: number;
+  } = {},
+): { lines: WordCell[][]; gap: number; rows: number } {
+  return linesFor(heroSlots(elapsed, full, word), { cols, truecolor, gap });
+}
+
 export type WordPixel = { x: number; y: number; shade: ShadeName };
 
-export function wordmarkPixels(
-  tMs = SETTLED_MS,
-  { word = WORD, gap = 1 }: { word?: string; gap?: number } = {},
-): { pixels: WordPixel[]; width: number; height: number } {
-  const frames = slotsAt(tMs, word);
+function pixelsFor(frames: readonly SlotFrame[], gap: number): { pixels: WordPixel[]; width: number; height: number } {
   const pixels: WordPixel[] = [];
   let cursor = 0;
   let drawn = 0;
@@ -250,6 +322,21 @@ export function wordmarkPixels(
     drawn += 1;
   }
   return { pixels, width: Math.max(cursor, 0), height: 10 };
+}
+
+export function wordmarkPixels(
+  tMs = SETTLED_MS,
+  { word = WORD, gap = 1 }: { word?: string; gap?: number } = {},
+): { pixels: WordPixel[]; width: number; height: number } {
+  return pixelsFor(slotsAt(tMs, word), gap);
+}
+
+export function heroWordmarkPixels(
+  elapsed = 0,
+  full = false,
+  { word = WORD, gap = 1 }: { word?: string; gap?: number } = {},
+): { pixels: WordPixel[]; width: number; height: number } {
+  return pixelsFor(heroSlots(elapsed, full, word), gap);
 }
 
 export function shadeHex(shade: ShadeName): string {

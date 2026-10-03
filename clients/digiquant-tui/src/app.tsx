@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { WEB_SLOTS } from "../../../apps/digiquant-web/components/desk/web-slots";
 import { BLOCKS, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
 import { COLS, ROWS, nudge, type Layout } from "./grid";
-import { MARK_COLS, MARK_ROWS, markLines } from "./mark";
+import { MARK_COLS, MARK_ROWS, glintCell, markElapsed, markLines, revealedColumns } from "./mark";
 import { BriefPage } from "./pages/brief";
 import { FxDesk, isFxPath } from "./pages/fx";
 import { PipelinePage } from "./pages/pipeline";
@@ -30,14 +30,36 @@ const share = (cells: number, total: number): `${number}%` => `${(cells / total)
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const WEB_ONLY = new Set<string>(WEB_SLOTS.map((slot) => slot.path));
-const MARK = markLines();
-
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
   if (status === "empty") return DIM;
   if (status === "loading") return DIM;
   return BAD;
 };
+
+function PixelMark() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(timer);
+  }, []);
+  const elapsed = markElapsed(now);
+  const lines = markLines(revealedColumns(elapsed));
+  const glint = glintCell(elapsed);
+  return (
+    <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
+      {lines.map((line, row) => (
+        <text key={row}>
+          {[...line].map((ch, col) => (
+            <span key={col} fg={glint && glint.row === row && glint.col === col ? GOLD : INK}>
+              {ch}
+            </span>
+          ))}
+        </text>
+      ))}
+    </box>
+  );
+}
 
 function isWebSlot(path: string): boolean {
   return WEB_ONLY.has(path);
@@ -251,11 +273,7 @@ export function App() {
           <text fg={DIM}>{`desk: ${deskLabel(desk)}`}</text>
           <text fg={INK}>{path}</text>
         </box>
-        <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
-          {MARK.map((line, index) => (
-            <text key={index} fg={INK}>{line}</text>
-          ))}
-        </box>
+        <PixelMark />
       </box>
       <box height={1} border={["bottom"]} borderColor={LINE} />
       <box flexGrow={1} flexDirection="row">
