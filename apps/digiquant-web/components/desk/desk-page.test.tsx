@@ -14,6 +14,10 @@ describe("mounted desk pages", () => {
     const holdings = renderToStaticMarkup(<DeskPage path="/portfolio/holdings" />);
     expect(holdings).toContain("Holdings · by sleeve");
 
+    const attribution = renderToStaticMarkup(<DeskPage path="/portfolio/attribution" />);
+    expect(attribution).toContain("Attribution");
+    expect(attribution).toContain('data-route="/attribution"');
+
     const pipeline = renderToStaticMarkup(<DeskPage path="/pipeline" />);
     expect(pipeline).toContain('data-block="pl-narrative"');
     expect(pipeline).toContain("Run narrative");
