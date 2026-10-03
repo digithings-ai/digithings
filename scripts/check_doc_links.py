@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
@@ -47,9 +48,39 @@ def _strip_fenced_code(text: str) -> str:
     return FENCE_RE.sub("", text)
 
 
-
 def _is_excluded(rel_posix: str) -> bool:
     return any(rel_posix == p.rstrip("/") or rel_posix.startswith(p) for p in EXCLUDE_PREFIXES)
+
+
+def _gitignore_paths(candidates: set[str]) -> frozenset[str]:
+    """The subset of `candidates` that git considers ignored.
+
+    Asking git rather than matching `.gitignore` text ourselves is the point:
+    the format carries `!` negations, anchored paths and per-directory ignore
+    files, and a hand-rolled subset silently disagrees with `git status` on
+    exactly the cases nobody tests locally. `EXCLUDE_PREFIXES` stays as the
+    fast path for the directories that are ignored in every checkout.
+
+    Falls back to "nothing is ignored" when git is missing or the tree is not
+    a checkout (a tarball export, a vendored copy). Reporting every link as
+    broken there would be worse than scanning a little too much.
+    """
+    if not candidates:
+        return frozenset()
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "check-ignore", "--stdin"],
+            input="\n".join(sorted(candidates)) + "\n",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return frozenset()
+    # Exit 1 means "no input path is ignored" — not an error.
+    if proc.returncode not in (0, 1):
+        return frozenset()
+    return frozenset(line for line in proc.stdout.splitlines() if line)
 
 
 def _collect_markdown_files() -> list[Path]:
@@ -76,7 +107,13 @@ def _collect_markdown_files() -> list[Path]:
         if name.startswith("DIGI") and name.endswith(".md"):
             out.append(p)
             continue
-    return sorted(set(out))
+    # Build output and vendored checkouts hold a copy of every component's
+    # AGENTS.md, and the relative links inside a copy do not resolve from the
+    # copy's own location — `npm run build` in apps/digichat used to make
+    # `make doc-check` fail on three links that exist nowhere in the tree.
+    found = {p: p.relative_to(REPO_ROOT).as_posix() for p in set(out)}
+    ignored = _gitignore_paths(set(found.values()))
+    return sorted(p for p, rel in found.items() if rel not in ignored)
 
 
 def _inside_repo(path: Path) -> bool:
