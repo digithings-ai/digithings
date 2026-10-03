@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import ValidationError
 from starlette.requests import Request
@@ -41,8 +43,10 @@ def _clean_limiter(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("DIGI_DISABLE_RATE_LIMIT", raising=False)
     server._rl_windows.clear()
     server._trusted_proxy_cache.clear()
+    server._rl_checks_since_sweep = 0
     yield
     server._rl_windows.clear()
+    server._rl_checks_since_sweep = 0
 
 
 def test_untrusted_peer_ignores_xff_and_a_spoofed_testclient_hop() -> None:
@@ -97,6 +101,21 @@ def test_ipv4_mapped_ipv6_buckets_as_ipv4() -> None:
     assert server._rl_check(plain, max_req=1, window=60, path="/bars") is not None
 
 
+def test_idle_path_buckets_are_swept(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server, "_SWEEP_INTERVAL", 1)
+    clock = {"t": 1_000.0}
+    monkeypatch.setattr(server.time, "monotonic", lambda: clock["t"])
+    req = _request("203.0.113.9")
+    assert server._rl_check(req, max_req=30, window=60, path="/junk") is None
+    clock["t"] = 1_030.0
+    assert server._rl_check(req, max_req=30, window=60, path="/bars") is None
+    assert any(key.endswith("|/junk") for key in server._rl_windows)
+    clock["t"] = 1_100.0
+    assert server._rl_check(req, max_req=30, window=60, path="/bars") is None
+    assert not any(key.endswith("|/junk") for key in server._rl_windows)
+    assert any(key.endswith("|/bars") for key in server._rl_windows)
+
+
 def test_optimize_rejects_non_positive_trials() -> None:
     with pytest.raises(ValidationError):
         server.OptimizeRequest(strategy_name="ema", symbols=["SPY"], n_trials=0)
@@ -148,6 +167,25 @@ def test_string_false_does_not_enable_pipeline_flags(monkeypatch: pytest.MonkeyP
     assert out["ok"] is True
     assert captured["run_optimize"] is False
     assert captured["run_export"] is False
+
+
+def test_mcp_pipeline_rejects_explicit_zero_trials(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digiquant.mcp_server import create_mcp_server
+
+    called: list[dict[str, object]] = []
+
+    def _capture(payload: dict[str, object]) -> dict[str, object]:
+        called.append(payload)
+        return {}
+
+    monkeypatch.setattr("digiquant.graph.pipeline.run_quant_workflow", _capture)
+    fn = create_mcp_server()._tool_manager.get_tool("digiquant_run_pipeline").fn
+    rejected = json.loads(fn("ema", '["SPY"]', data_path="x.csv", n_trials=0))
+    assert rejected["error"] == "n_trials must be an integer >= 1"
+    assert called == []
+    accepted = json.loads(fn("ema", '["SPY"]', data_path="x.csv", n_trials=3))
+    assert "error" not in accepted
+    assert called[0]["n_trials"] == 3
 
 
 def test_string_false_disables_full_tearsheet(monkeypatch: pytest.MonkeyPatch) -> None:

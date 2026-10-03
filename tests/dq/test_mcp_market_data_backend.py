@@ -259,21 +259,22 @@ def test_technicals_lookback_is_not_shared_across_cache_entries(monkeypatch):
     assert len(calls) == 2
 
 
-def test_technicals_non_positive_lookback_is_an_empty_window(monkeypatch):
-    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
-    monkeypatch.setattr(mcp, "_read_manifest", lambda: {"version": 1, "as_of": "2024-12-31"})
-    rows = [{"date": f"2024-12-{day:02d}", "close": float(day)} for day in (29, 30, 31)]
+def test_technicals_non_positive_lookback_is_an_error(monkeypatch):
+    calls: list[int] = []
 
     def _window(ticker, as_of, manifest=None, return_stale=False):
-        return (rows, False) if return_stale else rows
+        calls.append(1)
+        return ([], False) if return_stale else []
 
     monkeypatch.setattr(mcp, "_read_r2_window", _window)
     zero = json.loads(mcp.digiquant_get_price_technicals("SPY", lookback=0, as_of="2024-12-31"))
     negative = json.loads(
         mcp.digiquant_get_price_technicals("QQQ", lookback=-2, as_of="2024-12-31")
     )
-    assert zero["rows"] == []
-    assert negative["rows"] == []
+    assert zero["error"] == "lookback must be an integer >= 1"
+    assert "rows" not in zero
+    assert negative["error"] == zero["error"]
+    assert calls == []
 
 
 def test_macro_lookback_is_not_shared_across_cache_entries(monkeypatch):
@@ -290,11 +291,25 @@ def test_macro_lookback_is_not_shared_across_cache_entries(monkeypatch):
     monkeypatch.setattr(mcp, "_read_r2_macro_window", _counting)
     wide = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=3, as_of="2024-12-31"))
     narrow = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=1, as_of="2024-12-31"))
-    zero = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=0, as_of="2024-12-31"))
     assert len(wide["series"]["CPI"]["window"]) == 3
     assert [row["obs_date"] for row in narrow["series"]["CPI"]["window"]] == ["2024-12-03"]
-    assert zero["series"]["CPI"]["window"] == []
-    assert len(calls) == 3
+    assert narrow["series"]["CPI"]["latest"]["obs_date"] == "2024-12-03"
+    assert len(calls) == 2
+
+
+def test_macro_nonpositive_lookback_errors_on_both_backends(monkeypatch):
+    def _boom(*args, **kwargs):
+        raise AssertionError("lookback 0 must not read a backend")
+
+    monkeypatch.setattr(mcp, "_supabase_macro", _boom)
+    monkeypatch.setattr(mcp, "_read_r2_macro_window", _boom)
+    monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
+    supabase = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=0))
+    monkeypatch.setenv("DIGIQUANT_MARKET_DATA_BACKEND", "r2")
+    r2 = json.loads(mcp.digiquant_get_macro_series(["CPI"], lookback=0))
+    assert supabase == r2
+    assert supabase["error"] == "lookback must be an integer >= 1"
+    assert "series" not in supabase
 
 
 def test_macro_r2_backend_returns_asof_envelope(monkeypatch):

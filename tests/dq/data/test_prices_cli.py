@@ -287,6 +287,16 @@ def test_recompute_technicals_rejects_malformed_and_inverted_dates() -> None:
     assert "must be on or before" in inverted.output
 
 
+def test_compute_technicals_rejects_a_blank_ticker_list(tmp_path) -> None:
+    for tickers in (",", " ", " , "):
+        result = CliRunner().invoke(
+            compute_technicals_cmd,
+            ["--tickers", tickers, "--dry-run", "--cache-dir", str(tmp_path)],
+        )
+        assert result.exit_code != 0
+        assert "did not contain any symbols" in result.output
+
+
 def test_blank_tickers_are_not_an_empty_override(tmp_path) -> None:
     """A comma-only or whitespace ``--tickers`` must not yield an empty universe."""
     from click import UsageError

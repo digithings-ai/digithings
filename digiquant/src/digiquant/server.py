@@ -9,7 +9,7 @@ import logging
 import os
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from queue import Empty, Queue
 from typing import Any, get_args
 
@@ -65,8 +65,12 @@ install_cors(app, service="digiquant")
 app.add_middleware(DigiAuthMiddleware, service="digiquant", path_scopes=digiquant_path_scopes)
 
 
-_rl_windows: dict[str, deque[float]] = {}
+# Ordered so idle eviction can stop at the first still-active bucket.
+# Every limit in this module uses a 60s window; the sweep assumes that.
+_rl_windows: OrderedDict[str, deque[float]] = OrderedDict()
 _rl_lock = threading.Lock()
+_rl_checks_since_sweep = 0
+_SWEEP_INTERVAL = 1000
 _IPV6_BUCKET_PREFIX = 64
 _trusted_proxy_cache: dict[str, tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]] = {}
 _RATE_LIMITS: dict[str, tuple[int, int]] = {
@@ -172,7 +176,24 @@ def _bucket_key(ip: str) -> str:
     return str(addr)
 
 
+def _evict_idle_buckets(cutoff: float) -> None:
+    """Drop buckets with no accepted request since ``cutoff``. Caller holds the lock.
+
+    Front-to-back order is the time of the last accepted request, because
+    ``_rl_check`` calls ``move_to_end`` only when it appends. A 429 does not
+    refresh that order, so a reject flood cannot hide an idle bucket.
+    """
+    idle: list[str] = []
+    for key, q in _rl_windows.items():
+        if q and q[-1] >= cutoff:
+            break
+        idle.append(key)
+    for key in idle:
+        del _rl_windows[key]
+
+
 def _rl_check(request: Request, max_req: int, window: int, *, path: str) -> JSONResponse | None:
+    global _rl_checks_since_sweep
     if os.environ.get("DIGI_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"):
         return None
     # Exempt FastAPI TestClient by the socket peer, never by a header hop.
@@ -185,8 +206,12 @@ def _rl_check(request: Request, max_req: int, window: int, *, path: str) -> JSON
         q = _rl_windows.setdefault(bucket, deque())
         while q and q[0] < cutoff:
             q.popleft()
+        _rl_checks_since_sweep += 1
+        due_for_sweep = _rl_checks_since_sweep >= _SWEEP_INTERVAL
+        if due_for_sweep:
+            _rl_checks_since_sweep = 0
         if len(q) >= max_req:
-            return json_error_response(
+            response: JSONResponse | None = json_error_response(
                 status_code=429,
                 code="rate_limit_exceeded",
                 message=f"Rate limit exceeded: {max_req} requests per {window}s.",
@@ -194,8 +219,13 @@ def _rl_check(request: Request, max_req: int, window: int, *, path: str) -> JSON
                 service="digiquant",
                 headers={"Retry-After": str(window)},
             )
-        q.append(now)
-    return None
+        else:
+            q.append(now)
+            _rl_windows.move_to_end(bucket)
+            response = None
+        if due_for_sweep:
+            _evict_idle_buckets(cutoff)
+    return response
 
 
 @app.middleware("http")

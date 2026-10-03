@@ -243,8 +243,12 @@ def compute_technicals_cmd(
     from digiquant.data.prices.technicals import MIN_BARS, compute_indicators
     from digiquant.data.prices.ticker_venues import venue_for
 
-    if tickers:
+    if tickers.strip():
         universe = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+        if not universe:
+            raise click.UsageError("--tickers did not contain any symbols.")
+    elif tickers:
+        raise click.UsageError("--tickers did not contain any symbols.")
     else:
         # Scan cache_dir for <TICKER>.csv files.
         d = Path(cache_dir)
