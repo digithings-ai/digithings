@@ -157,9 +157,6 @@ out: `digithings.ai/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
 `/api/plan-proof*`, `/api/health`, and `/_dtchat*`. Preferred production host is
 Cloudflare Containers (Workers Paid) — see
 [`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md).
-Operator Compose + Cloudflare Tunnel remains the fallback when Paid is
-unavailable, and the local-dev path
-([`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md)).
 
 ### digithings.ai — static landing page
 
@@ -181,8 +178,7 @@ To update the landing page: edit `apps/digithings-web/`, run the build script lo
   `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (e.g. `https://digithings.ai`).
 - **Backend:** digichat BFF → digigraph (not a Pages Function OpenRouter loop).
 - **Production host:** Cloudflare Containers — `apps/digichat-cloudflare/` +
-  `Dockerfile.digichat-cloudflare`. Fallback: Compose + Cloudflare Tunnel — see
-  [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
+  `Dockerfile.digichat-cloudflare`.
 
 ### Verifying the routing
 
@@ -191,8 +187,6 @@ dig +short A digithings.ai
 curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 # Worker → Container health (same origin as Pages; live wrangler route):
 curl -sf https://digithings.ai/api/health | jq .
-# Fallback Tunnel origin (operator hostname; adjust if different):
-curl -sf https://digichat.digithings.ai/api/health | jq .
 ```
 
 ## Post-deploy smoke test
@@ -236,8 +230,6 @@ curl -s -o /dev/null -w '%{http_code}\n' https://digithings.ai/chat
 
 # 3. digichat Worker → Container (same-origin live route)
 curl -sf https://digithings.ai/api/health | jq .
-# Fallback Tunnel origin (adjust hostname if your Tunnel differs):
-curl -sf https://digichat.digithings.ai/api/health | jq .
 ```
 
 Browser steps (no one-liner equivalent):
@@ -245,7 +237,7 @@ Browser steps (no one-liner equivalent):
 - **Shell smoke:** open `https://digithings.ai/chat` and confirm the iframe loads digichat `/embed` without console CSP / frame errors.
 - **Vault-grounded round-trip:** ask a digivault-grounded question (e.g. what digigraph orchestrates) and confirm tool activity + answer via digigraph — see the operator checklist in [`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
 
-If any check fails, roll back per the deployment target's standard procedure (static landing: revert the offending commit and let Cloudflare Pages redeploy from the connected branch; digichat: redeploy the previous green Container image via `apps/digichat-cloudflare`, or the previous Compose stack on the Tunnel fallback host).
+If any check fails, roll back per the deployment target's standard procedure (static landing: revert the offending commit and let Cloudflare Pages redeploy from the connected branch; digichat: redeploy the previous green Container image via `apps/digichat-cloudflare`).
 
 ## Legacy URL Redirects
 
