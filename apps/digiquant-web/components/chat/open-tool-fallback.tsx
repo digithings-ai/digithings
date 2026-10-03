@@ -11,7 +11,7 @@ import {
 } from "../../../../packages/ui/src/components/chat/gallery-thread/tool-fallback.aui";
 
 /**
- * The digichat tool row, held open so a scripted result is on screen.
+ * The digichat tool row, held open so an example result is on screen.
  * Same Root / Trigger / Args / Result parts the thread uses; only the
  * disclosure starts open, because this page has no one to click.
  */
