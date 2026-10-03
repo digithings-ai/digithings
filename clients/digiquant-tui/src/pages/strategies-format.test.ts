@@ -156,14 +156,7 @@ test("deployments are a table, and an empty store stays its empty sentence", () 
   });
 });
 
-test("deploy and the tearsheet stay the line read", () => {
-  const lines = ["target  paper", "state  todo"];
-  const body = strategiesBody("st-targets", { targets: [{ target: "paper", description: "Paper only" }] }, ok(lines));
-  const text = JSON.stringify(body);
-  expect(text).toContain("paper");
-  expect(text).not.toContain("Paper only");
-  expect(body.blocks.some((block) => block.kind === "chart")).toBe(false);
-
+test("the tearsheet stays the line read", () => {
   const sheet = strategiesBody(
     "st-tearsheet",
     { label: "EMA", equity_curve: [{ t: "2024-01-01", v: 1 }, { t: "2024-02-01", v: 2 }] },
@@ -428,4 +421,170 @@ test("runs are a table, and an empty store stays its empty sentence", () => {
   expect(strategiesBody("st-runs", { runs: [] }, ok())).toEqual({
     blocks: [{ kind: "sentence", text: "No runs." }],
   });
+});
+
+test("deploy stubs, missed APIs, and an empty read stay the exact sentence", () => {
+  const missed = "/strategies/targets: the official API could not be reached.";
+  expect(
+    strategiesBody(
+      "st-targets",
+      { targets: [{ target: "paper", description: "Paper only" }] },
+      { status: "error", lines: [missed], asOf: null },
+    ),
+  ).toEqual({ blocks: [{ kind: "sentence", text: missed }] });
+  expect(
+    strategiesBody(
+      "st-deploy-flow",
+      { steps: [{ label: "Confirm", detail: "No order is sent.", state: "todo", status: "soon" }] },
+      { status: "stub", lines: [STUB_READ], asOf: null },
+    ),
+  ).toEqual({ blocks: [{ kind: "sentence", text: STUB_READ }] });
+  expect(strategiesBody("st-deploy-draft", null, { status: "empty", lines: [EMPTY_READ], asOf: null })).toEqual({
+    blocks: [{ kind: "sentence", text: EMPTY_READ }],
+  });
+});
+
+test("targets are a table, and an empty list stays its empty sentence", () => {
+  const body = strategiesBody(
+    "st-targets",
+    {
+      targets: [
+        { target: "paper", description: "Paper only", status: "soon", order: 3 },
+        { target: "", description: "skip", status: "live" },
+        { target: "broker", description: null, status: null },
+      ],
+    },
+    ok(["source  core:strategies", "marks  unavailable"]),
+  );
+  expect(body.blocks).toEqual([
+    { kind: "stat", text: "source  core:strategies   marks  unavailable" },
+    {
+      kind: "table",
+      columns: ["target", "what it is", "status"],
+      rows: [
+        ["paper", "Paper only", "soon"],
+        ["broker", "—", "—"],
+      ],
+    },
+  ]);
+  const text = JSON.stringify(body);
+  expect(text).not.toContain("skip");
+  expect(text).not.toContain("live");
+  expect(text).not.toContain("order");
+  expect(body.blocks.some((block) => block.kind === "chart")).toBe(false);
+  expect(strategiesBody("st-targets", { targets: [], empty_reason: "no deployment store" }, ok())).toEqual({
+    blocks: [{ kind: "sentence", text: "No targets.\nno deployment store" }],
+  });
+  expect(strategiesBody("st-targets", { targets: [] }, ok())).toEqual({
+    blocks: [{ kind: "sentence", text: "No targets." }],
+  });
+  expect(strategiesBody("st-targets", null, { status: "empty", lines: [EMPTY_READ], asOf: null })).toEqual({
+    blocks: [{ kind: "sentence", text: EMPTY_READ }],
+  });
+});
+
+test("plan steps are a table, and an empty list stays its empty sentence", () => {
+  const body = strategiesBody(
+    "st-deploy-flow",
+    {
+      steps: [
+        { label: "Choose a target", detail: "Paper only.", state: "todo", status: "soon", qty: 9 },
+        { label: "", detail: "skip", state: "done", status: "live" },
+        { label: "Confirm", detail: "No order is sent.", state: null, status: null },
+      ],
+    },
+    ok(["source  static:deploy-flow"]),
+  );
+  expect(body.blocks).toEqual([
+    { kind: "stat", text: "source  static:deploy-flow" },
+    {
+      kind: "table",
+      columns: ["step", "state", "status", "detail"],
+      rows: [
+        ["Choose a target", "todo", "soon", "Paper only."],
+        ["Confirm", "—", "—", "No order is sent."],
+      ],
+    },
+  ]);
+  expect(JSON.stringify(body)).not.toContain("skip");
+  expect(JSON.stringify(body)).not.toContain("9");
+  expect(strategiesBody("st-deploy-flow", { steps: [], empty_reason: "no plan" }, ok())).toEqual({
+    blocks: [{ kind: "sentence", text: "No deploy steps.\nno plan" }],
+  });
+  expect(strategiesBody("st-deploy-flow", { steps: [] }, ok())).toEqual({
+    blocks: [{ kind: "sentence", text: "No deploy steps." }],
+  });
+});
+
+test("draft fields are a stat or a table, and a draft is not an order", () => {
+  const few = strategiesBody(
+    "st-deploy-draft",
+    {
+      target_kind: "paper",
+      paper_capital: null,
+      broker: null,
+      portfolio: "house",
+      schedule: null,
+      notice: { tag: "soon", text: "Deploy is not built yet." },
+      order: { id: "o1", qty: 10 },
+    },
+    ok(["source  static:deploy-draft", "marks  unavailable"]),
+  );
+  expect(few.blocks).toEqual([
+    { kind: "stat", text: "source  static:deploy-draft   marks  unavailable" },
+    { kind: "sentence", text: "soon  Deploy is not built yet." },
+    { kind: "stat", text: "target kind  paper   portfolio  house" },
+  ]);
+  const fewText = JSON.stringify(few);
+  expect(fewText).not.toContain("o1");
+  expect(fewText).not.toContain("qty");
+  expect(fewText).not.toContain("order");
+  expect(few.blocks.some((block) => block.kind === "chart")).toBe(false);
+
+  const many = strategiesBody(
+    "st-deploy-draft",
+    {
+      target_kind: "paper",
+      paper_capital: "10000",
+      broker: "none",
+      portfolio: "house",
+      schedule: "daily",
+    },
+    ok(),
+  );
+  expect(many.blocks).toEqual([
+    {
+      kind: "table",
+      columns: ["field", "value"],
+      rows: [
+        ["target kind", "paper"],
+        ["paper capital", "10000"],
+        ["broker", "none"],
+        ["portfolio", "house"],
+        ["schedule", "daily"],
+      ],
+    },
+  ]);
+
+  expect(
+    strategiesBody(
+      "st-deploy-draft",
+      {
+        target_kind: null,
+        paper_capital: null,
+        broker: null,
+        portfolio: null,
+        schedule: null,
+        notice: { tag: "soon", text: "Deploy is not built yet." },
+      },
+      ok(),
+    ),
+  ).toEqual({ blocks: [{ kind: "sentence", text: "soon  Deploy is not built yet." }] });
+  expect(
+    strategiesBody(
+      "st-deploy-draft",
+      { target_kind: null, paper_capital: null, broker: null, portfolio: null, schedule: null },
+      ok(),
+    ),
+  ).toEqual({ blocks: [{ kind: "sentence", text: EMPTY_READ }] });
 });
