@@ -1,5 +1,6 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
+import { DigichatWordmark, WORDMARK_ROWS } from "../../digichat-tui/src/wordmark";
 import { GLYPH } from "./glyphs";
 import {
   activateStrip,
@@ -302,7 +303,7 @@ export function App() {
   useKeyboard((key) => onKey.current(key));
 
   const sideWidth = Math.max(40, Math.min(54, Math.floor((width || 120) * 0.36)));
-  const visible = Math.max(8, (height || 32) - 6);
+  const visible = Math.max(8, (height || 32) - 6 - WORDMARK_ROWS);
   const start = windowStart(rows.length, side, visible);
   const shownRows = rows.slice(start, start + visible);
   const stripStart = windowStart(strip.length, tool, 4);
@@ -314,9 +315,9 @@ export function App() {
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
+      <DigichatWordmark cols={width} />
       <box height={1} paddingLeft={1} flexDirection="row" backgroundColor={BG}>
-        <text fg={MUTE}>digichat</text>
-        <text fg={INK}>  devkit</text>
+        <text fg={INK}>devkit</text>
         <text fg={MUTE}>{`  ${API}  `}</text>
         <text fg={SOFT}>{headerReveal}</text>
         {shown < read.detail.length && blink ? <text fg={INK}>█</text> : null}

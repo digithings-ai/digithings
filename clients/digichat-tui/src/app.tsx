@@ -33,6 +33,7 @@ import {
   type ChatScreen,
 } from "./read";
 import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
+import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
@@ -358,7 +359,10 @@ export function App() {
         : [];
   if (pane === "export" && paneBody.length === 0) paneBody.push({ text: "nothing to export", tone: "mute" });
 
-  const maxLines = Math.max(4, height - 8 - (rows.length > 0 || (showPalette && slash.length === 0) ? listSize + 2 : 0) - ui.attachments.length);
+  const maxLines = Math.max(
+    4,
+    height - 8 - WORDMARK_ROWS - (rows.length > 0 || (showPalette && slash.length === 0) ? listSize + 2 : 0) - ui.attachments.length,
+  );
   const scroll = Math.max(0, Math.min(ui.scroll, Math.max(0, body.length - 1)));
   const shown = body.slice(Math.max(0, body.length - maxLines - scroll), Math.max(0, body.length - scroll));
   const caret = ui.focus === "composer" && ui.tray === "input" && !ui.pathing ? (caretOn ? "█" : " ") : "";
@@ -368,10 +372,11 @@ export function App() {
   const status = !screen ? "" : ui.note;
 
   return (
-    <box width="100%" height="100%" flexDirection="row" backgroundColor={BG}>
+    <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
+      <DigichatWordmark cols={width} />
+      <box flexGrow={1} flexDirection="row" backgroundColor={BG}>
       <box width={rail} flexDirection="column" backgroundColor={BG} border={["right"]} borderColor={HAIR}>
         <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" backgroundColor={BG}>
-          <text fg={MUTE}>digichat</text>
           <box flexGrow={1} backgroundColor={BG} />
           <text fg={MUTE}>{NEW_CHAT}</text>
         </box>
@@ -450,6 +455,7 @@ export function App() {
         <box height={1} backgroundColor={BG}>
           <text fg={MUTE}>{center(CREDIT, threadWidth)}</text>
         </box>
+      </box>
       </box>
     </box>
   );
