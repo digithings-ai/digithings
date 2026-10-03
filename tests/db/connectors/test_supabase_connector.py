@@ -47,6 +47,7 @@ class _FakeQuery:
     store: dict[str, list[dict[str, Any]]]
     canned: list[dict[str, Any]] = field(default_factory=list)
     raise_on_execute: Exception | None = None
+    owner: FakeSupabaseClient | None = None
     _upsert_rows: list[dict[str, Any]] | None = None
     _delete: bool = False
     _on_conflict: str | None = None
@@ -103,6 +104,11 @@ class _FakeQuery:
         if self.raise_on_execute is not None:
             raise self.raise_on_execute
         if self._upsert_rows is not None:
+            owner = self.owner
+            if owner is not None and owner.upsert_failures_after is not None:
+                if owner.upsert_executes >= owner.upsert_failures_after:
+                    raise RuntimeError("chunk failed")
+                owner.upsert_executes += 1
             stored = self.store.setdefault(self.table_name, [])
             for row in self._upsert_rows:
                 stored.append({**row, "_on_conflict": self._on_conflict})
@@ -143,6 +149,8 @@ class FakeSupabaseClient:
     store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     canned_reads: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     raise_on_execute: Exception | None = None
+    upsert_failures_after: int | None = None
+    upsert_executes: int = 0
     last_query: _FakeQuery | None = None
 
     def table(self, name: str) -> _FakeQuery:
@@ -151,6 +159,7 @@ class FakeSupabaseClient:
             store=self.store,
             canned=list(self.canned_reads.get(name, [])),
             raise_on_execute=self.raise_on_execute,
+            owner=self,
         )
         self.last_query = query
         return query
@@ -284,6 +293,17 @@ class TestUpsert:
         assert out.success is False
         assert "pgrst timeout" in out.error
         assert out.rows == 0
+
+    def test_later_chunk_failure_counts_rows_already_sent(self) -> None:
+        """A failed later batch must not report rows=0 after earlier batches landed."""
+        client = FakeSupabaseClient(upsert_failures_after=1)
+        connector = SupabaseConnector(client)
+        rows = [{"id": i} for i in range(3)]
+        out = connector.upsert("t", rows, chunk=2)
+        assert out.success is False
+        assert "chunk failed" in out.error
+        assert out.rows == 2
+        assert len(client.store["t"]) == 2
 
     def test_audit_emits_metadata_only(self, caplog: pytest.LogCaptureFixture) -> None:
         """Audit line carries table/operation/rows/on_conflict — never row bodies."""

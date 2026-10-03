@@ -54,7 +54,7 @@ Everything else in scope for digiclaw — a persistent gateway runtime with chan
 
 ### Heartbeat runner behaviour
 
-`python -m digiclaw` executes one cycle and exits with code 0 if it completes without an unhandled exception. In Docker, the heartbeat service wraps this in a shell loop:
+`python -m digiclaw` executes one cycle and exits 0 when every health ping succeeded, and 1 when any ping failed. Drift-check failures are audited and do not change that code. Health, drift, and reoptimize requests follow redirects only while the hop stays on the same origin (the scheme's default port counts); a cross-origin redirect is a failure and does not forward `Authorization`. In Docker, the heartbeat service wraps this in a shell loop:
 
 ```
 while true; do python -m digiclaw; sleep 1800; done
@@ -91,7 +91,7 @@ unchanged — format migration is out of scope for #1193):
 | `digiclaw heartbeat` | Same single-shot heartbeat via the `digiclaw` console script |
 | `digiclaw schedule status` | Lists agents, lifecycle, and next run times |
 | `digiclaw schedule start\|stop\|pause\|resume <agent>` | Lifecycle controls |
-| `digiclaw schedule tick` | Process due jobs once (supervisor / test entry) |
+| `digiclaw schedule tick` | Process due jobs once (supervisor / test entry). Exit 1 when any due job failed; exit 0 when none were due or every outcome was ok |
 | `AUDIT_LOG_PATH` (JSONL file) | Append-only event log written via `digibase.audit.emit_event` (component wrappers call it) |
 | `AUDIT_SINK_URL` (HTTP POST) | Optional remote audit mirror (NDJSON); best-effort, no auth, no retry |
 | `DIGICLAW_AGENTS_DIR` | Optional override for agent YAML directory (default `digiclaw/agents`) |
@@ -118,7 +118,9 @@ already hold a token). The POST uses a 120s httpx client timeout and
 `raise_for_status()`: transport and auth failures **raise** rather than
 returning an empty tick, the scheduler persists them as the agent's
 `last_status="error"` + `last_error`, and `digiclaw schedule tick` prints the
-failed outcome. Only `web-watch-tick` maps to this runner; every other agent name
+failed outcome and exits 1. The POST does not follow redirects (`httpx`
+defaults `follow_redirects` off), so a 302 is a transport failure rather than
+a second hop. Only `web-watch-tick` maps to this runner; every other agent name
 keeps the scheduler's no-op `default_agent_runner`. The helper aggregates the
 route's `{"runs": [MonitorRun...]}` payload into counts, where `failed` counts
 runs with `status == "failed"` (per-watch failures are isolated inside digisearch

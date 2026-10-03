@@ -157,3 +157,19 @@ def test_fetch_allowlist_permits_operator_trusted_host() -> None:
     with _fetcher(handler, allowed_hosts=["10.9.9.9"]) as f:
         result = f.fetch("http://10.9.9.9/service")
     assert result.text == "internal ok"
+
+
+def test_unresolved_host_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A DNS failure returns no addresses, and an empty address list is allow.
+
+    The guard refuses addresses it resolved. It does not treat "resolver
+    returned nothing" as a blocked host — the later connect fails the same way.
+    """
+    import digifetch.ssrf as ssrf
+
+    def _no_addresses(*_args: object, **_kwargs: object) -> list[object]:
+        raise OSError("name or service not known")
+
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", _no_addresses)
+    url = "https://no-such-host.example/path"
+    assert validate_fetch_url(url) == url

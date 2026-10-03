@@ -145,8 +145,9 @@ class SupabaseConnector:
             chunk:       Max rows per request (default :data:`DEFAULT_CHUNK`).
 
         Returns:
-            SupabaseWriteResult with the total rows sent, or ``success=False``
-            and the error string if any batch raised.
+            SupabaseWriteResult with the total rows sent. If a later batch
+            raises, ``success`` is false and ``rows`` is the count already
+            sent (earlier batches are not rolled back).
         """
         batch = [rows] if isinstance(rows, dict) else list(rows)
         if not batch:
@@ -158,8 +159,8 @@ class SupabaseConnector:
         # client's handling of an explicit ``on_conflict=None``.
         extra = {"on_conflict": on_conflict} if on_conflict else {}
         step = max(1, chunk)  # normalize once; a non-positive chunk must not empty every slice
+        total = 0
         try:
-            total = 0
             for start in range(0, len(batch), step):
                 payload = batch[start : start + step]
                 query = self._client.table(table).upsert(payload, **extra)
@@ -169,7 +170,7 @@ class SupabaseConnector:
             return SupabaseWriteResult(success=True, table=table, rows=total)
         except Exception as exc:  # surface any client/transport error
             logger.error("supabase: upsert failed for %s: %s", table, exc)
-            return SupabaseWriteResult(success=False, table=table, error=str(exc))
+            return SupabaseWriteResult(success=False, table=table, rows=total, error=str(exc))
 
     def select(
         self,
