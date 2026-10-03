@@ -23,12 +23,16 @@ import { screenKind, TerminalScreen } from "./terminal-screen";
 import {
   HOSTED_COPY,
   SELF_HOSTED_COPY,
-  TOUR_CAPTION,
+  SPLIT_MAX,
+  SPLIT_MIN,
   deskShellLoaded,
   nextDeskAnchor,
   nextTerminalPath,
   nextWebPath,
+  paneLayers,
   prevTerminalPath,
+  splitFromPointer,
+  widerSide,
 } from "./surface-tour";
 
 function docWith(
@@ -198,18 +202,28 @@ describe("desk walk", () => {
 
 describe("surface tour", () => {
   it("keeps the two stories free of a price", () => {
-    const copy = `${SELF_HOSTED_COPY} ${HOSTED_COPY} ${TOUR_CAPTION}`;
-    expect(copy).toContain("The terminal runs on your computer.");
-    expect(copy).toContain("You run pipelines, models, and strategies yourself.");
-    expect(copy).toContain("Paying makes the hosted services available.");
-    expect(copy).toContain("The web app hosts pipelines and runs the strategies.");
+    const copy = `${SELF_HOSTED_COPY} ${HOSTED_COPY}`;
+    expect(copy).toContain("one-to-one with the hosted desk");
+    expect(copy).toContain("run pipelines and strategies locally");
+    expect(copy).toContain("The same desk, delegated");
+    expect(copy).toContain("do not host the infrastructure");
     expect(copy).not.toMatch(/\$\d|\bFree\b|Coming soon|per month|99\.909|204\.04/);
+    expect(copy).not.toMatch(/Digi[A-Z]/);
   });
 
-  it("tells the visitor to use the switch", () => {
-    expect(TOUR_CAPTION).toContain("switch");
-    expect(TOUR_CAPTION).toContain("click inside the frame");
-    expect(TOUR_CAPTION).not.toMatch(/slider/i);
+  it("keeps both panes on screen and lets the gap change the split", () => {
+    expect(splitFromPointer(0, 0, 1000, 24)).toBe(SPLIT_MIN);
+    expect(splitFromPointer(500, 0, 1000, 24)).toBeCloseTo(0.5, 5);
+    expect(splitFromPointer(1000, 0, 1000, 24)).toBe(SPLIT_MAX);
+    expect(widerSide(0.5)).toBe("even");
+    expect(widerSide(0.62)).toBe("terminal");
+    expect(widerSide(0.4)).toBe("web");
+    expect(paneLayers("/brief", "/brief", null, "/portfolio")).toEqual(["/brief", "/portfolio"]);
+    expect(paneLayers("/portfolio", "/portfolio", "/brief", "/pipeline")).toEqual([
+      "/brief",
+      "/portfolio",
+      "/pipeline",
+    ]);
   });
 
   it("treats a page rail with no links as a loaded desk", () => {
@@ -278,14 +292,21 @@ describe("DashboardBand", () => {
     expect(html).toContain('src="/app"');
     expect(html).toContain('title="Hosted digiquant"');
     expect(html).toContain('aria-label="Terminal pages"');
-    expect(html).toContain('data-slot="segmented"');
-    expect(html).toContain('data-showing="web"');
-    expect(html).toContain('aria-pressed="true">Hosted');
-    expect(html).toContain('aria-pressed="false">Self-hosted');
+    expect(html).toContain('data-pane="terminal"');
+    expect(html).toContain('data-pane="web"');
+    expect(html).toContain('data-page="/brief"');
+    expect(html).toContain('data-wider="even"');
+    expect(html).toContain('role="separator"');
+    expect(html).toContain("Give more width to the terminal or the hosted desk");
+    expect(html).toContain("The terminal and the hosted desk are the same product.");
+    expect(html).not.toContain('data-slot="segmented"');
+    expect(html).not.toContain('data-showing=');
+    expect(html).not.toContain("aria-pressed");
     expect(html).not.toContain('data-slot="slider"');
     expect(html).not.toMatch(/slider/i);
     expect(html).toContain(SELF_HOSTED_COPY);
     expect(html).toContain(HOSTED_COPY);
+    expect(html).not.toContain("The pages tour until");
     expect(html).not.toContain("Opening the web app.");
     expect(html).not.toContain("Touring the web app.");
     expect(html).not.toContain("Touring the terminal.");
