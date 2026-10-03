@@ -102,6 +102,26 @@ describe("hero build clock", () => {
         expect(late.length).toBe(stroke.points.length);
       }
     }
+    const palette = new Set([
+      DIGIQUANT_CHART.sma,
+      DIGIQUANT_CHART.ema,
+      DIGIQUANT_CHART.vwap,
+      DIGIQUANT_CHART.bollingerBasis,
+      DIGIQUANT_CHART.bollingerBand,
+      DIGIQUANT_CHART.supertrendUp,
+      DIGIQUANT_CHART.supertrendDown,
+    ]);
+    expect(palette.size).toBe(7);
+    const seen = new Set<string>();
+    for (const overlay of ["bollinger-bands", "vwap", "supertrend"] as const) {
+      for (const stroke of heroIndicatorStrokes(bars, overlay)) {
+        expect(palette.has(stroke.color)).toBe(true);
+        expect(stroke.color).not.toBe(DIGIQUANT_CHART.candleUp);
+        expect(stroke.color).not.toBe(DIGIQUANT_CHART.candleDown);
+        seen.add(stroke.color);
+      }
+    }
+    expect(seen.size).toBe(palette.size);
     const bb = heroIndicatorStrokes(bars, "bollinger-bands");
     const basis = bb.find((s) => s.color === DIGIQUANT_CHART.bollingerBasis);
     const band = bb.find((s) => s.color === DIGIQUANT_CHART.bollingerBand);

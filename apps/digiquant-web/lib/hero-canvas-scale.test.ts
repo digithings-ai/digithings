@@ -10,6 +10,9 @@ describe("hero canvas scale", () => {
     expect(src).toContain("scale.candleDown");
     expect(src).toContain("scale.volumeUp");
     expect(src).toContain("scale.volumeDown");
+    expect(src).toContain("scale.sma");
+    expect(src).toContain("scale.ema");
+    expect(src).toContain("heroOverlayInputs(overlayKind, scale)");
     expect(src).not.toContain("#3DFF9A");
     expect(src).not.toContain("#FF5C6C");
   });
