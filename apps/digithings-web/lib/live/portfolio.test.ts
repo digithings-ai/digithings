@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACCOUNTING_NAV_COLUMNS,
+  ACCOUNTING_NAV_VIEW,
   cagrPct,
   fetchBenchmark,
   fetchNav,
@@ -9,15 +11,15 @@ import {
 } from "./portfolio";
 
 /**
- * The stitched public view (#3767 / #3935). Indexing every row from the legacy
- * anchor bridges the source flip and prints a return the finalized book did
- * not earn.
+ * The #3935 stitch. Indexing every row from the legacy anchor is +11.849%.
+ * The finalized run alone is +0.993%. The landing page has no since-inception
+ * label; these ratios are what `nav[0]` indexing produces on each series.
  */
 const SEAM_ROWS = [
-  { date: "2026-09-06", nav: 100, source: "legacy_nav_history", series_seam: false },
-  { date: "2026-09-07", nav: 99.92, source: "legacy_nav_history", series_seam: false },
-  { date: "2026-09-08", nav: 110.74928206, source: "finalized_accounting", series_seam: true },
-  { date: "2026-09-09", nav: 111.84928206, source: "finalized_accounting", series_seam: false },
+  { date: "2026-09-06", nav: 100, source: "legacy_nav_history" },
+  { date: "2026-09-07", nav: 99.92, source: "legacy_nav_history" },
+  { date: "2026-09-08", nav: 110.74928206, source: "finalized_accounting" },
+  { date: "2026-09-09", nav: 111.84928206, source: "finalized_accounting" },
 ];
 
 function sinceInceptionPct(points: { nav: number }[]): number {
@@ -52,41 +54,53 @@ describe("live portfolio reads", () => {
     expect(isDcaStrategy("btc_slapper")).toBe(false);
   });
 
-  it("rebases the published series on the current source run", () => {
+  it("publishes finalized rows and drops the legacy prefix", () => {
     const bridged = SEAM_ROWS.map((row) => ({ date: row.date, nav: row.nav }));
-    // The old read kept every row and indexed from the legacy anchor, so
-    // since-inception spanned the seam (~+11.8% instead of the finalized run).
-    expect(sinceInceptionPct(bridged)).toBeCloseTo((111.84928206 / 100 - 1) * 100, 5);
+    // Indexing the stitch from the first row is +11.849%, not the finalized run.
+    expect(sinceInceptionPct(bridged)).toBeCloseTo(11.84928206, 5);
 
     const published = publishedNavPoints(SEAM_ROWS);
     expect(published.map((point) => point.date)).toEqual(["2026-09-08", "2026-09-09"]);
-    expect(sinceInceptionPct(published)).toBeCloseTo(
-      (111.84928206 / 110.74928206 - 1) * 100,
-      5,
-    );
+    expect(sinceInceptionPct(published)).toBeCloseTo(0.993234, 3);
     expect(sinceInceptionPct(published)).not.toBeCloseTo(sinceInceptionPct(bridged), 0);
   });
 
-  it("keeps a single source run intact, including when the seam flag is absent", () => {
-    const oneRun = SEAM_ROWS.slice(2).map((row) => ({
-      date: row.date,
-      nav: row.nav,
-      source: row.source,
-    }));
-    expect(publishedNavPoints(oneRun).map((point) => point.date)).toEqual([
+  it("keeps a finalized run when a provisional nav_history tip is appended", () => {
+    // Latest-source-run cut returned only the tip. One point, and the landing
+    // chart falls through to the synthetic example. The tip must not be the series.
+    const rows = [
+      { date: "2026-09-08", nav: 110.74928206, source: "finalized_accounting" },
+      { date: "2026-10-02", nav: 111.2, source: "finalized_accounting" },
+      { date: "2026-10-03", nav: 112.4, source: "legacy_nav_history" },
+    ];
+    const published = publishedNavPoints(rows);
+    expect(published).toEqual([
+      { date: "2026-09-08", nav: 110.74928206 },
+      { date: "2026-10-02", nav: 111.2 },
+    ]);
+    expect(published).not.toEqual([{ date: "2026-10-03", nav: 112.4 }]);
+    expect(published.length).toBeGreaterThan(1);
+  });
+
+  it("keeps finalized rows on both sides of a one-day legacy hole", () => {
+    const rows = [
+      { date: "2026-09-08", nav: 110, source: "finalized_accounting" },
+      { date: "2026-09-09", nav: 111, source: "finalized_accounting" },
+      { date: "2026-09-10", nav: 50, source: "legacy_nav_history" },
+      { date: "2026-09-11", nav: 112, source: "finalized_accounting" },
+      { date: "2026-09-12", nav: 113, source: "finalized_accounting" },
+    ];
+    expect(publishedNavPoints(rows).map((point) => point.date)).toEqual([
       "2026-09-08",
       "2026-09-09",
+      "2026-09-11",
+      "2026-09-12",
     ]);
-    // A source flip is enough on its own — the boolean is additive.
-    const unlabeled = SEAM_ROWS.map((row) => ({
-      date: row.date,
-      nav: row.nav,
-      source: row.source,
-    }));
-    expect(publishedNavPoints(unlabeled).map((point) => point.date)).toEqual([
-      "2026-09-08",
-      "2026-09-09",
-    ]);
+  });
+
+  it("reads the finalized view, which has no series_seam column", () => {
+    expect(ACCOUNTING_NAV_VIEW).toBe("public_finalized_nav");
+    expect(ACCOUNTING_NAV_COLUMNS).not.toContain("series_seam");
   });
 
   it("drops rows that cannot be a NAV point", () => {
