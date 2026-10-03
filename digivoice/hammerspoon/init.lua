@@ -366,10 +366,10 @@ local function render(s)
     end
     build_canvas(s, view, box)
   else
+    -- Repaint colors only. `phase` is not an hs.canvas attribute: assigning it
+    -- raises, and hs.timer stops the callback after that error, so the icon
+    -- stays on the frame drawn when the canvas was built.
     paint_cells(s, view)
-    if canvas and canvas[1] then
-      canvas[1].phase = icon_phase_for(s, view)
-    end
   end
 end
 
