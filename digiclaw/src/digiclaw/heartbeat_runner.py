@@ -11,6 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 from digiclaw.audit import audit_log
 from digiclaw.digikey_auth import digikey_bearer_token
@@ -18,6 +19,47 @@ from digiclaw.digikey_auth import digikey_bearer_token
 HEARTBEAT_MD = "HEARTBEAT.md"
 DIGIGRAPH_URL = os.environ.get("DIGIGRAPH_URL", "http://127.0.0.1:8000")
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _request_origin(url: str) -> tuple[str, str, int | None]:
+    """Scheme, host, and port. Default ports match the scheme's origin."""
+    parsed = urllib.parse.urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    port = parsed.port
+    if port is None:
+        port = _DEFAULT_PORTS.get(scheme)
+    return (scheme, (parsed.hostname or "").lower(), port)
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only when it stays on the request origin.
+
+    ``urllib`` copies ``Authorization`` onto every hop. A health or drift URL
+    that redirects to another host must fail the call instead of delivering
+    that bearer. Same-origin hops (including the scheme's default port) are
+    still followed.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is None:
+            return None
+        if _request_origin(req.full_url) != _request_origin(newurl):
+            raise urllib.error.HTTPError(
+                req.full_url,
+                code,
+                "cross-origin redirect refused",
+                headers,
+                fp,
+            )
+        return new_req
+
+
+def _urlopen(req: urllib.request.Request, timeout: float) -> Any:
+    opener = urllib.request.build_opener(_SameOriginRedirectHandler)
+    return opener.open(req, timeout=timeout)
 
 
 def _heartbeat_checklist_path() -> Path | None:
@@ -33,7 +75,9 @@ def _heartbeat_checklist_path() -> Path | None:
     return None
 
 
-def _request(url: str, *, method: str = "GET", data: bytes | None = None, auth: bool = False) -> tuple[bool, str]:
+def _request(
+    url: str, *, method: str = "GET", data: bytes | None = None, auth: bool = False
+) -> tuple[bool, str]:
     headers: dict[str, str] = {}
     if auth:
         token = digikey_bearer_token()
@@ -44,7 +88,7 @@ def _request(url: str, *, method: str = "GET", data: bytes | None = None, auth: 
         headers["Content-Type"] = "application/json"
     try:
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
-        with urllib.request.urlopen(req, timeout=60 if method == "POST" else 5) as r:
+        with _urlopen(req, timeout=60 if method == "POST" else 5) as r:
             return r.status == 200, str(r.status)
     except urllib.error.URLError as e:
         return False, str(e.reason) if hasattr(e, "reason") else str(e)
@@ -103,7 +147,7 @@ def _check_drift_and_reoptimize() -> None:
             method="GET",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with _urlopen(req, timeout=5) as r:
             data = json.loads(r.read().decode())
     except (urllib.error.URLError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
         audit_log(
@@ -141,7 +185,7 @@ def _check_drift_and_reoptimize() -> None:
             method="POST",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with _urlopen(req, timeout=60) as r:
             result = json.loads(r.read().decode())
         audit_log(
             "reoptimize_completed",

@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import digiclaw.monitors_tick as monitors
 import pytest
+from digiclaw.cli import main
 from digiclaw.cron import CronParseError, next_cron_time, parse_cron
 from digiclaw.schedule_schema import (
     AgentDefinition,
@@ -114,6 +116,31 @@ def test_scheduler_continuous_tick_and_isolation(tmp_path: Path) -> None:
     outcomes2 = sched.tick(now=t0 + timedelta(seconds=10))
     assert len(outcomes2) == 2
     assert calls == ["flaky", "steady", "flaky", "steady"]
+
+
+@pytest.mark.unit
+def test_schedule_tick_cli_exits_nonzero_when_a_job_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed due job used to print the error and still exit 0."""
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "web-watch-tick.yaml").write_text(
+        "name: web-watch-tick\n"
+        "schedule:\n"
+        "  mode: continuous\n"
+        "  interval_seconds: 60\n",
+        encoding="utf-8",
+    )
+    state = tmp_path / "state.json"
+    common = ["--agents-dir", str(agents), "--state", str(state)]
+
+    def boom() -> None:
+        raise RuntimeError("digisearch down")
+
+    monkeypatch.setattr(monitors, "run_due_monitors", boom)
+    assert main(["schedule", "start", "web-watch-tick", *common]) == 0
+    assert main(["schedule", "tick", *common]) == 1
 
 
 @pytest.mark.unit

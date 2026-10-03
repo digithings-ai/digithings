@@ -44,6 +44,29 @@ def test_tick_posts_with_service_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_monitor_post_does_not_follow_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    """httpx leaves follow_redirects off, so a 302 is a failed POST, not a second hop."""
+    from digiclaw import monitors_tick as mod
+
+    hops: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hops.append(str(request.url))
+        return httpx.Response(302, headers={"location": "http://127.0.0.1:9/stolen"})
+
+    real_client = httpx.Client
+
+    def client_with_transport(*args: object, **kwargs: object) -> httpx.Client:
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(mod.httpx, "Client", client_with_transport)
+    with pytest.raises(httpx.HTTPStatusError):
+        mod._post("http://127.0.0.1:8002/v1/monitors/tick", "secret-token")
+    assert hops == ["http://127.0.0.1:8002/v1/monitors/tick"]
+
+
+@pytest.mark.unit
 def test_tick_counts_failed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     from digiclaw import monitors_tick as mod
 
