@@ -522,6 +522,13 @@ class TestBacktestNode:
         start_response.status_code = 200
         start_response.json.return_value = {"job_id": "job-sse"}
 
+        # First read is the deadline base (0 + 120s). 119s is still inside that
+        # budget; 120s is the bound. A 0s offset times out on the 119s read, so
+        # only one heartbeat is pulled. A longer offset never reaches 120s and
+        # the poll thread stays alive.
+        times = iter((0.0, 119.0, 120.0))
+        pulled: list[str] = []
+
         class _Heartbeats:
             def __enter__(self) -> _Heartbeats:
                 return self
@@ -531,18 +538,21 @@ class TestBacktestNode:
 
             def iter_lines(self) -> Iterator[str]:
                 while True:
-                    yield 'data: {"event":"heartbeat"}'
+                    line = 'data: {"event":"heartbeat"}'
+                    pulled.append(line)
+                    yield line
 
         mock_client = MagicMock()
         mock_client.post = MagicMock(side_effect=[v1_response, start_response])
         mock_client.stream.return_value = _Heartbeats()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        clock = {"t": 0.0}
 
         def _monotonic() -> float:
-            clock["t"] += 100.0
-            return clock["t"]
+            try:
+                return next(times)
+            except StopIteration:
+                return 120.0
 
         holder: dict[str, dict] = {}
 
@@ -558,6 +568,7 @@ class TestBacktestNode:
         thread.start()
         thread.join(2.0)
         assert not thread.is_alive(), "SSE progress poll did not stop on the deadline"
+        assert len(pulled) == 2
         assert holder["out"]["backtest_result"] is None
         assert holder["out"]["error"] == "Backtest job timed out waiting for completion."
         mock_client.get.assert_not_called()

@@ -392,12 +392,11 @@ class TestMcpToolEnforcement:
         assert called.get("ran") is True
 
     def test_workflow_forwards_verified_bearer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The workflow tool must put the caller's JWT on WorkflowRequest.
+        """The workflow tool puts the caller's verified JWT on WorkflowRequest.
 
-        chat and thread_state already forward the verified bearer into the
-        in-process HTTP call. workflow authorizes, then builds WorkflowRequest
-        without digi_bearer, so graph state never carries the token and
-        downstream digisearch/digiquant calls go out unauthenticated.
+        chat and thread_state forward that bearer into the in-process HTTP
+        call. workflow does the same for the graph: digi_bearer is the token
+        so downstream digisearch and digiquant calls stay authenticated.
         """
         monkeypatch.setenv("DIGI_MCP_REQUIRE_AUTH", "1")
         token = _mint(scopes=["digigraph:workflow"])
