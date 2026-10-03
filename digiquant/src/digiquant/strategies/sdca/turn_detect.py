@@ -6,9 +6,9 @@ This module is that algorithm, and nothing else — no asset names, no calendar,
 no engine call, no ``nautilus_trader`` import (SDCA core rule), no pandas.
 
 **It reads like ``cycle_windows.py`` and is interchangeable with it.** The
-documented pin factories (``SdcaCycleWindows.gold_v1()`` and friends) hand-enter
-peaks and troughs; the owner's approved set A is six such pins. This detector
-produces the *same type* from a price series, so a scoring target chosen by hand
+documented pin factories on ``SdcaCycleWindows`` hand-enter peaks and troughs; an
+approved hand-entered set is a row of such pins. This detector produces the
+*same type* from a price series, so a scoring target chosen by hand
 and one chosen by algorithm can be swapped without touching the consumer:
 ``turns_to_cycle_windows`` returns an ``SdcaCycleWindows``. Windows remain what
 the ``cycle_windows`` docstring says they are — a **scoring target** for
@@ -85,11 +85,12 @@ saturated knob is the failure mode that matters.
 4. **Pairing, enforced structurally.** Turns come out strictly alternating
    peak/trough, and a trailing turn with **no opposite partner** is dropped and
    recorded as ``dangling_no_partner``. ``TurnSet`` re-checks the invariant in a
-   validator: an odd number of turns is legitimate — odd alternation still gives
-   every peak an adjacent trough, which is why the owner's approved set A starts
-   and ends on a trough — but a one-turn set is malformed, two same-kind turns in
-   a row are malformed, and out-of-order or repeated pins are malformed. This is
-   owner ruling 2, not a style preference: a malformed set would make the scoring
+   validator: **parity is not the rule**, so an odd number of turns is
+   legitimate — odd alternation still gives every peak an adjacent trough (a
+   7-pin peak…peak set pairs inside it) — and an even count is the ordinary
+   case. What the validator refuses is a one-turn set (no partner at all), two
+   same-kind turns in a row, and out-of-order or repeated pins. This is owner
+   ruling 2, not a style preference: a malformed set would make the scoring
    target ambiguous.
 
 **Two properties worth stating because they are what make the walk safe.**
@@ -617,7 +618,8 @@ def turns_to_cycle_windows(
                 )
             if turn.index <= previous.index:
                 raise ValueError(
-                    f"turn indexes must be strictly ascending, got {previous.index} then {turn.index}"
+                    "turn indexes must be strictly ascending, got "
+                    f"{previous.index} then {turn.index}"
                 )
         previous = turn
         windows.append(
