@@ -16,6 +16,10 @@ import {
   letterGap,
   slotsAt,
   truecolorEnabled,
+  heroSlots,
+  heroWordmarkPixels,
+  idleSlots,
+  readFullPlay,
   wordmarkLines,
   wordmarkPixels,
 } from "./digichat-wordmark";
@@ -121,5 +125,42 @@ describe("digichat wordmark", () => {
     expect(mark.width).toBe(8 * 7 + 7);
     expect(mark.pixels.every((pixel) => pixel.shade === "rest")).toBe(true);
     expect(mark.pixels.some((pixel) => pixel.x === 7)).toBe(false);
+  });
+
+  it("plays the scramble once, then flashes one letter", () => {
+    const scrambling = heroSlots(0, true);
+    expect(scrambling.every((slot) => slot.shade === "dim")).toBe(true);
+    expect(scrambling.map((slot) => slot.ch).join("")).not.toBe(WORD);
+
+    const settled = heroSlots(CYCLE_MS, true);
+    expect(settled.map((slot) => slot.ch).join("")).toBe(WORD);
+    expect(settled.every((slot) => slot.shade === "rest")).toBe(true);
+
+    const again = heroSlots(CYCLE_MS * 2, true);
+    expect(again.map((slot) => slot.ch).join("")).toBe(WORD);
+    expect(again.some((slot) => slot.shade === "dim")).toBe(false);
+
+    const quiet = idleSlots(0);
+    expect(quiet.every((slot) => slot.shade === "rest")).toBe(true);
+    const flashed = heroSlots(CYCLE_MS + 6400, true);
+    expect(flashed.map((slot) => slot.ch).join("")).toBe(WORD);
+    expect(flashed.filter((slot) => slot.shade === "flash")).toHaveLength(1);
+
+    const skipped = heroWordmarkPixels(0, false);
+    const held = wordmarkPixels(SETTLED_MS);
+    expect(skipped.pixels).toEqual(held.pixels);
+  });
+
+  it("records the full play in the tab and skips it afterwards", () => {
+    const mem = new Map<string, string>();
+    const store = {
+      getItem: (key: string) => mem.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        mem.set(key, value);
+      },
+    };
+    expect(readFullPlay(store)).toBe(true);
+    expect(readFullPlay(store)).toBe(false);
+    expect(readFullPlay(null)).toBe(true);
   });
 });

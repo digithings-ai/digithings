@@ -2,32 +2,54 @@
 
 /**
  * Square-pixel DIGICHAT mark. The settled word is the logo. The scramble
- * is how it plays. Pixels are 1×1 user units with no radius.
+ * plays once per tab, then one letter flashes. Pixels are 1×1 with no radius.
  */
 import { useEffect, useState } from "react";
 
 import {
-  CYCLE_MS,
-  SETTLED_MS,
+  WORDMARK_CLOCK_HOST,
+  ensureWordmarkClock,
+  heroWordmarkPixels,
   shadeHex,
-  wordmarkPixels,
+  wordmarkSample,
+  type WordmarkClock,
+  type WordmarkStore,
 } from "./digichat-wordmark";
 
 const TICK_MS = 40;
 
+function clockHost(): WordmarkClock | null {
+  const bag = window as unknown as Record<string, WordmarkClock | undefined>;
+  return bag[WORDMARK_CLOCK_HOST] ?? null;
+}
+
+function storeClock(clock: WordmarkClock) {
+  (window as unknown as Record<string, WordmarkClock>)[WORDMARK_CLOCK_HOST] = clock;
+}
+
 export function DigichatWordmark() {
-  const [tMs, setTMs] = useState(SETTLED_MS);
+  const [sample, setSample] = useState({ elapsed: 0, full: false });
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const origin = performance.now() - SETTLED_MS;
-    const timer = window.setInterval(() => {
-      setTMs((performance.now() - origin) % CYCLE_MS);
-    }, TICK_MS);
+    let store: WordmarkStore | null = null;
+    try {
+      store = window.sessionStorage;
+    } catch {
+      store = null;
+    }
+    const clock = ensureWordmarkClock(performance.now(), store, clockHost());
+    storeClock(clock);
+    const tick = () => {
+      const current = clockHost() ?? clock;
+      setSample(wordmarkSample(performance.now(), current));
+    };
+    tick();
+    const timer = window.setInterval(tick, TICK_MS);
     return () => window.clearInterval(timer);
   }, []);
 
-  const { pixels, width, height } = wordmarkPixels(tMs);
+  const { pixels, width, height } = heroWordmarkPixels(sample.elapsed, sample.full);
   const cell = 2;
   return (
     <svg

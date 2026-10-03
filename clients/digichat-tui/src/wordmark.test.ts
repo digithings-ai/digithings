@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 
-import { CYCLE_MS, cellSgr, wordmarkLines } from "../../../packages/ui/src/components/chat/digichat-wordmark";
+import {
+  CYCLE_MS,
+  WORD,
+  cellSgr,
+  heroSlots,
+  wordmarkLines,
+} from "../../../packages/ui/src/components/chat/digichat-wordmark";
 
 test("the header wordmark is five half-block rows in one color mode", () => {
   expect(CYCLE_MS).toBe(2640);
@@ -13,4 +19,11 @@ test("the header wordmark is five half-block rows in one color mode", () => {
     expect(sgr.includes("38;5") && sgr.includes("38;2")).toBe(false);
     if (cell.ch === " ") expect(cell.color).toBeNull();
   }
+});
+
+test("a later moment in the same process does not scramble again", () => {
+  const later = heroSlots(CYCLE_MS + 50, true);
+  expect(later.map((slot) => slot.ch).join("")).toBe("DIGICHAT");
+  expect(later.some((slot) => slot.shade === "dim")).toBe(false);
+  expect(WORD).toBe("DIGICHAT");
 });

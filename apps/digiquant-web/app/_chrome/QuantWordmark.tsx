@@ -1,5 +1,8 @@
-import type { CSSProperties } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { BUILD_COLUMNS, BUILD_WORD, columnDelayMs } from "@/lib/hero-build";
+import { HERO_PLAYED_KEY, nextHeroLive, type HeroGateView } from "@/lib/hero-play";
 
 /** Pixel lockup for the hero: DIGIQUANT drawn in square cells that grow up from
  *  the baseline, left to right, like bars of a bar chart building the word.
@@ -48,16 +51,18 @@ function build(): { letters: Cell[]; strays: Cell[] } {
         const glint = rand() < 0.045;
         const delay = columnDelayMs(px) + (9 - y) * 9 + Math.floor(rand() * 140);
         const rise = `dq-rise ${260 + Math.floor(rand() * 220)}ms cubic-bezier(0.2,0.7,0.2,1) ${delay}ms backwards`;
+        const glintAnim = glint
+          ? `dq-glint ${7000 + Math.floor(rand() * 8000)}ms step-end ${3500 + Math.floor(rand() * 6000)}ms infinite`
+          : "none";
         letters.push({
           x: px,
           y,
           style: {
             transformBox: "fill-box",
             transformOrigin: "50% 100%",
-            animation: glint
-              ? `${rise}, dq-glint ${7000 + Math.floor(rand() * 8000)}ms step-end ${3500 + Math.floor(rand() * 6000)}ms infinite`
-              : rise,
-          },
+            animation: glint ? `${rise}, ${glintAnim}` : rise,
+            ["--dq-glint" as string]: glintAnim,
+          } as CSSProperties,
         });
       }
     }
@@ -73,7 +78,10 @@ function build(): { letters: Cell[]; strays: Cell[] } {
     strays.push({
       x: px,
       y: py,
-      style: { opacity: 0, animation: `dq-stray ${60 + Math.floor(rand() * 140)}ms linear ${Math.floor(rand() * 1400)}ms backwards` },
+      style: {
+        opacity: 0,
+        animation: `dq-stray ${60 + Math.floor(rand() * 140)}ms linear ${Math.floor(rand() * 1400)}ms backwards`,
+      },
     });
   }
   return { letters, strays };
@@ -81,18 +89,76 @@ function build(): { letters: Cell[]; strays: Cell[] } {
 
 const CELLS = build();
 
-/** `idle` holds every cell back (opacity 0, no animation) until it flips to `run`, which
- *  plays the build. The footer copy uses it to build when it first scrolls into view. */
-export function QuantWordmark({ className, phase = "run" }: { className?: string; phase?: "run" | "idle" }) {
+type LiveGate = { started: number; node: SVGSVGElement | null };
+
+const GATE_HOST = "__dqHeroGate";
+
+function readGate(): LiveGate | null {
+  return (window as unknown as Record<string, LiveGate | undefined>)[GATE_HOST] ?? null;
+}
+
+function writeGate(gate: LiveGate) {
+  (window as unknown as Record<string, LiveGate>)[GATE_HOST] = gate;
+}
+
+function gateView(gate: LiveGate | null): HeroGateView | null {
+  if (!gate) return null;
+  return { started: gate.started, connected: gate.node?.isConnected === true };
+}
+
+/** `idle` holds every cell back (opacity 0, no animation) until it flips to `run`.
+ *  The rise plays once per tab. Later mounts keep the glint only.
+ *  `armed` stays false until a scroll-triggered mark is allowed to claim. */
+export function QuantWordmark({
+  className,
+  phase = "run",
+  armed = true,
+}: {
+  className?: string;
+  phase?: "run" | "idle";
+  armed?: boolean;
+}) {
   const idle = phase === "idle";
+  const ref = useRef<SVGSVGElement>(null);
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const gate = readGate();
+    const decision = nextHeroLive({
+      played: root.getAttribute("data-dq-hero") === "played",
+      armed,
+      idle,
+      now: performance.now(),
+      gate: gateView(gate),
+    });
+    if (!decision.live) return;
+    const node = ref.current;
+    const started = decision.claim ? performance.now() : (gate?.started ?? performance.now());
+    writeGate({ started, node });
+    node?.setAttribute("data-dq-live", "");
+    setLive(true);
+    if (!decision.claim) return;
+    try {
+      if (window.sessionStorage.getItem(HERO_PLAYED_KEY) !== "1") {
+        window.sessionStorage.setItem(HERO_PLAYED_KEY, "1");
+      }
+    } catch {
+      /* private mode: this document still plays once */
+    }
+    root.setAttribute("data-dq-hero", "played");
+  }, [armed, idle]);
+
   return (
     <svg
+      ref={ref}
       xmlns="http://www.w3.org/2000/svg"
       viewBox={`0 0 ${WIDTH} 10`}
       role="img"
       aria-label="digiquant"
       shapeRendering="crispEdges"
       className={className}
+      data-dq-live={live ? "" : undefined}
     >
       {CELLS.letters.map((cell) => (
         <rect
@@ -101,7 +167,8 @@ export function QuantWordmark({ className, phase = "run" }: { className?: string
           y={cell.y}
           width="1"
           height="1"
-          data-dq-anim=""
+          data-dq-anim={idle ? undefined : ""}
+          data-dq-build={idle ? undefined : ""}
           style={idle ? { opacity: 0 } : cell.style}
         />
       ))}
@@ -112,7 +179,8 @@ export function QuantWordmark({ className, phase = "run" }: { className?: string
           y={cell.y}
           width="1"
           height="1"
-          data-dq-anim=""
+          data-dq-anim={idle ? undefined : ""}
+          data-dq-stray={idle ? undefined : ""}
           style={idle ? { opacity: 0 } : cell.style}
         />
       ))}

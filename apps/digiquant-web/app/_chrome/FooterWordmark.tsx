@@ -5,17 +5,20 @@ import { useMotionSafe } from "@digithings/ui";
 import { QuantWordmark } from "./QuantWordmark";
 
 /** The closing mark above the footer, drawn at the width between the page rails (one gutter in from each) so its
- *  edges line up with the frame. It builds once, the first time it scrolls
- *  into view. Server render, no-JS and reduced motion show the finished mark. */
+ *  edges line up with the frame. It may build the first time it scrolls into
+ *  view, if this tab has not already played a pixel mark. Server render, no-JS
+ *  and reduced motion show the finished mark. */
 export function FooterWordmark() {
   const safe = useMotionSafe();
   const ref = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<"run" | "idle">("run");
+  const [armed, setArmed] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!safe || !el || typeof IntersectionObserver === "undefined") return;
     setPhase("idle");
+    setArmed(true);
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) {
@@ -35,7 +38,7 @@ export function FooterWordmark() {
         ref={ref}
         className="mx-auto w-full max-w-[calc(var(--frame-w)+2*var(--page-pad))] overflow-x-clip px-[var(--page-pad)] pb-[clamp(1.5rem,4vw,3rem)] pt-[clamp(2.5rem,7vw,5rem)]"
       >
-        <QuantWordmark phase={phase} className="block h-auto w-full fill-current text-ink" />
+        <QuantWordmark phase={phase} armed={armed} className="block h-auto w-full fill-current text-ink" />
       </div>
     </div>
   );
