@@ -5,7 +5,7 @@
 
 ## Context
 
-digithings currently ships tracing-first observability through **digitrace**: every FastAPI service emits structured spans carrying `workflow_id`, `request_id`, and `session_id`, and each exposes a public, secret-free `/v1/status` endpoint (per the convention in [AGENTS.md](../../AGENTS.md)). This is sufficient to reconstruct *what* happened during a workflow run, but it leaves three gaps:
+digithings currently ships tracing through **digitrace**. `digitrace.trace` attaches `workflow_id`, `request_id`, and `session_id` to a span only when the caller passes them; not every FastAPI service imports it. Production imports are digigraph and digillm, plus a digiquant smoke script. digiquant, digisearch, and digikey expose `/healthz` and do not import `digitrace.trace`. `GET /v1/status` is digitrace only (per [AGENTS.md](../../AGENTS.md)). This is sufficient to reconstruct *what* happened on the calls that are wrapped, but it leaves three gaps:
 
 1. **No metrics.** There is no way to answer "how many workflows ran in the last hour", "what is the p95 latency of `/workflow`", or "how often did LiteLLM calls fail" without replaying raw traces or tailing logs. Tracing is sampled and verbose; aggregate counters and histograms are not.
 2. **No dashboards.** Operators have no shared visual surface for service health. Each on-call incident starts from `docker logs` and ad-hoc `curl` against `/v1/status`.
@@ -57,7 +57,7 @@ Adopt **Prometheus + Grafana** as the metrics baseline, embedded in the existing
 - Operators get a shared, always-on view of stack health without standing up external SaaS.
 - `/metrics` is a widely-understood contract; any future Kubernetes deployment can scrape the same endpoints with a `ServiceMonitor`.
 - Centralising instrumentation in digibase prevents per-service drift and keeps label cardinality controlled in one place.
-- Complements digitrace: metrics show *that* latency spiked; traces show *why*. Both carry `request_id` so operators can pivot between them.
+- Complements digitrace: metrics show *that* latency spiked; traces show *why*. HTTP metrics have no `request_id` label and no exemplar, so a Prometheus series cannot be joined to a trace on `request_id`.
 
 **Negative / tradeoffs**
 - New runtime dependency (`prometheus-client`) across every service. Small, pure-Python, MIT-licensed — acceptable.
