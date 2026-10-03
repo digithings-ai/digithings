@@ -2,7 +2,9 @@
 
 `digivoice install` fetches bun, the OpenTUI packages, whisper-cli, Piper, sox,
 `ggml-base.en.bin`, and the Lessac Piper voice, then copies this checkout's
-banner adapter into `~/.hammerspoon/digivoice`. On a terminal it asks first:
+banner adapter into `~/.hammerspoon/digivoice`. On macOS, when Piper's
+`libespeak-ng.1.dylib` is not already on the machine, it also runs
+`brew install espeak-ng`. On a terminal it asks first:
 auto installs that default set, or the user picks local speech, voice, and
 rewrite models. A pick does not delete models already on disk. `digivoice
 update` refreshes a step whose pin changed and stays non-interactive. Tests
@@ -37,6 +39,7 @@ from digivoice.probe import CommandProbe
 from digivoice.reload import reload_hammerspoon
 from digivoice.runner import CommandRunner, error_tail
 from digivoice.settings import load_settings, save_settings
+from digivoice.speak import find_espeak_library
 
 FetchFn = Callable[[str, Path], None]
 
@@ -164,6 +167,8 @@ def run_install(
         "piper",
         lambda: _install_piper(home, platform, machine, probe, worker, refresh),
     )
+    if platform == "darwin":
+        _attempt(steps, "espeak", lambda: _install_espeak(home, probe, runner, refresh))
     _attempt(steps, "sox", lambda: _install_sox(home, probe, runner, refresh))
     if chosen.auto:
         _attempt(steps, "stt", lambda: _install_stt(home, models_dir, worker, refresh))
@@ -629,6 +634,24 @@ def _install_piper(
     link = _link_binary(piper_fallback(home), binary)
     _remember(home, piper=PIPER_TAG)
     return InstallStep(id="piper", status="installed", detail=link)
+
+
+def _install_espeak(
+    home: Path,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    refresh: bool,
+) -> InstallStep:
+    """macOS Piper needs libespeak-ng. Brew only when that library is missing."""
+    binary = _find_piper(home, probe) or str(piper_fallback(home))
+    found = find_espeak_library(home, binary, platform="darwin")
+    stamp = _load_stamp(home).espeak
+    if found is not None and (not refresh or stamp != "brew"):
+        return InstallStep(id="espeak", status="present", detail=str(found))
+    upgrade = found is not None and refresh and stamp == "brew"
+    step = _brew(probe, runner, "espeak-ng", "espeak", upgrade=upgrade)
+    _remember(home, espeak="brew")
+    return step
 
 
 def _install_sox(

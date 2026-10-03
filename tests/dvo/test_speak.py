@@ -90,6 +90,105 @@ def _speak_runtime(
 def test_piper_argv_pipes_model_and_wav() -> None:
     argv = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"))
     assert argv == ["/usr/bin/piper", "--model", "/v.onnx", "--output_file", "/out.wav"]
+    with_data = piper_argv(
+        "/usr/bin/piper",
+        Path("/v.onnx"),
+        Path("/out.wav"),
+        espeak_data=Path("/opt/espeak-ng-data"),
+    )
+    assert with_data[-2:] == ["--espeak_data", "/opt/espeak-ng-data"]
+
+
+def test_darwin_speak_loads_espeak_beside_the_real_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "real"
+    real.mkdir()
+    piper = real / "piper"
+    piper.write_bytes(b"piper")
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    data = real / "espeak-ng-data"
+    data.mkdir()
+    (data / "phontab").write_bytes(b"tab")
+    link = tmp_path / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(piper)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(link)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[result.argv_piper.index("--espeak_data") + 1] == str(data)
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert str(real) in call.env["DYLD_LIBRARY_PATH"].split(":")
+    assert runtime.runner.calls[1].env is None  # type: ignore[union-attr]
+
+
+def test_darwin_speak_uses_a_homebrew_espeak_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    datadir = tmp_path / "opt" / "share" / "espeak-ng-data"
+    datadir.mkdir(parents=True)
+    (datadir / "phontab").write_bytes(b"tab")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: (datadir,))
+    runtime = _speak_runtime(tmp_path, platform="darwin")
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[-2:] == ["--espeak_data", str(datadir)]
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    dyld = call.env["DYLD_LIBRARY_PATH"].split(":")
+    assert str(libdir) in dyld
+    assert "/usr/bin" in dyld
+
+
+def test_linux_speak_does_not_set_dyld(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "real"
+    real.mkdir()
+    piper = real / "piper"
+    piper.write_bytes(b"piper")
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    data = real / "espeak-ng-data"
+    data.mkdir()
+    (data / "phontab").write_bytes(b"tab")
+    runtime = _speak_runtime(tmp_path, commands={"piper": str(piper)})
+    paths = resolve_paths("linux", tmp_path, runtime.env)
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="linux",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[-2:] == ["--espeak_data", str(data)]
+    assert runtime.runner.calls[0].env is None  # type: ignore[union-attr]
 
 
 def test_play_argv_per_player() -> None:

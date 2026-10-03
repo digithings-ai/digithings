@@ -243,7 +243,10 @@ def test_macos_without_a_cli_tarball_uses_brew(tmp_path: Path) -> None:
     assert _step(report, "sox").detail == "brew install sox"
 
 
-def test_missing_homebrew_fails_those_steps_and_keeps_going(tmp_path: Path) -> None:
+def test_missing_homebrew_fails_those_steps_and_keeps_going(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
     tui = _tui(tmp_path / "tui")
     bodies = {
         BUN_DARWIN: _zip({"bun-darwin-aarch64/bun": b"bun"}),
@@ -261,6 +264,7 @@ def test_missing_homebrew_fails_those_steps_and_keeps_going(tmp_path: Path) -> N
     )
     assert not report.ok
     assert "Homebrew" in _step(report, "whisper-cli").detail
+    assert "Homebrew" in _step(report, "espeak").detail
     assert "Homebrew" in _step(report, "sox").detail
     assert _step(report, "stt").status == "installed"
     assert _step(report, "bun").status == "installed"
@@ -401,7 +405,10 @@ def test_update_refetches_only_an_outdated_pin(tmp_path: Path) -> None:
     assert _step(refreshed, "adapter").status == "present"
 
 
-def test_update_upgrades_homebrew_tools_this_install_wrote(tmp_path: Path) -> None:
+def test_update_upgrades_homebrew_tools_this_install_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
     home = tmp_path / "home"
     tui = _tui(tmp_path / "tui")
     bodies = {
@@ -444,7 +451,11 @@ def test_update_upgrades_homebrew_tools_this_install_wrote(tmp_path: Path) -> No
     assert second.ok
     assert fetched == []
     brew_calls = [call.argv[1:] for call in runner.calls if call.program == "brew"]
-    assert brew_calls == [["upgrade", "whisper-cpp"], ["upgrade", "sox"]]
+    assert brew_calls == [
+        ["upgrade", "whisper-cpp"],
+        ["install", "espeak-ng"],
+        ["upgrade", "sox"],
+    ]
 
 
 def test_unstamped_whisper_upgrade_falls_back_to_install(tmp_path: Path) -> None:
@@ -455,6 +466,7 @@ def test_unstamped_whisper_upgrade_falls_back_to_install(tmp_path: Path) -> None
         binary = bindir / name
         binary.write_bytes(b"#!/bin/sh\n")
         binary.chmod(0o755)
+    (bindir / "libespeak-ng.1.dylib").write_bytes(b"lib")
     models = home / "models"
     models.mkdir()
     (models / DEFAULT_MODEL_FILE).write_bytes(b"ggml")
@@ -1051,3 +1063,158 @@ def test_cli_wizard_cancel_does_not_install(
     )
     assert result.code == 0
     assert result.stdout == "digivoice install: cancelled\n"
+
+
+def _darwin_bodies(piper: dict[str, bytes] | None = None) -> dict[str, bytes]:
+    members = piper or {
+        "piper/piper": b"piper",
+        "piper/espeak-ng-data/phontab": b"data",
+    }
+    return {
+        BUN_DARWIN: _zip({"bun-darwin-aarch64/bun": b"bun"}),
+        PIPER_DARWIN: _tar(members),
+        STT_URL: b"ggml-base",
+        VOICE_ONNX: b"onnx",
+        VOICE_JSON: b"{}",
+    }
+
+
+def _brew_verbs(runner: FakeRunner) -> list[list[str]]:
+    return [call.argv[1:] for call in runner.calls if call.program == "brew"]
+
+
+def test_macos_install_brews_espeak_only_when_the_library_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    tui = _tui(tmp_path / "tui")
+    runner = _runner(tui)
+    report, fetched = _install(
+        tmp_path / "home",
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=_darwin_bodies(),
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=runner,
+    )
+    assert report.ok
+    assert _step(report, "espeak").detail == "brew install espeak-ng"
+    assert not any("espeak" in url for url in fetched)
+    assert ["install", "espeak-ng"] in _brew_verbs(runner)
+    assert ["upgrade", "espeak-ng"] not in _brew_verbs(runner)
+
+
+def test_macos_install_keeps_espeak_already_on_the_machine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "homebrew" / "lib"
+    libdir.mkdir(parents=True)
+    library = libdir / "libespeak-ng.1.dylib"
+    library.write_bytes(b"lib")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    tui = _tui(tmp_path / "tui")
+    runner = _runner(tui)
+    report, _fetched = _install(
+        tmp_path / "home",
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=_darwin_bodies(),
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=runner,
+    )
+    assert _step(report, "espeak").status == "present"
+    assert _step(report, "espeak").detail == str(library)
+    assert ["install", "espeak-ng"] not in _brew_verbs(runner)
+    assert ["upgrade", "espeak-ng"] not in _brew_verbs(runner)
+
+
+def test_macos_install_keeps_espeak_shipped_beside_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    tui = _tui(tmp_path / "tui")
+    runner = _runner(tui)
+    report, _fetched = _install(
+        tmp_path / "home",
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=_darwin_bodies(
+            {
+                "piper/piper": b"piper",
+                "piper/libespeak-ng.1.dylib": b"lib",
+                "piper/espeak-ng-data/phontab": b"data",
+            }
+        ),
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        runner=runner,
+    )
+    assert _step(report, "espeak").status == "present"
+    assert _step(report, "espeak").detail.endswith("libespeak-ng.1.dylib")
+    assert ["install", "espeak-ng"] not in _brew_verbs(runner)
+
+
+def test_macos_update_upgrades_espeak_this_install_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dirs: list[Path] = []
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: tuple(dirs))
+    home = tmp_path / "home"
+    tui = _tui(tmp_path / "tui")
+    bodies = _darwin_bodies()
+    source = _lua_tree(tmp_path / "lua")
+    first, _fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(commands={"brew": "/opt/homebrew/bin/brew"}),
+        adapter_source=source,
+    )
+    assert _step(first, "espeak").detail == "brew install espeak-ng"
+    libdir = tmp_path / "later" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    dirs.append(libdir)
+    runner = _runner(tui)
+    second, fetched = _install(
+        home,
+        tui,
+        platform="darwin",
+        machine="arm64",
+        bodies=bodies,
+        probe=FakeProbe(
+            commands={
+                "brew": "/opt/homebrew/bin/brew",
+                "whisper-cli": "/opt/homebrew/bin/whisper-cli",
+                "sox": "/opt/homebrew/bin/sox",
+            }
+        ),
+        runner=runner,
+        refresh=True,
+        adapter_source=source,
+    )
+    assert second.ok
+    assert fetched == []
+    assert _brew_verbs(runner) == [
+        ["upgrade", "whisper-cpp"],
+        ["upgrade", "espeak-ng"],
+        ["upgrade", "sox"],
+    ]
+
+
+def test_linux_install_does_not_install_espeak(tmp_path: Path) -> None:
+    tui = _tui(tmp_path / "tui")
+    report, _fetched = _install(
+        tmp_path / "home",
+        tui,
+        platform="linux",
+        machine="aarch64",
+        bodies=_linux_bodies(),
+        probe=FakeProbe(commands={"sox": "/usr/bin/sox"}),
+    )
+    assert report.ok
+    assert all(step.id != "espeak" for step in report.steps)
