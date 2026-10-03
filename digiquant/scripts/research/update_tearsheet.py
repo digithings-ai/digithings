@@ -52,15 +52,19 @@ _JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
 _PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)
 _REMOTE_UPSERT_ERRORS = _digest.REMOTE_UPSERT_ERRORS
 
-ROOT = Path(__file__).parent.parent
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
-from lib.scratch_paths import AGENT_CACHE_ROOT  # noqa: E402
+from lib.roots import (  # noqa: E402
+    AGENT_CACHE_ROOT,
+    DASHBOARD_DATA_JSON,
+    DIGIQUANT_ROOT,
+    RESEARCH_CONFIG,
+)
 
-OUTPUT_JSON = ROOT / "apps" / "dashboard" / "public" / "dashboard-data.json"
+OUTPUT_JSON = DASHBOARD_DATA_JSON
 DAILY_DIR = AGENT_CACHE_ROOT / "daily"
-PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
+PORTFOLIO_JSON = RESEARCH_CONFIG / "portfolio.json"
 
 # Benchmarks for comparison
 BENCHMARKS = ["SPY", "QQQ", "IWM", "EEM", "TLT", "GLD", "IBIT"]
@@ -1003,7 +1007,7 @@ def main():
     )
     alpha = performance_returns.relative_return_pct
 
-    docs = load_all_markdowns(ROOT)
+    docs = load_all_markdowns(DIGIQUANT_ROOT)
     print(f"   Research docs: {len(docs)} found")
 
     # --- Push to Supabase (primary data store) ---
@@ -1045,7 +1049,7 @@ def main():
         all_tickers_pj = [p["ticker"] for p in pj_positions if p["ticker"] != "CASH"]
 
         # Try pre-fetched data first, then yfinance as fallback
-        prefetched = _load_prefetched_prices(ROOT)
+        prefetched = _load_prefetched_prices(DIGIQUANT_ROOT)
         pj_prices = None
         if _HAS_YFINANCE and all_tickers_pj and not prefetched:
             pj_prices = fetch_prices(all_tickers_pj, datetime.now().strftime("%Y-%m-%d"))

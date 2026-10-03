@@ -49,6 +49,7 @@ except ImportError:
     _HAS_SB = False
 
 ROOT = Path(__file__).parent.parent
+from lib.roots import research_script  # noqa: E402
 
 # ── Enum constants from schema ────────────────────────────────────────────────
 VALID_CONVICTION = {"High", "Medium", "Low"}
@@ -411,7 +412,7 @@ def run(start: str, end: str, dry_run: bool) -> int:
                 import importlib.util
                 spec = importlib.util.spec_from_file_location(
                     "materialize_snapshot",
-                    str(ROOT / "scripts" / "materialize_snapshot.py"),
+                    str(research_script("materialize_snapshot.py")),
                 )
                 mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
                 spec.loader.exec_module(mod)  # type: ignore[union-attr]
