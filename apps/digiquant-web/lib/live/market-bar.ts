@@ -11,8 +11,8 @@
  *
  * The rest of the baseline universe (ETFs, commodities, currencies, crypto)
  * comes from official `/benchmarks`, then the R2 close archive. A symbol
- * neither source returns stays on the tape as an em dash. Prices and percents
- * are never invented. The first paint is the full symbol list with no numbers.
+ * neither source returns is left off the tape. Prices and percents are never
+ * invented. The first paint has no quotes until a source returns one.
  */
 import { useEffect, useState } from "react";
 import { officialGet, tapeFromBenchmarks } from "@/lib/official-api";
@@ -348,38 +348,26 @@ const INITIAL: MarketBarState = { cells: [], status: "connecting", asOf: null };
 /** Matches the R2 worker cap in `fetchCloseSeries`. */
 const CLOSE_BATCH = 25;
 
-export function unavailableCell(symbol: string): MarketCell {
-  return {
-    symbol,
-    kind: "equity",
-    price: Number.NaN,
-    changePct: null,
-    asOf: "",
-    value: "—",
-    change: "—",
-    stamp: "",
-    up: null,
-  };
-}
-
 export function isQuotedCell(cell: MarketCell): boolean {
   return Number.isFinite(cell.price) && cell.price > 0;
 }
 
-/** One row per baseline symbol. A symbol with no finite price stays an em dash. */
+/** Quoted baseline symbols only, in baseline order. A symbol with no finite price is omitted. */
 export function assembleTape(quotes: ReadonlyMap<string, MarketCell>): MarketCell[] {
-  return TAPE_SYMBOLS.map((symbol) => {
+  const rows: MarketCell[] = [];
+  for (const symbol of TAPE_SYMBOLS) {
     const hit = quotes.get(symbol);
-    if (!hit || !isQuotedCell(hit)) return unavailableCell(symbol);
+    if (!hit || !isQuotedCell(hit)) continue;
     const changePct = hit.changePct !== null && Number.isFinite(hit.changePct) ? hit.changePct : null;
-    return {
+    rows.push({
       ...hit,
       symbol,
       changePct,
       change: formatChange(changePct),
       up: changePct === null ? null : changePct >= 0,
-    };
-  });
+    });
+  }
+  return rows;
 }
 
 /** Archive closes first. A live crypto tick with a real price replaces that symbol. */
