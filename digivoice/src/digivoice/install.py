@@ -926,11 +926,13 @@ def _install_adapter(
 
 
 def _sync_adapter(dest: Path, source: Path) -> bool:
-    """Copy sibling `*.lua` into `dest`. True when a file changed.
+    """Copy sibling `*.lua` and `theme_registry.json` into `dest`. True when a file changed.
 
     A symlink that already points at `source` is left alone. A real directory
     is updated in place, including deletion of lua that this checkout no longer
-    ships, so an old hover control cannot stay behind.
+    ships, so an old hover control cannot stay behind. The banner reads this
+    same registry from beside `banner_core.lua`; a lua-only copy leaves the
+    popup on legacy chrome.
     """
     root = source.resolve()
     if not root.is_dir():
@@ -949,9 +951,13 @@ def _sync_adapter(dest: Path, source: Path) -> bool:
     elif dest.exists() and not dest.is_dir():
         dest.unlink()
     dest.mkdir(parents=True, exist_ok=True)
-    names = {path.name for path in lua_files}
+    files = list(lua_files)
+    registry = root / "theme_registry.json"
+    if registry.is_file():
+        files.append(registry)
+    names = {path.name for path in files}
     changed = False
-    for path in lua_files:
+    for path in files:
         target = dest / path.name
         data = path.read_bytes()
         same = target.is_file() and not target.is_symlink() and target.read_bytes() == data
@@ -965,6 +971,10 @@ def _sync_adapter(dest: Path, source: Path) -> bool:
         if extra.name not in names:
             extra.unlink()
             changed = True
+    stale_registry = dest / "theme_registry.json"
+    if "theme_registry.json" not in names and stale_registry.exists():
+        stale_registry.unlink()
+        changed = True
     return changed
 
 

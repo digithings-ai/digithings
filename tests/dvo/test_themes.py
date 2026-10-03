@@ -125,3 +125,42 @@ def test_lua_banner_reads_the_same_dracula_ground() -> None:
     result = subprocess.run([LUA, "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
     assert "PASS" in result.stdout
+
+
+def test_named_palette_recolors_menu_rows_values_and_status() -> None:
+    """Rows, values, and status follow the payload. An empty palette does not."""
+    dark = json.loads(REGISTRY.read_text(encoding="utf-8"))["palettes"]["tokyonight"]["dark"]
+    ink = dark["ink"]
+    primary = dark["primary"]
+    app = (ROOT / "digivoice" / "tui" / "src" / "app.js").read_text(encoding="utf-8")
+    assert "menuPaint(activeTheme, truecolor)" in app
+    assert "menuPaint(activeTheme, truecolor).row" in app
+    assert "hexChannels(activeTheme.accent)" in app
+    script = f"""
+import {{ menuPaint }} from "./digivoice/tui/src/menu_colors.js"
+const named = menuPaint({{ active: true, text: {ink!r}, accent: {primary!r} }}, true)
+const empty = menuPaint(null, true)
+const channels = (hex) => {{
+  const body = hex.slice(1)
+  const value = Number.parseInt(body, 16)
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
+}}
+const same = (got, want) => got && got.join() === want.join()
+if (!same(named.row, channels({ink!r}))) process.exit(1)
+if (!same(named.value, channels({ink!r}))) process.exit(1)
+if (same(named.value, [175, 175, 175])) process.exit(1)
+if (!same(named.status, channels({primary!r}))) process.exit(1)
+if (!same(named.statusText, channels({ink!r}))) process.exit(1)
+if (empty.row !== null || empty.status !== null || empty.statusText !== null) process.exit(1)
+if (!same(empty.value, [175, 175, 175])) process.exit(1)
+console.log("PASS")
+"""
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "PASS" in result.stdout

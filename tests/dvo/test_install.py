@@ -15,6 +15,7 @@ from digivoice.cli import Runtime, run
 from digivoice.install import (
     PHONEMIZE_MACOS_ARM64_URL,
     _place_first_matching,
+    _sync_adapter,
     adapter_source_dir,
     bun_archive_url,
     hammerspoon_adapter_dir,
@@ -220,6 +221,9 @@ def test_linux_install_fetches_the_local_set(
     source = adapter_source_dir()
     for name in ("init.lua", "banner_core.lua", "hotkeys.lua"):
         assert (adapter / name).read_bytes() == (source / name).read_bytes()
+    assert (adapter / "theme_registry.json").read_bytes() == (
+        source / "theme_registry.json"
+    ).read_bytes()
     installed = "\n".join(path.read_text(encoding="utf-8") for path in adapter.glob("*.lua"))
     assert "pin button" in installed
     assert "copy button" not in installed
@@ -377,6 +381,16 @@ def _runner_with_hs(tui: Path, hs: FakeReply | None = None) -> FakeRunner:
     runner = _runner(tui)
     runner._responses["hs"] = FakeReply() if hs is None else hs
     return runner
+
+
+def test_adapter_copy_ships_the_theme_registry(tmp_path: Path) -> None:
+    source = _lua_tree(tmp_path / "source")
+    registry = source / "theme_registry.json"
+    registry.write_text('{"palettes":{"tokyonight":{}}}\n', encoding="utf-8")
+    dest = tmp_path / "installed"
+    assert _sync_adapter(dest, source) is True
+    assert (dest / "theme_registry.json").read_bytes() == registry.read_bytes()
+    assert _sync_adapter(dest, source) is False
 
 
 def test_update_refetches_only_an_outdated_pin(tmp_path: Path) -> None:
