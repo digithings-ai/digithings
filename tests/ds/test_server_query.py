@@ -84,6 +84,46 @@ def test_query_response_mode_summary_returns_summary(client: TestClient, indexed
 
 
 @pytest.mark.unit
+def test_query_skip_returns_later_hit_and_full_total(client: TestClient) -> None:
+    """skip and include_total_count page the stub corpus; the old path returned page 0.
+
+    With three matching chunks, top_k=1 and skip=1 used to return c0 and total 1
+    (page length standing in for the match count).
+    """
+    from digisearch.search._stub import get_stub_index
+
+    idx = "__unit_test_skip__"
+    get_stub_index().pop(idx, None)
+    for i in range(3):
+        add_chunks(
+            idx,
+            [
+                Chunk(
+                    id=f"c{i}",
+                    content=f"Content {i}",
+                    doc_id=f"d{i}",
+                    embedding=None,
+                    metadata={},
+                )
+            ],
+        )
+    response = client.post(
+        "/query",
+        json={
+            "text": "Content",
+            "index_name": idx,
+            "top_k": 1,
+            "skip": 1,
+            "include_total_count": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert [hit["chunk_id"] for hit in data["results"]] == ["c1"]
+    assert data["total"] == 3
+
+
+@pytest.mark.unit
 def test_query_summarize_if_over_returns_summary(client: TestClient, indexed_results: None) -> None:
     """When result count > summarize_if_over, response includes summary."""
     r = client.post(

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digisearch.core.models import Chunk, Document
 from digisearch.embedding.base import EmbeddingProvider
-from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.ingest_paths import assert_within_ingest_root, resolve_ingest_source
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,22 @@ def _sidecar_path_for(file_path: Path) -> Path:
     if yaml_path.is_file():
         return yaml_path
     return file_path.parent / f"{file_path.stem}.yml"
+
+
+def _reject_sidecar_outside_root(source_path: Path) -> None:
+    """Refuse a sibling sidecar whose resolved path leaves the ingest jail.
+
+    The source path is already contained. ``is_file`` / ``read_text`` still
+    follow an in-jail ``doc.yaml`` symlink to a file outside the root, and that
+    file would be copied into chunk metadata.
+    """
+    side = _sidecar_path_for(source_path)
+    if not side.is_file():
+        return
+    try:
+        assert_within_ingest_root(side)
+    except ValueError as exc:
+        raise IngestError(str(exc), code="ingest_source_rejected", http_status=400) from exc
 
 
 def _resolve_path(source: str | Path, *, enforce_ingest_root: bool) -> Path:
@@ -178,6 +194,8 @@ def ingest_source(
         from digisearch.ingestion.registry import ParserRegistry
 
         path = _resolve_path(source, enforce_ingest_root=enforce_ingest_root)
+        if enforce_ingest_root:
+            _reject_sidecar_outside_root(path)
         if not path.exists() or not path.is_file():
             raise IngestError(
                 f"Source file not found: {source}",
