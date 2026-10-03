@@ -110,10 +110,11 @@ def test_returning_lands_on_the_same_row(tmp_path: Path, monkeypatch: pytest.Mon
     assert seen[3] == 2
 
 
-def test_rewrite_is_enabled_style_and_model() -> None:
+def test_rewrite_is_enabled_style_model_and_timeout() -> None:
     rows = rows_at(VoiceSettings(), "/settings/rewrite")
-    assert [row.name for row in rows] == ["enabled", "style", "model"]
+    assert [row.name for row in rows] == ["enabled", "style", "model", "timeout"]
     assert rows[1].kind == "pick"
+    assert rows[3].value == "off"
     styles = rows_at(VoiceSettings(), "/settings/rewrite/style")
     assert [row.choice for row in styles] == [
         "email",
@@ -123,10 +124,16 @@ def test_rewrite_is_enabled_style_and_model() -> None:
         "blog",
         "none",
     ]
+    limits = rows_at(VoiceSettings(), "/settings/rewrite/timeout")
+    assert [row.choice for row in limits] == ["off", "15", "30", "60"]
+    saved = VoiceSettings(rewrite_timeout_seconds=30)
+    again = rows_at(saved, "/settings/rewrite")
+    assert again[3].value == "30s"
     names = [row.name for row in _walk(VoiceSettings())]
     assert "runner" not in names
-    assert "timeout" not in names
     assert "apps" not in names
+    assert "words" not in names
+    assert "spelling" not in names
 
 
 def test_banner_pin_is_a_chooser() -> None:

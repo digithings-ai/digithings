@@ -32,6 +32,7 @@ from digivoice.settings import (
     PRESET_LABELS,
     VoiceSettings,
     cycle_rewrite_timeout,
+    format_rewrite_timeout,
     load_settings,
     save_settings,
 )
@@ -201,6 +202,12 @@ def rows_at(
                 value=_model_title("rewrite_model", settings.rewrite_model or ""),
                 explain="On-device model. Enter opens the list.",
             ),
+            TreeRow(
+                name="timeout",
+                kind="pick",
+                value=format_rewrite_timeout(settings.rewrite_timeout_seconds),
+                explain="How long a rewrite may run. Enter opens off, 15, 30, or 60.",
+            ),
         ]
     if here == "/settings/rewrite/enabled":
         return _bool_choices(
@@ -212,6 +219,8 @@ def rows_at(
         return _style_choices()
     if here == "/settings/rewrite/model":
         return _model_choices("rewrite_model", installed or (), models_dir, on_disk)
+    if here == "/settings/rewrite/timeout":
+        return _timeout_choices()
     if here == "/settings/banner":
         return [
             TreeRow(
@@ -348,6 +357,22 @@ def _named_choices(field: str, names: tuple[str, ...], explain: str) -> list[Tre
     return [
         TreeRow(name=name, kind="choice", field=field, choice=name, explain=explain)
         for name in names
+    ]
+
+
+def _timeout_choices() -> list[TreeRow]:
+    """Rewrite may run with no timer, or for 15, 30, or 60 seconds."""
+    return [
+        TreeRow(
+            name=name,
+            kind="choice",
+            field="rewrite_timeout_seconds",
+            choice=name,
+            explain="Do not stop a rewrite on a timer."
+            if name == "off"
+            else "Stop a rewrite after this many seconds.",
+        )
+        for name in ("off", "15", "30", "60")
     ]
 
 
@@ -505,6 +530,9 @@ def _list_cursor(settings: VoiceSettings, path: str, rows: list[TreeRow]) -> int
         current = settings.rewrite_model or LOCAL_REWRITE_MODEL_FILE
     elif here == "/settings/rewrite/style":
         current = settings.rewrite_preset
+    elif here == "/settings/rewrite/timeout":
+        seconds = settings.rewrite_timeout_seconds
+        current = "off" if seconds is None else str(int(seconds))
     elif here == "/settings/banner/show":
         current = _on_off(settings.live_banner)
     elif here == "/settings/banner/pin":
