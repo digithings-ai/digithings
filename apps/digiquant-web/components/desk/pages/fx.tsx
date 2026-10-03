@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockDef } from "../../../../../clients/digiquant-tui/src/catalog";
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { readOfficial } from "../read-block";
-import { DeskPane, usePaneFocus } from "./pane";
+import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 const FX_BLOCK_IDS = [
   "fx-summary",
@@ -477,7 +477,7 @@ function FxLayout({ path }: { path: string }) {
   const layout = layoutFor(path);
   const panes = usePaneFocus(layout.map((placement) => placement.id));
   return (
-    <div className="grid h-full min-h-0 grid-cols-12 grid-rows-12 gap-1 p-1">
+    <div className={PANE_GRID}>
       {layout.map((placement) => (
         <div
           key={placement.id}

@@ -34,10 +34,10 @@ function lineOf(read: OfficialRead | null): string {
 function ReadBlock({ label, route, read }: { label: string; route: string; read: OfficialRead | null }) {
   const status = read?.result.status ?? "loading";
   return (
-    <section aria-label={label} className="min-w-0 border-r border-hair px-2 py-1 last:border-r-0">
-      <h2 className="m-0 truncate text-[0.65rem] font-normal text-ink-mute">{label}</h2>
-      <p className={`m-0 max-h-16 overflow-auto whitespace-pre-wrap text-[0.7rem] ${tone[status]}`}>{lineOf(read)}</p>
-      <p className="m-0 truncate text-[0.6rem] text-ink-mute">{route}</p>
+    <section aria-label={label} className="flex min-w-0 flex-col gap-1 border-r border-hair px-2.5 py-1.5 last:border-r-0">
+      <h2 className="m-0 truncate font-mono text-[0.6875rem] font-normal tracking-[0.04em] text-ink-mute">{label}</h2>
+      <p className={`m-0 max-h-16 overflow-auto whitespace-pre-wrap font-mono text-[0.75rem] leading-[1.45] ${tone[status]}`}>{lineOf(read)}</p>
+      <p className="m-0 truncate font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">{route}</p>
     </section>
   );
 }
@@ -175,7 +175,7 @@ export function DeskChat() {
             <DigichatThreadList className="h-full min-h-0" />
             <div className="flex min-h-0 flex-col">
               {sendNote ? (
-                <p role="status" className="m-0 shrink-0 border-b border-hair px-2 py-1 text-[0.7rem] text-ink-soft">
+                <p role="status" className="m-0 flex h-7 shrink-0 items-center border-b border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-soft">
                   {sendNote}
                 </p>
               ) : null}

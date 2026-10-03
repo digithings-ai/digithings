@@ -253,13 +253,13 @@ export function ProductStage() {
   const webHidden = slider <= TERMINAL_AT;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div className="grid gap-px border border-hair sm:grid-cols-2">
         <Story title={SELF_HOSTED_TITLE} copy={SELF_HOSTED_COPY} on={surface === "terminal"} />
         <Story title={HOSTED_TITLE} copy={HOSTED_COPY} on={surface === "web"} />
       </div>
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3 font-mono text-[0.62rem] text-ink-mute">
+        <div className="flex items-center justify-between gap-3 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
           <span className={surface === "terminal" ? "text-ink" : undefined}>{SELF_HOSTED_TITLE}</span>
           <span className={surface === "web" ? "text-ink" : undefined}>{HOSTED_TITLE}</span>
         </div>
@@ -271,7 +271,7 @@ export function ProductStage() {
           aria-label="Show the self-hosted terminal or the hosted web app"
           onValueChange={onSlider}
         />
-        <p className="m-0 flex flex-wrap items-center justify-between gap-2 font-mono text-[0.62rem] text-ink-mute">
+        <p className="m-0 flex flex-wrap items-center justify-between gap-2 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
           <span>{TOUR_CAPTION}</span>
           <span aria-live="polite">{stageStatus(phase, surface)}</span>
         </p>
@@ -324,9 +324,9 @@ export function ProductStage() {
 
 function Story({ title, copy, on }: { title: string; copy: string; on: boolean }) {
   return (
-    <div className={`px-3 py-3 ${on ? "bg-surface-2" : ""}`}>
-      <p className={`m-0 font-mono text-[0.62rem] ${on ? "text-ink" : "text-ink-mute"}`}>{title}</p>
-      <p className={`m-0 mt-1 text-[0.8125rem] leading-[1.5] ${on ? "text-ink-soft" : "text-ink-mute"}`}>{copy}</p>
+    <div className={`px-3 py-2.5 ${on ? "bg-surface-2" : ""}`}>
+      <p className={`m-0 font-mono text-[0.6875rem] tracking-[0.04em] ${on ? "text-ink" : "text-ink-mute"}`}>{title}</p>
+      <p className={`m-0 mt-1 text-[0.8125rem] leading-[1.55] ${on ? "text-ink-soft" : "text-ink-mute"}`}>{copy}</p>
     </div>
   );
 }
@@ -348,14 +348,14 @@ function TerminalStage({
   const layers = warm && upcoming !== path ? [path, upcoming] : [path];
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface font-mono text-ink">
-      <header className="flex h-8 shrink-0 items-center justify-between gap-3 border-b border-hair px-2 text-[0.62rem] text-ink-mute">
+      <header className="flex h-8 shrink-0 items-center justify-between gap-3 border-b border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
         <span className="truncate text-ink">
           digiquant · {label} · {path}
         </span>
         <span className="truncate">screens the terminal draws</span>
       </header>
       <div className="flex min-h-0 flex-1">
-        <nav aria-label="Terminal pages" className="w-[11rem] shrink-0 overflow-auto border-e border-hair" onKeyDown={onListKey}>
+        <nav aria-label="Terminal pages" className="w-[12rem] shrink-0 overflow-auto border-e border-hair" onKeyDown={onListKey}>
           {PAGES.map((item) => {
             const nested = item.path.split("/").filter(Boolean).length > 1;
             const current = item.path === path;
@@ -366,7 +366,7 @@ function TerminalStage({
                 variant="ghost"
                 size="xs"
                 aria-current={current ? "page" : undefined}
-                className={`h-6 w-full justify-start rounded-none px-2 font-mono text-[0.62rem] font-normal ${nested ? "ps-5" : ""} ${current ? "text-ink" : "text-ink-mute"}`}
+                className={`h-7 w-full justify-start rounded-none px-2.5 font-mono text-[0.6875rem] font-normal tracking-[0.02em] ${nested ? "ps-5" : ""} ${current ? "bg-surface-2 text-ink" : "text-ink-mute"}`}
                 onClick={() => onNavigate(item.path)}
               >
                 {item.label}

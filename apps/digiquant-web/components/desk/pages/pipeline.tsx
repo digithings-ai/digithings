@@ -5,7 +5,7 @@ import { BLOCKS, layoutFor, type BlockDef } from "../../../../../clients/digiqua
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import type { Placement } from "../../../../../clients/digiquant-tui/src/grid";
 import { readDeskBlock } from "../read-block";
-import { DeskPane, usePaneFocus } from "./pane";
+import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 /**
  * Pipeline page for the desk. One block per official read. Same reads as the terminal.
@@ -72,7 +72,7 @@ export function PipelinePage() {
   }, []);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-1 p-1">
+    <div className={PANE_GRID}>
       {blocks.map(({ id, def, placement }) => {
         const read = reads[id];
         const status = read?.status ?? "loading";

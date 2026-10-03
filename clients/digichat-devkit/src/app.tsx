@@ -316,15 +316,15 @@ export function App() {
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
       <DigichatWordmark cols={width} />
-      <box height={1} paddingLeft={1} flexDirection="row" backgroundColor={BG}>
+      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
         <text fg={INK}>devkit</text>
         <text fg={MUTE}>{`  ${API}  `}</text>
         <text fg={SOFT}>{headerReveal}</text>
         {shown < read.detail.length && blink ? <text fg={INK}>█</text> : null}
       </box>
       <box flexGrow={1} flexDirection="row" backgroundColor={BG}>
-        <box width={sideWidth} flexDirection="column" border borderColor={focus === "side" ? INK : HAIR} backgroundColor={BG}>
-          <box height={1} paddingLeft={1} flexDirection="row" backgroundColor={BG}>
+        <box width={sideWidth} flexDirection="column" border={["right"]} borderColor={focus === "side" ? INK : HAIR} backgroundColor={BG}>
+          <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
             {GROUPS.map((item) => {
               const on = item === group;
               return (
@@ -346,7 +346,7 @@ export function App() {
               </box>
             ))}
           </box>
-          <box height={1} paddingLeft={1} backgroundColor={BG}>
+          <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} backgroundColor={BG}>
             <text fg={MUTE}>{`${start + 1}–${start + shownRows.length}/${rows.length}`}</text>
           </box>
         </box>
@@ -367,7 +367,7 @@ export function App() {
               <text fg={MUTE}>{`· ${issue}`}</text>
             </box>
           ))}
-          <box flexGrow={1} border borderColor={HAIR} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1} overflow="hidden">
+          <box flexGrow={1} border={["left", "right", "top"]} borderColor={HAIR} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1} overflow="hidden">
             {turns.map((turn) => (
               <TurnLine key={turn.id} turn={turn} accent={accent} alignRight={view.alignRight} />
             ))}
@@ -384,7 +384,7 @@ export function App() {
               />
             </box>
           ))}
-          <box height={1} flexDirection="row" backgroundColor={BG}>
+          <box height={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
             {view.attachments ? <text fg={MUTE}>+ </text> : null}
             <text fg={INK}>{`${GLYPH.user} `}</text>
             {compose ? <text fg={INK}>{compose}</text> : null}
@@ -393,7 +393,7 @@ export function App() {
           </box>
         </box>
       </box>
-      <box height={1} paddingLeft={1} flexDirection="row" backgroundColor={BG}>
+      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
         <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
@@ -467,10 +467,11 @@ function SettingLine({
     return <text fg={row.on ? INK : MUTE}>{`${row.on ? GLYPH.assistant : GLYPH.system} ${row.text}`}</text>;
   }
   const mark = hot ? GLYPH.user : " ";
+  const label = clip(row.label, 22).padEnd(22, " ");
   return (
     <box flexDirection="row" backgroundColor={BG}>
-      <text fg={hot ? INK : MUTE}>{`${mark} ${clip(row.label, 24)}`}</text>
-      <text fg={dimValue(row.value) ? MUTE : SOFT}>{`  ${clip(row.value, valueWidth)}`}</text>
+      <text fg={hot ? INK : MUTE}>{`${mark} ${label}`}</text>
+      <text fg={dimValue(row.value) ? MUTE : SOFT}>{clip(row.value, valueWidth)}</text>
       {caret ? <text fg={INK}>█</text> : null}
     </box>
   );
