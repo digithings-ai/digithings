@@ -1,4 +1,4 @@
-/** Homepage desk: which surface is in the frame, and which page comes next. */
+/** Homepage desk: the shared page, and how wide each pane is. */
 
 import { publicCatalogPages } from "@/components/desk/public-surface";
 
@@ -6,16 +6,19 @@ const PAGES = publicCatalogPages();
 
 export const SELF_HOSTED_TITLE = "Self-hosted";
 export const SELF_HOSTED_COPY =
-  "The terminal runs on your computer. You run pipelines, models, and strategies yourself.";
+  "The terminal UI, one-to-one with the hosted desk. You run pipelines and strategies locally, host it yourself, and configure your own API tokens and local models.";
 
 export const HOSTED_TITLE = "Hosted";
 export const HOSTED_COPY =
-  "Paying makes the hosted services available. The web app hosts pipelines and runs the strategies.";
-
-export const TOUR_CAPTION = "The pages tour until you use the switch or click inside the frame.";
+  "The same desk, delegated. A subscription so you do not host the infrastructure on your own machine.";
 
 export const TOUR_DWELL_MS = 4_200;
 export const IDLE_RESUME_MS = 8_000;
+export const PAGE_FADE_MS = 700;
+
+/** Both panes stay on screen. The gap cannot close either one. */
+export const SPLIT_MIN = 0.28;
+export const SPLIT_MAX = 0.72;
 
 export const WEB_EMPTY_COPY =
   "The web app did not load. This frame stays empty. No figures are filled in.";
@@ -48,6 +51,41 @@ export function prevTerminalPath(current: string): string {
   const index = PAGES.findIndex((page) => page.path === current);
   const start = index < 0 ? 0 : index;
   return PAGES[(start - 1 + PAGES.length) % PAGES.length]?.path ?? PAGES[0].path;
+}
+
+export function clampSplit(share: number): number {
+  if (Number.isNaN(share)) return 0.5;
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, share));
+}
+
+/** Left-pane fraction for a pointer on the stage. `gap` is the center column. */
+export function splitFromPointer(clientX: number, left: number, width: number, gap = 0): number {
+  const usable = width - gap;
+  if (usable <= 0) return 0.5;
+  return clampSplit((clientX - left - gap / 2) / usable);
+}
+
+export type WiderSide = Surface | "even";
+
+/** Which story matches the wider pane. A tie lights neither tile. */
+export function widerSide(share: number): WiderSide {
+  if (share > 0.5) return "terminal";
+  if (share < 0.5) return "web";
+  return "even";
+}
+
+/** Pages mounted together so the outgoing page can fade while the next one loads. */
+export function paneLayers(
+  settled: string,
+  path: string,
+  leaving: string | null,
+  preload: string | null,
+): string[] {
+  const layers: string[] = [];
+  for (const item of [leaving, settled, path, preload]) {
+    if (item && !layers.includes(item)) layers.push(item);
+  }
+  return layers;
 }
 
 function routePath(href: string): string {
