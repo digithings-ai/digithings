@@ -42,6 +42,24 @@ def _report(probe: FakeProbe) -> DoctorReport:
     return render_doctor(doctor_checks("darwin", HOME, {}, probe))
 
 
+def test_whisper_cpp_without_whisper_cli_is_ready() -> None:
+    report = _report(
+        FakeProbe(
+            commands={
+                "whisper-cpp": "/opt/homebrew/bin/whisper-cpp",
+                "piper": "/opt/homebrew/bin/piper",
+                "sox": "/opt/homebrew/bin/sox",
+            },
+            directories={MODELS},
+            files={MODEL},
+        )
+    )
+    detail = _check(report, "whisper-cli")
+    assert detail.startswith("ok ")
+    assert "/opt/homebrew/bin/whisper-cpp" in detail
+    assert report.ok is True
+
+
 def test_ready_when_default_model_and_tools_exist() -> None:
     report = _report(_ready())
     assert report.ok is True
