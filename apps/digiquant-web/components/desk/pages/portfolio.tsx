@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { readDeskBlock } from "../read-block";
-import { DeskPane, usePaneFocus } from "./pane";
+import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
 export const PORTFOLIO_PATHS = [
@@ -112,7 +112,7 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
   }, [controlled, path]);
 
   return (
-    <div className="grid h-full min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-1 p-1">
+    <div className={PANE_GRID}>
       {blocks.map((block) => {
         const view = visibleRead(shown[block.id]);
         return (

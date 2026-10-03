@@ -257,14 +257,21 @@ export function App() {
           ))}
         </box>
       </box>
+      <box height={1} border={["bottom"]} borderColor={LINE} />
       <box flexGrow={1} flexDirection="row">
-        <box width={34} border borderColor={LINE} flexDirection="column">
-          <text fg={DIM}>~/pages</text>
+        <box width={36} border={["right"]} borderColor={LINE} flexDirection="column" flexShrink={0}>
+          <box height={1} paddingLeft={1} paddingRight={1} border={["bottom"]} borderColor={LINE}>
+            <text fg={DIM}>~/pages</text>
+          </box>
           {rows.map((row) =>
             row.kind === "title" ? (
-              <text key={row.text} fg={DIM}>{row.text}</text>
+              <box key={row.text} height={1} paddingLeft={1}>
+                <text fg={DIM}>{row.text}</text>
+              </box>
             ) : (
-              <text key={row.path} fg={row.path === path ? GOLD : DIM}>{railLine(row)}</text>
+              <box key={row.path} height={1} paddingLeft={1} paddingRight={1}>
+                <text fg={row.path === path ? GOLD : DIM}>{railLine(row)}</text>
+              </box>
             ),
           )}
         </box>
@@ -303,7 +310,7 @@ export function App() {
           }))}
         </box>
       </box>
-      <box height={1} paddingLeft={1} flexDirection="row">
+      <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={LINE} flexDirection="row">
         {mode === "goto" ? (
           <>
             <text fg={GOLD}>path </text>

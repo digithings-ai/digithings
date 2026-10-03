@@ -11,7 +11,7 @@ import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/cata
 import { DASH, EMPTY_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { strategyBlocks } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
-import { DeskPane, usePaneFocus } from "./pane";
+import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -370,7 +370,7 @@ function StrategiesDesk({
 }) {
   const panes = usePaneFocus(layout.map((placement) => placement.id));
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-1 p-1">
+    <div className={PANE_GRID}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;

@@ -7,7 +7,7 @@ import { MCP_COMMAND, MCP_INSTALL_COMMAND } from "../_mcp";
 function Step({ n, label, children }: { n: string; label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col border-b border-hair text-left last:border-b-0 lg:border-b-0 lg:border-e lg:last:border-e-0">
-      <p className="m-0 border-b border-hair px-3 py-1.5 font-mono text-[0.64rem] leading-none tracking-[0.04em] text-ink-mute">
+      <p className="m-0 flex h-7 items-center border-b border-hair px-2.5 font-mono text-[0.6875rem] leading-none tracking-[0.04em] text-ink-mute">
         [ {n} ] {label}
       </p>
       <div className="p-2">{children}</div>

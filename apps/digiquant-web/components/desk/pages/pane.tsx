@@ -6,6 +6,12 @@ import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../client
 
 export const PANE_HINT = "[tab] next";
 
+/** 12×12 mosaic. One hairline between panes, not a second frame plus a gutter. */
+export const PANE_GRID = "grid h-full min-h-0 flex-1 grid-cols-12 grid-rows-12 gap-px bg-hair p-px";
+
+const PANE_META = "font-mono text-[0.6875rem] font-normal tracking-[0.04em]";
+const PANE_COPY = "font-mono text-[0.75rem] leading-[1.45] tabular-nums";
+
 /** Click focuses a pane. The hint moves focus to the next one. */
 export function usePaneFocus(ids: string[]): { focus: string; focusAt: (id: string) => void; next: () => void } {
   const key = ids.join("|");
@@ -31,7 +37,7 @@ function BlockView({ block }: { block: PaneBlock }) {
         <thead>
           <tr>
             {block.columns.map((column) => (
-              <th key={column} className="border-b border-hair px-1 py-0.5 text-left font-normal uppercase text-ink-mute">
+              <th key={column} className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute">
                 {column}
               </th>
             ))}
@@ -40,9 +46,9 @@ function BlockView({ block }: { block: PaneBlock }) {
       ) : null}
       <tbody>
         {block.rows.map((row, index) => (
-          <tr key={index} className="border-b border-hair">
+          <tr key={index} className="border-b border-hair last:border-b-0">
             {row.map((cell, cellIndex) => (
-              <td key={cellIndex} className="px-1 py-0.5 align-top">
+              <td key={cellIndex} className="px-2 py-1 align-top">
                 {cell}
               </td>
             ))}
@@ -82,24 +88,24 @@ export function DeskPane({
       aria-label={title}
       data-route={route}
       data-focused={focused ? "1" : "0"}
-      className={`flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden border bg-surface ${focused ? "border-ink" : "border-hair"}`}
+      className={`flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface ${focused ? "shadow-[inset_0_0_0_1px_var(--ink)]" : ""}`}
     >
-      <header className="flex h-6 shrink-0 items-center border-b border-hair">
+      <header className="flex h-7 shrink-0 items-center border-b border-hair">
         <Button
           type="button"
           variant="ghost"
           size="xs"
-          className="h-6 w-full justify-start rounded-none px-2 text-[0.65rem] font-normal text-ink-mute"
+          className={`h-7 w-full justify-start rounded-none px-2.5 ${PANE_META} ${focused ? "text-ink" : "text-ink-mute"}`}
           onClick={onFocus}
         >
           <span className="truncate">{title}</span>
         </Button>
       </header>
-      <div className={`flex min-h-0 flex-1 flex-col gap-1 overflow-auto px-2 py-1 text-[0.7rem] leading-[1.35] ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
-      <footer className="flex h-6 shrink-0 items-center justify-between gap-2 border-t border-hair px-2 text-[0.6rem] text-ink-mute">
-        <span className="truncate">{status}</span>
+      <div className={`flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
+      <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
+        <span className="truncate tabular-nums">{status}</span>
         {focused ? (
-          <Button type="button" variant="ghost" size="xs" className="h-5 shrink-0 rounded-none px-1 text-[0.6rem] font-normal text-ink-mute" onClick={onNext}>
+          <Button type="button" variant="ghost" size="xs" className={`h-7 shrink-0 rounded-none px-0 ${PANE_META} text-ink-mute`} onClick={onNext}>
             {PANE_HINT}
           </Button>
         ) : (

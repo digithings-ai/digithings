@@ -42,7 +42,7 @@ export function VelaPane() {
         <div ref={ref} className="absolute inset-0" />
       </div>
       {failed ? (
-        <p aria-live="polite" className="m-0 border-t border-hair px-2 py-1 text-[0.7rem] text-ink-mute">
+        <p aria-live="polite" className="m-0 flex h-7 shrink-0 items-center border-t border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
           {VELA_UNAVAILABLE}
         </p>
       ) : null}
