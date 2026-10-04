@@ -6,8 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[2]
-AGENT_CACHE_ROOT = _ROOT / "data" / "agent-cache"
+from lib.roots import AGENT_CACHE_ROOT
 
 
 def daily_dir(date_str: str) -> Path:

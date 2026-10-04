@@ -184,7 +184,7 @@ async def byok_header_context(request: Request, call_next):
                 code="byok_model_required",
                 message=(
                     f"BYOK provider {provider!r} requires X-BYOK-Model "
-                    "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
+                    "(e.g. openai/gpt-4o-mini, gemini/gemini-3.5-flash-lite, claude-sonnet-4-6)."
                 ),
                 request=request,
                 service="digigraph",

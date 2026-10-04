@@ -54,8 +54,9 @@ except ImportError:
     pass
 
 
-ROOT = Path(__file__).parent.parent
-SCHEMA_PATH = ROOT / "templates" / "digest-snapshot-schema.json"
+from lib.roots import DIGEST_SNAPSHOT_SCHEMA
+
+SCHEMA_PATH = DIGEST_SNAPSHOT_SCHEMA
 _SUPABASE_UPSERT_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError)
 
 

@@ -226,7 +226,7 @@ describe("POST /api/byok/test", () => {
         headers: {
           "x-byok-key": "not-gemini",
           "x-byok-provider": "gemini",
-          "x-byok-model": "gemini/gemini-2.0-flash",
+          "x-byok-model": "gemini/gemini-3.5-flash-lite",
         },
       })
     );
@@ -296,7 +296,7 @@ describe("POST /api/byok/test", () => {
         headers: {
           "x-byok-key": "not-xai",
           "x-byok-provider": "xai",
-          "x-byok-model": "grok-4-3",
+          "x-byok-model": "grok-4.3",
         },
       })
     );
@@ -357,11 +357,17 @@ describe("POST /api/byok/test", () => {
     }
   });
 
-  it("returns the full model list for a valid Gemini key, from the models[].name shape", async () => {
+  // Google answers with `models[].name` and the `models/` prefix has to come off.
+  // Since #5000 the route also drops anything the house cannot route, because an
+  // unroutable id in the picker is a refused request on activation. The fixture
+  // therefore mixes one routable id with one that is alive upstream but has no
+  // LiteLLM model group, so this pins the shape, the prefix strip, and the
+  // filter in one assertion.
+  it("returns the routable subset of a Gemini key's list, from the models[].name shape", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
-          models: [{ name: "models/gemini-2.0-flash" }, { name: "models/gemini-2.5-flash" }],
+          models: [{ name: "models/gemini-3.5-flash-lite" }, { name: "models/gemini-2.0-flash" }],
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       ),
@@ -373,14 +379,13 @@ describe("POST /api/byok/test", () => {
           headers: {
             "x-byok-key": "AIza-test",
             "x-byok-provider": "gemini",
-            "x-byok-model": "gemini/gemini-2.0-flash",
+            "x-byok-model": "gemini/gemini-3.5-flash-lite",
           },
         }),
       );
       const body = await res.json();
       expect(body.models).toEqual([
-        { id: "gemini-2.0-flash", label: "gemini-2.0-flash" },
-        { id: "gemini-2.5-flash", label: "gemini-2.5-flash" },
+        { id: "gemini-3.5-flash-lite", label: "gemini-3.5-flash-lite" },
       ]);
     } finally {
       fetchSpy.mockRestore();
