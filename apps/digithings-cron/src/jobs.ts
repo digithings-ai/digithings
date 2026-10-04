@@ -291,7 +291,9 @@ export const JOBS: readonly Job[] = [
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
-  // Add a twelve-x wd() row only with a known cron from that repo.
+  // Add a CLOCK-DRIVEN twelve-x wd() row only with a known cron from that
+  // repo. A manual-only row (shipped switched off, addressed by cron string
+  // through POST /kick) is the one exception; see twelve-x-snapshot-backfill.
   wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
@@ -324,6 +326,100 @@ export const JOBS: readonly Job[] = [
   // house-run-09 at 09:17 (`17 9 * * MON`) or project-enforce-assignment at 09:23.
   // days input omitted — workflow default 14.
   wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml"),
+  /**
+   * Manual-only sanctioned trigger for dated snapshot backfills.
+   *
+   * Why this row exists: the FX session pipeline moved to the digiquant-runner
+   * clocks, so twelve-x's `maintenance.yml` lost its schedule and is
+   * `disabled_manually` on GitHub. Remediation therefore has no SSOT path —
+   * only an operator clicking "Run workflow" in the GitHub UI, which bypasses
+   * every Worker audit line. This row is the auditable equivalent.
+   *
+   * The row ships switched off, and that is load-bearing, not provisional:
+   *  - `uniqueEnabledCrons()` skips a switched-off row, so it is absent from
+   *    wrangler.toml `[triggers]` and Cloudflare can never fire it. No clock
+   *    exists.
+   *  - `0 0 30 2 *` is a sentinel that can never match: 30 February does not
+   *    occur. If someone later switches the row on without adding a real
+   *    trigger, it still does not fire.
+   *  - `POST /kick` passes `includeDisabled: true`, which is the only way to
+   *    reach it. Same mechanism the switched-off `house-run-10/11/12` rows
+   *    use.
+   *
+   * Clock-rule compatibility: the rule above this block ("add a twelve-x
+   * `wd()` row only with a known cron from that repo") governs rows a CLOCK
+   * drives. This row has no clock by design, so there is no cron to know — the
+   * sentinel exists purely so the row is addressable by `/kick`. Adding it does
+   * not put an unsourced cron on the org's clock.
+   *
+   * Editing this comment: `tests/scripts/test_prices_cron_dst.py` reads this
+   * file as text, not as a module. It takes everything between one row call
+   * and the next, and drops a row when that span contains the switch-off
+   * marker it greps for. Comment text in that span is attributed to the row
+   * ABOVE, so spelling the marker out anywhere in this block would drop
+   * `twelve-x-digisearch-parity` from the clock set and fail the parity test.
+   * The option object below is the only place the marker may appear. (DIG-55
+   * hit exactly that failure: see PR #5055.)
+   *
+   * `ref` is `develop` via `wd()`. Safe only while the reviewed blob shas
+   * match between branches; verified at DIG-55 time:
+   *   nodes/snapshot_publish.py    develop == main == 66ee88ae
+   *   scripts/backfill_snapshots.py develop == main == 8e65ffd8
+   * Re-verify both before switching the row on, and prefer flipping it on
+   * `main` if they ever diverge.
+   *
+   * Static inputs are deliberately just `{ backfill_snapshots: "true" }`:
+   *  - It is a subset of what twelve-x `develop` declares today, so this row
+   *    never 422s on an unexpected key. `dates` and `until` only exist after
+   *    twelve-x#237 merges, and they travel as per-request `/kick` args.
+   *  - There is NO date bound in configuration. `maintenance.yml` treats an
+   *    empty `since` as "from the beginning", so a bare kick re-projects every
+   *    stored run_date. Every real backfill must pass a bound explicitly. The
+   *    GitHub UI's own default has the same exposure; this row does not widen
+   *    it, but it does make it easy to fire by accident.
+   *  - The bound must be zero-padded ISO (`2026-06-02`, never `2026-6-2`):
+   *    the bounds compare as strings, so an unpadded month sorts after every
+   *    stored run_date and silently re-stamps the whole table.
+   *
+   * ORDERING GATE — read before using this row. This row is build-complete
+   * here, but one-date-per-dispatch is not usable until twelve-x#237 (DIG-52)
+   * merges. Today twelve-x `develop` declares only `backfill_snapshots` and
+   * `since`, and `since` is a LOWER bound with no upper bound:
+   * `backfill_snapshots.py` filters `d >= since`, so `since=2026-06-02`
+   * re-projects every stored run_date from that date to now, each with a fresh
+   * `as_of=now`. That is a bounded-from forward sweep, NOT one date. Until #237
+   * lands, an operator using `since` must accept that sweep; the one-date
+   * remediation sequence needs #237. Do not add a `dates` key here before #237
+   * — it is not a declared input yet and would 422.
+   *
+   * Prune safety: this path can never prune `fx_trade_ideas_snapshot`. That
+   * table is only written by the live FX session pipeline, which passes
+   * `trade_ideas`; `maintenance.yml` reaches `project_snapshots` with
+   * `trade_ideas=None`, so the trade-ideas `_upsert` returns on empty rows
+   * before its `_prune`. `dispatch.test.ts` pins the Worker-side half: this row
+   * declares no input outside the set twelve-x `maintenance.yml` declares. The
+   * runtime half belongs in twelve-x `tests/test_snapshot_publish.py`.
+   *
+   * Blast radius of per-request `/kick` args — known and accepted. The same
+   * `dispatchGithub` merge applies to EVERY workflow_dispatch row, so a `/kick`
+   * carrying `args` can also override a row's own static inputs (`dry_run` on
+   * agent-pr-finalizer, `bucket` on the market-context rows). Precedence is
+   * `{ ...(job.inputs ?? {}), ...args }` — args win — because that is the
+   * contract recorded for DIG-69/DIG-73 (`start_key` must be able to add a key
+   * to a row). Bounds: `/kick` requires `CRON_KICK_SECRET`, and every
+   * `inputs.*` in the workflows is bound through `env:`, never interpolated
+   * into a `run:` line, so this is a surface widening rather than injection.
+   */
+  wd(
+    "twelve-x-snapshot-backfill",
+    "0 0 30 2 *",
+    TWELVE_X,
+    "maintenance.yml",
+    {
+      inputs: { backfill_snapshots: "true" },
+      enabled: false,
+    },
+  ),
 ];
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */
