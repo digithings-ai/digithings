@@ -1,0 +1,27 @@
+# .brand-allowlist — Minimal explicit allowlist of brand exceptions
+
+This file lists the ONLY exceptions to the brand rules. Nothing else is permitted without explicit approval from the brand guardian.
+
+## Name Exceptions (code identifiers only)
+- `DigiChatSession` — TypeScript/React component PascalCase (code-only exception)
+- `requireDigiChatAuth()` — Python/function naming (code-only exception)
+- `X-Digichat-Session` — HTTP header literal (code-only exception)
+
+## Color Hex Exceptions (raw hex only, no token variable)
+- `#e5b765` — `--accent-digigraph` (dark theme accent)
+- `#3dd6c4` — `--accent-digiquant` (dark theme accent)
+- `#B27C1E` — `--accent-digigraph` (light theme accent)
+- `#0E8C7F` — `--accent-digiquant` (light theme accent)
+- `#0A0E0C` — dark avatar/og background
+- `#FBFBF9` — light avatar/og background
+
+## Typography / Voice Exceptions
+- None. There are no typography or voice exceptions beyond what is documented in BRAND.md.
+
+## How to add to this list
+1. Open an issue or mention the brand guardian (`@8f908dca` in Paperclip).
+2. Provide justification and evidence (link to design token, code reference, or deployed asset).
+3. The brand guardian will either add it to this list or direct you to use a design token instead.
+
+## Never commit raw hex outside this list or `packages/design/tokens.css`
+All component CSS must use `var(--token)` syntax. Raw hex appearing in `.css`, `.ts`, `.tsx`, `.md`, or any prose file will fail the `dt-gate brand` check.
