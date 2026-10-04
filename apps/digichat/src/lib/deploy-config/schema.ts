@@ -480,6 +480,17 @@ export const McpServerSchema = z
      * The subset of `allowedTools` whose tools mutate remote state (DIG-284),
      * so the chat can flag them before a call. Same bounds and the same
      * operator-only rule as `allowedTools`.
+     *
+     * Deliberately NOT validated as a subset of `allowedTools` (review #5061
+     * S2). It is an advisory annotation, not a grant: nothing downstream reads
+     * it yet, and a name in `mutatingTools` that is absent from `allowedTools`
+     * is inert rather than widening access, because `allowedTools` is the only
+     * list that grants. Enforcing the subset here would reject a config whose
+     * only fault is a stale entry — a typo'd name in the advisory list would
+     * take the whole server's tools offline, which is the opposite of what a
+     * safety annotation should do. A future leaf that actually enforces
+     * mutation approval should validate it at that point, where the failure
+     * mode is understood.
      */
     mutatingTools: z.array(MCP_TOOL_NAME_SCHEMA).max(MAX_MCP_TOOL_ENTRIES).optional(),
   })
