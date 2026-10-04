@@ -55,6 +55,22 @@ paths = [
   # History can't be rewritten cheaply, so this one exact path stays allowlisted.
   # NOT a generic fixture — see SECURITY.md "Secrets scanning".
   '''^digiquant/src/digiquant/research/config/mcp\.secrets\.env\.example$''',
+
+  # History-only path: third copy of the same example template from the same
+  # migration, at the olympus/atlas location (file absent at HEAD, present in
+  # history). Verified 2026-10-04: this path, the apps/digiquant-atlas path and
+  # the research path above all resolve to the identical git blob, so the same
+  # four names (FRED / CoinGecko / Alpha Vantage / SEC_EDGAR_USER_AGENT) and the
+  # same literals were committed at each of the three. The research copy at HEAD
+  # is placeholders; its historical blob is the one referenced here.
+  # The owner-confirmed dead/rotated 2026-06-18 record in
+  # docs/ops/SECRETS_INVENTORY.md covers those literals, so allowlisting this
+  # third sibling changes no exposure — the identical literals are already
+  # suppressed at the two paths above. Byte-identity re-checked inside the
+  # shell; no value was read or printed. Without this entry the full-history
+  # scan on push reports 90 findings and fails every push to main (DIG-267).
+  # NOT a generic fixture — see SECURITY.md "Secrets scanning".
+  '''^digiquant/src/digiquant/olympus/atlas/config/mcp\.secrets\.env\.example$''',
 ]
 
 # Known-safe values that gitleaks' default rules flag. Either a canonical
