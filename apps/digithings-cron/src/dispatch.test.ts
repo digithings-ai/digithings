@@ -5,7 +5,7 @@ import {
   workflowDispatchUrl,
 } from "./dispatch";
 import type { Env } from "./env";
-import { JOBS, type Job } from "./jobs";
+import { JOBS, jobsForCron, uniqueEnabledCrons, type Job } from "./jobs";
 
 const baseJob: Job = {
   id: "test-job",
@@ -412,5 +412,221 @@ describe("dispatch", () => {
       event_type: "digiquant-baseline",
       client_payload: {},
     });
+  });
+});
+
+describe("per-request dispatch args", () => {
+  /** Dispatch through the real request path and return the JSON body sent. */
+  async function sentBody(
+    job: Job,
+    args?: Record<string, string>,
+  ): Promise<Record<string, unknown>> {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, args ? { args } : {});
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    return JSON.parse(String(init.body));
+  }
+
+  it("merges args over static inputs instead of replacing them", async () => {
+    const job: Job = {
+      ...baseJob,
+      inputs: { backfill_snapshots: "true" },
+    };
+    expect(await sentBody(job, { dates: "2026-06-02" })).toEqual({
+      ref: "develop",
+      inputs: { backfill_snapshots: "true", dates: "2026-06-02" },
+    });
+  });
+
+  it("keeps existing per-job inputs when args are supplied (DIG-69 regression)", async () => {
+    for (const id of [
+      "twelve-x-market-context-intraday",
+      "twelve-x-market-context-daily",
+      "twelve-x-market-context-weekly",
+      "twelve-x-archive-maintenance",
+      "agent-pr-finalizer",
+    ]) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job, `missing ${id}`).toBeDefined();
+      const body = await sentBody(job!, { dates: "2026-06-02" });
+      // Every static input the row already declared is still on the wire.
+      for (const [key, value] of Object.entries(job!.inputs ?? {})) {
+        expect(body.inputs, `${id} lost ${key}`).toMatchObject({ [key]: value });
+      }
+    }
+  });
+
+  it("lets args override a static input of the same key", async () => {
+    const job: Job = { ...baseJob, inputs: { dry_run: "false" } };
+    expect(await sentBody(job, { dry_run: "true" })).toEqual({
+      ref: "develop",
+      inputs: { dry_run: "true" },
+    });
+  });
+
+  it("works on a row that declares no static inputs", async () => {
+    expect(await sentBody(baseJob, { dates: "2026-06-02" })).toEqual({
+      ref: "develop",
+      inputs: { dates: "2026-06-02" },
+    });
+  });
+
+  it("sends {} when there are neither static inputs nor args", async () => {
+    expect(await sentBody(baseJob)).toEqual({ ref: "develop", inputs: {} });
+  });
+
+  it("does not leak args into repository_dispatch client_payload", async () => {
+    const job: Job = {
+      id: "house-run-09",
+      cron: "17 9 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "repository_dispatch",
+      event_type: "digiquant-baseline",
+      enabled: true,
+    };
+    expect(await sentBody(job, { dates: "2026-06-02" })).toEqual({
+      event_type: "digiquant-baseline",
+      client_payload: {},
+    });
+  });
+
+  it("reaches the request body in dry-run mode without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const logged: string[] = [];
+    const logSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation((line: unknown) => void logged.push(String(line)));
+    const env: Env = { DRY_RUN: "1" };
+
+    const result = await dispatch(env, baseJob, baseJob.cron, 0, {
+      args: { dates: "2026-06-02" },
+    });
+
+    expect(result).toEqual({ ok: true, status: 0, dry_run: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const line = JSON.parse(logged[0]) as { body: { inputs: unknown } };
+    expect(line.body.inputs).toEqual({ dates: "2026-06-02" });
+    logSpy.mockRestore();
+  });
+});
+
+describe("twelve-x-snapshot-backfill trigger (DIG-55)", () => {
+  const row = JOBS.find((job) => job.id === "twelve-x-snapshot-backfill");
+
+  /** The ten remediation dates in severity order. Zero-padded ISO, required. */
+  const BACKFILL_DATES = [
+    "2026-06-02",
+    "2026-06-05",
+    "2026-06-08",
+    "2026-06-11",
+    "2026-06-16",
+    "2026-06-10",
+    "2026-06-25",
+    "2026-06-29",
+    "2026-06-30",
+    "2026-07-10",
+  ];
+
+  async function backfillBody(args: Record<string, string>) {
+    expect(row).toBeDefined();
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, row!, row!.cron, 0, { args });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    return { url, body: JSON.parse(String(init.body)) as Record<string, unknown> };
+  }
+
+  it("targets maintenance.yml on develop with backfill_snapshots set", async () => {
+    expect(row).toMatchObject({
+      id: "twelve-x-snapshot-backfill",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "maintenance.yml",
+      ref: "develop",
+      enabled: false,
+      cron: "0 0 30 2 *",
+    });
+    const { url, body } = await backfillBody({ dates: BACKFILL_DATES.join(",") });
+    expect(url).toBe(
+      "https://api.github.com/repos/digithings-ai/twelve-x/actions/workflows/maintenance.yml/dispatches",
+    );
+    expect(body).toEqual({
+      ref: "develop",
+      inputs: { backfill_snapshots: "true", dates: BACKFILL_DATES.join(",") },
+    });
+  });
+
+  it("never fires on a clock: absent from enabled crons and wrangler triggers", async () => {
+    expect(uniqueEnabledCrons()).not.toContain("0 0 30 2 *");
+    expect(jobsForCron("0 0 30 2 *")).toEqual([]);
+    // Reachable only on demand, via the same route as the paused house-run rows.
+    expect(jobsForCron("0 0 30 2 *", { includeDisabled: true })).toEqual([row]);
+    // 30 February cannot occur, so even `enabled: true` would never schedule.
+    expect(
+      uniqueEnabledCrons().some((cron) => cron === "0 0 30 2 *"),
+    ).toBe(false);
+  });
+
+  it("carries no date bound in configuration, so a bare kick sweeps every stored run_date", () => {
+    expect(row!.inputs).toEqual({ backfill_snapshots: "true" });
+    for (const key of Object.keys(row!.inputs ?? {})) {
+      expect(key).not.toMatch(/^(since|until|dates|run_date)$/);
+    }
+  });
+
+  it("declares no input that could request fx_trade_ideas_snapshot pruning", () => {
+    // Read from twelve-x develop at commit 1c7288d: maintenance.yml declares
+    // `backfill_snapshots` and `since`; `until` and `dates` arrive with
+    // twelve-x#237. There is no key that turns on trade-ideas recompute, and
+    // backfill_snapshots.py reaches project_snapshots with trade_ideas=None, so
+    // the trade-ideas _upsert returns on empty rows before its _prune.
+    //
+    // This asserts the ROW's declared inputs, which is configuration this repo
+    // controls — a new key here fails the test. A key added to the row that
+    // twelve-x does not declare would 422 at dispatch instead.
+    //
+    // When you add a key to twelve-x maintenance.yml, add it to
+    // DECLARED_ON_TWELVE_X_DEVELOP here deliberately, with the commit you read.
+    const DECLARED_ON_TWELVE_X_DEVELOP = [
+      "backfill_snapshots",
+      "since",
+      "until",
+      "dates",
+    ];
+    const declared = Object.keys(row!.inputs ?? {});
+    for (const key of declared) {
+      expect(
+        DECLARED_ON_TWELVE_X_DEVELOP,
+        `row declares ${key}, which maintenance.yml does not declare — it would 422`,
+      ).toContain(key);
+      expect(key).not.toMatch(/trade_?ideas/i);
+    }
+  });
+
+  it("sends zero-padded ISO dates so the string compare cannot over-sweep", async () => {
+    // maintenance.yml compares run_date as strings, so `2026-6-2` would sort
+    // after every stored run_date and re-stamp/prune the whole table.
+    for (const date of BACKFILL_DATES) {
+      expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(date).toBe(
+        new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10),
+      );
+    }
+    const { body } = await backfillBody({ dates: BACKFILL_DATES.join(",") });
+    expect((body.inputs as Record<string, string>).dates.split(",")).toHaveLength(10);
+  });
+
+  it("never sends an empty dates value, which maintenance.yml treats as an error", async () => {
+    // `maintenance.yml` guards `[ -n "$DATES" ]`, which is true for a lone
+    // space, so an empty string must be omitted rather than sent as "".
+    const { body } = await backfillBody({ dates: BACKFILL_DATES.join(",") });
+    expect(Object.keys(body.inputs as Record<string, string>)).not.toContain(
+      "run_date",
+    );
+    expect((body.inputs as Record<string, string>).dates.trim()).not.toBe("");
   });
 });

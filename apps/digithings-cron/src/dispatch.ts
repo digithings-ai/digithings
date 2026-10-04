@@ -246,7 +246,7 @@ export async function dispatch(
         }),
       );
     }
-    return dispatchGithub(env, job, cron);
+    return dispatchGithub(env, job, cron, opts.args);
   }
   if (job.kind === "probe") {
     return dispatchProbe(env, job, cron);
@@ -254,7 +254,12 @@ export async function dispatch(
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
 
-async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
+async function dispatchGithub(
+  env: Env,
+  job: Job,
+  cron: string,
+  args: Record<string, string> = {},
+): Promise<DispatchResult> {
   const dryRun = env.DRY_RUN === "1";
   let url: string;
   let body: Record<string, unknown>;
@@ -264,7 +269,11 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
       throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
     }
     url = workflowDispatchUrl(job.repo, job.workflow);
-    body = { ref: job.ref, inputs: job.inputs ?? {} };
+    // Per-request args are merged over the row's static inputs, not substituted
+    // for them: a kick that passes only `dates` must still carry the row's
+    // `backfill_snapshots`. Keys the job never declared still reach the
+    // workflow, so callers own key correctness (GitHub answers 422 otherwise).
+    body = { ref: job.ref, inputs: { ...(job.inputs ?? {}), ...args } };
   } else {
     if (!job.event_type) {
       throw new Error(`job ${job.id}: repository_dispatch requires event_type`);

@@ -22,6 +22,9 @@ const RESUMED_PIPELINE_IDS = [
 
 const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
 
+/** DIG-55: manual-only backfill trigger. Disabled and cron-less by design. */
+const MANUAL_ONLY_IDS = ["twelve-x-snapshot-backfill"] as const;
+
 const PATH_A_TRAP_IDS = [
   "agent-pr-finalizer",
   "agent-backlog-snapshot",
@@ -272,7 +275,7 @@ describe("jobsForCron", () => {
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...DISABLED_HOUSE_RETRY_IDS].sort());
+    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...MANUAL_ONLY_IDS].sort());
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)
@@ -337,5 +340,54 @@ describe("jobsForCron", () => {
     // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
     expect(jobsForCron("0 9 * * MON")).toEqual([]);
     expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
+  });
+});
+
+describe("manual-only rows (DIG-55)", () => {
+  it("are disabled, absent from every clock, and reachable only on demand", () => {
+    for (const id of MANUAL_ONLY_IDS) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job, `missing ${id}`).toBeDefined();
+      expect(job!.enabled).toBe(false);
+      // No clock: wrangler.toml [triggers] mirrors uniqueEnabledCrons(), which
+      // skips disabled rows, so this row needs no trigger and cannot fire.
+      expect(ENABLED_CRONS).not.toContain(job!.cron);
+      expect(uniqueEnabledCrons()).not.toContain(job!.cron);
+      expect(jobsForCron(job!.cron)).toEqual([]);
+      // Reachable via POST /kick, which passes includeDisabled: true.
+      expect(jobsForCron(job!.cron, { includeDisabled: true })).toEqual([job]);
+      // A workflow dispatch needs an explicit, safe ref.
+      expect(job!.ref).toBe("develop");
+      expect(job!.workflow).toBeTruthy();
+    }
+  });
+
+  it("use a sentinel cron that cannot occur, so enabling by accident is inert", () => {
+    // 30 February does not exist, so `0 0 30 2 *` can never be scheduled even if
+    // someone flips enabled: true without adding a real trigger.
+    const row = JOBS.find((job) => job.id === "twelve-x-snapshot-backfill");
+    expect(row?.cron).toBe("0 0 30 2 *");
+    const [, , dayOfMonth, month] = row!.cron.split(" ");
+    expect(Number(dayOfMonth)).toBe(30);
+    expect(Number(month)).toBe(2);
+    expect(Number(dayOfMonth)).toBeGreaterThan(28);
+  });
+
+  it("pins the twelve-x maintenance.yml backfill trigger's declaration", () => {
+    const row = JOBS.find((job) => job.id === "twelve-x-snapshot-backfill");
+    expect(row).toMatchObject({
+      id: "twelve-x-snapshot-backfill",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "maintenance.yml",
+      ref: "develop",
+      enabled: false,
+    });
+    // Static inputs stay a subset of what twelve-x develop declares today
+    // (backfill_snapshots, since), so the row can never 422 on a bare kick.
+    // The date bound is per-request only; see the row comment.
+    expect(row?.inputs).toEqual({ backfill_snapshots: "true" });
+    expect(Object.keys(row!.inputs ?? {})).not.toContain("since");
+    expect(Object.keys(row!.inputs ?? {})).not.toContain("dates");
   });
 });
