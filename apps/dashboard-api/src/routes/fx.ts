@@ -171,6 +171,8 @@ async function pairs(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   if ("error" in pinR) return pinR.error;
   const out = await tx(ctx.env, "fx_trade_ideas_snapshot", "select=pair,direction,run_date&order=run_date.desc&limit=100");
   if ("error" in out) return out.error;
+  // rows arrive run_date.desc, so the first non-null run_date is the latest run.
+  const runDate = out.rows.map((r) => str(r.run_date)?.slice(0, 10)).find((d) => d) ?? null;
   const seen = new Set<string>();
   const list = [];
   for (const r of out.rows) {
@@ -179,7 +181,8 @@ async function pairs(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
     seen.add(pair);
     list.push({ pair, bid: null, offer: null, day_pct: null, bias: str(r.direction), status: null });
   }
-  return ok({ pairs: list }, "twelvex:fx_trade_ideas_snapshot", pinR.pin, null, "unavailable");
+  // marks stay "unavailable": bid/offer/day_pct are hardcoded null, never fetched.
+  return ok({ pairs: list }, "twelvex:fx_trade_ideas_snapshot", pinR.pin, runDate, "unavailable");
 }
 
 async function pairPath(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
@@ -206,6 +209,7 @@ async function levels(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   if ("error" in pinR) return pinR.error;
   const out = await tx(ctx.env, "fx_trade_ideas_snapshot", "select=pair,run_date&order=run_date.desc&limit=50");
   if ("error" in out) return out.error;
+  const runDate = out.rows.map((r) => str(r.run_date)?.slice(0, 10)).find((d) => d) ?? null;
   const rows = out.rows.map((r) => ({
     pair: str(r.pair) ?? "",
     mark: null,
@@ -215,7 +219,8 @@ async function levels(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
     provenance: null,
     flag: null,
   })).filter((r) => r.pair !== "");
-  return ok({ levels: rows }, "twelvex:fx_trade_ideas_snapshot", pinR.pin, null, "unavailable");
+  // marks stay "unavailable": mark/level/role/pips are hardcoded null, never fetched.
+  return ok({ levels: rows }, "twelvex:fx_trade_ideas_snapshot", pinR.pin, runDate, "unavailable");
 }
 
 function sessions(req: Request): Response {
