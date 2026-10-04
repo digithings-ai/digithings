@@ -50,6 +50,9 @@ Pins that matter here, in order of importance:
   ("coarser" would be ambiguous), a duplicated grid cell in one level, and a
   ``degenerate`` flag that disagrees with the frozen dead-zone rule (a caller
   cannot smuggle a one-sided pass past the bar by mislabelling it).
+- **The gold wiring's own input** (i): the script must consume the harness's
+  ``fit.rows``, never re-derive the grid behind its back — a fit with no rows is
+  a broken harness and is refused by name rather than silently emptying a leg.
 - **Zero Nautilus** (h): the module is importable and pure, so the rule is
   reusable for any asset without the engine.
 
@@ -58,8 +61,11 @@ Every number below is synthetic and hand-built; nothing is copied from a run.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from digiquant.strategies.sdca.sensitivity_consolidate import (
@@ -86,6 +92,26 @@ MODULE_PATH = (
     / "sdca"
     / "sensitivity_consolidate.py"
 )
+
+# The gold wiring is a script, not a module, so it is loaded the way its siblings
+# load the other frozen research harnesses — by file path, so the pins read the
+# shipped source rather than a restatement of it.
+GOLD_RUNNER_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "digiquant"
+    / "scripts"
+    / "run_gold_sensitivity_consolidation.py"
+)
+
+
+def _load_gold_runner() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        "run_gold_sensitivity_consolidation", GOLD_RUNNER_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _row(
@@ -847,3 +873,23 @@ def test_module_imports_no_engine_and_no_pandas() -> None:
     assert banned == []
     # Asset knowledge would make the rule non-generic.
     assert not re.search(r"\bGLD\b|\bgold\b|\bBTC\b", source, re.IGNORECASE)
+
+
+# --------------------------------------------------------------------------- #
+# (i) the gold wiring requires the harness's rows — no silent re-derivation
+# --------------------------------------------------------------------------- #
+
+
+def test_an_empty_fit_raises_rather_than_re_deriving_the_grid() -> None:
+    """A fit with no rows is a broken harness, and must say so by name.
+
+    The wiring used to fall back to ``fitter.indicator_grid(name)``, which can
+    never fire (the harness populates ``rows`` on both return paths, and raises
+    ``no grid`` before it can be empty) and would raise ``AttributeError`` on any
+    stub fitter if it did. A level assembled from an emptied leg would still be
+    handed to the module as a verdict, so the refusal has to be explicit.
+    """
+    module = _load_gold_runner()
+    fit = SimpleNamespace(name="uup", rows=(), status="scored", reason=None)
+    with pytest.raises(ValueError, match="'uup'.*no grid rows"):
+        module._rows_from_fit("uup", fit)
