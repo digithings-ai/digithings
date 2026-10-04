@@ -282,6 +282,11 @@ export const JOBS: readonly Job[] = [
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
+  // Monthly names-only ageing sweep for the 90-day rotation window (#248). The
+  // clock lives here and not on the workflow: develop carries no on.schedule, and
+  // the workflow is workflow_dispatch only. Off :00 and off the smoke-site minute
+  // so nothing lands on a shared runner's worst moment.
+  wd("secret-staleness", "17 6 1 * *", DIGITHINGS, "secret-staleness-check.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
