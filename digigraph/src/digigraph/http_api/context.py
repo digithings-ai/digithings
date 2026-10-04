@@ -7,7 +7,12 @@ from typing import Any  # score:allow untyped any — Starlette headers / reques
 
 from fastapi import HTTPException, Request
 
-from digigraph.models import McpServerRef, WorkflowRequest
+from digigraph.models import (
+    MAX_MCP_TOOL_ENTRIES,
+    MAX_MCP_TOOL_NAME_LENGTH,
+    McpServerRef,
+    WorkflowRequest,
+)
 from digigraph.thread_scope import (
     assert_thread_access,
     auth_subject_from_request,
@@ -46,6 +51,44 @@ def _mcp_setup(raw: Any) -> dict[str, str] | None:
     if not isinstance(decoded, dict):
         return None
     return {str(k): str(v) for k, v in decoded.items()}
+
+
+def _mcp_tool_names(raw: Any) -> list[str] | None:
+    """Decode one header tool allowlist into the model's list of names.
+
+    ``parse_mcp_servers_json`` keeps each server row flat (``dict[str, str]``),
+    so an allowlist arrives JSON-encoded and the model field is a list. Absent
+    stays ``None`` and an explicit ``[]`` stays ``[]``: the gate reads that
+    difference as rule 1 (both offer nothing) versus rule 5 (which of the allowed
+    tools mutate), so collapsing the two spellings would silently change an
+    operator's answer.
+
+    Malformed input is refused whole rather than trimmed (rule 3). A non-list, a
+    non-string or empty entry, a name with whitespace or over
+    ``MAX_MCP_TOOL_NAME_LENGTH``, or more than ``MAX_MCP_TOOL_ENTRIES`` entries
+    all read as absent, which denies everything — the same thing the BFF does
+    when it refuses an overshoot. Dropping only the bad entries would keep the
+    tools the operator wrote while the config still looked correct, which is the
+    failure a brake is supposed to make impossible. Values are used verbatim, so
+    a name the BFF would have refused cannot gain a different meaning here.
+    """
+    if isinstance(raw, str):
+        if not raw:
+            return None
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, list) or len(raw) > MAX_MCP_TOOL_ENTRIES:
+        return None
+    names: list[str] = []
+    for name in raw:
+        if not isinstance(name, str):
+            return None
+        if not name or len(name) > MAX_MCP_TOOL_NAME_LENGTH or any(c.isspace() for c in name):
+            return None
+        names.append(name)
+    return names
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
@@ -152,6 +195,11 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
             token=s.get("token") or None,
             auth_header=s.get("authHeader") or None,
             setup=_mcp_setup(s.get("setup")),
+            # Operator allowlists (DIG-284). Field by field like everything else
+            # above, because that is how `setup` was silently dropped once: a
+            # header key the rebuild does not name never reaches the model.
+            allowed_tools=_mcp_tool_names(s.get("allowedTools")),
+            mutating_tools=_mcp_tool_names(s.get("mutatingTools")),
         )
         for s in mcp_servers
     ]
