@@ -22,6 +22,9 @@
  * columns with no representation in this shape; adding them is a contract
  * change for the three consumers, so they are left unmapped here.
  *
+ * The two jsonb criteria columns are rendered as capped prose, not raw JSON —
+ * see `criteriaText`.
+ *
  * Join note: `theses.id` is a uuid and `thesis_vehicles.thesis_id` is the text
  * business key. The vehicles lookup is therefore keyed on `thesis_id`, never on
  * `id`. Keying it on `id` matched 0 of 3256 live rows and silently shipped
@@ -90,6 +93,18 @@ function str(v: unknown): string | null {
 }
 
 /**
+ * A jsonb scalar as text. `validation_criteria` entries can be a bare threshold
+ * (`{ "condition": 2 }`) or a flag (`{ "condition": true }`), so the criterion
+ * key scan has to accept numbers and booleans — a string-only read drops a
+ * threshold-shaped criterion on the floor and renders an empty evidence cell.
+ */
+function scalarText(v: unknown): string | null {
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === "boolean") return v ? "true" : "false";
+  return str(v);
+}
+
+/**
  * The thesis book's business date — one row per thesis per date, newest first
  * from the reader's `order=date.desc`. `date` is the field to age by; `updated_at`
  * is a write timestamp and says nothing about when the book was struck.
@@ -125,14 +140,25 @@ const CRITERION_KEYS = [
   "value",
 ] as const;
 
+/**
+ * One criterion element as prose.
+ *
+ * An object contributes the value of its first recognised criterion key — that
+ * is the field the writer is documented to use (`condition` / `text` /
+ * `statement`, see `market-thesis-exploration.schema.json`). Secondary fields of
+ * the same object are deliberately not concatenated: a kill condition that reads
+ * as `yields < 2%` plus a bare `1.5%` is less honest than one that reads as the
+ * condition the writer meant. Only a hand-edited or future object writer can
+ * reach that case, and it shows up as a short cell rather than a wrong bound.
+ */
 function criterionText(item: unknown): string | null {
   const text = str(item);
   if (text) return text;
-  if (typeof item === "number" || typeof item === "boolean") return String(item);
-  if (item != null && typeof item === "object") {
+  if (typeof item === "number" || typeof item === "boolean") return scalarText(item);
+  if (item != null && typeof item === "object" && !Array.isArray(item)) {
     const rec = item as Record<string, unknown>;
     for (const key of CRITERION_KEYS) {
-      const hit = str(rec[key]);
+      const hit = scalarText(rec[key]);
       if (hit) return hit;
     }
   }
@@ -152,7 +178,15 @@ function criterionText(item: unknown): string | null {
  * A column that arrives as a JSON *string* (a text-path writer, or a proxy that
  * double-encoded it) is parsed and flattened the same way; if it does not parse,
  * it is shown as the text it is.
+ *
+ * The cell is capped. Both consumers render these as one table cell
+ * (`blocks-portfolio.tsx`, `blocks-markets.tsx`) and the TUI renders a fixed
+ * column (`theses-format.ts`), and neither jsonb column has a `maxItems` — an
+ * unbounded join is a layout hazard rather than a crash, so it is truncated with
+ * a visible marker instead of shipped whole.
  */
+const CRITERIA_CELL_MAX = 400;
+
 function criteriaText(v: unknown): string | null {
   if (v == null) return null;
   if (typeof v === "string") {
@@ -170,7 +204,11 @@ function criteriaText(v: unknown): string | null {
     const part = criterionText(item);
     if (part && !parts.includes(part)) parts.push(part);
   }
-  return parts.length > 0 ? parts.join("; ") : null;
+  if (parts.length === 0) return null;
+  const joined = parts.join("; ");
+  return joined.length <= CRITERIA_CELL_MAX
+    ? joined
+    : `${joined.slice(0, CRITERIA_CELL_MAX - 1).trimEnd()}…`;
 }
 
 function emptyCounts(): Record<ThesisStatus | "unknown", number> {
@@ -199,14 +237,22 @@ export function thesisShape(rows: ThesisRow[], vehicles: ThesisRow[]): ThesisSha
   const byThesisId = new Map<string, string[]>();
   for (const v of vehicles) {
     const id = str(v.thesis_id);
-    const ticker = str(v.ticker) ?? str(v.vehicle);
+    // `ticker` is the only vehicle-name column on thesis_vehicles (024). `vehicle`
+    // is a `theses` column, not a thesis_vehicles one, and is not read here.
+    const ticker = str(v.ticker);
     if (!id || !ticker) continue;
-    byThesisId.set(id, [...(byThesisId.get(id) ?? []), ticker]);
+    const seen = byThesisId.get(id) ?? [];
+    // (date, thesis_id, ticker) is the primary key, so a duplicate cannot come
+    // from the table; de-duplicating anyway keeps the cell honest if a caller
+    // hands this a merged read.
+    if (!seen.includes(ticker)) seen.push(ticker);
+    byThesisId.set(id, seen);
   }
   const theses = rows.map((r): Thesis => {
     const id = str(r.id) ?? str(r.thesis_id) ?? "";
-    // `status` is the constrained column; `state` is not a `theses` column and is
-    // read only as a fallback for a pre-shaped row.
+    // `status` is the constrained column and the only one a live row carries.
+    // `state` and `title` are not `theses` columns; they are tolerated as
+    // aliases for a pre-shaped row and are never the primary read.
     const state = (str(r.status) ?? str(r.state) ?? "").toLowerCase();
     // `thesis_id` is the key thesis_vehicles joins on; `id` is the uuid and
     // never matches, so it is only a fallback for rows that predate thesis_id.

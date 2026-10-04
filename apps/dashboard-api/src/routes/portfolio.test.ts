@@ -206,6 +206,12 @@ describe("phase 1 portfolio routes", () => {
   // row whose status the constraint would reject must land in `unknown` and
   // inflate neither — `WATCH` in the table is not the `watch` bucket. The row
   // still shows its own status: the pane reports the book, it does not relabel.
+  //
+  // `chk_theses_status` rejects `WATCH`, so this row cannot be written by the
+  // table. It is here on purpose: the mapper is exported and both routes hand it
+  // whatever a read returns, and a bucket that only trusts the constraint is a
+  // bucket that lies the first time the constraint is bypassed. In practice the
+  // `unknown` bucket is reachable through a NULL `status`, which is allowed.
   it("theses buckets a status the constraint would reject as unknown", async () => {
     mockFetch((url) => (url.includes("/theses?")
       ? [
