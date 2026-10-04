@@ -20,6 +20,16 @@ reproduce it by copying an existing file. `docs-onboard-digithings.yml` was alre
 and is the reason its sibling run showed `waiting` while db-migrate showed `pending` during
 the incident.
 
+The other half of the hazard is that the environment changes *after* this file was written,
+in the GitHub UI, where no test runs. A job gated on `cron` (added 2026-10-04 for DIG-248) is
+invisible to this sweep the moment someone arms a required reviewer on `cron`: 32 pipelines
+would then stop silently, exactly as db-migrate did, with every assertion here still green.
+`.github/environments.json` records the protection rules of every environment, this module
+reads it to decide which gated jobs may queue (an environment that cannot wait never leaves
+the approval gate, so the queue it would create is not one), and
+`scripts/secret_staleness_check.py` re-reads the live API so the manifest cannot quietly
+become a lie. An environment missing from the manifest is a test failure, not a skip.
+
 The escape is deliberately narrow — either supersede within the group, or use a group that
 is unique per run so nothing ever queues. What is refused is the third shape: a shared group
 that queues behind a run which may never be approved. See
@@ -30,6 +40,7 @@ that argument has to be made per workflow and this test does not make it for you
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -39,6 +50,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+MANIFEST_PATH = REPO_ROOT / ".github" / "environments.json"
 
 # Both suffixes: GitHub reads either, so a `.yaml` workflow is not exempt from the
 # invariant just because the repo happens to spell most of them `.yml`.
@@ -66,6 +78,29 @@ PER_RUN_TOKENS = ("github.run_id", "github.run_number")
 # environment-gated jobs still get caught by the parametrised sweep below;
 # pin any survivors here so dropping `environment:` cannot quietly skip.
 ENVIRONMENT_GATED: dict[str, set[str]] = {}
+
+
+def _manifest() -> dict[str, dict]:
+    """Protection rules per environment, as committed in `.github/environments.json`.
+
+    Read as data rather than derived from the workflows, because the whole point is that
+    the two can disagree: the workflows say *which* environment a job is gated on, the
+    manifest says *whether that environment can make a run wait*, and that second fact
+    lives only in the GitHub UI.
+    """
+    payload = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return payload["environments"]
+
+
+def _can_wait(rules: dict) -> bool:
+    """Whether a run gated on this environment can linger in the approval gate.
+
+    Required reviewers and a wait timer are both ways to be made to wait; neither means
+    the job starts immediately. `deployment_branches` is deliberately not counted: an
+    environment whose branch policy excludes the run's ref *skips* the job loudly, which
+    is a different failure with a visible log line, whereas #2541 is a stall.
+    """
+    return bool(rules.get("required_reviewers")) or int(rules.get("wait_timer_minutes") or 0) > 0
 
 
 def _gated_jobs(workflow: dict) -> dict[str, dict]:
@@ -168,12 +203,32 @@ def test_an_environment_gated_job_does_not_queue(path: Path) -> None:
     if not gated:
         pytest.skip("no environment-gated job")
 
+    manifest = _manifest()
+
     for name, job in gated.items():
+        environment = (
+            job["environment"]["name"]
+            if isinstance(job["environment"], dict)
+            else job["environment"]
+        )
+        assert environment in manifest, (
+            f"{path.name}:{name} is gated on environment {environment!r}, which is not in "
+            f"{MANIFEST_PATH.relative_to(REPO_ROOT)}. The queueing rules below cannot be "
+            "checked without knowing whether that environment can make a run wait, so this "
+            "is a failure rather than a skip — add it to the manifest with its protection "
+            "rules from the environments API"
+        )
+        if not _can_wait(manifest[environment]):
+            # The job starts immediately, so a shared group cannot be held by an
+            # unapproved run and the invariant cannot be violated here. The manifest
+            # saying otherwise (or wrongly) is caught by the two tests above.
+            continue
+
         for scope, concurrency in _concurrency_scopes(workflow, job):
             where = f"{path.name}:{name} ({scope})"
 
             assert isinstance(concurrency, dict), (
-                f"{where} is gated on environment {job['environment']!r} and uses the scalar "
+                f"{where} is gated on environment {environment!r} and uses the scalar "
                 f"form `concurrency: {concurrency}`, which cannot carry cancel-in-progress. A "
                 "run left unapproved then holds the group for as long as nobody approves it "
                 "and every later run queues behind it forever (#2541)"
@@ -184,7 +239,7 @@ def test_an_environment_gated_job_does_not_queue(path: Path) -> None:
                 continue  # genuinely distinct per run, so nothing ever queues behind it
 
             assert not _cancel_is_an_expression(concurrency), (
-                f"{where} is gated on environment {job['environment']!r}, shares the static "
+                f"{where} is gated on environment {environment!r}, shares the static "
                 f"concurrency group {group!r}, and decides cancel-in-progress with the "
                 f"expression {concurrency['cancel-in-progress']!r}. Whether it supersedes is "
                 "not decidable from this file, so it cannot be relied on to end a starvation "
@@ -192,9 +247,59 @@ def test_an_environment_gated_job_does_not_queue(path: Path) -> None:
             )
 
             assert _cancels_in_progress(concurrency), (
-                f"{where} is gated on environment {job['environment']!r} and shares the static "
+                f"{where} is gated on environment {environment!r} and shares the static "
                 f"concurrency group {group!r} without cancel-in-progress, so an unapproved run "
                 "stops the workflow indefinitely instead of delaying it. Either supersede "
                 "(cancel-in-progress: true, only if the newest run's work is a superset of what "
                 "it displaces) or make the group unique per run (#2541)"
             )
+
+
+def test_every_declared_environment_is_in_the_manifest() -> None:
+    """Fail closed on an environment whose protection rules are unknown here.
+
+    Without this, adding `environment: something-new` would make the sweep skip the job
+    while looking green — the same hole `test_known_environment_gated_jobs_are_still_gated`
+    was written to close from the other direction.
+    """
+    manifest = _manifest()
+    unknown: dict[str, set[str]] = {}
+    for path in WORKFLOWS:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for name, job in _gated_jobs(workflow).items():
+            environment = (
+                job["environment"]["name"]
+                if isinstance(job["environment"], dict)
+                else job["environment"]
+            )
+            if environment not in manifest:
+                unknown.setdefault(str(environment), set()).add(f"{path.name}:{name}")
+    assert not unknown, (
+        f"workflows gate on environment(s) missing from "
+        f"{MANIFEST_PATH.relative_to(REPO_ROOT)}: {unknown}"
+    )
+
+
+def test_the_cron_environment_cannot_wait() -> None:
+    """The property DIG-248 depends on, pinned here so the manifest cannot excuse itself.
+
+    32 jobs across 18 workflows were declared `environment: cron` so that the CI-read
+    secret names can be moved out of repo and org scope — GitHub only exposes an
+    environment-scope secret to a job that declares that environment. That plan is
+    worthless if `cron` ever gains a required reviewer: the jobs would then be correct on
+    paper and every scheduled pipeline would stall like #2541. The live check lives in
+    `scripts/secret_staleness_check.py`; this pins the intent at review time.
+    """
+    rules = _manifest().get("cron")
+    assert rules is not None, f"`cron` is missing from {MANIFEST_PATH.relative_to(REPO_ROOT)}"
+    assert rules.get("required_reviewers") == [], (
+        "an environment-scoped cron gate must not require review: 32 jobs would sit in the "
+        "approval gate and stop their workflows, the #2541 failure mode"
+    )
+    assert int(rules.get("wait_timer_minutes") or 0) == 0, (
+        "an environment-scoped cron gate must not add a wait timer, for the same reason"
+    )
+    assert rules.get("deployment_branches") is None, (
+        "`cron` is dispatched from the digithings-cron Worker on many refs; a branch policy "
+        "would skip the job rather than run it"
+    )
