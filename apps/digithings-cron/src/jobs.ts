@@ -413,7 +413,9 @@ export const JOBS: readonly Job[] = [
    * `trade_ideas=None`, so the trade-ideas `_upsert` returns on empty rows
    * before its `_prune`. `dispatch.test.ts` pins the Worker-side half: this row
    * declares no input outside the set twelve-x `maintenance.yml` declares. The
-   * runtime half belongs in twelve-x `tests/test_snapshot_publish.py`.
+   * runtime half is written in twelve-x `tests/test_backfill_snapshots.py`
+   * (`test_trade_ideas_snapshot_is_never_written_or_pruned`) and lands with
+   * twelve-x#237 (DIG-52); it is NOT in `test_snapshot_publish.py`.
    *
    * Blast radius of per-request `/kick` args — known and accepted. The same
    * `dispatchGithub` merge applies to EVERY workflow_dispatch row, so a `/kick`
