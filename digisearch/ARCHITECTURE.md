@@ -220,6 +220,14 @@ Key request fields:
 
 Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
 
+Multi-index fan-out (`index_name: "a,b"`) passes the caller's `skip`/`top_k`
+to each leg. Only stub legs are full-read then sliced; Vectorize/Chroma/Azure
+pages are fused as returned (Vectorize `skip > 0` raises, Chroma is capped at
+100, Azure at most 1000 per page). The fused `total_count` is set only when
+every leg is complete. `POST /query` returns `total: null` when
+`include_total_count: true` and the fused total is unknown; with
+`include_total_count: false` `total` stays the page length.
+
 Cross-namespace twin dedupe (#4823): before normalization, `run_query`
 collapses hits whose full chunk bodies are byte-identical and whose
 metadata paths are suffix-related at a `/` boundary (live path plus

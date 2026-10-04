@@ -437,7 +437,7 @@ class QueryResponse(BaseModel):
     results: list[dict]
     query: str
     index_name: str
-    total: int
+    total: int | None
     formatted: str | None = Field(
         default=None, description="When format=table, markdown table string for display"
     )
@@ -697,7 +697,13 @@ def run_query(req: QueryRequest) -> QueryResponse:
         from digisearch.http_client import format_results_table
 
         formatted = format_results_table(out_results, req.text, top_k=req.top_k)
-    total = response.total_count if response.total_count is not None else len(results)
+    total: int | None
+    if response.total_count is not None:
+        total = response.total_count
+    elif req.include_total_count:
+        total = None
+    else:
+        total = len(results)
     effective = effective_query_mode(mode, response.backend)
     if effective != mode:
         logger.info(

@@ -67,4 +67,7 @@ def resolve_ingest_source(source: str) -> Path:
     candidate = Path(source).expanduser()
     if not candidate.is_absolute():
         candidate = root / candidate
-    return assert_within_ingest_root(candidate)
+    resolved = assert_within_ingest_root(candidate)
+    if resolved.is_file():
+        assert_hardlink_within_ingest_root(resolved)
+    return resolved

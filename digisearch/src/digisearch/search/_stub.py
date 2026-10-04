@@ -238,29 +238,72 @@ def _rrf_merge_results(
     return merged[:top_k] if top_k else merged
 
 
-def _leg_is_complete(response: SearchResponse, page_size: int) -> bool:
+def _leg_is_complete(response: SearchResponse, page_size: int, skip: int = 0) -> bool:
     """True when *response* holds every match that leg can return.
 
-    A reported total wins. A short page with no total means the leg stopped
-    early. A full page with no total is not the end of the leg.
+    A reported total wins. A later page with no total already dropped a prefix,
+    so it is not the whole leg. A short first page with no total means the leg
+    stopped early, except when the backend truncates before the page ends: a Vectorize
+    page clamped at MAX_TOP_K 50 is not exhaustive when it lands exactly on
+    the clamp, and a Chroma page is not exhaustive when skip+top_k needs more
+    than the 100-result cap (the over-fetch was capped, so a short page is a
+    prefix, not the leg). A full page with no total is not the end of the leg.
     """
     if response.total_count is not None:
         return len(response.results) >= response.total_count
+    # No reported total. A later page has already dropped a prefix, so it is
+    # not the whole match set (Chroma's offset is a capped over-fetch; Vectorize
+    # has no offset and raises instead of returning this page).
+    if max(int(skip or 0), 0) > 0:
+        return False
+    backend = response.backend or ""
+    if backend == BACKEND_VECTORIZE:
+        try:
+            from digisearch.indexes.backends.vectorize import MAX_TOP_K as _vmax
+        except ImportError:
+            _vmax = 50
+        effective = min(max(int(page_size or 0), 1), int(_vmax))
+        return len(response.results) < effective
+    if backend == BACKEND_CHROMA:
+        n = min(max(int(page_size or 0), 0), 100)
+        if n <= 0:
+            return True
+        if max(int(skip or 0), 0) + n > 100:
+            return False
+        return len(response.results) < n
     return len(response.results) < max(page_size, 1)
 
 
 def _read_fanout_leg(query: Query, index_name: str) -> SearchResponse:
-    """Read one leg from the start, then the rest of it when a total is known.
+    """Read one leg for fan-out fusion.
 
-    Fusing ``skip + top_k`` hits makes the candidate set grow with the page.
-    A shared chunk that sits just outside the first page then picks up another
-    RRF term and can put an earlier hit on the next page as well.
+    The caller's skip/top_k pass through untouched so backends that apply
+    pagination themselves (Vectorize raises on skip>0, Chroma over-fetches
+    skip+top_k capped at 100, Azure applies skip/include_total_count) serve
+    the requested page. Only the in-memory stub -- which scans every match --
+    is full-read in one pass (skip=0, top_k=total) so the fused ranking can be
+    sliced afterwards. Other backends are never re-read with top_k=total: for
+    Azure that fuses a <=1000 prefix as the whole leg.
     """
-    page_size = max(int(query.top_k or 0), 1)
-    probe = replace(query, skip=0, top_k=page_size, include_total_count=True)
+    page_size = max(int(query.top_k or 0), 0)
+    probe = replace(query, include_total_count=True)
     first = _query_single_index(probe, index_name)
+    if first.backend != BACKEND_STUB:
+        return first
     total = first.total_count
-    if total is None or len(first.results) >= total or total <= page_size:
+    if total is None:
+        return _query_single_index(
+            replace(
+                query,
+                skip=0,
+                top_k=max(page_size, 10000),
+                include_total_count=True,
+            ),
+            index_name,
+        )
+    if len(first.results) >= total:
+        return first
+    if int(total) <= 0:
         return first
     return _query_single_index(
         replace(query, skip=0, top_k=int(total), include_total_count=True),
@@ -381,9 +424,10 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    # One fused ranking for every page. Each leg is read in full when it
-    # reports a total, then the same list is sliced. Growing the per-leg
-    # window with skip changes RRF scores and repeats an earlier hit.
+    # One fused ranking for every page. Stub legs are read in full (the stub
+    # scans every match in memory), then the fused list is sliced by the
+    # caller's skip/top_k. Remote legs already applied the caller's skip, so
+    # their pages are fused and truncated -- never sliced a second time.
     skip = max(int(query.skip or 0), 0)
     page_size = max(int(query.top_k or 0), 0)
     responses = [_read_fanout_leg(query, name) for name in names]
@@ -391,6 +435,10 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
         [response.results for response in responses],
         top_k=None,
     )
+    if all(response.backend == BACKEND_STUB for response in responses):
+        window = merged[skip : skip + page_size] if page_size else []
+    else:
+        window = merged[:page_size] if page_size else []
     page = [
         Result(
             chunk=result.chunk,
@@ -398,11 +446,11 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             source_doc=result.source_doc,
             rank=index,
         )
-        for index, result in enumerate(merged[skip : skip + page_size], start=1)
+        for index, result in enumerate(window, start=1)
     ]
     total_count = None
     if query.include_total_count and all(
-        _leg_is_complete(response, page_size) for response in responses
+        _leg_is_complete(response, page_size, skip) for response in responses
     ):
         total_count = len(merged)
     return _maybe_rerank(
