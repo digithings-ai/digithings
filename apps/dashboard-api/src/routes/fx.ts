@@ -8,6 +8,7 @@
 
 import { buildProvenance, errorResponse } from "../errors";
 import { tableRows, twelvexRead, type TableReadEnv } from "../table-read";
+import { maxThesisDate, rowsAtDate, thesisShape } from "../thesis-shape";
 import type { RouteCtx, RouteModule } from "./registry";
 
 type Row = Record<string, unknown>;
@@ -359,28 +360,43 @@ async function watchlist(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   return ok({ names: [] }, "core:macro_series_observations", pinR.pin, null, "unavailable");
 }
 
+/**
+ * Rates · theses. The house thesis book lives in core `theses`, not in
+ * twelve-x, so this reads core and shapes rows through the shared thesisShape —
+ * the same mapper /portfolio/theses uses.
+ *
+ * `theses` keeps one row per thesis per business `date`. Only the newest date is
+ * current, so unfiltered rows would repeat every thesis across dates and inflate
+ * every count in the envelope. `date` is sent as `as_of`; `updated_at` is a write
+ * timestamp and is not a run.
+ */
 async function ratesTheses(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await tx(ctx.env, "theses", "select=*&limit=200");
+  const out = await tableRows(ctx.env, {
+    project: "core",
+    table: "theses",
+    query: "select=*&order=date.desc&limit=500",
+    allowEmpty: true,
+  });
   if ("error" in out) return out.error;
-  const tagged = out.rows.some((r) => str(r.desk) !== null);
-  const rows = tagged ? out.rows.filter((r) => (str(r.desk) ?? "").toLowerCase() === "rates") : out.rows;
-  const theses = rows.map((r) => ({
-    id: str(r.id) ?? str(r.thesis_id) ?? "",
-    name: str(r.name) ?? str(r.title) ?? "",
-    state: (str(r.state) ?? "watch").toLowerCase(),
-    vehicles: Array.isArray(r.vehicles) ? r.vehicles.filter((v): v is string => typeof v === "string") : [],
-    evidence: str(r.evidence),
-    kill_condition: str(r.kill_condition),
-    note: str(r.note),
-  })).filter((t) => t.id !== "");
-  const counts = {
-    active: theses.filter((t) => t.state === "active").length,
-    watch: theses.filter((t) => t.state === "watch").length,
-    exited: theses.filter((t) => t.state === "exited").length,
-  };
-  return ok({ theses, counts }, "twelvex:theses", pinR.pin, null);
+  const vehicles = await tableRows(ctx.env, {
+    project: "core",
+    table: "thesis_vehicles",
+    query: "select=*&order=date.desc&limit=2000",
+    allowEmpty: true,
+  });
+  if ("error" in vehicles) return vehicles.error;
+  const tip = maxThesisDate(out.rows);
+  // Vehicles are dated too. Holding them at every date would show each thesis
+  // every ticker it has ever carried; at the tip date all 38 live theses still
+  // have their vehicles, so the filter costs nothing.
+  return ok(
+    thesisShape(rowsAtDate(out.rows, tip), rowsAtDate(vehicles.rows, tip)),
+    "core:theses",
+    pinR.pin,
+    tip,
+  );
 }
 
 export const registerFx: RouteModule<Env> = (reg) => {

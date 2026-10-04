@@ -82,4 +82,68 @@ describe("phase 3 fx and rates", () => {
     const res = await app.fetch(new Request("https://x/fx/ideas"), { ...CORE, TWELVEX_SUPABASE_URL: undefined, TWELVEX_SUPABASE_SERVICE_KEY: undefined });
     expect(res.status).toBe(502);
   });
+
+  // DIG-354: the thesis book is core `theses`, dated by the business `date`.
+  it("rates theses ages by date and keeps only the newest date", async () => {
+    mockFetch((url) => {
+      // `thesis_vehicles` must be matched first: it does not contain "theses".
+      if (url.includes("thesis_vehicles")) return [
+        { thesis_id: "t1", ticker: "EUR/USD", date: "2026-09-28" },
+        { thesis_id: "t1", ticker: "GBP/USD", date: "2026-09-27" },
+        { thesis_id: "t2", ticker: "USD/JPY", date: "2026-09-28" },
+      ];
+      if (url.includes("theses")) return [
+        { id: "uuid-t1", thesis_id: "t1", name: "Front-end easing", status: "ACTIVE", date: "2026-09-28" },
+        { id: "uuid-t1-old", thesis_id: "t1", name: "Front-end easing", status: "ACTIVE", date: "2026-09-27" },
+        { id: "uuid-t2", thesis_id: "t2", name: "Carry", status: "CHALLENGED", date: "2026-09-28" },
+        { id: "uuid-t3", thesis_id: "t3", name: "Older only", status: "ACTIVE", date: "2026-09-20" },
+      ];
+      return [];
+    });
+    const res = await app.fetch(new Request("https://x/rates/theses"), CORE);
+    const body = (await res.json()) as {
+      data: { theses: { id: string; state: string; vehicles: string[] }[]; counts: { active: number; watch: number; exited: number } };
+      as_of: string | null;
+      provenance: { source: string; tip_date: string | null };
+    };
+    expect(res.status).toBe(200);
+    // `date` is the run; provenance names the core table it came from.
+    expect(body.as_of).toBe("2026-09-28");
+    expect(body.provenance.tip_date).toBe("2026-09-28");
+    expect(body.provenance.source).toBe("core:theses");
+    // One row per thesis per date: t1's older row and the tip-stale t3 are out.
+    expect(body.data.theses.map((t) => t.id)).toEqual(["uuid-t1", "uuid-t2"]);
+    // Vehicles join on thesis_id, never on the uuid — and only at the tip date.
+    expect(body.data.theses[0].vehicles).toEqual(["EUR/USD"]);
+    expect(body.data.theses[1].vehicles).toEqual(["USD/JPY"]);
+    expect(body.data.counts).toEqual({ active: 1, watch: 0, exited: 0 });
+    // Core uses CHALLENGED/MONITORING, which are not watch/exited and pass through.
+    expect(body.data.theses[1].state).toBe("challenged");
+  });
+
+  // `updated_at` is a write timestamp, not a run, so it may never be the as_of
+  // even though core `theses` carries the column.
+  it("rates theses does not age by updated_at", async () => {
+    mockFetch((url) => (url.includes("theses") && !url.includes("thesis_vehicles")
+      ? [{ thesis_id: "t1", name: "Front-end easing", status: "ACTIVE", date: "2026-09-28", updated_at: "2026-10-03T04:05:06Z" }]
+      : []));
+    const res = await app.fetch(new Request("https://x/rates/theses"), CORE);
+    const body = (await res.json()) as { as_of: string | null };
+    expect(res.status).toBe(200);
+    expect(body.as_of).toBe("2026-09-28");
+  });
+
+  // The house book has no `desk` column. A desk gate would either be dead code
+  // or would label every house thesis as a rates thesis.
+  it("rates theses has no desk gate and keeps unrecognised statuses", async () => {
+    mockFetch((url) => (url.includes("theses") && !url.includes("thesis_vehicles")
+      ? [{ thesis_id: "t1", name: "A", status: "MONITORING", date: "2026-09-28" }]
+      : []));
+    const res = await app.fetch(new Request("https://x/rates/theses"), CORE);
+    const body = (await res.json()) as { data: { theses: { name: string; state: string }[]; counts: { watch: number } } };
+    expect(res.status).toBe(200);
+    expect(body.data.theses).toHaveLength(1);
+    expect(body.data.theses[0].name).toBe("A");
+    expect(body.data.counts.watch).toBe(0);
+  });
 });
