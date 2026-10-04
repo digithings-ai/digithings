@@ -67,12 +67,6 @@ hosts:
           default: true
           tokenEnv: ZAMMAD_API_TOKEN
           authHeader: Authorization
-          allowedTools:
-            - aggregate_tickets
-            - get_ticket
-            - list_tickets
-            - search_tickets
-            - ticket_report
         - id: digisearch
           url: http://digisearch-mcp:8765/mcp
           label: Help search
@@ -80,36 +74,12 @@ hosts:
           setup:
             # Docs only. The ticket corpus snapshot was retired in DIG-1380, so there is no second leg to fan out to.
             index_name: occ_help
-          allowedTools:
-            - grokipedia_get_page
-            - grokipedia_search
-            - monitors_create_watch
-            - monitors_get_runs
-            - monitors_list_watches
-            - monitors_trigger_watch
-            - research_turn
-            - search_strategies
-            - semantic
-            - web_search
-            - websets_add_search
-            - websets_create
-            - websets_events
-            - websets_export
-            - websets_get
-            - websets_list_items
         - id: digivault
           url: http://digivault-mcp:8769/mcp
           label: Knowledge vault
           default: true
           setup:
             path_prefix: clients/online-compliance-center
-          allowedTools:
-            - digivault_backlinks
-            - digivault_create_note
-            - digivault_get_note
-            - digivault_lint
-            - digivault_search_notes
-            - digivault_search_tag
     gate:
       mode: ungated
       activityDetail: labels
