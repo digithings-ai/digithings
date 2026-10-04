@@ -34,10 +34,23 @@ export type Book = {
   sleeves?: { sleeve: string; names: number; weight_pct: number }[];
 };
 
-/** Proposed routes (BLOCKS.md): not in CONTRACT yet. */
+/**
+ * Proposed routes (BLOCKS.md): not in CONTRACT yet.
+ *
+ * `state` is the row's own `theses.status`, lowercased. It is one of the seven
+ * `chk_theses_status` tokens, or "—" for a NULL status — not the
+ * `active | watch | exited` rollup, which lives in `counts`. `by_status` is the
+ * full partition: `active + watch + exited + paused + new + unknown` equals the
+ * number of rows.
+ */
 export type Theses = {
-  theses: { id: string; name: string; state: 'active' | 'watch' | 'exited'; vehicles: string[]; evidence: string | null; kill_condition: string | null; note?: string | null }[];
-  counts: { active: number; watch: number; exited: number };
+  theses: { id: string; name: string; state: string; vehicles: string[]; evidence: string | null; kill_condition: string | null; note?: string | null }[];
+  counts: {
+    active: number;
+    watch: number;
+    exited: number;
+    by_status: Record<'active' | 'monitoring' | 'challenged' | 'closed' | 'invalidated' | 'paused' | 'new' | 'unknown', number>;
+  };
 };
 export type Attribution = {
   window: { start: string; end: string };

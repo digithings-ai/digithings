@@ -20,7 +20,7 @@ Principles: never invent numbers (fail closed, "—"); one catalog (`access.ts`)
 - Identity headers were spoofable on a directly reachable worker → `DASHBOARD_EDGE_KEY` + `x-digi-edge-key`. **Deploy requirement: set it on every deployed worker and have the edge send it** (unset = headers trusted, dev only).
 - `/v1/tables/*` bypassed the catalog → brief+ only.
 - Uncatalogued registry GETs were served → now forbidden.
-- Open: the gate is per **path**, not per query variant (`/theses?needs_resolution=1`, `/theses?desk=rates`) → Phase 1 gives these distinct paths (`/theses/signals`, `/rates/theses`).
+- Open: the gate is per **path**, not per query variant → Phase 1 gives these distinct paths (`/theses/signals`, `/rates/theses`). Neither takes a desk filter; core `theses` has no `desk` column.
 - Open: `workers_dev = true` keeps a public URL; decide with the edge work (human gate).
 
 ## 2. Gaps (unchanged core)
