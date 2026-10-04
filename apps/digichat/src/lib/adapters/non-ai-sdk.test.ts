@@ -36,6 +36,31 @@ async function bodyOf(res: Response): Promise<string> {
   return await res.text();
 }
 
+function uiChunks(body: string): Record<string, unknown>[] {
+  const chunks: Record<string, unknown>[] = [];
+  for (const line of body.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const raw = trimmed.slice(trimmed.indexOf(":") + 1).trim();
+    if (!raw || raw === "[DONE]") continue;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        chunks.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Non-JSON SSE lines are not UI chunks.
+    }
+  }
+  return chunks;
+}
+
+function textDeltas(body: string): string[] {
+  return uiChunks(body)
+    .filter((chunk) => chunk.type === "text-delta")
+    .map((chunk) => String(chunk.delta));
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -73,6 +98,8 @@ describe("langgraph mapper (#4543)", () => {
     // The partial `tool_call_chunks` args are accumulated, so the completed row
     // carries the input even though no settled `tool_calls` frame arrived.
     expect(body).toContain("coffee");
+    // ToolMessage content stays on the tool row. It is not answer text.
+    expect(textDeltas(body)).toEqual(["Hello ", "world", "Done."]);
 
     // Stateless run: the assistant id and the chat messages go upstream.
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -116,6 +143,58 @@ describe("langgraph mapper (#4543)", () => {
     });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>)["x-api-key"]).toBe("lg-secret");
+  });
+
+  it("keeps a tool_calls row open until a ToolMessage arrives", async () => {
+    stubUpstream(
+      [
+        'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_calls":[{"id":"call_9","name":"search","args":{"q":"coffee"}}]}]\n\n',
+        'event: messages/partial\ndata: [{"type":"tool","tool_call_id":"call_9","content":"3 results"}]\n\n',
+      ].join(""),
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain('"tool-output-available"');
+    expect(body).not.toContain('"tool-output-error"');
+    expect(textDeltas(body).join("")).not.toContain("3 results");
+  });
+
+  it("errors a tool_calls row that never receives a ToolMessage", async () => {
+    stubUpstream(
+      'event: messages/partial\ndata: [{"type":"AIMessageChunk","tool_calls":[{"id":"call_9","name":"search","args":{"q":"coffee"}}]}]\n\n',
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "full",
+      apiKey: null,
+    });
+    const body = await bodyOf(res);
+    expect(body).toContain('"tool-input-start"');
+    expect(body).toContain('"tool-output-error"');
+    expect(body).not.toContain('"tool-output-available"');
+  });
+
+  it("fails the turn when LangGraph returns 500 and activity detail is off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const res = await createLangGraphStreamResponse({
+      backend: { type: "langgraph", apiUrl: "https://lg.example.com", assistantId: "agent" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("LangGraph 500");
   });
 });
 
@@ -165,6 +244,21 @@ describe("ag-ui mapper (#4543)", () => {
     expect(body).toContain("boom");
     expect(body).toContain('"data-status"');
     expect(body).toContain('"failed"');
+  });
+
+  it("fails the turn when AG-UI returns 500 and activity detail is off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const res = await createAgUiStreamResponse({
+      backend: { type: "ag-ui", url: "https://agui.example.com/run" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("AG-UI 500");
   });
 });
 
@@ -238,6 +332,42 @@ describe("a2a mapper (#4543)", () => {
       apiKey: null,
     });
     expect(await bodyOf(res)).toContain("Blocking answer.");
+  });
+
+  it("fails the turn when A2A returns 500 and activity detail is off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+    const res = await createA2aStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("A2A 500");
+  });
+
+  it("fails the turn when an A2A stream response has no body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(null, {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          }),
+      ),
+    );
+    const res = await createA2aStreamResponse({
+      backend: { type: "a2a", baseUrl: "https://a2a.example.com" },
+      messages: [USER_MESSAGE],
+      responseHeaders: HEADERS,
+      activityDetail: "off",
+      apiKey: null,
+    });
+    expect(await bodyOf(res)).toContain("A2A empty body");
   });
 });
 

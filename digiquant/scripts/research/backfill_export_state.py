@@ -35,8 +35,9 @@ try:
 except ImportError:
     _HAS_SB = False
 
-ROOT = Path(__file__).parent.parent
-DEFAULT_OUT = ROOT / "data" / "backfill-backup"
+from lib.roots import SCRATCH_DATA  # noqa: E402
+
+DEFAULT_OUT = SCRATCH_DATA / "backfill-backup"
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
