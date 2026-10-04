@@ -48,9 +48,13 @@ def _fake_gh(tmp_path: Path, stdout: str, returncode: int = 0, stderr: str = "")
 
 
 def _gh_on_path(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stdout: str, returncode: int = 0
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stdout: str,
+    returncode: int = 0,
+    stderr: str = "",
 ) -> None:
-    bindir = _fake_gh(tmp_path, stdout, returncode)
+    bindir = _fake_gh(tmp_path, stdout, returncode, stderr)
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
 
 
@@ -630,16 +634,95 @@ def test_markdown_never_calls_an_unread_level_clean(checker: object) -> None:
 
 
 @pytest.mark.unit
-def test_the_workflow_grants_the_read_permission_the_listings_need(checker: object) -> None:
-    """Without `actions: read` all three listings 403, every level reads as empty, and
-    the job still succeeds. Nothing else in the repo would notice."""
+def test_the_workflow_does_not_claim_a_permission_that_cannot_read_secrets(checker: object) -> None:
+    """`actions: read` was granted in #5063 and proved useless by run 37235973852.
+
+    The Actions secrets endpoints need a token carrying the `repo` scope.
+    GITHUB_TOKEN is a GitHub App installation token and the `permissions:`
+    vocabulary has no key for secrets, so `Actions: read` appeared in the job
+    banner and every listing still answered 403. Asserting it is absent keeps a
+    future run from re-adding a permission that widens the token and buys
+    nothing, and keeps the comment beside it honest.
+    """
     workflow = yaml.safe_load(
         (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
     )
     permissions = workflow["permissions"]
 
-    assert permissions.get("actions") == "read"
+    assert "actions" not in permissions
+    assert permissions.get("contents") == "read"
     assert permissions.get("issues") == "write"
+
+
+@pytest.mark.unit
+def test_the_workflow_says_the_secret_listings_cannot_be_read_here(checker: object) -> None:
+    """The header is the only place a reader learns why the ageing half is absent.
+
+    Before 2026-10-04 it claimed the job "needs no credential beyond the
+    automatic GITHUB_TOKEN", which is what sent #5063 looking for a permission
+    that does not exist. The proof is the run id, so the claim is pinned to it.
+    """
+    text = (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
+
+    assert "37235973852" in text
+    assert "CANNOT be read from this workflow" in text
+    assert "needs no credential" not in text
+
+
+@pytest.mark.unit
+def test_a_run_that_aged_nothing_files_no_tracker(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every level unread is the normal case from CI.
+
+    Filing a tracker whose body is "I read nothing" reads like a working
+    rotation control and is not one. A monthly issue that only ever says it
+    could not do its job also trains readers to ignore the one issue that would
+    carry real names.
+    """
+    _gh_on_path(
+        monkeypatch,
+        tmp_path,
+        stdout="",
+        returncode=1,
+        stderr="gh: Resource not accessible by integration (HTTP 403)",
+    )
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+
+    code = checker.main(["--skip-environment-gates", "--open-issue"])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "filed nothing" in out
+    assert checker.ISSUE_TITLE not in out
+
+
+@pytest.mark.unit
+def test_an_unreadable_level_says_which_scope_would_fix_it(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`repo secret list unavailable for o/r` is true and actionable for nobody.
+
+    The Actions secrets endpoints need the `repo` scope. A reader seeing the old
+    reason has no way to know that no `permissions:` grant can supply it, which is
+    what sent #5063 hunting for a permission that does not exist.
+    """
+    _gh_on_path(
+        monkeypatch,
+        tmp_path,
+        stdout="",
+        returncode=1,
+        stderr="gh: Resource not accessible by integration (HTTP 403)",
+    )
+
+    _, reason = checker.repo_secrets(checker.REPO_ROOT, "o/r")
+
+    assert reason is not None
+    assert "`repo` scope" in reason
+    assert "37235973852" in reason
 
 
 @pytest.mark.unit
