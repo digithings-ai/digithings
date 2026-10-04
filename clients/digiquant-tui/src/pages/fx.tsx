@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
-import { DANGER, INK, MUTE } from "../theme";
+import { DANGER, INK, MUTE, WARN } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
 import { shapeLines } from "./shape";
+import { calendarDay, todayYmd, tradingSessionsSince } from "./trading-calendar";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
@@ -397,11 +398,80 @@ export function fxBlockLines(id: string, result: ReadResult, data: unknown): str
   return lines.length ? lines : [EMPTY_READ];
 }
 
-export function fxTone(result: ReadResult | null, lines: string[]): ReadResult["status"] | "loading" {
+/**
+ * Tone for an FX pane. `warn` and `stale` sit above `ok` on the same axis: the
+ * read succeeded and has content, but it is no longer the run the pane owes the
+ * reader. The 2026-09 outage served a healthy-looking pane for 12 trading
+ * sessions because nothing here looked at the run date.
+ */
+export type FxTone = ReadResult["status"] | "loading" | "warn" | "stale";
+
+/**
+ * Age policy, in trading sessions behind the last run. Thresholds follow the
+ * three cases DIG-183 asks for, so there is no separate number to reconcile:
+ *   0-1  ok     the run is still the one the next session owes
+ *   2    warn   past one trading session
+ *   3+   stale  past the point where the next session should have landed
+ * Weekends do not count (see trading-calendar), so Monday morning does not warn
+ * on Friday's run.
+ */
+const SESSION_WARN = 2;
+const SESSION_STALE = 3;
+
+/** The run date for this block, or null when the block has no run to age.
+ *  The envelope `as_of` is the backend's run date wherever it threads one; the
+ *  payload fallbacks cover the read-routes that carry the date in the body only. */
+export function fxRunDate(result: ReadResult | null, data: unknown): string | null {
+  const envelope = calendarDay(result?.asOf);
+  if (envelope) return envelope;
+  const row = rec(data);
+  if (!row) return null;
+  const direct = calendarDay(str(row.run_date));
+  if (direct) return direct;
+  const lastRun = rec(row.last_run);
+  return lastRun ? calendarDay(str(lastRun.date)) : null;
+}
+
+/** Trading sessions this read is behind, or null when it cannot be aged. */
+function fxAge(result: ReadResult, data: unknown, now: string): number | null {
+  const runDate = fxRunDate(result, data);
+  return runDate === null ? null : tradingSessionsSince(runDate, now);
+}
+
+export function fxTone(
+  result: ReadResult | null,
+  lines: string[],
+  options: { now?: string; data?: unknown } = {},
+): FxTone {
   if (!result) return "loading";
   if (result.status !== "ok") return result.status;
   const body = lines.filter((line) => !line.startsWith("source  ") && !line.startsWith("marks  "));
-  return body.length > 0 && body.every(isQuiet) ? "empty" : "ok";
+  if (body.length === 0 || body.every(isQuiet)) return "empty";
+  const sessions = fxAge(result, options.data, options.now ?? todayYmd());
+  if (sessions === null) return "ok";
+  if (sessions >= SESSION_STALE) return "stale";
+  if (sessions >= SESSION_WARN) return "warn";
+  return "ok";
+}
+
+/** The age in words. The tone alone is a colour; the reader needs the count. */
+function ageLabel(sessions: number): string {
+  if (sessions === 0) return "current session";
+  return sessions === 1 ? "1 trading day old" : `${sessions} trading days old`;
+}
+
+/** Pane footer: the as-of date, how far behind it is, and stale when it is too far. */
+export function fxPaneStatus(
+  result: ReadResult | null,
+  data: unknown,
+  route: string,
+  now: string = todayYmd(),
+): string {
+  const runDate = result ? fxRunDate(result, data) : null;
+  if (runDate === null) return route;
+  const sessions = tradingSessionsSince(runDate, now);
+  if (sessions === null) return `as of ${runDate}`;
+  return `as of ${runDate} · ${ageLabel(sessions)}${sessions >= SESSION_STALE ? " · stale" : ""}`;
 }
 
 type Loaded = { result: ReadResult; data: unknown };
@@ -428,9 +498,13 @@ async function loadBlock(api: string, route: string, kind: BlockKind, signal?: A
   return { result, data };
 }
 
-function ink(status: ReadResult["status"] | "loading"): string {
+/** Pane ink for a tone. Exported so the mapping is pinned: a stale pane must
+ *  never render in the same ink as a healthy one, which is the whole defect. */
+export function fxInk(status: FxTone): string {
   if (status === "ok") return INK;
   if (status === "empty" || status === "loading") return MUTE;
+  // Amber reads as "behind, still usable". Red is reserved for a read that failed.
+  if (status === "warn") return WARN;
   return DANGER;
 }
 
@@ -456,14 +530,14 @@ function FxBlock({ id, api, focused }: { id: string; api: string; focused: boole
 
   if (!def) return null;
   const lines = loaded ? fxBlockLines(def.id, loaded.result, loaded.data) : ["loading…"];
-  const status = fxTone(loaded?.result ?? null, lines);
+  const status = fxTone(loaded?.result ?? null, lines, { data: loaded?.data });
   return (
     <PaneFrame
       title={def.title}
-      status={loaded?.result.asOf ? `as of ${loaded.result.asOf}` : def.route}
+      status={fxPaneStatus(loaded?.result ?? null, loaded?.data, def.route)}
       focused={focused}
       blocks={shapeLines(lines)}
-      ink={ink(status)}
+      ink={fxInk(status)}
     />
   );
 }
