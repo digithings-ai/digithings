@@ -171,14 +171,26 @@ def _row_from_grid_row(name: str, row: Any, fit: Any) -> IndicatorCaptureRow:
     )
 
 
-def _rows_from_fit(fitter: Any, name: str, fit: Any) -> list[IndicatorCaptureRow]:
+def _rows_from_fit(name: str, fit: Any) -> list[IndicatorCaptureRow]:
     """Every frozen-grid row for one indicator at one level, as capture rows.
 
     An unscoreable indicator (a staged source that starts after every window at
     this level, say) still gets its rows listed, with ``separation=None`` and the
     harness's own reason — listed, never silently absent.
+
+    ``fit.rows`` is REQUIRED, never re-derived: the frozen harness populates it on
+    both of its return paths and raises ``no grid for <name>`` before it can be
+    empty, so an empty fit is a broken harness rather than an indicator with
+    nothing to say. It is refused here, by name, instead of being papered over —
+    a level built from a silently emptied leg would still be handed to the module
+    as a verdict.
     """
-    grid_rows = list(fit.rows) or list(fitter.indicator_grid(name))
+    grid_rows = list(fit.rows)
+    if not grid_rows:
+        raise ValueError(
+            f"{name!r} fit returned no grid rows — the frozen harness populates them on "
+            "every path, so this is a broken harness, not an indicator with nothing to say"
+        )
     return [_row_from_grid_row(name, row, fit) for row in grid_rows]
 
 
@@ -228,7 +240,7 @@ def run_level(
         row
         for name in fitter.FITTED_INDICATORS
         for row in _rows_from_fit(
-            fitter, name, fitter.fit_indicator(name, dates, date_s, price_s, sources, windows)
+            name, fitter.fit_indicator(name, dates, date_s, price_s, sources, windows)
         )
     ]
     rows.append(_anchor_row(fitter, dates, windows, date_s, price_s))
