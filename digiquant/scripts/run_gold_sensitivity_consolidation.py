@@ -2,20 +2,28 @@
 """Run the SDCA sensitivity consolidation on GLD over the frozen sensitivity grid (#4804).
 
 Plan 22 Engine 2 shipped a *generic* capture rule
-(``strategies/sdca/sensitivity_consolidate.py``): an indicator captures a level
-iff its best grid row is at/above the 0.5 z-unit bar, sign-correct, and not
-one-sided; the level chosen is the most sensitive one that loses no indicator
-relative to every coarser level. This script is that rule's calibration read on
-the real series: it detects turns at the three frozen levels, turns each set into
-±45d scoring windows, sweeps every wired indicator's **frozen** grid against
-**that level's** windows, and consolidates.
+(``strategies/sdca/sensitivity_consolidate.py``): for each indicator the grid row
+that speaks for it is the one maximising ``|separation|`` (so direction is FITTED,
+not imposed); it captures a level iff that row is at/above the 0.5 z-unit bar on
+magnitude and is not one-sided; a leg that captures at more than one level must
+carry the SAME fitted direction at every level or it is flagged
+``direction_unstable`` and captures nowhere; and the level chosen is the most
+sensitive one that loses no indicator relative to every coarser level, ranked by
+capture DEPTH (the summed ``|separation|`` of its captures) rather than by
+headcount. This script is that rule's calibration read on the real series: it
+detects turns at the three frozen levels, turns each set into ±45d scoring
+windows, hands every wired indicator's **whole frozen grid** to the module
+against **that level's** windows, and consolidates.
 
 **Nothing is tuned after seeing results.** The magnitude crank
 (``min_move_pct`` ∈ {15, 10, 5}), the time filter (``min_separation_days`` = 45),
 the confirmation width (5 bars), the window half-width (±45d), the capture bar
 (0.5), the dead-zone width (0.06) and every indicator grid come from Engine 1 /
 Plan-19 and are imported, not restated. The only thing this script decides is
-which level the frozen rule picks — and it reports that as found.
+which level the frozen rule picks — and it reports that as found. **Every verdict
+belongs to the module**: this script maps the harness's rows to capture rows and
+prints what the module returned. It re-implements neither the bar nor the choice
+rule, and it does not pick the winning grid row either.
 
 **Windows are a SCORING TARGET only.** They are the ``±45d`` cycle windows the
 detector produces; nothing here trades around them, applies an exposure floor,
@@ -57,6 +65,7 @@ from digiquant.strategies.sdca.sensitivity_consolidate import (
     CHOICE_RULE,
     DEGENERATE_MEAN_ABS,
     IndicatorCaptureRow,
+    LevelSummary,
     SensitivityChoice,
     SensitivityLevelRow,
     select_sensitivity_level,
@@ -136,52 +145,41 @@ def _assert_constants_agree(fitter: Any) -> None:
         )
 
 
-def _row_from_fit(fitter: Any, name: str, fit: Any) -> IndicatorCaptureRow:
-    """One indicator's BEST frozen-grid row at one level, as a capture row.
+def _row_from_grid_row(name: str, row: Any, fit: Any) -> IndicatorCaptureRow:
+    """One scored harness grid row, as one capture row.
 
-    An unscoreable indicator (a staged source that starts after every window at
-    this level, say) still gets a row, with ``separation=None`` and the harness's
-    own reason — listed, never silently absent.
+    EVERY grid row is passed through, not just the harness's ``best_overall``.
+    Grid-row selection is the module's job now (it keys on ``|separation|``, the
+    frozen harness keys on signed ``separation``), so handing over only the
+    harness's winner would quietly re-impose the old polarity rule here.
     """
-    best = fit.best_overall
-    if best is None:
-        grid = fitter.indicator_grid(name)
-        return IndicatorCaptureRow(
-            name=name,
-            params={},
-            params_note=(
-                f"no scored row of {len(grid)}; frozen grid: "
-                f"{[dict(point.params) for point in grid]}"
-            ),
-            window_days=grid[0].window_days,
-            separation=None,
-            mean_peak_z=None,
-            mean_trough_z=None,
-            peak_negative_share=None,
-            trough_positive_share=None,
-            zero_z_share=None,
-            degenerate=False,
-            coverage=0.0,
-            scored_days=0,
-            status=fit.status,
-            reason=fit.reason,
-        )
     return IndicatorCaptureRow(
         name=name,
-        params=dict(best.params),
-        window_days=best.window_days,
-        separation=best.separation,
-        mean_peak_z=best.mean_peak_z,
-        mean_trough_z=best.mean_trough_z,
-        peak_negative_share=best.peak_negative_share,
-        trough_positive_share=best.trough_positive_share,
-        zero_z_share=best.zero_z_share,
-        degenerate=best.degenerate,
-        coverage=best.coverage,
-        scored_days=best.scored_days,
+        params=dict(row.params),
+        window_days=row.window_days,
+        separation=row.separation,
+        mean_peak_z=row.mean_peak_z,
+        mean_trough_z=row.mean_trough_z,
+        peak_negative_share=row.peak_negative_share,
+        trough_positive_share=row.trough_positive_share,
+        zero_z_share=row.zero_z_share,
+        degenerate=row.degenerate,
+        coverage=row.coverage,
+        scored_days=row.scored_days,
         status=fit.status,
-        reason=fit.reason,
+        reason=row.reason or fit.reason,
     )
+
+
+def _rows_from_fit(fitter: Any, name: str, fit: Any) -> list[IndicatorCaptureRow]:
+    """Every frozen-grid row for one indicator at one level, as capture rows.
+
+    An unscoreable indicator (a staged source that starts after every window at
+    this level, say) still gets its rows listed, with ``separation=None`` and the
+    harness's own reason — listed, never silently absent.
+    """
+    grid_rows = list(fit.rows) or list(fitter.indicator_grid(name))
+    return [_row_from_grid_row(name, row, fit) for row in grid_rows]
 
 
 def _anchor_row(
@@ -227,10 +225,11 @@ def run_level(
     windows = turns_to_cycle_windows(turnset, WINDOW_HALF_WIDTH_DAYS)
 
     rows = [
-        _row_from_fit(
+        row
+        for name in fitter.FITTED_INDICATORS
+        for row in _rows_from_fit(
             fitter, name, fitter.fit_indicator(name, dates, date_s, price_s, sources, windows)
         )
-        for name in fitter.FITTED_INDICATORS
     ]
     rows.append(_anchor_row(fitter, dates, windows, date_s, price_s))
     level = SensitivityLevelRow(
@@ -274,25 +273,58 @@ def _drop_counts(turnset: Any) -> dict[str, int]:
     return counts
 
 
-def _level_payload(level: SensitivityLevelRow, detail: dict[str, Any]) -> dict[str, Any]:
+def _level_payload(
+    level: SensitivityLevelRow, detail: dict[str, Any], summary: LevelSummary
+) -> dict[str, Any]:
+    """One rung's payload: the module's settled summary plus the full grid as evidence."""
     return {
         "min_move_pct": level.min_move_pct,
         "n_turns": level.n_turns,
         "n_peaks": level.n_peaks,
         "n_troughs": level.n_troughs,
         "window_day_share": level.window_day_share,
-        "capture_count": level.capture_count,
-        "capturing": list(level.capturing),
-        "non_capturing": [row.name for row in level.indicators if not row.captures],
+        # Settled numbers, all read off the module's own summary (the stability
+        # veto applied). The provisional per-row view is kept beside them as
+        # ``provisional`` so the two can never be mistaken for one another.
+        "capture_count": summary.capture_count,
+        "capture_depth": summary.capture_depth,
+        "expected_direction_count": summary.expected_direction_count,
+        "inverted_direction_count": summary.inverted_direction_count,
+        "capturing": list(summary.capturing),
+        "non_capturing": [row.name for row in level.best_rows if row.name not in summary.capturing],
+        "unstable_here": list(summary.unstable_here),
+        "qualifies": summary.qualifies,
+        "provisional": {
+            "note": (
+                "bar applied, direction-stability veto NOT applied — a per-row/level view, "
+                "not the settled count the choice was ranked by"
+            ),
+            "capture_count": level.capture_count,
+            "capture_depth": level.capture_depth,
+            "capturing": list(level.capturing),
+        },
         "indicators": [
             {
                 **row.model_dump(mode="json"),
+                "direction": row.direction,
                 "captures": row.captures,
+                "selected": selected,
             }
-            for row in level.indicators
+            for row, selected in _grid_rows_marked(level)
         ],
         "detector": detail,
     }
+
+
+def _grid_rows_marked(level: SensitivityLevelRow) -> list[tuple[IndicatorCaptureRow, bool]]:
+    """Every grid row, each flagged with whether it is the one that speaks for its indicator."""
+    selected = {
+        (row.name, row.window_days, tuple(sorted(row.params.items()))) for row in level.best_rows
+    }
+    return [
+        (row, (row.name, row.window_days, tuple(sorted(row.params.items()))) in selected)
+        for row in level.indicators
+    ]
 
 
 def _choice_payload(choice: SensitivityChoice) -> dict[str, Any]:
@@ -301,8 +333,14 @@ def _choice_payload(choice: SensitivityChoice) -> dict[str, Any]:
         "chosen_min_move_pct": choice.chosen_min_move_pct,
         "chosen_n_turns": choice.chosen_n_turns,
         "capture_count": choice.capture_count,
+        "capture_depth": choice.capture_depth,
+        "expected_direction_count": choice.expected_direction_count,
+        "inverted_direction_count": choice.inverted_direction_count,
         "capturing_indicators": list(choice.capturing_indicators),
         "non_capturing_indicators": list(choice.non_capturing_indicators),
+        "direction_unstable": list(choice.direction_unstable),
+        "direction_checks": [check.model_dump(mode="json") for check in choice.direction_checks],
+        "level_summaries": [summary.model_dump(mode="json") for summary in choice.level_summaries],
         "capture_rule": choice.capture_rule,
         "choice_rule": choice.choice_rule,
         "rationale": choice.rationale,
@@ -311,6 +349,7 @@ def _choice_payload(choice: SensitivityChoice) -> dict[str, Any]:
                 "min_move_pct": entry.min_move_pct,
                 "n_turns": entry.n_turns,
                 "capture_count": entry.capture_count,
+                "capture_depth": entry.capture_depth,
                 "qualifies": entry.qualifies,
                 "dropped": [drop.model_dump(mode="json") for drop in entry.dropped],
             }
@@ -320,51 +359,92 @@ def _choice_payload(choice: SensitivityChoice) -> dict[str, Any]:
 
 
 def print_matrix(levels: list[SensitivityLevelRow], choice: SensitivityChoice) -> None:
-    """The owner's read: the three levels side by side, best separation per indicator.
+    """The owner's read: the three levels side by side, selected grid row per indicator.
 
-    The choice rule is NOT restated here — this reads the counts the frozen rule
-    already consumed, plus the ``qualifies`` verdict the module recorded for each
-    finer level, so the table cannot drift from the decision it explains.
+    Every verdict below is READ off the module — the capture marks, the counts,
+    the depths, the sign mixes and the ``qualifies`` flags all come from
+    ``choice.level_summaries`` and the rows it was built from. The choice rule is
+    not restated and re-executed here, so this table cannot drift from the
+    decision it explains.
     """
-    finer = {entry.min_move_pct: entry.qualifies for entry in choice.dropped_at_finer_levels}
-    chosen = {
-        level.min_move_pct: level.min_move_pct == choice.chosen_min_move_pct for level in levels
-    }
+    summaries = {summary.min_move_pct: summary for summary in choice.level_summaries}
 
     def cells(label: str, value: Any) -> None:
-        print(f"{label:<22}" + "".join(f"{value(level):>30}" for level in levels))
+        print(f"{label:<24}" + "".join(f"{value(level):>32}" for level in levels))
 
     print()
-    print("SENSITIVITY CONSOLIDATION (Plan 22 Engine 2) — best frozen grid row per level")
+    print("SENSITIVITY CONSOLIDATION (Plan 22 Engine 2) — selected grid row per level")
     cells("level", lambda level: f"@{format(level.min_move_pct, 'g')}%")
     cells(
         "turns (peaks/troughs)",
         lambda level: f"{level.n_turns} ({level.n_peaks}/{level.n_troughs})",
     )
     cells("window-day share", lambda level: f"{level.window_day_share:.4f}")
-    cells(f"# capturing (bar {format(CAPTURE_BAR, 'g')})", lambda level: level.capture_count)
+    # Count / depth / sign mix all come from the module's SETTLED summary — the
+    # direction-stability veto included — never from the level row's own
+    # provisional per-row read, so no number here can disagree with the choice.
+    cells(
+        f"# capturing (bar {format(CAPTURE_BAR, 'g')})",
+        lambda level: summaries[level.min_move_pct].capture_count,
+    )
+    cells(
+        "capture DEPTH (sum |sep|)",
+        lambda level: f"{summaries[level.min_move_pct].capture_depth:.4f}",
+    )
+    cells(
+        "sign mix (+1 / -1)",
+        lambda level: (
+            f"{summaries[level.min_move_pct].expected_direction_count} / "
+            f"{summaries[level.min_move_pct].inverted_direction_count}"
+        ),
+    )
+    cells("qualifies", lambda level: str(summaries[level.min_move_pct].qualifies))
+    cells(
+        "vetoed here (unstable)",
+        lambda level: ",".join(summaries[level.min_move_pct].unstable_here) or "-",
+    )
     cells(
         "verdict",
         lambda level: (
             "<= CHOSEN"
-            if chosen[level.min_move_pct]
-            else ("qualifies, coarser tie" if finer.get(level.min_move_pct) else "loses")
+            if level.min_move_pct == choice.chosen_min_move_pct
+            else (
+                "qualifies, coarser/depth tie"
+                if summaries[level.min_move_pct].qualifies
+                else "loses"
+            )
         ),
     )
-    for name in [row.name for row in levels[0].indicators]:
+    unstable = set(choice.direction_unstable)
+    names = [row.name for row in levels[0].best_rows]
+    for name in names:
         cells(
-            name,
-            lambda level, name=name: _cell(
-                next(row for row in level.indicators if row.name == name)
-            ),
+            f"{name}{' [UNSTABLE]' if name in unstable else ''}",
+            lambda level, name=name: _cell(level.row_for(name)),
         )
     print()
-    print("  * captures this level (separation >= bar, sign-correct, not one-sided);")
+    print(
+        "  * this SELECTED row clears the bar on |separation| and is not one-sided;"
+        " dir = its FITTED direction (+1 trough-high/peak-low, -1 inverted)"
+    )
+    print(
+        "  the * above is a per-row read; the counts/depth/sign-mix rows above are the"
+        " SETTLED module summaries (stability veto applied)"
+    )
     print("  [w] is the row's window_days; DEGENERATE = one side's mean inside the dead zone")
     print(
         f"  chosen: min_move_pct={choice.chosen_min_move_pct} ({choice.chosen_n_turns} turns), "
-        f"capturing {choice.capture_count} — {choice.rationale}"
+        f"depth {choice.capture_depth:.4f} over {choice.capture_count} capturing "
+        f"(sign mix {choice.expected_direction_count}+/{choice.inverted_direction_count}-) — "
+        f"{choice.rationale}"
     )
+    if choice.direction_unstable:
+        print()
+        print("DIRECTION STABILITY (a veto — the leg's fitted direction flips between levels)")
+        for check in choice.direction_checks:
+            if check.stable:
+                continue
+            print(f"  {check.name}: {check.note}")
     print()
     print("DROPPED AT FINER LEVELS (the owner's evidence table)")
     if not choice.dropped_at_finer_levels:
@@ -372,7 +452,8 @@ def print_matrix(levels: list[SensitivityLevelRow], choice: SensitivityChoice) -
     for entry in choice.dropped_at_finer_levels:
         print(
             f"  min_move_pct={entry.min_move_pct} ({entry.n_turns} turns, "
-            f"captures {entry.capture_count}, qualifies={entry.qualifies})"
+            f"captures {entry.capture_count}, depth {entry.capture_depth:.4f}, "
+            f"qualifies={entry.qualifies})"
         )
         if not entry.dropped:
             print("    nothing dropped")
@@ -383,12 +464,15 @@ def print_matrix(levels: list[SensitivityLevelRow], choice: SensitivityChoice) -
             )
 
 
-def _cell(row: IndicatorCaptureRow) -> str:
-    """One matrix cell: the separation, the capture mark and the window it was read at."""
+def _cell(row: IndicatorCaptureRow | None) -> str:
+    """One matrix cell: the separation, the fitted direction, the capture mark and its window."""
+    if row is None:
+        return "not scored"
     if row.separation is None:
         return f"unscoreable [{row.window_days}d]"
     flag = " DEGENERATE" if row.degenerate else ""
-    return f"{row.separation:+.4f}{flag}{' *' if row.captures else '  '} [{row.window_days}d]"
+    direction = "  +" if row.direction == 1 else ("  -" if row.direction == -1 else "   0")
+    return f"{row.separation:+.4f}{direction}{flag}{' *' if row.captures else '  '} [{row.window_days}d]"
 
 
 def _signed(value: float | None) -> str:
@@ -443,11 +527,15 @@ def main() -> int:
             "degenerate_mean_abs": DEGENERATE_MEAN_ABS,
             "separator": (
                 "fit_gold_indicators.separation — mean(z | trough windows) - "
-                "mean(z | peak windows); abs() never applied"
+                "mean(z | peak windows). The separator itself never applies abs(); "
+                "abs() is applied by the capture rule, which fits direction per "
+                "indicator and records it as +1 (trough-high/peak-low) or -1 (inverted)"
             ),
             "grids": (
                 "fit_gold_indicators.indicator_grid — the Plan-19 frozen grids, "
-                "imported not restated; no grid changed after seeing output"
+                "imported not restated; no grid changed after seeing output. Every "
+                "grid row is handed to the module, which selects the row maximising "
+                "|separation| (the harness's best_overall keys on the signed value)"
             ),
             "anchor": (
                 f"{ANCHOR_NAME} = shipped rolling_z rails, rolling "
@@ -458,7 +546,14 @@ def main() -> int:
         "windows_label": WINDOWS_LABEL,
         "in_sample": True,
         "in_sample_label": IN_SAMPLE_LABEL,
-        "levels": [_level_payload(level, details[str(level.min_move_pct)]) for level in levels],
+        "levels": [
+            _level_payload(
+                level,
+                details[str(level.min_move_pct)],
+                next(s for s in choice.level_summaries if s.min_move_pct == level.min_move_pct),
+            )
+            for level in levels
+        ],
         "choice": _choice_payload(choice),
     }
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
