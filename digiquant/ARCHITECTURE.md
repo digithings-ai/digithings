@@ -1359,6 +1359,85 @@ final bar and so has no `+5` bars at all). Chart:
 pins from the live factories, re-verifies both sets against the CSV, and refuses to
 draw on a mismatch. IN-SAMPLE: Set A was chosen by looking at this same series.
 
+#### Both gold pin sets can be scored against the indicator weights (#4804, Plan 22 last piece)
+
+`scripts/run_gold_pin_set_fits.py` answers the Stage A question twice — "does this
+indicator read cheap inside the trough windows and rich inside the peak windows?"
+— once against `gold_v1()` and once against `gold_v2()`. It loads
+`scripts/fit_gold_indicators.py` by file path and calls that harness's own
+`run_fit` → `run_selection` → `fits_payload` / `selection_payload` twice, so the
+single-set run is reused unchanged and the `gold_v1` half of the artifact is
+**byte-identical** to what `--fit` / `--select` write.
+
+**Frozen for both sets, identical between them:** every grid (`LEVEL_WINDOWS`,
+`ROC_DAYS`/`ROC_WINDOWS`, `RSI_LENGTHS`, `MACD_SPANS` × `MACD_Z_WINDOWS`,
+`SMA_BAND_WINDOWS` × `SMA_BAND_MIN_SAMPLES`), the medium/long bands (≤378 / ≥504),
+`separation = mean(z|troughs) − mean(z|peaks)`, the 0.06 dead zone, the **0.5
+capture bar**, the greedy equal-weight rule and its `rolling_z` 90d / z 1.0 anchor
+at equal weight 1.0. The runner re-exports those constants **by reference** from
+the harness and from `sensitivity_consolidate` (identity asserted in
+`test_gold_pin_set_fits.py`), so there is no second copy to drift. **Only the
+window set differs.** The capture read is Engine 2b Ruling 2, unchanged: the
+speaking row is the largest `|separation|` in the grid, `direction` is FITTED from
+its sign, and a capture is `|separation| ≥ 0.5` and not degenerate.
+
+**Comparison outcome (IN-SAMPLE — both sets are fitted and scored on the same
+GLD history they are read against, and each row is a max over the frozen grid, so
+capture counts and depths are a partly-selected UPPER BOUND, not out-of-sample
+evidence):**
+
+| | `gold_v1` (Set A) | `gold_v2` (algorithmic 20) |
+|---|---|---|
+| pins / peaks / troughs | 6 / 3 / 3 | 20 / 10 / 10 |
+| window-day share | 0.0684 (376 days, 0 overlapping) | 0.2235 (1229 days, 24 overlapping) |
+| capturing legs / sign mix | 10 — 4 `+` / 6 `−` | 10 — 4 `+` / 6 `−` |
+| capture depth | **21.5674** | 11.4357 |
+| anchor separation | +5.0447 | +4.3100 |
+| greedy equal-weight keep list | **EMPTY (anchor-only)** | **EMPTY (anchor-only)** |
+| greedy pool / dropped | 5 / all 5 | 7 / all 7 (adds `walcl`, `weekly_macd`) |
+
+**`gold_v1` fits better, on the owner's depth-not-headcount ranking key: capture
+depth 21.5674 vs 11.4357, a margin of −10.1317 in `gold_v2`'s favour, at
+IDENTICAL headcount (10 vs 10).** Every leg's magnitude shrinks against the finer
+set — `real_rate` +3.7414 → +1.5617, `sma_band` +3.3450 → +2.4316, `gld_slv`
++2.1024 → +0.9958 — because 20 windows ask about 3.3× as much calendar as 6, and
+a z that separates the six macro turns is diluted by the fourteen intervening
+ones. Both keep lists are EMPTY: every `verdict == "keep"` candidate made the
+anchor's own aggregate separation worse under the frozen greedy rule, on either
+pin set.
+
+**Verdict flips: `nfci` and `walcl`, both by DIRECTION.** `nfci` +1.3157 → −0.6793
+and `walcl` −2.2117 → +0.5042. No leg changes its capture verdict between the two
+sets — the same ten capture on both — so a flip here is about which way a leg
+reads, not about whether it clears the bar. `walcl`'s `gold_v2` row clears by
+0.0042 z-units, the knife-edge that made headcount a fragile ranking key when the
+granularity was chosen. `weekly_rsi` / `weekly_macd` remain `degenerate_pass` on
+both sets and stay out of every keep list.
+
+**The two cross-check aggregates are NOT comparable across sets** (+2.0407 over
+124 days vs +1.9008 over 124 days): `gold_v1` covers 33.0% of its window days,
+`gold_v2` only 10.1%, because `ig_oas`'s staged CSV starts 2023-09-30 and the
+shipped blend sums with `ignore_nulls=False`, nulling the aggregate on every other
+window day. The cross-check is reported, never used to select.
+
+Because `gold_v1` ⊂ `gold_v2` on the same turns and kinds, this is not two
+rival targets scored twice: `gold_v2` **refines** the same target by
+interpolating the turns between Set A's picks, so every movement above is the
+granularity speaking, not a contradiction.
+
+Artifacts (both UNTRACKED): `.scratch/gold_pin_set_fits.json` and
+`.scratch/gold_pin_set_selection.json`, which nest the harness's own
+single-set payloads verbatim per pin set. Chart:
+`scripts/plot_gold_pin_set_fits.py` → `gold_pin_set_fits.svg`
+(`/gold_charts/gold_pin_set_fits.svg`) — horizontal bars signed around zero, one
+pair per indicator, inverted legs hatched **and** drawn to the left of zero, the
+±0.5 capture bar on both sides, capturing legs diamond-marked, the keep lists and
+the depth verdict annotated, and a pin-set inset carrying each set's pin count and
+window-day share. Pins:
+`tests/dq/strategies/sdca/test_gold_pin_set_fits.py` (18 pins). No
+`nautilus_trader`, pandas or matplotlib anywhere; the frozen harness is imported,
+never edited.
+
 **Composite formula (BTC charts default to a single rail).**
 
 ```
