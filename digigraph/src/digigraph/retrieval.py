@@ -22,14 +22,19 @@ GET_NOTE_TOOL = "digivault_get_note"
 GET_NOTE_BATCH_MAX = 20
 
 SEARCH_TOOLS_FOR_NOTE_HOP = frozenset(
-    {"digisearch", "digisearch_fetch_all", "digivault_search_notes"}
+    {"digisearch", "digisearch_semantic", "digisearch_fetch_all", "digivault_search_notes"}
 )
 
 # Public slash names → orchestrator tool ids. ``digivault_get_note`` is not a
 # force-tool: it is the automatic second hop, never a user-facing slash.
+#
+# "digisearch" stays as a key for one release (#4995): it is an operator-facing
+# string baked into live secrets this repo cannot see. Values are the canonical
+# tool id, because graph/research.py executes whatever resolve_force_tool returns.
 _FORCE_TOOL_ALIASES: dict[str, str] = {
-    "search": "digisearch",
-    "digisearch": "digisearch",
+    "search": "digisearch_semantic",
+    "digisearch": "digisearch_semantic",
+    "digisearch_semantic": "digisearch_semantic",
     "docs": "digivault_search_notes",
     "digivault": "digivault_search_notes",
     "digivault_search_notes": "digivault_search_notes",
