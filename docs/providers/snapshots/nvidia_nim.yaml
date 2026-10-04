@@ -1,5 +1,5 @@
 provider: nvidia_nim
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 4096
       status: deprecated        # confirmed EOL 2026-08-26 (probe's own 410 response carries the exact timestamp)
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 118
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 143
       verification_error: "Error code: 410 - {'type': 'about:blank', 'title': 'Gone', 'status': 410, 'detail': \"The model 'meta/llama-3.3-70b-instruct' has reached its end of life on 2026-08-26T09:00:00Z and is no longer available.\"}"
     - name: nvidia/llama-3.3-nemotron-super-49b-v1
       context_window: 131072

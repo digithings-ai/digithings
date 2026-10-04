@@ -1,5 +1,5 @@
 provider: gemini
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 65536
       status: active
       verified: true
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 8449
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 1080
       verification_error: null
     - name: gemini-2.5-flash-lite
       context_window: 1048576

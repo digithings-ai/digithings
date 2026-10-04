@@ -1,5 +1,5 @@
 provider: mistral
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -25,10 +25,10 @@ free_tier:
       max_input_tokens: 32768
       max_output_tokens: 32768
       status: active
-      verified: true
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 755
-      verification_error: null
+      verified: false
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 1874
+      verification_error: "Error code: 429 - {'object': 'error', 'message': 'Rate limit exceeded', 'type': 'rate_limited', 'param': None, 'code': '1300', 'raw_status_code': 429}"
     - name: codestral-latest
       context_window: 262144
       max_input_tokens: 262144
