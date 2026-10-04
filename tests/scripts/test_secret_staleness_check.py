@@ -9,14 +9,49 @@ the emitted issue body carries nothing else.
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "secret_staleness_check.py"
+
+
+def _fake_gh(tmp_path: Path, stdout: str, returncode: int = 0, stderr: str = "") -> Path:
+    """A `gh` on PATH that prints `stdout`, so the shell-out contract is tested.
+
+    Every pre-#5057 test here stubbed `_gh_json` itself, which is exactly why the
+    real `--paginate` parsing, the real `--jq`, and the real `-f labels=` call went
+    untested and the job shipped green while reading nothing.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    (tmp_path / "stdout").write_text(stdout)
+    (tmp_path / "stderr").write_text(stderr)
+    (tmp_path / "args").write_text("")
+    script = bindir / "gh"
+    script.write_text(
+        "#!/bin/sh\n"
+        f'printf "%s\\n" "$@" >> "{tmp_path / "args"}"\n'
+        f'cat "{tmp_path / "stdout"}"\n'
+        f'cat "{tmp_path / "stderr"}" >&2\n'
+        f"exit {returncode}\n"
+    )
+    script.chmod(0o755)
+    return bindir
+
+
+def _gh_on_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stdout: str, returncode: int = 0
+) -> None:
+    bindir = _fake_gh(tmp_path, stdout, returncode)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
 
 
 def _load() -> object:
@@ -164,32 +199,82 @@ def test_markdown_names_a_level_it_could_not_read(checker: object) -> None:
 def test_file_or_update_issue_updates_instead_of_duplicating(
     checker: object, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[list[str]] = []
-    monkeypatch.setattr(checker, "_gh_json", lambda cmd, root: calls.append(cmd) or None)
+    calls: list[tuple[list[str], str | None]] = []
+    monkeypatch.setattr(
+        checker,
+        "_gh_json",
+        lambda cmd, root, stdin=None: (calls.append((cmd, stdin)), {"number": 1})[1],
+    )
     monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: "412")
 
     result = checker.file_or_update_issue(checker.REPO_ROOT, "o/r", "body")
 
     assert result == "updated the open tracking issue #412"
     assert len(calls) == 1
-    assert calls[0][:3] == ["gh", "api", "--method"]
-    assert "PATCH" in calls[0]
-    assert "repos/o/r/issues/412" in calls[0]
+    assert calls[0][0][:3] == ["gh", "api", "--method"]
+    assert "PATCH" in calls[0][0]
+    assert "repos/o/r/issues/412" in calls[0][0]
+    assert json.loads(calls[0][1] or "") == {"body": "body"}
 
 
 @pytest.mark.unit
 def test_file_or_update_issue_opens_when_none_is_open(
     checker: object, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[list[str]] = []
-    monkeypatch.setattr(checker, "_gh_json", lambda cmd, root: calls.append(cmd) or None)
+    calls: list[tuple[list[str], str | None]] = []
+    monkeypatch.setattr(
+        checker,
+        "_gh_json",
+        lambda cmd, root, stdin=None: (calls.append((cmd, stdin)), {"number": 1})[1],
+    )
     monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: None)
 
     result = checker.file_or_update_issue(checker.REPO_ROOT, "o/r", "body")
 
     assert result == "opened a new tracking issue"
-    assert "POST" in calls[0]
-    assert "repos/o/r/issues" in calls[0]
+    assert "POST" in calls[0][0]
+    assert "repos/o/r/issues" in calls[0][0]
+    assert json.loads(calls[0][1] or "") == {
+        "title": checker.ISSUE_TITLE,
+        "body": "body",
+        "labels": list(checker.ISSUE_LABELS),
+    }
+
+
+@pytest.mark.baseline
+@pytest.mark.skipif(
+    not os.environ.get("GH_TOKEN") and not os.environ.get("GITHUB_TOKEN"),
+    reason="needs an authenticated gh to read the live label list; CI has no token",
+)
+def test_every_tracker_label_exists_in_the_repo(checker: object) -> None:
+    """A label name that does not exist fails the create on its own.
+
+    Run it with `GH_TOKEN=... pytest tests/scripts/test_secret_staleness_check.py -k label`.
+    It is not a unit test because it cannot be: `ci.yml` runs `-m "unit or baseline"`
+    with no token, so a live call in either lane turns `ruff-and-scripts` red.
+    """
+    listed = subprocess.run(
+        [
+            "gh",
+            "label",
+            "list",
+            "--repo",
+            "digithings-ai/digithings",
+            "--limit",
+            "300",
+            "--json",
+            "name",
+            "--jq",
+            ".[].name",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=checker.REPO_ROOT,
+    ).stdout
+    known = {line.strip() for line in listed.splitlines() if line.strip()}
+    assert known, "label list came back empty, so this test would pass vacuously"
+    assert not set(checker.ISSUE_LABELS) - known
 
 
 @pytest.mark.unit
@@ -388,3 +473,283 @@ def test_offline_mode_does_not_consult_the_live_gate(
 def test_a_missing_manifest_is_reported_as_unverified(checker: object) -> None:
     body = "\n".join(checker.gate_markdown(([], {})))
     assert "unverified" in body
+
+
+# --- The shell-out contract -----------------------------------------------------
+# Everything below drives the real `_gh_json`, through a fake `gh` on PATH, because
+# that is the layer the 2026-10-04 false green lived in and no test reached it.
+
+_SECRETS = {"name": "A_SECRET", "updated_at": "2026-01-02T03:04:05Z"}
+
+
+@pytest.mark.unit
+def test_a_secret_listing_spanning_many_pages_is_read_in_full(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--paginate` alone prints one JSON document per page, which `json.loads` rejects.
+
+    The live listing is 20 repo secrets; at two per page that is ten documents and
+    `Extra data: line 1 column 244`. Every level therefore read as unavailable, and
+    unavailable was rendered to the human as "0 of 0 listed secrets".
+    """
+    pages = [{"secrets": [{**_SECRETS, "name": f"S{page}"}]} for page in range(10)]
+    _gh_on_path(monkeypatch, tmp_path, json.dumps(pages))
+
+    secrets, reason = checker.repo_secrets(checker.REPO_ROOT, "o/r")
+
+    assert reason is None
+    assert [s.name for s in secrets] == [f"S{page}" for page in range(10)]
+    args = (tmp_path / "args").read_text().split()
+    assert "--paginate" in args
+    assert "--slurp" in args
+
+
+@pytest.mark.unit
+def test_pages_concatenated_without_slurp_are_unavailable_and_not_empty(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The old failure mode, pinned: unparseable must read as unavailable, never as empty."""
+    _gh_on_path(monkeypatch, tmp_path, json.dumps({"secrets": [_SECRETS]}) * 3)
+
+    secrets, reason = checker.repo_secrets(checker.REPO_ROOT, "o/r")
+
+    assert secrets == []
+    assert reason is not None and "unavailable" in reason
+
+
+@pytest.mark.unit
+def test_an_unpaginated_call_gets_no_slurp_and_still_parses(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gh rejects `--slurp` without `--paginate`, so it may only be added to a paged call."""
+    _gh_on_path(monkeypatch, tmp_path, json.dumps({"total_count": 1, "secrets": [_SECRETS]}))
+
+    payload = checker._gh_json(["gh", "api", "repos/o/r/actions/secrets"], checker.REPO_ROOT)
+
+    assert "--slurp" not in (tmp_path / "args").read_text().split()
+    assert checker._secret_entries(payload) == [_SECRETS]
+
+
+@pytest.mark.unit
+def test_a_server_side_filter_on_a_paged_call_is_refused_not_just_documented(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of gh's `--slurp` rule, and the one that bites silently.
+
+    `--slurp` is injected next to every `--paginate`, and gh hard-errors when it finds
+    `--jq` or `--template` beside it. A call site that filters server-side would
+    therefore die inside CI rather than in a test, which is exactly how the 2026-10-04
+    false green happened: correct-looking code, no signal until a run was inspected.
+    """
+    _gh_on_path(monkeypatch, tmp_path, "{}")
+    before = (tmp_path / "args").read_text() if (tmp_path / "args").exists() else ""
+
+    for flag in ("--jq", "--template"):
+        with pytest.raises(ValueError, match="--slurp"):
+            checker._gh_json(
+                ["gh", "api", "--paginate", flag, ".[]", "repos/o/r/issues"],
+                checker.REPO_ROOT,
+            )
+
+    after = (tmp_path / "args").read_text() if (tmp_path / "args").exists() else ""
+    assert after == before, "gh must not be invoked for a command that cannot work"
+
+
+@pytest.mark.unit
+def test_the_tracker_is_found_on_a_page_after_the_first(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The old `--jq '[...] | .[0].number'` emitted one `null` per page, so it never found
+    the tracker, so the update branch was unreachable and every run tried to create one."""
+    pages = [
+        [{"number": 1, "state": "open", "title": "unrelated"}],
+        [{"number": 412, "state": "open", "title": checker.ISSUE_TITLE}],
+        [{"number": 500, "state": "open", "title": "another"}],
+    ]
+    _gh_on_path(monkeypatch, tmp_path, json.dumps(pages))
+
+    assert checker._issue_exists(checker.REPO_ROOT, "o/r") == "412"
+
+
+@pytest.mark.unit
+def test_no_open_tracker_reads_as_none_rather_than_raising(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Three pages, no match: the old code handed `json.loads` an empty line per page
+    and raised `Expecting value: line 3 column 1`, which is the run log's error."""
+    pages = [[{"number": 1, "state": "open", "title": "unrelated"}] for _ in range(3)]
+    _gh_on_path(monkeypatch, tmp_path, json.dumps(pages))
+
+    assert checker._issue_exists(checker.REPO_ROOT, "o/r") is None
+
+
+@pytest.mark.unit
+def test_a_closed_tracker_is_not_the_open_one(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pages = [[{"number": 7, "state": "closed", "title": checker.ISSUE_TITLE}]]
+    _gh_on_path(monkeypatch, tmp_path, json.dumps(pages))
+
+    assert checker._issue_exists(checker.REPO_ROOT, "o/r") is None
+
+
+@pytest.mark.unit
+def test_the_create_body_is_json_with_a_label_array(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`-f labels=ops` sent a string and `ops` does not exist, so the create 400'd with
+    only `Invalid request` and the tracker never appeared. The body is JSON now."""
+    _gh_on_path(monkeypatch, tmp_path, json.dumps([[]]))
+    sent: list[str] = []
+    real = checker._gh_json
+
+    def spy(cmd: list[str], root: Path, stdin: str | None = None) -> object:
+        if stdin is not None:
+            sent.append(stdin)
+        return real(cmd, root, stdin)
+
+    monkeypatch.setattr(checker, "_gh_json", spy)
+
+    checker.file_or_update_issue(checker.REPO_ROOT, "o/r", "body")
+
+    assert len(sent) == 1
+    body = json.loads(sent[0])
+    assert body["title"] == checker.ISSUE_TITLE
+    assert isinstance(body["labels"], list)
+    assert body["labels"] == list(checker.ISSUE_LABELS)
+
+
+@pytest.mark.unit
+def test_markdown_never_calls_an_unread_level_clean(checker: object) -> None:
+    report = checker.Report(secrets=[_age(checker, 10)], unavailable={"cron": "HTTP 403"})
+    body = checker.markdown(report, 90)
+
+    assert "No action needed" not in body
+    assert "not a clean bill of health" in body
+    assert "`cron`" in body
+
+
+@pytest.mark.unit
+def test_the_workflow_grants_the_read_permission_the_listings_need(checker: object) -> None:
+    """Without `actions: read` all three listings 403, every level reads as empty, and
+    the job still succeeds. Nothing else in the repo would notice."""
+    workflow = yaml.safe_load(
+        (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
+    )
+    permissions = workflow["permissions"]
+
+    assert permissions.get("actions") == "read"
+    assert permissions.get("issues") == "write"
+
+
+@pytest.mark.unit
+def test_a_secret_with_an_unreadable_date_is_reported_not_dropped(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropping it would shrink the denominator and let the run say nothing is overdue."""
+    pages = [{"secrets": [_SECRETS, {"name": "ODD", "updated_at": "never"}]}]
+    _gh_on_path(monkeypatch, tmp_path, json.dumps(pages))
+
+    secrets, reason = checker.repo_secrets(checker.REPO_ROOT, "o/r")
+
+    assert secrets == []
+    assert reason is not None and "ODD" in reason
+
+
+@pytest.mark.unit
+def test_a_secret_with_no_date_at_all_is_reported_not_dropped(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pages = [{"secrets": [{"name": "ODD", "updated_at": None}]}]
+    _gh_on_path(monkeypatch, tmp_path, json.dumps(pages))
+
+    secrets, reason = checker.repo_secrets(checker.REPO_ROOT, "o/r")
+
+    assert secrets == []
+    assert reason is not None and "ODD" in reason
+
+
+@pytest.mark.unit
+def test_an_unreadable_issue_list_files_nothing_rather_than_a_duplicate(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """None means "no tracker is open". A failed read must not be read that way."""
+    posted: list[list[str]] = []
+    _gh_on_path(monkeypatch, tmp_path, "", returncode=1)
+    real = checker._gh_json
+
+    def spy(cmd: list[str], root: Path, stdin: str | None = None) -> object:
+        if "--method" in cmd:
+            posted.append(cmd)
+        return real(cmd, root, stdin)
+
+    monkeypatch.setattr(checker, "_gh_json", spy)
+
+    result = checker.file_or_update_issue(checker.REPO_ROOT, "o/r", "body")
+
+    assert "filed nothing" in result
+    assert posted == []
+
+
+@pytest.mark.unit
+def test_a_refused_create_is_reported_as_failed(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The create used to claim success on a 422, so the tracker silently never existed."""
+    monkeypatch.setattr(checker, "_gh_json", lambda cmd, root, stdin=None: None)
+    monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: None)
+
+    assert "FAILED" in checker.file_or_update_issue(checker.REPO_ROOT, "o/r", "body")
+
+
+@pytest.mark.unit
+def test_a_refused_update_is_reported_as_failed(
+    checker: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(checker, "_gh_json", lambda cmd, root, stdin=None: None)
+    monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: "412")
+
+    result = checker.file_or_update_issue(checker.REPO_ROOT, "o/r", "body")
+
+    assert "FAILED" in result and "412" in result
+
+
+@pytest.mark.unit
+def test_the_stdin_body_reaches_gh_rather_than_being_dropped(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_gh_json` gaining a `stdin` argument is plumbing; this is what proves it is wired."""
+    body = tmp_path / "bin" / "gh"
+    _gh_on_path(monkeypatch, tmp_path, "{}")
+    body.write_text(
+        body.read_text().replace(
+            f'cat "{tmp_path / "stderr"}" >&2',
+            f'cat >> "{tmp_path / "seen"}"',
+        )
+    )
+    body.chmod(0o755)
+
+    checker._gh_json(["gh", "api", "repos/o/r"], checker.REPO_ROOT, stdin='{"title":"x"}')
+
+    assert (tmp_path / "seen").read_text() == '{"title":"x"}'
+
+
+@pytest.mark.unit
+def test_no_summary_counts_zero_of_zero_as_a_clean_result(checker: object) -> None:
+    """ "0 of 0 listed secrets are past 90 days" is a claim about an empty set."""
+    report = checker.Report(unavailable={"cron": "HTTP 403", "org": "needs admin:org"})
+    body = checker.markdown(report, 90)
+
+    assert "0 of 0" not in body.replace("**", "")
+    assert "No secrets could be aged" in body
+    assert "No action needed" not in body
+
+
+@pytest.mark.unit
+def test_the_summary_still_reassures_when_everything_was_read(
+    checker: object,
+) -> None:
+    body = checker.markdown(checker.Report(secrets=[_age(checker, 10)]), 90)
+
+    assert "No action needed" in body
+    assert "of **1** listed secrets" in body
