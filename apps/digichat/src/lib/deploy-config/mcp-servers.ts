@@ -234,13 +234,23 @@ const MAX_TOKEN = 4_096;
  * 256 entries is set by our own corpus, not a guess. digiquant's `scope="read"`
  * server advertises 113 tools (`READ_SCOPE_TOOLS` in
  * `digiquant/src/digiquant/mcp_server.py`) and `config/examples/dashboard-modal.yaml`
- * is that row, so the entry bound has to clear 113 with room to grow. A bound
- * below that does not merely reject a big list — it rejects a correct config, and
- * the rejection surfaces as the whole `X-Digi-Mcp-Servers` header being dropped
- * by `route.ts` with only "Invalid deploy config" logged. 113 names serialise to
- * about 3 KB, so this stays well inside `MAX_UPSTREAM_JSON`, which remains the
- * backstop: an over-budget config fails closed, the same as an over-long `token`
- * does today.
+ * is that row, so the entry bound has to clear 113 with room to grow.
+ *
+ * `MAX_UPSTREAM_JSON` (16 KB) is the outer limit, and the entry bound is not the
+ * same limit — which matters to whoever fills the bound. The corpus row is well
+ * inside it: the real 113 digiquant names serialise to about 6 KB in both lists
+ * together. A maximal row is not: 256 names at the full 64 characters, in both
+ * lists, measure about 34 KB, and 30-character names still measure about 17 KB,
+ * so a row that is legal by both bounds here can still exceed the byte cap. When
+ * it does, `mcpUpstreamHeaderValue` drops the entire header, and the operator sees
+ * their MCP tools disappear with nothing logged — the `catch` in
+ * `app/api/chat/route.ts` is a comment, not a log line. `mcp.servers` itself is
+ * uncapped, so rows compound toward the same ceiling.
+ *
+ * Every overshoot fails closed, the same as an over-long `token` does today, and
+ * the bounds are deliberately independent: a config that trips either one is
+ * refused rather than trimmed, because a partial allowlist denies tools the
+ * operator asked for while still looking configured.
  */
 export const MAX_MCP_TOOL_ENTRIES = 256;
 export const MAX_MCP_TOOL_NAME_LENGTH = 64;
