@@ -164,6 +164,110 @@ describe("phase 1 portfolio routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // `theses` is one row per thesis per date, so a dossier that reads it without an
+  // order and `.find()`s the first match resolves whichever date PostgREST happens
+  // to return first. The stale row here leads the fixture AND carries `ticker: "GLD"`
+  // so the resolver's ticker arm would match it — that isolates the date defect from
+  // the join defect, which the next test covers on its own. Note no live `theses` row
+  // carries a `ticker` column (the ticker-ish column is `vehicle`); the field is here
+  // only to let this fixture rule the join out.
+  it("dossier resolves the thesis from the newest date, not an arbitrary one", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [
+          { id: "uuid-gold-stale", date: "2026-09-27", thesis_id: "gold", name: "Gold", status: "EXITED", ticker: "GLD" },
+          { id: "uuid-gold", date: "2026-09-28", thesis_id: "gold", name: "Gold bid", status: "ACTIVE" },
+        ];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [
+          { date: "2026-09-28", thesis_id: "gold", ticker: "GLD" },
+        ];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { thesis: { id: string; name: string; state: string } | null };
+    expect(data.thesis).toEqual({ id: "uuid-gold", name: "Gold bid", state: "ACTIVE" });
+  });
+
+  // `vehicleIds` is built from `thesis_id`, so matching it against `str(r.id)`
+  // first compares a uuid against a business key and never matches. This fixture
+  // omits the `ticker` column so the ticker fallback cannot mask a dead join.
+  it("dossier joins thesis_vehicles on thesis_id, not the uuid id", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [{ id: "uuid-1", date: "2026-09-28", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE" }];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [{ date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" }];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { thesis: { id: string } | null };
+    expect(data.thesis?.id).toBe("uuid-1");
+  });
+
+  // Vehicles must be narrowed to the same tip date as the thesis book, or the
+  // drawer shows mappings the thesis pane no longer holds.
+  it("dossier holds vehicles at the newest date too", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [{ id: "uuid-gold", date: "2026-09-28", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE" }];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [
+          { date: "2026-09-27", thesis_id: "gold-bid-old", ticker: "GLD" },
+          { date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" },
+        ];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { vehicles: string[] };
+    expect(data.vehicles).toEqual(["gold-bid"]);
+  });
+
+  // Fail-closed: `rowsAtDate` returns [] for a null date, so a `theses` row with no
+  // `date` yields no vehicles rather than falling back to `updated_at`. The
+  // `thesis === null` assertion here is decoration — pre-fix it is satisfied by the
+  // dead uuid join, not by the missing date — so the load-bearing part is the
+  // `vehicles` one.
+  it("dossier without a dated thesis row withholds the thesis and the vehicles", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [{ id: "uuid-1", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE", updated_at: "2026-09-28T10:00:00Z" }];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [{ date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" }];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { thesis: unknown; vehicles: string[] };
+    expect(res.status).toBe(200);
+    expect(data.thesis).toBeNull();
+    expect(data.vehicles).toEqual([]);
+  });
+
+  // `maxThesisDate` maxima over whatever page PostgREST returned, so `order=date.desc`
+  // is the only thing making the tip derivable under `limit`. The other dossier mocks
+  // ignore the query string, so without this assertion dropping the order from either
+  // read leaves every one of them green.
+  it("dossier orders both dated reads so the tip survives the row cap", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return Response.json([]);
+    }));
+    await app.fetch(new Request("https://x/dossier/GLD"), ENV);
+    const theses = urls.find((u) => u.includes("/theses?")) ?? "";
+    const vehicles = urls.find((u) => u.includes("/thesis_vehicles")) ?? "";
+    expect(theses).toContain("order=date.desc");
+    expect(vehicles).toContain("order=date.desc");
+  });
+
   it("unconfigured core fails closed", async () => {
     const res = await app.fetch(new Request("https://x/theses"), { DASHBOARD_DEV_CALLER: "enterprise+12x" });
     expect(res.status).toBe(502);

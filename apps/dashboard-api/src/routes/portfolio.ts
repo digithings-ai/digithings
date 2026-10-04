@@ -344,6 +344,45 @@ async function risks(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   return ok({ risks: items }, "core:documents", pinR.pin, maxDate(out.rows, "as_of")?.slice(0, 10) ?? null);
 }
 
+/**
+ * Per-ticker dossier drawer data.
+ *
+ * The thesis and its vehicle mapping are read as **one dated book**, the same way
+ * `/theses` (below) and `/rates/theses` read theirs. Both tables are dated on the
+ * key they share: `theses` is one row per `(date, thesis_id)` under
+ * `UNIQUE(date, thesis_id)`, while `thesis_vehicles` is one row per
+ * `(date, thesis_id, ticker)` — so a thesis carrying several vehicles has several
+ * rows at one date, and the vehicle side is a `Set` of thesis ids rather than a
+ * single id. `maxThesisDate` picks the business date the book was struck on and
+ * `rowsAtDate` narrows both sides to it.
+ * (`digiquant/supabase/migrations/001_initial_schema.sql:58-69`,
+ * `024_thesis_deliberation_first_class.sql:18-34`)
+ *
+ * `order=date.desc` is what makes the tip derivable under a row cap:
+ * `maxThesisDate` maxima over the page PostgREST returned, so an unordered `limit`
+ * could drop the newest date away. `idx_theses_date ON theses(date DESC)` backs it.
+ * This route still issues exactly five reads; the fix adds none.
+ *
+ * Three consequences worth keeping:
+ * - The vehicle join is on `thesis_id`, never the row `id`. `id` is a uuid
+ *   (`gen_random_uuid()`), so joining on it matches nothing; `thesis_id` is the
+ *   stable business key both tables share.
+ * - `thesis_vehicles` has `FOREIGN KEY (date, thesis_id) REFERENCES theses (date,
+ *   thesis_id) ON DELETE CASCADE`, so every vehicle at date D has a thesis at date
+ *   D: narrowing to the tip cannot cross-join one to another date's thesis. It
+ *   says nothing about vehicles *existing* at the tip — vehicle writes are
+ *   best-effort enrichment that never blocks the book — so on such a day the drawer
+ *   correctly withholds instead of showing a stale thesis.
+ * - `theses` has no `ticker` column (the ticker-ish column is `vehicle`), so the
+ *   `str(r.ticker)` arm of the resolver cannot fire against real rows; in practice
+ *   resolution rides `thesis_vehicles`.
+ *
+ * `date` is the only age available: there is no separate business-date column, and
+ * `updated_at` is a row-write timestamp — a no-op edit on a stale-date row makes
+ * that row look like the newest book, so a pane that aged by it would read current
+ * while showing stale content. The thesis date is deliberately not surfaced:
+ * `as_of` stays `positions`-derived, exactly as it was before this fix.
+ */
 async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
@@ -353,8 +392,8 @@ async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   }
   const key = ticker.toUpperCase();
   const [thesesOut, vehicles, events, docs, positions] = await Promise.all([
-    read(ctx.env, "theses", "select=*&limit=500"),
-    read(ctx.env, "thesis_vehicles", "select=*&limit=2000"),
+    read(ctx.env, "theses", "select=*&order=date.desc&limit=500"),
+    read(ctx.env, "thesis_vehicles", "select=*&order=date.desc&limit=2000"),
     read(ctx.env, "position_events", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=200`),
     read(ctx.env, "documents", "select=*&limit=200"),
     read(ctx.env, "positions", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=500`),
@@ -364,10 +403,15 @@ async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   if ("error" in events) return events.error;
   if ("error" in docs) return docs.error;
   if ("error" in positions) return positions.error;
+  const tip = maxThesisDate(thesesOut.rows);
+  const book = rowsAtDate(thesesOut.rows, tip);
   const vehicleIds = new Set(
-    vehicles.rows.filter((r) => (str(r.ticker) ?? str(r.vehicle) ?? "").toUpperCase() === key).map((r) => str(r.thesis_id)).filter((id): id is string => id !== null),
+    rowsAtDate(vehicles.rows, tip)
+      .filter((r) => (str(r.ticker) ?? str(r.vehicle) ?? "").toUpperCase() === key)
+      .map((r) => str(r.thesis_id))
+      .filter((id): id is string => id !== null),
   );
-  const thesis = thesesOut.rows.find((r) => vehicleIds.has(str(r.id) ?? str(r.thesis_id) ?? "") || (str(r.ticker) ?? "").toUpperCase() === key);
+  const thesis = book.find((r) => vehicleIds.has(str(r.thesis_id) ?? str(r.id) ?? "") || (str(r.ticker) ?? "").toUpperCase() === key);
   const pos = positions.rows.find((r) => (str(r.ticker) ?? "").toUpperCase() === key);
   const ev = events.rows.filter((r) => (str(r.ticker) ?? "").toUpperCase() === key).map((r) => ({
     date: str(r.date)?.slice(0, 10) ?? null,
