@@ -209,32 +209,69 @@ def _maybe_rerank(query: Query, resp: SearchResponse) -> SearchResponse:
 
     provider = (os.environ.get("DIGISEARCH_RERANK_PROVIDER") or "bge").strip().lower() or "bge"
     reranker = _get_reranker(provider)
+    # Reranker providers rebuild Result objects (chunk/score/rank only), which
+    # would silently drop #5045 index provenance. Snapshot it by chunk id and
+    # restore after rerank; observability only — order and scores come from the
+    # reranker untouched. (source_doc loss on this path is pre-existing.)
+    provenance = {r.chunk.id: r.index_names for r in resp.results if r.index_names}
     resp.results = reranker.rerank(query.text, resp.results, top_n=query.top_k)
+    for result in resp.results:
+        if not result.index_names:
+            result.index_names = provenance.get(result.chunk.id)
     return resp
 
 
 def _rrf_merge_results(
-    results_list: list[list[Result]], top_k: int | None, k: int = 60
+    results_list: list[tuple[str, list[Result]]], top_k: int | None, k: int = 60
 ) -> list[Result]:
     """Merge per-index result lists with RRF (multi-index fan-out).
+
+    Each entry is ``(index_name, results)``. Merged hits carry provenance in
+    ``Result.index_names``: every contributing index name, in fan-out order,
+    deduped — a chunk present in two indexes records both (#5045). The index
+    name on a result's own ``index_names`` (stamped by ``_query_single_index``)
+    wins over the tuple name, which is the fallback for direct callers.
 
     Rank falls back to position when a backend leaves ``Result.rank`` unset.
     """
     scored: dict[str, list] = {}
-    for results in results_list:
+    for index_name, results in results_list:
         for position, result in enumerate(results):
             rank = result.rank if result.rank is not None else position + 1
+            names = list(result.index_names) if result.index_names else [index_name]
             entry = scored.get(result.chunk.id)
             if entry is None:
-                scored[result.chunk.id] = [result, 1.0 / (k + rank)]
+                scored[result.chunk.id] = [result, 1.0 / (k + rank), names]
             else:
                 entry[1] += 1.0 / (k + rank)
+                entry[2].extend(name for name in names if name not in entry[2])
     ranked = sorted(scored.values(), key=lambda item: item[1], reverse=True)
     merged = [
-        Result(chunk=result.chunk, score=score, source_doc=result.source_doc, rank=index + 1)
-        for index, (result, score) in enumerate(ranked)
+        Result(
+            chunk=result.chunk,
+            score=score,
+            source_doc=result.source_doc,
+            rank=index + 1,
+            index_names=names,
+        )
+        for index, (result, score, names) in enumerate(ranked)
     ]
     return merged[:top_k] if top_k else merged
+
+
+def _with_index_name(resp: SearchResponse, index_name: str) -> SearchResponse:
+    """Stamp index provenance on a single-index response (#5045, observability only).
+
+    Sets ``SearchResponse.index_names`` and, on every hit that does not already
+    carry provenance, ``Result.index_names = [index_name]``. The index name is the
+    Chroma collection name (strictly 1:1), so it is the correct corpus label.
+    Mutates and returns ``resp``; touches no field that affects scoring or order.
+    """
+    for result in resp.results:
+        if not result.index_names:
+            result.index_names = [index_name]
+    resp.index_names = [index_name]
+    return resp
 
 
 def _query_single_index(query: Query, index_name: str) -> SearchResponse:
@@ -270,7 +307,7 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
                     "top_k": query.top_k,
                 },
             )
-            return resp
+            return _with_index_name(resp, index_name)
 
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
@@ -289,11 +326,13 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
                 "backend": None,
             },
         )
-        return SearchResponse(results=[], facets=None, backend=None)
+        return _with_index_name(SearchResponse(results=[], facets=None, backend=None), index_name)
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return _with_index_name(
+            SearchResponse(results=[], facets=None, backend=BACKEND_STUB), index_name
+        )
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -320,7 +359,9 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
         out.append(Result(chunk=c, score=0.9, rank=rank))
         if len(out) >= query.top_k:
             break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
+    return _with_index_name(
+        SearchResponse(results=out, facets=None, backend=BACKEND_STUB), index_name
+    )
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
@@ -345,8 +386,14 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
         },
     )
     responses = [_query_single_index(query, name) for name in names]
-    merged = _rrf_merge_results([response.results for response in responses], top_k=query.top_k)
-    return _maybe_rerank(query, SearchResponse(results=merged, facets=None, backend="multi"))
+    merged = _rrf_merge_results(
+        [(name, response.results) for name, response in zip(names, responses)],
+        top_k=query.top_k,
+    )
+    return _maybe_rerank(
+        query,
+        SearchResponse(results=merged, facets=None, backend="multi", index_names=names),
+    )
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
