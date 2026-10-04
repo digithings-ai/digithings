@@ -149,16 +149,6 @@ async function loadPositionsOnDate(env: SupabaseEnv, bookDate: string): Promise<
   return out;
 }
 
-/** Latest position date on or before the snapshot; else null. */
-export function committedDate(snapshotDate: string | null, dates: readonly string[]): string | null {
-  if (!snapshotDate) return null;
-  let best: string | null = null;
-  for (const d of dates) {
-    if (d <= snapshotDate && (best === null || d > best)) best = d;
-  }
-  return best;
-}
-
 interface NavViewRow {
   date: string;
   nav?: number | string | null;
@@ -349,9 +339,11 @@ async function loadFreshLivePrices(
   try {
     const list = safe.map((t) => `"${t}"`).join(',');
     rows = await supaGet(env, `prices_live?select=ticker,price,quoted_at&ticker=in.(${list})`);
-  } catch (err) {
-    if (err instanceof UpstreamError) return out;
-    throw err;
+  } catch {
+    // Any throw from the overlay read — HTTP non-OK, fetch rejection, unparseable
+    // JSON — falls back to stored closes. Only this read is non-fatal; every other
+    // book read stays fail-closed (`UpstreamError` → `upstream_empty` 502).
+    return out;
   }
   if (!Array.isArray(rows)) return out;
   for (const row of rows as LiveQuoteRow[]) {

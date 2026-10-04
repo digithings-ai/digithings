@@ -8,7 +8,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   UpstreamError,
-  committedDate,
   createSupabaseSource,
   hasSupabaseEnv,
   loadMarketClosesMap,
@@ -65,17 +64,6 @@ describe('supaGet', () => {
     );
     await expect(supaGet(ENV, 'positions?select=*')).rejects.toBeInstanceOf(UpstreamError);
     await expect(supaGet(ENV, 'positions?select=*')).rejects.toMatchObject({ status: 500 });
-  });
-});
-
-describe('committedDate', () => {
-  it('picks the latest position date on or before the snapshot', () => {
-    expect(committedDate('2026-09-24', ['2026-09-22', '2026-09-24', '2026-09-25'])).toBe(
-      '2026-09-24',
-    );
-    expect(committedDate('2026-09-23', ['2026-09-22', '2026-09-24'])).toBe('2026-09-22');
-    expect(committedDate(null, ['2026-09-24'])).toBeNull();
-    expect(committedDate('2026-09-24', [])).toBeNull();
   });
 });
 
@@ -399,6 +387,26 @@ describe('live quotes', () => {
 
   it('falls back to stored marks when prices_live fails', async () => {
     mockLive(null, 500);
+    const source = createSupabaseSource(ENV);
+    const book = await source.live.loadLiveBook();
+    expect(book?.positions.find((p) => p.ticker === 'XLV')).toMatchObject({
+      isLive: false,
+      effectivePrice: 105,
+    });
+    expect(FETCHED.some((url) => url.includes('/prices_live?'))).toBe(true);
+  });
+
+  it('falls back to stored marks when the prices_live fetch rejects', async () => {
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) return [{ date: '2026-09-24' }];
+      if (url.includes('/positions?')) return POSITIONS;
+      if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
+      }
+      if (url.includes('/prices_live')) throw new TypeError('fetch failed');
+      throw new Error(`unexpected fetch ${url}`);
+    });
     const source = createSupabaseSource(ENV);
     const book = await source.live.loadLiveBook();
     expect(book?.positions.find((p) => p.ticker === 'XLV')).toMatchObject({

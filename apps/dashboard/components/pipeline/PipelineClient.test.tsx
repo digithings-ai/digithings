@@ -132,7 +132,7 @@ describe('PipelineClient', () => {
     });
   }
 
-  it('clears the previous day when a later date read returns no documents', async () => {
+  it('clears the previous day when a later date read errors', async () => {
     docsByDate.set('2026-09-01', { data: [MONDAY], error: null });
     docsByDate.set('2026-09-02', { data: null, error: { message: 'documents down' } });
     await renderClient();
