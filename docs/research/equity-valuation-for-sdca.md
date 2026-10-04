@@ -81,7 +81,7 @@ honest; interpolating GDP across days is not.
 | Earnings lag | CAPE’s E10 includes reports that were not out on day 1 of the month. | Use CAPE as of month-end *minus a lag* (two months is conservative). Never peek at a restated E. |
 | COVID denominator | Nominal GDP fell in 2020-Q2; Buffett = cap / GDP **rose** in the official quarterly print (`NCBEILQ027S/GDP` ≈ 129% in 2020-Q1 → **173% in 2020-Q2** on current vintage). A Buffett-driven SDCA would have read “more expensive” through the crash. | Do not use Buffett as a daily or even intra-quarter signal. If used at all, pair with a high-frequency spread and treat GDP as a *regime prior* updated on release dates only. |
 | `digiquant_get_macro_series` | Returns the last `lookback` ingested rows from Supabase — operator diagnostic, not a PIT backtest feed. | Backtests must read a vintage-aware store, not this MCP tool. |
-| FRED graph CSV | Convenient, no API key, **current vintage only**, and some ICE series truncate to ~3 years without a key. | Fine for a spike; not a production path. Production stays `fetch_fred` + `FRED_API_KEY`. |
+| FRED graph CSV | Convenient, no API key, **current vintage only**, and some ICE series truncate to ~3 years. | Fine for a spike; not a production path. Production reads the sealed macro panel written by Gloomberb `econ_series` (#4794). FRED was dropped as a provider on 2026-10-04 (DIG-335). |
 
 ## Historical plausibility (2000 / 2009 / 2020 / 2021)
 
@@ -181,8 +181,8 @@ including a miss if it still misses.
 - FRED graph CSV (no API key): `GDP` 1947-01-01–2026-04-01; `NCBEILQ027S` 1945-10-01–2026-01-01;
   `DGS10` 1962-01-02–2026-08-27; `DDDM01USA156NWDB` 1975–2020 only; `BAMLH0A0HYM2` truncated to
   2023-08-29–2026-08-27 without a key; `SP500` on FRED is a ~10-year licensed window.
-- `FRED_API_KEY` was unset in this environment; production ingest remains the right full-history
-  path.
+- Full-history coverage for the truncating series is a known gap: the sealed macro
+  panel (Gloomberb `econ_series`) has no key and no backfill beyond its page window.
 - Shiller `ie_data.xls` fetched from `http://www.econ.yale.edu/~shiller/data/ie_data.xls` (HTTP 200,
   last saved 2023-09-17). Event CAPE values in the table are from the `Data` sheet column “P/E10 or
   CAPE.”

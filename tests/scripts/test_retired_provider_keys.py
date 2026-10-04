@@ -122,8 +122,9 @@ def test_fragment_is_valid_json_and_has_no_retired_servers():
     servers = data["mcpServers"]
     for name in RETIRED_SERVERS:
         assert name not in servers, f"{name} is still wired in {FRAGMENT}"
-    # Sanity: the edit did not empty the file.
-    assert "fred" in servers and "world-bank" in servers
+    # Sanity: the edit did not empty the file. DIG-335 also removed `fred`, so it
+    # is no longer a valid witness here; pick servers that stay.
+    assert "world-bank" in servers and "frankfurter-fx" in servers
 
 
 def test_fragment_env_block_carries_no_vendor_variable():

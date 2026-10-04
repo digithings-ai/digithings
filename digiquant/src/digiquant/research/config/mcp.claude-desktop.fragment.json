@@ -15,14 +15,6 @@
         "FASTMCP_LOG_LEVEL": "WARNING"
       }
     },
-    "fred": {
-      "command": "uvx",
-      "args": ["fred-mcp-server"],
-      "env": {
-        "FRED_API_KEY": "${env:FRED_API_KEY}",
-        "FASTMCP_LOG_LEVEL": "WARNING"
-      }
-    },
     "crypto-feargreed": {
       "command": "uvx",
       "args": ["--from", "crypto-feargreed-mcp", "python3", "-m", "main"],
