@@ -43,6 +43,13 @@ jobs:
           # pull_request and scan the full log on develop/main pushes.
           fetch-depth: 0
 
+      - name: Example-credential guard (tracked .example/.template files)
+        # Fail fast, before the gitleaks download, when a tracked
+        # .example/.template file carries a credential-shaped value that
+        # is not an obvious placeholder — the leak class PR #5030 (DIG-41)
+        # cleaned up. python3 is preinstalled on ubuntu-latest.
+        run: python3 scripts/check_example_credentials.py
+
       - name: Install gitleaks (pinned release tarball)
         run: |
           set -euo pipefail
