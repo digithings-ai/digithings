@@ -20,17 +20,16 @@ Scope is split so a partial fix is legible:
 
 * ``test_live_*`` -- the digiquant + workflow surfaces DIG-335 owns. Green here
   is the claim "the key is no longer needed by anything we run on develop".
-* ``test_cloudflare_worker_does_not_forward_the_retired_key`` -- the Worker ``envVars``
-  block. That is a Cloudflare Worker file owned by Platform, tracked as a child
-  issue, and marked ``deselected`` so it is excluded from ``-m unit`` until it
-  lands. It is here rather than omitted so the day the child issue closes the
-  flip is one edit, and so the debt is visible in ``pytest --collect-only``.
+* ``test_cloudflare_worker_does_not_forward_the_retired_key`` -- the Worker
+  ``envVars`` block. ``apps/digithings-stack-cloudflare`` is Platform-owned code,
+  so this leaf edited four files there together: the ``envVars`` entry, the ``Env``
+  interface field, the ``MCP_SCOPED_VARS`` pin in ``env-vars-pin.test.js``, and the
+  two operator-facing docs. The pin test does two-way source checks, so the four
+  cannot move separately -- which is why this is one test and not four.
 
 Run from the repo root::
 
-    pytest tests/scripts/test_fred_credential_retired.py -m "unit or deselected"
-    # or, without pytest:
-    make fred-retired-check
+    pytest tests/scripts/test_fred_credential_retired.py -m unit
 """
 
 from __future__ import annotations
@@ -43,11 +42,11 @@ from pathlib import Path
 
 import pytest
 
-# NOTE: no module-level ``pytestmark``. In this repo ``deselected`` means
-# "carries no `unit` mark", so a module-wide ``pytestmark = pytest.mark.unit``
-# would make the ``deselected`` Worker test run under CI's ``-m "unit or
-# baseline"`` and fail it. The five digiquant-owned tests are marked
-# individually instead; the Worker test is marked ``deselected`` only.
+# Every test here carries its own mark rather than a module-level ``pytestmark``,
+# because the allowlisted-path tests must be able to assert on *why* a path is
+# exempt and the scanning tests must fail loudly when the shape of the tree
+# changes. A module-wide mark would also silently drag the exempt-path tests
+# into any other selection someone runs (``-m integration``, ``-m slow``).
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -353,25 +352,21 @@ def test_allowed_mentions_are_all_documented() -> None:
         )
 
 
-@pytest.mark.deselected
+@pytest.mark.unit
 def test_cloudflare_worker_does_not_forward_the_retired_key() -> None:
     """The stack Worker must stop forwarding FRED_API_KEY into its MCP container.
 
-    Deselected, not passing. ``apps/digithings-stack-cloudflare/src/index.ts``
-    still declares ``FRED_API_KEY?: string`` on ``Env`` and still puts
-    ``FRED_API_KEY: env.FRED_API_KEY ?? ""`` in ``DigiQuantMcpContainer.envVars``.
-    That is now dead config with a live secret behind it: the digiquant MCP
-    stopped calling FRED in #4794 PR3, so the container reads nothing, while the
-    secret keeps being forwarded into it on every container start.
-
-    Platform owns that Worker; the child issue is DIG-341. This test is here so
-    the exemption is a visible, flippable line rather than an omission.
+    Both halves are checked because they are one edit. ``env-vars-pin.test.js``
+    asserts ``MCP_SCOPED_VARS`` is present on the MCP ``envVars`` block and absent
+    from the stack one, and it ``checkKeyMatchesRef``'s each key against the
+    ``Env`` interface -- so dropping the ``Env`` field without the pin (or the pin
+    without the field) fails that test instead of silently passing here.
     """
     index = "apps/digithings-stack-cloudflare/src/index.ts"
     offenders = [f"{index}:{n}: {l}" for n, l in _lines_with_name(index)]
     assert not offenders, (
-        "The stack Worker still reads/forwards FRED_API_KEY (DIG-335, "
-        f"owner: Platform, child issue DIG-341):\n  " + "\n  ".join(offenders)
+        "The stack Worker still reads/forwards FRED_API_KEY (DIG-335):\n  "
+        + "\n  ".join(offenders)
     )
 
     pin = "apps/digithings-stack-cloudflare/src/env-vars-pin.test.js"

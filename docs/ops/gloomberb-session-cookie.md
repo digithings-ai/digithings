@@ -143,7 +143,7 @@ runbook.
 `GLOOMBERB_SESSION_COOKIE` **is forwarded** to the hosted container
 (wiring shipped in #4260): the name is in `DigiQuantMcpContainer.envVars`
 (`apps/digithings-stack-cloudflare/src/index.ts`) beside
-`DIGIQUANT_MCP_SCOPE`, `DIGIQUANT_MARKET_DATA_BACKEND`, `FRED_API_KEY`, and the
+`DIGIQUANT_MCP_SCOPE`, `DIGIQUANT_MARKET_DATA_BACKEND`, and the
 four `R2_*` names; that set is pinned by `tests/scripts/test_mcp_container.py`.
 Until an operator sets the secret the variable is empty, so the gated tools on
 that surface still answer the typed `auth_required`.
