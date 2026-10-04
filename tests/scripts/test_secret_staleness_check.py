@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -113,7 +113,9 @@ def test_markdown_lists_only_names_and_ages(checker: object) -> None:
     assert cells[0] == "`repo`"
     assert cells[1] == "`DIGITHINGS_PROJECT_TOKEN`"
     assert cells[2] == "164"
-    datetime.strptime(cells[3], "%Y-%m-%d")
+    # The date column is a plain calendar date, so parse it as one. `date` has no
+    # timezone by construction, which keeps ruff DTZ007 quiet without a noqa.
+    date.fromisoformat(cells[3])
 
 
 @pytest.mark.unit
