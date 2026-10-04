@@ -670,6 +670,82 @@ def _issue_exists(root: Path, repo: str) -> str | None:
     return None
 
 
+CLOSE_NOTE = f"""{ISSUE_MARKER}
+This tracker cannot be refreshed from CI, so it is being closed rather than left
+open and wrong.
+
+The ageing half of `secret-staleness-check` reads the GitHub Actions secret
+listings, and those endpoints need a token with the `repo` scope. A workflow's
+`GITHUB_TOKEN` is a GitHub App installation token and GitHub's `permissions:`
+vocabulary has no key for secrets, so no grant in a workflow file can supply it.
+Every level comes back `403 Resource not accessible by integration`.
+
+Leaving this open would be the worst of both: a `security:finding` that claims to
+be watching a rotation window it cannot see. The environment-gate half of the same
+job needs only `contents: read` and does work — it compares
+`.github/environments.json` against live protection rules on every run.
+
+The real rotation state is recorded by hand in `docs/ops/SECRETS_INVENTORY.md`.
+As of 2026-10-04, 16 of 33 secret names were past the 90-day window; the oldest
+were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.
+
+Give the ageing half a credential and the next run files a fresh tracker with real
+names in it."""
+
+
+def close_unmeasurable_tracker(root: Path, repo: str) -> str:
+    """Close an open tracker when nothing could be aged, recording why.
+
+    Skipping the write was not enough on its own. The tracker opened by run
+    37235973852 was already open and empty when this was written, carrying
+    `security:finding` and a body saying nothing had been read. A guard that only
+    prevents *new* empty trackers leaves that one sitting forever, and the docs
+    claim the clock files no tracker while a tracker is open. Silence here is
+    indistinguishable from "still running".
+
+    The comment lands before the close, so the reason is on the record before the
+    issue stops counting as an open finding. If the comment cannot be written the
+    issue is left open, because closing it without the explanation would be worse.
+    """
+    try:
+        existing = _issue_exists(root, repo)
+    except TrackerUnreadable as exc:
+        return f"filed nothing: {exc}"
+    if existing is None:
+        return "filed nothing: no tracker is open"
+    noted = _gh_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{repo}/issues/{existing}/comments",
+            "--input",
+            "-",
+        ],
+        root,
+        stdin=json.dumps({"body": CLOSE_NOTE}),
+    )
+    if noted is None:
+        return f"FAILED to record why on #{existing}; left open (see stderr)"
+    closed = _gh_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{repo}/issues/{existing}",
+            "--input",
+            "-",
+        ],
+        root,
+        stdin=json.dumps({"state": "closed"}),
+    )
+    if closed is None:
+        return f"recorded why on #{existing} but FAILED to close it (see stderr)"
+    return f"recorded why on #{existing} and closed it"
+
+
 def file_or_update_issue(root: Path, repo: str, body: str) -> str:
     """Open the tracker, or update the one already open. Never files a duplicate.
 
@@ -802,23 +878,19 @@ def main(argv: list[str] | None = None) -> int:
         args.summary.write_text(body, encoding="utf-8")
 
     if args.open_issue and not args.file_names:
-        # A tracker whose whole body is "I read nothing" is a monthly false alarm: it
-        # looks like the rotation control is running when it is not, and it trains
-        # readers to ignore the one issue that would carry real names. Every level
-        # being unreadable is the normal case from CI, where the listings need a token
-        # the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE. So a run that aged nothing
-        # files nothing and says so, rather than opening an empty tracker.
+        slug = repo_slug(root)
+        if slug is None:
+            print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
+            return 2
         if not report.secrets:
-            print(
-                "filed nothing: no level could be aged, so the tracker would carry no "
-                "secret names. The levels and why they are unread are in the report "
-                "above and in the summary."
-            )
+            # A tracker whose whole body is "I read nothing" is a monthly false alarm: it
+            # looks like the rotation control is running when it is not, and it trains
+            # readers to ignore the one issue that would carry real names. Every level
+            # being unreadable is the normal case from CI, where the listings need a token
+            # the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE. So a run that aged nothing
+            # opens nothing, and clears up any tracker an earlier run already left open.
+            print(close_unmeasurable_tracker(root, f"{slug[0]}/{slug[1]}"))
         else:
-            slug = repo_slug(root)
-            if slug is None:
-                print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
-                return 2
             print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
     if gates is not None and any(row["drift"] for row in gates[0]):

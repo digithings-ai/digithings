@@ -670,7 +670,7 @@ def test_the_workflow_says_the_secret_listings_cannot_be_read_here(checker: obje
 
 
 @pytest.mark.unit
-def test_a_run_that_aged_nothing_files_no_tracker(
+def test_a_run_that_aged_nothing_opens_no_tracker(
     checker: object,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -695,18 +695,108 @@ def test_a_run_that_aged_nothing_files_no_tracker(
         stderr="gh: Resource not accessible by integration (HTTP 403)",
     )
     monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
-    filed: list[str] = []
+    opened: list[str] = []
     monkeypatch.setattr(
-        checker, "file_or_update_issue", lambda root, slug, body: filed.append(slug) or "opened"
+        checker, "file_or_update_issue", lambda root, slug, body: opened.append(slug) or "opened"
+    )
+    cleared: list[str] = []
+    monkeypatch.setattr(
+        checker,
+        "close_unmeasurable_tracker",
+        lambda root, slug: cleared.append(slug) or "no tracker is open",
     )
 
     code = checker.main(["--skip-environment-gates", "--open-issue"])
 
-    out = capsys.readouterr().out
     assert code == 0
-    assert filed == []
-    assert "filed nothing" in out
-    assert "no level could be aged" in out
+    assert opened == []
+    assert cleared == ["o/r"]
+
+
+@pytest.mark.unit
+def test_an_unmeasurable_tracker_is_annotated_and_closed_not_left_open(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Skipping the write was not enough on its own.
+
+    The tracker opened by run 37235973852 was already open and empty when this
+    was written, carrying `security:finding` and a body saying nothing had been
+    read. A guard that only stops *new* empty trackers leaves that one sitting
+    forever while the docs claim the clock files none. Silence here is
+    indistinguishable from "still running".
+    """
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    posted: list[tuple[str, str]] = []
+
+    def fake_gh_json(cmd, root, stdin=None):
+        # Every secret listing is a plain `--paginate` read with no `--method`, and
+        # an unreadable one has to answer None. Only the writes are recorded.
+        if "--method" not in cmd:
+            return None
+        verb = cmd[cmd.index("--method") + 1]
+        target = next(a for a in cmd if a.startswith("repos/") and "/issues" in a)
+        if verb == "POST" and target.endswith("/comments"):
+            posted.append(("comment", json.loads(stdin)["body"]))
+            return {"id": 1}
+        if verb == "PATCH":
+            posted.append(("close", target))
+            return {"number": 5065}
+        return None
+
+    monkeypatch.setattr(checker, "_gh_json", fake_gh_json)
+    monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: "5065")
+
+    code = checker.main(["--skip-environment-gates", "--open-issue"])
+
+    assert code == 0
+    kinds = [kind for kind, _ in posted]
+    assert kinds == ["comment", "close"], posted
+    note = posted[0][1]
+    assert "security:finding" in note
+    assert "SECRETS_INVENTORY.md" in note
+    assert "repo` scope" in note
+    assert "closed" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_an_unmeasurable_tracker_is_left_open_when_the_note_cannot_be_written(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Closing without the explanation would be worse than staying open.
+
+    The comment lands before the close on purpose. If it cannot be written, the
+    issue keeps counting as an open finding and the operator can see that
+    something is still wrong, rather than finding a closed issue that never
+    says why.
+    """
+    _gh_on_path(
+        monkeypatch,
+        tmp_path,
+        stdout="",
+        returncode=1,
+        stderr="gh: Resource not accessible by integration (HTTP 403)",
+    )
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    seen: list[str] = []
+    monkeypatch.setattr(
+        checker,
+        "_gh_json",
+        lambda cmd, root, stdin=None: (seen.append(cmd[3]), None)[1],
+    )
+    monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: "5065")
+
+    checker.main(["--skip-environment-gates", "--open-issue"])
+
+    assert "PATCH" not in seen, "must not close when the note did not land"
+    out = capsys.readouterr().out
+    assert "FAILED" in out
+    assert "left open" in out
 
 
 @pytest.mark.unit
@@ -736,14 +826,31 @@ def test_a_run_that_aged_something_does_file_the_tracker(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("call", "args", "scope", "cites_run"),
+    [
+        ("repo_secrets", ("o/r",), "`repo` scope", True),
+        ("org_secrets", ("o",), "admin:org", False),
+        ("environment_secrets", ("o/r", "cron"), "`repo` scope", True),
+    ],
+)
 def test_an_unreadable_level_says_which_scope_would_fix_it(
-    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    call: str,
+    args: tuple[str, ...],
+    scope: str,
+    cites_run: bool,
 ) -> None:
     """`repo secret list unavailable for o/r` is true and actionable for nobody.
 
     The Actions secrets endpoints need the `repo` scope. A reader seeing the old
     reason has no way to know that no `permissions:` grant can supply it, which is
     what sent #5063 hunting for a permission that does not exist.
+
+    All three levels are pinned. Pinning only `repo` left the `org` and `cron`
+    reasons free to rot back to their bare form with the suite still green.
     """
     _gh_on_path(
         monkeypatch,
@@ -753,11 +860,14 @@ def test_an_unreadable_level_says_which_scope_would_fix_it(
         stderr="gh: Resource not accessible by integration (HTTP 403)",
     )
 
-    _, reason = checker.repo_secrets(checker.REPO_ROOT, "o/r")
+    secrets, reason = getattr(checker, call)(checker.REPO_ROOT, *args)
 
+    assert secrets == []
     assert reason is not None
-    assert "`repo` scope" in reason
-    assert "37235973852" in reason
+    # Each level names the scope that level actually needs: the org listing is
+    # gated on `admin:org`, not on `repo`, so it does not cite the run either.
+    assert scope in reason
+    assert ("37235973852" in reason) is cites_run
 
 
 @pytest.mark.unit
