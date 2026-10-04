@@ -28,6 +28,7 @@ import os
 import re
 import socket
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any  # score:allow untyped any — MCP JSON payloads / tool results
 from urllib.parse import urlparse
@@ -63,6 +64,11 @@ _MAX_MCP_JSON = 16384
 _MAX_TOKEN = 4096
 _AUTH_KINDS = frozenset({"bearer", "oauth"})
 _AUTH_HEADER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,40}$")
+# Raw remote tool name carried alongside a listed tool (DIG-284). The offered
+# name `prefixed_tool_name` builds substitutes non-identifier characters and
+# truncates at 64, so it cannot be matched back to the name an operator put in
+# `allowedTools`. Stripped before the record reaches a model provider.
+_RAW_TOOL_NAME_KEY = "x_digi_mcp_raw_tool_name"
 # Opt-in hardening (#3879): when set, only these hostnames (comma-separated,
 # typically dotless Docker service names) may resolve into private space.
 _PRIVATE_HOST_ALLOWLIST_ENV = "DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST"
@@ -462,6 +468,17 @@ def parse_mcp_servers_json(raw: str | None) -> list[dict[str, str]]:
             }
             if clean:
                 row["setup"] = json.dumps(clean, sort_keys=True)
+        # Operator tool allowlists (DIG-284). Carried, not validated: the shape
+        # check below is deliberate, because a non-list value must read as
+        # absent (deny everything) rather than be coerced into something that
+        # looks configured. An explicit [] is carried as "[]" so the empty list
+        # survives to the model field, where rule 1 and rule 5 read it and its
+        # absence as two different answers. Bounds live in digigraph.models and
+        # are enforced there (and by `_mcp_tool_names`), so they cannot drift.
+        for key in ("allowedTools", "mutatingTools"):
+            names = item.get(key)
+            if isinstance(names, list):
+                row[key] = json.dumps(names)
         out.append(row)
     return out
 
@@ -502,6 +519,107 @@ def merge_mcp_servers(
 def prefixed_tool_name(server_id: str, tool_name: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name)[:64]
     return f"{server_id}_{safe}"
+
+
+def _tool_record(
+    server_id: str,
+    name: str,
+    description: str | None = None,
+    schema: Any = None,
+) -> dict[str, Any]:
+    """One listed tool: the offered name plus the raw name it came from.
+
+    Keeping the raw name is the only way an allowlist written in real remote
+    names can be matched at all (DIG-284) — the offered name is lossy. The
+    sidecar is stripped in :func:`openai_tools_for_servers`, so what a model
+    provider receives is byte-identical to before this key existed.
+    """
+    return {
+        "type": "function",
+        "function": {
+            "name": prefixed_tool_name(server_id, name),
+            "description": (description or "")[:2000],
+            "parameters": (
+                schema if isinstance(schema, dict) else {"type": "object", "properties": {}}
+            ),
+        },
+        _RAW_TOOL_NAME_KEY: name,
+    }
+
+
+def raw_tool_names_for_server(server_id: str, tools: Iterable[Any] | None) -> list[str]:
+    """Remote tool names for one server as advertised — pre-substitution, pre-truncation.
+
+    ``prefixed_tool_name`` replaces every character outside ``[a-zA-Z0-9_-]`` and
+    cuts the result at 64, so ``atlassian.executeWrite`` and a 76-character
+    camelCase name both reach the gate wearing a name no operator wrote. An
+    allowlist is written in real names, so the real name has to travel with the
+    listed tool.
+
+    Only records carrying a raw name *and* addressed to *server_id* are reported:
+    a name is returned when it was observed, never reconstructed by reversing a
+    lossy substitution. Order-preserving, de-duplicated.
+    """
+    prefix = f"{server_id}_"
+    out: list[str] = []
+    for td in tools or ():
+        if not isinstance(td, dict):
+            continue
+        raw = td.get(_RAW_TOOL_NAME_KEY)
+        fn = td.get("function")
+        offered = fn.get("name") if isinstance(fn, dict) else None
+        if not isinstance(raw, str) or not raw or not isinstance(offered, str):
+            continue
+        if not offered.startswith(prefix):
+            continue
+        if raw not in out:
+            out.append(raw)
+    return out
+
+
+def _server_tool_names(server: Any, *keys: str) -> list[str] | None:
+    """One tool-name list off a server row or ref; ``None`` means absent.
+
+    Accepts an ``McpServerRef`` and the flat rows that reach graph state — wire
+    spelling (``allowedTools``, from ``model_dump(by_alias=True)``) or the snake
+    attribute name — so the gate reads the row it was handed instead of demanding
+    a re-projection. A non-list value reads as absent.
+    """
+    for key in keys:
+        value = server.get(key) if isinstance(server, dict) else getattr(server, key, None)
+        if isinstance(value, (list, tuple)):
+            return [name for name in value if isinstance(name, str)]
+    return None
+
+
+def mcp_server_allows_raw_tool(server: Any, raw_name: str) -> bool:
+    """Rule 2: exact equality against the allowlist. No glob, no prefix, ever.
+
+    Every near-miss denies, on purpose: a glob, a case-folded hit, or a longer
+    name that merely starts with an allowed one each widen one approved tool
+    into a family of unapproved ones. Absent and ``[]`` both deny everything
+    (rule 1), so this is safe to call before the allowlist has been checked for
+    presence.
+    """
+    allowed = _server_tool_names(server, "allowedTools", "allowed_tools")
+    if not allowed:
+        return False
+    return isinstance(raw_name, str) and raw_name in allowed
+
+
+def mcp_server_mutating_tools(server: Any) -> set[str]:
+    """Rule 5: an absent ``mutatingTools`` means every allowed tool mutates.
+
+    An explicit ``[]`` is the operator saying nothing mutates. The two are
+    different answers, which is why the wire keeps them distinguishable — and why
+    only a row that allows something can tell the difference. This set never
+    grants: it is an advisory, and ``allowedTools`` is the only list that grants
+    (review #5061 S2 — a stale name here is inert, not an accidental grant).
+    """
+    mutating = _server_tool_names(server, "mutatingTools", "mutating_tools")
+    if mutating is not None:
+        return set(mutating)
+    return set(_server_tool_names(server, "allowedTools", "allowed_tools") or ())
 
 
 def resolve_mcp_force_id(raw: str | None, servers: list[dict[str, str]]) -> str | None:
@@ -561,9 +679,19 @@ def list_tools_cached(server: dict[str, str]) -> list[dict[str, Any]]:
 
 
 def openai_tools_for_servers(servers: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Listed tools for a model provider: raw-name sidecars removed.
+
+    The only path from the cache to a provider, so it is where the sidecar has to
+    go. A copy is returned rather than the cached dict mutated, or the raw name
+    would be gone for the next caller inside the 60s TTL.
+    """
     out: list[dict[str, Any]] = []
     for s in servers:
-        out.extend(list_tools_cached(s))
+        for td in list_tools_cached(s):
+            if isinstance(td, dict) and _RAW_TOOL_NAME_KEY in td:
+                out.append({k: v for k, v in td.items() if k != _RAW_TOOL_NAME_KEY})
+            else:
+                out.append(td)
     return out
 
 
@@ -702,20 +830,7 @@ async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:
         if t.name not in seen:
             seen.add(t.name)
             advertised.append(t.name)
-        if isinstance(t.inputSchema, dict):
-            schema = t.inputSchema
-        else:
-            schema = {"type": "object", "properties": {}}
-        out.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": prefixed_tool_name(server_id, t.name),
-                    "description": (t.description or "")[:2000],
-                    "parameters": schema,
-                },
-            }
-        )
+        out.append(_tool_record(server_id, t.name, t.description, t.inputSchema))
     _raw_names_cache[mcp_list_cache_key(server)] = advertised
     return out
 
