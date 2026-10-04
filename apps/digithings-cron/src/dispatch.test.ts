@@ -86,6 +86,70 @@ describe("dispatch", () => {
     expect(result.status).toBe(422);
   });
 
+  it("names an undeclared input key instead of reporting a bare 422", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message:
+              "Unexpected inputs provided to workflow: pipeline-research-metrics.yml: " +
+              "unexpected key(s) 'run_date', 'since', relative to 'bucket'",
+          }),
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    // A 422 for an undeclared key is the dispatch the 2026-09-28 outage was
+    // made of: GitHub refuses the request, no run starts, and an operator sees
+    // nothing that names the bad key. The refusal must survive into the error.
+    await expect(dispatch(env, baseJob, baseJob.cron)).rejects.toThrow(
+      /^undeclared_workflow_input: job test-job:/,
+    );
+    // The refusal is deterministic, so it must not be retried like a 429.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists the offending and declared keys so the operator can fix the kick", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              message:
+                "Unexpected inputs provided to workflow: pipeline-research-metrics.yml: " +
+                "unexpected key(s) 'run_date', relative to 'bucket', 'mode'",
+            }),
+            { status: 422 },
+          ),
+      ),
+    );
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await expect(dispatch(env, baseJob, baseJob.cron)).rejects.toThrow(
+      /run_date[\s\S]*bucket[\s\S]*mode/,
+    );
+  });
+
+  it("still reports a 422 with no recognisable reason as a plain HTTP failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ message: "Validation Failed" }),
+            { status: 422 },
+          ),
+      ),
+    );
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    // Only the undeclared-key shape gets a code. Every other 422 keeps its
+    // existing message so this cannot swallow a failure class it cannot name.
+    await expect(dispatch(env, baseJob, baseJob.cron)).rejects.toThrow(
+      /GitHub dispatch failed for test-job: HTTP 422$/,
+    );
+  });
+
   it("throws on other errors", async () => {
     vi.stubGlobal(
       "fetch",

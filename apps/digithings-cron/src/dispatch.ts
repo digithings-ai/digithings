@@ -25,6 +25,8 @@ export type DispatchResult = {
   container_status?: string;
 };
 
+export const UNDECLARED_INPUT = "undeclared_workflow_input";
+
 export function workflowDispatchUrl(repo: string, workflow: string): string {
   return `${GH_API}/repos/${repo}/actions/workflows/${workflow}/dispatches`;
 }
@@ -40,6 +42,44 @@ function isBenign422(body: string): boolean {
     lower.includes("already running") ||
     lower.includes("workflow is already running")
   );
+}
+
+/**
+ * Pull the `'a', 'b'` token list GitHub writes after a marker.
+ * GitHub's shape is: unexpected key(s) 'x', 'y', relative to 'a', 'b'
+ */
+function quotedKeysAfter(body: string, marker: RegExp): string[] {
+  const match = marker.exec(body);
+  if (match === null) {
+    return [];
+  }
+  return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
+
+/**
+ * GitHub refuses a workflow_dispatch whose body carries a key the target
+ * workflow never declared:
+ *
+ *   422 Unexpected inputs provided to workflow: maintenance.yml:
+ *   unexpected key(s) 'run_date', relative to 'backfill_snapshots', 'since'
+ *
+ * This is the silent-failure shape the 2026-09-28 outage was made of. The POST
+ * is answered, no run starts, and nothing recorded afterwards says which key was
+ * wrong — `run_date` belongs to daily_run.yml, not maintenance.yml, and the two
+ * look interchangeable from the Worker. So recover the key names from the body
+ * and name them in the error, rather than surfacing `HTTP 422` alone.
+ *
+ * Returns null for any 422 this does not recognise, so the plain failure path
+ * keeps every other 422 shape exactly as it was.
+ */
+export function undeclaredInput422(body: string): { unexpected: string[]; declared: string[] } | null {
+  if (!body.toLowerCase().includes("unexpected inputs provided to workflow")) {
+    return null;
+  }
+  return {
+    unexpected: quotedKeysAfter(body, /unexpected key\(s\)\s*(.*?)(?:,\s*relative to|,?\s*$)/i),
+    declared: quotedKeysAfter(body, /relative to\s*(.*)$/i),
+  };
 }
 
 function isRateLimited(status: number, body: string): boolean {
@@ -328,6 +368,30 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
         note: "benign_422",
       });
       return { ok: true, status, dry_run: false };
+    }
+
+    // An undeclared input key is a deterministic refusal: the same request will
+    // fail the same way forever, so retrying it is wasted time. Checked after
+    // the benign 422 (disjoint messages) and before the rate-limit branch,
+    // because a 429 must stay retryable.
+    const undeclared = status === 422 ? undeclaredInput422(text) : null;
+    if (undeclared !== null) {
+      const named = undeclared.unexpected.length > 0 ? undeclared.unexpected.join(", ") : "the supplied key(s)";
+      const declared =
+        undeclared.declared.length > 0 ? `; it declares ${undeclared.declared.join(", ")}` : "";
+      logLine({
+        cron,
+        repo: job.repo,
+        job: job.id,
+        github_status: 422,
+        dry_run: false,
+        note: "undeclared_workflow_input",
+        unexpected_keys: undeclared.unexpected,
+      });
+      throw new Error(
+        `${UNDECLARED_INPUT}: job ${job.id}: workflow ${job.workflow} does not declare ` +
+          `${named}${declared}. No run started.`,
+      );
     }
 
     if (isRateLimited(status, text) && attempt < MAX_ATTEMPTS) {
