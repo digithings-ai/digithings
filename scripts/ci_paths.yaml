@@ -168,6 +168,21 @@ web:
   - apps/digitrace-langfuse/**
   - Dockerfile.digitrace-langfuse-web
   - Dockerfile.digitrace-langfuse-worker
+  # Central read-only dashboard API worker (workspace `dashboard-api`, #4651).
+  # Same lane, same reason, as the Cloudflare Workers above: Pages does not build
+  # it, its vitest/wrangler live in that package, and this lane already pays the
+  # root `npm ci` that resolves this workspace's devDependencies (including the
+  # @cloudflare/workers-types its tsconfig pins), so a lane of its own would
+  # duplicate a whole install to run two commands.
+  #
+  # This path was ALREADY listed in this file — but only under `ruff_and_scripts`,
+  # where it merely decides whether the Python lint job runs. That entry's own
+  # comment asserted "an edit here must redden a lane that runs"; no lane did.
+  # So its 322-test vitest suite and `tsc --noEmit` were enforced nowhere in CI:
+  # PR #5057 edited two files in here and every suite check skipped. A Worker route
+  # could break and merge fully green (#358). The `ruff_and_scripts` entry stays —
+  # an edit to a manifest or Python file under this path must still redden lint.
+  - apps/dashboard-api/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml

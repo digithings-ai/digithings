@@ -64,6 +64,13 @@ SCOPES = ("repo", "org", "cron")
 ISSUE_TITLE = "Ops: GitHub secrets past the 90-day rotation window"
 ISSUE_MARKER = "<!-- secret-staleness-check -->"
 
+#: Labels put on the tracker issue. `gh api`'s field flags only take strings, and a
+#: string here is rejected as `For 'properties/labels', "ops" is not an array`
+#: (HTTP 422) whatever the name is, so the array goes out as an explicit JSON body.
+#: Every name must also already exist in the repo; there is no CI path that could
+#: create a label first, and an unknown name fails the create on its own.
+ISSUE_LABELS = ("security:finding",)
+
 #: Order in which an overdue name is reported: widest blast radius first, so a
 #: truncated issue body still leads with the worst of it. An org secret is
 #: inherited by every repo in the org; a repo secret is readable by any workflow on
@@ -143,10 +150,32 @@ def parse_tsv(raw: str) -> list[Secret]:
     return out
 
 
-def _gh_json(cmd: list[str], root: Path) -> object | None:
-    """Parsed `gh` JSON, or None with a one-line reason on stderr."""
+def _gh_json(cmd: list[str], root: Path, stdin: str | None = None) -> object | None:
+    """Parsed `gh` JSON, or None with a one-line reason on stderr.
+
+    A paginated call is given `--slurp`, so it comes back as a list of pages rather
+    than as one object. This is hardening rather than a fix for the 2026-10-04 false
+    green: `--paginate` on its own prints one JSON document per page and `json.loads`
+    cannot read that (`Extra data: line 1 column 244` on this repo's secrets listing
+    at two per page). It had not bitten yet only because the 20 repo secrets fit one
+    page of 30 and the 403 came first. gh rejects `--slurp` beside `--jq`, and
+    requires it nowhere else, so a call that filtered server-side has to filter here.
+    """
+    if "--paginate" in cmd and ({"--jq", "--template"} & set(cmd)):
+        # Stated as a rule in the docstring, enforced here because the alternative is
+        # discovering it the way 2026-10-04 did: one bad call site, one hard gh error
+        # inside CI, one silently dead check.
+        raise ValueError(
+            "gh refuses --slurp beside --jq/--template, so this call cannot both page "
+            "and filter server-side. Filter the parsed pages here instead."
+        )
+    if "--paginate" in cmd and "--slurp" not in cmd:
+        at = cmd.index("--paginate") + 1
+        cmd = [*cmd[:at], "--slurp", *cmd[at:]]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=root)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, cwd=root, input=stdin
+        )
     except FileNotFoundError:
         print("secret_staleness_check: `gh` not found on PATH", file=sys.stderr)
         return None
@@ -164,11 +193,47 @@ def _gh_json(cmd: list[str], root: Path) -> object | None:
         return None
 
 
+def _pages(payload: object) -> list[object]:
+    """A `--slurp` result as its pages; an unpaginated object as a single page."""
+    return payload if isinstance(payload, list) else [payload]
+
+
 def _secret_entries(payload: object) -> list[dict] | None:
-    """The `.secrets` list of a paginated listing, or None when it is not that shape."""
-    if not isinstance(payload, dict) or not isinstance(payload.get("secrets"), list):
+    """Every `.secrets` entry across the pages, or None when it is not that shape.
+
+    None is the important return: the caller turns it into "unavailable", and
+    "unavailable" must never be reported to a human as an empty list, because an
+    empty list reads as "nothing is overdue".
+    """
+    entries: list[dict] = []
+    pages = _pages(payload)
+    if not pages:
         return None
-    return [e for e in payload["secrets"] if isinstance(e, dict)]
+    for page in pages:
+        if not isinstance(page, dict) or not isinstance(page.get("secrets"), list):
+            return None
+        entries.extend(e for e in page["secrets"] if isinstance(e, dict))
+    return entries
+
+
+def _aged(entries: list[dict], scope: str) -> tuple[list[Secret], str | None]:
+    """Turn listing entries into `Secret`s, or explain why an entry could not be aged.
+
+    An entry whose date will not parse is a reason, not a row to drop. Dropping it
+    would shrink the denominator and let the run say "nothing is overdue" while a
+    name it could not date went unmentioned.
+    """
+    out: list[Secret] = []
+    for entry in entries:
+        name, updated = entry.get("name"), entry.get("updated_at")
+        label = name if isinstance(name, str) else "<unnamed>"
+        if not isinstance(name, str) or not isinstance(updated, str):
+            return [], f"{scope} secret {label} has no readable name or updated_at"
+        try:
+            out.append(Secret(scope, name, parse_timestamp(updated)))
+        except ValueError as exc:
+            return [], f"{scope} secret {name} has an unreadable updated_at: {exc}"
+    return out, None
 
 
 def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
@@ -177,11 +242,7 @@ def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
     entries = _secret_entries(payload)
     if entries is None:
         return [], f"repo secret list unavailable for {repo}"
-    return [
-        Secret("repo", e["name"], parse_timestamp(e["updated_at"]))
-        for e in entries
-        if isinstance(e.get("name"), str) and isinstance(e.get("updated_at"), str)
-    ], None
+    return _aged(entries, "repo")
 
 
 def org_secrets(root: Path, org: str) -> tuple[list[Secret], str | None]:
@@ -190,11 +251,7 @@ def org_secrets(root: Path, org: str) -> tuple[list[Secret], str | None]:
     entries = _secret_entries(payload)
     if entries is None:
         return [], f"org secret list unavailable (needs {ORG_SCOPE_REQUIRES_ADMIN})"
-    return [
-        Secret("org", e["name"], parse_timestamp(e["updated_at"]))
-        for e in entries
-        if isinstance(e.get("name"), str) and isinstance(e.get("updated_at"), str)
-    ], None
+    return _aged(entries, "org")
 
 
 def environment_secrets(root: Path, repo: str, environment: str) -> tuple[list[Secret], str | None]:
@@ -215,11 +272,7 @@ def environment_secrets(root: Path, repo: str, environment: str) -> tuple[list[S
     entries = _secret_entries(payload)
     if entries is None:
         return [], f"environment {environment!r} secret list unavailable"
-    return [
-        Secret(environment, e["name"], parse_timestamp(e["updated_at"]))
-        for e in entries
-        if isinstance(e.get("name"), str) and isinstance(e.get("updated_at"), str)
-    ], None
+    return _aged(entries, environment)
 
 
 ENVIRONMENT_MANIFEST = REPO_ROOT / ".github" / "environments.json"
@@ -453,10 +506,23 @@ def markdown(
         "Opened automatically by `scripts/secret_staleness_check.py` (#248).",
         "Names and last-written dates only: GitHub never returns a secret value here.",
         "",
-        f"**{len(overdue)}** of **{len(report.secrets)}** listed secrets are past",
-        f"**{max_age_days} days** since last written.",
-        "",
     ]
+    if report.secrets:
+        lines += [
+            f"**{len(overdue)}** of **{len(report.secrets)}** listed secrets are past",
+            f"**{max_age_days} days** since last written.",
+            "",
+        ]
+    else:
+        # "0 of 0 listed secrets are past 90 days" is a positive claim about an empty
+        # set, and it was the exact sentence a run printed while every listing 403'd.
+        # Appended rather than added to the list, because a wrapped string literal
+        # inside a list is implicit concatenation, which CodeQL reads as a lost comma.
+        lines.append(
+            "**No secrets could be aged.** Nothing below says anything about whether "
+            "a secret is stale, because nothing was read."
+        )
+        lines.append("")
     if overdue:
         lines += ["| Scope | Name | Age (days) | Last written |", "|---|---|---|---|"]
         for secret in overdue:
@@ -469,6 +535,18 @@ def markdown(
             "Rotate, or record here why a name is deliberately long-lived. A name "
             "only counts as rotated when its **last-written date** moves."
         )
+    elif report.unavailable:
+        if report.secrets:
+            missed = ", ".join(f"`{scope}`" for scope in sorted(report.unavailable))
+            lines.append(
+                f"Nothing is past {max_age_days} days **among the levels that could be "
+                f"read**, but {missed} could not be. That is not a clean bill of "
+                "health: a level nobody read cannot report a stale name. The per-level "
+                "reason is below."
+            )
+        # With nothing read at all the header has already said so. Adding a sentence
+        # about "the levels that could be read" would be a claim about an empty set,
+        # which is the shape of bug this whole change is about.
     else:
         lines.append(f"Nothing is past {max_age_days} days. No action needed.")
     if report.unavailable:
@@ -525,59 +603,83 @@ def render(
     return "\n".join(out)
 
 
+class TrackerUnreadable(RuntimeError):
+    """The open-issue list could not be read, so it is not known whether one is open."""
+
+
 def _issue_exists(root: Path, repo: str) -> str | None:
-    """The number of the open tracker issue, if one is already open."""
-    payload = _gh_json(
-        [
-            "gh",
-            "api",
-            "--paginate",
-            f"repos/{repo}/issues",
-            "--jq",
-            f'[.[] | select(.state == "open") | select(.title == "{ISSUE_TITLE}")] | .[0].number',
-        ],
-        root,
-    )
-    if isinstance(payload, list) and payload and isinstance(payload[0], int):
-        return str(payload[0])
-    if isinstance(payload, int):
-        return str(payload)
+    """The number of the open tracker issue, if one is already open.
+
+    Filtering happens here rather than in a `--jq` expression for two reasons. gh
+    rejects `--slurp` beside `--jq`, and `--jq` alone under `--paginate` emits one
+    value *per page*: with no match on any of three pages it printed three empty
+    lines, which `json.loads` refused with `Expecting value: line 3 column 1`. That
+    is why the update branch was unreachable and every run tried to create an issue.
+
+    A failed read raises rather than returning None. None means "no tracker is open",
+    and on that reading the caller files a fresh one, so a 5xx would duplicate the
+    tracker this function exists to keep unique.
+    """
+    payload = _gh_json(["gh", "api", "--paginate", f"repos/{repo}/issues"], root)
+    if payload is None:
+        raise TrackerUnreadable(f"could not list issues on {repo}")
+    for page in _pages(payload):
+        if not isinstance(page, list):
+            continue
+        for issue in page:
+            if not isinstance(issue, dict):
+                continue
+            if issue.get("state") == "open" and issue.get("title") == ISSUE_TITLE:
+                number = issue.get("number")
+                if isinstance(number, int):
+                    return str(number)
     return None
 
 
 def file_or_update_issue(root: Path, repo: str, body: str) -> str:
-    """Open the tracker, or update the one already open. Never files a duplicate."""
-    existing = _issue_exists(root, repo)
+    """Open the tracker, or update the one already open. Never files a duplicate.
+
+    Every outcome is reported from what actually happened. The create used to claim
+    "opened a new tracking issue" whether or not the POST landed — it 422'd on
+    `labels` being a string — so the tracker did not exist for the whole time the job
+    was reporting green.
+    """
+    try:
+        existing = _issue_exists(root, repo)
+    except TrackerUnreadable as exc:
+        return f"filed nothing: {exc}"
     if existing is None:
-        _gh_json(
+        written = _gh_json(
             [
                 "gh",
                 "api",
                 "--method",
                 "POST",
                 f"repos/{repo}/issues",
-                "-f",
-                f"title={ISSUE_TITLE}",
-                "-f",
-                f"body={body}",
-                "-f",
-                "labels=ops",
+                "--input",
+                "-",
             ],
             root,
+            stdin=json.dumps({"title": ISSUE_TITLE, "body": body, "labels": list(ISSUE_LABELS)}),
         )
+        if written is None:
+            return "FAILED to open the tracking issue (see stderr)"
         return "opened a new tracking issue"
-    _gh_json(
+    written = _gh_json(
         [
             "gh",
             "api",
             "--method",
             "PATCH",
             f"repos/{repo}/issues/{existing}",
-            "-f",
-            f"body={body}",
+            "--input",
+            "-",
         ],
         root,
+        stdin=json.dumps({"body": body}),
     )
+    if written is None:
+        return f"FAILED to update the open tracking issue #{existing} (see stderr)"
     return f"updated the open tracking issue #{existing}"
 
 

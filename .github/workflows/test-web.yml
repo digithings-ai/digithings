@@ -205,3 +205,25 @@ jobs:
 
       - name: Test digitrace-langfuse
         run: npm run test --workspace digitrace-langfuse
+
+      # dashboard-api (#4651) is the central read-only dashboard Worker. Its path
+      # was already in this lane's filter (ci.yml's `web`) for manifest/lint
+      # purposes, and it declares `test`/`typecheck`, but no lane invoked either,
+      # so its 322-test vitest suite and tsc program could regress green (#358).
+      # The lane had been added to `ruff_and_scripts` in this file, whose own
+      # comment claimed "an edit here must redden a lane that runs" — no lane
+      # did. Concretely: PR #5057 edited src/routes/fx.ts and fx.test.ts here and
+      # every suite check skipped, merging a Worker change with zero test signal.
+      #
+      # Typecheck first so a type break is reported before the suite runs; without
+      # it `tsc --noEmit` never ran on this package at all, and a missing
+      # @cloudflare/workers-types in a reused node_modules surfaces as TS2688
+      # ("cannot find type definition file"), which reads as "code is broken" when
+      # the code is fine. That ambiguity was hit in the wild on DIG-193. This lane
+      # runs the root `npm ci` above from the lockfile, so the type resolves from
+      # a declared devDependency and the failure means a real type error.
+      - name: Typecheck dashboard-api
+        run: npm run typecheck --workspace dashboard-api
+
+      - name: Test dashboard-api
+        run: npm run test --workspace dashboard-api
