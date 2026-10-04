@@ -1,0 +1,73 @@
+{
+  "_comment": [
+    "digiquant house model prices — USD per 1,000,000 prompt / completion tokens.",
+    "",
+    "Read by digiquant/src/digiquant/research/pricing.py (mtime-cached, fail-soft).",
+    "HAND-MAINTAINED: edit this file, never the Python table it replaces (#5029 moved the",
+    "numbers here so no provider model id is a string literal in production code).",
+    "",
+    "HONESTY RULES — these are why the table is small and boring:",
+    "  1. Only slugs the model policy can route to appear here (config/digiquant_models.yaml).",
+    "     A slug not in that policy has no reason to be priced.",
+    "  2. Every number is taken VERBATIM from the committed provider snapshot named in that",
+    "     entry's `source`, fields paid_tier.models[].cost_per_1m_input / cost_per_1m_output.",
+    "     No number is inferred, averaged, converted, or refreshed from a live feed.",
+    "     tests/dq/research/test_pricing.py re-derives the snapshots and fails on a mismatch,",
+    "     so an arbitrary edit here goes red instead of shipping a fabricated price.",
+    "  3. A slug with no price goes in `unpriced_slugs` WITH the snapshot that was checked",
+    "     and why it could not corroborate a number — never into the table with a guess.",
+    "  4. When a rate is not the obvious one, `rate` says so and `note` says why. `rate:",
+    "     standard` means the plain cost_per_1m_* fields, verbatim.",
+    "",
+    "Fields per entry under prices_usd_per_1m:",
+    "  prompt_usd_per_1m     required, > 0, verbatim cost_per_1m_input",
+    "  completion_usd_per_1m required, > 0, verbatim cost_per_1m_output",
+    "  source                required, repo-relative path to the snapshot it came from",
+    "  snapshot_last_checked optional, that snapshot's own last_checked date",
+    "  rate                  optional, defaults to \"standard\"; anything else must carry a note",
+    "  note                  optional, required whenever `rate` is not \"standard\"",
+    "",
+    "Fields per entry under unpriced_slugs:",
+    "  source  required, the snapshot that was checked and found not to list the model",
+    "  note    required, why there is no price",
+    "",
+    "SCOPE: prompt + completion tokens only. Cached prompt tokens are billed at the full",
+    "prompt rate — a cache-hit discount is provider- and model-specific and not always",
+    "reported, so the estimate is a deliberate upper bound rather than a fabricated discount."
+  ],
+  "schema_version": 1,
+  "prices_usd_per_1m": {
+    "deepseek/deepseek-v4-flash": {
+      "prompt_usd_per_1m": 0.07,
+      "completion_usd_per_1m": 0.28,
+      "source": "docs/providers/snapshots/deepseek.yaml",
+      "snapshot_last_checked": "2026-08-30"
+    },
+    "deepseek/deepseek-v4-pro": {
+      "prompt_usd_per_1m": 1.32,
+      "completion_usd_per_1m": 3.96,
+      "source": "docs/providers/snapshots/deepseek.yaml",
+      "snapshot_last_checked": "2026-08-30",
+      "rate": "peak",
+      "note": "PEAK rate, deliberately not the off-peak one. The snapshot carries the peak figures in cost_per_1m_input/output (1.32 / 3.96) and repurposed its *_long fields for the off-peak figures (0.66 / 1.98) after the 2026-08-16 peak/off-peak switch. Peak is committed here because an estimate that systematically understates the one model whose price tripled would defeat the spend alert it exists to make fire. Do not 'correct' this to the *_long values."
+    },
+    "openai/gpt-5.6-luna": {
+      "prompt_usd_per_1m": 1.0,
+      "completion_usd_per_1m": 6.0,
+      "source": "docs/providers/snapshots/openai.yaml",
+      "snapshot_last_checked": "2026-07-19"
+    },
+    "openai/gpt-5.6-sol": {
+      "prompt_usd_per_1m": 5.0,
+      "completion_usd_per_1m": 30.0,
+      "source": "docs/providers/snapshots/openai.yaml",
+      "snapshot_last_checked": "2026-07-19"
+    }
+  },
+  "unpriced_slugs": {
+    "google/gemini-3.7-flash": {
+      "source": "docs/providers/snapshots/gemini.yaml",
+      "note": "Absent from the committed gemini.yaml (last_checked 2026-08-30 lists gemini-2.5-flash, gemini-2.5-flash-lite, gemini-3-flash-preview and gemini-3.5-flash — the snapshot predates this model), so the repo has no committed source to cite. Recorded as unpriced rather than guessed; it moves into prices_usd_per_1m when that snapshot is refreshed."
+    }
+  }
+}

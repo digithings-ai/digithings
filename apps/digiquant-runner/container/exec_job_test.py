@@ -372,7 +372,11 @@ def _check_phase2(commands: dict[str, Any]) -> None:
         "COPY digigraph ./digigraph",
         "COPY digillm ./digillm",
         "COPY digitrace ./digitrace",
+        # Both are loaded fail-loud at import by digigraph (llm_auth / model_config);
+        # the house chain steps run it in-process, so omitting either crash-loops the
+        # house image. Pinned because the failure only shows up in production.
         "COPY config/byok-providers.json",
+        "COPY config/model-policy.json",
         "COPY .github/digiquant-pipeline.yml",
         "COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml",
         "/opt/runner/house_chain_step.py",

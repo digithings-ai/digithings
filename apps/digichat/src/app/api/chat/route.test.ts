@@ -1158,6 +1158,34 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     expect(body.error).toBe("byok_model_required");
   });
 
+  // #5029: the hint used to spell one provider's model out in full
+  // ("openai/gpt-4o-mini") while eliding the others as "claude-…" / "gemini/…".
+  // A model id is provider vocabulary, not a stable part of this contract, so
+  // every example is elided the same way. Reverting the message to name a
+  // concrete slug fails on the last assertion.
+  it("elides every provider example in the missing-model message (#5029)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.message).toContain("openai/…");
+    expect(body.message).toContain("anthropic/…");
+    expect(body.message).toContain("gemini/…");
+    // No example resolves to a concrete `provider/model` slug.
+    expect(body.message).not.toMatch(/[a-z0-9.-]+\/[a-z0-9][a-z0-9.-]*/i);
+  });
+
   // #2351: byokNeedsModel is now byokRequiresModel(byokProvider) from the shared
   // apps/digichat/src/lib/byok-providers.ts module instead of a hand-written
   // OR-chain — these three cover the other requiresModel:true providers the old

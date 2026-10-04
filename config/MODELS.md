@@ -11,6 +11,8 @@
 | `config/litellm.omniroute.yaml` | Optional OmniRoute overlay — **not** loaded by default (#3413). |
 | `config/litellm.cheaperinference.yaml` | Hosted Cheaper Inference overlay — merged over `litellm.yaml` when `CHEAPERINFERENCE_API_KEY` is set (merge via `scripts/merge_litellm_cheaperinference.py` / stack boot), otherwise not loaded. |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
+| `config/model-policy.json` | digigraph **policy**, not defaults: the model-id markers that classify a slug as a blocked frontier model, the subset cleared for `balanced`, and `fallback_model` (the mode ladder's last resort). Loaded once at import by `model_config.py` and **fail-loud** — a missing/malformed file, a blank marker, or an empty flagship set raises rather than degrading, because the failure mode is silent: no markers means *nothing* is flagship, so frontier models quietly become eligible on tiers never cleared for them. Add a frontier family's marker here, not in Python. |
+| `config/byok-providers.json` | BYOK provider allowlist + each provider's `fallbackModels` (the ids the digigraph refusals quote). Mirrored into digichat; see [docs/MODEL_CATALOG.md](../docs/MODEL_CATALOG.md). |
 
 Per-model metadata (price, context window, modalities, tool-call / structured-output
 / reasoning / vision capability) is **not** hand-listed anywhere — it comes from

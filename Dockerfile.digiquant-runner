@@ -44,6 +44,10 @@ COPY digigraph ./digigraph
 COPY digillm ./digillm
 COPY digitrace ./digitrace
 COPY config/byok-providers.json ./config/byok-providers.json
+# Second fail-loud-at-import config file: model_config._load_model_policy. The house
+# chain steps run digigraph in-process, so this image needs it for the same reason it
+# needs byok-providers.json. See digigraph/Dockerfile.
+COPY config/model-policy.json ./config/model-policy.json
 
 RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus \
     && uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres

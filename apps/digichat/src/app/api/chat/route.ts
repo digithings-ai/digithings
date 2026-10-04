@@ -490,7 +490,7 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({
         error: "byok_model_required",
-        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. openai/gpt-4o-mini, claude-…, gemini/…).`,
+        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. openai/…, anthropic/…, gemini/…).`,
       }),
       { status: 400, headers: { "content-type": "application/json" } }
     );
