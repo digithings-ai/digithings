@@ -158,6 +158,7 @@ async def byok_header_context(request: Request, call_next):
         BYOK_ROUTABLE_PROVIDERS,
         byok_default_model_refusal,
         byok_model_required,
+        byok_model_required_refusal,
         byok_model_routes_elsewhere,
         byok_provider_supported,
         pop_byok,
@@ -182,10 +183,7 @@ async def byok_header_context(request: Request, call_next):
             return json_error_response(
                 status_code=400,
                 code="byok_model_required",
-                message=(
-                    f"BYOK provider {provider!r} requires X-BYOK-Model "
-                    "(e.g. openai/gpt-4o-mini, gemini/gemini-3.5-flash-lite, claude-sonnet-4-6)."
-                ),
+                message=byok_model_required_refusal(provider),
                 request=request,
                 service="digigraph",
             )
