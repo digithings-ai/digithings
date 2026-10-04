@@ -2,7 +2,8 @@
 
 `concurrency` without `cancel-in-progress` means *queue*: an arriving run waits for the
 group's current occupant to finish. That is the right trade for a run that is doing work —
-see CI_CONVENTIONS.md #7, which asks production pipelines for `cancel-in-progress: false`
+see `docs/agents/CI_CONVENTIONS.md` #7, which asks production pipelines for
+`cancel-in-progress: false`
 precisely so a half-finished apply is never killed.
 
 An `environment:` with required reviewers breaks the assumption underneath that rule. The job
@@ -32,10 +33,11 @@ become a lie. An environment missing from the manifest is a test failure, not a 
 
 The escape is deliberately narrow — either supersede within the group, or use a group that
 is unique per run so nothing ever queues. What is refused is the third shape: a shared group
-that queues behind a run which may never be approved. See
-``test_db_migrate_ledger_gate.py`` for why superseding is *safe* for db-migrate specifically
-(a purely ledger-gated apply, so the newest run's work is a superset of what it displaces);
-that argument has to be made per workflow and this test does not make it for you.
+that queues behind a run which may never be approved. Superseding was *safe* for db-migrate
+specifically (a purely ledger-gated apply, so the newest run's work was a superset of what it
+displaced), which `test_db_migrate_ledger_gate.py` used to argue and which the 2026-10-01
+strict-essentials cut (`f54af7052`) deleted along with the workflow. That argument has to be
+made per workflow and this test does not make it for you.
 """
 
 from __future__ import annotations
@@ -78,7 +80,58 @@ PER_RUN_TOKENS = ("github.run_id", "github.run_number")
 # docs-onboard-digithings, sync-architecture-vault) deleted from tree. New
 # environment-gated jobs still get caught by the parametrised sweep below;
 # pin any survivors here so dropping `environment:` cannot quietly skip.
-ENVIRONMENT_GATED: dict[str, set[str]] = {}
+#
+# 2026-10-04 (DIG-330): this was committed **empty**, so
+# `test_known_environment_gated_jobs_are_still_gated` iterated an empty dict, `lost` was
+# always empty, and the assert could not fire. Deleting `environment: cron` from
+# `pipeline-digiquant.yml` left the whole `tests/scripts` suite green. The pin is the only
+# thing that makes a *lost* gate visible — the sweep only asserts about gates that are
+# still there — so it is now populated, and `test_the_pin_is_not_empty` fails if it is ever
+# emptied again.
+ENVIRONMENT_GATED: dict[str, set[str]] = {
+    # `cron` — 32 jobs declared gated on 2026-10-04 for DIG-248, on the 18 files that read a
+    # non-automatic `secrets.*` name. The gate is what makes an environment-scoped value
+    # readable by a job at all, so once the values move out of repo and org scope, one of
+    # these jobs losing its `environment:` line resolves that name to empty while every
+    # check here still passes. Until that move lands the gate is inert — the `cron`
+    # environment holds 0 secrets and every name still resolves at repo or org scope — so
+    # this is a precondition for DIG-248 rather than a live break today.
+    "agent-backlog-snapshot.yml": {"snapshot"},
+    "agent-pr-finalizer.yml": {"finalize"},
+    "deploy-digithings-cron.yml": {"deploy"},
+    "execution-cron-check.yml": {"probe"},
+    "pipeline-checkpoint-archive.yml": {"archive"},
+    "pipeline-continuous-improvement.yml": {"digest"},
+    "pipeline-digiquant-onchain.yml": {"bitview-ingest"},
+    "pipeline-digiquant-prices.yml": {"fx-refresh", "fx-candles", "at-open", "eod-macro"},
+    "pipeline-digiquant-tearsheets.yml": {"tearsheets"},
+    "pipeline-digiquant.yml": {"run"},
+    "pipeline-maintenance.yml": {
+        "dependency-audit",
+        "stale-branches",
+        "doc-links",
+        "adr-numbering",
+        "agents-drift",
+        "architecture-drift",
+        "stale-issues",
+        "stale-prs",
+        "label-coverage",
+        "workflow-health",
+        "duplicate-issues",
+        "project-fields-backfill",
+    },
+    "pipeline-market-data-refresh.yml": {"refresh"},
+    "pipeline-provider-review.yml": {"review"},
+    "pipeline-research-metrics.yml": {"refresh"},
+    "project-enforce-assignment.yml": {"orphan-check"},
+    "sync-digiquant-runner-digikey-secret.yml": {"sync-runner-house"},
+    "sync-digiquant-runner-mail-secrets.yml": {"sync-runner-mail"},
+    "token-canary.yml": {"canary"},
+    # `production` — the one job whose environment *can* make a run wait, and therefore
+    # the one the queueing assertions actually bite on. Its reviewer gate is intentional
+    # and its concurrency group has to keep superseding.
+    "deploy-digiquant-runner.yml": {"deploy"},
+}
 
 
 def _manifest() -> dict[str, dict]:
@@ -190,6 +243,41 @@ def test_known_environment_gated_jobs_are_still_gated() -> None:
         f"these jobs no longer declare an `environment:`, so the sweep below now skips them "
         f"instead of asserting anything: {lost}. Either the gate was removed — in which case "
         "#2541 can recur there unnoticed — or `_gated_jobs` stopped recognising the key"
+    )
+
+
+def test_the_pin_is_not_empty() -> None:
+    """The pin is load-bearing, so an empty one is a failure rather than a vacuous pass.
+
+    `test_known_environment_gated_jobs_are_still_gated` is the only thing that can see a
+    *lost* `environment:` — the sweep below only ever asserts about gates that are still
+    there, and skips the rest. An empty `ENVIRONMENT_GATED` therefore does not make it
+    stricter, it makes it incapable of failing at all.
+
+    That is not hypothetical: DIG-330 found this file's pin committed as `{}` on 2026-10-04,
+    with the comment above it claiming the gated jobs were pinned. Deleting
+    `environment: cron` from `pipeline-digiquant.yml` then left the entire `tests/scripts`
+    suite green. The 33 jobs that read environment-scoped secrets after DIG-248 are now
+    listed explicitly, and this asserts the list has not been emptied again.
+
+    Two limits worth knowing, both deliberate. This catches *total* emptying, not a single
+    dropped entry — there is no reverse check that the pin covers every gate in the tree,
+    because requiring one would contradict the design above ("new ones need no edit here")
+    and a new gate is already caught by the sweep. And a renamed or deleted workflow reports
+    here as a lost gate even though no `environment:` was removed;
+    `test_the_pin_is_not_empty` names that case accurately.
+    """
+    assert ENVIRONMENT_GATED, (
+        "ENVIRONMENT_GATED is empty, so test_known_environment_gated_jobs_are_still_gated "
+        "cannot fail and a removed `environment:` is invisible. Repopulate it from "
+        "`_gated_jobs` over .github/workflows — do not delete the entries."
+    )
+    missing = sorted(name for name in ENVIRONMENT_GATED if not (WORKFLOW_DIR / name).exists())
+    assert not missing, (
+        f"pinned workflow file(s) do not exist, so every job pinned under them reads as a "
+        f"lost gate: {missing}. A workflow that no longer exists is a rename or a deletion, "
+        f"not a removed `environment:` — move its entries to the new filename, or drop them "
+        f"if the workflow is gone."
     )
 
 
