@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
@@ -237,6 +238,79 @@ def _rrf_merge_results(
     return merged[:top_k] if top_k else merged
 
 
+def _leg_is_complete(response: SearchResponse, page_size: int, skip: int = 0) -> bool:
+    """True when *response* holds every match that leg can return.
+
+    A reported total wins. A later page with no total already dropped a prefix,
+    so it is not the whole leg. A short first page with no total means the leg
+    stopped early, except when the backend truncates before the page ends: a Vectorize
+    page clamped at MAX_TOP_K 50 is not exhaustive when it lands exactly on
+    the clamp, and a Chroma page is not exhaustive when skip+top_k needs more
+    than the 100-result cap (the over-fetch was capped, so a short page is a
+    prefix, not the leg). A full page with no total is not the end of the leg.
+    """
+    if response.total_count is not None:
+        return len(response.results) >= response.total_count
+    # No reported total. A later page has already dropped a prefix, so it is
+    # not the whole match set (Chroma's offset is a capped over-fetch; Vectorize
+    # has no offset and raises instead of returning this page).
+    if max(int(skip or 0), 0) > 0:
+        return False
+    backend = response.backend or ""
+    if backend == BACKEND_VECTORIZE:
+        try:
+            from digisearch.indexes.backends.vectorize import MAX_TOP_K as _vmax
+        except ImportError:
+            _vmax = 50
+        effective = min(max(int(page_size or 0), 1), int(_vmax))
+        return len(response.results) < effective
+    if backend == BACKEND_CHROMA:
+        n = min(max(int(page_size or 0), 0), 100)
+        if n <= 0:
+            return True
+        if max(int(skip or 0), 0) + n > 100:
+            return False
+        return len(response.results) < n
+    return len(response.results) < max(page_size, 1)
+
+
+def _read_fanout_leg(query: Query, index_name: str) -> SearchResponse:
+    """Read one leg for fan-out fusion.
+
+    The caller's skip/top_k pass through untouched so backends that apply
+    pagination themselves (Vectorize raises on skip>0, Chroma over-fetches
+    skip+top_k capped at 100, Azure applies skip/include_total_count) serve
+    the requested page. Only the in-memory stub -- which scans every match --
+    is full-read in one pass (skip=0, top_k=total) so the fused ranking can be
+    sliced afterwards. Other backends are never re-read with top_k=total: for
+    Azure that fuses a <=1000 prefix as the whole leg.
+    """
+    page_size = max(int(query.top_k or 0), 0)
+    probe = replace(query, include_total_count=True)
+    first = _query_single_index(probe, index_name)
+    if first.backend != BACKEND_STUB:
+        return first
+    total = first.total_count
+    if total is None:
+        return _query_single_index(
+            replace(
+                query,
+                skip=0,
+                top_k=max(page_size, 10000),
+                include_total_count=True,
+            ),
+            index_name,
+        )
+    if len(first.results) >= total:
+        return first
+    if int(total) <= 0:
+        return first
+    return _query_single_index(
+        replace(query, skip=0, top_k=int(total), include_total_count=True),
+        index_name,
+    )
+
+
 def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     """Route one index name through registered backends (no rerank; caller applies it)."""
     start = time.perf_counter()
@@ -293,7 +367,12 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return SearchResponse(
+            results=[],
+            facets=None,
+            backend=BACKEND_STUB,
+            total_count=0 if query.include_total_count else None,
+        )
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -307,8 +386,7 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     if isinstance(fd.get("structured"), list):
         structured = fd["structured"]
     text_lower = query.text.lower()
-    out: list[Result] = []
-    rank = 0
+    matches: list[Chunk] = []
     for c in chunks:
         if text_lower not in c.content.lower():
             continue
@@ -316,11 +394,13 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
             continue
         if not chunk_matches_workspace(c.metadata, query.workspace_id):
             continue
-        rank += 1
-        out.append(Result(chunk=c, score=0.9, rank=rank))
-        if len(out) >= query.top_k:
-            break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
+        matches.append(c)
+    start = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    page = matches[start : start + page_size]
+    out = [Result(chunk=c, score=0.9, rank=index) for index, c in enumerate(page, start=1)]
+    total = len(matches) if query.include_total_count else None
+    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB, total_count=total)
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
@@ -344,9 +424,39 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    responses = [_query_single_index(query, name) for name in names]
-    merged = _rrf_merge_results([response.results for response in responses], top_k=query.top_k)
-    return _maybe_rerank(query, SearchResponse(results=merged, facets=None, backend="multi"))
+    # One fused ranking for every page. Stub legs are read in full (the stub
+    # scans every match in memory), then the fused list is sliced by the
+    # caller's skip/top_k. Remote legs already applied the caller's skip, so
+    # their pages are fused and truncated -- never sliced a second time.
+    skip = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    responses = [_read_fanout_leg(query, name) for name in names]
+    merged = _rrf_merge_results(
+        [response.results for response in responses],
+        top_k=None,
+    )
+    if all(response.backend == BACKEND_STUB for response in responses):
+        window = merged[skip : skip + page_size] if page_size else []
+    else:
+        window = merged[:page_size] if page_size else []
+    page = [
+        Result(
+            chunk=result.chunk,
+            score=result.score,
+            source_doc=result.source_doc,
+            rank=index,
+        )
+        for index, result in enumerate(window, start=1)
+    ]
+    total_count = None
+    if query.include_total_count and all(
+        _leg_is_complete(response, page_size, skip) for response in responses
+    ):
+        total_count = len(merged)
+    return _maybe_rerank(
+        query,
+        SearchResponse(results=page, facets=None, backend="multi", total_count=total_count),
+    )
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:

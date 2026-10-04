@@ -56,7 +56,14 @@ def _backend_with_collection(
             client = MagicMock()
             chromadb_mod.Client.return_value = client
             client.get_or_create_collection.return_value = collection
-            return ChromaBackend("test-index", embedding_provider=embedding_provider)
+            # ``Settings`` is bound only when chromadb imports. Patch it so the
+            # constructor can run in a unit env that does not install the extra.
+            with patch(
+                "digisearch.indexes.backends.chroma.Settings",
+                MagicMock(),
+                create=True,
+            ):
+                return ChromaBackend("test-index", embedding_provider=embedding_provider)
 
 
 @pytest.mark.unit
@@ -207,3 +214,21 @@ def test_no_op_behavior_preserving_minilm_matches_chroma_onnx() -> None:
     for a, b in zip(provider_vecs, bundled_vecs, strict=True):
         assert len(a) == len(b) == MINILM_DIMENSIONS
         assert a == b
+
+
+@pytest.mark.unit
+def test_query_skip_slices_filtered_hits() -> None:
+    """skip used to be ignored, so top_k=1 skip=1 returned the first hit."""
+    collection = MagicMock()
+    collection.count = MagicMock(return_value=0)
+    collection.query.return_value = {
+        "ids": [["c0", "c1", "c2"]],
+        "documents": [["zero", "one", "two"]],
+        "metadatas": [[{}, {}, {}]],
+        "distances": [[0.0, 0.2, 0.4]],
+    }
+    backend = _backend_with_collection(collection, embedding_provider=_FakeEmbedder())
+    results = backend.query(Query(text="q", top_k=1, skip=1, embedding=[0.1] * 8))
+    assert collection.query.call_args.kwargs["n_results"] == 2
+    assert [r.chunk.id for r in results] == ["c1"]
+    assert [r.rank for r in results] == [1]
