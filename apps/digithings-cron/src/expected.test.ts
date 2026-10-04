@@ -88,3 +88,39 @@ describe("expectedCount rejects what it does not implement", () => {
     );
   });
 });
+// A range whose `from` is larger than its `to` is not a Quartz range at all:
+// croner rejects it outright ("From value is larger than to value: '5-1'") and
+// does not wrap it. The loop `for (let value = lo; value <= hi; value += step)`
+// simply never runs when `lo > hi`, so the field parses to an empty set and
+// expectedCount returns 0 -- a confident wrong number, where 0 reads as a day
+// on which the clock never fired. Refusing is the only safe answer.
+//
+// Grounded in croner@9, the Quartz-compatible parser Cloudflare's cron model
+// tracks. NOT grounded, and deliberately not asserted here: whether Quartz
+// accepts a comma list that mixes a range with a single value (`MON-FRI,SAT`).
+// croner throws an internal TypeError on that form, so the reference cannot
+// answer it and this leaf does not pin a claim it cannot support.
+describe("expectedCount rejects a reversed range instead of counting zero", () => {
+  it.each([
+    ["a reversed weekday range", "0 0 * * FRI-MON"],
+    ["a reversed weekday range that starts on Saturday", "0 0 * * SAT-MON"],
+    ["a reversed numeric range", "5-1 * * * *"],
+  ])("throws on %s rather than returning an empty count", (_label, cron) => {
+    expect(() => expectedCount(cron, "2026-10-05", { now: AT("2026-10-05T12:00:00Z") })).toThrow(
+      /unsupported|range/i,
+    );
+  });
+
+  // Regression guards. A reversed range must not be "fixed" by teaching the
+  // parser to wrap: Quartz does not wrap, and a wrapped count would be a wrong
+  // number wearing the same clothes as the bug this leaf removes.
+  it("still counts a well-formed weekday range", () => {
+    expect(expectedCount("0 0 * * MON-FRI", "2026-10-05", { now: AT("2026-10-05T12:00:00Z") })).toBe(1);
+    expect(expectedCount("0 0 * * FRI-SAT", "2026-10-05", { now: AT("2026-10-05T12:00:00Z") })).toBe(0);
+  });
+  it("still counts a well-formed numeric range", () => {
+    expect(expectedCount("0 9-17 * * *", "2026-10-05", { now: AT("2026-10-05T23:00:00Z") })).toBe(9);
+    expect(expectedCount("0 0 * * *", "2026-10-05", { now: AT("2026-10-05T23:00:00Z") })).toBe(1);
+    expect(expectedCount("0 0-23/6 * * *", "2026-10-05", { now: AT("2026-10-05T23:00:00Z") })).toBe(4);
+  });
+});
