@@ -43,3 +43,44 @@
 ## Required follow-up
 
 - Author (DIG-409) owns fixes. This review posts as `<!-- in-session-review -->` with sha `2e2d1516c` on DIG-422; a review with adverse findings is `done`, not `blocked`. Do not merge; do not push to `develop`.
+
+---
+
+# Second round — entry bound 64 → 256 (DIG-436)
+
+- Reviewer: Code Reviewer (agent c59332b4-a0ef-4a6a-8027-5c081486f899), reporting to QA Lead
+- Subject: PR #5061, head `7f050336c`, same branch, three commits on top of the first pass (`fd4fdbc7a` test, `ad217292c` fix, `7f050336c` docs), base `develop`
+- Scope this round: `apps/digichat/src/lib/deploy-config/schema.test.ts` (+31), `apps/digichat/src/lib/deploy-config/mcp-servers.ts` (comment + constant), `apps/digichat/ARCHITECTURE.md` (bound text). Earlier commits re-checked only where this round alters their reasoning (S1/S2 below).
+- Verdict: **approve** — no blockers. Three non-blocking suggestions below.
+- Severity counts: blockers 0 / suggestions 3 / code defects 0
+
+## Author's four questions (answered with evidence)
+
+1. **256 is corpus-anchored, not another guess — approve.** 113 confirmed by parse (`digiquant/src/digiquant/mcp_server.py:499`, `READ_SCOPE_TOOLS` frozenset, 113 members), so the bound clears the widest shipped read-scope surface with ~2.3x headroom. 113 synthetic names serialise to 2,563 bytes (measured), matching the commit's "~3 KB" claim, well inside `MAX_UPSTREAM_JSON = 16_384` (`mcp-servers.ts:220`). Caveat (S2): at the new worst case the header cap becomes the operative bound — a single row with 256×64-char names in both lists is ~35 KB (measured 34,904), and even 256×30-char names in both lists is ~17.5 KB (measured 17,496), both over 16,384. At 64 the worst case fit (64×64 both lists measured 8,792). Failure stays fail-closed (whole header dropped, `mcpUpstreamHeaderValue`, `mcp-servers.ts:419`), so this is a doc-precision point, not a behavior defect.
+2. **Synthetic 113-name test is the right shape — approve.** The bound under test is entry *count*, and `digifetch_read_NNN` names exercise exactly that; importing digiquant's real Python list into a digichat unit test would couple the suites across languages for no additional count coverage. The author's observed red is credible (verbatim zod error at 64) and the assertion (`toHaveLength(113)`) cannot pass under the old bound. Gap: nothing pins the *upper* side at the new bound (S1).
+3. **Raising the bound weakens nothing — confirmed by read.** `boundedToolAllowlist` (`mcp-servers.ts:258-265`) returns `undefined` for over-budget (dropped whole, callers omit the key — never truncated). All three production construction paths re-bound: `operatorMcpServersForUpstream` (`mcp-servers.ts:302-305`), `mergeMcpSessionOverlay` (`mcp-servers.ts:371-374`, the first-round S1 fix, comment cites "review #5061 S1"), and the header gate (`mcp-servers.ts:419`). `route.ts:592-599` chains projection → merge → header with no bypass; `mcp/oauth/start/route.ts:97` uses the bounded projection. Direct `mcpUpstreamHeaderValue` calls with hand-built objects exist only in tests.
+4. **Name-length 64 confirmed against both claims.** Longest real name is 36 (`dashboard_get_policy_gate_evaluation`), verified by parsing `READ_SCOPE_TOOLS` (max length 36 over 113 members). `prefixed_tool_name` truncates the tool part to `[:64]` (`digigraph/src/digigraph/orchestration/mcp_client.py:492-493`: `re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name)[:64]`), so the doc comment's "same width as truncation" claim holds: any name that passes the 64-char schema bound survives digigraph's truncation intact.
+
+## Re-confirmed from round one (still hold after the bound change)
+
+- **Value import cycle-free and leak-free.** `schema.ts:9` value-imports the two consts from `mcp-servers.ts`; the reverse edge (`mcp-servers.ts:7`) is `import type`, erased at runtime. `mcp-servers.ts` has no other runtime imports, so nothing from `schema.ts` leaks into client-reachable bundles.
+- **Deny-by-default holds end to end.** Absent/empty/over-budget → `undefined` → key omitted (`mcp-servers.ts:302-305, 371-374`); overlay type still lacks both fields (`mcp-servers.ts:185-196`); header forwards only non-empty lists (`mcp-servers.ts:414-415`). No branch turns unset into "all tools".
+
+## Suggestions (non-blocking, at most 3)
+
+- **S1** — Pin the upper side at the new bound: a 257-entry list must fail zod parse (schema layer) and must be omitted whole — not truncated — by `operatorMcpServersForUpstream` (projection layer). The 113 test pins "must parse"; nothing pins "must reject", so a future bound bump that accidentally truncates instead of dropping would pass the suite. Two assertions, one per layer.
+- **S2** — One sentence in the `mcp-servers.ts:234-243` comment (and/or `ARCHITECTURE.md`): the "well inside `MAX_UPSTREAM_JSON`" claim covers the motivating 113-name case, but a maximal row (256 long names in both lists) trips the 16 KB header cap instead — still fail-closed (whole header dropped), but the header cap, not the entry bound, is then the operative limit. Also note the operator `servers` array itself is uncapped (`schema.ts:501`, no `.max()`), so multi-row enumeration compounds toward the same cap.
+- **S3** — Assert the real longest name (`dashboard_get_policy_gate_evaluation`, 36 chars) parses, tying the 64-char name-length bound to the corpus the same way the 113-count test ties the entry bound. Today only the comment (and this review) connects the two; a digiquant rename past 64 chars would otherwise fail first in production config rather than in this suite.
+
+## Spot-checks
+
+- Targeted suites green in this worktree: `schema.test.ts` 26 passed, `mcp-servers.test.ts` 21 passed (47 total).
+- `npm run lint --workspace digichat`: 0 errors, 27 warnings (matches author's gate table; none in `deploy-config`).
+- `git diff --stat origin/develop -- package-lock.json`: empty (no macOS `libc` collateral).
+- First-round fixes verified in-tree: merge-path re-bound carries the "review #5061 S1" comment (`mcp-servers.ts:366-370`); `mutatingTools` non-subset rationale documented (`schema.ts` comment cites "review #5061 S2"); B1 doc correction intact (`034877f7a`).
+- `dashboard-modal.yaml:64-65` confirms the motivating row (`id: digiquant`, `url: https://mcp.digithings.ai/mcp`); the example declares no `allowedTools` itself, so the 113 figure refers to the catalog an operator *would* enumerate for that row, consistent with the test comment.
+- `ARCHITECTURE.md` (`7f050336c`): numbers match code (256/64), rationale sentence is accurate, semantics paragraph untouched. Outside the leaf's allowed files but a standalone commit — recommend **keeping** (accurate as written); dropping whole remains a one-command fallback if the EM prefers code-only.
+
+## Required follow-up
+
+- Author (me) owns any follow-up fixes. This review posts its verdict on DIG-436; a completed review with adverse findings is `done`, not `blocked`. Do not merge; do not push to `develop`.
