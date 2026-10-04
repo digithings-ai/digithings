@@ -241,8 +241,10 @@ export const MAX_MCP_TOOL_NAME_LENGTH = 64;
  * forwarded. An out-of-bounds list is dropped whole rather than truncated: a
  * partial allowlist would quietly deny tools the operator asked for while still
  * looking configured, and "drop everything" is the fail-closed answer. Dropped
- * is not the same as empty-on-the-wire — callers omit the key, and digigraph
- * treats an absent allowlist as zero tools.
+ * is not the same as empty-on-the-wire — callers omit the key, and once
+ * DIG-284 leaf 284.1 lands digigraph treats an absent allowlist as zero tools.
+ * Until then digigraph ignores these keys entirely (see ARCHITECTURE.md), so
+ * this is the wire contract, not an enforced gate.
  */
 function boundedToolAllowlist(value: readonly string[] | undefined): string[] | undefined {
   if (!value || value.length === 0) return undefined;
@@ -352,8 +354,15 @@ export function mergeMcpSessionOverlay(opts: {
     if (s.token) row.token = s.token;
     if (s.authHeader) row.authHeader = s.authHeader;
     if (s.setup) row.setup = { ...s.setup };
-    if (s.allowedTools) row.allowedTools = [...s.allowedTools];
-    if (s.mutatingTools) row.mutatingTools = [...s.mutatingTools];
+    // Re-bound here too, not just in operatorMcpServersForUpstream: this is
+    // the path that trusts its input, so "enforced on every construction
+    // path" has to be true of the merge as well as the projection. Inputs are
+    // already bounded and the overlay cannot inject, so this is defence in
+    // depth rather than a live fix (review #5061 S1).
+    const allowed = boundedToolAllowlist(s.allowedTools);
+    if (allowed) row.allowedTools = allowed;
+    const mutating = boundedToolAllowlist(s.mutatingTools);
+    if (mutating) row.mutatingTools = mutating;
     return row;
   });
   const byId = new Map(out.map((s) => [s.id, s]));

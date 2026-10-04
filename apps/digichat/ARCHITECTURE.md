@@ -991,9 +991,13 @@ can neither set nor override them, and the overlay merge copies them from the op
 `mcp-servers.ts` and are imported by `schema.ts` so the zod bound and the header guard cannot disagree — a
 disagreement would silently drop the whole header, which is the failure mode `DIG-284` removes. `.strict()` still
 holds, so a misspelled `allowdTools` fails the parse rather than becoming a no-op allowlist.
-**digigraph does not read these keys yet** (`McpServerRef` is `extra="forbid"` and its header rebuild is
-field-by-field), so configuring them today fails loudly in digigraph rather than taking effect — see `DIG-284`
-leaf 284.1.
+**digigraph does not enforce these keys yet** — see `DIG-284` leaf 284.1. Until that lands they are
+accepted by this app, forwarded on the header, and then **silently ignored** in digigraph: `parse_mcp_servers_json`
+rebuilds each row from scratch (`id`/`url` plus auth and `setup` only) and drops unknown keys, and `context.py`
+constructs `McpServerRef` field-by-field, so `extra="forbid"` never sees them. Two consequences worth being explicit
+about: configuring the field today grants no protection, and a server row that *omits* it keeps **full** tool access
+rather than dropping to zero. Absence is deny-by-default from leaf 284.1 onward, not before — do not read the
+digichat-side semantics below as a live gate today.
 The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every
