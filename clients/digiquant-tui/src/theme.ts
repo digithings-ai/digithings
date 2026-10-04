@@ -21,6 +21,8 @@ export const ACCENT = "#3DD6C4";
 export const UP = DIGIQUANT_CHART.candleUp;
 export const DOWN = DIGIQUANT_CHART.candleDown;
 export const DANGER = "#E94959";
+/** Design package `--warn` (dark). The amber the dashboard badge uses for stale. */
+export const WARN = "#E0B341";
 export const HAIR = hairOnBlack(0.09);
 export const HAIR_STRONG = hairOnBlack(0.15);
 /** Desk wash: white at 5% on the black canvas (`--term-fill`). */
