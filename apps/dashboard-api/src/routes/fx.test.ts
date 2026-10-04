@@ -82,4 +82,37 @@ describe("phase 3 fx and rates", () => {
     const res = await app.fetch(new Request("https://x/fx/ideas"), { ...CORE, TWELVEX_SUPABASE_URL: undefined, TWELVEX_SUPABASE_SERVICE_KEY: undefined });
     expect(res.status).toBe(502);
   });
+
+  // DIG-354: there is no `theses` table in the twelve-x project, so this
+  // route has nothing to age. It must fail closed, never serve a bare 200.
+  it("rates theses fails closed when twelve-x has no theses table", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ code: "PGRST205", message: "Could not find the table 'public.theses'" }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    )));
+    const res = await app.fetch(new Request("https://x/rates/theses"), CORE);
+    const body = (await res.json()) as { error: { code: string; details: { table: string; upstream_status: number } }; as_of?: unknown };
+    expect(res.status).toBe(502);
+    expect(body.error.code).toBe("upstream_empty");
+    expect(body.error.details).toMatchObject({ table: "theses", upstream_status: 404 });
+    expect(body.as_of).toBeUndefined();
+  });
+
+  // Rows with no run-date column must stay untoned: `updated_at` is a write
+  // timestamp, not a run, so it may never be dressed up as one.
+  it("rates theses does not invent an as_of from a write timestamp", async () => {
+    mockFetch((url) => (url.includes("theses")
+      ? [{ thesis_id: "t1", name: "Front-end easing", state: "active", updated_at: "2026-09-28T11:59:24Z" }]
+      : []));
+    const res = await app.fetch(new Request("https://x/rates/theses"), CORE);
+    const body = (await res.json()) as {
+      data: { theses: { id: string }[]; counts: { active: number } };
+      as_of: string | null;
+      provenance: { tip_date: string | null };
+    };
+    expect(res.status).toBe(200);
+    expect(body.as_of).toBeNull();
+    expect(body.provenance.tip_date).toBeNull();
+    expect(body.data.counts.active).toBe(1);
+  });
 });
