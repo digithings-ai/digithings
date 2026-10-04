@@ -459,6 +459,37 @@ describe("McpServerSchema operator tool allowlist (DIG-284)", () => {
     expect(server?.mutatingTools).toEqual(["addOrEditJiraIssueComment"]);
   });
 
+  it("parses an allowlist as large as the widest real read-scope surface", () => {
+    // digiquant's `scope="read"` server advertises 113 tools
+    // (`READ_SCOPE_TOOLS` in digiquant/src/digiquant/mcp_server.py) and
+    // `config/examples/dashboard-modal.yaml` is that row. So the entry bound
+    // has to clear 113 with headroom — an allowlist the operator cannot
+    // express is the silent whole-config parse failure this leaf removes, now
+    // self-inflicted by a bound too small to hold our own corpus.
+    const readScope = Array.from(
+      { length: 113 },
+      (_, i) => `digifetch_read_${String(i).padStart(3, "0")}`,
+    );
+    expect(readScope).toHaveLength(113);
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        mcp: {
+          servers: [
+            {
+              id: "digiquant",
+              url: "https://mcp.digithings.ai/mcp",
+              allowedTools: readScope,
+            },
+          ],
+        },
+      },
+    });
+    expect(cfg.deployment?.mcp?.servers?.[0]?.allowedTools).toHaveLength(113);
+  });
+
   it("still rejects an unknown key on an MCP server", () => {
     // The allowlist fields must not have loosened McpServerSchema from
     // `.strict()`. A typo'd key is still a hard parse failure rather than a
