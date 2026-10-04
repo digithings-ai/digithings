@@ -103,6 +103,11 @@ def test_every_prefix_agrees_on_every_key_shape() -> None:
             assert len(set(verdicts.values())) == 1, (
                 f"prefixes disagree on {body!r}{suffix!r}: {verdicts}"
             )
+            # Agreement alone is satisfied by every prefix going dead, which is a
+            # mutation that must fail rather than pass.
+            assert next(iter(set(verdicts.values()))) is True, (
+                f"every prefix agrees that {body!r}{suffix!r} reads clean: {verdicts}"
+            )
 
 
 def test_no_vendor_pattern_is_end_anchored() -> None:
