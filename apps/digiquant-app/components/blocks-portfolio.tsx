@@ -214,7 +214,17 @@ export function RisksBlock() {
   );
 }
 
-const stateTone: Record<string, BadgeTone> = { active: 'ok', watch: 'wip', exited: 'plain' };
+// Tones for the real `chk_theses_status` tokens the API returns. `watch` and
+// `exited` are `counts` rollups, not row states, so they are not keys here.
+const stateTone: Record<string, BadgeTone> = {
+  active: 'ok',
+  monitoring: 'wip',
+  challenged: 'wip',
+  new: 'wip',
+  paused: 'plain',
+  closed: 'plain',
+  invalidated: 'plain',
+};
 
 /** GET /theses — thesis list. A row with a vehicle opens that ticker's dossier. */
 export function ThesesBlock() {
