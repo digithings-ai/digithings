@@ -54,6 +54,8 @@ jobs:
       pull-requests: write      # Step 3b opens a PR for the pushed bot/ branch
     name: Weekly provider review
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 30
 
     steps:
