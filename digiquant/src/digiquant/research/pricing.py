@@ -63,9 +63,12 @@ _SOURCE_PREFIX = "docs/providers/snapshots/"
 _STANDARD_RATE = "standard"
 
 # ``digiquant/src/digiquant/research/pricing.py`` -> repo root. Only used when
-# ``DIGI_CONFIG_PATH`` is unset, so a wrong CWD cannot silently empty the table; the
-# container layout (``/app/src/digiquant/...``) resolves to ``/``, where the file is absent,
-# which is the same fail-soft-empty outcome an explicit path would give.
+# ``DIGI_CONFIG_PATH`` is unset, so a wrong CWD cannot silently empty the table.
+# In a container this lands somewhere useful rather than nowhere: the house
+# runner copies sources under ``/app`` and its config under ``/app/config``, so
+# ``parents[4]`` is ``/app`` and the table is found. An image that does NOT copy
+# it resolves to a root with no ``config/`` at all, which takes the missing-file
+# warning below rather than pretending the table is legitimately empty.
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 

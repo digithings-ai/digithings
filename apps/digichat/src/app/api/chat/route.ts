@@ -10,6 +10,7 @@ import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
 import { byokRequiresModel } from "@/lib/byok-providers";
+import { byokModelExample } from "@/lib/byok-model-example";
 import {
   AI_SDK_PROTOCOLS,
   NON_AI_SDK_PROTOCOLS,
@@ -490,7 +491,7 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({
         error: "byok_model_required",
-        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. openai/…, anthropic/…, gemini/…).`,
+        message: `${byokProvider} BYOK requires X-BYOK-Model (e.g. ${byokModelExample(byokProvider) ?? "your provider's model id"}).`,
       }),
       { status: 400, headers: { "content-type": "application/json" } }
     );

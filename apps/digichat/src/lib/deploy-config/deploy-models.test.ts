@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DEFAULT_CLIENT_CONFIG } from "./client-projection";
@@ -41,6 +41,24 @@ describe("deploy model table has a single config source (#5029)", () => {
     expect(DEPLOY_DEFAULT_MODELS.available).toEqual([
       ...new Set(DEPLOY_DEFAULT_MODELS.available),
     ]);
+  });
+
+  // The guard in deploy-models.ts runs at *import* time, so no assertion about
+  // the good table can reach it: every other test in this file would still pass
+  // if the `if` were deleted. This one imports the module against a bad table
+  // and requires the throw. `doMock` rather than a hoisted `vi.mock` so the
+  // already-imported good module above is unaffected.
+  it("refuses to load a table whose default is not offered", async () => {
+    vi.resetModules();
+    vi.doMock(CONFIG_FILE, () => ({
+      default: { default: "vendor/unoffered", available: ["vendor/other"] },
+    }));
+    try {
+      await expect(import("./deploy-models")).rejects.toThrow(/is not in available/);
+    } finally {
+      vi.doUnmock(CONFIG_FILE);
+      vi.resetModules();
+    }
   });
 
   it("is non-empty — an empty table would silently strip every model", () => {

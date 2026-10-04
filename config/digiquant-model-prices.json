@@ -67,7 +67,7 @@
   "unpriced_slugs": {
     "google/gemini-3.7-flash": {
       "source": "docs/providers/snapshots/gemini.yaml",
-      "note": "Absent from the committed gemini.yaml (last_checked 2026-08-30 lists gemini-2.5-flash, gemini-2.5-flash-lite, gemini-3-flash-preview and gemini-3.5-flash — the snapshot predates this model), so the repo has no committed source to cite. Recorded as unpriced rather than guessed; it moves into prices_usd_per_1m when that snapshot is refreshed."
+      "note": "Absent from the committed gemini.yaml — that snapshot's paid_tier (last_checked 2026-08-30) carries six models, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro, gemini-3-flash-preview, gemini-3.5-flash and gemini-3.1-pro-preview, and this slug is not among them. The snapshot predates the model, so the repo has no committed source to cite. Recorded as unpriced rather than guessed; it moves into prices_usd_per_1m when that snapshot is refreshed."
     }
   }
 }
