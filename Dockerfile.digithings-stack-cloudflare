@@ -83,10 +83,36 @@ COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
 RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search,embedding-multilingual]"
 # ^ embedding-multilingual (onnxruntime + tokenizers + numpy, CPU-only) powers
-# the multilingual ticket/docs indexes for the OCC chat (#4756). Model weights
-# (~120 MB Xenova quantized ONNX) download on first embed; bake them with
-# scripts/download_multilingual_model.py + DIGISEARCH_MULTILINGUAL_MODEL_DIR
-# to avoid runtime HF Hub egress on the critical path.
+# the multilingual ticket/docs indexes for the OCC chat (#4756). Its weights
+# (~120 MB Xenova quantized ONNX) are baked below at build time — v14
+# prescribed that bake in this comment but never ran it, so every cold start
+# downloaded the snapshot from HF Hub on the seed's critical path, and when
+# that egress failed the seed still exited 0 (CLI ingest skips failed files)
+# and digisearch came up on an empty corpus (#5045). Inlined rather than
+# COPYing scripts/download_multilingual_model.py because .dockerignore
+# excludes scripts/ from this build context; the pins (model id + file names)
+# are imported from the installed digisearch package, so they cannot drift
+# from the provider. The assert fails the build when the snapshot is empty or
+# partial — a silent no-download bake cannot land.
+RUN python -c "from pathlib import Path; from huggingface_hub import snapshot_download; \
+from digisearch.embedding.providers.multilingual import ( \
+MULTILINGUAL_MODEL_FILE, MULTILINGUAL_MODEL_ID, MULTILINGUAL_TOKENIZER_FILE); \
+out = Path('/models/multilingual'); \
+snapshot_download(repo_id=MULTILINGUAL_MODEL_ID, \
+allow_patterns=[MULTILINGUAL_MODEL_FILE, MULTILINGUAL_TOKENIZER_FILE], \
+local_dir=str(out)); \
+missing = [str(p) for p in (out / MULTILINGUAL_MODEL_FILE, \
+out / MULTILINGUAL_TOKENIZER_FILE) if not p.is_file()]; \
+assert not missing, f'multilingual weights bake incomplete, missing: {missing}'; \
+print(f'multilingual weights ready in {out} ({MULTILINGUAL_MODEL_ID})')"
+# Runtime: the multilingual provider resolves DIGISEARCH_MULTILINGUAL_MODEL_DIR
+# with local stat()s only (multilingual.py `_resolve_under` -> onnxruntime +
+# tokenizers local file reads; huggingface_hub is never imported on that path),
+# and HF_HUB_OFFLINE=1 turns the unset-var fallback (HF snapshot_download) into
+# a loud RuntimeError instead of silent runtime egress. Both sit AFTER the bake
+# RUN on purpose: the bake itself must run online.
+ENV DIGISEARCH_MULTILINGUAL_MODEL_DIR=/models/multilingual \
+    HF_HUB_OFFLINE=1
 
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
@@ -140,6 +166,12 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # Rebuild marker v14 (2026-10-01): installs digisearch[embedding-multilingual]
 # (onnxruntime + tokenizers + numpy) for the multilingual OCC ticket/docs
 # indexes (#4756). Full rebuild required (wrangler caches by Dockerfile hash).
+# Rebuild marker v15 (2026-10-04): bakes the multilingual embedding weights
+# (Xenova quantized ONNX, ~120 MB) into /models/multilingual at build time and
+# pins DIGISEARCH_MULTILINGUAL_MODEL_DIR + HF_HUB_OFFLINE=1 — closing the v14
+# gap where the bake was only prescribed in a comment and every cold start
+# pulled the snapshot from HF Hub on the seed critical path (#5045). Dockerfile
+# only; full rebuild required (wrangler caches by Dockerfile hash).
 # Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
 # in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
 # :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
