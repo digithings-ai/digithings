@@ -350,6 +350,61 @@ describe("mcpServersHeaderValue operator tool allowlist (DIG-284)", () => {
     expect(rows[0]).not.toHaveProperty("allowedTools");
     expect(rows[0]).not.toHaveProperty("mutatingTools");
   });
+
+  it("omits an over-budget allowlist whole rather than truncating it", () => {
+    // The projection half of the same bound (review #5061 round 2, S1). The dep
+    // literal bypasses zod on purpose, because zod is the check that runs first
+    // in production: the loader parses, then we project, so this layer only ever
+    // sees an over-budget list if the two bounds have drifted apart — which is
+    // exactly what the shared-constant import exists to prevent, and exactly what
+    // this assertion catches if it ever happens. Truncating here instead of
+    // dropping would produce an allowlist that lost tools the operator named and
+    // still looked configured, so the whole list goes.
+    const overBudget = Array.from({ length: 257 }, (_, i) => `digifetch_read_${i}`);
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "digiquant",
+            url: "https://mcp.digithings.ai/mcp",
+            allowedTools: overBudget,
+            mutatingTools: overBudget,
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    // The row itself still ships — only the unforwardable lists are gone.
+    expect(rows).toEqual([{ id: "digiquant", url: "https://mcp.digithings.ai/mcp" }]);
+  });
+
+  it("omits an allowlist carrying one over-long name, whole", () => {
+    // The other branch of `boundedToolAllowlist`, and the name-bound counterpart
+    // of the test above. A single 65th character disqualifies the whole list: it
+    // is a name digigraph truncates, and a truncated name can collide with a
+    // different tool, which is precisely the ambiguity the bound exists to
+    // prevent. Dropping only the offending entry would grant the rest of a list
+    // that was wrong about something.
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "atlassian",
+            url: "https://mcp.atlassian.com/v1/sse",
+            allowedTools: ["search_tickets", "t".repeat(65)],
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    expect(rows).toEqual([{ id: "atlassian", url: "https://mcp.atlassian.com/v1/sse" }]);
+  });
 });
 
 describe("dashboard-modal operator digiquant server", () => {
