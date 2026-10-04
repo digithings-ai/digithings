@@ -42,6 +42,9 @@ describe("phase 1 portfolio routes", () => {
     expect(data.theses[0]).toMatchObject({ id: "t1", vehicles: ["GLD"], evidence: null });
     expect(data.counts.active).toBe(1);
     expect(res.provenance).toMatchObject({ source: "core:theses" });
+    // The fixture's `date` is load-bearing: this pane ages off it, so a pane that
+    // aged by anything else would not report the row's own business date.
+    expect(res.as_of).toBe("2026-09-28");
   });
 
   // The test above uses `id: "t1"`, which coincides with `thesis_id` and so
@@ -75,7 +78,6 @@ describe("phase 1 portfolio routes", () => {
   // Only the newest date is the current book.
   it("theses ages by date and keeps only the newest date", async () => {
     mockFetch((url) => {
-      // `thesis_vehicles` must be matched first: it does not contain "theses".
       if (url.includes("/thesis_vehicles")) return [
         { thesis_id: "t1", ticker: "GLD", date: "2026-09-28" },
         { thesis_id: "t1", ticker: "IAU", date: "2026-09-27" },
@@ -115,6 +117,21 @@ describe("phase 1 portfolio routes", () => {
     const res = await body("/theses");
     expect(res.status).toBe(200);
     expect(res.as_of).toBe("2026-09-28");
+  });
+
+  // Rows carrying no business `date` yield no book: `maxThesisDate` is null and
+  // `rowsAtDate` treats null as "nothing to keep", so the pane must report an
+  // empty book with a null as_of rather than falling back to a write timestamp.
+  it("theses without a dated row returns an empty book and a null as_of", async () => {
+    mockFetch((url) => (url.includes("/theses?")
+      ? [{ id: "t1", thesis_id: "t1", name: "Gold", status: "ACTIVE", updated_at: "2026-10-03T04:05:06Z" }]
+      : []));
+    const res = await body("/theses");
+    const payload = res as { status: number; data: { theses: unknown[]; counts: { active: number } }; as_of: string | null };
+    expect(payload.status).toBe(200);
+    expect(payload.as_of).toBeNull();
+    expect(payload.data.theses).toEqual([]);
+    expect(payload.data.counts.active).toBe(0);
   });
 
   it("drawdown is computed from NAV and stays null without a second point", async () => {
