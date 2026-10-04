@@ -26,6 +26,16 @@ files or updates one tracking issue instead.
 Offline switch: `--file-names` reads `SCOPE\\tNAME\\tUPDATED` lines so the
 ageing logic can be tested without `gh`, and `--strict-offline` refuses to
 report success when the input came from a file rather than the live API.
+
+A second, sharper question rides along: **can the `cron` gate still stall?** The 32
+jobs declared `environment: cron` in #248 are only safe because that environment
+has no required reviewer and no wait timer. Both are armed from the GitHub UI,
+where no test runs, and the failure mode is #2541 again — pipelines stop, with
+every assertion still green. So this also reads
+`.github/environments.json` (written by #248) and compares it to the live
+protection rules, and **exits 1 on drift**. Drift is worth failing on where an
+overdue secret is not: a stale credential is a human's decision, a stalled
+automation is not.
 """
 
 from __future__ import annotations
@@ -85,9 +95,7 @@ class Report:
     def overdue(self, max_age_days: int) -> list[Secret]:
         """Overdue names, widest scope first, then oldest first."""
         hits = [s for s in self.secrets if s.age_days > max_age_days]
-        return sorted(
-            hits, key=lambda s: (SCOPE_ORDER.get(s.scope, 99), -s.age_days, s.name)
-        )
+        return sorted(hits, key=lambda s: (SCOPE_ORDER.get(s.scope, 99), -s.age_days, s.name))
 
     def by_scope(self) -> dict[str, list[Secret]]:
         grouped: dict[str, list[Secret]] = {}
@@ -123,14 +131,10 @@ def parse_tsv(raw: str) -> list[Secret]:
             continue
         fields = line.split("\t")
         if len(fields) != 3:
-            raise ValueError(
-                f"line {number}: expected 3 tab-separated fields, got {len(fields)}"
-            )
+            raise ValueError(f"line {number}: expected 3 tab-separated fields, got {len(fields)}")
         scope, name, updated = (f.strip() for f in fields)
         if scope not in SCOPES:
-            raise ValueError(
-                f"line {number}: unknown scope {scope!r}, expected one of {SCOPES}"
-            )
+            raise ValueError(f"line {number}: unknown scope {scope!r}, expected one of {SCOPES}")
         try:
             stamp = parse_timestamp(updated)
         except ValueError as exc:
@@ -169,9 +173,7 @@ def _secret_entries(payload: object) -> list[dict] | None:
 
 def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
     """Repo-scope secrets with their last-written dates."""
-    payload = _gh_json(
-        ["gh", "api", "--paginate", f"repos/{repo}/actions/secrets"], root
-    )
+    payload = _gh_json(["gh", "api", "--paginate", f"repos/{repo}/actions/secrets"], root)
     entries = _secret_entries(payload)
     if entries is None:
         return [], f"repo secret list unavailable for {repo}"
@@ -184,9 +186,7 @@ def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
 
 def org_secrets(root: Path, org: str) -> tuple[list[Secret], str | None]:
     """Org-scope secrets. Needs `admin:org`; a GITHUB_TOKEN will fail here."""
-    payload = _gh_json(
-        ["gh", "api", "--paginate", f"orgs/{org}/actions/secrets"], root
-    )
+    payload = _gh_json(["gh", "api", "--paginate", f"orgs/{org}/actions/secrets"], root)
     entries = _secret_entries(payload)
     if entries is None:
         return [], f"org secret list unavailable (needs {ORG_SCOPE_REQUIRES_ADMIN})"
@@ -197,9 +197,7 @@ def org_secrets(root: Path, org: str) -> tuple[list[Secret], str | None]:
     ], None
 
 
-def environment_secrets(
-    root: Path, repo: str, environment: str
-) -> tuple[list[Secret], str | None]:
+def environment_secrets(root: Path, repo: str, environment: str) -> tuple[list[Secret], str | None]:
     """Environment-scope secrets, aged like the others.
 
     After #248 this is where every CI read lives, so ageing it is how we notice a
@@ -224,9 +222,166 @@ def environment_secrets(
     ], None
 
 
-def collect(
-    root: Path, repo: str, org: str, environment: str = "cron"
-) -> Report:
+ENVIRONMENT_MANIFEST = REPO_ROOT / ".github" / "environments.json"
+
+#: The rules that decide whether a job gated on an environment can sit in a queueing
+#: concurrency group (#2541). Required reviewers and a wait timer both hold the run;
+#: a branch policy instead *skips* the job on a non-matching ref, which is loud.
+GATE_RULES = ("wait_timer_minutes", "required_reviewers", "deployment_branches")
+
+
+def load_manifest(path: Path | None = None) -> dict[str, object]:
+    """The environment manifest, or an empty mapping when it cannot be read."""
+    try:
+        raw = (path or ENVIRONMENT_MANIFEST).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def manifest_environments(path: Path | None = None) -> dict[str, dict]:
+    """The `environments` map from the manifest."""
+    environments = load_manifest(path).get("environments")
+    if not isinstance(environments, dict):
+        return {}
+    return {str(k): v for k, v in environments.items() if isinstance(v, dict)}
+
+
+def can_wait(rules: dict) -> bool:
+    """Whether a run gated on this environment can linger in the approval gate.
+
+    Shared with ``tests/scripts/test_workflow_environment_concurrency.py``, which uses
+    it to decide which gated jobs are allowed to share a queueing `concurrency` group.
+    Both callers reading one implementation is the point: a test and a report that
+    disagree about what is safe is how a gate quietly becomes armed.
+    """
+    return bool(rules.get("required_reviewers")) or int(rules.get("wait_timer_minutes") or 0) > 0
+
+
+def protection_rules(payload: object, branches: list[str] | None = None) -> dict[str, object]:
+    """Normalise a `GET .../environments/{name}` payload to the manifest shape.
+
+    `branches` comes from the separate `deployment-branch-policies` endpoint, which
+    404s when no policy is configured; that is read as `None` (no restriction) rather
+    than as an error. `[]` means a policy exists with no branch allowed.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    rules = payload.get("protection_rules")
+    wait_timer = 0
+    reviewers: list[str] = []
+    if isinstance(rules, list):
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            if rule.get("type") == "wait_timer":
+                try:
+                    wait_timer = max(wait_timer, int(rule.get("wait_timer") or 0))
+                except (TypeError, ValueError):
+                    continue
+            elif rule.get("type") == "required_reviewers":
+                # Each entry is `{"type": "User", "reviewer": {...user object...}}`, so
+                # the login is one level down. Reading `entry["login"]` yields `[]` and
+                # the environment then looks unreviewed — which is the one direction of
+                # error that fails open, so it is asserted against in the tests.
+                for entry in rule.get("reviewers") or []:
+                    if not isinstance(entry, dict):
+                        continue
+                    user = entry.get("reviewer")
+                    login = user.get("login") if isinstance(user, dict) else None
+                    if isinstance(login, str):
+                        reviewers.append(login)
+    return {
+        "wait_timer_minutes": wait_timer,
+        "required_reviewers": sorted(reviewers),
+        "deployment_branches": None if branches is None else sorted(branches),
+    }
+
+
+def branch_policy_names(payload: object) -> list[str] | None:
+    """Branch names from a `deployment-branch-policies` payload, or None when absent.
+
+    None is the meaningful value: GitHub 404s this endpoint for an environment with no
+    branch policy, and a manifest that says `null` has to be able to tell that apart
+    from a policy that is configured but empty.
+    """
+    if not isinstance(payload, dict) or payload.get("branch_policies") is None:
+        return None
+    policies = payload.get("branch_policies")
+    if not isinstance(policies, list):
+        return None
+    return sorted(
+        str(p["name"]) for p in policies if isinstance(p, dict) and isinstance(p.get("name"), str)
+    )
+
+
+def gate_drift(expected: dict, actual: dict) -> list[str]:
+    """Human-readable differences between manifest rules and the live ones."""
+    out: list[str] = []
+    for rule in GATE_RULES:
+        want = expected.get(rule)
+        got = actual.get(rule)
+        if want != got:
+            out.append(f"{rule}: manifest {want!r}, live {got!r}")
+    return out
+
+
+def environment_gate_status(
+    root: Path, repo: str, manifest_path: Path | None = None
+) -> tuple[list[dict[str, object]], dict[str, str]]:
+    """Live protection rules per manifest environment, plus the drift found.
+
+    The second return value maps an environment name to the reason it could not be
+    read, so a missing `admin:org`-style permission is reported rather than read as
+    "unchanged".
+    """
+    rows: list[dict[str, object]] = []
+    unavailable: dict[str, str] = {}
+    for name, expected in manifest_environments(manifest_path).items():
+        payload = _gh_json(["gh", "api", f"repos/{repo}/environments/{name}"], root)
+        if not isinstance(payload, dict) or payload.get("name") != name:
+            unavailable[name] = f"environment {name!r} could not be read"
+            continue
+        # The inline `deployment_branch_policy` decides whether a second call is worth
+        # making: it is `null` when there is no branch policy at all, so `copilot` and
+        # `cron` never hit the `deployment-branch-policies` endpoint (which 404s for
+        # them). That also keeps "no policy" from being inferred from a failed request.
+        branches = None
+        policy = payload.get("deployment_branch_policy")
+        if isinstance(policy, dict) and policy.get("custom_branch_policies") is True:
+            listed = _gh_json(
+                [
+                    "gh",
+                    "api",
+                    f"repos/{repo}/environments/{name}/deployment-branch-policies",
+                ],
+                root,
+            )
+            branches = branch_policy_names(listed)
+            if branches is None:
+                unavailable[name] = (
+                    f"environment {name!r} has custom branch policies but their names "
+                    "could not be read"
+                )
+                continue
+        actual = protection_rules(payload, branches)
+        rows.append(
+            {
+                "name": name,
+                "expected": expected,
+                "actual": actual,
+                "can_wait": can_wait(actual),
+                "drift": gate_drift(expected, actual),
+            }
+        )
+    return rows, unavailable
+
+
+def collect(root: Path, repo: str, org: str, environment: str = "cron") -> Report:
     """Read every level. A level that cannot be read is recorded, not fatal."""
     report = Report()
     for scope, reader in (
@@ -241,7 +396,55 @@ def collect(
     return report
 
 
-def markdown(report: Report, max_age_days: int) -> str:
+def gate_markdown(
+    gates: tuple[list[dict[str, object]], dict[str, str]] | None,
+) -> list[str]:
+    """The environment-gate section of the report, empty when it was not checked."""
+    if gates is None:
+        return []
+    rows, unavailable = gates
+    lines = ["", "## Environment gates", ""]
+    if not rows and not unavailable:
+        lines.append(
+            "No environment manifest found at `.github/environments.json`, so no gate "
+            "was checked. Treat the gate as unverified until that file exists."
+        )
+        return lines
+    lines += [
+        "| Environment | Live rules | Can a run wait? | Manifest agrees? |",
+        "|---|---|---|---|",
+    ]
+    for row in rows:
+        actual = row["actual"] if isinstance(row["actual"], dict) else {}
+        waits = "yes" if row["can_wait"] else "no"
+        agrees = "yes" if not row["drift"] else "**NO**"
+        lines.append(
+            f"| `{row['name']}` | {', '.join(f'{k}={v!r}' for k, v in sorted(actual.items()))} "
+            f"| {waits} | {agrees} |"
+        )
+    for name, reason in sorted(unavailable.items()):
+        lines.append(f"- `{name}` — NOT CHECKED, {reason}")
+    drift = {str(row["name"]): row["drift"] for row in rows if row["drift"]}
+    if drift:
+        lines += [
+            "",
+            "**Drift.** A `cron` environment that gained a required reviewer or a wait "
+            "timer does not fail a build; it makes every job gated on it stop silently "
+            "(#2541). Fix the environment, then re-run to refresh "
+            "`.github/environments.json`.",
+            "",
+        ]
+        for name, lines_for in sorted(drift.items()):
+            for line in lines_for or ["unknown drift"]:
+                lines.append(f"- `{name}`: {line}")
+    return lines
+
+
+def markdown(
+    report: Report,
+    max_age_days: int,
+    gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+) -> str:
     """The issue body. Names and ages only — no value ever reaches this string."""
     overdue = report.overdue(max_age_days)
     lines = [
@@ -270,9 +473,8 @@ def markdown(report: Report, max_age_days: int) -> str:
         lines.append(f"Nothing is past {max_age_days} days. No action needed.")
     if report.unavailable:
         lines += ["", "## Levels not checked", ""]
-        lines += [
-            f"- `{scope}` — {reason}" for scope, reason in sorted(report.unavailable.items())
-        ]
+        lines += [f"- `{scope}` — {reason}" for scope, reason in sorted(report.unavailable.items())]
+    lines += gate_markdown(gates)
     return "\n".join(lines) + "\n"
 
 
@@ -287,7 +489,11 @@ def ordered_scopes(report: Report) -> list[str]:
     return sorted(present, key=lambda scope: (SCOPE_ORDER.get(scope, 99), scope))
 
 
-def render(report: Report, max_age_days: int) -> str:
+def render(
+    report: Report,
+    max_age_days: int,
+    gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+) -> str:
     """Human-readable stdout, grouped by scope and oldest first."""
     grouped = report.by_scope()
     out: list[str] = []
@@ -304,6 +510,18 @@ def render(report: Report, max_age_days: int) -> str:
     overdue = report.overdue(max_age_days)
     out.append("")
     out.append(f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed.")
+    if gates is not None:
+        rows, unavailable = gates
+        out.append("")
+        out.append(f"environment gates: {len(rows)} checked")
+        for row in rows:
+            mark = "DRIFT" if row["drift"] else "ok"
+            waits = "can wait" if row["can_wait"] else "cannot wait"
+            out.append(f"  {mark:>5}  {row['name']} ({waits})")
+            for line in row["drift"] or []:
+                out.append(f"           {line}")
+        for name, reason in sorted(unavailable.items()):
+            out.append(f"  NOT CHECKED  {name} — {reason}")
     return "\n".join(out)
 
 
@@ -316,7 +534,7 @@ def _issue_exists(root: Path, repo: str) -> str | None:
             "--paginate",
             f"repos/{repo}/issues",
             "--jq",
-            f"[.[] | select(.state == \"open\") | select(.title == \"{ISSUE_TITLE}\")] | .[0].number",
+            f'[.[] | select(.state == "open") | select(.title == "{ISSUE_TITLE}")] | .[0].number',
         ],
         root,
     )
@@ -365,9 +583,7 @@ def file_or_update_issue(root: Path, repo: str, body: str) -> str:
 
 def repo_slug(root: Path) -> tuple[str, str] | None:
     """`(owner, repo)` from `gh repo view`, or None with a reason."""
-    payload = _gh_json(
-        ["gh", "repo", "view", "--json", "owner,name"], root
-    )
+    payload = _gh_json(["gh", "repo", "view", "--json", "owner,name"], root)
     if not isinstance(payload, dict):
         return None
     owner = payload.get("owner")
@@ -417,9 +633,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="exit 1 when a level could not be read",
     )
+    parser.add_argument(
+        "--skip-environment-gates",
+        action="store_true",
+        help="do not compare `.github/environments.json` to the live protection rules",
+    )
     args = parser.parse_args(argv)
 
     root = REPO_ROOT
+    gates: tuple[list[dict[str, object]], dict[str, str]] | None = None
     if args.file_names:
         try:
             report = Report(secrets=parse_tsv(args.file_names.read_text(encoding="utf-8")))
@@ -433,9 +655,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         owner, name = slug
         report = collect(root, f"{owner}/{name}", owner, args.environment)
+        if not args.skip_environment_gates:
+            gates = environment_gate_status(root, f"{owner}/{name}")
 
-    body = markdown(report, args.max_age_days)
-    print(render(report, args.max_age_days))
+    body = markdown(report, args.max_age_days, gates)
+    print(render(report, args.max_age_days, gates))
 
     if args.summary:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
@@ -448,6 +672,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
+    if gates is not None and any(row["drift"] for row in gates[0]):
+        # Deliberately unconditional, unlike `--fail-overdue`. A drifted gate does not
+        # fail a build, it silently stops every pipeline gated on it.
+        return 1
     if args.fail_overdue and report.overdue(args.max_age_days):
         return 1
     if args.strict_offline and report.unavailable:

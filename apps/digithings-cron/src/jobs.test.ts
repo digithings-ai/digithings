@@ -39,6 +39,7 @@ const PATH_A_ENABLED_IDS = [
   "security-pip-audit",
   "security-npm-audit",
   "token-canary",
+  "secret-staleness",
   "smoke-site",
 ] as const;
 
@@ -82,6 +83,7 @@ const ENABLED_CRONS = [
   "33 6 * * MON",
   "37 6 * * MON",
   "41 6 * * *",
+  "17 6 1 * *",
   "17 6 * * *",
   "7 0 * * MON-FRI",
   "12 7 * * MON-FRI",

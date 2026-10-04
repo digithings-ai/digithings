@@ -61,6 +61,7 @@ crons = [
   "33 6 * * MON",      # security-pip-audit
   "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
+  "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
   "17 6 * * *",        # smoke-site
   "7 0 * * MON-FRI",   # twelve-x-asia
   "12 7 * * MON-FRI",  # twelve-x-london
