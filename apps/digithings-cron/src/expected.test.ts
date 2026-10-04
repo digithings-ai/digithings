@@ -6,7 +6,7 @@ describe("expectedCount", () => {
     expect(expectedCount("52 * * * MON-FRI", "2026-09-28")).toBe(24);
   });
   it("A.7 the same clock owes nothing on a Sunday", () => {
-    expect(expectedCount("52 * * * MON-FRI", "2026-09-29")).toBe(0);
+    expect(expectedCount("52 * * * MON-FRI", "2026-09-27")).toBe(0);
   });
   it("counts hour lists and step syntax", () => {
     expect(expectedCount("3 6,18 * * *", "2026-10-05")).toBe(2);
