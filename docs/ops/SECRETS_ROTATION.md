@@ -107,9 +107,9 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 
 ### 4. `GH_DISPATCH_TOKEN`
 
-**Blast radius** — every cron→GitHub `workflow_dispatch` / `repository_dispatch`; all scheduled pipelines stop (`apps/digithings-cron/src/dispatch.ts:92,101`).
-**Copies** — cron Worker (`apps/digithings-cron/wrangler.toml:18` comment); GitHub repo secret (source), pushed by `deploy-digithings-cron.yml:51`.
-**Pre-flight** — fine-grained PAT with Actions write on `digithings-ai/digithings` + `digithings-ai/twelve-x` (`wrangler.toml:18-19` comment).
+**Blast radius** — every cron→GitHub `workflow_dispatch` / `repository_dispatch`; all scheduled pipelines stop (token read at `apps/digithings-cron/src/dispatch.ts:289`, bearer header `:298`; all 38 crons in `apps/digithings-cron/wrangler.toml:38-77`). **This is also the DIG-71 alarm's only GitHub credential**, so one PAT failure takes out the clocks and the alarm that reports on them together — see [R14](SECRETS_INVENTORY.md#risk-register).
+**Copies** — cron Worker (`apps/digithings-cron/wrangler.toml:24` comment); GitHub repo secret (source), pushed by `deploy-digithings-cron.yml:51`.
+**Pre-flight** — fine-grained PAT with Actions read/write **and** Issues read/write on `digithings-ai/digithings` + `digithings-ai/twelve-x` (`wrangler.toml:24-25` comment). **Manual step:** the PAT is a *personal* token, so minting and revoking are account-level actions on a human's GitHub account. An agent cannot rotate this on a schedule; escalate to Chris. Both grants are proved weekly by `scripts/check_workflow_tokens.py`.
 **Steps**
 1. Mint the new PAT in GitHub (dashboard action), same repos + Actions write.
 2. `gh secret set GH_DISPATCH_TOKEN`.
