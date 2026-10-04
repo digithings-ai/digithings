@@ -12,9 +12,14 @@ describe("expectedCount", () => {
   it("A.7 the same clock owes nothing on a Sunday", () => {
     expect(expectedCount("52 * * * MON-FRI", "2026-09-27", { now: AT("2026-10-04T12:00:00Z") })).toBe(0);
   });
+  // 2026-10-03 is a Saturday and it is over, so the whole day counts and no day
+  // restriction applies. It sits on the Saturday that the `MON-FRI` assertion
+  // above uses to prove restriction, so the pair reads as one contrast: the same
+  // day owes 24 from a weekday clock and 0 from a weekday-restricted one, while
+  // an unrestricted clock owes its full count on that Saturday.
   it("counts hour lists and step syntax", () => {
-    expect(expectedCount("3 6,18 * * *", "2026-10-05", { now: AT("2026-10-04T12:00:00Z") })).toBe(2);
-    expect(expectedCount("4 */4 * * *", "2026-10-05", { now: AT("2026-10-04T12:00:00Z") })).toBe(6);
+    expect(expectedCount("3 6,18 * * *", "2026-10-03", { now: AT("2026-10-04T12:00:00Z") })).toBe(2);
+    expect(expectedCount("4 */4 * * *", "2026-10-03", { now: AT("2026-10-04T12:00:00Z") })).toBe(6);
   });
   it("counts a day-of-month rule on a day that is over", () => {
     expect(expectedCount("0 0 15 * *", "2026-10-15", { now: AT("2026-10-16T12:00:00Z") })).toBe(1);
@@ -43,9 +48,19 @@ describe("expectedCount", () => {
 
   // A day that has not arrived owes nothing. Reporting the full count for a
   // future day makes a clock that will never fire look healthy.
+  //
+  // The last two assertions exist because the contract has to answer a harder
+  // question than "is it in the future". An unrestricted clock is the case that
+  // tempts an exemption, and a day later in the same month is the case that
+  // tempts a month-granularity rule. Both must return 0, which pins the rule to
+  // `day > today` and leaves no room for a carve-out keyed on the cron itself.
   it("owes nothing for a day that has not arrived", () => {
     expect(expectedCount("52 * * * MON-FRI", "2026-12-25", { now: AT("2026-10-04T12:00:00Z") })).toBe(0);
     expect(expectedCount("0 0 15 * *", "2026-11-15", { now: AT("2026-10-04T12:00:00Z") })).toBe(0);
+    // An always-on clock owes nothing for tomorrow either.
+    expect(expectedCount("3 6,18 * * *", "2026-10-05", { now: AT("2026-10-04T12:00:00Z") })).toBe(0);
+    // Nor for a later day in the month that is already running.
+    expect(expectedCount("3 6,18 * * *", "2026-10-20", { now: AT("2026-10-04T12:00:00Z") })).toBe(0);
   });
 });
 
