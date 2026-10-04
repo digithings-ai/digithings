@@ -7,6 +7,11 @@ name: "Pipeline: scheduled maintenance"
 
 on:
   workflow_dispatch:         # Manual trigger anytime
+    inputs:
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
 
 permissions:
   contents: read
