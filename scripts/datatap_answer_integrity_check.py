@@ -295,6 +295,14 @@ def parse_sse_answer(body: str) -> str:
     deltas: list[str] = []
     for line in body.splitlines():
         if not line.startswith("data:"):
+            # Blank separators and SSE comments (": keep-alive") carry no answer
+            # text and are ignorable by the stream format. Anything else is a
+            # shape this parser does not understand, and silently skipping it
+            # could drop a leaked identifier out of the answer we scan. That is
+            # the one direction this check must not fail silently in, so it is
+            # exit 2 instead: we could not see the whole answer.
+            if line.strip() and not line.startswith(":"):
+                raise ProbeError(f"unexpected line in the event stream: {line.strip()[:60]!r}")
             continue
         payload = line[len("data:") :].strip()
         if not payload:
