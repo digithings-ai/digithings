@@ -48,6 +48,11 @@ function parseField(
       hi = max;
     } else if (range.includes("-")) {
       [lo, hi] = range.split("-").map(num);
+      // Quartz has no reversed range: croner rejects `5-1` with "From value is
+      // larger than to value" instead of wrapping it. The loop below would run
+      // zero times, parse the field to an empty set and return a count of 0 --
+      // which an alarm reads as a day the clock never fired. Refuse instead.
+      if (lo > hi) refuse(cron, `reversed range ${range}`);
     } else {
       lo = num(range);
       hi = stepText === undefined ? lo : max;
