@@ -9,7 +9,8 @@
 > the package version (`resolveDigichatVersion()` in
 > `src/lib/license/version.ts`). Container images bake the package version into
 > `DIGICHAT_VERSION` and `/etc/digichat-version`. The `ChatShell` sidebar
-> label is a hardcoded string in `src/components/chat-shell.tsx`; it does not
+> label is the hardcoded string `v0.1 · digithings`
+> (`src/components/chat-shell.tsx:458`); it does not
 > read `DIGICHAT_VERSION`. The Ink CLI is a
 > **separate package** that versions on its own line —
 > `@digithings/digichat-cli` is **1.4.0** (`apps/digichat/cli/package.json`).
