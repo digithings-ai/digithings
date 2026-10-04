@@ -48,6 +48,12 @@ deployment:
         # are set. Neither is ever projected to the browser.
         tokenEnv: DATATAP_MCP_TOKEN
         authHeader: X-API-Key
+        # No `allowedTools` on purpose: this example points at a placeholder host
+        # (`.example` does not resolve) and DataTap publishes no catalog in this
+        # repo, so there is nothing to enumerate from. Copy this row into a real
+        # deployment and it must gain an allowlist from `tools/list` first —
+        # under DIG-284 deny-by-default an unenumerated row offers zero tools.
+        # Tracked on DIG-409; asserted in mcp-servers.test.ts.
   gate:
     mode: ungated
     activityDetail: labels
