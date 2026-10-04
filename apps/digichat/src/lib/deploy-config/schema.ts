@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import { MAX_MCP_TOOL_ENTRIES, MAX_MCP_TOOL_NAME_LENGTH } from "./mcp-servers";
 import {
   DEFAULT_LANGUAGE_CODE,
   LANGUAGES,
@@ -415,6 +416,21 @@ export const ToolsSchema = z
   })
   .strict();
 
+/**
+ * One entry in an operator MCP tool allowlist (DIG-284). Remote tool names are
+ * matched exactly, so the only thing worth validating is that the entry is a
+ * short, non-empty, single-line string: `MAX_MCP_TOOL_NAME_LENGTH` is the width
+ * digigraph's `prefixed_tool_name` can carry without ambiguity. Whitespace and
+ * control characters are rejected because a name containing them could never
+ * match a real tool and would only hide a config typo.
+ */
+const MCP_TOOL_NAME_SCHEMA = z
+  .string()
+  .min(1, "mcp tool name must not be empty")
+  .max(MAX_MCP_TOOL_NAME_LENGTH, "mcp tool name is too long")
+  .refine((name) => !/\s/.test(name), "mcp tool name must not contain whitespace")
+  .refine((name) => name === name.trim(), "mcp tool name must not have leading or trailing space");
+
 export const McpServerSchema = z
   .object({
     id: z
@@ -451,6 +467,21 @@ export const McpServerSchema = z
       .string()
       .regex(/^[A-Za-z][A-Za-z0-9-]{0,40}$/, "authHeader must be a valid HTTP header name")
       .optional(),
+    /**
+     * Operator tool allowlist for this server row (DIG-284). Remote tool names,
+     * matched exactly by digigraph — no globs, no patterns. Omit it to deny
+     * every tool on this server; an empty list means the same thing. Bound by
+     * `MAX_MCP_TOOL_ENTRIES` / `MAX_MCP_TOOL_NAME_LENGTH`, imported from
+     * `./mcp-servers` so the parse bound and the header guard cannot drift.
+     * Operator-only — the session overlay cannot set it.
+     */
+    allowedTools: z.array(MCP_TOOL_NAME_SCHEMA).max(MAX_MCP_TOOL_ENTRIES).optional(),
+    /**
+     * The subset of `allowedTools` whose tools mutate remote state (DIG-284),
+     * so the chat can flag them before a call. Same bounds and the same
+     * operator-only rule as `allowedTools`.
+     */
+    mutatingTools: z.array(MCP_TOOL_NAME_SCHEMA).max(MAX_MCP_TOOL_ENTRIES).optional(),
   })
   .strict();
 
