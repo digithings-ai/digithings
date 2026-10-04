@@ -6,11 +6,15 @@
  * and ThreadListPrimitive sidebar (inside the runtime provider).
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
-import { useRemoteThreadListRuntime } from "@assistant-ui/react";
+import {
+  useAuiState,
+  useRemoteThreadListRuntime,
+  type AssistantRuntime,
+} from "@assistant-ui/react";
 import {
   ProductStockShell,
   buildProductRuntimeAdapters,
@@ -24,6 +28,8 @@ import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 import { toStockChatPrefsConfig } from "@/lib/route-client-config";
 import {
+  setPendingForceTool,
+  setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
   takePendingWebSearchForce,
@@ -86,6 +92,9 @@ function useShellThreadRuntime(
   getMcpSession: () => string | undefined,
   getEffort: () => string | undefined,
   getSearchEngine: () => string | undefined,
+  redoRef: { current: () => void } | null,
+  redoByThread?: { current: Map<string, () => void> },
+  threadId?: string,
 ) {
   const transport = useMemo(
     () =>
@@ -151,6 +160,30 @@ function useShellThreadRuntime(
   );
 
   const chat = useChat<UIMessage>({ transport });
+  useEffect(() => {
+    const run = () => {
+      const key = chat.id || sessionKey;
+      // Force-tool is send-only (#3466). Clear it before regenerate, and arm
+      // the turn mode on the key prepareSendMessagesRequest will read.
+      setPendingForceTool(sessionKey);
+      if (key !== sessionKey) setPendingForceTool(key);
+      setPendingTurnMode(key, "regenerate");
+      void chat.regenerate();
+    };
+    if (redoRef) {
+      redoRef.current = run;
+      return;
+    }
+    // Each mounted thread keeps its own regenerate closure. Switching the
+    // main thread does not remount earlier runtimes, so /redo looks up
+    // the closure for the thread id on screen.
+    if (!redoByThread || !threadId) return;
+    const byThread = redoByThread.current;
+    byThread.set(threadId, run);
+    return () => {
+      if (byThread.get(threadId) === run) byThread.delete(threadId);
+    };
+  }, [chat, redoByThread, redoRef, sessionKey, threadId]);
   const adapters = useMemo(
     () => buildProductRuntimeAdapters(clientConfig.features),
     [clientConfig.features],
@@ -166,13 +199,16 @@ function HomeStockClientSingle({
   userId?: string;
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
+  const redoRef = useRef<() => void>(() => {});
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: false,
     newThread: () => {},
-    redo: () => {},
+    redo: () => {
+      redoRef.current();
+    },
   });
   const runtime = useShellThreadRuntime(
     clientConfig,
@@ -184,6 +220,7 @@ function HomeStockClientSingle({
     prefs.getMcpSession,
     prefs.getEffort,
     prefs.getSearchEngine,
+    redoRef,
   );
 
   const mode = clientConfig.chrome.mode;
@@ -221,13 +258,19 @@ function HomeStockClientMemory({
   userId?: string;
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
+  const redoByThread = useRef(new Map<string, () => void>());
+  const runtimeRef = useRef<AssistantRuntime | null>(null);
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
     deps: PREFS_DEPS,
     sessionKey,
     hasSessions: true,
     newThread: () => {},
-    redo: () => {},
+    redo: () => {
+      const mainId = runtimeRef.current?.threads.getState().mainThreadId;
+      if (!mainId) return;
+      redoByThread.current.get(mainId)?.();
+    },
   });
   const [memoryAdapter] = useState(
     () => new SessionMemoryThreadListAdapter(memoryThreadStorageKey("app", userId)),
@@ -263,6 +306,7 @@ function HomeStockClientMemory({
 
   const runtimeHook = useMemo(() => {
     return function useMemoryThreadRuntime() {
+      const threadId = useAuiState((s) => s.threadListItem.id);
       return useShellThreadRuntime(
         configRef.current,
         sessionRef.current,
@@ -273,14 +317,19 @@ function HomeStockClientMemory({
         () => getMcpRef.current(),
         () => getEffortRef.current(),
         () => getSearchEngineRef.current(),
+        null,
+        redoByThread,
+        threadId,
       );
     };
-  }, []);
+  }, [redoByThread]);
 
   const runtime = useRemoteThreadListRuntime({
     adapter: memoryAdapter,
     runtimeHook,
   });
+  // eslint-disable-next-line react-hooks/refs -- /redo reads the live main thread
+  runtimeRef.current = runtime;
 
   const mode = clientConfig.chrome.mode;
 

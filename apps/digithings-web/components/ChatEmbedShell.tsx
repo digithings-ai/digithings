@@ -197,11 +197,9 @@ export function ChatEmbedShell({
       if (next === themeRef.current) return;
       themeRef.current = next;
       setShellTheme(next);
-      // Rebuild the embed URL for the new theme: the theme message alone left
-      // the app on the old palette (dark composer on a light page). When the
-      // URL is unchanged React skips the attribute write, so this cannot
-      // reload an already-correct iframe.
-      setSrc(embedSrc(embedOrigin, embedHost, next));
+      // Live toggles post digichat:theme. Rebuilding `src` reloads the iframe
+      // and drops the session. The ready handler posts themeRef if the frame
+      // has not said ready yet, so a toggle during boot still lands.
       if (!embedReadyRef.current) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;

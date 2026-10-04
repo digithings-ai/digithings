@@ -1,11 +1,11 @@
 # CORE_POSTGRES_URI secret rename runbook (#3979)
 
-Operator runbook for the shared production Postgres URI that the four pipeline
-workflows read. The canonical name is the **repository secret `CORE_POSTGRES_URI`**.
+Operator runbook for the shared production Postgres URI that the three pipeline
+workflows still read. The canonical name is the **repository secret `CORE_POSTGRES_URI`**.
 The pre-#3860 names were `DIGI_CHECKPOINTER_POSTGRES_URI` (checkpointer,
-archiver, db-migrate, pipeline) and `MARKET_DATA_POSTGRES_URI` (backfill /
+archiver, pipeline; also the removed `db-migrate` workflow) and `MARKET_DATA_POSTGRES_URI` (backfill /
 refresh — **never created**, #3860). Both are retired; `CORE_POSTGRES_URI` is the
-only name any consumer reads.
+only name any consumer reads. `db-migrate.yml` is not in `.github/workflows`.
 
 This replaces the earlier stub. It exists because the rename is a two-part job:
 the **code/workflow side is landed**, and the **GitHub Settings side is a human
@@ -18,12 +18,13 @@ Web UI (repo admin required):
 > `https://github.com/digithings-ai/digithings/settings/secrets/actions`
 > → **Repository secrets** → `CORE_POSTGRES_URI`
 
-Do **not** scope it to the `production` environment. `db-migrate` runs under
-`environment: production`, and an environment secret of the same name
-**overrides** the repository secret for that one job (GitHub resolves
-environment secrets first). The other three workflows have no environment and
-read the repository secret only. Setting it once at repo level makes all four
-jobs agree.
+Do **not** scope it to the `production` environment. The three consumers have
+no `environment:` gate and read the repository secret only. The one workflow
+that does declare `environment: production` (`deploy-digiquant-runner.yml`)
+does not read this secret. An environment secret of the same name would
+**override** the repository secret for that environment's jobs (GitHub
+resolves environment secrets first). Setting it once at repo level makes all
+three jobs agree.
 
 Equivalent CLI (value never echoed):
 
@@ -37,7 +38,7 @@ gh secret list --repo digithings-ai/digithings --env production   # must NOT con
 The DB URI carries a password, so it is only ever read from the secret: it is
 never written into a workflow, an `.env.example`, or this doc.
 
-## 2. What the four consumers read
+## 2. What the three consumers read
 
 Every consumer reads the single canonical name:
 
@@ -47,17 +48,18 @@ ${{ secrets.CORE_POSTGRES_URI }}
 
 | Workflow (`name:`) | Job | Step that consumes it | Env var exposed | Missing/empty URI behaviour |
 |---|---|---|---|---|
-| `db-migrate.yml` (`db-migrate`) | `migrate` | `Apply pending migrations (atomic, ledger-gated)` | `DB_URI` | **Hard-fails**: `::error::CORE_POSTGRES_URI secret is empty` + `exit 1` (`db-migrate.yml:115`) |
-| `pipeline-checkpoint-archive.yml` (`Pipeline: checkpoint archive`) | `archive` | `Archive checkpoint payloads older than 1 day` | `CORE_POSTGRES_URI` | **Fails closed**: `checkpoint_archive.main` prints `missing direct Postgres URI; set CORE_POSTGRES_URI` and returns `2` (`digiquant/src/digiquant/ops/checkpoint_archive.py:947-949`) |
-| `pipeline-market-data-refresh.yml` (`market-data-refresh`) | `refresh` | `uv run … scripts/refresh_market_data_r2.py --manifest-out …` | `CORE_POSTGRES_URI` | **Fails closed**: `SystemExit: set --postgres-uri or $CORE_POSTGRES_URI (direct-PG only)` (`scripts/refresh_market_data_r2.py:1078-1079`) |
-| `pipeline-digiquant.yml` (`Pipeline: digiquant research`) | `run` | `Run digiquant research pipeline` | `CORE_POSTGRES_URI` | **Silently degrades**: `_acquire_checkpointer()` catches the failure, logs `checkpointer unavailable (…); running without resume`, and runs the book **uncheckpointed** (`digiquant/src/digiquant/portfolio/chain.py:165-181`) |
+| `pipeline-checkpoint-archive.yml` (`Pipeline: checkpoint archive`) | `archive` | `Archive checkpoint payloads older than 1 day` | `CORE_POSTGRES_URI` | **Fails closed**: `checkpoint_archive.main` prints `missing direct Postgres URI; set CORE_POSTGRES_URI` and returns `2` (`digiquant/src/digiquant/ops/checkpoint_archive.py:1086`) |
+| `pipeline-market-data-refresh.yml` (`market-data-refresh`) | `refresh` | `uv run … scripts/refresh_market_data_r2.py --manifest-out …` | `CORE_POSTGRES_URI` | **Fails closed**: `SystemExit: set --postgres-uri or $CORE_POSTGRES_URI (direct-PG only)` (`scripts/refresh_market_data_r2.py:1396`) |
+| `pipeline-digiquant.yml` (`Pipeline: digiquant research`) | `run` | `Run digiquant research pipeline` | `CORE_POSTGRES_URI` | **Silently degrades**: with `DIGI_CHECKPOINTER=postgres`, `get_checkpointer()` reads `CORE_POSTGRES_URI` at `digigraph/src/digigraph/graph/graph.py:180` and, when the string is empty, skips `PostgresSaver` and returns `None` without raising. `_acquire_checkpointer()` (`digiquant/src/digiquant/portfolio/chain.py:172-177`) then returns that `None`. The warning `checkpointer unavailable (…); running without resume` (`chain.py:179`) runs only in the `except` when something else raises (import error, unreachable host), including when the secret was set |
 
 The silent-degrade path in `pipeline-digiquant` is live because
 `.github/digiquant-pipeline.yml:44` sets `DIGI_CHECKPOINTER: postgres`, and the
-`Load pipeline configuration` step appends it to `$GITHUB_ENV`. So a missing URI
-does not fail that job; the run simply cannot resume from the last completed
-node (`--resume-run-id` becomes a no-op). That is the failure that is easiest to
-miss and the reason this doc names the job log line to look for.
+`Load pipeline configuration` step appends it to `$GITHUB_ENV`. A missing URI
+does not fail that job; the run cannot resume (`--resume-run-id` becomes a
+no-op). Do not treat `checkpointer unavailable` as the empty-secret tell: an
+empty URI never hits that `except`. The store path logs a different line when
+the URI is unset (`DIGI_CHECKPOINTER=postgres but CORE_POSTGRES_URI is unset`,
+`graph.py:237`). The checkpointer empty-URI path itself is silent.
 
 ## 3. Code side already done vs Settings side
 
@@ -93,17 +95,13 @@ written so either state lands correctly.
 
 ## 4. Verify success (exact job/step and expected output)
 
-Trigger each workflow after the secret is in place. `db-migrate` and the
-checkpoint archive are the two cheapest provers; both need the URI to be
-non-empty to pass.
+Trigger each remaining consumer after the secret is in place. The
+checkpoint archive is the cheapest prover; it needs the URI to be
+non-empty to pass. `db-migrate.yml` is gone from `.github/workflows`.
 
 ```bash
 # Cheapest direct prover: the archiver returns 2 without the URI.
 gh workflow run pipeline-checkpoint-archive.yml --repo digithings-ai/digithings
-gh run watch --repo digithings-ai/digithings
-
-# db-migrate (production environment approval required; no migrations pending is fine)
-gh workflow run db-migrate.yml --repo digithings-ai/digithings
 gh run watch --repo digithings-ai/digithings
 
 # Market data refresh (direct-PG registry insert)
@@ -116,11 +114,10 @@ gh workflow run pipeline-digiquant.yml --repo digithings-ai/digithings
 | Workflow | Proof of success |
 |---|---|
 | `checkpoint-archive` | Job `archive` succeeds (exit 0) and step `Archive checkpoint payloads older than 1 day` prints `archived …`; manifests artifact uploaded. If it instead prints `missing direct Postgres URI; set CORE_POSTGRES_URI`, the secret is absent/empty. |
-| `db-migrate` | Job `migrate` succeeds; step prints `Done: applied N pending migration(s); skipped M already in the ledger.` An empty URI fails before this with `::error::CORE_POSTGRES_URI secret is empty`. |
 | `market-data-refresh` | Job `refresh` succeeds; no `set --postgres-uri or $CORE_POSTGRES_URI` on stderr. |
-| `pipeline-digiquant` | Job `run` succeeds **and** the run log does **not** contain `checkpointer unavailable` / `running without resume`. That warning is the silent-degrade tell; if present, the URI did not arrive. |
+| `pipeline-digiquant` | Job `run` succeeding without `checkpointer unavailable` does **not** prove the URI arrived: an empty URI also succeeds, without that warning. Presence of `checkpointer unavailable` means `get_checkpointer()` raised, not that the secret was empty. Presence of `DIGI_CHECKPOINTER=postgres but CORE_POSTGRES_URI is unset` is the store-path empty-URI log (`graph.py:237`). Prefer the archive job as the empty-URI prover. |
 
-After all four pass, delete the retired `DIGI_CHECKPOINTER_POSTGRES_URI`
+After all three pass, delete the retired `DIGI_CHECKPOINTER_POSTGRES_URI`
 repository secret (if a fresh `gh secret list` still shows it) and close #3979.
 
 ## 5. Rollback

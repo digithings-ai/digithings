@@ -96,6 +96,20 @@ def _arg_value(provided: dict[str, str], name: str) -> str:
     return str(provided.get(name, "")).strip()
 
 
+def _when_arg_matches(provided: dict[str, str], name: str, equals: object) -> bool:
+    """Compare a gate arg the same way ``when_arg_empty`` reads it.
+
+    Only the looked-up value and a string ``equals`` are stripped. A missing
+    arg stays missing (``None``), so it does not match ``""``.
+    """
+    if name not in provided:
+        actual: object = None
+    else:
+        actual = str(provided[name]).strip()
+    expected = equals.strip() if isinstance(equals, str) else equals
+    return actual == expected
+
+
 def _resolve_step(
     step: Any,
     provided: dict[str, str],
@@ -107,7 +121,7 @@ def _resolve_step(
         return StepPlan([str(part) for part in step])
     argv = [str(part) for part in step["argv"]]
     when_arg = step.get("when_arg")
-    if when_arg is not None and provided.get(str(when_arg)) != step.get("equals"):
+    if when_arg is not None and not _when_arg_matches(provided, str(when_arg), step.get("equals")):
         return None
     empty_key = step.get("when_arg_empty")
     if empty_key is not None and _arg_value(provided, str(empty_key)):
@@ -307,12 +321,17 @@ def build_child_env(
     return child
 
 
+def _clean_run_date(run_date: str) -> str:
+    """Strip only the calendar date. Do not collapse spaces inside other args."""
+    return str(run_date).strip()
+
+
 def interrupted_body(run_id: str, run_date: str) -> dict[str, str]:
-    return {"resume_run_id": run_id, "run_date": run_date}
+    return {"resume_run_id": run_id, "run_date": _clean_run_date(run_date)}
 
 
 def interrupted_key(run_date: str) -> str:
-    return f"pipeline-runs/house-run/{run_date}/interrupted.json"
+    return f"pipeline-runs/house-run/{_clean_run_date(run_date)}/interrupted.json"
 
 
 _PRODUCER_KEYS = ("source_workflow", "producer_workflow", "producer", "workflow")
@@ -385,7 +404,7 @@ def _put_r2_bytes(key: str, body: bytes) -> None:
 
 
 def upload_interrupted(run_id: str, run_date: str) -> None:
-    if not run_date:
+    if not _clean_run_date(run_date):
         return
     payload = json.dumps(interrupted_body(run_id, run_date)).encode("utf-8")
     _put_r2_bytes(interrupted_key(run_date), payload)
@@ -922,7 +941,7 @@ class _Handler(BaseHTTPRequestHandler):
             )
             _current["run_id"] = run_id
             _current["command"] = command
-            _current["run_date"] = string_args.get("run_date", "")
+            _current["run_date"] = _clean_run_date(string_args.get("run_date", ""))
         thread = threading.Thread(
             target=_run_steps,
             args=(run_id, command, string_args, timeout),

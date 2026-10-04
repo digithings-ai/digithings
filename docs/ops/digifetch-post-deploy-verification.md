@@ -29,9 +29,15 @@ only when a trigger fires.
 
 ## Check 1 — list the served MCP surface tools
 
-The served path matches the hosted container's scope and port
-(`Dockerfile.mcp:31-34`): `--scope read` on `127.0.0.1:8767`, streamable-http at
-`/mcp`.
+Hosted image vs this local check (do not conflate binds):
+
+- The hosted `digiquant/Dockerfile.mcp` ENV is `DIGIQUANT_MCP_HOST=0.0.0.0`,
+  `DIGIQUANT_MCP_PORT=8767`, and `DIGIQUANT_MCP_SCOPE=read` (lines 31–34). The
+  container process therefore binds all interfaces on `:8767` at read scope.
+- This operator check runs `python -m digiquant.mcp_server --scope read` on the
+  workstation. Code defaults remain loopback (`127.0.0.1:8767`) when those ENV
+  vars are unset (`run_mcp` in `digiquant/src/digiquant/mcp_server.py`).
+  Streamable-http path is `/mcp`.
 
 Start the server in a second terminal:
 
@@ -41,7 +47,7 @@ PATH="$PWD/.venv/bin:$PATH" python -m digiquant.mcp_server --scope read
 
 Expected log line:
 `Starting digiquant MCP server on 127.0.0.1:8767 (transport=streamable-http scope=read)`
-(`digiquant/src/digiquant/mcp_server.py:1996-2010`).
+(`digiquant/src/digiquant/mcp_server.py` `run_mcp`).
 
 Then list the tools with the repo's own client shape
 (`digigraph/src/digigraph/orchestration/mcp_client.py:611-623`):

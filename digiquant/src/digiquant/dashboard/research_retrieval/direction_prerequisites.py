@@ -12,6 +12,7 @@ from digiquant.dashboard.research_retrieval.direction_decision_context import (
 )
 from digiquant.dashboard.research_retrieval.models import content_digest
 from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.dashboard.tenancy import eq_house_workspace
 from digiquant.research.forecast_outcomes import (
     ForecastOutcomeIntegrityError,
     ResolvedOutcomesMemo,
@@ -64,9 +65,11 @@ def _load_latest_accounting_period(
     """Return tip accounting-period id + a locally computed version pin before run_date."""
     try:
         resp = (
-            client.table(_ACCOUNTING_PERIODS)
-            .select(_PERIOD_PIN_COLUMNS)
-            .lt("period_date", before_date.isoformat())
+            eq_house_workspace(
+                client.table(_ACCOUNTING_PERIODS)
+                .select(_PERIOD_PIN_COLUMNS)
+                .lt("period_date", before_date.isoformat())
+            )
             .order("period_date", desc=True)
             .limit(1)
             .execute()

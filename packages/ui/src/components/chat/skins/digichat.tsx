@@ -379,14 +379,20 @@ export function DigichatSkin({
           event.preventDefault();
           if (action.command.id === "copy") copyExport.copy();
           else if (action.command.id === "export") copyExport.exportThread();
-          else slashWiring.executeDef(action.command, action.arg, slashPrefs);
+          else if (action.command.id === "compact") {
+            // Palette compact serializes the thread and queues a summary.
+            // executeDef only resets prefs and opens an empty thread.
+            const compact = commands.find((command) => command.id === "compact");
+            if (compact) compact.execute();
+            else slashWiring.executeDef(action.command, action.arg, slashPrefs);
+          } else slashWiring.executeDef(action.command, action.arg, slashPrefs);
           aui.composer.setText("");
           return;
         }
       }
       gateSubmit?.(event);
     },
-    [slashPrefs, slashWiring, aui, gate, gateSubmit, copyExport, extra],
+    [slashPrefs, slashWiring, aui, gate, gateSubmit, copyExport, extra, commands],
   );
 
   return (

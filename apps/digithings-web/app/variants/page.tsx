@@ -5,9 +5,8 @@ import { DtFooter } from "@/components/DtFooter";
 import { StandardNav } from "@/app/_variants/headers";
 import { BlockLabel, Doc, Specimen } from "@/app/_variants/parts";
 
-// Exploration index — the seven home-page variants on one page, with the
-// pick table. Not part of the site: noindex, absent from sitemap.ts, and only
-// ever rendered by the dev server (the shipped export never contains it).
+// Exploration index. Routes are /variants and /variants/<slug> (this folder).
+// noindex, absent from sitemap.ts, and not linked from the public nav.
 
 export const metadata: Metadata = {
   title: "home page variants — exploration",

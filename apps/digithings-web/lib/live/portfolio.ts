@@ -16,17 +16,23 @@
 import { supabase } from "./supabaseClient";
 
 /**
- * Fail-closed contract for the published NAV series (#2599 / #3029) — must match
- * the dashboard's `lib/accounting-views.ts` view name, with no client fallback.
+ * Finalized tips only (#2599 / #3767). `public_accounting_nav_history` still
+ * appends `nav_history` on any date that has no finalized row, and
+ * `portfolio_materialize` still writes that table. A latest-source-run cut
+ * then publishes the provisional tail — one row of it, and the landing chart
+ * falls through to the synthetic example.
  */
-export const ACCOUNTING_NAV_VIEW = "public_accounting_nav_history" as const;
+export const ACCOUNTING_NAV_VIEW = "public_finalized_nav" as const;
 
 /**
- * Read-only columns. Deliberately the curated public set: no positions, no
- * cash figures beyond the published percentages, nothing that is not already on
- * digiquant.io's public portfolio surface.
+ * Columns on `public_finalized_nav`. That view has no `series_seam`; selecting
+ * the stitched view's extra column makes PostgREST error and the read return
+ * empty, which paints the example series.
  */
-const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source";
+export const ACCOUNTING_NAV_COLUMNS =
+  "date, nav, cash_pct, invested_pct, day_return_pct, source";
+
+const FINALIZED_SOURCE = "finalized_accounting";
 
 const STRATEGY_TABLE = "strategy_tearsheets";
 
@@ -60,23 +66,55 @@ export interface StrategyRead {
   allocatedPct: number | null;
 }
 
-/** The published NAV series, oldest first. Empty when unconfigured or missing. */
+interface AccountingNavRow {
+  date: string;
+  nav: number;
+  source: string | null;
+}
+
+/** One PostgREST row → a point, or null when date/nav are unusable. */
+export function accountingNavRow(row: unknown): AccountingNavRow | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as { date?: unknown; nav?: unknown; source?: unknown };
+  const date = typeof r.date === "string" ? r.date : null;
+  const nav = Number(r.nav);
+  if (!date || !Number.isFinite(nav)) return null;
+  return {
+    date,
+    nav,
+    source: typeof r.source === "string" ? r.source : null,
+  };
+}
+
+/**
+ * Finalized points the band may index from its first row, oldest first.
+ *
+ * A labeled `legacy_nav_history` row is dropped wherever it sits: a prefix
+ * would be indexed into the window return, and a provisional tip would become
+ * the whole series. Rows with no source stay — `public_finalized_nav` is
+ * finalized by definition, and a date/nav select does not repeat the label.
+ */
+export function publishedNavPoints(rows: readonly unknown[]): NavPoint[] {
+  const points: NavPoint[] = [];
+  for (const row of rows) {
+    const parsed = accountingNavRow(row);
+    if (!parsed) continue;
+    if (parsed.source != null && parsed.source !== FINALIZED_SOURCE) continue;
+    points.push({ date: parsed.date, nav: parsed.nav });
+  }
+  points.sort((a, b) => a.date.localeCompare(b.date));
+  return points;
+}
+
+/** Finalized NAV points, oldest first. */
 export async function fetchNav(): Promise<NavPoint[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from(ACCOUNTING_NAV_VIEW)
-    .select(NAV_COLUMNS)
+    .select(ACCOUNTING_NAV_COLUMNS)
     .order("date", { ascending: true });
   if (error || !data) return [];
-  return data
-    .map((row) => {
-      const r = row as { date?: unknown; nav?: unknown };
-      const date = typeof r.date === "string" ? r.date : null;
-      const nav = Number(r.nav);
-      if (!date || !Number.isFinite(nav)) return null;
-      return { date, nav };
-    })
-    .filter((p): p is NavPoint => p !== null);
+  return publishedNavPoints(data);
 }
 
 /**
