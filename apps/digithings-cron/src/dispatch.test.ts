@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   dispatch,
+  MISSING_REQUIRED_ARG,
   repositoryDispatchUrl,
   workflowDispatchUrl,
 } from "./dispatch";
@@ -571,7 +572,10 @@ describe("twelve-x-snapshot-backfill trigger (DIG-55)", () => {
     ).toBe(false);
   });
 
-  it("carries no date bound in configuration, so a bare kick sweeps every stored run_date", () => {
+  it("carries no date bound in configuration; the guard, not the config, is the control", () => {
+    // Nothing here is a bound — the row cannot be made safe by editing its
+    // static inputs, because an operator can always omit them. `requiredKickArgs`
+    // below is what refuses the bare kick.
     expect(row!.inputs).toEqual({ backfill_snapshots: "true" });
     for (const key of Object.keys(row!.inputs ?? {})) {
       expect(key).not.toMatch(/^(since|until|dates|run_date)$/);
@@ -628,5 +632,142 @@ describe("twelve-x-snapshot-backfill trigger (DIG-55)", () => {
       "run_date",
     );
     expect((body.inputs as Record<string, string>).dates.trim()).not.toBe("");
+  });
+});
+
+/**
+ * DIG-369. Verified against twelve-x develop: `maintenance.yml` only passes
+ * `--since` when the input is non-empty, and `backfill_snapshots.py` keeps
+ * `distinct_run_dates()` in full when `since` is None. So a bare kick
+ * re-projects EVERY stored run_date, each with a fresh `as_of=now`, and each
+ * `_upsert` then prunes any older generation for that run_date. That is
+ * production data on a live client, so the row now refuses it.
+ */
+describe("requiredKickArgs guard (DIG-369)", () => {
+  const row = JOBS.find((job) => job.id === "twelve-x-snapshot-backfill");
+
+  function stubGitHub(): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+
+  async function kickRow(args: Record<string, string> | undefined, overrideEnv = env) {
+    const fetchMock = stubGitHub();
+    await dispatch(overrideEnv, row!, row!.cron, 0, args ? { args } : {});
+    return fetchMock;
+  }
+
+  it("names every key that can carry a date bound, so #237 cannot be locked out", () => {
+    expect(row?.requiredKickArgs).toEqual(["since", "dates", "until"]);
+    // Exactly the key set maintenance.yml declares today plus the two that
+    // twelve-x#237 (DIG-52) adds. No wider than that: a key that is not a date
+    // bound must never satisfy the guard.
+    for (const key of row!.requiredKickArgs!) {
+      expect(key).toMatch(/^(since|dates|until)$/);
+    }
+    // No other row opts into the guard, so nothing else changes behaviour.
+    const guarded = JOBS.filter((job) => job.requiredKickArgs !== undefined);
+    expect(guarded.map((job) => job.id)).toEqual(["twelve-x-snapshot-backfill"]);
+  });
+
+  it("refuses a bare kick and never calls api.github.com", async () => {
+    const fetchMock = stubGitHub();
+    await expect(dispatch(env, row!, row!.cron, 0, {})).rejects.toThrow(
+      /missing_required_arg/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an omitted args object entirely, which is what /kick sends bare", async () => {
+    const fetchMock = stubGitHub();
+    await expect(dispatch(env, row!, row!.cron, 0)).rejects.toThrow(
+      /requires at least one of since, dates, until/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["empty string", ""],
+    ["single space", " "],
+    ["padded spaces", "   "],
+  ])("refuses a %s value, because a blank bound still sweeps the whole table", async (_label, value) => {
+    // `maintenance.yml` guards `if [ -n "$SINCE" ]`, and " " is non-empty to
+    // the shell, so a blank-but-present value would be passed through and then
+    // sort below every stored run_date. Refusing it here is the point.
+    const fetchMock = stubGitHub();
+    await expect(dispatch(env, row!, row!.cron, 0, { args: { since: value } })).rejects.toThrow(
+      /missing_required_arg/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does NOT police the bound's format — presence only, on purpose", async () => {
+    // A malformed-but-present bound still over-sweeps: "  2026-06-02  " sorts
+    // below every stored run_date for the same reason an unpadded month does.
+    // Rejecting it here would mean encoding a shape twelve-x#237 has not settled
+    // yet, so this guard stays presence-only and the row documents the format.
+    // Recorded as a known residual, not an oversight.
+    for (const value of ["  2026-06-02  ", "2026-6-2", "not-a-date"]) {
+      const fetchMock = await kickRow({ since: value });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("refuses a kick whose only key is not a date bound", async () => {
+    const fetchMock = stubGitHub();
+    await expect(
+      dispatch(env, row!, row!.cron, 0, { args: { backfill_snapshots: "false" } }),
+    ).rejects.toThrow(/missing_required_arg/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["since", "dates", "until"])("dispatches with %s alone", async (key) => {
+    const fetchMock = await kickRow({ [key]: "2026-06-02" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { inputs: Record<string, string> };
+    // The static input survives alongside the bound, and the row's own ref is used.
+    expect(body.inputs).toEqual({ backfill_snapshots: "true", [key]: "2026-06-02" });
+  });
+
+  it("dispatches when the bound is only in the row's static inputs", async () => {
+    // Proves the guard reads the MERGED inputs, not the args alone.
+    const bound: Job = { ...baseJob, id: "bound-row", inputs: { since: "2026-06-02" }, requiredKickArgs: ["since"] };
+    const fetchMock = stubGitHub();
+    await dispatch(env, bound, bound.cron, 0, {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not a dry-run-only guard: DRY_RUN=1 refuses too, so the preview is faithful", async () => {
+    const fetchMock = stubGitHub();
+    await expect(
+      dispatch({ DRY_RUN: "1" }, row!, row!.cron, 0, {}),
+    ).rejects.toThrow(/missing_required_arg/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not touch repository_dispatch, which carries no inputs at all", async () => {
+    const rd: Job = {
+      ...baseJob,
+      id: "rd-row",
+      kind: "repository_dispatch",
+      workflow: undefined,
+      event_type: "something",
+      requiredKickArgs: ["since"],
+    };
+    const fetchMock = stubGitHub();
+    await dispatch(env, rd, rd.cron, 0, {});
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(repositoryDispatchUrl("digithings-ai/digithings"));
+    expect(JSON.parse(String(init.body))).toEqual({ event_type: "something", client_payload: {} });
+  });
+
+  it("exports the stable prefix POST /kick maps to a 400", () => {
+    // index.ts matches on this exact string; changing one without the other
+    // silently turns a legible refusal back into an opaque 500.
+    expect(MISSING_REQUIRED_ARG).toBe("missing_required_arg");
   });
 });

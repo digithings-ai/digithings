@@ -6,7 +6,7 @@
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */
-import { dispatch, type DispatchResult } from "./dispatch";
+import { dispatch, MISSING_REQUIRED_ARG, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
@@ -222,12 +222,24 @@ export default {
       if (!cron) {
         return Response.json({ error: "cron_required" }, { status: 400 });
       }
-      const result = await runJobsForCron(cron, Date.now(), env, ctx, {
-        force,
-        args,
-        awaitDispatch: true,
-        includeDisabled: true,
-      });
+      let result: { started: string[]; skipped: string[]; runs: StartedRun[] };
+      try {
+        result = await runJobsForCron(cron, Date.now(), env, ctx, {
+          force,
+          args,
+          awaitDispatch: true,
+          includeDisabled: true,
+        });
+      } catch (err) {
+        // A row that refuses the request (see requiredKickArgs) must read as a
+        // deliberate refusal, not an opaque 500 an operator retries blind. Every
+        // other dispatch failure keeps its existing shape.
+        const detail = err instanceof Error ? err.message : String(err);
+        if (detail.startsWith(MISSING_REQUIRED_ARG)) {
+          return Response.json({ error: MISSING_REQUIRED_ARG, detail }, { status: 400 });
+        }
+        throw err;
+      }
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }
 

@@ -25,6 +25,13 @@ export type DispatchResult = {
   container_status?: string;
 };
 
+/**
+ * Stable prefix on the guard refusal so POST /kick can answer a legible
+ * 400 missing_required_arg instead of a bare 500. Keep in sync with the throw
+ * in dispatchGithub.
+ */
+export const MISSING_REQUIRED_ARG = "missing_required_arg";
+
 export function workflowDispatchUrl(repo: string, workflow: string): string {
   return `${GH_API}/repos/${repo}/actions/workflows/${workflow}/dispatches`;
 }
@@ -273,7 +280,24 @@ async function dispatchGithub(
     // for them: a kick that passes only `dates` must still carry the row's
     // `backfill_snapshots`. Keys the job never declared still reach the
     // workflow, so callers own key correctness (GitHub answers 422 otherwise).
-    body = { ref: job.ref, inputs: { ...(job.inputs ?? {}), ...args } };
+    const inputs = { ...(job.inputs ?? {}), ...args };
+    // A row may demand a date bound (or any other key) per request. Checked on
+    // the MERGED inputs, so a bound in the row's static config also satisfies
+    // it, and BEFORE the dry-run branch so DRY_RUN=1 previews the refusal
+    // faithfully. Presence only, deliberately: a value that is present but
+    // malformed (an unpadded `2026-6-2`, a padded one) still sorts wrong
+    // against run_date and over-sweeps, but tightening that would need the input
+    // shape twelve-x#237 (DIG-52) settles, which is not merged yet. The
+    // zero-padded-ISO requirement is documented on the row instead.
+    const required = job.requiredKickArgs ?? [];
+    if (required.length > 0 && !required.some((key) => (inputs[key] ?? "").trim() !== "")) {
+      throw new Error(
+        `${MISSING_REQUIRED_ARG}: job ${job.id}: /kick requires at least one of ` +
+          `${required.join(", ")} to carry a non-empty value. With none, the ` +
+          `workflow receives no date bound and re-projects every stored run_date.`,
+      );
+    }
+    body = { ref: job.ref, inputs };
   } else {
     if (!job.event_type) {
       throw new Error(`job ${job.id}: repository_dispatch requires event_type`);

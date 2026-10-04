@@ -11,6 +11,13 @@ export type Job = {
   kind: JobKind;
   workflow?: string;
   inputs?: Record<string, string>;
+  /**
+   * Input keys of which at least one must carry a non-empty value (static
+   * inputs plus per-request `/kick` args) before this row may be dispatched.
+   * Unset means no requirement. Enforced in dispatchGithub BEFORE any dispatch,
+   * dry-run or real, so a refusal never reaches api.github.com.
+   */
+  requiredKickArgs?: readonly string[];
   event_type?: string;
   ref?: "develop" | "main";
   etOpenGate?: boolean;
@@ -37,6 +44,7 @@ function wd(
   workflow: string,
   opts: {
     inputs?: Record<string, string>;
+    requiredKickArgs?: readonly string[];
     etOpenGate?: boolean;
     enabled?: boolean;
   } = {},
@@ -48,6 +56,7 @@ function wd(
     kind: "workflow_dispatch",
     workflow,
     inputs: opts.inputs,
+    requiredKickArgs: opts.requiredKickArgs,
     ref: DEVELOP,
     etOpenGate: opts.etOpenGate,
     enabled: opts.enabled ?? true,
@@ -372,11 +381,17 @@ export const JOBS: readonly Job[] = [
    *  - It is a subset of what twelve-x `develop` declares today, so this row
    *    never 422s on an unexpected key. `dates` and `until` only exist after
    *    twelve-x#237 merges, and they travel as per-request `/kick` args.
-   *  - There is NO date bound in configuration. `maintenance.yml` treats an
-   *    empty `since` as "from the beginning", so a bare kick re-projects every
-   *    stored run_date. Every real backfill must pass a bound explicitly. The
-   *    GitHub UI's own default has the same exposure; this row does not widen
-   *    it, but it does make it easy to fire by accident.
+   *  - There is NO date bound in configuration, and that is now enforced, not
+   *    just documented. `maintenance.yml` treats an empty `since` as "from the
+   *    beginning": it only passes `--since` when the input is non-empty, and
+   *    `backfill_snapshots.py` then keeps EVERY distinct stored run_date and
+   *    re-projects each one with a fresh `as_of=now`. That rewrites
+   *    fx_consensus_snapshot (both views), fx_confluence_snapshot and
+   *    fx_events_snapshot for the whole history, and each `_upsert` then prunes
+   *    any older generation for that run_date. `requiredKickArgs` below makes
+   *    the row REFUSE a kick that carries none of since/dates/until, before any
+   *    dispatch. The GitHub UI still has the same exposure; this row no longer
+   *    walks into it.
    *  - The bound must be zero-padded ISO (`2026-06-02`, never `2026-6-2`):
    *    the bounds compare as strings, so an unpadded month sorts after every
    *    stored run_date and silently re-stamps the whole table.
@@ -418,6 +433,11 @@ export const JOBS: readonly Job[] = [
     {
       inputs: { backfill_snapshots: "true" },
       enabled: false,
+      // Refuse a kick with no date bound — see the backfill-sweep bullet above.
+      // `dates` and `until` are listed so this survives twelve-x#237 (DIG-52)
+      // merging; today only `since` is a declared input and the other two would
+      // 422 at GitHub anyway, so naming them cannot loosen the guard.
+      requiredKickArgs: ["since", "dates", "until"],
     },
   ),
 ];
