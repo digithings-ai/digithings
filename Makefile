@@ -343,3 +343,11 @@ secrets-scan:
 .PHONY: secrets-audit
 secrets-audit:
 	python3 scripts/secrets_audit.py --strict
+
+# Age every GitHub secret name (repo, org and the `cron` environment) and list the
+# ones past the rotation window. Names and last-written dates only — GitHub never
+# returns a value here, so this needs no credential beyond `gh`. Runs monthly in
+# `secret-staleness-check.yml`, which also files the tracking issue.
+.PHONY: secrets-staleness
+secrets-staleness:
+	python3 scripts/secret_staleness_check.py
