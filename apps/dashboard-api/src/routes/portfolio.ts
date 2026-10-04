@@ -348,26 +348,40 @@ async function risks(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
  * Per-ticker dossier drawer data.
  *
  * The thesis and its vehicle mapping are read as **one dated book**, the same way
- * `/portfolio/theses` and `/rates/theses` read theirs: both tables carry one row
- * per `(date, thesis_id)` — `theses` has `UNIQUE(date, thesis_id)` and
- * `thesis_vehicles` has `PRIMARY KEY (date, thesis_id, ticker)` with
- * `FOREIGN KEY (date, thesis_id) REFERENCES theses (date, thesis_id)`
- * (`migrations/001_initial_schema.sql`, `migrations/024_thesis_deliberation_first_class.sql`)
- * — so `maxThesisDate` picks the business date the book was struck on and
- * `rowsAtDate` narrows both sides to it. `order=date.desc` is what makes the tip
- * derivable under a row cap, and `idx_theses_date ON theses(date DESC)` backs it.
+ * `/theses` (below) and `/rates/theses` read theirs. Both tables are dated on the
+ * key they share: `theses` is one row per `(date, thesis_id)` under
+ * `UNIQUE(date, thesis_id)`, while `thesis_vehicles` is one row per
+ * `(date, thesis_id, ticker)` — so a thesis carrying several vehicles has several
+ * rows at one date, and the vehicle side is a `Set` of thesis ids rather than a
+ * single id. `maxThesisDate` picks the business date the book was struck on and
+ * `rowsAtDate` narrows both sides to it.
+ * (`digiquant/supabase/migrations/001_initial_schema.sql:58-69`,
+ * `024_thesis_deliberation_first_class.sql:18-34`)
  *
- * Two consequences worth keeping:
- * - The vehicle join is on `thesis_id`, never on the row `id`. `id` is a uuid
+ * `order=date.desc` is what makes the tip derivable under a row cap:
+ * `maxThesisDate` maxima over the page PostgREST returned, so an unordered `limit`
+ * could drop the newest date away. `idx_theses_date ON theses(date DESC)` backs it.
+ * This route still issues exactly five reads; the fix adds none.
+ *
+ * Three consequences worth keeping:
+ * - The vehicle join is on `thesis_id`, never the row `id`. `id` is a uuid
  *   (`gen_random_uuid()`), so joining on it matches nothing; `thesis_id` is the
  *   stable business key both tables share.
- * - The FK means narrowing vehicles to the tip can neither orphan a vehicle nor
- *   cross-join it to a thesis from another date, so the narrow is safe.
+ * - `thesis_vehicles` has `FOREIGN KEY (date, thesis_id) REFERENCES theses (date,
+ *   thesis_id) ON DELETE CASCADE`, so every vehicle at date D has a thesis at date
+ *   D: narrowing to the tip cannot cross-join one to another date's thesis. It
+ *   says nothing about vehicles *existing* at the tip — vehicle writes are
+ *   best-effort enrichment that never blocks the book — so on such a day the drawer
+ *   correctly withholds instead of showing a stale thesis.
+ * - `theses` has no `ticker` column (the ticker-ish column is `vehicle`), so the
+ *   `str(r.ticker)` arm of the resolver cannot fire against real rows; in practice
+ *   resolution rides `thesis_vehicles`.
  *
  * `date` is the only age available: there is no separate business-date column, and
- * `updated_at` is a row-write timestamp that would repeat a thesis across every
- * date it was rewritten on. These five reads are still the route's entire subrequest
- * budget — the fix adds none.
+ * `updated_at` is a row-write timestamp — a no-op edit on a stale-date row makes
+ * that row look like the newest book, so a pane that aged by it would read current
+ * while showing stale content. The thesis date is deliberately not surfaced:
+ * `as_of` stays `positions`-derived, exactly as it was before this fix.
  */
 async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
