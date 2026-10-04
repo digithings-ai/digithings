@@ -15,6 +15,9 @@
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
+# Seed markdown root. Overridable so the local compose stack and the shell tests
+# can point at a checkout instead of the image-baked /seed.
+SEED_ROOT="${DIGISEARCH_SEED_ROOT:-/seed}"
 
 # DIGI_VECTORIZE_ACTIVE is computed once in entrypoint.sh (delegated to
 # python3 so it agrees with digisearch's own os.environ.get(...).strip()
@@ -90,8 +93,8 @@ record_failure() {
   fi
 }
 
-seed_index digithings_docs /seed/digithings_docs || record_failure digithings_docs
-seed_index occ_help /seed/occ_help || record_failure occ_help
+seed_index digithings_docs "${SEED_ROOT}/digithings_docs" || record_failure digithings_docs
+seed_index occ_help "${SEED_ROOT}/occ_help" || record_failure occ_help
 
 if [ -z "$UNSEEDED" ]; then
   touch "$SEED_MARKER"
