@@ -146,6 +146,17 @@ describe("fxPaneStatus names the age", () => {
     expect(fxPaneStatus(read(null), null, "/fx/sessions", "2026-10-05")).toBe("/fx/sessions");
     expect(fxPaneStatus(null, null, "/fx/summary", "2026-10-05")).toBe("/fx/summary");
   });
+
+  test("a run dated ahead of the clock never claims the current session", () => {
+    // Clock skew, or a run_date written wrong. The tone deliberately stays ok —
+    // a future date is not proof of staleness — but the footer must not assert a
+    // freshness it cannot support. "current session" on a 2027 run is the same
+    // class of false claim as the healthy-looking pane this issue exists to kill.
+    expect(fxPaneStatus(read("2027-01-01"), null, "/fx/summary", "2026-10-05")).toBe("as of 2027-01-01");
+    expect(fxPaneStatus(read("2076-10-05"), null, "/fx/summary", "2026-10-05")).toBe("as of 2076-10-05");
+    // One day ahead is still ahead: the same rule, at the boundary.
+    expect(fxPaneStatus(read("2026-10-06"), null, "/fx/summary", "2026-10-05")).toBe("as of 2026-10-06");
+  });
 });
 
 describe("warn and stale are visually distinct", () => {
