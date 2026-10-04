@@ -1219,7 +1219,8 @@ fully functional, because the provider falls back to that literal when
 `DIGICHAT_DEV_PASSWORD` is unset.
 
 **Now guarded at startup.** `src/lib/startup-env-guards.ts` exports
-`assertDevAuthDisabledInProduction()`, which throws when `NODE_ENV=production` and
+`assertDevAuthDisabledInProduction()`, which throws when `NODE_ENV` is
+production-like (`production`, `prod`, or a case variant) and
 `DIGICHAT_DEV_AUTH=1`, naming both variables in the message. It runs from two
 places: `src/instrumentation.ts` `register()`, ahead of the config, license and
 migration initializers, and `devProvider()` in `src/auth.ts`, so the provider
@@ -1227,9 +1228,10 @@ cannot be registered in production even if instrumentation is bypassed.
 
 The refusal is a hard throw rather than the silent `return null` used by
 `localBootstrapProvider`: a deployment mistake should be a loud boot failure, not a
-login that mysteriously never succeeds. `DIGICHAT_DEV_AUTH=1` without
-`NODE_ENV=production` is unaffected — local development works exactly as before.
-`src/lib/startup-env-guards.test.ts` pins both the throw and the two call sites.
+login that mysteriously never succeeds. `DIGICHAT_DEV_AUTH=1` without a
+production-like `NODE_ENV` is unaffected — local development works exactly as
+before. `src/lib/startup-env-guards.test.ts` pins both the throw and the two
+call sites.
 
 ### DIGICHAT_LOCAL_AUTH_KEY
 
@@ -1720,8 +1722,9 @@ dependencies. Image size is significantly smaller than a non-standalone build.
 
 `src/instrumentation.ts` is a Next.js instrumentation module. When `NEXT_RUNTIME=nodejs`
 (Node.js runtime, not edge) it runs, in order: `assertDevAuthDisabledInProduction()`
-(`src/lib/startup-env-guards.ts` — throws when `NODE_ENV=production` and
-`DIGICHAT_DEV_AUTH=1`; see "DIGICHAT_DEV_AUTH=1 risk in production"),
+(`src/lib/startup-env-guards.ts` — throws when `NODE_ENV` is production-like
+(`production`/`prod`, any case) and `DIGICHAT_DEV_AUTH=1`; see
+"DIGICHAT_DEV_AUTH=1 risk in production"),
 `initDigichatConfigAtStartup()`,
 `initLicenseStateAtStartup()` (pure local RS256 license verification — never touches
 the network, never throws, fail-open), and `startLicenseHeartbeat()` (24h sender plus
