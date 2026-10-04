@@ -4,6 +4,8 @@
 
 **Parent:** #4762.
 
+> ⚠️ **HOLD — DIG-503:** This package is on hold. The PrimeMarket (PMT) integration uses an access method (automated cookie replay via Playwright→HTTP hand-off) that the vendor's Terms of Use (Section 12) prohibit. Publication of the `twelve_x/nodes/scrape.py` mapping and any further PrimeMarket access recipe is blocked pending a decision on DIG-478. Do not implement this package until the hold is lifted.
+
 ## Goal
 
 The twelve-x producer still publishes `fx_daily_digest`, `fx_research_history`, `fx_relevance_ledger`, `fx_events_snapshot`, and `fx_consensus_snapshot` with the columns the hub reads. A producer-side test locks those column names. Recommendation policy (relevance weights, what gets ingested, strategist text) does not change.

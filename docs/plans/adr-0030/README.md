@@ -10,6 +10,8 @@
 
 **Status:** Proposed (2026-09-29). Parent epic [#4762](https://github.com/digithings-ai/digithings/issues/4762). Decision record [ADR-0030](../../adr/0030-swappable-digiquant-stage-modules.md) (Accepted on [#4763](https://github.com/digithings-ai/digithings/pull/4763), `develop` commit `dc8e06365`).
 
+> ⚠️ **HOLD — DIG-503:** The PrimeMarket (PMT) integration is on hold. The vendor's Terms of Use (Section 12) prohibit the access method (automated cookie replay via Playwright→HTTP hand-off). Package **P22** (`twelve_x/nodes/scrape.py` mapping) and any further publication of the PrimeMarket access recipe are blocked pending a decision on DIG-478. No code change, no removal — a hold so the next agent to pick up #4762 stops and reads. See `digifetch/ARCHITECTURE.md` and `digifetch/AGENTS.md` for the vendor-content boundary.
+
 ## Global constraints
 
 - Digi product names stay lowercase in prose (`digiquant`, `twelve-x`, `digithings`).
