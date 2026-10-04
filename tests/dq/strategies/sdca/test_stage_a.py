@@ -43,23 +43,28 @@ class TestSdcaCycleWindows:
         assert names["2025_peak"].start <= date(2025, 1, 20) <= names["2025_peak"].end
 
     def test_gold_v1_pins_documented_extrema(self) -> None:
+        """Set A, the six owner-approved close-based gold pins.
+
+        The per-pin audit — every date and close against the GLD cache, the +/-5-bar
+        extremum rule, and the algorithmic superset ``gold_v2()`` — lives in
+        ``test_gold_cycle_windows.py``; this is the shape Stage A actually consumes.
+        """
         windows = SdcaCycleWindows.gold_v1()
         names = {w.name: w for w in windows.windows}
         pins = {
-            "2008_peak": (CycleKind.PEAK, date(2008, 3, 17)),
-            "2008_trough": (CycleKind.TROUGH, date(2008, 10, 24)),
-            "2011_peak": (CycleKind.PEAK, date(2011, 9, 6)),
+            "2011_peak": (CycleKind.PEAK, date(2011, 8, 22)),
             "2015_trough": (CycleKind.TROUGH, date(2015, 12, 17)),
-            "2020_peak": (CycleKind.PEAK, date(2020, 8, 7)),
-            "2022_trough": (CycleKind.TROUGH, date(2022, 10, 21)),
-            "2026_peak": (CycleKind.PEAK, date(2026, 9, 29)),
+            "2020_peak": (CycleKind.PEAK, date(2020, 8, 6)),
+            "2022_trough": (CycleKind.TROUGH, date(2022, 9, 26)),
+            "2026_peak": (CycleKind.PEAK, date(2026, 1, 29)),
+            "2026_trough": (CycleKind.TROUGH, date(2026, 7, 16)),
         }
         assert set(names) == set(pins)
         for name, (kind, pin) in pins.items():
             assert names[name].kind == kind
             assert names[name].start == pin - _dt.timedelta(days=45)
             assert names[name].end == pin + _dt.timedelta(days=45)
-        assert len(windows.peaks()) == 4
+        assert len(windows.peaks()) == 3
         assert len(windows.troughs()) == 3
         ordered = sorted(windows.windows, key=lambda w: w.start)
         assert [w.start for w in ordered] == sorted(w.start for w in windows.windows)
