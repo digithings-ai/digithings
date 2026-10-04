@@ -32,8 +32,8 @@ describe("phase 1 portfolio routes", () => {
 
   it("theses envelope joins vehicles and does not invent evidence", async () => {
     mockFetch((url) => {
-      if (url.includes("/theses?")) return [{ id: "t1", name: "Gold", state: "active" }];
-      if (url.includes("/thesis_vehicles")) return [{ thesis_id: "t1", ticker: "GLD" }];
+      if (url.includes("/theses?")) return [{ id: "t1", name: "Gold", state: "active", date: "2026-09-28" }];
+      if (url.includes("/thesis_vehicles")) return [{ thesis_id: "t1", ticker: "GLD", date: "2026-09-28" }];
       return [];
     });
     const res = await body("/theses");
@@ -51,9 +51,9 @@ describe("phase 1 portfolio routes", () => {
   it("theses vehicles join on thesis_id, not the uuid id", async () => {
     mockFetch((url) => {
       if (url.includes("/theses?")) return [
-        { id: "fd49f84b-114b-4e73-ab87-f16939664f97", thesis_id: "gold-bid", name: "Gold", status: "ACTIVE" },
+        { id: "fd49f84b-114b-4e73-ab87-f16939664f97", thesis_id: "gold-bid", name: "Gold", status: "ACTIVE", date: "2026-09-28" },
       ];
-      if (url.includes("/thesis_vehicles")) return [{ thesis_id: "gold-bid", ticker: "GLD" }];
+      if (url.includes("/thesis_vehicles")) return [{ thesis_id: "gold-bid", ticker: "GLD", date: "2026-09-28" }];
       return [];
     });
     const res = await body("/theses");
@@ -64,10 +64,57 @@ describe("phase 1 portfolio routes", () => {
   });
 
   it("signals keeps only needs_resolution rows", async () => {
-    mockFetch((url) => (url.includes("/theses?") ? [{ id: "a", needs_resolution: true, name: "A" }, { id: "b", needs_resolution: false, name: "B" }] : []));
+    mockFetch((url) => (url.includes("/theses?") ? [{ id: "a", needs_resolution: true, name: "A", date: "2026-09-28" }, { id: "b", needs_resolution: false, name: "B", date: "2026-09-28" }] : []));
     const res = await body("/theses/signals", { ...ENV, DASHBOARD_DEV_CALLER: "brief" });
     const data = res.data as { theses: { id: string }[] };
     expect(data.theses.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  // DIG-401: `theses` keeps one row per thesis per business `date`, so an
+  // unfiltered read repeats every thesis across dates and inflates every count.
+  // Only the newest date is the current book.
+  it("theses ages by date and keeps only the newest date", async () => {
+    mockFetch((url) => {
+      // `thesis_vehicles` must be matched first: it does not contain "theses".
+      if (url.includes("/thesis_vehicles")) return [
+        { thesis_id: "t1", ticker: "GLD", date: "2026-09-28" },
+        { thesis_id: "t1", ticker: "IAU", date: "2026-09-27" },
+        { thesis_id: "t2", ticker: "EUR/USD", date: "2026-09-28" },
+      ];
+      if (url.includes("/theses?")) return [
+        { id: "uuid-t1", thesis_id: "t1", name: "Gold", status: "ACTIVE", date: "2026-09-28" },
+        { id: "uuid-t1-old", thesis_id: "t1", name: "Gold", status: "ACTIVE", date: "2026-09-27" },
+        { id: "uuid-t2", thesis_id: "t2", name: "Front-end easing", status: "CHALLENGED", date: "2026-09-28" },
+        { id: "uuid-t3", thesis_id: "t3", name: "Stale only", status: "ACTIVE", date: "2026-09-20" },
+      ];
+      return [];
+    });
+    const res = await body("/theses");
+    const payload = res as { status: number; data: { theses: { id: string; vehicles: string[] }[]; counts: { active: number } }; as_of: string | null; provenance: { source: string; tip_date: string | null } };
+    expect(payload.status).toBe(200);
+    // `date` is the run; provenance names the core table it came from.
+    expect(payload.as_of).toBe("2026-09-28");
+    expect(payload.provenance.tip_date).toBe("2026-09-28");
+    expect(payload.provenance.source).toBe("core:theses");
+    // One row per thesis per date: t1's older row and the tip-stale t3 are out.
+    expect(payload.data.theses.map((t) => t.id)).toEqual(["uuid-t1", "uuid-t2"]);
+    // Vehicles are dated too — holding them at every date would show each thesis
+    // every ticker it has ever carried.
+    expect(payload.data.theses[0].vehicles).toEqual(["GLD"]);
+    expect(payload.data.theses[1].vehicles).toEqual(["EUR/USD"]);
+    expect(payload.data.counts.active).toBe(1);
+  });
+
+  // `updated_at` is a row write timestamp, not a run. A pane that ages by it
+  // looks current after a no-op edit, so it may never be the as_of even though
+  // core `theses` carries the column.
+  it("theses does not age by updated_at", async () => {
+    mockFetch((url) => (url.includes("/theses?")
+      ? [{ id: "t1", thesis_id: "t1", name: "Gold", status: "ACTIVE", date: "2026-09-28", updated_at: "2026-10-03T04:05:06Z" }]
+      : []));
+    const res = await body("/theses");
+    expect(res.status).toBe(200);
+    expect(res.as_of).toBe("2026-09-28");
   });
 
   it("drawdown is computed from NAV and stays null without a second point", async () => {

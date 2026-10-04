@@ -6,7 +6,7 @@
 import { buildProvenance, errorResponse, type Provenance } from "../errors";
 import { HOUSE_WORKSPACE_ID } from "../supabase";
 import { tableRows, type TableReadEnv } from "../table-read";
-import { thesisShape } from "../thesis-shape";
+import { maxThesisDate, rowsAtDate, thesisShape } from "../thesis-shape";
 import type { RouteCtx, RouteModule } from "./registry";
 
 type Row = Record<string, unknown>;
@@ -158,16 +158,32 @@ async function enriched(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   );
 }
 
+/**
+ * The house thesis book. `theses` keeps one row per thesis per business `date`,
+ * so an unfiltered read repeats every thesis across dates and inflates every
+ * count in the envelope. Only the newest date is the current book.
+ *
+ * `date` is sent as `as_of`; `updated_at` is a write timestamp, not a run, and a
+ * pane that ages by it looks current after a no-op edit. Same mapper, same
+ * newest-date rule as /rates/theses.
+ */
 async function theses(req: Request, ctx: RouteCtx<Env>, onlySignals: boolean): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const rows = await read(ctx.env, "theses", "select=*&limit=500");
+  const rows = await read(ctx.env, "theses", "select=*&order=date.desc&limit=500");
   if ("error" in rows) return rows.error;
-  const vehicles = await read(ctx.env, "thesis_vehicles", "select=*&limit=2000");
+  const vehicles = await read(ctx.env, "thesis_vehicles", "select=*&order=date.desc&limit=2000");
   if ("error" in vehicles) return vehicles.error;
   const filtered = onlySignals ? rows.rows.filter((r) => r.needs_resolution === true) : rows.rows;
-  const tip = maxDate(filtered, "updated_at") ?? maxDate(filtered, "as_of");
-  return ok(thesisShape(filtered, vehicles.rows), "core:theses", pinR.pin, tip ? tip.slice(0, 10) : null);
+  const tip = maxThesisDate(filtered);
+  // Vehicles are dated too. Holding them at every date would show each thesis
+  // every ticker it has ever carried.
+  return ok(
+    thesisShape(rowsAtDate(filtered, tip), rowsAtDate(vehicles.rows, tip)),
+    "core:theses",
+    pinR.pin,
+    tip,
+  );
 }
 
 async function attribution(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
