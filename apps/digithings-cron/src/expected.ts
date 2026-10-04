@@ -60,6 +60,14 @@ function parseField(
     // `*/0` never advances the loop below, and a fractional or negative step
     // makes the count depend on float error.
     if (!Number.isInteger(step) || step < 1) refuse(cron, `step ${stepText} in ${part}`);
+    // A field can also arrive as a non-number. Quartz's `?` ("no specific value")
+    // is the live case: `names.indexOf("?")` is -1, so num() hands back
+    // `Number("?")` -- NaN -- and the `lo > hi` guard above cannot see it,
+    // because `NaN > NaN` is false. The loop below then runs zero times
+    // (`NaN <= NaN` is false), the field becomes an empty set and the count comes
+    // back 0 -- a day the alarm reads as one the clock never fired. Refuse the
+    // whole NaN family rather than modelling any one member of it.
+    if (!Number.isInteger(lo) || !Number.isInteger(hi)) refuse(cron, part);
     if (range !== "*") wildcard = false;
     // wrap=7 folds the traditional Sunday=7 onto Sunday=0.
     for (let value = lo; value <= hi; value += step) {

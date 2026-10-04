@@ -124,3 +124,67 @@ describe("expectedCount rejects a reversed range instead of counting zero", () =
     expect(expectedCount("0 0-23/6 * * *", "2026-10-05", { now: AT("2026-10-05T23:00:00Z") })).toBe(4);
   });
 });
+
+
+// `?` is the Quartz "no specific value" token. It reaches expectedCount as NaN
+// (Number("?") is NaN and `at < 0` is false, so num() returns it unchanged),
+// and the counting loop `for (let value = lo; value <= hi; ...)` runs zero
+// times because NaN <= NaN is false. The field becomes an empty set and
+// expectedCount answers 0.
+//
+// 0 owed is the worst answer available: .7's alarm compares observed starts
+// against owed starts, so 0 reads as a healthy day on which the clock never
+// fired -- indistinguishable from correct.
+//
+// The .1c guard cannot catch this: it tests `lo > hi`, and NaN > NaN is false.
+// This is the same NaN hole one level up.
+//
+// REFUSING is the contract, not modelling. croner@9.1.0 does not implement
+// Quartz's `?` -- it reads it as the digit 0, so `0 9 * * ?` fires weekly and
+// `0 9 ? * *` never fires. There is no trustworthy reference to copy, and a
+// wrong number is worse than a refusal. Refusing on `?` also makes both
+// tempting wrong fixes fail: mapping `?` to `*` and mapping `?` to `0` both
+// stop throwing, which is exactly what these assertions forbid.
+describe("expectedCount refuses the Quartz '?' token instead of counting zero", () => {
+  const NOW = new Date("2026-10-05T23:59:00Z");
+  it.each([
+    ["minute", "? 9 15 * *"],
+    ["hour", "30 ? 15 * *"],
+    ["day of month", "30 9 ? * *"],
+    ["month", "30 9 15 ? *"],
+    ["day of week", "30 9 15 * ?"],
+  ])("throws on ? in the %s field", (_field, cron) => {
+    expect(() => expectedCount(cron, "2026-10-05", { now: NOW })).toThrow(/unsupported|\?/i);
+  });
+
+  it("throws when ? is embedded in a range rather than standing alone", () => {
+    expect(() => expectedCount("0 9-? * * *", "2026-10-05", { now: NOW })).toThrow(/unsupported|\?/i);
+    expect(() => expectedCount("0 ?-17 * * *", "2026-10-05", { now: NOW })).toThrow(/unsupported|\?/i);
+  });
+
+  it("throws when ? is followed by a step", () => {
+    expect(() => expectedCount("*/? * * * *", "2026-10-05", { now: NOW })).toThrow(/unsupported|\?/i);
+  });
+
+  // A `?` must be refused whatever count it would have produced. These pin
+  // that the answer is a refusal and not a number wearing `?`'s clothes.
+  it("refuses even where every plausible interpretation agrees on the count", () => {
+    // day-of-month 15 and month 10 can never be selected by any reading of `?`,
+    // so "0 owed" would look right. It must still be a refusal, not a 0.
+    expect(() => expectedCount("0 0 ? 10 1", "2026-10-05", { now: NOW })).toThrow(/unsupported|\?/i);
+  });
+
+  // Regression guards. The .1c guard is not to be weakened to cover `?`.
+  it("still refuses a reversed range", () => {
+    expect(() => expectedCount("0 0 * * FRI-MON", "2026-10-05", { now: NOW })).toThrow(/unsupported|range/i);
+    expect(() => expectedCount("5-1 * * * *", "2026-10-05", { now: NOW })).toThrow(/unsupported|range/i);
+  });
+
+  it("still counts every cron that has no ? in it", () => {
+    expect(expectedCount("0 0 * * *", "2026-10-05", { now: NOW })).toBe(1);
+    expect(expectedCount("0 0-23/6 * * *", "2026-10-05", { now: NOW })).toBe(4);
+    expect(expectedCount("*/15 * * * *", "2026-10-05", { now: NOW })).toBe(96);
+    expect(expectedCount("52 * * * MON-FRI", "2026-10-05", { now: NOW })).toBe(24);
+    expect(expectedCount("3 6,18 * * *", "2026-10-05", { now: NOW })).toBe(2);
+  });
+});
