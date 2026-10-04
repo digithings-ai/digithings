@@ -29,17 +29,23 @@ CRED_VALUE_PATTERNS = [
     # The generic character-class entries are gone - they whitelisted an
     # alphabet, so a credential holding any other character was reported clean.
     # `looks_cred_val` now scores the value's own distribution instead.
-    # None of these may be end-anchored: a prefixed key is routinely followed by a
-    # trailing `# comment`, and an `$` would let that comment hide the key.
-    r'^sk-[A-Za-z0-9]{20,}',
+    # Two rules for this list. No entry may be end-anchored (`$` or `\Z`): a
+    # prefixed key is routinely followed by a trailing `# comment`, and the
+    # anchor lets that comment hide the key. And a body class must be the
+    # alphabet the vendor really uses, because a value carrying a comment never
+    # reaches the entropy score below - the prose exclusion runs first - so this
+    # loop is the only gate that can catch it. `sk-` is URL-safe base64, and its
+    # two common families (`sk-proj-`, `sk-ant-api03-`) put a `-` inside the
+    # first 20 characters.
+    r'^sk-[A-Za-z0-9_-]{20,}',
     r'^ghp_', r'^gho_', r'^glpat-',
 ]
 #: Bits per character at or above which a value counts as a credential. Set
 #: below the weakest probe (3.565) on purpose: the floor also has to cover the
-#: encodings the removed character-class patterns caught - measured over 10 000
-#: 32-character hex secrets, 3.5 misses 19.3%, 3.2 misses 0.4%, 3.0 misses ~0%
-#: (none in 10 000 random samples, but a skewed string can still fall below it).
-#: Precision comes from the inline-comment exclusion below, not from this floor.
+#: encodings the removed character-class patterns caught - over 100 000 random
+#: 32-character hex secrets, 3.5 misses 18.8%, 3.2 misses 0.36%, 3.0 misses
+#: 0.006% (6 in 100 000; the observed minimum was 2.936). Precision comes from
+#: the inline-comment exclusion below, not from this floor.
 CRED_MIN_ENTROPY = 3.0
 
 def is_placeholder(v):
