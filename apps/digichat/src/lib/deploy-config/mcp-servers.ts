@@ -168,6 +168,18 @@ export type McpServerForward = {
    * digigraph; the model never sees or supplies them.
    */
   setup?: Record<string, string>;
+  /**
+   * Operator tool allowlist for this server row (DIG-284). Remote tool names,
+   * exact match, no globs. Absent means deny-by-default upstream: zero tools
+   * are offered, which is the same as an empty list. Operator-only — the
+   * session overlay can never set this.
+   */
+  allowedTools?: string[];
+  /**
+   * Subset of `allowedTools` whose tools mutate remote state (DIG-284).
+   * Operator-only, same rules as `allowedTools`.
+   */
+  mutatingTools?: string[];
 };
 
 export type McpSessionOverlayItem = {
@@ -175,6 +187,12 @@ export type McpSessionOverlayItem = {
   url?: string;
   auth?: string;
   token?: string;
+  // Deliberately no `allowedTools` / `mutatingTools` (DIG-284), extending the
+  // `authHeader` invariant pinned by the #3841 test in mcp-servers.test.ts.
+  // These are operator-only: a visitor attaching a session connector gets zero
+  // tools, and a session overlay can never widen an operator row's allowlist.
+  // `url` is bounded the same way — it can only ever introduce a new row, never
+  // repoint an operator one.
 };
 
 export type McpUpstreamServer = {
@@ -190,6 +208,10 @@ export type McpUpstreamServer = {
    * digigraph; the model never sees or supplies them.
    */
   setup?: Record<string, string>;
+  /** Operator-only — session overlay can never set this (DIG-284). */
+  allowedTools?: string[];
+  /** Operator-only — session overlay can never set this (DIG-284). */
+  mutatingTools?: string[];
 };
 
 const MCP_AUTH = new Set(["none", "bearer", "oauth"]);
@@ -197,6 +219,39 @@ const MAX_SESSION_SERVERS = 8;
 const MAX_OVERLAY_JSON = 8_192;
 const MAX_UPSTREAM_JSON = 16_384;
 const MAX_TOKEN = 4_096;
+
+/**
+ * Bounds on the operator tool allowlists (`allowedTools`, `mutatingTools`).
+ * These live here, next to the header guard that has to honour them, and
+ * `schema.ts` imports them so the zod bound and the projection bound can never
+ * drift apart — if they could, "config parses but the whole upstream header is
+ * silently dropped" is exactly the invisibility DIG-284 exists to remove.
+ *
+ * 64 characters matches digigraph's `prefixed_tool_name` truncation width, so a
+ * name that fits here is one digigraph can prefix unambiguously. 64 entries is
+ * the scale of a real MCP tool catalog. `MAX_UPSTREAM_JSON` stays the backstop:
+ * an over-budget config fails closed, the same as an over-long `token` does
+ * today.
+ */
+export const MAX_MCP_TOOL_ENTRIES = 64;
+export const MAX_MCP_TOOL_NAME_LENGTH = 64;
+
+/**
+ * Copy an operator allowlist for the wire, or `undefined` when it must not be
+ * forwarded. An out-of-bounds list is dropped whole rather than truncated: a
+ * partial allowlist would quietly deny tools the operator asked for while still
+ * looking configured, and "drop everything" is the fail-closed answer. Dropped
+ * is not the same as empty-on-the-wire — callers omit the key, and digigraph
+ * treats an absent allowlist as zero tools.
+ */
+function boundedToolAllowlist(value: readonly string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) return undefined;
+  if (value.length > MAX_MCP_TOOL_ENTRIES) return undefined;
+  if (value.some((name) => typeof name !== "string" || name.length > MAX_MCP_TOOL_NAME_LENGTH)) {
+    return undefined;
+  }
+  return [...value];
+}
 
 /** Operator URL wins. Session client URLs only when allowUserServers, https-only. */
 export function resolveMcpOAuthResourceUrl(opts: {
@@ -230,6 +285,13 @@ export function operatorMcpServersForUpstream(
       if (s.authHeader?.trim()) row.authHeader = s.authHeader.trim();
     }
     if (s.setup && Object.keys(s.setup).length) row.setup = { ...s.setup };
+    // Operator tool allowlists. Re-checked here, not only in zod, exactly like
+    // `token` above: the projection is the last place the bound can be enforced
+    // before the bytes go on the wire. Over budget ⇒ omitted ⇒ zero tools.
+    const allowedTools = boundedToolAllowlist(s.allowedTools);
+    if (allowedTools) row.allowedTools = allowedTools;
+    const mutatingTools = boundedToolAllowlist(s.mutatingTools);
+    if (mutatingTools) row.mutatingTools = mutatingTools;
     out.push(row);
   }
   return out;
@@ -290,6 +352,8 @@ export function mergeMcpSessionOverlay(opts: {
     if (s.token) row.token = s.token;
     if (s.authHeader) row.authHeader = s.authHeader;
     if (s.setup) row.setup = { ...s.setup };
+    if (s.allowedTools) row.allowedTools = [...s.allowedTools];
+    if (s.mutatingTools) row.mutatingTools = [...s.mutatingTools];
     return row;
   });
   const byId = new Map(out.map((s) => [s.id, s]));
@@ -321,7 +385,7 @@ export function mcpUpstreamHeaderValue(
   if (!servers.length) return undefined;
   const json = JSON.stringify(
     servers.map((s) => {
-      const row: Record<string, string | Record<string, string>> = {
+      const row: Record<string, string | string[] | Record<string, string>> = {
         id: s.id,
         url: s.url,
       };
@@ -329,6 +393,8 @@ export function mcpUpstreamHeaderValue(
       if (s.token) row.token = s.token;
       if (s.authHeader) row.authHeader = s.authHeader;
       if (s.setup && Object.keys(s.setup).length) row.setup = s.setup;
+      if (s.allowedTools?.length) row.allowedTools = s.allowedTools;
+      if (s.mutatingTools?.length) row.mutatingTools = s.mutatingTools;
       return row;
     }),
   );
