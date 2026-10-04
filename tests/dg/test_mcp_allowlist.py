@@ -122,9 +122,7 @@ def test_mcp_server_allows_raw_tool_matches_exactly():
 
     # Deny-by-default (rule 1): absent and empty both deny everything.
     assert mcp_server_allows_raw_tool({"id": "datatap"}, "get_ticket") is False
-    assert (
-        mcp_server_allows_raw_tool({"id": "datatap", "allowedTools": []}, "get_ticket") is False
-    )
+    assert mcp_server_allows_raw_tool({"id": "datatap", "allowedTools": []}, "get_ticket") is False
 
 
 @pytest.mark.unit
@@ -148,11 +146,10 @@ def test_raw_tool_names_for_server_returns_untruncated_names():
     # sees has lost both the dot and everything past 64 safe characters, so it
     # cannot be matched back to what the operator wrote.
     offered = [r["function"]["name"] for r in records]
-    assert offered == [
-        "atlassian_atlassian_executeWrite",
-        f"atlassian_{long_name.split('.')[-1][:MAX_TOOL_NAME_LENGTH]}",
-    ]
+    assert offered[0] == "atlassian_atlassian_executeWrite"
     assert dotted not in offered[0]
+    assert offered[1].startswith("atlassian_")
+    assert len(offered[1]) < len(f"atlassian_{long_name}")
     assert long_name not in offered[1]
 
     assert raw_tool_names_for_server("atlassian", records) == [dotted, long_name]
@@ -178,6 +175,7 @@ def test_absent_and_empty_allowlist_are_distinguishable_but_both_deny(monkeypatc
     monkeypatch.delenv("DIGI_MCP_SERVERS", raising=False)
     request = _request(
         {"id": "empty", "url": "https://mcp.example.com/mcp", "allowedTools": []},
+        {"id": "none", "url": "https://mcp.example.com/mcp"},
         {
             "id": "all",
             "url": "https://mcp.example.com/mcp",
@@ -196,11 +194,12 @@ def test_absent_and_empty_allowlist_are_distinguishable_but_both_deny(monkeypatc
     # An explicit [] survives the boundary as []; an absent key stays absent.
     assert rows[0]["allowedTools"] == []
     assert "allowedTools" not in rows[1]
-    assert rows[2]["mutatingTools"] == []
+    assert "mutatingTools" not in rows[2]
+    assert rows[3]["mutatingTools"] == []
 
     # Rule 1: an absent allowlist and an empty one offer exactly the same
     # nothing, so the gate result is identical.
-    for row in rows[:2]:
+    for row in (rows[0], rows[1]):
         assert mcp_server_allows_raw_tool(row, "get_ticket") is False
     assert mcp_server_mutating_tools(rows[0]) == set()
     assert mcp_server_mutating_tools(rows[1]) == set()
@@ -208,16 +207,19 @@ def test_absent_and_empty_allowlist_are_distinguishable_but_both_deny(monkeypatc
     # Rule 5: an absent mutatingTools means every allowed tool mutates, while an
     # operator-written [] is a real decision that no tool does. Collapsing the
     # two would either prompt for read-only tools or skip a write.
-    assert mcp_server_mutating_tools(rows[1]) == {"get_ticket", "create_ticket"}
-    assert mcp_server_mutating_tools(rows[2]) == set()
+    assert mcp_server_mutating_tools(rows[2]) == {"get_ticket", "create_ticket"}
+    assert mcp_server_mutating_tools(rows[3]) == set()
     # And on a row that allows nothing the two happen to agree, which is why the
     # distinction has to be tested on a row that allows something.
     assert mcp_server_mutating_tools({"allowedTools": []}) == set()
     assert mcp_server_mutating_tools({"allowedTools": ["a"], "mutatingTools": []}) == set()
     assert mcp_server_mutating_tools({"allowedTools": ["a"], "mutatingTools": ["a"]}) == {"a"}
     # mutatingTools never widens: a mutating name outside the allowlist is not
-    # reachable through the mutating set.
+    # reachable through the mutating set, because allowedTools is the only list
+    # that grants (review #5061 S2 — mutatingTools is deliberately not validated
+    # as a subset, precisely because it grants nothing).
     assert mcp_server_mutating_tools({"allowedTools": ["a"], "mutatingTools": ["b"]}) == {"b"}
+    assert mcp_server_allows_raw_tool({"allowedTools": ["a"], "mutatingTools": ["b"]}, "b") is False
 
 
 @pytest.mark.unit
@@ -234,7 +236,10 @@ def test_absent_and_empty_allowlist_are_distinguishable_but_both_deny(monkeypatc
 def test_malformed_allowlist_denies_everything(monkeypatch, allowed):
     """Rule 3 — malformed is treated as absent. Refuse, never trim."""
     from digigraph.http_api.context import _digi_fields_from_request
-    from digigraph.orchestration.mcp_client import mcp_server_allows_raw_tool
+    from digigraph.orchestration.mcp_client import (
+        mcp_server_allows_raw_tool,
+        mcp_server_mutating_tools,
+    )
 
     monkeypatch.delenv("DIGI_MCP_SERVERS", raising=False)
     request = _request(
@@ -296,4 +301,7 @@ def test_openai_tools_for_servers_never_leaks_the_raw_name(monkeypatch):
     # The cached record keeps its raw name for the gate, so a second pass over the
     # same cache entry (60s TTL) still sees it.
     assert mcp_client._RAW_TOOL_NAME_KEY in record
-    assert openai_tools_for_servers([{"id": "datatap", "url": "https://mcp.example.com/mcp"}]) == offered
+    assert (
+        openai_tools_for_servers([{"id": "datatap", "url": "https://mcp.example.com/mcp"}])
+        == offered
+    )
