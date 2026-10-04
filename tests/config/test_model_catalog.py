@@ -124,12 +124,17 @@ def test_every_byok_fallback_model_exists_in_the_catalog() -> None:
 
     xai's was `grok-4-3`, which models.dev only carries as `grok-4.3`; the
     anthropic pins were dated `-4` ids whose generation models.dev no longer
-    lists at all. All six are **exempted, not replaced** — every `fallbackModels`
-    entry must also be a `model_name` in `config/litellm.yaml`
-    (`test_every_advertised_byok_preset_is_a_litellm_model_group`, #3605), so
-    swapping one is a routing change to an upstream slug that cannot be verified
-    without a provider key. See the D11 row in the spec's decision table and
-    `docs/MODEL_CATALOG.md` for what each replacement would take.
+    lists at all. All six were **replaced** in #5000, after each successor was
+    verified against the provider's own API (or, for the three anthropic ids
+    with no key on hand, against two independent public keyspaces: models.dev
+    and LiteLLM's pricing table). The replacement was a **routing** change, not
+    a catalog edit: every `fallbackModels` entry must also be a `model_name` in
+    `config/litellm.yaml`
+    (`test_every_advertised_byok_preset_is_a_litellm_model_group`, #3605), so a
+    wrong `litellm_params.model` is a 500 on every BYOK chat that picks it.
+    `config/model-catalog-exemptions.json` is now empty; see
+    `docs/MODEL_CATALOG.md` for what a future retired pin has to satisfy before
+    it can be swapped.
     """
     generator = _load_generator()
     exempt_ids = {e["id"] for e in load_exemptions()}

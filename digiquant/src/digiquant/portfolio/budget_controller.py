@@ -127,7 +127,7 @@ def budget_for(assessment: RegimeAssessment, *, static_cap: int) -> tuple[int, i
     """Map regime assessment to a dispatch budget and explore floor.
 
     Budget policy (cost-safe — budget never exceeds static_cap when > 0):
-    - `stress` → budget = max(STRESS_FLOOR, round(static_cap * 0.5)),
+    - `stress` → budget = min(static_cap, max(STRESS_FLOOR, round(static_cap * 0.5))),
                  explore_floor = 0
     - `neutral` → budget = static_cap, explore_floor = 1
     - `dispersion` → budget = static_cap,
@@ -157,7 +157,7 @@ def budget_for(assessment: RegimeAssessment, *, static_cap: int) -> tuple[int, i
 
     # When static_cap > 0, apply regime-specific budgeting
     if regime == "stress":
-        budget = max(STRESS_FLOOR, round(static_cap * 0.5))
+        budget = min(static_cap, max(STRESS_FLOOR, round(static_cap * 0.5)))
         return budget, 0
     elif regime == "dispersion":
         budget = static_cap

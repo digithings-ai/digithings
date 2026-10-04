@@ -511,6 +511,41 @@ def _check_house_run(commands: dict[str, Any]) -> None:
         raise SystemExit("interrupted body drifted")
     if exec_job.interrupted_key("2026-09-30") != "pipeline-runs/house-run/2026-09-30/interrupted.json":
         raise SystemExit("interrupted key drifted")
+    if exec_job.interrupted_key(" 2026-09-30 ") != exec_job.interrupted_key("2026-09-30"):
+        raise SystemExit("interrupted key must ignore surrounding run_date whitespace")
+    padded = exec_job.interrupted_body("run-abc", " 2026-09-30 ")
+    if padded["run_date"] != "2026-09-30":
+        raise SystemExit(f"interrupted body must store a stripped run_date, got {padded}")
+    exec_job.upload_interrupted("run-abc", "   ")
+    gated = {
+        "argv": ["echo", "ok"],
+        "when_arg": "run_writers",
+        "equals": "true",
+    }
+    kept = exec_job._resolve_step(
+        gated,
+        {"run_writers": "true "},
+        today="2026-09-30",
+        workdir=Path("."),
+    )
+    if kept is None:
+        raise SystemExit("when_arg must match after stripping the provided value")
+    skipped = exec_job._resolve_step(
+        gated,
+        {},
+        today="2026-09-30",
+        workdir=Path("."),
+    )
+    if skipped is not None:
+        raise SystemExit("a missing when_arg must not match equals")
+    spaced = exec_job._resolve_step(
+        {"argv": ["echo"], "append_arg": "note"},
+        {"note": "keep  spaces"},
+        today="2026-09-30",
+        workdir=Path("."),
+    )
+    if spaced is None or spaced.argv[-1] != "keep  spaces":
+        raise SystemExit(f"append_arg must keep internal spaces, got {spaced}")
 
     dry = exec_job.steps_for(
         "house-run",
