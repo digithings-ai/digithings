@@ -9,14 +9,12 @@ import sys
 from pathlib import Path
 
 PLACEHOLDER_PATTERNS = [
-    r'^(replace|REPLACE|CHANGE_ME|TODO|FIXME|CHANGEME)',
-    r'<.*>',
-    r'your_',
-    r'example_',
-    r'test_',
-    r'dummy_',
-    r'placeholder',
-    r'changeme',
+    # A placeholder marker counts only as the *first* token, and the separator that
+    # follows it is tolerated (`_` or `-`), so `your_openai_key_here` and
+    # `your-litellm-key-here` both stay placeholders. An unanchored match let a real
+    # credential hide behind a placeholder word sitting in the middle of the value.
+    r'^(?:replace|change_?me|todo|fixme|placeholder|your|example|test|dummy)(?:[^A-Za-z0-9]|$)',
+    r'^<.*>$',
     r'^$',
 ]
 CRED_VAR_PATTERNS = [
