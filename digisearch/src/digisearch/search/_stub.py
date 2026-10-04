@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
-from digisearch.indexes.backends.backend_errors import SearchBackendError
+from digisearch.indexes.backends.backend_errors import CorpusNotSeededError, SearchBackendError
 from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 if TYPE_CHECKING:
@@ -33,6 +33,32 @@ _BackendFn = Callable[[Query, str], "SearchResponse | None"]
 _backends: list[_BackendFn] = []
 
 _BACKEND_ERRORS = (ImportError, OSError, RuntimeError, TypeError, ValueError)
+
+#: Comma-separated index names the current boot's seed failed to populate, set by
+#: the stack's ``start_digisearch.sh``. Empty/absent means seeded, so this guard
+#: is inert everywhere but that deployment (#5045).
+UNSEEDED_INDEXES_ENV = "DIGISEARCH_UNSEEDED_INDEXES"
+
+
+def unseeded_indexes() -> frozenset[str]:
+    """Indexes this boot's seed could not populate.
+
+    Read per call rather than cached at import: tests set it around individual
+    requests, and a container's value is fixed for its whole life anyway.
+    """
+    raw = os.environ.get(UNSEEDED_INDEXES_ENV, "")
+    return frozenset(name.strip() for name in raw.split(",") if name.strip())
+
+
+def guard_unseeded(index_names: list[str]) -> None:
+    """Refuse to serve from a collection this boot's seed never populated.
+
+    Raises :class:`CorpusNotSeededError` naming the offending indexes. Partial
+    failure only takes down the indexes that actually failed.
+    """
+    missing = sorted(set(index_names) & unseeded_indexes())
+    if missing:
+        raise CorpusNotSeededError(missing)
 
 
 def _first_env(*names: str) -> str:
@@ -374,6 +400,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     """
     names = [name.strip() for name in str(index_name or "default").split(",")]
     names = [name for name in names if name] or ["default"]
+    guard_unseeded(names)
     if len(names) == 1:
         return _maybe_rerank(query, _query_single_index(query, names[0]))
     logger.info(
