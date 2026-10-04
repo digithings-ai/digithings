@@ -4192,10 +4192,10 @@ are tests pinning the negative property; do not relax them into a ceiling withou
 `cost_usd` in the usage snapshot is `0.0` on every run and this alert could never fire. `_row`
 therefore resolves `est_cost_usd` once — the reported cost when it is positive, otherwise
 `pricing.estimate_cost_usd(usage["by_model"])` against the committed per-model table in
-`research/pricing.py` — and feeds the SAME value to both `spend_alert` and the `est_cost_usd`
-column. The estimator returns `None` when no tokens were priced (no priced model, or a priced
-model whose tokens are all zero/junk), so behaviour is unchanged when no price is known (never
-fabricate `$0`).
+`config/digiquant-model-prices.json` (loaded by `research/pricing.py`) — and feeds the SAME
+value to both `spend_alert` and the `est_cost_usd` column. The estimator returns `None` when no
+tokens were priced (no priced model, or a priced model whose tokens are all zero/junk), so
+behaviour is unchanged when no price is known (never fabricate `$0`).
 
 Each price is taken verbatim from the repo's own committed snapshot,
 `docs/providers/snapshots/<provider>.yaml` (`paid_tier.models[].cost_per_1m_input` /
@@ -4203,8 +4203,30 @@ Each price is taken verbatim from the repo's own committed snapshot,
 rate. A price no snapshot corroborates fails
 `tests/dq/research/test_pricing.py::TestThePriceTable::test_every_committed_price_is_corroborated_by_a_committed_snapshot`.
 `google/gemini-3.7-flash` is a house slug with no price: it is absent from the committed
-`gemini.yaml` (the snapshot predates the model), so it is listed in `_UNPRICED_SLUGS` until
-that snapshot is refreshed.
+`gemini.yaml` (the snapshot predates the model), so it is listed in the config file's
+`unpriced_slugs` until that snapshot is refreshed.
+
+**The table is config, not code (#5029).** The slugs and their prices live in
+`config/digiquant-model-prices.json`, read by `load_price_table()` (mtime-cached on
+`(path, mtime)`, so an edited file takes effect without a restart). `DIGI_CONFIG_PATH`
+overrides the directory exactly as it does for `digigraph.model_config`; unset, the repo root
+is tried before the CWD-relative `config/`. Two consequences worth knowing before editing:
+
+- **Provenance is required, not decorative.** Every price entry carries the `source` snapshot it
+  came from and its `last_checked` date, and a rate that is not the obvious one carries
+  `rate` + `note`. `ModelPrice` carries these onto the parsed row, so the audit trail is
+  readable without opening the JSON. The loader **drops** an entry whose `source` is missing or
+  does not point under `docs/providers/snapshots/` — an uncitable price is not a price. A bad
+  entry is dropped by name with a warning and the rest of the table still loads, because one
+  bad row must not under-report every other model's spend.
+- **Failing soft is loud.** A missing/unreadable/corrupt config yields an empty table plus a
+  `warning`, never an exception — telemetry must not break a chain run. An empty table means
+  `estimate_cost_usd` returns `None` and the caller falls back to the provider's own `0.0`,
+  i.e. the pre-#4596 behaviour, so the warning is the only signal that spend went unmeasured.
+  Production runs the chain in CI (`python -m digiquant.portfolio.chain`) with the repo checked
+  out, so `config/` is present there; the `digiquant` **container** mounts no `config/` and sets
+  no `DIGI_CONFIG_PATH`, so in that deployment the table resolves empty and only the warning
+  fires.
 
 It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
 is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
