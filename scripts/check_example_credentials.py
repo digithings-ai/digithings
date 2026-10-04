@@ -6,6 +6,8 @@ that are not obvious placeholders. Fails if found.
 import re
 import subprocess
 import sys
+from collections import Counter
+from math import log2
 from pathlib import Path
 
 PLACEHOLDER_PATTERNS = [
@@ -23,11 +25,28 @@ CRED_VAR_PATTERNS = [
     r'WEBHOOK_SECRET', r'SIGNING_KEY',
 ]
 CRED_VALUE_PATTERNS = [
-    r'^[A-Za-z0-9]{32,}$',
-    r'^[A-Za-z0-9+/]{20,}={0,2}$',
-    r'^sk-[A-Za-z0-9]{20,}$',
+    # Vendor prefixes only: high-signal, short, and a prefix alone is enough.
+    # The generic character-class entries are gone - they whitelisted an
+    # alphabet, so a credential holding any other character was reported clean.
+    # `looks_cred_val` now scores the value's own distribution instead.
+    # Two rules for this list. No entry may be end-anchored (`$` or `\Z`): a
+    # prefixed key is routinely followed by a trailing `# comment`, and the
+    # anchor lets that comment hide the key. And a body class must be the
+    # alphabet the vendor really uses, because a value carrying a comment never
+    # reaches the entropy score below - the prose exclusion runs first - so this
+    # loop is the only gate that can catch it. `sk-` is URL-safe base64, and its
+    # two common families (`sk-proj-`, `sk-ant-api03-`) put a `-` inside the
+    # first 20 characters.
+    r'^sk-[A-Za-z0-9_-]{20,}',
     r'^ghp_', r'^gho_', r'^glpat-',
 ]
+#: Bits per character at or above which a value counts as a credential. Set
+#: below the weakest probe (3.565) on purpose: the floor also has to cover the
+#: encodings the removed character-class patterns caught - over 100 000 random
+#: 32-character hex secrets, 3.5 misses 18.8%, 3.2 misses 0.36%, 3.0 misses
+#: 0.006% (6 in 100 000; the observed minimum was 2.936). Precision comes from
+#: the inline-comment exclusion below, not from this floor.
+CRED_MIN_ENTROPY = 3.0
 
 def is_placeholder(v):
     v = v.strip().strip('"').strip("'")
@@ -45,6 +64,14 @@ def looks_cred_var(var):
             return True
     return False
 
+def shannon_entropy(v: str) -> float:
+    """Shannon entropy of ``v`` in bits per character; 0.0 for an empty string."""
+    if not v:
+        return 0.0
+    n = len(v)
+    # `+ 0.0` normalizes the `-0.0` a single-symbol string would otherwise return.
+    return -sum((c / n) * log2(c / n) for c in Counter(v).values()) + 0.0
+
 def looks_cred_val(v):
     v = v.strip().strip('"').strip("'")
     if len(v) < 16:
@@ -54,9 +81,14 @@ def looks_cred_val(v):
     for p in CRED_VALUE_PATTERNS:
         if re.match(p, v):
             return True
-    if re.match(r'^[A-Za-z0-9_\-.]{32,}$', v):
-        return True
-    return False
+    # Prose is rejected before any score is taken. The lowest probe scores
+    # 3.565 and the live inline comments in `.env.example` score 4.005 and
+    # 4.348, so no threshold separates the two groups: whitespace, or a leading
+    # `#`, is what marks a value as a comment rather than a token. That costs a
+    # passphrase written with real internal spaces, accepted on purpose.
+    if v.startswith('#') or any(c.isspace() for c in v):
+        return False
+    return shannon_entropy(v) >= CRED_MIN_ENTROPY
 
 def main():
     try:
