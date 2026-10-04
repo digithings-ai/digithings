@@ -228,12 +228,21 @@ const MAX_TOKEN = 4_096;
  * silently dropped" is exactly the invisibility DIG-284 exists to remove.
  *
  * 64 characters matches digigraph's `prefixed_tool_name` truncation width, so a
- * name that fits here is one digigraph can prefix unambiguously. 64 entries is
- * the scale of a real MCP tool catalog. `MAX_UPSTREAM_JSON` stays the backstop:
- * an over-budget config fails closed, the same as an over-long `token` does
- * today.
+ * name that fits here is one digigraph can prefix unambiguously; the longest name
+ * in the widest surface we ship is 36.
+ *
+ * 256 entries is set by our own corpus, not a guess. digiquant's `scope="read"`
+ * server advertises 113 tools (`READ_SCOPE_TOOLS` in
+ * `digiquant/src/digiquant/mcp_server.py`) and `config/examples/dashboard-modal.yaml`
+ * is that row, so the entry bound has to clear 113 with room to grow. A bound
+ * below that does not merely reject a big list — it rejects a correct config, and
+ * the rejection surfaces as the whole `X-Digi-Mcp-Servers` header being dropped
+ * by `route.ts` with only "Invalid deploy config" logged. 113 names serialise to
+ * about 3 KB, so this stays well inside `MAX_UPSTREAM_JSON`, which remains the
+ * backstop: an over-budget config fails closed, the same as an over-long `token`
+ * does today.
  */
-export const MAX_MCP_TOOL_ENTRIES = 64;
+export const MAX_MCP_TOOL_ENTRIES = 256;
 export const MAX_MCP_TOOL_NAME_LENGTH = 64;
 
 /**
