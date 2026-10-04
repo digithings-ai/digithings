@@ -58,8 +58,18 @@ vault-check:
 	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
 
 # Read-only probe of the DataTap production answer path. Exits 2 if it cannot see.
+#
+# GNU make returns 2 for *any* failing recipe and cannot return 1, so this target
+# cannot carry the script's exit 1 on its own. The recipe therefore echoes the
+# real status on a `datatap-answer-check: exit N` line and still fails, so make
+# never reports success for a check that found something. Anything that schedules
+# this must run `python3 scripts/datatap_answer_integrity_check.py` directly and
+# branch on its exit code, not on make's.
 datatap-answer-check:
-	python3 scripts/datatap_answer_integrity_check.py
+	@python3 scripts/datatap_answer_integrity_check.py; \
+	code=$$?; \
+	echo "datatap-answer-check: exit $$code"; \
+	exit $$code
 
 # Coverage for Phase 1 code (digigraph + digiquant + digitrace). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digitrace"
 test-cov:
