@@ -37,6 +37,8 @@ scripts
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp
+# Boot-time occ_tickets backfill, run by [program:seed_occ_tickets].
+!scripts/index_occ_tickets.py
 agents
 apps/digithings-web
 apps/digiquant-web

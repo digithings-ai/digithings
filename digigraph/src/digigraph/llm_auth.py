@@ -14,6 +14,13 @@ provider-agnostic override contextvars:
   (#1873). Non-OpenAI BYOK requires ``X-BYOK-Model`` so the spend path never falls
   through to the operator key with an ambiguous model id.
 
+Both refusals that quote a model id read it from the catalog via
+:func:`byok_model_example` (:func:`byok_default_model_refusal`,
+:func:`byok_model_required_refusal`). That is the whole point of the catalog carrying
+``fallbackModels``: a named example is only remediation if the reader's key can spend
+it, and the catalog is where that fact is maintained. No model id is a literal in this
+module or in ``server.py`` (#5029).
+
 digigraph keeps its own ``(key, provider)`` BYOK contextvar so
 :func:`get_byok_override` still reports the provider tag — digillm's ``get_byok``
 only carries ``(api_key, base_url)``.
@@ -303,6 +310,18 @@ def byok_operator_model_routes_elsewhere(provider: str, model: str) -> bool:
     return _routes_to_another_provider(provider, model)
 
 
+def byok_model_example(provider: str) -> str | None:
+    """The provider's own first ``fallbackModels`` entry from the loaded catalog, or None.
+
+    The one place user-facing "here is a model that provider serves" copy gets its id.
+    Both refusals quote it — a model list is only useful remediation if the named model
+    is one the reader's key can actually spend, and the catalog is where that fact is
+    maintained (it is the same list digichat's picker offers, pinned by
+    ``use-byok-key.catalog-parity.test.ts``).
+    """
+    return _BYOK_MODEL_EXAMPLES.get(provider.strip().lower())
+
+
 BYOK_DEFAULT_MODEL_MISMATCH_CODE = "byok_default_model_provider_mismatch"
 
 
@@ -332,12 +351,29 @@ def byok_default_model_refusal(provider: str) -> str:
     ``a xai``, ``a openrouter``; only ``a gemini`` scans).
     """
     normalized = provider.strip().lower()
-    example = _BYOK_MODEL_EXAMPLES.get(normalized)
+    example = byok_model_example(normalized)
     hint = f" (e.g. {example})" if example else ""
     return (
         f"This deployment's default model is served by a provider other than {provider!r}, "
         f"so your {provider} key would not be the one billed. Send X-BYOK-Model with a model "
         f"served by {provider}{hint} to spend your own key."
+    )
+
+
+def byok_model_required_refusal(provider: str) -> str:
+    """Refusal text for a BYOK key sent to a provider that requires ``X-BYOK-Model``.
+
+    Lives beside :func:`byok_default_model_refusal` because it answers the same
+    question the same way — *send a model this provider serves* — and it previously
+    did not: ``server.py`` carried its own sentence naming three hardcoded ids for
+    every provider at once, so an x.ai caller was told to send a model x.ai does not
+    serve and an Anthropic caller was offered two it cannot spend. Same catalog,
+    same reader, same sentence shape; the difference is only which refusal asks.
+    """
+    example = byok_model_example(provider)
+    hint = f" (e.g. {example})" if example else ""
+    return (
+        f"BYOK provider {provider!r} requires X-BYOK-Model with a model served by {provider}{hint}."
     )
 
 
