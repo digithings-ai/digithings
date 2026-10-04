@@ -80,4 +80,22 @@ Exempt patterns (not blocked):
 - Default to the most conservative, secure, and token-efficient option.
 - If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
 
-By contributing, you agree to the technical constraints above and the license terms in [LICENSE](LICENSE).
+## Contributor terms — DCO 1.1
+
+digithings is open-core under the MIT license ([LICENSE](LICENSE)). The MIT
+license covers our code; it does not grant us any rights in the code *you*
+contribute. Every contribution therefore carries a Developer Certificate of
+Origin 1.1 sign-off, which is the record that you have the right to submit it.
+
+Sign off every commit:
+
+    git commit -s -m "feat(x): ..."
+
+or add the line automatically for this repo:
+
+    git config --local format.signoff true
+
+A pull request whose commits are missing the sign-off cannot be merged — the
+CI check enforces this. The full text is at <https://developercertificate.org/>.
+
+This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
