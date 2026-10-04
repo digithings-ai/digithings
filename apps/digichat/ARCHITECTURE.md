@@ -936,7 +936,10 @@ call on that server) and `mutatingTools` (the subset of those that write). Both 
 `MAX_MCP_TOOL_ENTRIES` (256) entries of at most `MAX_MCP_TOOL_NAME_LENGTH` (64) characters — the same width as
 digigraph's `prefixed_tool_name` truncation — with `MAX_UPSTREAM_JSON` as the backstop. The entry bound clears the widest
 read-scope surface this repo ships (digiquant's `scope="read"` server, 113 tools) because a bound below it would reject a
-correct config and take the whole `X-Digi-Mcp-Servers` header down with it. Semantics: **deny-by-default**
+correct config and take the whole `X-Digi-Mcp-Servers` header down with it. The two limits are independent, and the byte cap
+is the one that binds first at the top of the range: the real 113-name row is about 6 KB, but a maximal row (256 names at 64
+characters, both lists) is about 34 KB against a 16 KB cap — legal by both bounds here, refused by the header guard. Either
+overshoot drops the whole header unlogged, so a row that disappears is a config to look at, not a server to debug. Semantics: **deny-by-default**
 (absent and `[]` both mean zero tools, and neither is forwarded), **exact match only** (no globs; digigraph compares
 the remote name literally, so a glob could only ever never match), and an over-budget list is dropped whole rather
 than truncated, because a partial allowlist denies tools while still looking configured. `allowedTools`/`mutatingTools`
