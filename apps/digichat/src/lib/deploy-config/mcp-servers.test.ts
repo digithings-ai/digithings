@@ -407,68 +407,6 @@ describe("mcpServersHeaderValue operator tool allowlist (DIG-284)", () => {
   });
 });
 
-describe("every shipped operator row names its tools (DIG-284 deny-by-default)", () => {
-  // Once leaf 284.1 lands, a row with no `allowedTools` offers *zero* tools. So
-  // each shipped row has to name its catalog, and the count is the cheapest way
-  // to notice when a hand-edit drops or invents a name. The numbers come from
-  // the source of each server, not from the YAML:
-  //   digiquant  — READ_SCOPE_TOOLS, digiquant/src/digiquant/mcp_server.py
-  //   zammad     — @mcp.tool() in scripts/zammad_mcp/server.py
-  //   digisearch — @mcp.tool() in digisearch/src/digisearch/mcp_server.py
-  //   digivault  — DISPATCH_TOOL_NAMES, digivault/src/digivault/tool_dispatch.py
-  const rows = [
-    { file: "dashboard-modal.yaml", id: "digiquant", count: 113 },
-    { file: "occ-embed.yaml", id: "zammad", count: 5 },
-    { file: "occ-embed.yaml", id: "digisearch", count: 16 },
-    { file: "occ-embed.yaml", id: "digivault", count: 6 },
-    { file: "digithings-ai-embed.yaml", id: "digisearch", count: 16 },
-    { file: "digithings-ai-embed.yaml", id: "digivault", count: 6 },
-  ];
-  // Rows live under `deployment.mcp` in some files and under a host's `mcp` in
-  // others (`occ-embed.yaml` and `digithings-ai-embed.yaml` are `hosts:` files),
-  // so collect from wherever the row actually is rather than guessing the shape.
-  const allServerRows = (cfg: ReturnType<typeof parseDigichatConfig>) => {
-    const out: { id: string; allowedTools?: string[] }[] = [];
-    const scopes = [cfg.deployment, ...Object.values(cfg.hosts ?? {})];
-    for (const scope of scopes) {
-      for (const s of (scope as { mcp?: { servers?: typeof out } })?.mcp?.servers ?? []) {
-        out.push(s);
-      }
-    }
-    return out;
-  };
-  it.each(rows)("$file [$id] names exactly $count tools", ({ file, id, count }) => {
-    const cfg = parseDigichatConfig(
-      loadYaml(readFileSync(resolve(examplesDir, file), "utf8")),
-      file,
-    );
-    const row = allServerRows(cfg).find((s) => s.id === id);
-    expect(row, `${file} has no mcp.servers row with id ${id}`).toBeDefined();
-    expect(row?.allowedTools).toHaveLength(count);
-    expect(row?.allowedTools).toEqual([...(row?.allowedTools ?? [])].sort());
-    expect(new Set(row?.allowedTools).size).toBe(count);
-  });
-
-  it("leaves the two DataTap rows unenumerated, on purpose and visibly", () => {
-    // DataTap's catalog is only knowable from a remote `tools/list`, so these two
-    // rows cannot be enumerated ahead of connect. Under deny-by-default they
-    // therefore go dark when 284.1 lands — which is the point of this test: it
-    // fails the moment someone enumerates them, so the decision gets made rather
-    // than inherited. The open question (read `tools/list`, or narrow the server)
-    // is on DIG-409; do not resolve it by editing a number here.
-    for (const file of ["datatap-mcp.yaml", "../datatap-trial-test.yaml"]) {
-      const cfg = parseDigichatConfig(
-        loadYaml(readFileSync(resolve(examplesDir, file), "utf8")),
-        file,
-      );
-      const rows = allServerRows(cfg);
-      expect(rows.map((s) => s.id)).toEqual(["datatap"]);
-      expect(rows[0]?.allowedTools).toBeUndefined();
-      expect((rows[0] as { mutatingTools?: string[] } | undefined)?.mutatingTools).toBeUndefined();
-    }
-  });
-});
-
 describe("dashboard-modal operator digiquant server", () => {
   it("declares exactly the digiquant read-scope server", () => {
     const cfg = parseDigichatConfig(
@@ -478,36 +416,14 @@ describe("dashboard-modal operator digiquant server", () => {
     const dep = cfg.deployment;
     expect(dep?.mcp?.allowUserServers).toBe(false);
     expect(dep?.mcp?.allowAddForm).toBe(false);
-    expect(dep?.mcp?.servers).toHaveLength(1);
-    const row = dep?.mcp?.servers?.[0];
-    // Exactly these keys — the previous `toEqual` on the whole row was what
-    // caught the allowlist landing here, and pinning the key set keeps that
-    // signal without pasting 113 names into the fixture.
-    expect(Object.keys(row ?? {}).sort()).toEqual([
-      "allowedTools",
-      "default",
-      "id",
-      "label",
-      "url",
+    expect(dep?.mcp?.servers).toEqual([
+      {
+        id: "digiquant",
+        url: "https://mcp.digithings.ai/mcp",
+        label: "digiquant market data",
+        default: true,
+      },
     ]);
-    expect(row).toMatchObject({
-      id: "digiquant",
-      url: "https://mcp.digithings.ai/mcp",
-      label: "digiquant market data",
-      default: true,
-    });
-    // DIG-284 deny-by-default: the row names its whole read scope, and it names
-    // it exactly — `READ_SCOPE_TOOLS` in `digiquant/src/digiquant/mcp_server.py`
-    // has 113 entries and this one keeps its longest. Sorted, so a hand-edit
-    // that drops or duplicates a name is visible in a diff.
-    expect(row?.allowedTools).toHaveLength(113);
-    expect(row?.allowedTools).toContain("dashboard_get_policy_gate_evaluation");
-    expect(row?.allowedTools).toEqual([...(row?.allowedTools ?? [])].sort());
-    expect(new Set(row?.allowedTools).size).toBe(113);
-    // Nothing is flagged as mutating: `READ_SCOPE_TOOLS` is the read surface by
-    // construction, and digigraph owns the mutating decision anyway (DIG-284
-    // decision D1) — `mutatingTools` is an operator hint, not the gate.
-    expect(row?.mutatingTools).toBeUndefined();
   });
 
   it("a session overlay entry with the same id cannot override the operator URL", () => {
