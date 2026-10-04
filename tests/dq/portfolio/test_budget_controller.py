@@ -91,6 +91,11 @@ class TestBudgetFor:
         b, _ = budget_for(RegimeAssessment(regime="stress"), static_cap=4)
         assert b == 3  # STRESS_FLOOR, not round(4*0.5)=2
 
+    def test_stress_budget_never_exceeds_a_cap_below_the_floor(self) -> None:
+        b, floor = budget_for(RegimeAssessment(regime="stress"), static_cap=2)
+        assert b == 2
+        assert floor == 0
+
     def test_neutral_equals_cap(self) -> None:
         b, floor = budget_for(RegimeAssessment(regime="neutral"), static_cap=20)
         assert b == 20 and floor == 1

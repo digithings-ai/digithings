@@ -708,10 +708,12 @@ def _exemption_violations(catalog: dict[str, Any], exemptions_path: Path) -> lis
         if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
             violations.append(f"exemption {model_id!r} has no non-empty reason")
         # The exemption is scoped to one provider, so a stale exemption is only
-        # stale *there*. An unscoped check would flag `grok-4-3` as obsolete the
-        # moment xai's local slice carried a dotted `grok-4.3`, and -- worse --
-        # would let an exemption filed for one provider excuse the same id on
-        # another, which is exactly the class of drift the file exists to stop.
+        # stale *there*. An unscoped check reads some *other* provider's row with
+        # a similar name as proof the pin is fine, and -- worse -- would let an
+        # exemption filed for one provider excuse the same id on another, which is
+        # exactly the class of drift the file exists to stop. (Both halves were
+        # real: a dashed id one provider listed while the other listed the dotted
+        # spelling of the same model.)
         provider = entry.get("provider")
         if not isinstance(provider, str) or not provider:
             violations.append(f"exemption {model_id!r} has no provider")
