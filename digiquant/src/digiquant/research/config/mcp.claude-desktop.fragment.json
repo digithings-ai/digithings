@@ -50,22 +50,6 @@
       "env": {
         "FASTMCP_LOG_LEVEL": "WARNING"
       }
-    },
-    "coingecko": {
-      "command": "npx",
-      "args": ["-y", "@coingecko/coingecko-mcp"],
-      "env": {
-        "COINGECKO_API_KEY": "${env:COINGECKO_API_KEY}",
-        "FASTMCP_LOG_LEVEL": "WARNING"
-      }
-    },
-    "alpha-vantage": {
-      "command": "npx",
-      "args": ["-y", "alpha-vantage-mcp"],
-      "env": {
-        "ALPHA_VANTAGE_API_KEY": "${env:ALPHA_VANTAGE_API_KEY}",
-        "FASTMCP_LOG_LEVEL": "WARNING"
-      }
     }
   }
 }

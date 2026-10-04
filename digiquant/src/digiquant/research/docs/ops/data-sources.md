@@ -217,14 +217,12 @@ Configured in `.vscode/mcp.json` (VS Code Copilot) and `~/Library/Application Su
 | `fred` | `mcp_fred_*` | 800K+ FRED series: GDP, CPI, UNRATE, PCE, DGS10, DFF, T10YIE, T10Y2Y, credit spreads | Phase 3 (Macro) + Phase 4A (Bonds) |
 | `polymarket` | `mcp_polymarket_*` | Prediction market probabilities: rate cuts, elections, geopolitical events | Phase 1 (Alt Data) |
 | `crypto-feargreed` | `mcp_crypto-feargr_*` | Crypto Fear & Greed Index — current value, N-day history, trend analysis | Phase 1 (Alt Data) + Phase 4D (Crypto) |
-| `coingecko` | `mcp_coingecko_*` | 200+ chains, 8M+ tokens, DeFi TVL, exchange volumes — free public tier | Phase 4D (Crypto) |
 | `frankfurter-fx` | `mcp_frankfurter-f_*` | Live + historical FX rates across 30+ currency pairs | Phase 4C (Forex) |
 | `world-bank` | `mcp_world-bank_*` | GDP growth, inflation, debt-to-GDP, trade data by country | Phase 4E (International) |
 | `sec-edgar` | `mcp_sec-edgar_*` | 10-K/10-Q/8-K filings, XBRL financials, Form 3/4/5 insider trades | Phase 2 (Institutional) |
-| `alpha-vantage` | `mcp_alpha-vantage_*` | Fundamentals, earnings calendar, news sentiment — 25 req/day | Phase 5 (Equities) |
 
 > **SEC EDGAR**: Requires Docker running. Image: `stefanoamorelli/sec-edgar-mcp:latest`. User-Agent string as the only credential.
-> **CoinGecko**: Free public tier — leave API key blank.
+> **Crypto**: No MCP server and no API key. Read crypto levels from the ingested layer or use web search.
 
 ### Key FRED Series by Phase
 
@@ -235,13 +233,6 @@ Configured in `.vscode/mcp.json` (VS Code Copilot) and `~/Library/Application Su
 | Bonds (4A) | `T10YIE`, `T5YIE`, `DFII10` | 10Y/5Y TIPS breakeven, 10Y real yield |
 | Bonds (4A) | `BAMLH0A0HYM2`, `BAMLC0A0CM` | HY OAS, IG OAS credit spreads |
 | Macro (3) | `VIXCLS` | VIX close |
-
-### Key CoinGecko Queries
-
-Use `mcp_coingecko_execute` with the path and method:
-- Coin prices: `GET /simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true`
-- Market overview: `GET /coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20`
-- Trending: `GET /search/trending`
 
 ### Key Polymarket Queries
 
@@ -269,7 +260,4 @@ docker pull stefanoamorelli/sec-edgar-mcp:latest
 
 # uv (for uvx-based servers)
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Node.js v18+ (for coingecko npx server)
-node --version
 ```
