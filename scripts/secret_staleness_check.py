@@ -64,6 +64,13 @@ SCOPES = ("repo", "org", "cron")
 ISSUE_TITLE = "Ops: GitHub secrets past the 90-day rotation window"
 ISSUE_MARKER = "<!-- secret-staleness-check -->"
 
+#: Labels put on the tracker issue. Every name here must already exist in the repo:
+#: GitHub rejects the whole create with a bare `Invalid request` when one does not,
+#: and there is no CI path that could create the label first. `ops` was the original
+#: value and has never existed, so the tracker silently never appeared. `gh api` field
+#: flags only take strings, so the array goes out as an explicit JSON body instead.
+ISSUE_LABELS = ("security:finding",)
+
 #: Order in which an overdue name is reported: widest blast radius first, so a
 #: truncated issue body still leads with the worst of it. An org secret is
 #: inherited by every repo in the org; a repo secret is readable by any workflow on
@@ -143,10 +150,22 @@ def parse_tsv(raw: str) -> list[Secret]:
     return out
 
 
-def _gh_json(cmd: list[str], root: Path) -> object | None:
-    """Parsed `gh` JSON, or None with a one-line reason on stderr."""
+def _gh_json(cmd: list[str], root: Path, stdin: str | None = None) -> object | None:
+    """Parsed `gh` JSON, or None with a one-line reason on stderr.
+
+    A paginated call is given `--slurp`, so it comes back as a list of pages rather
+    than as one object. `--paginate` on its own prints one JSON document per page
+    and `json.loads` cannot read that: this repo's 226-issue listing reproduces it
+    as `Extra data: line 1 column 244`. gh rejects `--slurp` beside `--jq`, so a
+    call that filtered server-side has to filter here instead.
+    """
+    if "--paginate" in cmd and "--slurp" not in cmd:
+        at = cmd.index("--paginate") + 1
+        cmd = [*cmd[:at], "--slurp", *cmd[at:]]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=root)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, cwd=root, input=stdin
+        )
     except FileNotFoundError:
         print("secret_staleness_check: `gh` not found on PATH", file=sys.stderr)
         return None
@@ -164,11 +183,27 @@ def _gh_json(cmd: list[str], root: Path) -> object | None:
         return None
 
 
+def _pages(payload: object) -> list[object]:
+    """A `--slurp` result as its pages; an unpaginated object as a single page."""
+    return payload if isinstance(payload, list) else [payload]
+
+
 def _secret_entries(payload: object) -> list[dict] | None:
-    """The `.secrets` list of a paginated listing, or None when it is not that shape."""
-    if not isinstance(payload, dict) or not isinstance(payload.get("secrets"), list):
+    """Every `.secrets` entry across the pages, or None when it is not that shape.
+
+    None is the important return: the caller turns it into "unavailable", and
+    "unavailable" must never be reported to a human as an empty list, because an
+    empty list reads as "nothing is overdue".
+    """
+    entries: list[dict] = []
+    pages = _pages(payload)
+    if not pages:
         return None
-    return [e for e in payload["secrets"] if isinstance(e, dict)]
+    for page in pages:
+        if not isinstance(page, dict) or not isinstance(page.get("secrets"), list):
+            return None
+        entries.extend(e for e in page["secrets"] if isinstance(e, dict))
+    return entries
 
 
 def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
@@ -470,7 +505,16 @@ def markdown(
             "only counts as rotated when its **last-written date** moves."
         )
     else:
-        lines.append(f"Nothing is past {max_age_days} days. No action needed.")
+        if report.unavailable:
+            missed = ", ".join(f"`{scope}`" for scope in sorted(report.unavailable))
+            lines.append(
+                f"Nothing is past {max_age_days} days **among the levels that could be "
+                f"read**, but {missed} could not be. That is not a clean bill of health: "
+                "a level nobody read cannot report a stale name. The per-level reason "
+                "is below."
+            )
+        else:
+            lines.append(f"Nothing is past {max_age_days} days. No action needed.")
     if report.unavailable:
         lines += ["", "## Levels not checked", ""]
         lines += [f"- `{scope}` — {reason}" for scope, reason in sorted(report.unavailable.items())]
@@ -526,22 +570,24 @@ def render(
 
 
 def _issue_exists(root: Path, repo: str) -> str | None:
-    """The number of the open tracker issue, if one is already open."""
-    payload = _gh_json(
-        [
-            "gh",
-            "api",
-            "--paginate",
-            f"repos/{repo}/issues",
-            "--jq",
-            f'[.[] | select(.state == "open") | select(.title == "{ISSUE_TITLE}")] | .[0].number',
-        ],
-        root,
-    )
-    if isinstance(payload, list) and payload and isinstance(payload[0], int):
-        return str(payload[0])
-    if isinstance(payload, int):
-        return str(payload)
+    """The number of the open tracker issue, if one is already open.
+
+    Filtering happens here rather than in a `--jq` expression because `--slurp` cannot
+    be combined with `--jq`, and `--jq` alone emits one value per *page*: a repo-wide
+    match returned `null` on each of three pages, which is the run log's
+    `Expecting value: line 3 column 1`.
+    """
+    payload = _gh_json(["gh", "api", "--paginate", f"repos/{repo}/issues"], root)
+    for page in _pages(payload):
+        if not isinstance(page, list):
+            continue
+        for issue in page:
+            if not isinstance(issue, dict):
+                continue
+            if issue.get("state") == "open" and issue.get("title") == ISSUE_TITLE:
+                number = issue.get("number")
+                if isinstance(number, int):
+                    return str(number)
     return None
 
 
@@ -549,6 +595,7 @@ def file_or_update_issue(root: Path, repo: str, body: str) -> str:
     """Open the tracker, or update the one already open. Never files a duplicate."""
     existing = _issue_exists(root, repo)
     if existing is None:
+        payload = json.dumps({"title": ISSUE_TITLE, "body": body, "labels": list(ISSUE_LABELS)})
         _gh_json(
             [
                 "gh",
@@ -556,14 +603,11 @@ def file_or_update_issue(root: Path, repo: str, body: str) -> str:
                 "--method",
                 "POST",
                 f"repos/{repo}/issues",
-                "-f",
-                f"title={ISSUE_TITLE}",
-                "-f",
-                f"body={body}",
-                "-f",
-                "labels=ops",
+                "--input",
+                "-",
             ],
             root,
+            stdin=payload,
         )
         return "opened a new tracking issue"
     _gh_json(
@@ -573,10 +617,11 @@ def file_or_update_issue(root: Path, repo: str, body: str) -> str:
             "--method",
             "PATCH",
             f"repos/{repo}/issues/{existing}",
-            "-f",
-            f"body={body}",
+            "--input",
+            "-",
         ],
         root,
+        stdin=json.dumps({"body": body}),
     )
     return f"updated the open tracking issue #{existing}"
 
