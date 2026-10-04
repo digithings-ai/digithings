@@ -471,6 +471,12 @@ export function fxPaneStatus(
   if (runDate === null) return route;
   const sessions = tradingSessionsSince(runDate, now);
   if (sessions === null) return `as of ${runDate}`;
+  // A run dated ahead of the clock is skew or a bad write, not proof of staleness,
+  // so the tone stays as it is. But "current session" is a positive claim about
+  // freshness, and this one cannot be supported: show the date and stop there.
+  // Both ends are normalised YYYY-MM-DD, so the string compare is the date compare.
+  const today = calendarDay(now);
+  if (today !== null && runDate > today) return `as of ${runDate}`;
   return `as of ${runDate} · ${ageLabel(sessions)}${sessions >= SESSION_STALE ? " · stale" : ""}`;
 }
 
