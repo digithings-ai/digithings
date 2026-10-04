@@ -78,6 +78,7 @@ apps/digithings-web/public/openwiki/
 projects/*/.env*
 secrets.yaml
 digikey/examples/vault.yaml
+digiquant/src/digiquant/research/config/*.env
 
 # Local stack (scripts/run_stack_local.sh)
 .local_stack_pids
