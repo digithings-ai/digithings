@@ -390,4 +390,18 @@ describe("manual-only rows (DIG-55)", () => {
     expect(Object.keys(row!.inputs ?? {})).not.toContain("since");
     expect(Object.keys(row!.inputs ?? {})).not.toContain("dates");
   });
+
+  it("demands a date bound per kick, because an empty since re-projects all of it", () => {
+    // Verified on twelve-x develop: maintenance.yml drops an empty `since`, and
+    // backfill_snapshots.py then keeps every distinct_run_dates() entry and
+    // re-projects each with a fresh as_of. So the row carries no bound itself and
+    // refuses a request that carries none either. See dispatch.test.ts for the
+    // enforcement cases.
+    const row = JOBS.find((job) => job.id === "twelve-x-snapshot-backfill");
+    expect(row?.requiredKickArgs).toEqual(["since", "dates", "until"]);
+    // The bound is required, never supplied: config holds no date key at all.
+    for (const key of row!.requiredKickArgs!) {
+      expect(Object.keys(row!.inputs ?? {})).not.toContain(key);
+    }
+  });
 });

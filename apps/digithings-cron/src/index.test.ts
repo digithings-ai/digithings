@@ -346,3 +346,76 @@ describe("GET /runs", () => {
     expect(res.status).toBe(404);
   });
 });
+
+/**
+ * DIG-369. The sentinel cron is reachable only from here, and a kick with no
+ * date bound would re-project every stored run_date on twelve-x. The refusal
+ * must be legible: an operator who gets an opaque 500 retries, and the second
+ * attempt is the expensive one.
+ */
+describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
+  const SENTINEL = "0 0 30 2 *";
+
+  function envFor(githubFetch: () => Promise<Response>): Env {
+    return {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "github-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER_AUTH_TOKEN: "runner-token",
+    } as Env;
+  }
+
+  it("answers 400 missing_required_arg on a bare kick, and never dispatches", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const env = envFor(githubFetch as unknown as () => Promise<Response>);
+    env.RUNNER = undefined;
+    const res = await worker.fetch(kick({ cron: SENTINEL }), env, executionContext([]));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; detail: string };
+    expect(body.error).toBe("missing_required_arg");
+    expect(body.detail).toContain("since");
+    // The whole point: no workflow_dispatch reached GitHub.
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["empty since", { since: "" }],
+    ["blank since", { since: "   " }],
+    ["a non-date key", { backfill_snapshots: "true" }],
+  ])("refuses %s the same way", async (_label, args) => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const env = envFor(githubFetch as unknown as () => Promise<Response>);
+    env.RUNNER = undefined;
+    const res = await worker.fetch(kick({ cron: SENTINEL, args }), env, executionContext([]));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("missing_required_arg");
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it("dispatches once a date bound is present", async () => {
+    const githubFetch = vi.fn(
+      async () => new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal("fetch", githubFetch);
+    const env = envFor(githubFetch as unknown as () => Promise<Response>);
+    env.RUNNER = undefined;
+    const res = await worker.fetch(
+      kick({ cron: SENTINEL, args: { since: "2026-06-02" } }),
+      env,
+      executionContext([]),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; started: string[] };
+    expect(body.ok).toBe(true);
+    expect(body.started).toEqual(["twelve-x-snapshot-backfill"]);
+    const [url, init] = githubFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("maintenance.yml/dispatches");
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { backfill_snapshots: "true", since: "2026-06-02" },
+    });
+  });
+});
