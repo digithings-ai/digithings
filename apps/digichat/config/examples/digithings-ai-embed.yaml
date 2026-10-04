@@ -82,12 +82,36 @@ hosts:
           default: true
           setup:
             index_name: digithings_docs
+          allowedTools:
+            - grokipedia_get_page
+            - grokipedia_search
+            - monitors_create_watch
+            - monitors_get_runs
+            - monitors_list_watches
+            - monitors_trigger_watch
+            - research_turn
+            - search_strategies
+            - semantic
+            - web_search
+            - websets_add_search
+            - websets_create
+            - websets_events
+            - websets_export
+            - websets_get
+            - websets_list_items
         - id: digivault
           url: http://digivault-mcp:8769/mcp
           label: Vault
           default: true
           setup:
             path_prefix: clients/digithings
+          allowedTools:
+            - digivault_backlinks
+            - digivault_create_note
+            - digivault_get_note
+            - digivault_lint
+            - digivault_search_notes
+            - digivault_search_tag
     gate:
       mode: ungated
       # Local website-like dogfood (`?host=digithings.ai`) must show retrieve

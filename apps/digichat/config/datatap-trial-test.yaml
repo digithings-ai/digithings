@@ -43,6 +43,10 @@ deployment:
         default: true
         tokenEnv: DATATAP_MCP_TOKEN
         authHeader: X-API-Key
+        # No `allowedTools` on purpose: DataTap publishes no catalog in this repo
+        # and `tools/list` needs a real X-API-Key. Under DIG-284 deny-by-default
+        # this row then offers zero tools — enumerate it from `tools/list` before
+        # it goes live. Tracked on DIG-409; asserted in mcp-servers.test.ts.
   gate:
     mode: ungated
     activityDetail: labels
