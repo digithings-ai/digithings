@@ -175,13 +175,17 @@ web:
   # @cloudflare/workers-types its tsconfig pins), so a lane of its own would
   # duplicate a whole install to run two commands.
   #
-  # This path was ALREADY listed in this file — but only under `ruff_and_scripts`,
-  # where it merely decides whether the Python lint job runs. That entry's own
-  # comment asserted "an edit here must redden a lane that runs"; no lane did.
-  # So its 322-test vitest suite and `tsc --noEmit` were enforced nowhere in CI:
-  # PR #5057 edited two files in here and every suite check skipped. A Worker route
-  # could break and merge fully green (#358). The `ruff_and_scripts` entry stays —
-  # an edit to a manifest or Python file under this path must still redden lint.
+  # This path was NOT in this lane's filter — it was listed in this file only
+  # under `ruff_and_scripts`, where it merely decides whether that job runs, and
+  # that entry's own comment asserted "an edit here must redden a lane that runs".
+  # No lane did. So this worker's vitest suite (236 tests in 20 files on develop)
+  # and its `tsc --noEmit` were enforced nowhere in CI: a PR touching only
+  # apps/dashboard-api/src ran zero suites, so a Worker route could break and merge
+  # fully green (#358). Do not read the two entries as redundant — the `web` one
+  # below runs the worker's own vitest and tsc, which no other lane does. The
+  # `ruff_and_scripts` entry is kept because that job also runs the generator's
+  # `--check` and the model-routing validation, which an edit under this path
+  # should still redden.
   - apps/dashboard-api/**
   - package.json
   - package-lock.json
