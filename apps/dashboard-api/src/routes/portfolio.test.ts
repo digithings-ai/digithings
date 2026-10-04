@@ -44,6 +44,25 @@ describe("phase 1 portfolio routes", () => {
     expect(res.provenance).toMatchObject({ source: "core:theses" });
   });
 
+  // The test above uses `id: "t1"`, which coincides with `thesis_id` and so
+  // cannot tell a working join from a dead one. Live core rows carry a uuid in
+  // `id` and the text business key in `thesis_id`, and the vehicles lookup must
+  // key on the latter: joined on `id`, it matched 0 of 3256 live rows.
+  it("theses vehicles join on thesis_id, not the uuid id", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) return [
+        { id: "fd49f84b-114b-4e73-ab87-f16939664f97", thesis_id: "gold-bid", name: "Gold", status: "ACTIVE" },
+      ];
+      if (url.includes("/thesis_vehicles")) return [{ thesis_id: "gold-bid", ticker: "GLD" }];
+      return [];
+    });
+    const res = await body("/theses");
+    expect(res.status).toBe(200);
+    const data = res.data as { theses: { id: string; vehicles: string[] }[] };
+    expect(data.theses[0].id).toBe("fd49f84b-114b-4e73-ab87-f16939664f97");
+    expect(data.theses[0].vehicles).toEqual(["GLD"]);
+  });
+
   it("signals keeps only needs_resolution rows", async () => {
     mockFetch((url) => (url.includes("/theses?") ? [{ id: "a", needs_resolution: true, name: "A" }, { id: "b", needs_resolution: false, name: "B" }] : []));
     const res = await body("/theses/signals", { ...ENV, DASHBOARD_DEV_CALLER: "brief" });

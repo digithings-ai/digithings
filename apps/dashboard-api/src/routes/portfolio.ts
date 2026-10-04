@@ -6,6 +6,7 @@
 import { buildProvenance, errorResponse, type Provenance } from "../errors";
 import { HOUSE_WORKSPACE_ID } from "../supabase";
 import { tableRows, type TableReadEnv } from "../table-read";
+import { thesisShape } from "../thesis-shape";
 import type { RouteCtx, RouteModule } from "./registry";
 
 type Row = Record<string, unknown>;
@@ -155,35 +156,6 @@ async function enriched(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
     pinR.pin,
     bookDate,
   );
-}
-
-function thesisShape(rows: Row[], vehicles: Row[]) {
-  const byId = new Map<string, string[]>();
-  for (const v of vehicles) {
-    const id = str(v.thesis_id);
-    const ticker = str(v.ticker) ?? str(v.vehicle);
-    if (!id || !ticker) continue;
-    byId.set(id, [...(byId.get(id) ?? []), ticker]);
-  }
-  const theses = rows.map((r) => {
-    const id = str(r.id) ?? str(r.thesis_id) ?? "";
-    const state = (str(r.state) ?? str(r.status) ?? "").toLowerCase();
-    return {
-      id,
-      name: str(r.name) ?? str(r.title) ?? id,
-      state: state === "active" || state === "watch" || state === "exited" ? state : state || "—",
-      vehicles: byId.get(id) ?? [],
-      evidence: str(r.evidence),
-      kill_condition: str(r.kill_condition),
-      note: str(r.note),
-    };
-  });
-  const counts = {
-    active: theses.filter((t) => t.state === "active").length,
-    watch: theses.filter((t) => t.state === "watch").length,
-    exited: theses.filter((t) => t.state === "exited").length,
-  };
-  return { theses, counts };
 }
 
 async function theses(req: Request, ctx: RouteCtx<Env>, onlySignals: boolean): Promise<Response> {
