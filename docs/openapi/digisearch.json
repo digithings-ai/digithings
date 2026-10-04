@@ -2896,16 +2896,14 @@
     },
     "/health": {
       "get": {
-        "description": "Legacy health check for Docker and digigraph (kept for back-compat).",
+        "description": "Legacy health check for Docker and digigraph (kept for back-compat).\n\nReports ``degraded`` when a boot marked indexes as unseeded (#5045): their\ncollections are empty, so every query would answer \"no results\" and read as\na confident miss. HTTP stays 200 on purpose \u2014 every consumer gates on the\nstatus code (``scripts/run_stack_local.sh`` uses ``curl -sf``,\n``tests/test_e2e.py::test_digisearch_health`` asserts 200) and none read this\nbody. ``/healthz`` stays the pure liveness probe the CI pipeline calls.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
