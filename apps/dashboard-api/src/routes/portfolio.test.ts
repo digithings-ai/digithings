@@ -164,6 +164,88 @@ describe("phase 1 portfolio routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  // `theses` is one row per thesis per date, so a dossier that reads it without an
+  // order and `.find()`s the first match resolves whichever date PostgREST happens
+  // to return first. The stale row here leads the fixture AND carries `ticker: "GLD"`,
+  // so the ticker fallback would match it — that isolates the date defect from the
+  // join defect, which the next test covers on its own.
+  it("dossier resolves the thesis from the newest date, not an arbitrary one", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [
+          { id: "uuid-gold-stale", date: "2026-09-27", thesis_id: "gold", name: "Gold", status: "EXITED", ticker: "GLD" },
+          { id: "uuid-gold", date: "2026-09-28", thesis_id: "gold", name: "Gold bid", status: "ACTIVE" },
+        ];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [
+          { date: "2026-09-28", thesis_id: "gold", ticker: "GLD" },
+        ];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { thesis: { id: string; name: string; state: string } | null };
+    expect(data.thesis).toEqual({ id: "uuid-gold", name: "Gold bid", state: "ACTIVE" });
+  });
+
+  // `vehicleIds` is built from `thesis_id`, so matching it against `str(r.id)`
+  // first compares a uuid against a business key and never matches. This fixture
+  // omits the `ticker` column so the ticker fallback cannot mask a dead join.
+  it("dossier joins thesis_vehicles on thesis_id, not the uuid id", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [{ id: "uuid-1", date: "2026-09-28", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE" }];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [{ date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" }];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { thesis: { id: string } | null };
+    expect(data.thesis?.id).toBe("uuid-1");
+  });
+
+  // Vehicles must be narrowed to the same tip date as the thesis book, or the
+  // drawer shows mappings the thesis pane no longer holds.
+  it("dossier holds vehicles at the newest date too", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [{ id: "uuid-gold", date: "2026-09-28", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE" }];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [
+          { date: "2026-09-27", thesis_id: "gold-bid-old", ticker: "GLD" },
+          { date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" },
+        ];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { vehicles: string[] };
+    expect(data.vehicles).toEqual(["gold-bid"]);
+  });
+
+  // Fail-closed: `rowsAtDate` returns [] for a null date, so a `theses` row with no
+  // `date` yields no thesis and no vehicles rather than falling back to `updated_at`.
+  it("dossier without a dated thesis row withholds the thesis and the vehicles", async () => {
+    mockFetch((url) => {
+      if (url.includes("/theses?")) {
+        return [{ id: "uuid-1", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE", updated_at: "2026-09-28T10:00:00Z" }];
+      }
+      if (url.includes("/thesis_vehicles")) {
+        return [{ date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" }];
+      }
+      return [];
+    });
+    const res = await body("/dossier/GLD");
+    const data = res.data as { thesis: unknown; vehicles: string[] };
+    expect(res.status).toBe(200);
+    expect(data.thesis).toBeNull();
+    expect(data.vehicles).toEqual([]);
+  });
+
   it("unconfigured core fails closed", async () => {
     const res = await app.fetch(new Request("https://x/theses"), { DASHBOARD_DEV_CALLER: "enterprise+12x" });
     expect(res.status).toBe(502);

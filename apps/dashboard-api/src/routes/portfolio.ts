@@ -344,6 +344,31 @@ async function risks(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   return ok({ risks: items }, "core:documents", pinR.pin, maxDate(out.rows, "as_of")?.slice(0, 10) ?? null);
 }
 
+/**
+ * Per-ticker dossier drawer data.
+ *
+ * The thesis and its vehicle mapping are read as **one dated book**, the same way
+ * `/portfolio/theses` and `/rates/theses` read theirs: both tables carry one row
+ * per `(date, thesis_id)` — `theses` has `UNIQUE(date, thesis_id)` and
+ * `thesis_vehicles` has `PRIMARY KEY (date, thesis_id, ticker)` with
+ * `FOREIGN KEY (date, thesis_id) REFERENCES theses (date, thesis_id)`
+ * (`migrations/001_initial_schema.sql`, `migrations/024_thesis_deliberation_first_class.sql`)
+ * — so `maxThesisDate` picks the business date the book was struck on and
+ * `rowsAtDate` narrows both sides to it. `order=date.desc` is what makes the tip
+ * derivable under a row cap, and `idx_theses_date ON theses(date DESC)` backs it.
+ *
+ * Two consequences worth keeping:
+ * - The vehicle join is on `thesis_id`, never on the row `id`. `id` is a uuid
+ *   (`gen_random_uuid()`), so joining on it matches nothing; `thesis_id` is the
+ *   stable business key both tables share.
+ * - The FK means narrowing vehicles to the tip can neither orphan a vehicle nor
+ *   cross-join it to a thesis from another date, so the narrow is safe.
+ *
+ * `date` is the only age available: there is no separate business-date column, and
+ * `updated_at` is a row-write timestamp that would repeat a thesis across every
+ * date it was rewritten on. These five reads are still the route's entire subrequest
+ * budget — the fix adds none.
+ */
 async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
@@ -353,8 +378,8 @@ async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   }
   const key = ticker.toUpperCase();
   const [thesesOut, vehicles, events, docs, positions] = await Promise.all([
-    read(ctx.env, "theses", "select=*&limit=500"),
-    read(ctx.env, "thesis_vehicles", "select=*&limit=2000"),
+    read(ctx.env, "theses", "select=*&order=date.desc&limit=500"),
+    read(ctx.env, "thesis_vehicles", "select=*&order=date.desc&limit=2000"),
     read(ctx.env, "position_events", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=200`),
     read(ctx.env, "documents", "select=*&limit=200"),
     read(ctx.env, "positions", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=500`),
@@ -364,10 +389,15 @@ async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   if ("error" in events) return events.error;
   if ("error" in docs) return docs.error;
   if ("error" in positions) return positions.error;
+  const tip = maxThesisDate(thesesOut.rows);
+  const book = rowsAtDate(thesesOut.rows, tip);
   const vehicleIds = new Set(
-    vehicles.rows.filter((r) => (str(r.ticker) ?? str(r.vehicle) ?? "").toUpperCase() === key).map((r) => str(r.thesis_id)).filter((id): id is string => id !== null),
+    rowsAtDate(vehicles.rows, tip)
+      .filter((r) => (str(r.ticker) ?? str(r.vehicle) ?? "").toUpperCase() === key)
+      .map((r) => str(r.thesis_id))
+      .filter((id): id is string => id !== null),
   );
-  const thesis = thesesOut.rows.find((r) => vehicleIds.has(str(r.id) ?? str(r.thesis_id) ?? "") || (str(r.ticker) ?? "").toUpperCase() === key);
+  const thesis = book.find((r) => vehicleIds.has(str(r.thesis_id) ?? str(r.id) ?? "") || (str(r.ticker) ?? "").toUpperCase() === key);
   const pos = positions.rows.find((r) => (str(r.ticker) ?? "").toUpperCase() === key);
   const ev = events.rows.filter((r) => (str(r.ticker) ?? "").toUpperCase() === key).map((r) => ({
     date: str(r.date)?.slice(0, 10) ?? null,
