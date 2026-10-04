@@ -202,6 +202,65 @@ describe("mergeMcpSessionOverlay", () => {
     expect(merged).toEqual([{ id: "evil", url: "https://mcp.evil.example/mcp" }]);
   });
 
+  it("a session overlay item can never carry allowedTools or mutatingTools through to upstream", () => {
+    // McpSessionOverlayItem has no allowedTools/mutatingTools fields at the type
+    // level; this asserts the runtime behavior matches — an overlay-only id
+    // (no operator entry) never gets a tool allowlist even if injected via a
+    // loose object. Deny-by-default: a session connector starts with zero
+    // tools and can only ever narrow, never widen, the operator allowlist.
+    const merged = mergeMcpSessionOverlay({
+      operator: [],
+      overlay: [
+        {
+          id: "evil",
+          url: "https://mcp.evil.example/mcp",
+          allowedTools: ["*"],
+          mutatingTools: ["deleteEverything"],
+        } as { id: string; url?: string },
+      ],
+      allowSessionUrls: true,
+    });
+    expect(merged).toEqual([{ id: "evil", url: "https://mcp.evil.example/mcp" }]);
+    expect(merged[0]).not.toHaveProperty("allowedTools");
+    expect(merged[0]).not.toHaveProperty("mutatingTools");
+  });
+
+  it("a session overlay entry cannot override the operator allowlist", () => {
+    // Operator-only by construction: the overlay is merged onto an existing
+    // operator row, and mergeMcpSessionOverlay only ever writes `auth` and
+    // `token` onto it. The operator allowlist survives untouched, and the
+    // overlay cannot introduce a `mutatingTools` the operator did not declare.
+    const merged = mergeMcpSessionOverlay({
+      operator: [
+        {
+          id: "atlassian",
+          url: "https://mcp.atlassian.com/v1/sse",
+          allowedTools: ["addOrEditJiraIssueComment"],
+        },
+      ],
+      overlay: [
+        {
+          id: "atlassian",
+          auth: "oauth",
+          token: "visitor-oauth-token",
+          allowedTools: ["executeWrite"],
+          mutatingTools: ["executeWrite"],
+        } as { id: string; auth?: string; token?: string },
+      ],
+      allowSessionUrls: false,
+    });
+    expect(merged).toEqual([
+      {
+        id: "atlassian",
+        url: "https://mcp.atlassian.com/v1/sse",
+        allowedTools: ["addOrEditJiraIssueComment"],
+        auth: "oauth",
+        token: "visitor-oauth-token",
+      },
+    ]);
+    expect(merged[0]).not.toHaveProperty("mutatingTools");
+  });
+
   it("rejects http session URLs even when host would otherwise pass SSRF (#3795)", () => {
     expect(
       mergeMcpSessionOverlay({
@@ -234,6 +293,62 @@ describe("mergeMcpSessionOverlay", () => {
         allowSessionUrls: true,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("mcpServersHeaderValue operator tool allowlist (DIG-284)", () => {
+  it("forwards allowedTools and mutatingTools to the upstream header", () => {
+    // The digigraph side reads these exact spellings off the X-Digi-Mcp-Servers
+    // JSON rows, so the key names are the wire contract — pin them literally.
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "atlassian",
+            url: "https://mcp.atlassian.com/v1/sse",
+            label: "Atlassian",
+            allowedTools: ["addOrEditJiraIssueComment"],
+            mutatingTools: ["addOrEditJiraIssueComment"],
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(Object.keys(rows[0] ?? {})).toEqual(
+      expect.arrayContaining(["id", "url", "allowedTools", "mutatingTools"]),
+    );
+    expect(rows[0]?.allowedTools).toEqual(["addOrEditJiraIssueComment"]);
+    expect(rows[0]?.mutatingTools).toEqual(["addOrEditJiraIssueComment"]);
+    // Never client-projected: only id/url and the two allowlists reach the row.
+    expect(rows[0]?.label).toBeUndefined();
+  });
+
+  it("omits both keys entirely when the operator sets neither", () => {
+    // Do not forward `allowedTools: []`. An empty array and an absent key mean
+    // the same thing to digigraph (zero tools), but shipping the key would add
+    // bytes to every row and invite a reader to think [] widens the allowlist.
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "datatap",
+            url: "https://mcp.datatap.example/mcp",
+            label: "DataTap",
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    expect(rows).toEqual([{ id: "datatap", url: "https://mcp.datatap.example/mcp" }]);
+    expect(rows[0]).not.toHaveProperty("allowedTools");
+    expect(rows[0]).not.toHaveProperty("mutatingTools");
   });
 });
 

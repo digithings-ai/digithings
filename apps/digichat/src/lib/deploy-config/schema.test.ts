@@ -435,6 +435,55 @@ describe("McpServerSchema operator-static auth (#3841)", () => {
   });
 });
 
+describe("McpServerSchema operator tool allowlist (DIG-284)", () => {
+  it("parses an MCP server with allowedTools and mutatingTools", () => {
+    const cfg = parseDigichatConfig({
+      version: 1,
+      deployment: {
+        slug: "acme",
+        backend: { type: "digigraph" },
+        mcp: {
+          servers: [
+            {
+              id: "atlassian",
+              url: "https://mcp.atlassian.com/v1/sse",
+              allowedTools: ["addOrEditJiraIssueComment"],
+              mutatingTools: ["addOrEditJiraIssueComment"],
+            },
+          ],
+        },
+      },
+    });
+    const server = cfg.deployment?.mcp?.servers?.[0];
+    expect(server?.allowedTools).toEqual(["addOrEditJiraIssueComment"]);
+    expect(server?.mutatingTools).toEqual(["addOrEditJiraIssueComment"]);
+  });
+
+  it("still rejects an unknown key on an MCP server", () => {
+    // The allowlist fields must not have loosened McpServerSchema from
+    // `.strict()`. A typo'd key is still a hard parse failure rather than a
+    // silently ignored field.
+    expect(() =>
+      parseDigichatConfig({
+        version: 1,
+        deployment: {
+          slug: "acme",
+          backend: { type: "digigraph" },
+          mcp: {
+            servers: [
+              {
+                id: "atlassian",
+                url: "https://mcp.atlassian.com/v1/sse",
+                allowdTools: ["addOrEditJiraIssueComment"],
+              },
+            ],
+          },
+        },
+      }),
+    ).toThrow();
+  });
+});
+
 describe("allowlistModelId", () => {
   it("passes through when available is empty", () => {
     expect(allowlistModelId(undefined, "any-model")).toBe("any-model");
