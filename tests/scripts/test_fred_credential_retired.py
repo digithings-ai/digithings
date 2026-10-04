@@ -198,7 +198,7 @@ def test_retired_key_is_not_re_registered_in_the_mcp_registry() -> None:
     just reads the registry, provisions the key again, and the exposure is back.
     """
     path = "config/mcp_servers.yaml"
-    offenders = [f"{path}:{n}: {l}" for n, l in _lines_with_name(path)]
+    offenders = [f"{path}:{n}: {hit}" for n, hit in _lines_with_name(path)]
     assert not offenders, (
         "FRED_API_KEY must not appear in the MCP server registry (DIG-335):\n  "
         + "\n  ".join(offenders)
@@ -363,7 +363,7 @@ def test_cloudflare_worker_does_not_forward_the_retired_key() -> None:
     without the field) fails that test instead of silently passing here.
     """
     index = "apps/digithings-stack-cloudflare/src/index.ts"
-    offenders = [f"{index}:{n}: {l}" for n, l in _lines_with_name(index)]
+    offenders = [f"{index}:{n}: {hit}" for n, hit in _lines_with_name(index)]
     assert not offenders, (
         "The stack Worker still reads/forwards FRED_API_KEY (DIG-335):\n  "
         + "\n  ".join(offenders)
