@@ -1096,7 +1096,7 @@ upstream for cached price history.
 | `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Zero-weight extras are omitted (`enabled`/weight 0), so they cannot null a day. Rejects duplicate enabled names and a non-finite/zero total weight. |
 | `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` (MTF weekly+monthly dead-zone) / `weekly_macd` (weekly log-MACD) / `sma_band` plus **BTC-plugin** **m2** / **rs_eth** / **dxy** / **uup** (`"uup": "dollar proxy (UUP)"`, sign-flipped like DXY: strong dollar → −z; #4804 parity swap for unrefreshable DTWEXBGS, UUP↔DXY corr 0.86 levels / 0.88 63d changes) plus **gold-plugin** `gvz` (gold volatility (GVZ)) / `walcl` (Fed balance sheet) / `hy_oas` (HY credit spread) / `ig_oas` (IG credit spread) / `breakeven_5y` (5Y breakeven) / `nfci` (financial conditions (NFCI)) (#4804) plus **gold price-family** `gdx_gld` (GDX/GLD participation) / `gld_slv` (gold/silver ratio) (#4804). Ratio sign convention: `log(leg/asset)` rolling-z, rising → +z, no flip, `forward_fill=False` daily-ETF legs like `rs_eth` (`log(GDX/GLD)` = miner participation confirms the bid; `log(GLD/SLV)` = silver weak vs gold is stress). Sibling files: `GDX-USD.csv` (pre-existing suffixed stem) + `SLV.csv` (plain stem per Task-1 probe — Yahoo rejects suffixed ETF forms) + `UUP.csv` (plain stem). Gold fear-bid sign convention: rising → +z, no flip; WALCL votes YoY growth like M2. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Published `btc_sdca` weights live in `settings.json` (sidecar `btc_richer_composite.json`). `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084), pi-cycle (wrong-signed in 2025). |
 | `sdca/price_oscillators.py` | `SdcaOscillatorSpec` + weekly/monthly resample + SMA-band z. Completed ISO weeks / calendar months only; `join_asof(..., strategy="backward")`. Weekly RSI uses a **dead zone + cap** (mid-cycle 30–80 is near 0; RSI 85 is max-sell). Weekly MACD is **log-MACD** with a sloped top cap, not 52-week histogram z. `mtf_rsi_z` blends weekly+monthly into the `weekly_rsi` extra. |
-| `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Stage A must not invent ad-hoc date lists. |
+| `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Gold ships TWO sets — `gold_v1()` is Set A (6 owner-approved close-based pins) and `gold_v2()` is the same series' 20 turns chosen by algorithm; Set A ⊆ `gold_v2()`, so the two are comparable rather than competing. `validate_paired_turns()` makes the pairing invariant structural for every pin factory: strictly alternating peak/trough, never a lone turn, parity NOT the rule. It is a function rather than a model validator because `period_optimize.combine_periods` legitimately builds one-sided window sets. Windows are a SCORING TARGET for indicator weights — NOT execution periods, and they carry NO exposure floor. Stage A must not invent ad-hoc date lists. |
 | `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). Default `search_names` is the full extra catalog; missing `extra_z` series skip those combos. |
 | `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve. Searches every extra that has data (`search_names_with_data`). OOS is reported, not used to pick. Rails are fit once per fold. Published BTC uses this, not cycle overlap, to decide which extras stay. |
 | `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
@@ -1281,6 +1281,83 @@ lump-beating vote never trades), not theorized. Visuals:
 ## Secular-leg firing verdict for gold phase-b decision (#4804, Plan 14a Task 3 — NO-GO)
 
 Real-rate leg (DFII10 staged 5940 rows, 2003-01-02→2026-09-29; `real_rate_z` window-1260, no-flip washout, voteless default; 5480 valid z days; full-history deciles 10/25/50/75/90 = -2.115/-1.432/+0.128/+1.070/+1.743, clipped ±3.0) and 200w leg (causal completed-weeks, 1000d SMA, first-valid 2008-11-06, 4500-row series in untracked `digiquant/.scratch/gold_mayer_multiple.json`) fire as follows — judged read-only on the recorded Ruling-3 / Task-2 numbers, no new runs, no weight/window/threshold changes: | event | real-rate z | 200w multiple | — 2011-09 top: z −2.522 (below 10th-pct −2.115 → top-decile rich, rich side passes) / multiple 1.7159 (week-end 2011-09-02, close 183.24 / sma200w 106.7877); 2015-12 bottom: z +1.066 (≈75th-pct 1.070, vs 90th-pct +1.743 → NOT top-decile cheap, misses by 0.677) / multiple 0.7672; 2020-08 high: z −3.000 (clip floor) / multiple 1.4819; 2022-10 dip: z +2.252 / multiple 0.9836; now: z +1.530 (2026-09-29) / multiple 1.4707 (week-end 2026-09-25). Half-a (real-rate) FAILS: the bar needs top-decile cheap spanning the 2015 bottom AND top-decile rich spanning the 2011 top, and the 2015 reading (+1.066) sits at ~75th percentile, not top-decile (≥ +1.743). Half-b (200w) FAILS on selectivity: the 2011 level passes (1.7159 ≥ 1.5) but 349 grind-days sit above 1.5 outside the ±6mo 2011 window (2011-03-06→2012-03-06), i.e. 349/4500 = 7.76% ≥ 5% bar (5% budget = 225d; excess = 124d; all-valid-days >1.5 = 423/4500 = 9.4%; >1.7 outside = 154d, concentrated 2025-09-30→2026-05-14). Verdict: **NO-GO for phase-b engine design** — both halves fail, so no engine extension follows from this plan; COT / Dow-gold / CPI-oil legs stay recon-listed, not tasked.
+
+### Gold cycle-window pin sets: Set A and the algorithmic 20 (#4804, Plan 22)
+
+Gold is the first asset with **two** cycle-window sets, and the reason is that the
+pin set itself was a defect. The shipped `gold_v1()` carried seven pins — four
+peaks to three troughs — one of them **fabricated** (`2026-09-29` as a "current run
+high" when the real high is `2026-01-29`) and four more misdated
+(`2011-09-06` / `2020-08-07` / `2022-10-21`, plus the 2008 pair), with a docstring
+quoting spot prices for a spot-free ETF. Every wrong date came from reading the
+wrong column: in `data/price-history/GLD-USD.csv` the columns are
+`timestamp, open, high, low, close, volume, symbol`, so **index 1 is `open`**, not
+close. All pins are `close`-based for that reason — the engine scores risk against
+closes.
+
+**`gold_v1()` = Set A, six pins, owner-approved 2026-10-03.** Each is a bar whose
+close is the extreme of its own ±5-bar neighbourhood: 2011-08-22 peak $184.59 ·
+2015-12-17 trough $100.50 ·2020-08-06 peak $193.89 · 2022-09-26 trough $151.23 ·
+2026-01-29 peak $495.90 · 2026-07-16 trough $364.96. Strictly alternating from a
+peak — three complete pairs, the owner's pairing invariant (ruling 2). Windows are
+**±45 calendar days** (`_HALF_WINDOW`). Corroborated, not merely asserted:
+`turn_detect.detect_turns` at `min_move_pct=15.0` reproduces **all six at 0-bar
+offsets with exact closes**.
+
+**`gold_v2()` = the algorithmic set, 20 turns, chosen by RULE not by hand.** Same
+instrument, same price source, same ±45d windows, same scoring-target meaning. The
+granularity was *selected*: `turn_detect` sweeps `min_move_pct` (magnitude) against
+`min_separation_days` (time), and `sensitivity_consolidate.select_sensitivity_level`
+takes the qualifying calibration with the largest `capture_depth` (summed
+`|separation|` of indicators clearing the frozen 0.5 bar, direction fitted per
+indicator and stability-checked). On GLD closes: **15.0% → 20 turns (10/10),
+window-day share 0.2234, depth 15.7457 — qualifies**; 10.0% → 34 turns, 0.3554,
+depth 10.6792, loses 4 indicators; 5.0% → 63 turns, 0.5990, depth 7.1547, loses 5.
+15% is the only qualifying level, so no depth tie-break was needed; headcount would
+also have said 15%, but under depth the answer no longer rests on `walcl` clearing
+the bar by 0.0042 z-units. Detector config is
+`TurnDetectionConfig(min_move_pct=15.0, min_separation_days=45, confirmation_bars=5,
+window_half_width_days=45)`.
+
+**The pins are landed LITERALLY, and that is deliberate.** `cycle_windows.py` cannot
+import `turn_detect` — that module already imports `CycleKind` / `CycleWindow` from
+here, so the import is circular — and a documented pin set should not depend on the
+price cache being present at import time. The provenance lives in the docstring and
+all 20 dates are pinned in `tests/dq/strategies/sdca/test_gold_cycle_windows.py`,
+so the set can be re-derived with `detect_turns` but cannot silently drift.
+
+**Set A ⊆ `gold_v2()`**, all six pins with the same kind: the approved set is the
+coarse reading of one alternation, not a competing sequence. Names are
+`<year>_<kind>` with an ordinal suffix where a year repeats a kind
+(`2013_trough` vs `2013_trough_2`), so a name identifies exactly one pin; a name
+shared across the two sets means "the same turn in both". Two 2013–2014 turns sit
+61 days apart, so their ±45d windows **overlap** for about a month — `kind_on`
+resolves an overlapping day to the EARLIER pin by design (first match), and that
+resolution is pinned rather than left to chance.
+
+**What the windows are FOR, in one line: a SCORING TARGET for the Stage A
+indicator-weight search.** Not execution periods, no exposure floor, nothing about
+time in market. Any artifact that prints a window alongside a return is printing
+two different claims and must not conflate them.
+
+**The pairing invariant is now structural.** `validate_paired_turns()` refuses two
+same-kind turns in a row (the "a buy, no sell, then another buy further down"
+shape) and refuses a lone turn. It deliberately does **not** refuse parity: an odd
+count still pairs every peak inside it, which is why `btc_v1()`'s five pins and
+`gold_v1()`'s six both stay legal. It is a function rather than a `SdcaCycleWindows`
+validator because `period_optimize.combine_periods` builds one-sided window sets
+(long-only buy bands) that the invariant would refuse — correctly, since those are
+not cycle pins.
+
+Pins: `tests/dq/strategies/sdca/test_gold_cycle_windows.py` (44 pins, including the
+CSV-backed regression net for the fabricated pin: a pin must be a real bar, carry
+its pinned close, sit on a ±5-bar close extreme, and be ≥5 bars from either series
+edge — the last of which is what catches `2026-09-29`, since that date is the
+final bar and so has no `+5` bars at all). Chart:
+`scripts/plot_gold_pin_sets_v2.py` → `gold_pin_sets_v2.svg`
+(`/gold_charts/gold_pin_sets_v2.svg` on the digiquant-web dev server), which reads the
+pins from the live factories, re-verifies both sets against the CSV, and refuses to
+draw on a mismatch. IN-SAMPLE: Set A was chosen by looking at this same series.
 
 **Composite formula (BTC charts default to a single rail).**
 
