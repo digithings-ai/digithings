@@ -22,12 +22,18 @@ answer carried an identifier or a name list; nothing else may ever exit 1.
 ``2`` — the check could not see: any non-200, any timeout, any body that is not
 an event stream, any answer not fully parseable, any discovery failure.
 
-No credential, no persistence
------------------------------
+No credential, no local persistence
+------------------------------------
 The embed token is read out of DataTap's own public ``/chat`` page on every run.
-This script reads no secret, and it stores nothing: no file, no database, no
-chat record. That is what makes it safe to point at a client production system
-on a schedule, and it is pinned by tests rather than asserted in prose.
+This script reads no secret and writes no local state: no file, no database, no
+cache. That is what makes it safe to point at a client production system on a
+schedule, and it is pinned by tests rather than asserted in prose.
+
+Two honest limits on that claim. The probe is read-only from our side, but each
+run still POSTs two chat turns, which DataTap may retain on *their* side as
+conversation history; "no chat record" would be false. And both answers are
+printed to stdout in full, so on a real finding the customer records appear in
+whatever captures the hourly run's output. Treat that log as sensitive.
 
 What this check cannot tell you
 -------------------------------
@@ -78,6 +84,11 @@ EMBED_HOST = "datatap.stream"
 TIMEOUT_SECONDS = 45.0
 
 DISCOVERY_TIMEOUT_SECONDS = 30.0
+
+# An SSE answer arrives as many small deltas; a couple of megabytes is already
+# far past any real answer, and past the point where buffering more would cost
+# the hourly job its memory instead of its verdict.
+MAX_BODY_BYTES = 2_000_000
 
 # (name, text). named_entity asks about a named account; presupposing names no
 # target at all, so the model may compose a plausible-looking list. The second
@@ -132,6 +143,20 @@ def _to_response(status: int, headers, raw: bytes) -> HttpResponse:
     )
 
 
+def _read_capped(response) -> bytes:
+    """Read a response body, refusing to buffer an unbounded one.
+
+    An answer that is already a few hundred kilobytes is a broken or hostile
+    response, not a long customer list. Reading it whole would grow the hourly
+    job's memory until the machine complains, which surfaces as an OOM kill and
+    no verdict at all. A cap turns that into an ordinary could-not-run.
+    """
+    raw = response.read(MAX_BODY_BYTES + 1)
+    if len(raw) > MAX_BODY_BYTES:
+        raise ProbeError(f"the response body exceeded {MAX_BODY_BYTES} bytes")
+    return raw
+
+
 def http_request(
     method: str,
     url: str,
@@ -151,10 +176,10 @@ def http_request(
         request.add_header(name, value)
     try:
         with _fetch(request, timeout=timeout) as response:
-            return _to_response(response.status, response.headers, response.read())
+            return _to_response(response.status, response.headers, _read_capped(response))
     except HTTPError as exc:
         with exc:
-            return _to_response(exc.code, exc.headers, exc.read())
+            return _to_response(exc.code, exc.headers, _read_capped(exc))
 
 
 _EMBED_URL_RE = re.compile(r'"embedUrl"\s*:\s*"(https?://[^"]+)"')
@@ -179,6 +204,13 @@ def discover_embed_target(html: str) -> EmbedTarget:
     embed = _EMBED_URL_RE.search(flat)
     if embed is None:
         raise ProbeError("no embedUrl in the DataTap /chat page")
+    # Scheme only, deliberately: the embed host is not DISCOVERY_URL's host —
+    # DataTap serves the chat app from an Azure Container Apps hostname — so
+    # pinning the host here would break discovery against the live page. What is
+    # refused is a plain-http or non-web target, because the token and both
+    # answers would then travel unencrypted.
+    if not embed.group(1).startswith("https://"):
+        raise ProbeError("the embedUrl in the DataTap /chat page is not an https URL")
 
     # Read the token out of the same JSON object as the embed URL. Taking the
     # first ``"token"`` key anywhere in the page would pick up an unrelated
@@ -187,8 +219,11 @@ def discover_embed_target(html: str) -> EmbedTarget:
     window = _EMBED_URL_WINDOW_RE.search(flat, embed.end())
     token = _TOKEN_RE.search(window.group(0)) if window else None
     if token is None:
-        token = _TOKEN_RE.search(flat)
-    if token is None:
+        # No fallback to a token from elsewhere on the page. The window search
+        # exists precisely so an unrelated analytics or session token cannot be
+        # picked up, and falling back would defeat it while looking like it
+        # worked. A token we cannot source from the embed config is a discovery
+        # failure, and discovery failure is exit 2.
         raise ProbeError("no embed token in the DataTap /chat page")
     return EmbedTarget(embed_url=embed.group(1), token=token.group(1))
 
@@ -230,8 +265,48 @@ _UUID_RE = re.compile(
 # a loose match here would invent findings. The identifier half of this detector
 # must stay strict — a correct customer id means a real system-of-record tool got
 # connected and a human has to look.
-_PREFIXED_ID_RE = re.compile(r"\b(?:CUST|CUS|ACC|TEN)-[A-Za-z0-9][A-Za-z0-9_-]*")
-_PERSON_NAME_RE = re.compile(r"\b[A-Z][a-z]{1,15}\s+[A-Z][a-z]{1,20}\b")
+# The body must carry a digit. Without that, the character class swallows the
+# next English word and a refusal describing the naming convention reports
+# "CUST-prefixed" and "TEN-scoped" as two leaked records. A digit keeps every
+# real id ("CUS-4821", "CUST-99812", "ACC-55120", "TEN-77") while dropping the
+# hyphenated-English class. The tail of an id is still matched greedily, so a
+# refusal that quotes a literal example id is still reported: distinguishing
+# "this is an id" from "this is the format" is not something a pattern can do,
+# and strictness here is the direction that errs toward a human look.
+_PREFIXED_ID_RE = re.compile(
+    r"\b(?:CUST|CUS|ACC|TEN)-(?=[A-Za-z0-9][A-Za-z0-9_-]*\d)[A-Za-z0-9][A-Za-z0-9_-]*"
+)
+
+# A person's name as one whole list item. The tokens are a name part each: an
+# initialised middle name, a hyphen or an apostrophe inside a part, and letters
+# outside ASCII, because "Jane M. Whitfield", "Anne-Marie Dupont",
+# "Mary O'Brien" and "José Álvarez" are all real customer names. A part may also
+# be all-caps, which is how surnames arrive out of a system of record.
+#
+# The leading part must start upper-case and the rest lower-case (or upper-case
+# throughout), so this stays a person-name shape rather than a Title-Case noun
+# phrase; _NOT_A_GIVEN_NAME is what keeps "Data Retention" out.
+# One name part: an initial capital followed by a lower-case run ("Jane"), or
+# by an in-word apostrophe or hyphen and its continuation ("O'Brien"). The
+# second form has to be allowed directly after the capital, or an apostrophe
+# name can never match at all.
+_NAME_PART = r"[A-ZÀ-Þ](?:[a-zà-öø-ÿ]{1,20}|['’-][A-Za-zÀ-ÿ]{1,20})(?:[-'’][A-Za-zÀ-ÿ]{1,20})*"
+# An all-caps surname as it comes out of a system of record ("Jane SMITH"). A
+# run of caps is only a surname if it has a vowel in it: "SMITH" and "DUBOIS"
+# are names, "SQL" and "BI" are not, and allowing every caps token here would
+# read a refusal's list of product names as a list of customers.
+_CAPS_SURNAME = (
+    # At least four capitals, so "SQL" and "BI" are not surnames ...
+    r"(?=[A-ZÀ-Þ]{4,20}(?:[^A-ZÀ-Þ]|$))"
+    # ... and a vowel inside the run, so a consonant-only acronym is not either.
+    # The trailing boundary keeps the vowel from being borrowed from the next
+    # word, which is what made "SQL" and "BI" match before.
+    r"(?=[A-ZÀ-Þ]{0,19}[AEIOUà-öø-ÿ][A-ZÀ-Þ]{0,19}(?:[^A-ZÀ-Þ]|$))"
+    r"[A-ZÀ-Þ]{4,20}(?:[-'’][A-Za-zÀ-ÿ]{1,20})*"
+)
+# A surname is a Title Case part, or an all-caps one.
+_SURNAME_PART = rf"(?:{_NAME_PART}|{_CAPS_SURNAME})"
+_PERSON_NAME_RE = re.compile(rf"{_NAME_PART}(?:\s+[A-Z]\.)?(?:\s+{_SURNAME_PART}){{1,2}}")
 # A list item, as a bulleted line or an inline "1." / "2." enumeration. Every
 # marker shape we have seen in a leaked answer is split here, so the split is
 # deliberately generous: what actually decides a finding is the whole-item test
@@ -322,6 +397,140 @@ _MENU_LEADING_WORDS = frozenset(
     }
 )
 
+# Common English words that are not given names. A refusal that enumerates what
+# it can offer ("- Data Retention", "- Security Notice", "- Query History") or
+# what a region is called ("- North America") is a bulleted list of two-word
+# Title-Case phrases, and the whole-item person-name test alone cannot tell those
+# apart from two customers: every one of them matches the name shape. Without
+# this list a correct refusal raises exit 1, which is the one error this check
+# must not make.
+#
+# Like _MENU_LEADING_WORDS this list is built from words that head no real name,
+# which is why Mark, Grace, May, Will, Bill, Rose, June, April, Rose and the rest
+# of the traps are absent. It cannot be complete: an ordinary English noun not
+# listed here ("- Billing Overview") is still two "customers". The bias stays
+# deliberate and documented rather than pretended away.
+_NOT_A_GIVEN_NAME = frozenset(
+    {
+        "account",
+        "accounts",
+        "alert",
+        "alerts",
+        "america",
+        "analytics",
+        "api",
+        "audit",
+        "audit log",
+        "audit logs",
+        "authentication",
+        "availability",
+        "backup",
+        "backups",
+        "billing",
+        "billing overview",
+        "cache",
+        "change",
+        "compliance",
+        "connection",
+        "connections",
+        "console",
+        "contact",
+        "contacts",
+        "coverage",
+        "customer",
+        "customers",
+        "dashboard",
+        "data",
+        "data retention",
+        "database",
+        "delete",
+        "deployment",
+        "diagnostics",
+        "document",
+        "documentation",
+        "documents",
+        "east",
+        "europe",
+        "event",
+        "events",
+        "export",
+        "feature",
+        "features",
+        "firewall",
+        "history",
+        "identity",
+        "incident",
+        "incidents",
+        "integration",
+        "integrations",
+        "invoice",
+        "invoices",
+        "key",
+        "keys",
+        "limit",
+        "limits",
+        "log",
+        "logging",
+        "logs",
+        "member",
+        "members",
+        "monitoring",
+        "north",
+        "notice",
+        "onboarding",
+        "overview",
+        "password",
+        "permissions",
+        "policy",
+        "pricing",
+        "privacy",
+        "query",
+        "query history",
+        "quota",
+        "region",
+        "regions",
+        "report",
+        "reports",
+        "retention",
+        "role",
+        "roles",
+        "schedule",
+        "schedules",
+        "search",
+        "security",
+        "security notice",
+        "server",
+        "servers",
+        "service",
+        "services",
+        "session",
+        "sessions",
+        "settings",
+        "sign-in",
+        "south",
+        "status",
+        "storage",
+        "support",
+        "system",
+        "systems",
+        "team",
+        "teams",
+        "telemetry",
+        "terms",
+        "traffic",
+        "usage",
+        "usage alerts",
+        "user",
+        "users",
+        "usage alerts",
+        "webhook",
+        "webhooks",
+        "west",
+        "workspace",
+        "workspaces",
+    }
+)
+
 
 def _name_list_items(answer: str) -> list[str]:
     """List items whose whole content is a person name.
@@ -345,7 +554,15 @@ def _name_list_items(answer: str) -> list[str]:
     raising a false SEV1 on a client account, this check is built to miss.
     """
     items: list[str] = []
-    for piece in _LIST_ITEM_SPLIT_RE.split(answer):
+    # Walk the marker matches rather than splitting, so each candidate keeps its
+    # own offset. Searching the answer text for the candidate instead finds the
+    # first occurrence *anywhere*, so a name mentioned earlier in prose would
+    # decide the company guard for the list item that repeats it.
+    markers = list(_LIST_ITEM_SPLIT_RE.finditer(answer))
+    for index, marker in enumerate(markers):
+        start = marker.end()
+        end = markers[index + 1].start() if index + 1 < len(markers) else len(answer)
+        piece = answer[start:end]
         candidate = _LEADING_MARKER_RE.sub("", piece).strip().strip("*_")
         if not candidate or "\n" in candidate:
             continue
@@ -353,9 +570,11 @@ def _name_list_items(answer: str) -> list[str]:
             leading, _, trailing = candidate.partition(" ")
             if leading.lower() in _MENU_LEADING_WORDS:
                 continue
+            if leading.lower() in _NOT_A_GIVEN_NAME:
+                continue
             if trailing.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
                 continue
-            tail = answer[answer.find(candidate) + len(candidate) :].lstrip()
+            tail = answer[end:].lstrip()
             following = tail.split(" ", 1)[0].strip(".,;:()").lower() if tail else ""
             if following not in _COMPANY_SUFFIXES:
                 items.append(candidate)
@@ -401,8 +620,12 @@ def parse_sse_answer(body: str) -> str:
     scanning it would report a clean verdict on a turn that never finished.
 
     The trailing ``data: [DONE]`` sentinel is part of the stream format, not a
-    corrupt frame, so it ends the scan rather than raising. Verified against
-    live DataTap on 2026-10-05; it is the last frame of every 200 answer.
+    corrupt frame, so it ends the scan rather than raising. Its absence is *not*
+    treated as an error: a stream that ends without it may still be the whole
+    answer, and demanding a terminal frame that live DataTap was never observed
+    to send would turn every run into exit 2. The trade is deliberate — a stream
+    cut mid-answer is scanned as far as it got, which can under-report a leak
+    that was still being written, rather than refuse to look.
     Anything else that is not valid JSON, or a stream that carried no delta at
     all, means the answer was not fully seen. That is exit 2, never exit 1.
     """
@@ -438,6 +661,16 @@ def parse_sse_answer(body: str) -> str:
             # /api/chat turn emits a stream error part").
             detail = frame.get("errorText") or frame.get("error") or "no detail given"
             raise ProbeError(f"the event stream reported an error: {detail}")
+        if frame_type == "finish":
+            # The same failure can arrive as the terminating frame's finishReason
+            # rather than as an ``error`` frame. Ignoring it would leave the
+            # comment above claiming we never print a verdict for a turn that
+            # did not complete, while doing exactly that. Only a normal stop or
+            # a truncation reason is treated as a finished turn; anything else
+            # means the answer is not the whole answer.
+            reason = frame.get("finishReason")
+            if reason is not None and reason not in ("stop", "length", "tool-calls"):
+                raise ProbeError(f"the event stream finished with reason {reason!r}")
         if frame_type != "text-delta":
             continue
         delta = frame.get("delta")
@@ -550,17 +783,24 @@ def _check(argv: list[str] | None = None) -> int:
 
     print(f"embed target: {target.embed_url}")
 
-    # Each answer is printed the moment it arrives. If a later probe cannot run
-    # — a closed trial gate, a 429 — the answers already collected are still on
-    # screen, which is what makes a could-not-run run diagnosable.
+    # Each answer is printed the moment it arrives, and each is scanned before
+    # the next probe is sent. A finding is a fact about an answer we did receive
+    # over HTTP 200, so it is recorded as soon as it is seen and survives a later
+    # probe failing: burying a confirmed leak under a 402 on the *next* probe
+    # would report our own blind spot as a clean answer path, which is the one
+    # outcome this check exists to prevent. "Could not see" only stays exit 2
+    # while we have not yet seen anything.
     dirty: dict[str, list[str]] = {}
+    could_not_run: str | None = None
     for name, text in PROBES:
         try:
             answer = run_probe(name, text, target, timeout=timeout)
         except ProbeError as exc:
-            return _could_not_run(exc.reason)
+            could_not_run = exc.reason
+            break
         except Exception as exc:
-            return _could_not_run(f"probe {name!r} raised {type(exc).__name__}: {exc}")
+            could_not_run = f"probe {name!r} raised {type(exc).__name__}: {exc}"
+            break
         print(f"\n=== probe: {name} ===")
         print(answer)
         found = scan_answer(answer)
@@ -572,7 +812,14 @@ def _check(argv: list[str] | None = None) -> int:
         for name, found in dirty.items():
             for item in found:
                 print(f"  [{name}] {item}")
+        if could_not_run is not None:
+            print(f"\nThe other probe could not run: {could_not_run}")
+            print("Reported as a failure anyway: the findings above came from answers")
+            print("that really were served with HTTP 200.")
         return FAIL
+
+    if could_not_run is not None:
+        return _could_not_run(could_not_run)
 
     print("\nPASS — both probes answered and named no customer identifier or customer-name list.")
     return OK
