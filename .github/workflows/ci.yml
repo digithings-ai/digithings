@@ -250,6 +250,33 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+  # ── Example credential guard (DIG-31) — UNCONDITIONAL ───────────────────────
+  # Unconditional for the same reason as `frontend-canon` above: the guard runs
+  # `git ls-files` and scans every tracked `.example` / `.template` file regardless of
+  # the diff, so its verdict is a property of the whole tree while a path filter is a
+  # property of the diff. Stdlib-only; nothing to install.
+  # Locally: `python3 scripts/check_example_credentials.py`.
+  #
+  # Read a green run narrowly. The guard decides by SHAPE, so green is NOT proof that
+  # no credential is committed anywhere — it is proof that no value matching its shape
+  # sits in a tracked `.example` / `.template` file. Two of the three values ever
+  # actually committed here would have passed it. Known false-negative gaps are tracked
+  # in DIG-43 (short keys, 16-31 chars) and DIG-50 (placeholder words matched mid-value,
+  # and punctuation-bearing secrets). A red verdict names the file and the variable and
+  # never the value.
+  example-credentials:
+    name: Example credential guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Example credential guard
+        run: python3 scripts/check_example_credentials.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -631,6 +658,7 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - example-credentials
       - digibase
       - digikey
       - digitrace
