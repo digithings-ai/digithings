@@ -3,9 +3,10 @@
 The MIT license covers copyright only. It grants no trademark rights, and this
 file does not change that.
 
-**`digithings` and the digithings logo are trademarks.** Registration is pending
-at EUIPO and USPTO. Do not use them to imply that a product, service or fork is
-official, endorsed by, or affiliated with digithings, without written permission.
+**`digithings` and the digithings logo are trademarks.** We use them as
+trademarks; no registration application has been filed yet. Do not use them to
+imply that a product, service or fork is official, endorsed by, or affiliated
+with digithings, without written permission.
 
 **`digi*` module names are not trademarks.** Names such as digichat, digisearch,
 digivault, digiquant, digigraph and digikey are used descriptively to identify

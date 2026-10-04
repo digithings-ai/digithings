@@ -99,3 +99,13 @@ A pull request whose commits are missing the sign-off cannot be merged — the
 CI check enforces this. The full text is at <https://developercertificate.org/>.
 
 This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
+
+Pull requests are squash-merged, and a squash keeps the commit subjects but not
+the message bodies where `Signed-off-by` lives. The sign-off therefore stays on
+the pull request's commits, which GitHub keeps after the branch is deleted. If
+you sub-license or re-license a file that arrived through a pull request, cite
+the pull request and the commit sha — that is where the sign-off is on the
+record.
+
+MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
+not reuse.
