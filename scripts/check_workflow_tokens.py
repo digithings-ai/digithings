@@ -58,15 +58,24 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Literal
 
 OK = 0
 FAIL = 1
 PROBE_ERROR = 2
 
-Status = Literal["valid", "invalid", "unvalidated-by-design", "absent", "probe-error"]
+Status = Literal[
+    "valid",
+    "invalid",
+    "unvalidated-by-design",
+    "absent",
+    "probe-error",
+    "skipped-by-design",
+]
 
 
 @dataclass
@@ -116,6 +125,100 @@ def check_github_pat(
     if code == PROBE_ERROR:
         return Credential(name, "probe-error", err)
     return Credential(name, "invalid", f"GET {endpoint} failed: {err}")
+
+
+def _gh_api_write(
+    endpoint: str, token: str, *, method: str, fields: dict[str, str] | None = None
+) -> tuple[int, str, str]:
+    """Return ``(exit_code, stdout, stderr)`` for a *writing* ``gh api`` call.
+
+    Separate from :func:`_gh_api` on purpose: read probes only ever need a
+    boolean, but the Issues write probe must read back the created comment's id
+    so it can delete it again. ``fields`` become ``-f`` flags, which keeps the
+    payload out of argv quoting entirely.
+    """
+    argv = ["gh", "api", endpoint, "-X", method]
+    for key, value in (fields or {}).items():
+        argv += ["-f", f"{key}={value}"]
+    env = {**os.environ, "GH_TOKEN": token}
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=30)
+    except FileNotFoundError:
+        return PROBE_ERROR, "", "gh CLI not found"
+    except subprocess.TimeoutExpired:
+        return PROBE_ERROR, "", f"gh api {endpoint} timed out"
+    if proc.returncode == 0:
+        return 0, proc.stdout or "", ""
+    return FAIL, "", (proc.stderr or proc.stdout or "").strip()[:200]
+
+
+#: The marker body. Kept short and self-explaining: if cleanup ever fails, the
+#: comment left behind has to tell an operator what created it and that it is
+#: safe to delete.
+_PROBE_MARKER = (
+    "Token-canary write probe for `GH_DISPATCH_TOKEN` (DIG-362). "
+    "Created and immediately deleted by the Ops token-validity canary to prove "
+    "the Issues: write grant. No action needed."
+)
+
+
+def probe_issues_write_grant(name: str, token: str | None, repo: str, issue: int) -> Credential:
+    """Prove ``token`` holds Issues **write** by writing and deleting a comment.
+
+    A read probe cannot do this job. GitHub offers exactly three levels for
+    Issues — *no access*, *read*, *read and write* — so ``GET /issues/{n}``
+    passes on a token that has been **downgraded** to read-only, which is the
+    exact state DIG-93 wrongly believed the token was in. Only a real write
+    separates "grant removed" from "grant downgraded".
+
+    Costs nothing and leaves nothing: one comment, then ``DELETE`` on it. The
+    DELETE is verified, and a failed DELETE is itself a failure — a marker left
+    on the pinned issue violates the probe's own promise, so it must be loud.
+    """
+    if not token:
+        return Credential(name, "absent", "secret not set", env={name: "absent"})
+
+    comments = f"/repos/{repo}/issues/{issue}/comments"
+
+    # Step 1 — a real write. POST the marker.
+    code, out, err = _gh_api_write(comments, token, method="POST", fields={"body": _PROBE_MARKER})
+    if code == PROBE_ERROR:
+        return Credential(name, "probe-error", err)
+    if code != 0:
+        # A 403 here is the signal: the token can no longer write. Name it,
+        # because "invalid" alone does not say which grant went missing.
+        return Credential(
+            name,
+            "invalid",
+            f"Issues: write grant LOST — POST {comments} was rejected: {err}",
+        )
+
+    # Step 2 — self-clean. DELETE what we just created.
+    try:
+        comment_id = json.loads(out)["id"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return Credential(
+            name,
+            "probe-error",
+            f"POST {comments} succeeded but returned no comment id; "
+            "a marker comment may have been left behind",
+        )
+
+    code, _out, err = _gh_api_write(f"/repos/{repo}/issues/comments/{comment_id}", token, method="DELETE")
+    if code != 0:
+        # The grant is proven, but cleanup failed. Both facts get reported, and
+        # this stays a failure so the leftover comment is actually dealt with.
+        return Credential(
+            name,
+            "invalid",
+            f"Issues: write grant OK, but the marker comment {comment_id} could NOT be "
+            f"deleted from {repo}#{issue} and must be removed by hand: {err}",
+        )
+    return Credential(
+        name,
+        "valid",
+        f"Issues: write grant proven (comment {comment_id} posted and deleted on {repo}#{issue})",
+    )
 
 
 def check_unverifiable(name: str, token: str | None, why: str) -> Credential:

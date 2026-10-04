@@ -24,8 +24,10 @@ and GitHub's `permissions:` vocabulary has no key for secrets at all, so no gran
 in a workflow file can make these three listings readable. This was measured, not
 assumed — run 37235973852 on `develop` had `actions: read` visibly granted and all
 three listings still answered `Resource not accessible by integration (HTTP 403)`.
-So run this from a shell or a job that holds a PAT (the Keymaster weekly key
-report does), or pass `--file-names`. From CI every level is reported as NOT
+So run this from a shell that holds a token with those scopes — `gh auth` on
+Chris's Mac already carries `repo` and `admin:org` — or pass `--file-names`. It
+does NOT run from the Keymaster weekly key report, which is built from Bitwarden
+and never reads this API. From CI every level is reported as NOT
 CHECKED and the reason is printed; see `--strict-offline` for turning that into a
 non-zero exit when a report must not be trusted.
 
