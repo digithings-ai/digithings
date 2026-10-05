@@ -343,9 +343,9 @@ def test_a_name_list_with_a_trailing_role_is_reported() -> None:
     """
     dashes = mod.scan_answer("- Dana Whitfield (owner)\n- Marcus Oyelaran")
     numbered = mod.scan_answer("1. Dana Whitfield (owner) 2. Marcus Oyelaran (owner)")
-    for findings in (dashes, numbered):
-        assert findings, "a two-name list with a trailing role must be reported"
-        assert any("Dana Whitfield" in f and "Marcus Oyelaran" in f for f in findings)
+    # The finding names the customers, not the wording the answer used for them.
+    assert dashes == ["customer name list: Dana Whitfield, Marcus Oyelaran"]
+    assert numbered == ["customer name list: Dana Whitfield, Marcus Oyelaran"]
 
 
 def test_one_name_with_a_role_is_still_not_a_list() -> None:
@@ -376,15 +376,25 @@ def test_an_annotated_list_of_things_is_not_a_name_list() -> None:
     of these would be reported as customer name lists.
     """
     annotated = (
-        "Recent changes:\n"
-        "- Added Session Cookies (privacy)\n"
-        "- Improved Usage Alerts (reliability)",
+        "Recent changes:\n- Added Session Cookies (privacy)\n- Improved Usage Alerts (reliability)",
         "You have two options:\n- Manual Approval (default)\n- Auto Approval (beta)",
         "Plan differences:\n- Priority Support (included)\n- Dedicated Manager (included)",
         "Not in this product:\n- Wire Transfers (unsupported)\n- Payment Methods (unsupported)",
     )
+    annotated += (
+        # One role word is not enough. "every word" is what keeps a bracket that is
+        # mostly a note from splitting on the role word inside it.
+        "Plan notes:\n- Field Mapping (user data)\n- Batch Limits (owner only)",
+        # Both groups are annotations, so neither splits.
+        "Limits:\n- Field Mapping (beta)\n- Batch Limits (owner)",
+    )
     for answer in annotated:
         assert mod.scan_answer(answer) == [], answer
+
+    # The pattern cannot span two bracket groups, so it takes the last pair and the
+    # item keeps the earlier one. The name then still fails the whole-item test,
+    # which is why an item with two brackets stays out of the finding.
+    assert mod._strip_trailing_role("Jane Whitfield (beta) (owner)") == "Jane Whitfield (beta)"
 
 
 def test_a_parenthesised_company_word_is_not_a_role() -> None:
