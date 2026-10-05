@@ -39,6 +39,61 @@ declined to guess at what Gloom's terms allow. Nobody had read them. They are 3,
 served from a live URL, and take eleven minutes to read. That is the whole failure mode: not a
 missing legal opinion, a missing document.
 
+## Security decision record — 2026-10-05, after Counsel's memo
+
+Security's own answers in DIG-1194 were given before Counsel's memo was read, and one of them is now
+in tension with it. Both facts belong in this index, because this index is the record that is checked
+before anyone relies on this entry.
+
+**Chronology, all 2026-10-05 UTC.** Security classified Unclear at ~20:40 and asked Chris three
+questions. Counsel's prohibiting memo and PR #5157 sign-off were committed at 21:16 and 21:18.
+Chris answered Security's card at 21:38 — after those commits, but whether he had read the memo is not
+known, and Security does not assume either way.
+
+**What Chris answered.**
+
+| Question | Answer |
+|---|---|
+| Plan on the account | `free`. This closed Security's open delay question: §5 delays free-plan data, and §11 names delays as an access control, so a free plan sits inside the offered limits. |
+| Team plan or written agreement | **No team plan.** (His comment was about Bloomberg, a different vendor. His design principle — the end user brings their own vendor account — is not an answer about Gloom and is not recorded here as one.) |
+| Path for the cookie | Keep using it while it is functional, and move it into Bitwarden so it is not hard-coded. |
+
+**The tension.** Security recommended destroying the credential and not rotating it. Counsel then ruled
+method A prohibited with CONFIRMED confidence. "Keep it while functional" cannot coexist with a
+confirmed prohibition without being a deliberate acceptance of a prohibited use, so Security did not
+act on it either way and put the decision to Chris a second time, with Counsel's ruling stated.
+
+**Corrections Security accepts from Counsel's memo.** Two, both of which make our position stronger:
+
+1. The §11 carve-out is conjunctive — "through the interfaces **and** within the limits we offer".
+   Security treated the first conjunct as the contested one. The second fails independently: a
+   browser session cookie cannot be scoped per integration, rate-limited per integration, monitored
+   as a key, or revoked without killing a human's live session, which is why §12 specifies keys. We
+   do not need to win the contested argument.
+2. The billing fact is a money question, not a classification question. It does not move the
+   classification, and Security should not present it as if it did.
+
+**One earlier Security claim is superseded.** DIG-1194 treated the 47 credential-free tools as clean.
+Counsel classifies them as **Unclear** on the same §14 question. Destroying the cookie does not fix
+them, and closing the account does not fix them.
+
+**What Security has not done.** No contact with Cold Start. No credential destroyed. Nothing moved
+into Bitwarden. `GLOOMBERB_ENABLED` not changed — that is a code change owned by the digifetch tree.
+No rotation: a session cookie is not rotatable, and "rotation" here means re-running the very
+acquisition method that was removed from the public docs.
+
+**Live trackers.**
+
+| What | Where |
+|---|---|
+| Prohibited-pattern remediation ladder, owners named | DIG-1232 (critical) |
+| Code containment: `GLOOMBERB_ENABLED` default off | DIG-1233 (critical) |
+| Counsel's classification and remediation order | [`COUNSEL-2026-10-05-session-cookie-position.md`](COUNSEL-2026-10-05-session-cookie-position.md), DIG-1206 (done) |
+| Security's original read, kept for provenance | [`POSITION-2026-10-05-session-cookie.md`](POSITION-2026-10-05-session-cookie.md) |
+| Publication decision for `docs/ops/SECRETS_INVENTORY.md` | `docs/ops/SECRETS_INVENTORY.md`, section "Vendor terms and what this file may publish" |
+
+---
+
 ## Known gaps in this index
 
 - **PrimeMarket is not indexed.** `docs/VENDOR_CONTENT_BOUNDARY.md` records a Prime Terminal
