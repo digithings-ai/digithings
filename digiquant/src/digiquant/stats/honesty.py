@@ -106,7 +106,7 @@ class HonestRateBlock(HonestRate):
         itself unguarded — otherwise a caller who relaxes ``refuse_floor`` gets
         ``refused=False`` beside three ``None`` fields. A negative count is
         rejected here because ``wilson()`` returns early for ``n <= 0`` and
-        would never see it.
+        never reaches its own check; with ``n > 0`` it would raise by itself.
         """
         if self.k < 0 or self.n < 0:
             raise ValueError(f"negative counts: k={self.k} n={self.n}")

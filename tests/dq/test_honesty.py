@@ -215,10 +215,16 @@ def test_block_refuses_below_refuse_floor_and_hides_the_estimate() -> None:
 
 
 def test_block_flags_low_sample_below_warn_floor() -> None:
-    """n=29 (below warn=30, at/above refuse=10) — low sample but not refused."""
+    """Both sides of the warn floor: n=29 flags, n=30 does not.
+
+    The warn floor is strict, so n == warn_floor is already a full sample. Only
+    n=29 was pinned before; a `<` swapped for `<=` slipped through the suite.
+    """
     b = HonestRateBlock(k=14, n=29)  # n=29
     assert b.low_sample is True and b.refused is False  # n=29
     assert b.estimate == pytest.approx(14 / 29, abs=1e-10)  # n=29
+    edge = HonestRateBlock(k=15, n=30)  # n=30 -- exactly warn_floor, so not low
+    assert edge.low_sample is False and edge.refused is False  # n=30
 
 
 def test_block_derives_the_interval_and_ignores_a_caller_supplied_estimate() -> None:
