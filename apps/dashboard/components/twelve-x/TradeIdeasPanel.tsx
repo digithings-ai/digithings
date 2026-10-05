@@ -96,7 +96,7 @@ export function ideaDetailBlocksClass(hasLevels: boolean, hasEvidence: boolean):
 }
 
 export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
-  const { status, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
+  const { levelsPending, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
   const [openEvidence, setOpenEvidence] = useState<number[]>([]);
   const toggleEvidenceDetail = (index: number) =>
     setOpenEvidence((open) =>
@@ -105,7 +105,8 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   const desks = contributingDesks(idea.citations);
   const showLevels = levelRows.length > 0;
   const showEvidence = evidenceRows.length > 0;
-  const showGrid = showLevels || showEvidence;
+  // A pending bracket keeps the column (pending state instead of a half ladder).
+  const showGrid = showLevels || levelsPending || showEvidence;
 
   return (
     <div className="mt-2 space-y-2 border-t border-hair pt-2 text-left">
@@ -115,19 +116,20 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
       ) : null}
       {showGrid ? (
         <div className={ideaDetailBlocksClass(showLevels, showEvidence)}>
-          {showLevels ? (
+          {showLevels || levelsPending ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-ink-soft">Levels</span>
-                {status && status !== 'complete' ? (
-                  <span className="font-mono text-[10px] text-ink-mute">{status}</span>
-                ) : null}
               </div>
-              <div className="space-y-0.5">
-                {levelRows.map((row) => (
-                  <LadderRow key={`${row.role}-${row.label}-${row.value}`} row={row} />
-                ))}
-              </div>
+              {levelsPending ? (
+                <p className="text-[11px] text-ink-mute">Levels pending</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {levelRows.map((row) => (
+                    <LadderRow key={`${row.role}-${row.label}-${row.value}`} row={row} />
+                  ))}
+                </div>
+              )}
               {riskRewardLabel != null ? (
                 <p className="font-mono text-[10px] text-ink-mute">R:R {riskRewardLabel}</p>
               ) : null}
