@@ -54,9 +54,16 @@ RETIRED_NAME = "FRED_API_KEY"
 
 # Globs whose ``FRED_API_KEY`` mention is a *live requirement*: an environment
 # injection, an ``os.environ`` read, or a declaration that makes some process
-# ask an operator for the key. A mention inside a comment or a docstring does
-# not reach these globs, which is the point -- prose is handled by review, and
-# only these paths can break a run when the org secret disappears.
+# ask an operator for the key. Only these paths can break a run when the org
+# secret disappears.
+#
+# The match is a plain substring scan (``_lines_with_name``), so it is
+# deliberately BROADER than "can only break a run": it also fires on prose in
+# comments and docstrings. That is the intended behaviour. An earlier version of
+# this comment claimed prose never reached these globs, which was false, and the
+# merge of develop 8d7c5edbf proved it by failing the guard on a docstring that
+# only narrates a past measurement. Fail closed on every mention and make each
+# exception an explicit, reviewed entry in ALLOWED_LIVE_MENTIONS below.
 LIVE_CODE_GLOBS = (
     ".github/workflows/*.yml",
     ".github/workflows/*.yaml",
@@ -75,10 +82,33 @@ LIVE_CONFIG_FILES = (
 # The single row allowed to keep the name, and the file allowed to keep the
 # literal history about it. Kept as data (path -> reason) so a failing run
 # names the exception that has to be widened, and why.
+#
+# The exception is scoped to the exact allowed *line text*, never to the whole
+# path. A path-level skip is a hole: it lets any future live read in that file
+# through, which is the "test that passes on stub code" failure this file exists
+# to prevent. Verified 2026-10-05 by appending a real
+# `os.environ.get("FRED_API_KEY")` read to an allowlisted file -- with a
+# path-level skip the guard stayed green (6 passed).
 ALLOWED_LIVE_MENTIONS = {
     "digiquant/src/digiquant/research/config/mcp.secrets.env.example": (
-        "placeholder row `FRED_API_KEY=replace-with-your-fred-api-key`; "
-        "cleaned and human-owned by DIG-78 / PR #5034, do not remove the row"
+        {
+            "FRED_API_KEY=replace-with-your-fred-api-key": (
+                "placeholder row; cleaned and human-owned by DIG-78 / PR #5034, "
+                "do not remove the row"
+            ),
+        }
+    ),
+    "scripts/secret_staleness_check.py": (
+        {
+            "were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.": (
+                "module docstring naming FRED_API_KEY as one of the oldest org "
+                "secret names in a hand-recorded rotation audit. Prose about a "
+                "past measurement, not a read: the script only calls `gh secret "
+                "list` / `gh api .../actions/secrets`, which return names and "
+                "dates, never values. Added 2026-10-05 when develop's 8d7c5edbf "
+                "brought it in and the guard correctly failed closed on it"
+            ),
+        }
     ),
 }
 
@@ -175,9 +205,12 @@ def test_live_code_surfaces_do_not_require_the_retired_key() -> None:
     """
     offenders: list[str] = []
     for path in _tracked_matching(LIVE_CODE_GLOBS):
-        if path in ALLOWED_LIVE_MENTIONS:
-            continue
+        allowed_lines = ALLOWED_LIVE_MENTIONS.get(path, {})
         for lineno, line in _lines_with_name(path):
+            # Exception is per exact line text, not per file: a different line in
+            # an allowlisted file is still an offender.
+            if line in allowed_lines:
+                continue
             offenders.append(f"{path}:{lineno}: {line}")
 
     assert not offenders, (
@@ -340,12 +373,29 @@ def test_no_keyed_fred_api_call_remains_in_python() -> None:
 
 @pytest.mark.unit
 def test_allowed_mentions_are_all_documented() -> None:
-    """Every exemption names a reason, and each reason path still exists.
+    """Every exemption names a reason, and each exemption is still needed.
 
     Without this the allowlist is a silent hole: a path added "temporarily"
-    keeps its exemption forever.
+    keeps its exemption forever. Two staleness modes are covered:
+
+    - the exempt *path* no longer exists -> drop the row;
+    - the exempt *line text* no longer appears in that path -> drop the row, so
+      an exemption cannot outlive the prose it was written for.
     """
-    for path, reason in list(ALLOWED_LIVE_MENTIONS.items()) + list(ALLOWED_ELSEWHERE.items()):
+    for path, allowed_lines in ALLOWED_LIVE_MENTIONS.items():
+        assert allowed_lines, f"{path} is exempt from the FRED guard with no allowed line"
+        assert (REPO_ROOT / path).exists(), (
+            f"{path} is exempt from the FRED guard but no longer exists -- drop the row"
+        )
+        present = {line for _, line in _lines_with_name(path)}
+        for line_text, reason in allowed_lines.items():
+            assert reason.strip(), f"{path}:{line_text!r} is exempt with no reason"
+            assert line_text in present, (
+                f"{path}: exempt line no longer appears in the file, so the "
+                f"exemption is stale -- drop it: {line_text!r}"
+            )
+
+    for path, reason in ALLOWED_ELSEWHERE.items():
         assert reason.strip(), f"{path} is exempt from the FRED guard with no reason"
         assert (REPO_ROOT / path).exists(), (
             f"{path} is exempt from the FRED guard but no longer exists -- drop the row"
