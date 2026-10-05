@@ -121,4 +121,19 @@ commits = [
   # and still flags the introducing commit. No rotation needed —
   # "296-jwt-claims" was never a secret.
   "3ed49c426d38c5e7ed91be48e8f71a5cee9fe9ae",
+
+  # 2026-10-01: 0f193360 committed apps/digiquant-app/.next dev build output.
+  # prerender-manifest.json carries the preview-mode material that Next.js
+  # generates locally: previewModeId plus previewModeSigningKey and
+  # previewModeEncryptionKey. These are not provider credentials, so the
+  # generic-api-key rule fires on entropy alone, and there is nothing to
+  # rotate at any vendor. Security verified the whole commit tree (183 added
+  # files); the only other credential-shaped assignments are two OpenTelemetry
+  # regex character-class templates vendored into a sourcemap.
+  # Recurrence is closed: a later commit removed the tree, and the root
+  # .gitignore lists `.next/`, `.next-*/` and `.opencode/`, so develop tracks
+  # no build output. History is not rewritten, and the push job walks all refs
+  # with no --log-opts, so this commit stays in scope until the refs are gone.
+  # No rotation needed (see SECURITY.md "Secrets scanning").
+  "0f193360d21305ca8a65d33c47a7502a7ad5ec60",
 ]
