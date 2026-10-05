@@ -16,6 +16,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import socket
 import sys
 from pathlib import Path
 
@@ -345,3 +346,52 @@ def test_the_check_writes_no_persistence() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     for forbidden in ("open(", "sqlite3", "@/db", "conversations", "requests.post"):
         assert forbidden not in source, f"{forbidden!r} would breach the read-only proof"
+
+
+def test_main_opens_no_real_socket(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No unit test may reach client production.
+
+    Every test above swaps the one `http_request` seam, so the only way a real
+    connection happens is code reaching around it. CI runs this file on every
+    push and on forks, against a system we do not control, so the escape has to
+    be impossible rather than merely unintended.
+
+    The chat pattern is registered first on purpose: ``FakeHttp`` returns the
+    first pattern that matches, and the probe URL also ends in ``/chat``.
+    """
+    escapes: list[str] = []
+
+    def _guard(label: str):
+        def _refuse(*_args, **_kwargs):
+            escapes.append(label)
+            raise AssertionError(f"a unit test opened a real socket via socket.{label}")
+
+        return _refuse
+
+    for label in ("connect", "connect_ex"):
+        monkeypatch.setattr(socket.socket, label, _guard(label), raising=False)
+    monkeypatch.setattr(socket, "create_connection", _guard("create_connection"), raising=False)
+
+    code, fake = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer("I don't have access to customer records.")),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+
+    assert escapes == [], "a request escaped the http_request seam to the real network"
+    assert len(fake.calls) == 3, "one discovery plus both probes, every one through the fake"
+    assert code == mod.OK
+
+
+def test_http_request_is_the_only_door_to_the_network() -> None:
+    """A static pin on the seam, so a second door cannot be added quietly.
+
+    This fails the moment someone introduces another HTTP client, even in a code
+    path this suite does not exercise today. ``urlopen`` is deliberately aliased
+    on import (see the module) so that this check, and the read-only check
+    above, cannot be satisfied by a substring they cannot tell apart.
+    """
+    source = SCRIPT.read_text(encoding="utf-8")
+    for banned in ("import requests", "import httpx", "urlopen(", "socket.", "http.client"):
+        assert banned not in source, f"{banned!r} would open a second door to the network"
