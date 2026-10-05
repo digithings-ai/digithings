@@ -219,7 +219,11 @@ def _stream_completions_progressive(
                     "data: "
                     f"{_sse_chunk(cid, created, model, 'Error: workflow stream ended before completion', None)}\n\n"
                 )
-                break
+                # Ensure the stream ends with a proper finish_reason and [DONE] marker
+                # so OpenAI-compatible clients don't fail with "stream ended without finish_reason"
+                yield f"data: {_sse_chunk(cid, created, model, '', 'stop')}\n\n"
+                yield "data: [DONE]\n\n"
+                return
             event_type = ev[0]
             data = ev[1] if len(ev) > 1 else None
 
