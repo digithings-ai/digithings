@@ -14,6 +14,7 @@ import {
   standardPartsToSpans,
   type ActivitySpan,
 } from "./chat-activity";
+import type { DigiChatActivity } from "@digithings/digichat-ui";
 
 const span = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   operation: "execute_tool",
@@ -510,6 +511,96 @@ describe("toDigiChatActivity", () => {
         count: 1,
       },
     ]);
+  });
+});
+
+// The DIG-100 no-invent guard, BFF half (leaf 2a).
+//
+// The projector has exactly one lever for "a search ran and found nothing":
+// a tool_result with count === 0, which the shared UI renders as the literal
+// string `no hits` (packages/ui/.../activity-view.ts, outcomeMeta). That is
+// an authoritative negative claim — it asserts that a retrieval happened and
+// came back empty.
+//
+// It must therefore only ever be emitted when a retrieval actually ran. The
+// trailing pass today reaches it from any completed execute_tool span whose
+// result the projector cannot count, and that is not the same thing: an MCP
+// call that returned a payload the BFF does not recognise is a completed tool
+// call, not an empty search. Today such a row renders as "no hits", which is
+// a fabricated negative claim in the client-visible transcript — the same
+// failure class as the DCE-150 incident, one layer down.
+describe("toDigiChatActivity — a negative claim requires a retrieval", () => {
+  /** Every row that reads to the user as "searched, found nothing". */
+  function zeroHitRows(rows: DigiChatActivity[]): DigiChatActivity[] {
+    return rows.filter((r) => r.kind === "tool_result" && r.count === 0);
+  }
+
+  it("does not claim no hits for a completed tool whose result is not a counted retrieval", () => {
+    // The MCP shape: a completed dynamic-tool part whose output carries no
+    // `documents`, no `documentsWithheld` and no `hitCount`. standardPartsToSpans
+    // projects it as a single completed execute_tool span, and the trailing
+    // pass currently rewrites that into a zero-hit tool_result.
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap__list_connections",
+        state: "output-available",
+        input: {},
+        output: { result: { connections: [] } },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(spans).toHaveLength(1);
+    expect(zeroHitRows(toDigiChatActivity(spans))).toEqual([]);
+  });
+
+  it("does not claim no hits for a completed tool that returned an uncounted payload", () => {
+    // Same shape with a query: the user asked something, a tool ran and
+    // returned, and the result was not countable. "no hits" would assert the
+    // retrieval came back empty, which nothing here establishes.
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap_search",
+        state: "output-available",
+        input: { query: "acme" },
+        output: { result: { rows: 3 } },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(zeroHitRows(toDigiChatActivity(spans))).toEqual([]);
+  });
+
+  it("still claims no hits when a search completed and produced no retrieve span", () => {
+    // The one legitimate zero: the search provably ran (started + completed)
+    // and no retrieve span followed. This must keep working — a real empty
+    // result and a tool whose output we cannot read are different cases, and
+    // collapsing them would lose the honest negative the guard depends on.
+    expect(toDigiChatActivity([started("file_search"), finished("file_search", "auth")])).toEqual([
+      { kind: "tool_result", name: "file_search", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("still settles a failed search as a failure, never as a zero-hit row", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      { ...finished("file_search", "auth"), status: "failed" },
+    ]);
+    expect(zeroHitRows(rows)).toEqual([]);
+    expect(rows).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+  });
+
+  it("does not produce a zero-hit row while the turn is still open", () => {
+    // settle: false means the turn has not settled. A completed call with no
+    // retrieve span yet is not yet evidence of an empty result — the retrieve
+    // may still arrive — so it must stay a running tool_call.
+    expect(
+      toDigiChatActivity([started("file_search"), finished("file_search", "auth")], {
+        settle: false,
+      }),
+    ).toEqual([{ kind: "tool_call", name: "file_search", query: "auth" }]);
   });
 });
 
