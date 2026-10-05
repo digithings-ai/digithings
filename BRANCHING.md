@@ -100,8 +100,40 @@ module branch being force-pushed also stops it being quietly dropped.
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
 | `chore/<slug>` | Tooling, CI, config. | `chore/bump-pydantic` |
+| `DIG-<n>-<slug>` | A Paperclip **execution workspace**. Paperclip checks the workspace out on `DIG-<n>-<title-slug>`, so this is not a branch a human creates — the taxonomy has to admit what the harness already produces, or every commit made there is unpushable. See [Execution-workspace branches](#execution-workspace-branches-never-blanket-push) before pushing one. | `DIG-1122-pre-push-taxonomy-has-no-dig-slug-rule` |
 
 Slugs: lowercase, dashes, no underscores. Numbers permitted.
+
+### Execution-workspace branches: never blanket-push
+
+A `DIG-<n>-<slug>` branch is a **workspace**, not a unit of work. It accumulates
+whatever commits the agents working in it produce, which routinely includes
+commits belonging to other issues, merges of other people's PRs, and copies of
+changes that already landed on `develop` by another route.
+
+So `git push` on such a branch is not a save operation — it publishes the whole
+accumulation. Concretely, on the DIG-47 workspace: it sat 12 commits ahead of its
+own epic branch and 29 behind `develop`, and one of those 12 (`6d3789d9a`, a
+DIG-361 docs change) had already reached `develop` through PR #5094. The local
+copy *deleted* the DIG-258 inventory row and the entire DIG-526 section that
+`develop` had gained since. A blanket push would have been a clean fast-forward
+that regressed `docs/ops/SECRETS_INVENTORY.md` by ~185 lines, with no conflict
+to warn you.
+
+Two safe shapes:
+
+- **Re-home the commits** onto a branch whose whole history is yours — normally
+  `task/<N>-<slug>` or `feat/<slug>` — and push that. This is the normal path.
+- **Push an explicit per-commit refspec** when you only want to preserve a
+  specific commit on the workspace branch without moving its tip, e.g.
+  `git push origin <sha>:refs/heads/<taxonomy-legal-name>`.
+
+Avoid the third path: cherry-picking the same commits onto a legal branch
+*without* dropping the local ones is how a patch ends up on two refs with
+different SHAs. That happened on DIG-47.10 (`b6a3154d6`/`9b90f2a1c` locally,
+`99e3d8618`/`8cc861931` remotely, identical patch-ids). Two patch streams mean
+"which ref holds this fix?" has two answers and the contract review is in no
+ref at all.
 
 ## Adding a human contributor
 

@@ -378,18 +378,15 @@ fi
 # DIG-1122: the execution-workspace arm, with its digit required, plus a help
 # line that names it. A refusal message that omits the shape the harness
 # actually produces is what made this look like a config error, not a policy gap.
-if grep -nE 'DIG/\[0-9\]\+\[a-z0-9-\]\+' "$HOOK" >/dev/null; then
+if grep -qF 'DIG-[0-9]+-[a-z0-9-]+' "$HOOK"; then
   echo "PASS [structure] DIG-<n>-<slug> present in branch_regex"
   pass=$((pass + 1))
 else
-  echo "FAIL [structure] branch_regex missing DIG/[0-9]+-[a-z0-9-]+"
+  echo "FAIL [structure] branch_regex missing DIG-[0-9]+-[a-z0-9-]+"
   fail=$((fail + 1))
 fi
 
-if awk '
-  /^[[:space:]]*DIG-\x3cn\x3e-\x3cslug\x3e/ { found=1 }
-  END { exit found ? 0 : 1 }
-' "$HOOK"; then
+if grep -qF 'DIG-<n>-<slug>' "$HOOK"; then
   echo "PASS [structure] help text lists DIG-<n>-<slug>"
   pass=$((pass + 1))
 else
@@ -399,11 +396,12 @@ fi
 
 # BRANCHING.md carries the no-blanket-push rule; the regex without it is the
 # destructive half of this change.
-if grep -nE 'DIG-\x3cn\x3e-\x3c' "$REPO_ROOT/BRANCHING.md" >/dev/null; then
+if grep -qF 'DIG-<n>-<slug>' "$REPO_ROOT/BRANCHING.md" \
+  && grep -qiF 'blanket' "$REPO_ROOT/BRANCHING.md"; then
   echo "PASS [structure] BRANCHING.md documents the execution-workspace branch"
   pass=$((pass + 1))
 else
-  echo "FAIL [structure] BRANCHING.md must document DIG-<n>-<slug>"
+  echo "FAIL [structure] BRANCHING.md must document DIG-<n>-<slug> and the no-blanket-push rule"
   fail=$((fail + 1))
 fi
 
