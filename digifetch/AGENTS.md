@@ -18,6 +18,12 @@ browser **session lifecycle**, composable **retry/backoff**, a min-interval
 specific scraping logic (login selectors, URLs, HTML parsing, PDF extraction)
 stays in the **consumer** (today: twelve-x).
 
+> **Scrapers are site-specific.** Selectors, URLs, authentication flows,
+> pagination logic, and domain models are **not** in this library — they live
+> in the consumer (e.g. twelve-x). The engine provides only the generic
+> lifecycle and transport primitives. This boundary is deliberate and must be
+> preserved.
+
 > ⚠️ Built **ahead of** the single-consumer YAGNI trigger, per explicit request
 > (#634). One consumer exists today (twelve-x); the interface is provisional and
 > will likely change at the second consumer. Wiring twelve-x onto digifetch is a
