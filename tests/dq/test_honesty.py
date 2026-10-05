@@ -262,3 +262,10 @@ def test_negative_counts_are_rejected() -> None:
     for bad in ({"k": -5, "n": 0}, {"k": -1, "n": -1}, {"k": -5, "n": -5}):  # n=3
         with pytest.raises(ValueError):  # pydantic wraps it in ValidationError
             HonestRateBlock(**bad)  # type: ignore[arg-type]
+
+
+def test_more_wins_than_closes_is_rejected() -> None:
+    """The other side of the `k == n` boundary in case 5: impossible counts raise."""
+    for bad in ({"k": 5, "n": 2}, {"k": 41, "n": 40}, {"k": 1, "n": 0}):  # n=3
+        with pytest.raises(ValueError, match="impossible counts"):  # n=3
+            HonestRateBlock(**bad)  # type: ignore[arg-type]
