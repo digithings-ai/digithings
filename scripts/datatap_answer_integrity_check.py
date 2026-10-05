@@ -22,12 +22,26 @@ answer carried an identifier or a name list; nothing else may ever exit 1.
 ``2`` — the check could not see: any non-200, any timeout, any body that is not
 an event stream, any answer not fully parseable, any discovery failure.
 
-No credential, no local persistence
-------------------------------------
+One secret, no local persistence
+--------------------------------
 The embed token is read out of DataTap's own public ``/chat`` page on every run.
-This script reads no secret and writes no local state: no file, no database, no
-cache. That is what makes it safe to point at a client production system on a
-schedule, and it is pinned by tests rather than asserted in prose.
+It is not a credential and it is not treated as one: it is a client-published
+identifier scraped from a public page, and no bypass is keyed on it.
+
+The check does read one real secret, from one place. ``DATATAP_ANSWER_CHECK_MONITOR_TOKEN``
+holds our sanctioned internal-monitor identity, and it is sent on the ``/api/chat``
+requests as ``x-embed-monitor-token`` so the hourly check is not refused by our own
+embed gate. That gate is our code on our host — ``apps/digichat/src/app/api/chat/route.ts``
+past ``EMBED_FREE_TURN_LIMIT`` per client IP — and both probes share one IP, so
+without the identity the check was blind for most of every 24h window. The value is
+never logged, never printed, and never written anywhere; it is read in
+``build_headers`` and put straight onto the wire. Unset means no header is sent. digichat
+ignores an allowlist entry shorter than 32 characters, so a value below that is sent and
+then refused; the same secret has to be in both places.
+
+This script writes no local state: no file, no database, no cache. That is what makes
+it safe to point at a client production system on a schedule, and it is pinned by
+tests rather than asserted in prose.
 
 Two honest limits on that claim. The probe is read-only from our side, but each
 run still POSTs two chat turns, which DataTap may retain on *their* side as
@@ -54,6 +68,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import uuid
@@ -75,6 +90,25 @@ COULD_NOT_RUN = 2
 
 DISCOVERY_URL = "https://datatap.stream/chat"
 EMBED_HOST = "datatap.stream"
+
+# The one environment variable this script reads, and the only secret it is
+# allowed to read. It is our sanctioned internal-monitor identity, presented to
+# our own embed gate so the hourly check is not charged for the turns it needs
+# to run. digichat matches it against DIGICHAT_MONITOR_TOKENS on
+# ``x-embed-monitor-token`` — the constant ``EMBED_MONITOR_TOKEN_HEADER`` in
+# ``apps/digichat/src/lib/embed-monitor-token.ts``, compared with
+# ``timingSafeEqual``. The spelling below must match that constant exactly; any
+# other spelling is an unrecognised caller and gets charged like everyone else.
+MONITOR_TOKEN_ENV_VAR = "DATATAP_ANSWER_CHECK_MONITOR_TOKEN"
+EMBED_MONITOR_TOKEN_HEADER = "x-embed-monitor-token"
+
+# Anything a header value cannot carry: control characters (CR and LF above all)
+# and anything outside printable ASCII, which urllib cannot even encode for the
+# wire. Such a value is refused rather than sent, because urllib reports the
+# rejection by raising with the offending value quoted in the message, and every
+# failure path in this script prints the exception text — a pasted secret with a
+# stray newline would land in the hourly log.
+_BAD_HEADER_CHARS = re.compile(r"[^\x21-\x7e]")
 
 # Both calls go to the same client platform and a slow Azure Container Apps cold
 # start is routine, so the default is generous. It is passed explicitly down the
@@ -238,8 +272,23 @@ def build_headers(token: str) -> dict[str, str]:
     Dropping ``X-Embed-Host`` yields 401; losing ``Referer`` or ``Origin`` yields
     503. Neither is obvious from the answer alone, so the set is pinned by a test
     that asserts dict equality rather than by inspection here.
+
+    The monitor identity is appended only when ``MONITOR_TOKEN_ENV_VAR`` holds a
+    non-empty value. Unset is not the same as empty on the server side, so an
+    absent token sends no header at all and the run stays honest: the probes are
+    then charged like any other caller and a refusal says so in its reason.
+
+    The environment is read here, in the one function that builds headers, rather
+    than cached in a module global. A global would be bound once at import, which
+    both hides the second read site from an audit and makes the answer depend on
+    what the process happened to be started with.
+
+    Raises ProbeError when the configured value cannot be sent as a header value.
+    The reason names the variable and never the value: urllib's own rejection
+    quotes what it was handed, and that text reaches stdout through the exit-2
+    path, so an unsendable secret would be printed rather than refused quietly.
     """
-    return {
+    headers = {
         "content-type": "application/json",
         "accept": "text/event-stream",
         "X-Embed-Host": EMBED_HOST,
@@ -247,6 +296,16 @@ def build_headers(token: str) -> dict[str, str]:
         "Referer": DISCOVERY_URL,
         "Origin": f"https://{EMBED_HOST}",
     }
+    monitor_token = (os.environ.get(MONITOR_TOKEN_ENV_VAR) or "").strip()
+    if not monitor_token:
+        return headers
+    if _BAD_HEADER_CHARS.search(monitor_token):
+        raise ProbeError(
+            f"{MONITOR_TOKEN_ENV_VAR} holds a value that cannot be sent as a header "
+            "(a control character, or a character outside ASCII)"
+        )
+    headers[EMBED_MONITOR_TOKEN_HEADER] = monitor_token
+    return headers
 
 
 def build_payload(probe_text: str) -> dict:
@@ -755,9 +814,20 @@ def _status_reason(name: str, response: HttpResponse) -> str:
     if isinstance(parsed, dict) and parsed.get("error"):
         detail = f" ({parsed['error']})"
     if response.status == 402:
+        # Our own gate, not the client's. apps/digichat/src/app/api/chat/route.ts
+        # answers 402 {"error": "trial_gate"} past EMBED_FREE_TURN_LIMIT (3) turns
+        # per client IP in a 24h window, and both probes share one IP — so the
+        # first run spends two turns and the rest of the window sees this. That
+        # body also comes back from a tenant's configured consume-quota, which a
+        # monitor token does not bypass, so the message names both possibilities
+        # rather than asserting the one it cannot distinguish. No retry: the
+        # counter resets on its own after 24 hours.
         return (
-            f"probe {name!r} came back HTTP 402{detail}: their trial gate is closed, "
-            "so we cannot see the answer path"
+            f"probe {name!r} came back HTTP 402{detail}: our own digichat embed gate "
+            "(EMBED_FREE_TURN_LIMIT per client IP) is closed, or the check is not "
+            "recognised as the internal monitor, so we cannot see the answer path — "
+            f"set {MONITOR_TOKEN_ENV_VAR} for the check and DIGICHAT_MONITOR_TOKENS "
+            "on digichat"
         )
     return f"probe {name!r} came back HTTP {response.status}{detail}: we cannot see the answer path"
 
@@ -772,8 +842,8 @@ def run_probe(
     """Send one probe and return the answer it produced.
 
     Raises ProbeError for anything short of a complete HTTP 200 event stream. A
-    402 trial gate is not retried: the quota is theirs to give, and retrying to
-    beat it would put avoidable load on a client account.
+    402 gate is not retried: the quota is ours to give, it resets on its own after
+    24 hours, and hammering it costs us nothing but noise.
     """
     response = http_request(
         "POST",
