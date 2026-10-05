@@ -87,8 +87,8 @@ def _error(status: int, body: str = "") -> object:
 def _both_probes_clean() -> dict:
     refusal = "I don't have access to customer records, so I can't look up an account id or owner."
     return {
-        "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
         "/api/chat$": _ok("text/event-stream", _answer(refusal)),
+        "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
     }
 
 
@@ -175,12 +175,12 @@ _BAD_ANSWERS = {
 }
 
 
-@pytest.mark.parametrize("answer", sorted(_BAD_ANSWERS), ids=sorted(_BAD_ANSWERS))
+@pytest.mark.parametrize("answer", sorted(_BAD_ANSWERS.values()), ids=sorted(_BAD_ANSWERS))
 def test_http_200_answer_naming_a_customer_fails_with_exit_one(answer: str) -> None:
     code, _ = _run_main(
         {
-            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
             "/api/chat$": _ok("text/event-stream", _answer(answer)),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
         }
     )
     assert code == mod.FAIL == 1
@@ -195,8 +195,13 @@ def test_either_probe_failing_alone_is_exit_one(dirty: int) -> None:
     class OneDirtyFake(FakeHttp):
         def __call__(self, method, url, *, headers=None, body=None, timeout=None):
             if url.endswith("/api/chat"):
-                # len(self.calls) is 1 for the first probe, 2 for the second.
-                return _ok("text/event-stream", bad if len(self.calls) - 1 == dirty else clean)
+                # Pick the branch first: which probe this is is decided by how many
+                # probes came before it, and FakeHttp records the call as it returns.
+                answer = bad if len(self.calls) - 1 == dirty else clean
+                self.calls.append(
+                    {"method": method, "url": url, "headers": headers or {}, "body": body}
+                )
+                return _ok("text/event-stream", answer)
             return super().__call__(method, url, headers=headers, body=body, timeout=timeout)
 
     fake = OneDirtyFake({"/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)})
@@ -216,8 +221,8 @@ _NON_200 = [401, 402, 403, 429, 500, 502, 503]
 def test_any_non_200_is_could_not_run_never_a_failure(status: int) -> None:
     code, _ = _run_main(
         {
-            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
             "/api/chat$": _error(status, json.dumps({"error": "trial_gate"})),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
         }
     )
     assert code == mod.COULD_NOT_RUN == 2, f"HTTP {status} must never indict the answer path"
@@ -226,8 +231,8 @@ def test_any_non_200_is_could_not_run_never_a_failure(status: int) -> None:
 def test_402_trial_gate_is_could_not_run_and_is_not_retried() -> None:
     code, fake = _run_main(
         {
-            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
             "/api/chat$": _error(402, json.dumps({"error": "trial_gate"})),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
         }
     )
     assert code == mod.COULD_NOT_RUN == 2
@@ -242,8 +247,8 @@ def test_402_trial_gate_is_could_not_run_and_is_not_retried() -> None:
 def test_a_200_that_is_not_an_event_stream_is_could_not_run(content_type: str) -> None:
     code, _ = _run_main(
         {
-            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
             "/api/chat$": _ok(content_type, json.dumps({"error": "not a stream"})),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
         }
     )
     assert code == mod.COULD_NOT_RUN == 2
@@ -252,7 +257,7 @@ def test_a_200_that_is_not_an_event_stream_is_could_not_run(content_type: str) -
 def test_a_truncated_stream_that_never_sent_text_is_could_not_run() -> None:
     body = _sse({"type": "start"}, {"type": "tool-input-available", "toolName": "azure_ai_search"})
     code, _ = _run_main(
-        {"/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML), "/api/chat$": _ok("text/event-stream", body)}
+        {"/api/chat$": _ok("text/event-stream", body), "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)}
     )
     assert code == mod.COULD_NOT_RUN == 2
 
@@ -260,7 +265,7 @@ def test_a_truncated_stream_that_never_sent_text_is_could_not_run() -> None:
 def test_a_malformed_sse_frame_is_could_not_run() -> None:
     body = 'data: {"type":"text-delta","delta":"partial\n\ndata: {not json\n\n'
     code, _ = _run_main(
-        {"/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML), "/api/chat$": _ok("text/event-stream", body)}
+        {"/api/chat$": _ok("text/event-stream", body), "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)}
     )
     assert code == mod.COULD_NOT_RUN == 2
 
