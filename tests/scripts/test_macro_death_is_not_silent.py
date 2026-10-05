@@ -21,11 +21,15 @@ How this stays a real test rather than a stub. It does not reimplement the
 logic. It parses ``refresh_market_data_r2.py`` with :mod:`ast`, extracts the
 *actual* source of ``_outcome``, ``_slow_macro_exempt_ids`` and
 ``_macro_leg_dead`` plus the real ``_SOFT_FAIL_MODES`` / ``MODE_*`` constants,
-and executes them. So the exemption behaviour under test is the repository's
-own code. The second half of the file then reads the ``failed = [...]``
-comprehension out of ``main``'s AST, runs *that* with ``main``'s own bindings,
-and pins that a whole-leg guard is wired into it -- so the aggregate cannot be
-quietly dropped again.
+and executes them. The second half then reads the ``failed = [...]``
+comprehension out of ``main``'s AST and runs *that* with ``main``'s own
+bindings -- an ``import`` cannot reach the comprehension, because it lives
+inside ``main`` rather than at module scope, and inlining a copy of it here
+would be the paraphrase this file exists to avoid. The exempt set for the
+realistic shapes comes from the *shipped* ``macro_series.yaml`` through the
+real ``_resolve_macro_specs``, so the fixtures cannot drift away from the
+panel the cron actually runs (a quarterly ``GDPC1`` fixture, for instance,
+would be testing a series the manifest dropped).
 
 Run from the repo root::
 
@@ -35,6 +39,8 @@ Run from the repo root::
 from __future__ import annotations
 
 import ast
+import importlib.util
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +48,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "refresh_market_data_r2.py"
+MACRO_YAML = (
+    REPO_ROOT / "digiquant" / "src" / "digiquant" / "research" / "config" / "macro_series.yaml"
+)
 
 pytestmark = pytest.mark.unit
 
@@ -51,19 +60,43 @@ _EXTRACTED_CONSTS = (
     "_SOFT_FAIL_MODES",
     "MODE_HISTORY_ONLY",
     "MODE_ERROR",
+    # Only used to build the healthy half of a realistic run.
+    "MODE_UP_TO_DATE",
     # `_slow_macro_exempt_ids` reads this at call time, so it must come along.
     "SLOW_CADENCES",
 )
 
 
 @pytest.fixture(scope="module")
+def shipped_specs() -> list[tuple[str, str, str | None]]:
+    """The real ``(source, series, cadence)`` specs of the shipped macro manifest.
+
+    Imported, not hand-written: ``pytest.ini`` puts ``digiquant/src`` on
+    ``pythonpath`` and the sibling ``test_refresh_market_data_r2_macro.py``
+    already imports this script, so a fixture naming series the manifest no
+    longer carries would be a fixture for a panel that does not exist.
+    """
+    spec = importlib.util.spec_from_file_location("refresh_market_data_r2_r1", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    specs = module._resolve_macro_specs([], str(MACRO_YAML))
+    monthly = [s for s in specs if (s[2] or "").lower() == "monthly"]
+    # The panel this guard exists for must keep existing: a total death of it is
+    # the bug. If the manifest ever ships fewer than two monthly series the
+    # `> 1` floor can no longer be exercised and the premise needs revisiting.
+    assert len(monthly) >= 2, f"expected a multi-series monthly panel, got {monthly}"
+    return specs
+
+
+@pytest.fixture(scope="module")
 def r2() -> dict[str, Any]:
     """Exec the real pure helpers from ``refresh_market_data_r2.py``.
 
-    Deliberately not an ``import``: the module pulls in the whole digiquant
-    runtime, which needs Python >= 3.12 (``enum.StrEnum``). Extracting the
-    dependency-free helpers keeps this guard runnable on any interpreter while
-    still executing the repository's own logic.
+    Extracted rather than imported because the ``failed = [...]`` reduction
+    lives inside ``main`` and cannot be reached by an ``import``; the helpers
+    are extracted with it so the comprehension runs against the same code.
     """
     tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
     keep: list[ast.stmt] = []
@@ -147,31 +180,77 @@ def test_error_mode_on_slow_series_still_fails_loud(r2: dict[str, Any]) -> None:
     assert _real_failed(r2, outcomes, specs) == outcomes
 
 
-def test_total_macro_feed_death_fails_the_leg(r2: dict[str, Any]) -> None:
+def _healthy_run(r2: dict[str, Any], n_prices: int = 99) -> list[dict]:
+    """Outcomes of a *healthy* run: prices and FX landed, only the macro leg failed.
+
+    Every other fixture in this file is all-silent or one-off-from-silent, which
+    is not a shape a real run has. A wrong ``_macro_leg_dead`` therefore slips
+    through them; this shape is what the cron actually produces.
+    """
+    outcomes = [
+        r2["_outcome"](f"T{i}", r2["MODE_UP_TO_DATE"], as_of="2026-09-23", rows=250)
+        for i in range(n_prices)
+    ]
+    outcomes += [
+        r2["_outcome"](sym, r2["MODE_UP_TO_DATE"], as_of="2026-09-23", rows=250)
+        for sym in ("yahoo__EURUSD=X", "yahoo__USDJPY=X", "yahoo__GBPUSD=X", "yahoo__AUDUSD=X")
+    ]
+    return outcomes
+
+
+def test_total_macro_feed_death_fails_the_leg(
+    r2: dict[str, Any], shipped_specs: list[tuple[str, str, str | None]]
+) -> None:
     """THE FINDING, inverted: a total macro outage now fails loud.
 
-    Every macro series in a real slow-cadence manifest (``macro_series.yaml``
-    carries M2SL/UNRATE/CPIAUCSL/PCEPI monthly) returning ``history-only`` at
-    once is the whole leg dead, not a release calendar. The per-series #4621
-    exemption must not swallow it: the run reports ``stale=True`` and exits 1.
+    The shipped manifest's monthly series all returning ``history-only`` at once,
+    alongside a healthy price and FX book, is the whole macro leg dead rather
+    than a release calendar. The per-series #4621 exemption must not swallow it:
+    the run reports ``stale=True`` and exits 1 naming every dead macro id.
+    """
+    exempt = r2["_slow_macro_exempt_ids"](shipped_specs)
+    outcomes = _healthy_run(r2)
+    outcomes += [
+        r2["_outcome"](name, r2["MODE_HISTORY_ONLY"], note="fetch failed, serving history")
+        for name in sorted(exempt)
+    ]
+
+    failed = _real_failed(r2, outcomes, shipped_specs)
+
+    assert failed != [], "a total macro-feed outage is silent again: the whole-leg guard is gone"
+    assert {o["ticker"] for o in failed} == exempt, (
+        "every dead macro series should be named, alongside the rest of the universe still fresh"
+    )
+
+
+def test_a_partial_slow_leg_still_runs_quiet(r2: dict[str, Any]) -> None:
+    """The other side of the guard: a *subset* of slow series is not an outage.
+
+    ``_fetch_macro`` builds a fresh client per series, so a rate-limit blip
+    silences an arbitrary subset of the panel. A majority rule would fail the
+    cron on a healthy panel, which is how operators learn to ignore the gate.
+    Unanimity is what makes the guard safe to alert on.
     """
     specs = [
         ("fred", "M2SL", "monthly"),
         ("fred", "PCEPI", "monthly"),
         ("fred", "UNRATE", "monthly"),
-        ("fred", "GDPC1", "quarterly"),
+        ("fred", "CPIAUCSL", "monthly"),
     ]
-    outcomes = [
-        r2["_outcome"](name, r2["MODE_HISTORY_ONLY"], note="fetch failed, serving history")
-        for name in ("fred__M2SL", "fred__PCEPI", "fred__UNRATE", "fred__GDPC1")
+    outcomes = _healthy_run(r2)
+    # One outcome per spec, as `main` emits -- including the slow series that
+    # came back fine. Without those the fixture has no healthy series *inside*
+    # the exempt set, which is a shape no real run has.
+    outcomes += [
+        r2["_outcome"](name, r2["MODE_HISTORY_ONLY"], note="fetch failed: rate_limited")
+        for name in ("fred__M2SL", "fred__PCEPI")
+    ]
+    outcomes += [
+        r2["_outcome"](name, r2["MODE_UP_TO_DATE"], as_of="2026-09-23", rows=8)
+        for name in ("fred__UNRATE", "fred__CPIAUCSL")
     ]
 
-    failed = _real_failed(r2, outcomes, specs)
-
-    assert failed != [], "a total macro-feed outage is silent again: the whole-leg guard is gone"
-    assert [o["ticker"] for o in failed] == [o["ticker"] for o in outcomes], (
-        "the whole leg should fail loud, not just part of it"
-    )
+    assert _real_failed(r2, outcomes, specs) == []
 
 
 def test_slow_cadence_failure_alongside_a_daily_failure_still_fails_loud(
@@ -192,20 +271,21 @@ def test_slow_cadence_failure_alongside_a_daily_failure_still_fails_loud(
 
 
 def test_stale_comprehension_keeps_a_whole_leg_guard() -> None:
-    """The aggregate is wired into the comprehension, not bolted on beside it.
+    """The aggregate is *called* from the comprehension, not computed beside it.
 
-    The per-series cadence exemption alone cannot see a leg, so the
-    comprehension must also consult a whole-leg condition. This is the check
-    that keeps a future refactor from deleting the aggregate while every
-    behavioural test above still passes.
+    ``_macro_leg_dead`` could be hoisted above the comprehension and left
+    unwired -- every behavioural test above would then pass while a whole-leg
+    outage went unreported again. Behavioural coverage cannot see that; the
+    call site can.
     """
     comp = _failed_comprehension()
+    calls = [ast.unparse(n.func) for n in ast.walk(comp) if isinstance(n, ast.Call)]
     clauses = [ast.unparse(cond) for gen in comp.generators for cond in gen.ifs]
     joined = " ".join(clauses)
 
     assert "exempt" in joined, f"expected the cadence exemption, got {clauses}"
-    assert "_macro_leg_dead" in joined, (
-        "the `failed` comprehension filters per-outcome only again: a whole-leg "
+    assert "_macro_leg_dead" in calls, (
+        "the `failed` comprehension no longer calls _macro_leg_dead: a whole-leg "
         "macro outage would be reported as a fresh run. Re-wire the aggregate "
-        "guard through _macro_leg_dead."
+        f"guard. Calls found: {calls}"
     )
