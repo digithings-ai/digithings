@@ -1,11 +1,16 @@
 # Review — PR #5155 (OCC customer PII mask)
 
-- **Subject:** `d608c5df4` fix(zammad): mask customer PII by default in the OCC help surfaces → branch `task/1063-zammad-mask-customer-pii`, PR #5155
+- **Subject:** `fe4f75488` fix(zammad): mask customer PII by default in the OCC help surfaces → branch `task/1063-zammad-mask-customer-pii`, PR #5155
 - **Reviewer:** fresh-context `general` subagent (`ses_ef24d7da2ffe95uC8J0f1Yj8N5`), spawned by the Platform agent that authored the branch
 - **Date:** 2026-10-05
-- **Verdict:** request changes → all findings addressed in `c0d5814f4`
+- **Verdict:** request changes → all findings addressed in `ecb064e09`
 - **Severity counts:** 2 high, 4 medium, 4 low — all 10 addressed; 3 residual limits recorded as documented limitations rather than code changes (see § Accepted limitations)
 - **Scope:** `scripts/zammad_mcp/{formatting,server}.py`, `scripts/zammad_mcp/README.md`, `tests/scripts/test_zammad_mcp.py`, `docker-compose.yml`, `apps/digithings-stack-cloudflare/{src/index.ts,wrangler.toml}`, `infra/digichat-release/compose.profile-a-bundle.override.yml`
+
+> The SHAs above are post-rewrite. The reviewed commits were rewritten once to add the
+> DCO `Signed-off-by` trailer that `ci-dco-sign-off.yml` requires; the tree is byte-identical
+> (`git diff --stat` against the pre-rewrite head is empty). The original SHAs were `d608c5df4`
+> and `c0d5814f4` and no longer exist on the branch.
 
 ## Reviewer independence
 
