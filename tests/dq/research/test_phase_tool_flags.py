@@ -61,19 +61,18 @@ def test_alt_phases_grounding_modes():
 
 @pytest.mark.unit
 def test_politician_signals_makes_no_paid_search(monkeypatch):
-    # DIG-1252 done-test: with live_search=False the segment must never reach the
-    # web_grounding pre-pass, so no outbound request can go to its grounding domains
-    # (capitoltrades.com / quiverquant.com per search_domains.yaml). Model the options
-    # segment's guard: a call here is the bug.
-    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
-    monkeypatch.setattr(_node_factory, "_research_data_client", object)
-
+    # DIG-1252 done-test. Counsel ruled this feed permanently refused, so no run of this
+    # segment may reach the `web_search` pre-pass in web_grounding.py — that call is the
+    # single outbound hop, and search_domains.yaml scopes it to capitoltrades.com /
+    # quiverquant.com / sec.gov. Model the options segment's guard: a call here is the bug.
     def _fail(**_k):  # a paid web_search call here would be the bug
         raise AssertionError("alt-politician-signals must not call fetch_web_grounding")
 
     monkeypatch.setattr("digiquant.research.data.web_grounding.fetch_web_grounding", _fail)
     spec = next(s for s in ALT_SPECS if s.segment_slug == "alt-politician-signals")
-    _tools, _execute, grounding = _node_factory.build_grounding(
+    # Same argument shape _node_factory.build_node passes in production, so this fails if
+    # any other input ever re-opens the outbound path.
+    tools, _execute, grounding = _node_factory.build_grounding(
         use_data_tools=spec.use_data_tools,
         live_search=spec.live_search,
         live_search_is_fallback=spec.live_search_is_fallback,
@@ -81,16 +80,15 @@ def test_politician_signals_makes_no_paid_search(monkeypatch):
         model="openrouter/openrouter/auto",
         segment=spec.segment_slug,
         ai_portfolios=spec.ai_portfolios,
+        use_research_tools=spec.use_research_tools,
+        research_phase=spec.research_phase,
+        digifetch_tools=spec.digifetch_tools,
     )
     assert grounding is None
-    # The domain allowlist stays in tree (Counsel may order a narrower or removed
-    # segment); the flag is what keeps it unreached. Pin both halves.
-    import yaml
-    from digiquant.research.graph import _research_config_root
-
-    cfg = yaml.safe_load((_research_config_root() / "search_domains.yaml").read_text())
-    domains = cfg["per_segment"]["alt-politician-signals"]
-    assert "capitoltrades.com" in domains and "quiverquant.com" in domains
+    # Whatever tools survive are corpus reads (Supabase/R2 on our own account); none of
+    # them may be an outbound web or Gloomberb/digifetch call.
+    names = [str((t.get("function") or t).get("name", "")) for t in (tools or [])]
+    assert not [n for n in names if "web_search" in n or n.startswith("digifetch_")]
 
 
 @pytest.mark.unit
