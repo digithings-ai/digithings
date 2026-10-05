@@ -9,8 +9,15 @@ freshness controls (``livecrawl`` / ``max_age_hours``).
 
 Design constraints (see ``digisearch/AGENTS.md``):
 
-- No new hard dependencies: transport is ``httpx`` (already in base install).
-  No ``exa-py`` import; the REST shapes are built locally.
+- No new hard dependencies: transport is the shared ``digifetch`` fetch seam
+  (``HttpFetcher``; ``httpx`` underneath, already in base install). No ``exa-py``
+  import; the REST shapes are built locally. Routing EXA through ``digifetch``
+  (DIG-912 §5.3) is what puts the shared controls on this path — chiefly the
+  SSRF guard in :mod:`digifetch.ssrf`, so a webhook that carries an
+  attacker-chosen base URL is refused instead of dialled. ``digifetch`` is
+  imported lazily inside :func:`_post` (the same shape
+  ``pipeline/url_ingest.py`` uses), so importing this module never requires the
+  ``[web-search]`` extra.
 - No env reads at import time: ``is_exa_configured()`` / ``_api_key()`` read
   ``EXA_API_KEY`` at call time so tests and key-less installs stay side-effect
   free. Without a key every entry point fails closed with
@@ -21,6 +28,7 @@ Design constraints (see ``digisearch/AGENTS.md``):
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, Literal
@@ -107,34 +115,67 @@ def _api_key(explicit: str | None = None) -> str:
     return key
 
 
-def _post(path: str, payload: dict[str, Any], *, api_key: str) -> dict[str, Any]:
-    url = f"{EXA_API_BASE}{path}"
-    try:
-        resp = httpx.post(
-            url,
-            json=payload,
-            headers={"x-api-key": api_key, "Content-Type": "application/json"},
-            timeout=EXA_TIMEOUT_S,
-        )
-    except httpx.HTTPError as e:
-        raise ExaError(f"EXA request failed: {e}") from e
-    if resp.status_code in (401, 403):
-        raise ExaError(
+def _status_error(path: str, response: httpx.Response) -> ExaError:
+    """Map an HTTP error response onto the :class:`ExaError` taxonomy.
+
+    401/403 and 429 keep their distinct messages and ``status_code`` so callers
+    can apply the retry taxonomy from ``web_providers.base.request_json``
+    (401/403 never retryable, 429/5xx retryable — #4711 review).
+    """
+    status = response.status_code
+    if status in (401, 403):
+        return ExaError(
             "EXA rejected the API key (401/403) — check EXA_API_KEY.",
-            status_code=resp.status_code,
+            status_code=status,
         )
-    if resp.status_code == 429:
-        raise ExaError(
+    if status == 429:
+        return ExaError(
             "EXA rate limited this key (429) — back off and retry.",
             status_code=429,
         )
-    if resp.status_code >= 400:
-        raise ExaError(
-            f"EXA {path} failed ({resp.status_code}): {resp.text[:500]}",
-            status_code=resp.status_code,
-        )
+    return ExaError(
+        f"EXA {path} failed ({status}): {response.text[:500]}",
+        status_code=status,
+    )
+
+
+def _post(path: str, payload: dict[str, Any], *, api_key: str) -> dict[str, Any]:
+    """POST *payload* to *path* on the EXA API over the shared ``digifetch`` seam.
+
+    ``digifetch.HttpFetcher`` owns the transport, so this path inherits the
+    fleet-wide fetch controls — the SSRF guard (``digifetch.ssrf``) above all:
+    an EXA base URL naming a loopback / link-local / RFC1918 / metadata address
+    is refused *before* a socket is opened, and a redirect hop that lands on one
+    is refused on the way. Redirects are followed by the seam (bounded, each hop
+    re-validated); this module does not re-follow them itself.
+
+    Every failure still surfaces as :class:`ExaError` — the seam's
+    ``SsrfBlockedError`` and ``httpx``'s status/transport errors are translated,
+    not leaked — so the ``except ExaError`` handlers in ``server.py``,
+    ``mcp_server.py`` and ``web_providers.exa`` keep catching one type. The wire
+    shapes are unchanged.
+    """
+    url = f"{EXA_API_BASE}{path}"
+    # Imported lazily: digifetch is an optional extra, so importing this module
+    # must not require it (same pattern as pipeline/url_ingest.py).
+    from digifetch import HttpFetcher, SsrfBlockedError
+
     try:
-        data = resp.json()
+        with HttpFetcher(timeout=EXA_TIMEOUT_S) as fetcher:
+            result = fetcher.fetch(
+                url,
+                method="POST",
+                json=payload,
+                headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            )
+    except SsrfBlockedError as e:
+        raise ExaError(f"EXA request refused by the digifetch SSRF guard: {e}") from e
+    except httpx.HTTPStatusError as e:
+        raise _status_error(path, e.response) from e
+    except httpx.HTTPError as e:
+        raise ExaError(f"EXA request failed: {e}") from e
+    try:
+        data = json.loads(result.text)
     except ValueError as e:
         raise ExaError(f"EXA {path} returned non-JSON") from e
     if not isinstance(data, dict):
