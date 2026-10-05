@@ -102,7 +102,11 @@ export function PaneFrame({
       <box flexGrow={1} paddingLeft={1} paddingRight={1} overflow="hidden" flexDirection="column">
         <Blocks body={body} ink={ink} />
       </box>
-      <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} flexDirection="row" flexShrink={0}>
+      {/* Two rows, not one: a box that carries a top border spends its first
+          row on that rule, so `height={1}` left the status with no content row
+          at all and every page in this client drew a blank footer. One row for
+          the rule, one for the words. */}
+      <box height={2} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} flexDirection="row" flexShrink={0}>
         <text fg={MUTE}>{status}</text>
         <box flexGrow={1} />
         {focused ? <text fg={MUTE}>{PANE_HINT}</text> : null}
