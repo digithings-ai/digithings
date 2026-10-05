@@ -398,6 +398,71 @@ describe("citationHits", () => {
   });
 });
 
+// The DIG-100 no-invent guard, UI half (leaf 2b).
+//
+// A search that genuinely found nothing is a result. It has a tool name, a
+// query and an outcome count, and it should read in the transcript as a first
+// class row among the other tool rows — because that is how the reader tells
+// "this search ran and found nothing" apart from "something went wrong" and
+// from "the assistant never looked".
+//
+// Today the honest negative arrives as a `status` activity, which maps to a
+// canon `aside` — a de-emphasised system note floating below the tool rows,
+// carrying no name and no count. A reader scanning the transcript sees an
+// unlabelled aside and cannot tell it apart from any other status note. That
+// is the shape G4' calls out: the negative surface must be authoritative.
+describe("toCanonRows — the honest negative is a result row", () => {
+  it("renders a search outcome status as a first class row, not an aside", () => {
+    const row = onlyRow([{ kind: "status", message: 'Found results for "jwt".' }]);
+    expect(row.kind).toBe("tool");
+    expect(row).not.toHaveProperty("message");
+  });
+
+  it("keeps a zero-hit tool_result a first class row with its outcome count", () => {
+    // The shape the projector emits when a search provably ran and came back
+    // empty. It must stay a named row that reads "no hits" — that string is
+    // the whole point of it, and it is not an aside today either.
+    const row = onlyRow([
+      { kind: "tool_result", name: "digisearch", query: "jwt", hits: [], count: 0 },
+    ]);
+    expect(row).toMatchObject({
+      kind: "tool",
+      name: "Search the knowledge base",
+      args: "jwt",
+      status: "ok",
+      meta: "no hits",
+    });
+  });
+
+  it("leaves a real hit unchanged", () => {
+    const row = onlyRow([
+      {
+        kind: "tool_result",
+        name: "digisearch",
+        query: "jwt",
+        hits: [{ title: "Auth", path: "docs/auth.md" }],
+        count: 1,
+      },
+    ]);
+    expect(row).toMatchObject({ kind: "tool", status: "ok", meta: "1 note" });
+    expect(row).toHaveProperty("sources");
+  });
+
+  it("does not put a settled search back in the waiting caret", () => {
+    // The negative surface becoming a row must not change what the caret reads
+    // while a search is genuinely still running.
+    expect(liveActivityLabel([{ kind: "tool_call", name: "digisearch", query: "jwt" }])).toBe(
+      'Searching for "jwt"',
+    );
+    expect(
+      liveActivityLabel([
+        { kind: "tool_call", name: "digisearch", query: "jwt" },
+        { kind: "status", message: 'Found results for "jwt".' },
+      ]),
+    ).toBeUndefined();
+  });
+});
+
 describe("stripFoundryCitationMarkers", () => {
   it("removes 【N:M†source】 glyphs from the prose", () => {
     expect(
