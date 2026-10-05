@@ -162,7 +162,7 @@ nothing at all about this copy. It is a **second live copy**, not a scratch file
 
 | Name | Where the second copy is | Read by | Readback? | **Owner** | Recorded refresh path |
 |---|---|---|---|---|---|
-| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
+| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is a human operator's own sign-in at `https://desk.prime-terminal.com`. **The acquisition procedure is not published in this repo** — it is held in the private `twelve-x` repo, for the reason given in [Vendor terms and what this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194). **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
 | `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:161` — the only refresh history that exists for it — and the same doc's 2026-09-17 follow-up records that the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:171-172`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
 
 Consequence to state plainly: **a `primemarket-session-expired` alert tells you
@@ -264,6 +264,57 @@ None of these are done here. This section records the owner and the refresh path
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
 
+## Vendor terms and what this file may publish (DIG-1194)
+
+Raised by the CTO from DIG-503. Counsel's finding on DIG-461/DIG-503 was that this
+file, public under our own name, described how to obtain and replay a session
+against a vendor whose Terms of Use prohibit automated and unauthorized access.
+Security owns the call on what an audit document in a public repo may contain,
+because the file's value is its provenance — it records what was found and when —
+and because it carries live rotation decisions that a docs edit would quietly
+overwrite. Three questions were put to Security. Answered 2026-10-05.
+
+**Q1 — Are the vendor-specific rows generalised, and at what level?**
+**No. The vendor name stays, and so do the `file:line` citations.** Anonymising
+them buys nothing: `PRIMEMARKET_*` is already public and unavoidable in
+`.env.example`, in `digithings-ai/twelve-x`'s workflow files, and in the Python
+config; `https://desk.prime-terminal.com` is a vendor login page anyone can reach.
+Scrubbing one audit file while the same strings sit in the code would make the
+file *less* honest without making the exposure smaller. What is generalisable here
+is the **method**, not the **name** — and the method is what is being removed.
+
+**Q2 — Is the session-acquisition procedure at the `PRIMEMARKET_SESSION_TOKEN`
+row a recipe that belongs out of a public repo?**
+**Yes, and it has been removed.** "Sign in at the desk and copy
+`localStorage['pmt_auth_token']`" was the *session-acquisition* half of the
+prohibited pattern, and it was the most operational sentence in the file. It is
+now "a human operator's own sign-in", with the procedure held in the private
+`twelve-x` repo. Nothing was lost that the audit needs: the row still records the
+name, both storage locations, the reader, the owner, and the refresh script.
+
+**Q3 — Does the `PRIMEMARKET_SESSION_COOKIE` finding survive in a public file?**
+**Yes, unchanged.** "Delete it; do not rotate it" and "an expiry alert tells you
+about the Actions secret only" are **negative** findings — they exist to stop
+someone doing the wrong thing. Removing a negative finding from a public audit
+removes the warning while leaving the secret in place, which is strictly worse
+than publishing it. The supporting citations (`docs/PRIMEMARKET_DESK_API.md:161`,
+`:171-172`) stay too: a `file:line` pointer into a private repo is not an
+operational recipe, and the citation is the only reason the claim is checkable.
+
+**Changed in this file on 2026-10-05:** the one sentence in Q2, nothing else. The
+vendor name, both storage locations, the three-place spread of the desk login pair,
+"a human's desk credentials", the delete-don't-rotate conclusion, the alert gap,
+and every `file:line` above are all as they were, because Security's judgement is
+that an audit which softens its own findings is worse than one that publishes them.
+
+**Vendor terms are now recorded separately, with artefacts.** A secret inventory
+cannot answer "are we allowed to use this at all" — that is a different question
+from "where does the value live and who owns it", and answering it here is how the
+2026-08-01 note went wrong. Terms, retrieval date, sha256 and classification live
+under `docs/vendor-terms/<vendor>/`, per `docs/VENDOR_CONTENT_BOUNDARY.md`.
+[`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) is the first entry, and it
+classifies **Unclear** pending Counsel.
+
 ## Review coverage for this section
 
 Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
@@ -325,6 +376,7 @@ repo before calling a shared name dead.**
 **Still open, and not an agent action.** Confirm a `default` publishable/secret pair exists on `lfghjucjrsabiqwxerxv`, creating one only if it is absent; deploy both functions (`supabase functions deploy fx-hub-session fx-hub-grant-sync` — no workflow deploys them); verify FX Hub sign-in **and** invite redemption end to end; then deactivate the legacy pair as one reversible step. Runbook: `twelve-x:docs/ops/FX_HUB_API_KEY_MIGRATION.md`. Steps 1 and 3 must not be swapped — the code cannot read keys that do not exist yet. **Do not deactivate the flag on core `rwagjbkvxkdwqmouagad`**; that is platform-wide and out of scope here. Two things this checkout cannot answer, both of which gate the deactivation: whether `lfghjucjrsabiqwxerxv` has a `default` pair yet, and whether anything **outside** twelve-x (mobile/desktop builds, CI, webhooks) still reads the legacy keys on that project — Supabase's own guide makes both a manual pre-deactivation check.
 
 **A caller was found in this repo, and it gates the deactivation: a stale bundle.** `apps/dashboard/lib/twelve-x/supabase.ts` builds a GoTrue client from `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` (the same var as inventory row 93), and `lib/twelve-x/session.ts` `ensureTwelveXSession` calls `setSession()` → `getUser()` → `/auth/v1/user`, which carries that key on the `apikey` header. Because `NEXT_PUBLIC_*` is inlined at build time, DIG-258's publishable-key rotation only reaches users on the next production **build**, and the rotation log in `SECRETS_ROTATION.md` records the old `anon` JWT as still shipped in the live bundle at 2026-10-05. Deactivating the legacy flag therefore breaks the dashboard's FX Hub page for any browser still on a pre-rotation bundle — and it fails **silently**, because `ensureTwelveXSession` is best-effort and returns `false` rather than throwing. So the Pages rebuild and a live-bundle re-scan (asserting **absence** of the old key hash, not just presence of the new one) must land **before** the deactivation, not merely before the function deploy. Step 1 must also *confirm* a `default` pair rather than assume one: this project already carries a publishable key named `fx_hub_dashboard` (DIG-258), which shows the naming is under our control and a project can have every key custom-named — in which case both functions fail `API_KEYS_UNCONFIGURED`.
+**R16 — two vendors' access methods are published in public docs, and one of them has never had its terms read.** Severity: high. Evidence: the session-acquisition sentence removed from this file on 2026-10-05; the surviving PrimeMarket rows at the `PRIMEMARKET_SESSION_TOKEN`/`PRIMEMARKET_SESSION_COOKIE` table and the desk-login pair; [`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) (artefact sha256 `6f781a39…`, terms effective 2026-09-26, classified **Unclear** 2026-10-05, Counsel sign-off **not yet given**); `docs/ops/gloomberb-session-cookie.md`; `digiquant/src/digiquant/data/gloomberb/client.py:405-406`. Why: the 2026-08-01 record that "PrimeMarket is fine with us using their data" was written on the belief that the terms "could not be retrieved", when they were served live the whole time — and Gloomber's terms, 3,072 words at a URL that returns 200, had never been read by anyone here. One failure mode, two vendors: **no retrievable, dated artefact to check a claim against.** Action: `docs/vendor-terms/<vendor>/` per `docs/VENDOR_CONTENT_BOUNDARY.md`; Counsel sign-off in writing before any new vendor access merges to a public repo; Gloomber's §14 team-plan licence question and §11 interface carve-out are with Counsel as of 2026-10-05.
 
 ## Gaps and unknowns
 
