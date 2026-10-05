@@ -80,5 +80,17 @@ jobs:
             exit 2
           fi
 
+          # `real` is text lifted out of the log, so it is only ever as trustworthy as
+          # the recipe that wrote it. Where the two disagree, make is the authority:
+          # a failing make next to a report line claiming exit 0 means the status line
+          # is lying, and a green run over a failed check is the one outcome worth
+          # failing closed for. Unreachable with the committed Makefile; cheap if that
+          # recipe ever changes shape. An `if` rather than an `&&` chain, because
+          # Actions runs this block under `set -e` and a false chain would abort the step.
+          if [ "$rc" -ne 0 ] && [ "$real" -eq 0 ]; then
+            echo "::error::make exited $rc while the recipe reported datatap-answer-check: exit 0"
+            exit "$rc"
+          fi
+
           echo "datatap-answer-check: exit $real"
           exit "$real"
