@@ -203,11 +203,13 @@ export default {
       let cron = "";
       let force = false;
       let args: Record<string, string> = {};
+      let requestedTime: number | undefined;
       try {
         const body = (await request.json()) as {
           cron?: unknown;
           force?: unknown;
           args?: unknown;
+          scheduledTime?: unknown;
         };
         cron = typeof body.cron === "string" ? body.cron : "";
         force = body.force === true;
@@ -216,13 +218,28 @@ export default {
           return Response.json({ error: "invalid_args" }, { status: 400 });
         }
         args = parsedArgs;
+        if (body.scheduledTime !== undefined) {
+          // A non-numeric or fractional value is a caller mistake, not a
+          // coercion hint: reject it here so it can never reach the start key
+          // as NaN. Number.isInteger is false for NaN and both infinities.
+          if (typeof body.scheduledTime !== "number" || !Number.isInteger(body.scheduledTime)) {
+            return Response.json({ error: "invalid_args" }, { status: 400 });
+          }
+          requestedTime = body.scheduledTime;
+        }
       } catch {
         return Response.json({ error: "invalid_json" }, { status: 400 });
       }
       if (!cron) {
         return Response.json({ error: "cron_required" }, { status: 400 });
       }
-      const result = await runJobsForCron(cron, Date.now(), env, ctx, {
+      // One derivation, at the kick boundary. Flooring to the wall-clock minute
+      // gives a repeat kick inside the same minute the same start key, so the
+      // dedupe engages. A kick is a distinct namespace from the cron path and
+      // does not resolve to the cron's firing slot: see DIG-47 spec section 9,
+      // decision D3.
+      const scheduledTime = requestedTime ?? Math.floor(Date.now() / 60_000) * 60_000;
+      const result = await runJobsForCron(cron, scheduledTime, env, ctx, {
         force,
         args,
         awaitDispatch: true,
