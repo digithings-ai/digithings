@@ -147,6 +147,24 @@ describe('blockAgeFooter', () => {
     expect(text(`${RUN}T14:02:00Z`, MON)).toBe(`as of ${RUN} · 2 trading days old · warn`);
   });
 
+  it('renders the same characters Block renders, in every band', () => {
+    // `Block` composes `{age.lead}<span>{' '}{age.state}</span>` — the space sits
+    // outside the inked span, so `lead` must not also carry it. Verified here
+    // against the exact composition the component uses, so the two cannot drift.
+    const asBlockRenders = (f: ReturnType<typeof blockAgeFooter>) =>
+      f.state === null ? f.lead : `${f.lead} ${f.state}`;
+
+    for (const now of [MON, TUE, OUTAGE_READ]) {
+      const f = blockAgeFooter({ runDate: RUN, route: 'desk/fx', now });
+      expect(blockAgeText(f)).toBe(asBlockRenders(f));
+      expect(blockAgeText(f)).not.toMatch(/· {2}|·\s{2}| {2}/);
+    }
+    // ...and with no state word there is no trailing separator left behind.
+    const fresh = blockAgeFooter({ runDate: MON, route: 'desk/fx', now: MON });
+    expect(blockAgeText(fresh)).toBe(`as of ${MON} · current session`);
+    expect(blockAgeText(fresh)).not.toMatch(/·\s*$/);
+  });
+
   it('never lets an aged footer read like a fresh one', () => {
     // The defect: one footer for every age, all of it mute ink.
     const fresh = text(MON, MON);

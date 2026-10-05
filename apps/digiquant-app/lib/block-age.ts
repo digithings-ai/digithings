@@ -31,7 +31,9 @@ function ageLabel(sessions: number): string {
 }
 
 export type BlockAgeFooter = {
-  /** Everything before the state word, including the separator when one is due. */
+  /** Everything before the state word, including the `·` separator when one is due.
+   *  Never carries the space that follows it — the caller owns that, so the inked
+   *  span can hold the word alone. */
   lead: string;
   /** The state a footer names, or null when the pane is not aged past `ok`.
    *  An aged pane names its state; an `ok` pane does not, because
@@ -77,12 +79,15 @@ export function blockAgeFooter({ runDate, route, now = todayYmd() }: BlockAgeInp
 
   const age = blockAge(sessions);
   return {
-    lead: `as of ${day} · ${ageLabel(sessions)}${age === 'ok' ? '' : ' · '}`,
+    lead: `as of ${day} · ${ageLabel(sessions)}${age === 'ok' ? '' : ' ·'}`,
     state: age === 'ok' ? null : age,
   };
 }
 
-/** The footer as one flat string — what the bar reads, and what tests assert. */
+/** The footer as one flat string — what the bar reads, and what tests assert.
+ *  The single space before the state word is supplied here rather than stored in
+ *  `lead`, because `Block` puts that space outside the inked span. Both routes
+ *  must produce the same characters; `block-age.test.ts` pins that. */
 export function blockAgeText(footer: BlockAgeFooter): string {
-  return footer.state === null ? footer.lead : `${footer.lead}${footer.state}`;
+  return footer.state === null ? footer.lead : `${footer.lead} ${footer.state}`;
 }
