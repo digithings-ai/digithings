@@ -23,7 +23,10 @@ def _extract_frame(series: Any) -> pl.DataFrame | None:
     from the model path. Returns ``None`` for a missing/empty series or on any failure.
     """
     try:
-        dates, values = normalize_series(series)
+        normalized = normalize_series(series)
+        if normalized is None:
+            return None
+        dates, values = normalized
         return pl.DataFrame({"date": dates, "value": values})
     except Exception:
         return None

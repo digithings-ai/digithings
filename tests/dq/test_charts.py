@@ -384,22 +384,41 @@ def test_rolling_equity_accepts_polars_series() -> None:
 # (DIG-428, L6 of DIG-474). The anti-drift locks below compare the chart entry points
 # against digiquant.stats.normalize_series directly; they must never be weakened.
 
-#: One value of each junk kind the honest denominator must drop: null, NaN, ±inf.
-_MESSY = [10.0, None, -5.0, float("nan"), float("inf"), 3.0, -1.0, float("-inf"), 9.0]
-#: Dates for the pandas shape only — normalize_series truncates these with ``[:10]``.
-_MESSY_DATES = [datetime.date(2023, 1, 1) + datetime.timedelta(days=i) for i in range(len(_MESSY))]
+#: One value of each junk kind the honest denominator must drop: null, NaN, ±inf — plus a
+#: breakeven ``0.0``, so ``> 0`` (a win) cannot silently become ``>= 0`` without failing here.
+_MESSY = [10.0, None, -5.0, float("nan"), float("inf"), 3.0, -1.0, float("-inf"), 9.0, 0.0]
+#: Dates for the pandas shape only. ``datetime``, not ``date``: ``str(datetime)`` is 25 chars,
+#: so ``normalize_series``'s ``[:10]`` truncation is load-bearing here, exactly as it is for the
+#: real ``pandas.DatetimeIndex`` the Nautilus boundary delivers. Case 3 asserts the values.
+_MESSY_DATES = [
+    datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(days=i)
+    for i in range(len(_MESSY))
+]
+#: The rows the honest denominator keeps, with their dates and wins, written out. A lock that
+#: compares the chart path only against ``normalize_series`` cannot catch a change to
+#: ``normalize_series`` itself — both sides would move together — so the expected dates are
+#: literals here. The pandas dates are the ``[:10]`` of the tz-aware ``datetime`` fixtures.
+_KEPT = [0, 2, 5, 6, 8, 9]
+_KEPT_DATES = [f"2023-01-{day + 1:02d}" for day in _KEPT]
+_KEPT_POSITIONS = [str(i) for i in _KEPT]
+#: shape -> (series, expected rows, expected dates, expected wins).
 _SHAPES = {
-    "pandas": _MockSeries(_MESSY, _MESSY_DATES),
-    "polars": pl.Series("value", _MESSY),
-    "list": _MESSY,
+    "pandas": (_MockSeries(_MESSY, _MESSY_DATES), 6, _KEPT_DATES, 3),
+    "polars": (pl.Series("value", _MESSY), 6, _KEPT_POSITIONS, 3),
+    "list": (_MESSY, 6, _KEPT_POSITIONS, 3),
 }
 
 
-def _model_values(series: object) -> list[float]:
-    """The model path's view of a series — the values normalize_series keeps."""
+def _model(series: object) -> tuple[list[str], list[float]]:
+    """The model path's view of a series — the dates and finite values it keeps."""
     from digiquant.stats import normalize_series
 
-    return normalize_series(series)[1]
+    return normalize_series(series)
+
+
+def _model_values(series: object) -> list[float]:
+    """The model path's values only."""
+    return _model(series)[1]
 
 
 @pytest.mark.unit
@@ -408,8 +427,14 @@ def test_extract_frame_agrees_with_normalize_series() -> None:
     from digiquant.charts.common import _extract_frame
 
     frame = _extract_frame(_MESSY)
-    assert len(frame) == len(_model_values(_MESSY)) == 5
+    assert len(frame) == len(_model_values(_MESSY)) == 6
     assert frame.schema == {"date": pl.Utf8, "value": pl.Float64}
+    # The dates column is load-bearing, so compare values and not just the count. For a plain
+    # list normalize_series emits position strings; the ``[:10]`` truncation that charts/returns.py
+    # depends on only applies to the pandas shape, which the anti-drift case below pins.
+    list_dates, list_values = _model(_MESSY)
+    assert frame["date"].to_list() == list_dates
+    assert frame["value"].to_list() == list_values
 
 
 @pytest.mark.unit
@@ -421,17 +446,27 @@ def test_count_winning_trades_agrees_with_normalize_series() -> None:
 
 
 @pytest.mark.unit
+def test_breakeven_trade_is_not_a_win() -> None:
+    """A PnL of exactly 0.0 is not a win — the ``> 0`` boundary, pinned on its own."""
+    from digiquant.charts.trades import count_winning_trades
+
+    assert count_winning_trades([1.0, 0.0, -1.0]) == 1
+    assert count_winning_trades([0.0, 0.0]) == 0
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("shape", sorted(_SHAPES))
 def test_anti_drift_lock_holds_for_every_series_shape(shape: str) -> None:
     """Both locks hold for the pandas shape, the polars shape and a plain list."""
     from digiquant.charts.common import _extract_frame
     from digiquant.charts.trades import count_winning_trades
 
-    series = _SHAPES[shape]
+    series, expected_rows, expected_dates, expected_wins = _SHAPES[shape]
     frame = _extract_frame(series)
-    model = _model_values(series)
-    assert len(frame) == len(model)
-    assert count_winning_trades(series) == sum(1 for v in model if v > 0)
+    dates, values = _model(series)
+    assert len(frame) == len(values) == expected_rows
+    assert frame["date"].to_list() == dates == expected_dates
+    assert count_winning_trades(series) == sum(1 for v in values if v > 0) == expected_wins
 
 
 @pytest.mark.unit
@@ -439,8 +474,10 @@ def test_to_pandas_series_is_never_routed_through_to_pandas() -> None:
     """A ``.to_pandas`` attribute must never be reached — see charts/trades.py:21-25."""
 
     class _NoPyarrow(list):
-        def to_pandas(self):
-            raise ModuleNotFoundError("No module named 'pyarrow'")  # pragma: no cover
+        # pragma: no cover on the def, matching test_tearsheet_honesty.py — the whole body is
+        # unreachable, which is the point: reaching it needs pyarrow and crashed tearsheets.
+        def to_pandas(self):  # pragma: no cover
+            raise ModuleNotFoundError("No module named 'pyarrow'")
 
     from digiquant.charts.common import _extract_frame
     from digiquant.charts.trades import count_winning_trades
