@@ -53,6 +53,8 @@ PRO_UNBLOCK_ADVICE = (
     "Unblocking this is a billing decision, not a config change:\n"
     "  1. Upgrade the owning org to GitHub Pro. This is the supported route and it\n"
     "     also unblocks the server-side merge queue for every private repo in the org.\n"
+    "     (The plan GitHub actually sells per seat is 'Team', $4/user/month for the\n"
+    "     first 12 months; 'Pro' is the name in the API's own error message.)\n"
     "  2. Making the repository public unblocks protection on the Free plan, but it\n"
     "     publishes the code and the history — never a client repo's decision to take\n"
     "     here, and never an agent's.\n"
@@ -111,6 +113,44 @@ def _gh_api_status(*args: str, method: str = "GET", payload: dict[str, Any] | No
     if proc.returncode == 0:
         return ""
     return (proc.stderr or proc.stdout).strip()
+
+
+def _find_ruleset(repo: str, name: str) -> dict[str, Any] | None:
+    """The existing ruleset with this name, if any.
+
+    Names are the only handle an operator can put on a command line, and `apply` has
+    to reuse it: GitHub has no upsert, so a POST per run would leave a stack of
+    same-named rulesets whose combined effect nobody could reason about.
+    """
+    if _gh_api_status(f"repos/{repo}/rulesets"):
+        return None
+    for entry in _gh_json(f"repos/{repo}/rulesets") or []:
+        if isinstance(entry, dict) and entry.get("name") == name and entry.get("id") is not None:
+            return entry
+    return None
+
+
+def _required_checks(repo: str, branch: str, requested: list[str], *, replace: bool) -> list[str]:
+    """The checks to write: `requested`, plus whatever the branch already requires.
+
+    Protection is a full replace, so naming one check on a branch that requires
+    three removes the other two — and the write reports success while doing it. That
+    is the worst shape of bug in this script: it weakens a branch and says "applied".
+    `--replace-checks` opts into the replace when that is genuinely the intent.
+    """
+    if replace or _gh_api_status(f"repos/{repo}/branches/{branch}/protection"):
+        return list(requested)
+    body = _gh_json(f"repos/{repo}/branches/{branch}/protection")
+    live: list[str] = []
+    if isinstance(body, dict):
+        live = list((body.get("required_status_checks") or {}).get("contexts") or [])
+    dropped = [c for c in live if c not in requested]
+    if dropped:
+        print(
+            f"note: {branch} already requires {', '.join(live)}; keeping all of them. "
+            f"Pass --replace-checks to drop {', '.join(dropped)}."
+        )
+    return requested + [c for c in live if c not in requested]
 
 
 def preflight(repo: str) -> Preflight:
@@ -351,24 +391,44 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if not pf.can_apply:
         return EXIT_PLAN_BLOCKED if pf.has_admin else EXIT_PERMISSION_BLOCKED
 
-    steps: list[tuple[str, str, dict[str, Any]]] = []
+    # Classic protection is a full replace, so an apply naming fewer checks than the
+    # branch already requires would silently *reduce* it — on `digithings/develop`,
+    # which requires three checks, that is a one-flag downgrade from three to one.
+    # Union the live contexts in unless the operator asked for exactly this set.
+    checks = _required_checks(args.repo, args.branch, args.check, replace=args.replace_checks)
+
+    steps: list[tuple[str, str, str, dict[str, Any]]] = []
     if args.mode in ("classic", "both"):
         steps.append(
             (
                 "classic",
+                "PUT",
                 f"repos/{args.repo}/branches/{args.branch}/protection",
-                classic_payload(args.check, args.require_approvals, strict=args.strict),
+                classic_payload(checks, args.require_approvals, strict=args.strict),
             )
         )
     if args.mode in ("ruleset", "both"):
+        # Rulesets have no `PUT /repos/O/R/rulesets` — that endpoint does not exist.
+        # Creating is `POST /repos/O/R/rulesets`; updating needs the ruleset id in the
+        # path. Re-running `apply` must update the ruleset it created last time, not
+        # stack up a second one with the same name, so the id is looked up by name and
+        # the verb chosen to match. A blind POST here silently duplicates on every run.
+        existing = _find_ruleset(args.repo, args.ruleset)
+        if existing:
+            ruleset_endpoint = f"repos/{args.repo}/rulesets/{existing['id']}"
+            ruleset_method = "PUT"
+        else:
+            ruleset_endpoint = f"repos/{args.repo}/rulesets"
+            ruleset_method = "POST"
         steps.append(
             (
                 "ruleset",
-                f"repos/{args.repo}/rulesets",
+                ruleset_method,
+                ruleset_endpoint,
                 ruleset_payload(
                     args.ruleset,
                     args.branch,
-                    args.check,
+                    checks,
                     args.require_approvals,
                     strict=args.strict,
                     merge_queue=args.merge_queue,
@@ -379,16 +439,16 @@ def cmd_apply(args: argparse.Namespace) -> int:
         )
 
     if args.dry_run:
-        for kind, endpoint, payload in steps:
-            print(f"\nwould PUT {endpoint} ({kind}):")
+        for kind, method, endpoint, payload in steps:
+            print(f"\nwould {method} {endpoint} ({kind}):")
             print(json.dumps(payload, indent=2, sort_keys=True))
         print("\ndry run — nothing was changed.")
         return EXIT_OK
 
     failures = 0
-    for kind, endpoint, payload in steps:
+    for kind, method, endpoint, payload in steps:
         print(f"\napplying {kind} to {args.repo}:{args.branch}")
-        err = _gh_api_status(endpoint, method="PUT", payload=payload)
+        err = _gh_api_status(endpoint, method=method, payload=payload)
         if err:
             failures += 1
             if any(m in err.lower() for m in PRO_REQUIRED_MARKERS):
@@ -439,6 +499,11 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="require the branch to be up to date with its base before merging",
+    )
+    parser.add_argument(
+        "--replace-checks",
+        action="store_true",
+        help="write exactly --check, dropping any the branch already requires",
     )
     parser.add_argument("--dry-run", action="store_true", help="print the payload; change nothing")
     args = parser.parse_args(argv)

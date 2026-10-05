@@ -54,11 +54,12 @@ into "I reviewed it and merged it".
 
 | Gate | Rule |
 |---|---|
-| Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3). |
-| Required check | `test` must have **reported** and concluded `SUCCESS`. |
+| Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
+| Required check | `test` must have **reported** from a workflow run, and concluded `SUCCESS`. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
-| Mergeable | `mergeable == CLEAN`. Drafts and `CONFLICTING` do not queue. |
-| Review | An `APPROVED` review from someone other than the author, or `--attest-review` from a role on the review path that is not the merging role. |
+| Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
+| Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
+| Review | An `APPROVED` review from a person who is neither the author nor a bot, or `--attest-review` from a role on the review path that is not the merging role. |
 | Change requests | Any `CHANGES_REQUESTED` review blocks. |
 
 Two of these are deliberate choices worth stating plainly.
@@ -68,6 +69,26 @@ is indistinguishable from a check that was never asked to run — which is exact
 being closed. This has a real cost: Bugbot reports `neutral` when it is out of quota, so a
 required Bugbot check would block merges indefinitely. Do not put a metered third-party
 service on the required list. See `CODE_REVIEW_BASELINE.md`.
+
+**A green commit status is not a passing build.** GitHub's commit status docs are explicit
+that "any person or integration with write permissions can set the state of any status
+check". So a required check only satisfies the gate if it arrived as a *check run* — one
+bound to an Actions workflow — not as a bare status anyone with write access can type. On
+this org the `test` check is a check run, so this costs nothing; it is here because the
+alternative is a queue that any agent holding a token could green-light its own PR.
+
+**A bot's approval is not a review.** `coderabbitai[bot]` approving a PR means a linter
+found nothing to complain about, not that a person owns the change. GitHub's own review
+summary ignores bot reviews for the same reason, so the queue does too.
+
+**A PR behind its base does not queue.** After PR #1 lands, PR #2's checks have not
+re-run — its green `test` is from the run against the *previous* base, and GitHub reports
+it `MERGEABLE + BEHIND`. Merging on that evidence is precisely what a merge queue exists to
+prevent, and nothing in the check rollup reveals it. This is what the ruleset path calls
+`strict_required_status_checks_policy`; a local queue has to enforce it itself. It also
+means each merge in a batch has to wait for the next PR's CI, which is the cost of doing
+it correctly. `run` re-reads the queue after every merge for the same reason: a verdict
+computed before a merge is stale the moment that merge lands.
 
 **Order is FIFO, not greenest-first.** Sorting by check status turns a queue into a race
 that the loudest PR wins. Oldest-eligible-first is the only ordering that is fair and only
@@ -127,27 +148,51 @@ access can still push to `develop` directly, and this queue will not notice.
 DIG-506 asked for two things: native branch protection on `develop` with a required `test`
 check, and GitHub's own merge queue. Neither is available on `digithings-ai` today.
 
-`digithings-ai` is on the GitHub Free plan with one seat. GitHub's own documentation:
+`digithings-ai` is on the GitHub Free plan with one seat. GitHub's plans page lists
+**Protected branches** under the paid org plan's "Advanced tools and insights in private
+repositories", not under Free, and the pricing comparison marks *Repository rules*
+"Public repositories" on Free and "Public repositories / Private repositories" on Team.
 
-> Protected branches are available in public repositories with GitHub Free and GitHub Free
-> for organizations, and in public and private repositories with GitHub Pro, GitHub Team,
-> GitHub Enterprise Cloud, and GitHub Enterprise Server.
+`twelve-x` is private, so both are paid-plan features. The merge queue is a branch
+protection setting ("Require merge queue" on the About-protected-branches page), so it is
+gated the same way.
 
-`twelve-x` is private, so both are Pro-only. The merge queue is configured *through*
-branch protection, so it is gated the same way.
+Note the naming: GitHub's per-seat paid plan is **GitHub Team**, at **$4/user/month for the
+first 12 months**. Older docs and blog posts call it "GitHub Pro" for organizations. The
+API's error message says "Upgrade to GitHub Pro", and this doc uses "Pro" when quoting that
+message; the plan to actually buy is Team.
 
 The refusal is reproduced by the tooling, not asserted:
 
+Verbatim output, trimmed only where marked:
+
 ```console
 $ python3 scripts/enable_branch_protection.py status --repo digithings-ai/twelve-x --branch develop
-visibility: private
-org plan: free
-admin: yes
-BLOCKED: digithings-ai/twelve-x is private and the digithings-ai plan is 'free'.
-        Protected branches require GitHub Pro for private repositories.
-...
-Upgrade to GitHub Pro or make this repository public to enable this feature.
+repo:        digithings-ai/twelve-x
+visibility:  private
+org plan:    free
+admin:       yes
+
+BLOCKED: digithings-ai/twelve-x is private and org 'digithings-ai' is on the 'free' plan; branch protection, rulesets and the server-side merge queue all require GitHub Pro for private repositories
+
+Unblocking this is a billing decision, not a config change:
+  1. Upgrade the owning org to GitHub Pro. This is the supported route and it
+     also unblocks the server-side merge queue for every private repo in the org.
+     (The plan GitHub actually sells per seat is 'Team', $4/user/month for the
+     first 12 months; 'Pro' is the name in the API's own error message.)
+  2. Making the repository public unblocks protection on the Free plan, but it
+     publishes the code and the history — never a client repo's decision to take
+     here, and never an agent's.
+Until one of those happens, use scripts/merge_queue.py: it applies the same gates
+on the merge path, under a named merge-authority role, but it cannot stop a
+direct push to the branch.
+
+protection on develop: NOT READABLE — gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)
+rulesets: NOT READABLE — gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)
 ```
+
+`status` exits 0 here: it succeeded in reporting the gate. Callers that branch on the
+exit code must read the `BLOCKED:` line, or use `apply`, which exits 3.
 
 This is a plan limit, not a misconfiguration. The decisive test: the identical API call
 succeeds on the **public** `digithings-ai/digithings` and is refused on the private
@@ -156,7 +201,11 @@ are the only variables. There is no permission, token, or org-setting fix.
 
 ### The two real options
 
-1. **Upgrade `digithings-ai` to Pro.** About $4/month for one seat. This unblocks branch
+1. **Upgrade `digithings-ai` to the paid org plan.** GitHub's per-seat plan is **Team**,
+   $4/user/month for the first 12 months — about $4/month at one seat. (The API's 403
+   names it "Pro", which is the wording it has always used; `github.com/pricing` no longer
+   lists a per-seat Pro tier. Either way the gate is the same: Free orgs get repository
+   rules and protected branches on **public repositories only**.) This unblocks branch
    protection, the native merge queue, and rulesets across all three org repos at once.
    This is a billing decision.
 2. **Make the repo public.** Not an agent's call, and never a client repo's call. The
@@ -174,6 +223,9 @@ python3 scripts/enable_branch_protection.py status \
   --repo digithings-ai/twelve-x --branch develop
 
 # Rehearse the exact payloads. Writes nothing.
+# This is also what it does today: on a plan-blocked repo it refuses with exit 3
+# before printing anything, because there is no payload that would be accepted.
+# Run it once the plan allows it to see the payload.
 python3 scripts/enable_branch_protection.py apply \
   --repo digithings-ai/twelve-x --branch develop \
   --check test --mode ruleset --merge-queue --dry-run
@@ -183,6 +235,14 @@ python3 scripts/enable_branch_protection.py apply \
   --repo digithings-ai/twelve-x --branch develop \
   --check test --require-approvals 1 --mode ruleset --merge-queue
 ```
+
+Rulesets are created with `POST` and updated with `PUT` to the ruleset's own id, looked up
+by name — GitHub has no upsert, and a `POST` per run would stack up same-named rulesets
+whose combined effect nobody could reason about.
+
+Applying never *reduces* protection. The check list is a union of `--check` and whatever
+the branch already requires, so naming one check on a branch that requires three keeps all
+three. `--replace-checks` opts out and is the only way to drop one.
 
 `--mode ruleset` is required for `--merge-queue`: classic branch protection has no
 merge-queue field, so the ask would be silently dropped rather than refused. The script
@@ -229,4 +289,4 @@ python3 scripts/enable_branch_protection.py status --repo OWNER/NAME --branch BR
 - `scripts/merge_queue_policy.json` — the roster.
 - `scripts/merge_queue.py` — the queue.
 - `scripts/enable_branch_protection.py` — status and apply.
-- `BRANCHING.md` — the branch taxonomy this queue sits on top of.
+- [`BRANCHING.md`](../BRANCHING.md) — the branch taxonomy this queue sits on top of.

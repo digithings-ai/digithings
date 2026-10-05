@@ -61,6 +61,10 @@ FAILING_CONCLUSIONS: frozenset[str] = frozenset(
 # say something about the code. COMMENTED is a discussion, not a verdict.
 BLOCKING_REVIEW_STATES: frozenset[str] = frozenset({"CHANGES_REQUESTED"})
 
+# `mergeStateStatus` values that must never queue. `BLOCKED` is the obvious one.
+# `BEHIND` is the dangerous one — see `evaluate`.
+STALE_MERGE_STATES: frozenset[str] = frozenset({"BLOCKED", "BEHIND", "DIRTY", "UNKNOWN"})
+
 EXIT_OK = 0
 EXIT_OPERATIONAL = 1
 EXIT_NOT_AUTHORISED = 2
@@ -169,6 +173,12 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         base,
         "--state",
         "open",
+        # `gh pr list` returns newest-first and `--limit N` keeps the *newest* N,
+        # so sorting afterwards cannot recover the oldest ones: above the limit the
+        # queue would silently starve its head, which is the opposite of what FIFO
+        # is for. Ask GitHub for the oldest order so `--limit` truncates the tail.
+        "--search",
+        "sort:created-asc",
         "--limit",
         str(limit),
         "--json",
@@ -184,6 +194,19 @@ def _check_name(entry: dict[str, Any]) -> str:
     # CheckRun carries `name`; StatusContext (external CI) carries `context`. gh
     # normalises most fields, but a third-party integration can post either.
     return str(entry.get("name") or entry.get("context") or "")
+
+
+def _is_check_run(entry: dict[str, Any]) -> bool:
+    """True when the report came from a workflow run rather than a commit status.
+
+    A StatusContext is only as trustworthy as whoever posted it: "any person or
+    integration with write permissions can set the state of any status check"
+    (GitHub's commit status docs). So a bare status named `test` is not
+    evidence that `test` ran, and accepting one would let any agent with write
+    access green-light its own PR by posting a status. A CheckRun is bound to an
+    Actions run, so it cannot be written by hand.
+    """
+    return entry.get("__typename") == "CheckRun"
 
 
 def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
@@ -208,6 +231,14 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
         if bad:
             states = sorted({str(e.get("conclusion") or e.get("state") or "?") for e in bad})
             reasons.append(f"required check '{required}' is {', '.join(states)}")
+            continue
+        # All green, but a green that anyone with write access could have typed is
+        # not a passing build. Require the evidence to come from a workflow run.
+        if not any(_is_check_run(e) for e in entries):
+            reasons.append(
+                f"required check '{required}' only reported as a commit status, which any "
+                "writer can set; the queue needs a workflow run"
+            )
 
     # A non-required check that failed is still a red build. The base branch has a
     # CI contract whether or not GitHub enforces it.
@@ -232,6 +263,10 @@ def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) 
     approved_by_other = any(
         str(r.get("state") or "").upper() == "APPROVED"
         and str((r.get("author") or {}).get("login") or "") != author
+        # A bot's APPROVED is a linter saying it found no problems, not a person
+        # taking responsibility for the change. GitHub's own review summary
+        # ignores bot reviews for the same reason.
+        and not str((r.get("author") or {}).get("login") or "").endswith("[bot]")
         for r in reviews
     )
     if approved_by_other:
@@ -255,19 +290,35 @@ def evaluate(
     pr: dict[str, Any],
     policy: Policy,
     *,
+    base: str,
     acting_role: str,
     attest_role: str | None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
     reasons: list[str] = []
 
+    # `--base` already filters the fetch, and `blocked_bases` already refuses the
+    # branches a human must sign off on. Asserting the base again here is cheap and
+    # closes the gap between the two: without it, losing the `--base` flag would
+    # silently widen the queue from `develop` to every open PR in the repo, and the
+    # roster would merge them without anyone noticing the target moved.
+    if str(pr.get("baseRefName") or "") != base:
+        reasons.append(f"baseRefName={pr.get('baseRefName') or '?'}, expected {base}")
+
     if pr.get("isDraft"):
         reasons.append("draft")
     mergeable = str(pr.get("mergeable") or "")
     if mergeable != "MERGEABLE":
         reasons.append(f"mergeable={mergeable or 'UNKNOWN'}")
-    if str(pr.get("mergeStateStatus") or "") == "BLOCKED":
-        reasons.append("mergeStateStatus=BLOCKED")
+    # `BEHIND` matters as much as `BLOCKED`, and this is the subtle one. When this
+    # queue merges PR #1, PR #2's base moves but its checks do not re-run: GitHub
+    # reports #2 as MERGEABLE + BEHIND, and its green `test` is the run against the
+    # *previous* base. Merging on that evidence is exactly what a merge queue exists
+    # to prevent, and the ruleset path catches it with `strict_required_status_checks_policy`.
+    # The local queue has to catch it itself.
+    state = str(pr.get("mergeStateStatus") or "")
+    if state in STALE_MERGE_STATES:
+        reasons.append(f"mergeStateStatus={state} (base moved since the checks ran)")
 
     reasons.extend(_gate_checks(pr, policy))
     reasons.extend(_gate_review(pr, acting_role, attest_role))
@@ -291,12 +342,14 @@ def evaluate_all(
     prs: list[dict[str, Any]],
     policy: Policy,
     *,
+    base: str,
     acting_role: str,
     attest_role: str | None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
     verdicts = [
-        evaluate(pr, policy, acting_role=acting_role, attest_role=attest_role) for pr in prs
+        evaluate(pr, policy, base=base, acting_role=acting_role, attest_role=attest_role)
+        for pr in prs
     ]
     verdicts.sort(key=Verdict.order_key)
     return verdicts
@@ -441,6 +494,7 @@ def main(argv: list[str] | None = None) -> int:
             return evaluate_all(
                 fetch_queue(args.repo, args.base, args.limit),
                 policy,
+                base=args.base,
                 acting_role=args.acting_role,
                 attest_role=args.attest_review,
             )

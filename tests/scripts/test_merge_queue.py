@@ -131,6 +131,7 @@ def test_required_check_that_never_reported_blocks_the_merge() -> None:
         _pr(237, test_conclusion=None),
         mq.load_policy(),
         acting_role="cto",
+        base="develop",
         attest_role="qa",
     )
     assert not verdict.eligible
@@ -152,9 +153,25 @@ def test_only_success_passes_a_required_check(conclusion: str | None) -> None:
         entry["conclusion"] = conclusion
     pr = _pr(1, test_conclusion=None)
     pr["statusCheckRollup"] = [entry]
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
     assert not verdict.eligible
     assert any("required check 'test'" in reason for reason in verdict.reasons)
+
+
+def test_a_pr_targeting_a_different_base_is_refused() -> None:
+    """The queue merges one branch. A PR aimed elsewhere must never be picked up.
+
+    `gh pr list --base develop` filters the fetch, and `blocked_bases` refuses the
+    branches a human must sign off on. If `--base` were ever dropped from that call,
+    the fetch would silently widen to every open PR in the repo and the roster would
+    merge them all. This pins the second line of defence: the verdict itself refuses
+    a PR whose `baseRefName` is not the queue's base.
+    """
+    pr = _pr(1)
+    pr["baseRefName"] = "main"
+    verdict = mq.evaluate(pr, mq.load_policy(), base="develop", acting_role="cto", attest_role="qa")
+    assert not verdict.eligible
+    assert "baseRefName=main, expected develop" in verdict.reasons
 
 
 def test_a_pending_required_check_blocks() -> None:
@@ -162,6 +179,7 @@ def test_a_pending_required_check_blocks() -> None:
         _pr(1, test_conclusion=None, test_status="IN_PROGRESS"),
         mq.load_policy(),
         acting_role="cto",
+        base="develop",
         attest_role="qa",
     )
     assert not verdict.eligible
@@ -180,7 +198,7 @@ def test_a_failing_non_required_check_also_blocks() -> None:
             }
         ],
     )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
     assert not verdict.eligible
     assert "check 'pip-audit' is FAILURE" in verdict.reasons
 
@@ -207,7 +225,7 @@ def test_an_ignored_check_cannot_fail_the_queue() -> None:
         required_checks=policy.required_checks,
         ignored_checks=frozenset({"advisory-score"}),
     )
-    assert mq.evaluate(pr, policy, acting_role="cto", attest_role="qa").eligible
+    assert mq.evaluate(pr, policy, acting_role="cto", base="develop", attest_role="qa").eligible
 
 
 # --- review: who is allowed to say the code was read --------------------------
@@ -215,7 +233,7 @@ def test_an_ignored_check_cannot_fail_the_queue() -> None:
 
 def test_the_author_approving_their_own_pr_does_not_count() -> None:
     pr = _pr(1, reviews=[{"author": {"login": "chrizefan"}, "state": "APPROVED"}])
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", attest_role=None)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
     assert not verdict.eligible
     assert any("no approving review from a non-author" in r for r in verdict.reasons)
 
@@ -223,7 +241,39 @@ def test_the_author_approving_their_own_pr_does_not_count() -> None:
 def test_an_approving_review_from_someone_else_is_enough() -> None:
     """No attestation needed when a real approval exists — the queue must not stall here."""
     pr = _pr(1, reviews=[{"author": {"login": "coderabbit"}, "state": "APPROVED"}])
-    assert mq.evaluate(pr, mq.load_policy(), acting_role="cto", attest_role=None).eligible
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None
+    ).eligible
+
+
+def test_a_bots_approval_is_not_a_review() -> None:
+    """A bot's APPROVED is a linter verdict, not a person owning the change.
+
+    GitHub's own review summary ignores bot reviews for exactly this reason. If a
+    bot approval satisfied the gate, a repo with an auto-reviewing bot would show
+    every PR as reviewed and the queue would merge on nothing but green checks.
+    """
+    pr = _pr(1, reviews=[{"author": {"login": "coderabbitai[bot]"}, "state": "APPROVED"}])
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    assert not verdict.eligible
+    assert any("no approving review from a non-author" in r for r in verdict.reasons)
+
+
+def test_a_commit_status_cannot_stand_in_for_the_build() -> None:
+    """A green commit status is not evidence that anything ran.
+
+    GitHub's commit status docs: "any person or integration with write permissions
+    can set the state of any status check". So a status named `test` posted by hand
+    would green-light any PR. Only a CheckRun — bound to an Actions run — counts as
+    the required gate passing.
+    """
+    pr = _pr(1, test_conclusion=None)
+    pr["statusCheckRollup"] = [
+        {"__typename": "StatusContext", "context": "test", "state": "SUCCESS"}
+    ]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("only reported as a commit status" in r for r in verdict.reasons)
 
 
 def test_outstanding_change_requests_block() -> None:
@@ -232,7 +282,7 @@ def test_outstanding_change_requests_block() -> None:
         reviews=[{"author": {"login": "someone"}, "state": "CHANGES_REQUESTED"}],
     )
     pr["reviewDecision"] = "CHANGES_REQUESTED"
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
     assert not verdict.eligible
     assert "review has outstanding change requests" in verdict.reasons
 
@@ -245,17 +295,23 @@ def test_the_merging_role_cannot_attest_its_own_review() -> None:
     available, which is why an attestation naming the merging role is rejected
     outright rather than trusted.
     """
-    verdict = mq.evaluate(_pr(1), mq.load_policy(), acting_role="cto", attest_role="cto")
+    verdict = mq.evaluate(
+        _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role="cto"
+    )
     assert not verdict.eligible
     assert any("also the merging role" in reason for reason in verdict.reasons)
 
 
 def test_a_different_role_attesting_passes() -> None:
-    assert mq.evaluate(_pr(1), mq.load_policy(), acting_role="cto", attest_role="qa").eligible
+    assert mq.evaluate(
+        _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
+    ).eligible
 
 
 def test_an_em_merge_attested_by_the_cto_passes() -> None:
-    assert mq.evaluate(_pr(1), mq.load_policy(), acting_role="em", attest_role="cto").eligible
+    assert mq.evaluate(
+        _pr(1), mq.load_policy(), acting_role="em", base="develop", attest_role="cto"
+    ).eligible
 
 
 # --- ordering: a queue, not a race --------------------------------------------
@@ -268,18 +324,21 @@ def test_queue_order_is_creation_order_not_greenness() -> None:
             _pr(3, created="2026-10-03T00:00:00Z"),
             mq.load_policy(),
             acting_role="cto",
+            base="develop",
             attest_role="qa",
         ),
         mq.evaluate(
             _pr(1, created="2026-10-01T00:00:00Z"),
             mq.load_policy(),
             acting_role="cto",
+            base="develop",
             attest_role="qa",
         ),
         mq.evaluate(
             _pr(2, created="2026-10-02T00:00:00Z"),
             mq.load_policy(),
             acting_role="cto",
+            base="develop",
             attest_role="qa",
         ),
     ]
@@ -289,7 +348,13 @@ def test_queue_order_is_creation_order_not_greenness() -> None:
 def test_ties_on_creation_time_break_on_pr_number() -> None:
     same = "2026-10-01T00:00:00Z"
     verdicts = [
-        mq.evaluate(_pr(n, created=same), mq.load_policy(), acting_role="cto", attest_role="qa")
+        mq.evaluate(
+            _pr(n, created=same),
+            mq.load_policy(),
+            acting_role="cto",
+            base="develop",
+            attest_role="qa",
+        )
         for n in (11, 4, 7)
     ]
     assert [v.number for v in sorted(verdicts, key=mq.Verdict.order_key)] == [4, 7, 11]
@@ -352,6 +417,56 @@ def test_blocked_bases_match_by_prefix(gh_stub: Any) -> None:
     assert mq.load_policy().is_blocked_base("main")
     assert not mq.load_policy().is_blocked_base("develop")
     assert not mq.load_policy().is_blocked_base("feature/develop-helper")
+
+
+def test_a_pr_behind_its_base_does_not_queue(gh_stub: Any) -> None:
+    """A PR whose base moved after its checks ran must not merge on that evidence.
+
+    This is the failure the queue exists to prevent, and it is invisible in the
+    check rollup: after PR #1 lands, PR #2 still shows `test: SUCCESS` — from the
+    run against the *previous* base. GitHub marks it `BEHIND` and the ruleset path
+    catches it with `strict`; a local queue has to catch it itself or it merges
+    unverified code while looking green.
+    """
+    prs = [_pr(1, created="2026-10-01T00:00:00Z", merge_state="BEHIND")]
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run(
+        "list",
+        "--repo",
+        "digithings-ai/twelve-x",
+        "--acting-role",
+        "cto",
+        "--attest-review",
+        "qa",
+    )
+    assert done.returncode == EXIT_OK
+    assert "queued: none" in done.stdout
+    assert "mergeStateStatus=BEHIND" in done.stdout
+
+
+def test_the_queue_asks_github_for_the_oldest_prs(gh_stub: Any) -> None:
+    """`gh pr list` is newest-first, so a plain --limit truncates the head.
+
+    Above the limit, the oldest PRs would never be fetched, never listed and never
+    merged — silent head-of-line starvation, which is the opposite of what the FIFO
+    ordering is for. `sort:created-asc` moves the truncation to the tail.
+    """
+    prs = [_pr(1, created="2026-10-01T00:00:00Z")]
+    stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run(
+        "list",
+        "--repo",
+        "digithings-ai/twelve-x",
+        "--acting-role",
+        "cto",
+        "--attest-review",
+        "qa",
+    )
+    assert done.returncode == EXIT_OK
+    assert stub.matching("sort:created-asc") != []
+    # `--base` must be passed to gh, not merely checked afterwards: dropping it makes
+    # the queue merge into whatever base the PR happens to target.
+    assert stub.matching("--base develop") != []
 
 
 def test_drafts_and_conflicts_do_not_queue(gh_stub: Any) -> None:

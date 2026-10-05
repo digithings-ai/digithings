@@ -121,7 +121,7 @@ def gh_rule(
     return rule
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def gh_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[..., GhStub]:
     """Install a rule-driven `gh` stub at the front of PATH for one test.
 
@@ -133,10 +133,14 @@ def gh_stub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[..., Gh
         )
         assert stub.matching("pr merge 42")
 
-    Not autouse on purpose. A test exercising a script that shells out to `gh`
-    *without* this stub reaches the real API with whatever credential the
-    developer shell holds — the failure mode
-    `tests/scripts/test_worktree_task_base_ref.py` warns about in its docstring.
+    Autouse, but inert until a test installs rules. The stub is only prepended to
+    PATH when `_install` runs, so a test that never calls `gh` is unaffected — while
+    a test that *forgets* to call it fails with the stub's exit 97 ("no rule
+    matched") instead of reaching the real API. That is the failure mode
+    `tests/scripts/test_worktree_task_base_ref.py` warns about in its docstring,
+    and leaving the fixture opt-in is how a real API call slips into the suite in
+    the first place: the per-test discipline that prevents it is exactly the thing
+    a future edit forgets.
     """
     root = tmp_path / "ghstub"
     bin_dir = root / "bin"

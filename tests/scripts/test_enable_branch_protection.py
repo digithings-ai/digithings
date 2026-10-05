@@ -454,7 +454,9 @@ def test_dry_run_prints_the_payload_and_writes_nothing(gh_stub: Any) -> None:
     assert done.returncode == EXIT_OK, done.stderr
     assert "nothing was changed" in done.stdout
     assert "merge_queue" in done.stdout
-    assert not any("rulesets" in " ".join(c) for c in stub.calls)
+    # Looking a ruleset up by name is a read and is expected; writing one is not.
+    assert not any(c[0] in ("api", "api", "api") and "POST" in " ".join(c) for c in stub.calls)
+    assert not any("PUT" in " ".join(c) for c in stub.calls)
 
 
 def test_the_dry_run_payload_is_valid_json(gh_stub: Any) -> None:
@@ -476,4 +478,128 @@ def test_the_dry_run_payload_is_valid_json(gh_stub: Any) -> None:
     body = done.stdout.split("would PUT ", 1)[1]
     blocks = body.split("\n\n", 1)
     assert json.loads(blocks[0].split("(", 1)[1].split("):", 1)[1])
-    assert json.loads(blocks[1].split("):", 1)[1].split("dry run")[0].strip())
+    # The ruleset step is a POST when no ruleset of that name exists yet — there is
+    # no `PUT /repos/O/R/rulesets` endpoint, so a dry run claiming one would be
+    # promising a call that 404s.
+    assert "would POST repos/o/r/rulesets (ruleset)" in done.stdout
+
+
+def test_the_dry_run_posts_a_ruleset_when_none_exists_by_that_name(gh_stub: Any) -> None:
+    """Rulesets have no upsert, so the verb has to follow whether the name is taken.
+
+    Creating is `POST /repos/O/R/rulesets`; updating needs the id in the path. Always
+    POSTing would leave a stack of same-named rulesets on every run, which is why the
+    lookup exists.
+    """
+    stub = _preflight_stub(gh_stub, private=False, plan="pro")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(r"^api orgs/", stdout=_org_plan("pro")),
+        gh_rule(r"/branches/[^/]+/protection$", stdout={"message": "Branch not protected"}),
+        gh_rule(r"/rulesets$", stdout=[]),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "o/r",
+        "--branch",
+        "develop",
+        "--check",
+        "test",
+        "--mode",
+        "ruleset",
+        "--merge-queue",
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "would POST repos/o/r/rulesets (ruleset)" in done.stdout
+
+
+def test_an_existing_ruleset_is_updated_by_id_not_recreated(gh_stub: Any) -> None:
+    """Re-running `apply` must edit the ruleset it made last time."""
+    stub = _preflight_stub(gh_stub, private=False, plan="pro")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(r"^api orgs/", stdout=_org_plan("pro")),
+        gh_rule(r"/branches/[^/]+/protection$", stdout={"message": "Branch not protected"}),
+        gh_rule(r"/rulesets$", stdout=[{"id": 42, "name": "develop-merge-queue"}]),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "o/r",
+        "--branch",
+        "develop",
+        "--check",
+        "test",
+        "--mode",
+        "ruleset",
+        "--merge-queue",
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "would PUT repos/o/r/rulesets/42 (ruleset)" in done.stdout
+
+
+def test_applying_never_drops_a_check_the_branch_already_required(gh_stub: Any) -> None:
+    """Protection is a full replace, so naming one check on a branch requiring three
+    removes the other two — and the write reports success while doing it.
+
+    `digithings/develop` is the live case: it requires three checks, and the documented
+    one-flag apply would have cut it to one.
+    """
+    stub = _preflight_stub(gh_stub, private=False, plan="free")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(
+            r"/branches/[^/]+/protection$",
+            stdout={
+                "required_status_checks": {
+                    "strict": True,
+                    "contexts": ["Required checks passed", "doc-links + agents-init"],
+                }
+            },
+        ),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "digithings-ai/digithings",
+        "--branch",
+        "develop",
+        "--check",
+        "test",
+        "--require-approvals",
+        "1",
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "already requires" in done.stdout
+    for context in ("Required checks passed", "doc-links + agents-init", "test"):
+        assert context in done.stdout
+
+
+def test_replace_checks_opts_into_dropping_the_existing_ones(gh_stub: Any) -> None:
+    """The escape hatch has to actually escape, or the guard above is a dead end."""
+    stub = _preflight_stub(gh_stub, private=False, plan="free")
+    stub.set_rules(
+        gh_rule(r"^api repos/[^ /]+/[^ /]+$", stdout=_repo_meta(private=False)),
+        gh_rule(
+            r"/branches/[^/]+/protection$",
+            stdout={"required_status_checks": {"strict": True, "contexts": ["old-check"]}},
+        ),
+    )
+    done = _run(
+        "apply",
+        "--repo",
+        "digithings-ai/digithings",
+        "--branch",
+        "develop",
+        "--check",
+        "test",
+        "--replace-checks",
+        "--dry-run",
+    )
+    assert done.returncode == EXIT_OK, done.stderr
+    assert "already requires" not in done.stdout
+    assert "old-check" not in done.stdout
