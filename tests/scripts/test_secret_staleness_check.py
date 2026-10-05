@@ -808,8 +808,9 @@ def test_a_run_that_aged_something_does_file_the_tracker(
 ) -> None:
     """The converse, so the guard above cannot be satisfied by never filing.
 
-    This is the path the operator shell and the Keymaster report take, and it is
-    the only one that has ever produced a useful tracker.
+    This is the path the operator shell on the Mac takes, and it is the only one
+    that has ever produced a useful tracker. It is NOT the Keymaster weekly key
+    report: that report is built from Bitwarden and never reads this API.
     """
     _gh_on_path(monkeypatch, tmp_path, stdout=json.dumps([{"secrets": [_SECRETS]}]))
     monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
