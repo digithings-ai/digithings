@@ -47,6 +47,21 @@ CRED_VALUE_PATTERNS = [
 #: 0.006% (6 in 100 000; the observed minimum was 2.936). Precision comes from
 #: the inline-comment exclusion below, not from this floor.
 CRED_MIN_ENTROPY = 3.0
+#: Shortest value the guard will score at all. The name has already matched
+#: `CRED_VAR_PATTERNS` by this point, so length is all that separates a real key
+#: from the short human words a developer writes under a credential name.
+#: Nothing in the tracked corpus sets the bound - every credential-named line
+#: there is empty, a placeholder, or a `#` comment - so the shortest pinned
+#: probe sets it, at 12.
+CRED_MIN_VALUE_LEN = 12
+#: Length at or above which `CRED_MIN_ENTROPY` is a meaningful test. That floor is
+#: bits *per character*, so below the length it was calibrated at the rate reports
+#: sample size rather than randomness: over 40 000 random hex secrets per length a
+#: 3.0 bits/char floor misses 45.7% at 12 characters and 14.0% at 16, against the
+#: 0.006% at 32. 17 is the narrowest band any pinned probe needs - the 16-character
+#: one scores 2.750, exactly level with `postgres`, so no threshold separates the
+#: two - the other three score 3.022, 3.155 and 3.301 and clear the floor unaided.
+CRED_MIN_ENTROPY_LEN = 17
 
 def is_placeholder(v):
     v = v.strip().strip('"').strip("'")
@@ -74,7 +89,7 @@ def shannon_entropy(v: str) -> float:
 
 def looks_cred_val(v):
     v = v.strip().strip('"').strip("'")
-    if len(v) < 16:
+    if len(v) < CRED_MIN_VALUE_LEN:
         return False
     if is_placeholder(v):
         return False
@@ -88,6 +103,11 @@ def looks_cred_val(v):
     # passphrase written with real internal spaces, accepted on purpose.
     if v.startswith('#') or any(c.isspace() for c in v):
         return False
+    # Below `CRED_MIN_ENTROPY_LEN` the rate cannot set the floor, but it can still
+    # refute a value: one repeated symbol scores 0.0 bits, which is evidence
+    # against a credential rather than an absence of evidence for one.
+    if len(v) < CRED_MIN_ENTROPY_LEN:
+        return shannon_entropy(v) > 0.0
     return shannon_entropy(v) >= CRED_MIN_ENTROPY
 
 def main():
