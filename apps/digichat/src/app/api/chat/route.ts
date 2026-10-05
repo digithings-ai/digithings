@@ -43,6 +43,10 @@ import {
   isOverEmbedTrialLimit,
   unlockEmbedTrial,
 } from "@/lib/embed-turn-quota";
+import {
+  EMBED_MONITOR_TOKEN_HEADER,
+  isAllowlistedMonitorToken,
+} from "@/lib/embed-monitor-token";
 import { consumeChatAccess } from "@/lib/embed-gate-provider";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
@@ -281,6 +285,25 @@ export async function POST(req: Request) {
         );
       }
       quotaSatisfied = true;
+    }
+
+    if (!quotaSatisfied) {
+      try {
+        // An allowlisted internal monitor (DIG-613) holds a server-side secret
+        // and is exempt from the per-IP free-turn budget, so an hourly check can
+        // run every hour without spending the window's 3 turns in the first hour
+        // and then reporting 402 for the next 24. The secret is not
+        // X-Embed-Token — that one is a publishable key served in the embedding
+        // page (DIG-619), so a bypass keyed on it would be public. Fails open:
+        // no allowlist configured means this is false and the quota below runs
+        // exactly as before. Scope is this gate only — every other check in this
+        // route, and tenant resolution itself, is unchanged.
+        if (isAllowlistedMonitorToken(req.headers.get(EMBED_MONITOR_TOKEN_HEADER))) {
+          quotaSatisfied = true;
+        }
+      } catch (e) {
+        console.warn("[trial-gate] monitor allowlist error, failing open:", e);
+      }
     }
 
     if (!quotaSatisfied) {

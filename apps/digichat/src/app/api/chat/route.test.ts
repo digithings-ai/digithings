@@ -1393,6 +1393,71 @@ vi.mocked(createFoundryStreamResponse).mockClear();
       }
     });
 
+    // DIG-613: an internal monitor had no sanctioned way past the free-turn cap,
+    // so the hourly DataTap answer-integrity check spent the whole 3-turn budget
+    // in its first hour and then reported 402 trial_gate on every run after.
+    describe("monitor allowlist", () => {
+      const MONITOR_SECRET = "monitor-secret-0123456789abcdef0123456789abcdef";
+
+      it("serves an allowlisted monitor indefinitely and never consults the per-IP quota", async () => {
+        process.env.DIGICHAT_MONITOR_TOKENS = MONITOR_SECRET;
+        const quotaModule = await import("@/lib/embed-turn-quota");
+        const overSpy = vi.spyOn(quotaModule, "isOverEmbedTrialLimit");
+        const recordSpy = vi.spyOn(quotaModule, "recordEmbedTrialTurn");
+        try {
+          // Well past the cap, which is the whole point: an hourly job must not
+          // be gated after the first three probes.
+          for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 3; i++) {
+            const res = await POST(
+              trialReq({ "x-embed-monitor-token": MONITOR_SECRET }),
+            );
+            expect(res.status).toBe(200);
+          }
+          expect(overSpy).not.toHaveBeenCalled();
+          expect(recordSpy).not.toHaveBeenCalled();
+          expect(createFoundryStreamResponse).toHaveBeenCalledTimes(
+            EMBED_FREE_TURN_LIMIT + 3,
+          );
+        } finally {
+          overSpy.mockRestore();
+          recordSpy.mockRestore();
+        }
+      });
+
+      it("still gates a caller holding only the published X-Embed-Token, even with an allowlist configured", async () => {
+        // The tenant token is a Stripe-style publishable key rendered into the
+        // embedding page (DIG-619), so a bypass keyed on it would be public and
+        // would hand every visitor an unlimited budget. This pins that.
+        process.env.DIGICHAT_MONITOR_TOKENS = MONITOR_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq({ "x-embed-token": "published-token" }))).status).toBe(200);
+        }
+        const gated = await POST(trialReq({ "x-embed-token": "published-token" }));
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("still gates a caller presenting the wrong monitor secret", async () => {
+        process.env.DIGICHAT_MONITOR_TOKENS = MONITOR_SECRET;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          await POST(trialReq({ "x-embed-monitor-token": "not-the-secret" }));
+        }
+        const gated = await POST(trialReq({ "x-embed-monitor-token": "not-the-secret" }));
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+
+      it("fails open when DIGICHAT_MONITOR_TOKENS is absent, leaving the per-IP cap in force for everyone", async () => {
+        delete process.env.DIGICHAT_MONITOR_TOKENS;
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+          expect((await POST(trialReq({ "x-embed-monitor-token": MONITOR_SECRET }))).status).toBe(200);
+        }
+        const gated = await POST(trialReq({ "x-embed-monitor-token": MONITOR_SECRET }));
+        expect(gated.status).toBe(402);
+        expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      });
+    });
+
     it("skips the quota entirely when the client IP is unknown, so a broken ingress fails open rather than collapsing every visitor into one bucket", async () => {
       const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
       const spy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
@@ -1478,6 +1543,22 @@ vi.mocked(createFoundryStreamResponse).mockClear();
     it("returns 403 plan_tier_required when no proof is supplied (#3662)", async () => {
       const req = dashboardReq();
       const res = await POST(req);
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("plan_tier_required");
+    });
+
+    it("does not let the DIG-613 monitor identity bypass the plan-tier gate", async () => {
+      // The monitor bypass is scoped to the trial_form free-turn gate. It must
+      // not become a general capability: the plan-tier check runs before it and
+      // nothing about it consults the monitor allowlist.
+      process.env.DIGICHAT_MONITOR_TOKENS =
+        "monitor-secret-0123456789abcdef0123456789abcdef";
+      const res = await POST(
+        dashboardReq({
+          "x-embed-monitor-token": "monitor-secret-0123456789abcdef0123456789abcdef",
+        }),
+      );
       expect(res.status).toBe(403);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe("plan_tier_required");
