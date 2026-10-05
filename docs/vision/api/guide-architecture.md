@@ -18,7 +18,7 @@ digigraph is the horizontal orchestrator. digisearch and digiquant each own vert
 - `digigraph` `:8000` — workflows, OpenAI-compatible chat, federated tools
 - `digiquant` `:8001` — NautilusTrader backtest / optimize
 - `digisearch` `:8002` — RAG ingest + query
-- `digismith` `:8003` — observability helpers + status
+- `digitrace` `:8003` — observability helpers + status
 - `digivault` `:8004` — vault (opt-in compose profile)
 - `digikey` `:8005` — API keys + JWT exchange + JWKS
 - `digichat` `:3005` — Next.js BFF + chat UI (profile `digichat`)

@@ -12,7 +12,7 @@ Component foundations in place:
 
 - **Orchestration:** digigraph LangGraph workflows (supervisor + subgraphs), digikey JWT for protected HTTP, vertical dispatch via `/v1/orchestrator_tools` and `/v1/orchestrator_invoke`.
 - **Verticals:** digisearch (RAG, ingest, search backends), digiquant (NautilusTrader backtest/optimize, Polars-only).
-- **Platform:** Docker Compose core stack, LiteLLM proxy, digismith health/`/v1/status`, optional digichat (Postgres + Next.js BFF).
+- **Platform:** Docker Compose core stack, LiteLLM proxy, digitrace health/`/v1/status`, optional digichat (Postgres + Next.js BFF).
 - **MCP:** digigraph, digiquant, digisearch MCP servers for IDE and external clients.
 - **First pilot:** the client pilot (projects/client-pilot/) running digigraph + digisearch against an Azure AI Search unified-content index.
 

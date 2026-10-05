@@ -6,7 +6,7 @@ digillm is the **single home for LLM client / API-wrapper / tooling code** in th
 monorepo: a standalone, **provider-agnostic** OpenAI-compatible client with
 routing, retry/backoff, response caching, the tool-calling loop, structured
 output, and strict provider telemetry. It has **no FastAPI / service coupling**
-and no hard dependency on `digismith`; LiteLLM is the house upstream swap layer
+and no hard dependency on `digitrace`; LiteLLM is the house upstream swap layer
 via `OPENAI_API_BASE`, not an in-package assumption.
 
 ---
@@ -74,7 +74,7 @@ Beyond root `AGENTS.md`:
 - ❌ Adding a provider-specific search / grounding branch (`openrouter_web_search`,
   `search_parameters`, Responses-API helpers, provider `extra_body` dials).
 - ❌ `import fastapi` or accepting a Starlette `Request` anywhere in the package.
-- ❌ Adding a required dependency on `digismith`, `pyyaml`, or `mcp`.
+- ❌ Adding a required dependency on `digitrace`, `pyyaml`, or `mcp`.
 - ❌ Returning bare `dict`s from public functions (use `types.py`).
 - ❌ Introducing a retry/fallback chain that hides a provider failure.
 - ❌ Writing a per-request BYOK/proxy key into module globals instead of the

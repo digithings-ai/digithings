@@ -5,7 +5,7 @@
 #
 # Intentional omissions:
 #   - digiquant / backtest / optimize (no DIGIQUANT_DATA_DIR, no :8001)
-#   - digismith HTTP (tracing library only)
+#   - digitrace HTTP (tracing library only)
 #   - digivault_get_note (requires D1; stock Profile A sets DIGIVAULT_ROOT only)
 #
 # Spec: docs/spec/project-spec-v1alpha1.md
@@ -84,7 +84,7 @@ agents:
     ## Style
 
     Write digi product names in lowercase always, including at the start of a sentence:
-    digithings, digichat, digigraph, digiquant, digisearch, digikey, digismith,
+    digithings, digichat, digigraph, digiquant, digisearch, digikey, digitrace,
     digivault, digiclaw, digibase, digiskills, digiweb, digillm, digifetch.
 
 indexes:

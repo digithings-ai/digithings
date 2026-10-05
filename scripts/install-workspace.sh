@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Install monorepo workspace packages in dependency order for CI.
 #
-# Why this exists: sibling packages like `digismith` are listed as hard
+# Why this exists: sibling packages like `digitrace` are listed as hard
 # dependencies in some pyproject.toml files (e.g. digigraph) but are NOT on
 # PyPI — they live in this monorepo. A naive `pip install -e ./digigraph`
-# therefore fails in CI because pip cannot resolve `digismith>=0.1.0`.
+# therefore fails in CI because pip cannot resolve `digitrace>=0.1.0`.
 # This script installs the workspace in the correct topological order so
 # downstream packages always find their siblings already on sys.path.
 #
@@ -31,15 +31,15 @@ done
 
 python -m pip install -U pip
 
-# Dependency-ordered workspace. digibase, digifetch and digismith are leaves
+# Dependency-ordered workspace. digibase, digifetch and digitrace are leaves
 # that many other packages depend on, so they go first. Apps depend on the
 # services so they go last.
-ALL=(digibase digifetch digismith digillm digikey digigraph digiquant digisearch digiclaw digivoice)
+ALL=(digibase digifetch digitrace digillm digikey digigraph digiquant digisearch digiclaw digivoice)
 
 # Which packages actually have a [dev] extra? (Keeps --with-dev safe.)
 has_dev() {
   case "$1" in
-    digibase|digikey|digismith|digigraph|digiquant|digisearch|digiclaw) return 0 ;;
+    digibase|digikey|digitrace|digigraph|digiquant|digisearch|digiclaw) return 0 ;;
     *) return 1 ;;
   esac
 }

@@ -37,8 +37,8 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 
 | Artifact | Status | Notes |
 |---|---|---|
-| **Git tag** `digichat-vX.Y.Z` | Exists | [release-please-digichat.yml](../../.github/workflows/release-please-digichat.yml) on `develop`; changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.3.2` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | [publish-digichat-image.yml](../../.github/workflows/publish-digichat-image.yml) when release-please cuts the `digichat-vX.Y.Z` tag on `develop` (the release workflow dispatches it at the tag), and re-checked on a push to `main` touching `apps/digichat/**`; skips if that version tag already published. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
+| **Git tag** `digichat-vX.Y.Z` | Exists | the former `release-please-digichat.yml` workflow on `develop` (removed in the strict-essentials cut); see [RELEASES.md](../../RELEASES.md) for the current tagging process. Changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.3.2` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | the former `publish-digichat-image.yml` workflow (removed in the strict-essentials cut); see [RELEASES.md](../../RELEASES.md) for the current artifact path. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
@@ -86,7 +86,7 @@ Browser / parent site iframe
 | LiteLLM (+ provider keys) | Via digillm |
 | digivault | Vault tool behind digigraph (when grounded chat matters) |
 
-Optional: digisearch, digiquant, digismith, Redis (LiteLLM cache) — only if the deploy needs those tools / health surfaces.
+Optional: digisearch, digiquant, digitrace, Redis (LiteLLM cache) — only if the deploy needs those tools / health surfaces.
 
 **digithings operator path today:** Compose profiles `digichat` + `digivault` (+ `litellm-cache` as needed) and Cloudflare Tunnel — see [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md). Public marketing URL stays `digithings.ai/chat` (Pages shell + iframe); digichat Node may be `digichat.digithings.ai` (Tunnel). digithings has **no Azure**.
 

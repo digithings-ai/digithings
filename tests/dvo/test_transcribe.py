@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from digivoice.errors import TranscribeError
+from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL_FILE, resolve_paths
 from digivoice.probe import real_probe
@@ -110,3 +110,18 @@ def test_silence_is_an_error_not_an_empty_history_entry(paths: VoicePaths) -> No
     with pytest.raises(TranscribeError) as excinfo:
         transcribe(paths, WHISPER, runner, "/tmp/a.wav")
     assert "no text" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["[BLANK_AUDIO]", " [ Silence ] \n", "(silence)", "[BLANK_AUDIO]\n[BLANK_AUDIO]"],
+)
+def test_silence_markers_are_an_empty_take(paths: VoicePaths, raw: str) -> None:
+    _install_model(paths)
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout=raw)})
+    with pytest.raises(EmptyTranscriptError):
+        transcribe(paths, WHISPER, runner, "/tmp/a.wav")
+
+
+def test_silence_marker_next_to_speech_is_dropped() -> None:
+    assert clean_transcript("[BLANK_AUDIO] ship it. [ Silence ]") == "ship it."

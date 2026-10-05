@@ -5,7 +5,7 @@ in the digithings monorepo. It is a standalone, **provider-agnostic** library
 extracted from the mature `digigraph.llm` implementation. It speaks to any
 OpenAI-compatible endpoint, carries **no vendor preference** (LiteLLM is the
 house upstream swap layer via `OPENAI_API_BASE`), and has **no FastAPI /
-service coupling** and no hard dependency on `digismith`.
+service coupling** and no hard dependency on `digitrace`.
 
 Consumers: **twelve-x** adopts it now; **digigraph** and **digisearch** migrate
 to it later (their current in-tree LLM modules are superseded by this package).
@@ -15,7 +15,7 @@ to it later (their current in-tree LLM modules are superseded by this package).
 - Python 3.12, Pydantic v2, full type hints, ruff line-length 100.
 - Hard deps: `openai>=1.0`, `pydantic>=2` only.
 - Optional extras: `[modes]` (PyYAML, for path-based mode resolution),
-  `[trace]` (digismith, for LangSmith tracing), `[dev]` (pytest, ruff, pyyaml).
+  `[trace]` (digitrace, for LangSmith tracing), `[dev]` (pytest, ruff, pyyaml).
 - No `import fastapi`; no `Request` objects anywhere in this package.
 
 ## Module map
@@ -481,10 +481,10 @@ finally:
 
 ## Tracing
 
-`@traceable("chat_completion")` is imported from `digismith.trace` inside a
+`@traceable("chat_completion")` is imported from `digitrace.trace` inside a
 `try/except ImportError` that falls back to a no-op decorator. digillm therefore
-has **no hard dependency** on digismith; install `digillm[trace]` (or have
-digismith on the path) plus `LANGSMITH_API_KEY` to enable spans.
+has **no hard dependency** on digitrace; install `digillm[trace]` (or have
+digitrace on the path) plus `LANGSMITH_API_KEY` to enable spans.
 
 ## Environment variables
 
@@ -545,7 +545,7 @@ These are **outside this package** and intentionally **not** done here:
    `ARCHITECTURE.md` (around line 413), e.g.:
 
    ```bash
-   pip install -e ./digibase -e ./digillm -e "./digismith[langsmith]" \
+   pip install -e ./digibase -e ./digillm -e "./digitrace[langsmith]" \
                -e ./digikey -e "./digigraph[dev]" -e "./digiquant[dev]" \
                -e "./digisearch[dev]"
    ```

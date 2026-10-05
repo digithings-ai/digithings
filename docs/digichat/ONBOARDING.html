@@ -552,7 +552,7 @@
       <tr><td><code>DIGICHAT_DATABASE_URL</code></td><td>server</td><td>Postgres, when thread persistence is <code>server</code>.</td></tr>
       <tr><td><code>DIGICHAT_AUTO_MIGRATE</code></td><td>server</td><td>Run Drizzle migrations on boot. Recommended in Docker.</td></tr>
       <tr><td><code>DIGICHAT_BOOTSTRAP_API_KEY</code></td><td>server</td><td>A static machine key for bootstrapping clients, compared timing-safely.</td></tr>
-      <tr><td><code>DIGICHAT_DEV_AUTH</code> · <code>DIGICHAT_DEV_PASSWORD</code></td><td>server, dev only</td><td>Registers the dev password provider. Guarded so it cannot activate in production.</td></tr>
+      <tr><td><code>DIGICHAT_DEV_AUTH</code> · <code>DIGICHAT_DEV_PASSWORD</code></td><td>server, dev only</td><td>Registers the dev password provider. Local development only. When it is set to <code>1</code> together with <code>NODE_ENV=production</code>, digichat refuses to start and names both variables.</td></tr>
       <tr><td><code>DIGICHAT_ALLOW_DEV_GLOBAL</code></td><td>server, dev only</td><td>Must never be <code>1</code> in production.</td></tr>
       <tr><td><code>NEXT_PUBLIC_DIGICHAT_BASE_PATH</code></td><td><span class="chip teal" style="font-size:10px;padding:0 5px">browser</span></td><td>Client mirror of the sub-path, for serving under <code>/chat</code>.</td></tr>
     </tbody>

@@ -2,7 +2,7 @@
 
 Speaks to any OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter,
 OpenAI direct, or a registered external provider). No FastAPI, no service
-coupling; optional LangSmith tracing via digismith degrades to a no-op when
+coupling; optional LangSmith tracing via digitrace degrades to a no-op when
 absent.
 
 Public API:

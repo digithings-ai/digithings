@@ -89,7 +89,9 @@ the 13:30 archive only creates dead tuples, and plain VACUUM (05:50 pg_cron) is
 what makes the space reusable, so relief is not measurable until ~16h later and
 a same-run gate would false-fail. The workflow *does* capture the pre-archive
 snapshot (artifact `checkpoint-size-pre-snapshot`) so the comparison has a
-baseline. Compare by hand after the next morning's vacuum:
+baseline. On the container path the same pre snapshot is
+`pipeline-runs/checkpoint-archive/<run_id>/checkpoint-size-pre.json`.
+Compare by hand after the next morning's vacuum:
 
 ```bash
 # after downloading the artifact to /tmp/checkpoint-size-pre.json

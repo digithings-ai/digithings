@@ -24,7 +24,7 @@ Before structuring, silently correct these common macOS dictation errors.
 | "dig it graph", "dig graph", DigiGraph, Digigraph | digigraph |
 | "dig it quant", "dig quant", DigiQuant, Digiquant | digiquant |
 | "dig it search", "dig search", DigiSearch, Digisearch | digisearch |
-| "dig it smith", "dig smith", DigiSmith, Digismith | digismith |
+| "dig it smith", "dig smith", DigiTrace, Digitrace | digitrace |
 | "dig it claw", "dig claw", DigiClaw, Digiclaw | digiclaw |
 | "dig it base", "dig base", DigiBase, Digibase | digibase |
 | "dig it key", "dig key", DigiKey, Digikey | digikey |

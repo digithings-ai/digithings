@@ -39,6 +39,6 @@ cp infra/digichat-release/.env.profile-a.example \
 make digichat-profile-a-up
 ```
 
-Does not start digiquant / digisearch / digismith / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.
+Does not start digiquant / digisearch / digitrace / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.
 
 See also [[digichat]].

@@ -174,10 +174,11 @@ MCP (Model Context Protocol) servers extend GitHub Copilot's agent mode with liv
 | `polymarket` | Prediction market event probabilities | No | Phase 1 (Alt Data) |
 | `frankfurter-fx` | Live FX rates, 30+ pairs | No | Phase 4C (Forex) |
 | `world-bank` | World Bank global indicators | No | Phase 4E (International) |
-| `coingecko` | 200+ chains, DeFi TVL, volumes | Optional — free tier works w/o key | Phase 4D (Crypto) |
 | `twelve-data` | Real-time stocks/forex/ETFs + TA | Yes — [free, 800 credits/day](https://twelvedata.com) | Phases 4A–4C |
-| `alpha-vantage` | Fundamentals, earnings, news sentiment | Yes — [free, 25 req/day](https://alphavantage.co) | Phase 5 (Equities) |
 | `defi-rates` | DeFi borrow/supply rates (Aave, Morpho…) | No | Phase 4D (Crypto) |
+
+Crypto prices are read from the ingested layer or from web search. There is no crypto MCP
+server in this stack and no key to configure.
 
 ### Setup Notes
 
@@ -188,7 +189,7 @@ docker pull stefanoamorelli/sec-edgar-mcp:latest
 # uv/uvx required for Python-based servers
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Node.js v18+ required for fred and coingecko (npx)
+# Node.js v18+ required for npx-based servers
 node --version
 ```
 

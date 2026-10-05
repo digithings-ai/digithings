@@ -35,7 +35,7 @@ hosts:
       speech: false
     backend:
       type: digigraph
-      digisearchIndex: occ_help
+      digisearchIndex: occ_help,occ_tickets
       vaultPathPrefix: clients/online-compliance-center
     tools:
       allowUserToggle: true
@@ -72,7 +72,8 @@ hosts:
           label: Help search
           default: true
           setup:
-            index_name: occ_help
+            # Docs + tickets fan-out by default (#4756); pass occ_help for docs only.
+            index_name: occ_help,occ_tickets
         - id: digivault
           url: http://digivault-mcp:8769/mcp
           label: Knowledge vault

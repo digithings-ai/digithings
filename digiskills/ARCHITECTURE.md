@@ -260,7 +260,7 @@ still caught by the post-fetch host re-check, the byte cap trips via
 stripped).
 
 `tests/dsk/test_dogfood.py` (P2) compiles every digithings module's real
-`ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digismith,
+`ARCHITECTURE.md`/`AGENTS.md` (digigraph, digiquant, digisearch, digitrace,
 digiclaw, digibase, digikey, digivault, digifetch, digillm, digiskills,
 digichat) through the full pipeline with `TemplateSynthesizer`, asserting a
 clean compile (no truncation warnings) and a well-formed, round-trippable

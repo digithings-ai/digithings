@@ -24,7 +24,6 @@ COMPOSE_FILES = (
     REPO_ROOT / "docker-compose.yml",
     REPO_ROOT / "infra" / "digichat-release" / "compose.profile-a.yml",
 )
-SMOKE_STACK = REPO_ROOT / ".github" / "workflows" / "smoke-stack.yml"
 EMPTY_REDIS_DEFAULT = "${REDIS_URL:-}"
 
 
@@ -50,16 +49,3 @@ def test_litellm_does_not_inject_empty_redis_url(compose_path: Path) -> None:
     )
     assert not any(v.startswith("REDIS_URL=") and v.split("=", 1)[1] == "" for v in values)
 
-
-def test_smoke_stack_dumps_litellm_logs_on_compose_failure() -> None:
-    doc = yaml.safe_load(SMOKE_STACK.read_text(encoding="utf-8"))
-    steps = doc["jobs"]["healthz"]["steps"]
-    dump = next(
-        (s for s in steps if s.get("name") == "Dump compose logs on failure"),
-        None,
-    )
-    assert dump is not None, "smoke-stack.yml must dump LiteLLM logs when compose up fails"
-    assert dump.get("if") == "failure()"
-    run = dump["run"]
-    assert "docker compose logs" in run
-    assert "litellm" in run

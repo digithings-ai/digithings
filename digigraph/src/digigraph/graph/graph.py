@@ -17,6 +17,7 @@ from digigraph.graph.nodes import (
 from digigraph.graph.research_subgraph import build_research_subgraph
 from digigraph.graph.state import WorkflowState
 from digigraph.project_config import DigiProjectConfig
+from digigraph.tracing import trace_node
 
 # Shared checkpointer so thread_id persists across HTTP requests (see LANGGRAPH_REVIEW.md).
 _checkpointer_lock = threading.Lock()
@@ -337,11 +338,14 @@ def build_workflow_graph():
     research_sg = build_research_subgraph()
     builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
     if supervisor_on:
-        builder.add_node("supervisor", supervisor_node)
+        builder.add_node("supervisor", trace_node("supervisor")(supervisor_node))
+    # NOTE (#4931): the compiled research subgraph stays unwrapped so
+    # graph.stream(..., subgraphs=True) custom events keep flowing; its spans
+    # come from LangSmith auto-instrumentation (configure_langgraph_tracing).
     builder.add_node("research", research_sg)
-    builder.add_node("validate_strategy", strategy_validator_node)
-    builder.add_node("backtest", backtest_node)
-    builder.add_node("optimize", optimize_node)
+    builder.add_node("validate_strategy", trace_node("validate_strategy")(strategy_validator_node))
+    builder.add_node("backtest", trace_node("backtest")(backtest_node))
+    builder.add_node("optimize", trace_node("optimize")(optimize_node))
     if supervisor_on:
         builder.add_edge(START, "supervisor")
         builder.add_conditional_edges("supervisor", _route_after_supervisor)

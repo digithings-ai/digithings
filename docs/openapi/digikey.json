@@ -379,7 +379,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. Intended for load-balancer and\nk8s liveness checks. For richer cross-service diagnostics, call digismith's\n``/v1/status``.",
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. Intended for load-balancer and\nk8s liveness checks. For richer cross-service diagnostics, call digitrace's\n``/v1/status``.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {

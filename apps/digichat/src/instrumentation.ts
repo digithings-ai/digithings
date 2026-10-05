@@ -1,5 +1,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Fail closed on the dev password provider in a production environment.
+  // Runs before every other initializer: no database, license or migration work
+  // starts on a deployment that is misconfigured this way.
+  const { assertDevAuthDisabledInProduction } = await import(
+    "@/lib/startup-env-guards"
+  );
+  assertDevAuthDisabledInProduction();
   // Fail closed on invalid digichat.yaml / DIGICHAT_EMBED_TENANTS before serving.
   const { initDigichatConfigAtStartup } = await import(
     "@/lib/deploy-config/loader"

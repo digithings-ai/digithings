@@ -41,8 +41,8 @@ services:
     build: !reset null
     pull_policy: always
 
-  digismith:
-    image: ghcr.io/digithings-ai/digismith:${DIGI_IMAGE_TAG:-latest}
+  digitrace:
+    image: ghcr.io/digithings-ai/digitrace:${DIGI_IMAGE_TAG:-latest}
     build: !reset null
     pull_policy: always
 

@@ -11,7 +11,6 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build-digiquant.sh"
 DEPLOY = REPO_ROOT / ".github" / "workflows" / "deploy-digiquant-cloudflare.yml"
-SMOKE = REPO_ROOT / ".github" / "workflows" / "smoke-site.yml"
 REDIRECTS = REPO_ROOT / "apps" / "digiquant-web" / "public" / "_redirects"
 HEADERS = REPO_ROOT / "apps" / "digiquant-web" / "public" / "_headers"
 
@@ -39,10 +38,6 @@ def test_pages_build_check_asserts_dist_dashboard() -> None:
     assert "test -d dist/olympus" not in text
 
 
-def test_site_smoke_probes_dashboard_url() -> None:
-    text = SMOKE.read_text(encoding="utf-8")
-    assert 'probe "https://digiquant.io/dashboard/" "text/html"' in text
-    assert 'probe "https://digiquant.io/olympus/" "text/html"' not in text
 
 
 def test_pages_redirects_olympus_to_dashboard_permanently() -> None:

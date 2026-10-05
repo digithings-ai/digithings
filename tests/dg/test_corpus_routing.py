@@ -310,7 +310,8 @@ def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> Non
         '"also-ok":"not-an-object"}'
     )
     table = load_tenant_corpus_map(raw)
-    assert "OCC" not in table  # uppercase fails _SLUG
+    assert "OCC" not in table  # lowercased to occ; occ_help is kept
+    assert table["occ"].digisearch_index == "occ_help"
     assert "also-ok" not in table
     assert table["ok-tenant"].digisearch_index == "ok_docs"
     assert table["ok-tenant"].vault_path_prefix == "clients/ok"
@@ -377,3 +378,34 @@ def test_merge_clears_client_override_when_map_unset(monkeypatch: pytest.MonkeyP
     req = WorkflowRequest(prompt="hi", research_system_prompt_override="client injected prompt")
     out = _with_digi_request_context(_merge_http("baseline"), req)
     assert out.research_system_prompt_override is None
+
+
+def test_resolve_map_accepts_comma_separated_fan_out() -> None:
+    """A comma-separated index pair (#4756 fan-out) passes validation intact,
+    while empty elements and bad chars still fail closed."""
+    mapped = {
+        "occ": TenantCorpusOverride(
+            digisearch_index="occ_help,occ_tickets",
+            vault_path_prefix="clients/online-compliance-center",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="occ",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index == "occ_help,occ_tickets"
+    assert out.vault_path_prefix == "clients/online-compliance-center"
+
+    for bad in ("occ_help,", ",occ_help", "occ_help,,occ_tickets", "occ help,occ_tickets"):
+        out = resolve_corpus_override(
+            headers={},
+            tenant_slug="occ",
+            corpus_map={
+                "occ": TenantCorpusOverride(
+                    digisearch_index=bad,
+                    vault_path_prefix="clients/online-compliance-center",
+                ),
+            },
+        )
+        assert out.digisearch_index is None

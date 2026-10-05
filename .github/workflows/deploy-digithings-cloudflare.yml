@@ -200,11 +200,12 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/CNAME
-          # /modules/* and /architecture were folded into the home-page module
-          # manifest; assert the manifest rendered instead of those routes.
-          # Match the aria-label, not an implementation class — the pane is the
-          # shared <TerminalManifest> primitive since #1416 (was .dt-manifest).
-          grep -q 'aria-label="digithings module manifest"' dist/index.html
+          # The home is the landing composition (components/landing/sections.ts):
+          # assert every band rendered by its anchor id instead of a retired pane.
+          for band in architecture why open-source digiquant pricing faq contact; do
+            grep -q "id=\"$band\"" dist/index.html \
+              || { echo "ERROR: landing band #$band missing from dist/index.html" >&2; exit 1; }
+          done
           grep -q digithings.ai dist/CNAME
           # fonts self-hosted; no Google Fonts references in the export —
           # except the openwiki visualizer (#3696): dist/openwiki (pinned

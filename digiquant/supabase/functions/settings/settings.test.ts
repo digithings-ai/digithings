@@ -1658,7 +1658,7 @@ function memInviteStore(): InviteStore & { grants: Map<string, string[]> } {
       grants.set(email, [...prev, productKey]);
     },
     recordRedemption: async () => {},
-    incrementRedemptionCount: async () => {},
+    claimRedemption: async () => true,
   };
   return store;
 }

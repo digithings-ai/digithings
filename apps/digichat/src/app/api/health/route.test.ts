@@ -18,7 +18,7 @@ describe("GET /api/health", () => {
     vi.mocked(getEcosystemEndpoints).mockResolvedValue({
       digigraphUrl: "http://127.0.0.1:8000",
       digiquantUrl: "http://127.0.0.1:8001",
-      digismithUrl: "http://127.0.0.1:8003",
+      digitraceUrl: "http://127.0.0.1:8003",
       digisearchUrl: "",
     });
     vi.mocked(getDb).mockReturnValue(null);
@@ -54,7 +54,7 @@ describe("GET /api/health", () => {
     expect(body.ok).toBe(false);
   });
 
-  it("skips digraph/digiquant/digismith checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (foundry-only / services-disabled deploy)", async () => {
+  it("skips digraph/digiquant/digitrace checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (foundry-only / services-disabled deploy)", async () => {
     // "" falls back to the all-enabled default in capabilities.ts (raw || fallback),
     // so a non-matching placeholder is what actually disables every service.
     vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "none");
@@ -68,11 +68,11 @@ describe("GET /api/health", () => {
     expect(body.ok).toBe(true);
     expect(body.checks.digraph).toBeUndefined();
     expect(body.checks.digiquant).toBeUndefined();
-    expect(body.checks.digismith).toBeUndefined();
+    expect(body.checks.digitrace).toBeUndefined();
   });
 
-  it("still requires digraph/digiquant/digismith when they are in DIGICHAT_ENABLED_SERVICES", async () => {
-    vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "digigraph,digiquant,digismith");
+  it("still requires digraph/digiquant/digitrace when they are in DIGICHAT_ENABLED_SERVICES", async () => {
+    vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "digigraph,digiquant,digitrace");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(new Error("connection refused"))

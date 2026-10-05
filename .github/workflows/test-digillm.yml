@@ -27,7 +27,7 @@ jobs:
 
       # --frozen fails if uv.lock is stale rather than silently re-resolving.
       # --all-packages matches the other lanes: digillm's [trace] extra pulls the
-      # digismith sibling, and one uniform command avoids per-workflow reasoning
+      # digitrace sibling, and one uniform command avoids per-workflow reasoning
       # about which workspace members a suite touches.
       - name: Install from lockfile
         run: uv sync --frozen --all-packages --all-extras

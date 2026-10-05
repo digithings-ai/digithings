@@ -8,7 +8,7 @@ name: "Test: research graph"
 #
 # Installs from the committed uv.lock rather than resolving fresh (#1714, #1715).
 # `uv sync --all-packages` replaces scripts/install-workspace.sh here: that script
-# exists because sibling packages (digismith, digillm) are hard dependencies that
+# exists because sibling packages (digitrace, digillm) are hard dependencies that
 # are not on PyPI, so a naive `pip install -e ./digigraph` cannot resolve them and
 # the install had to be hand-ordered topologically. A uv workspace resolves
 # siblings natively, so the ordering problem the script solved no longer exists.

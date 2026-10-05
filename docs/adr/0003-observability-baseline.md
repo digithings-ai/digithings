@@ -1,17 +1,17 @@
 # ADR 0003: Observability Baseline — Prometheus + Grafana
 
-**Status:** proposed
+**Status:** Accepted (implemented in-tree)
 **Date:** 2026-04-18
 
 ## Context
 
-digithings currently ships tracing-first observability through **digismith**: every FastAPI service emits structured spans carrying `workflow_id`, `request_id`, and `session_id`, and each exposes a public, secret-free `/v1/status` endpoint (per the convention in [AGENTS.md](../../AGENTS.md)). This is sufficient to reconstruct *what* happened during a workflow run, but it leaves three gaps:
+digithings currently ships tracing through **digitrace**. `digitrace.trace` attaches `workflow_id`, `request_id`, and `session_id` to a span only when the caller passes them; not every FastAPI service imports it. Production imports are digigraph and digillm, plus a digiquant smoke script. digiquant, digisearch, and digikey expose `/healthz` and do not import `digitrace.trace`. `GET /v1/status` is digitrace only (per [AGENTS.md](../../AGENTS.md)). This is sufficient to reconstruct *what* happened on the calls that are wrapped, but it leaves three gaps:
 
 1. **No metrics.** There is no way to answer "how many workflows ran in the last hour", "what is the p95 latency of `/workflow`", or "how often did LiteLLM calls fail" without replaying raw traces or tailing logs. Tracing is sampled and verbose; aggregate counters and histograms are not.
 2. **No dashboards.** Operators have no shared visual surface for service health. Each on-call incident starts from `docker logs` and ad-hoc `curl` against `/v1/status`.
 3. **No alerting.** Without a metrics backend there is nothing to alert *on*. Failures are discovered by users, not by the stack.
 
-The stack is deployed via docker-compose (`make up`) for development and self-hosted pilots; a full managed observability suite (Datadog, New Relic) would be disproportionate and non-OSS. We want a baseline that is cheap, OSS, container-native, and complementary to — not a replacement for — digismith tracing.
+The stack is deployed via docker-compose (`make up`) for development and self-hosted pilots; a full managed observability suite (Datadog, New Relic) would be disproportionate and non-OSS. We want a baseline that is cheap, OSS, container-native, and complementary to — not a replacement for — digitrace tracing.
 
 See also: [docs/VISION.md](../VISION.md) (open-core, self-hostable stack).
 
@@ -30,7 +30,7 @@ Adopt **Prometheus + Grafana** as the metrics baseline, embedded in the existing
   - **digigraph** — `:8000/metrics`
   - **digiquant** — `:8001/metrics`
   - **digisearch** — `:8002/metrics`
-  - **digismith** — `:8003/metrics`
+  - **digitrace** — `:8003/metrics`
   - **digikey** — `:8005/metrics`
 - `/metrics` is bound to the same loopback-only interface as every other management endpoint. It is *not* exposed publicly and carries no secrets (route labels are normalised; high-cardinality path params are collapsed).
 
@@ -41,7 +41,7 @@ Adopt **Prometheus + Grafana** as the metrics baseline, embedded in the existing
   - `grafana:3001` — provisioned with Prometheus as a default datasource and a seed dashboard.
 - Ship configuration in-repo:
   - `docs/ops/prometheus/prometheus.yml` — scrape config.
-  - `docs/ops/grafana/digithings-overview.json` — seed dashboard (per-service request rate, error rate, p50/p95/p99 latency, in-flight requests, process memory).
+  - `docs/ops/grafana/dashboards/digithings-overview.json` — seed dashboard (per-service request rate, error rate, p50/p95/p99 latency, in-flight requests, process memory).
   - `docs/ops/grafana/provisioning/` — datasource + dashboard provisioning YAML.
 - A new Make target (`make up-observability`) starts the core stack plus the observability profile.
 
@@ -57,7 +57,7 @@ Adopt **Prometheus + Grafana** as the metrics baseline, embedded in the existing
 - Operators get a shared, always-on view of stack health without standing up external SaaS.
 - `/metrics` is a widely-understood contract; any future Kubernetes deployment can scrape the same endpoints with a `ServiceMonitor`.
 - Centralising instrumentation in digibase prevents per-service drift and keeps label cardinality controlled in one place.
-- Complements digismith: metrics show *that* latency spiked; traces show *why*. Both carry `request_id` so operators can pivot between them.
+- Complements digitrace: metrics show *that* latency spiked; traces show *why*. HTTP metrics have no `request_id` label and no exemplar, so a Prometheus series cannot be joined to a trace on `request_id`.
 
 **Negative / tradeoffs**
 - New runtime dependency (`prometheus-client`) across every service. Small, pure-Python, MIT-licensed — acceptable.
@@ -67,7 +67,7 @@ Adopt **Prometheus + Grafana** as the metrics baseline, embedded in the existing
 
 ## Alternatives considered
 
-1. **OpenTelemetry metrics only (no Prometheus).** Attractive because digismith is trace-first and OTel unifies signals. Rejected for now: the OTel metrics ecosystem for Python is less mature than `prometheus-client`, operators have to run an OTel collector *and* a backend anyway, and the Prometheus exposition format is the de-facto lingua franca. We can layer OTel on later without discarding this baseline.
+1. **OpenTelemetry metrics only (no Prometheus).** Attractive because digitrace is trace-first and OTel unifies signals. Rejected for now: the OTel metrics ecosystem for Python is less mature than `prometheus-client`, operators have to run an OTel collector *and* a backend anyway, and the Prometheus exposition format is the de-facto lingua franca. We can layer OTel on later without discarding this baseline.
 2. **Datadog / New Relic / Grafana Cloud managed.** Best UX, least ops work. Rejected: not OSS, per-host pricing is incompatible with an open-core stack users can self-host, and we would still need an on-prem fallback.
 3. **Skip metrics, rely on traces + logs.** Cheapest. Rejected: without aggregate counters and histograms the team is operationally blind, and tracing backends are not designed to answer quantitative questions at scale.
 4. **Push-based metrics (StatsD / Prometheus Pushgateway).** Rejected for long-lived services; pull is simpler, healthier, and matches FastAPI's request lifecycle. Pushgateway remains an option later for batch jobs (e.g., backtest workers) if needed.
@@ -94,4 +94,4 @@ Adopt **Prometheus + Grafana** as the metrics baseline, embedded in the existing
 - Related: ADR-0002 (Domain Unification)
 - Convention: [AGENTS.md](../../AGENTS.md) — `/v1/status` + loopback binding
 - Strategy: [docs/VISION.md](../VISION.md)
-- digismith tracing: `digismith/`
+- digitrace tracing: `digitrace/`

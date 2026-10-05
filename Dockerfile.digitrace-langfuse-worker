@@ -1,0 +1,7 @@
+# digitrace Langfuse Worker for Cloudflare Containers (#4930 Phase 1).
+# Build context: monorepo root (wrangler image_build_context = ../..).
+# Background queue / event processing. Pin matches Web image.
+# ClickHouse is NOT in this image — provision managed/VM externally
+# (see docs/ops/digitrace-langfuse.md). Do not host CH in a lite CF Container.
+FROM langfuse/langfuse-worker:4.49.0
+EXPOSE 3030

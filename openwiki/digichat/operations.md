@@ -155,7 +155,7 @@ checked with constant-time comparison) for CI/local without Postgres.
 | `DIGIKEY_BFF_TOKEN` | Shared secret for `grant_type=bff_session` |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base URL |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL |
-| `DIGISMITH_INTERNAL_URL` | digismith base URL |
+| `DIGITRACE_INTERNAL_URL` | digitrace base URL |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL |
 | `DIGICHAT_DATABASE_URL` | Postgres connection (optional) |
 | `DIGICHAT_AUTO_MIGRATE` | Auto-apply Drizzle migrations on boot (`=1`) |
@@ -164,7 +164,7 @@ checked with constant-time comparison) for CI/local without Postgres.
 
 | Variable | Purpose |
 |---|---|
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated capability list (default: all four: `digigraph,digisearch,digiquant,digismith`) |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated capability list (default: all four: `digigraph,digisearch,digiquant,digitrace`) |
 
 ### Embed / tenant
 
@@ -232,7 +232,7 @@ admit new parents without rebuild.
 
 - **digigraph** — `GET {digigraphUrl}/health` (4 s timeout), gated by `DIGICHAT_ENABLED_SERVICES`
 - **digiquant** — same pattern
-- **digismith** — same pattern
+- **digitrace** — same pattern
 - **digisearch** — probed only when `digisearchUrl` is set
 - **database** — `SELECT 1` when `DIGICHAT_DATABASE_URL` is configured; `skipped` otherwise
 

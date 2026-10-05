@@ -16,7 +16,7 @@ digichat follows the **digithings.ai** marketing palette from **digiweb** tokens
 
 ## Features
 
-- **Ecosystem** side panel: digigraph, digiquant, digismith, and **digisearch** base URLs (httpOnly cookie overrides + health badges). On the host, use `127.0.0.1` ports **8000–8003** (graph / quant / search / smith).
+- **Ecosystem** side panel: digigraph, digiquant, digitrace, and **digisearch** base URLs (httpOnly cookie overrides + health badges). On the host, use `127.0.0.1` ports **8000–8003** (graph / quant / search / smith).
 - **React 19 + AI SDK** streaming chat (`useChat`, UI message parts).
 - **Auth.js (OIDC)** for humans + **digichat machine keys** (`digi_live_…`, hashed in Postgres). **digikey** issues separate `dgk_live_…` keys for upstream JWT exchange — see `ARCHITECTURE.md` §Machine API key prefixes.
 - **Optional Postgres**: tenants, `api_keys`, `user_tenants` mapping (OIDC `sub` → tenant).
@@ -42,8 +42,8 @@ Deployments can describe which Digi ecosystem surfaces the BFF and UI treat as *
 
 | Env | Purpose |
 |-----|---------|
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated: `digigraph`, `digisearch`, `digiquant`, `digismith`. **Default when unset:** all four (digisearch included for local RAG parity). Set a narrower list only if a vertical is not deployed. |
-| Existing URLs | `DIGIGRAPH_INTERNAL_URL`, `DIGIQUANT_INTERNAL_URL`, `DIGISMITH_INTERNAL_URL`; add **`DIGISEARCH_INTERNAL_URL`** when surfacing search health next to the hub. |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated: `digigraph`, `digisearch`, `digiquant`, `digitrace`. **Default when unset:** all four (digisearch included for local RAG parity). Set a narrower list only if a vertical is not deployed. |
+| Existing URLs | `DIGIGRAPH_INTERNAL_URL`, `DIGIQUANT_INTERNAL_URL`, `DIGITRACE_INTERNAL_URL`; add **`DIGISEARCH_INTERNAL_URL`** when surfacing search health next to the hub. |
 
 Trace payloads from digigraph may include **`service`** (`digigraph` \| `digisearch` \| `digiquant`) so the transcript can label **which vertical** emitted a span when using hub connector tools.
 
@@ -76,11 +76,11 @@ Apply new tables with `cd apps/digichat && npm run db:migrate` (see [drizzle/000
 
 ## Local dev (fast iteration — no digichat Docker image)
 
-Use the **Next.js dev server** for hot reload. For the fastest loop, run **all backends on the host** (no Docker): digikey, digiquant, digisearch, digismith, digigraph — same ports as Compose (**8005** digikey, **8000–8003** services, optional **4000** LiteLLM).
+Use the **Next.js dev server** for hot reload. For the fastest loop, run **all backends on the host** (no Docker): digikey, digiquant, digisearch, digitrace, digigraph — same ports as Compose (**8005** digikey, **8000–8003** services, optional **4000** LiteLLM).
 
 ### Host backends only (recommended for iteration)
 
-1. **Prereqs:** Repo **`.venv`** with editable installs per [scripts/run_stack_local.sh](scripts/run_stack_local.sh) (`digibase`, `digikey`, `digiquant`, `digigraph`, `digisearch`, `digismith`). Optional: `litellm` on PATH or set **`OPENAI_API_BASE`** in root `.env` to any OpenAI-compatible URL (e.g. Ollama on `127.0.0.1:11434/v1`).
+1. **Prereqs:** Repo **`.venv`** with editable installs per [scripts/run_stack_local.sh](scripts/run_stack_local.sh) (`digibase`, `digikey`, `digiquant`, `digigraph`, `digisearch`, `digitrace`). Optional: `litellm` on PATH or set **`OPENAI_API_BASE`** in root `.env` to any OpenAI-compatible URL (e.g. Ollama on `127.0.0.1:11434/v1`).
 2. **Start stack** (from repo root):
 
    ```bash
@@ -94,8 +94,8 @@ Use the **Next.js dev server** for hot reload. For the fastest loop, run **all b
    - `AUTH_SECRET` — use the **same** value as repo-root `.env` if you already use Auth.js elsewhere, **or** `openssl rand -base64 32`. Set **`NEXTAUTH_SECRET`** to the same string to avoid decrypt errors.
    - **`AUTH_URL`** and **`NEXTAUTH_URL`** — must match the origin you open in the browser. **`npm run dev`** serves **`http://127.0.0.1:3000`** by default (don’t mix `localhost` vs `127.0.0.1` for cookies). If repo-root `.env` uses **`AUTH_URL=...:3005`** for Docker digichat, your **host** `.env.local` should still use **:3000** when using `make digichat-dev`, unless you change the Next port.
    - **`DIGIKEY_URL=http://127.0.0.1:8005`** and **`DIGIKEY_BFF_TOKEN`** — **identical** to **`DIGIKEY_BFF_TOKEN`** on the running digikey process (same as repo-root `.env` when using `make stack-local`). Without this, chat returns **`upstream_auth`**.
-   - `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:8000`, `DIGIQUANT_INTERNAL_URL=http://127.0.0.1:8001`, `DIGISMITH_INTERNAL_URL=http://127.0.0.1:8003`, **`DIGISEARCH_INTERNAL_URL=http://127.0.0.1:8002`**.
-   - **`DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digismith`** so the Ecosystem sheet, health probes, and hub tools see digisearch.
+   - `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:8000`, `DIGIQUANT_INTERNAL_URL=http://127.0.0.1:8001`, `DIGITRACE_INTERNAL_URL=http://127.0.0.1:8003`, **`DIGISEARCH_INTERNAL_URL=http://127.0.0.1:8002`**.
+   - **`DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digitrace`** so the Ecosystem sheet, health probes, and hub tools see digisearch.
    - **`DIGICHAT_DEV_AUTH=1`** and **`DIGICHAT_DEV_PASSWORD`** (e.g. `dev`) — password login at `/login`.
    - **`DIGICHAT_LOCAL_AUTH_KEY`** (`openssl rand -hex 24`) — recommended: **real** Auth.js session on first load ([`local-bootstrap`](digichat/src/app/actions/local-bootstrap.ts)); same experience as signing in, without clicking through `/login` every time.
 
@@ -119,7 +119,7 @@ Older two-service-only script (digiquant + digigraph on **18001** / **18000**): 
 
 **Backend in Docker, UI on the host** (optional):
 
-1. From repo root, start the core stack **without** the `digichat` profile (digigraph, LiteLLM, digiquant, digisearch, digismith on `127.0.0.1`):
+1. From repo root, start the core stack **without** the `digichat` profile (digigraph, LiteLLM, digiquant, digisearch, digitrace on `127.0.0.1`):
 
    ```bash
    make up
@@ -139,7 +139,7 @@ Older two-service-only script (digiquant + digigraph on **18001** / **18000**): 
    - `NEXTAUTH_URL` — set to the **same origin** as `AUTH_URL` (e.g. `http://127.0.0.1:3000`) so `next-auth/react` client sign-in matches the dev password flow.
    - `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:8000`
    - `DIGIQUANT_INTERNAL_URL=http://127.0.0.1:8001`
-   - `DIGISMITH_INTERNAL_URL=http://127.0.0.1:8003`
+   - `DIGITRACE_INTERNAL_URL=http://127.0.0.1:8003`
    - `DIGICHAT_DEV_AUTH=1` — password login without OIDC (use `DIGICHAT_DEV_PASSWORD`, default `dev`).
    - **`DIGICHAT_LOCAL_AUTH_KEY`** — optional random secret (`openssl rand -hex 24`); when set in **non-production**, the app performs a **real** Auth.js credentials sign-in on first load so you skip `/login` without faking sessions.
    - Optional: leave `DIGICHAT_DATABASE_URL` unset — conversations stay in **localStorage** only until you point at Postgres

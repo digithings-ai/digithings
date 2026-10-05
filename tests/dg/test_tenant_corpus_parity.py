@@ -30,18 +30,18 @@ from fastapi import HTTPException
 pytestmark = pytest.mark.unit
 
 #: SAME raw map string used in production — verbatim from
-#: ``infra/digichat-release/compose.profile-a-bundle.override.yml:11`` and
+#: ``infra/digichat-release/compose.profile-a-bundle.override.yml:6`` and
 #: ``apps/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``.
 _RAW_MAP = (
     '{"digithings":{"digisearchIndex":"digithings_docs",'
     '"vaultPathPrefix":"clients/digithings"},'
-    '"occ":{"digisearchIndex":"occ_help",'
+    '"occ":{"digisearchIndex":"occ_help,occ_tickets",'
     '"vaultPathPrefix":"clients/online-compliance-center"}}'
 )
 
 _EXPECTED = {
     "digithings": ("digithings_docs", "clients/digithings"),
-    "occ": ("occ_help", "clients/online-compliance-center"),
+    "occ": ("occ_help,occ_tickets", "clients/online-compliance-center"),
 }
 
 

@@ -14,6 +14,16 @@
  * The catalog below mirrors (but is not generated from — see
  * `apps/digichat/ARCHITECTURE.md`'s BYOK section) `config/byok-providers.json`.
  * `use-byok-key.catalog-parity.test.ts` fails if the two drift apart.
+ *
+ * That mirror stays deliberately hand-written. `config/byok-providers.json`
+ * carries the routing half of a provider (baseUrl, keyPrefix, requiresModel),
+ * which is house policy and changes rarely. The *model* half moved to a
+ * different mechanism in #4994: `config/model-catalog.json` (models.dev
+ * metadata) is generated into `src/lib/model-catalog.generated.ts` by
+ * `scripts/refresh_model_catalog.py`, and `config/byok-providers.json`'s
+ * `fallbackModels` are only *validated* against it, never replaced by it.
+ * The two halves are linked by `MODEL_CATALOG_BYOK_PROVIDER_MAP` (D7's
+ * BYOK-id -> models.dev-provider map), not by generation.
  */
 
 import { isOpenRouterKey } from "@/lib/byok-openrouter";
