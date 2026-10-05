@@ -68,7 +68,15 @@ def _records_from(rows: list[Any]) -> list[tuple[Any, Any, Any]] | None:
     ``list[(position_id, ts_event, pnl)]`` on 1.230.0; ``returns()`` is a
     ``{ts_ns: return}`` dict. All of them reach this function unconverted from
     ``nautilus_runner.py``, so they are recognised here, before the series probes.
-    The value is the last column, and a 2-column row is read as ``(key, value)``.
+
+    Only the 3-column ``(position_id, ts_event, pnl)`` row is accepted. A
+    2-column row is refused rather than guessed at: it could be
+    ``(position_id, pnl)`` or ``(position_id, ts_event)``, and those two readings
+    disagree — the second turns a timestamp into a ``1.7e18`` PnL that ``> 0``
+    then counts as a win. Fabricating a number is the one outcome this module
+    exists to prevent, so the honest answer to an ambiguous row is ``None``. No
+    build in reach emits one: 1.223.0 and 1.228.0 return a ``dict``, which is
+    handled above this function, and 1.230.0 returns 3-column rows.
 
     Every row is checked, not just the first: a row of some other width would
     otherwise be silently truncated to its last element, which reports a number
@@ -79,9 +87,9 @@ def _records_from(rows: list[Any]) -> list[tuple[Any, Any, Any]] | None:
         return None
     records: list[tuple[Any, Any, Any]] = []
     for row in rows:
-        if not isinstance(row, (tuple, list)) or len(row) not in (2, 3):
+        if not isinstance(row, (tuple, list)) or len(row) != 3:
             return None
-        records.append((row[0], row[1] if len(row) == 3 else None, row[-1]))
+        records.append((row[0], row[1], row[2]))
     return records
 
 
@@ -98,7 +106,15 @@ def _from_records(records: list[tuple[Any, Any, Any]]) -> tuple[list[str], list[
     """
     collapsed: dict[tuple[Any, Any], Any] = {}
     for key, ts_event, value in records:
-        collapsed[(key, ts_event)] = value
+        try:
+            collapsed[(key, ts_event)] = value
+        except TypeError:
+            # An unhashable key cannot identify a round trip, so this row cannot
+            # be one. Dropping just this row keeps N a real count; letting the
+            # TypeError escape would discard every good row alongside it and turn
+            # a guarded denominator into an absent one, which is the regression
+            # this leaf exists to remove.
+            continue
 
     kept: list[str] = []
     values: list[float] = []

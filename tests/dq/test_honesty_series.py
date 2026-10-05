@@ -301,14 +301,25 @@ def test_record_generator_is_rewound_not_double_consumed() -> None:
     assert list(generator) == [], "the iterable is consumed exactly once"
 
 
-def test_two_column_rows_are_read_as_key_and_value() -> None:
-    """A 2-element row carries no ts_event; the value is still the last column."""
-    assert normalize_series([("P-1", 10.0), ("P-2", -4.0)]) == (["0", "1"], [10.0, -4.0])
+def test_two_column_rows_fail_closed_rather_than_guessing_the_value_column() -> None:
+    """A 2-element row is ambiguous, so it is refused rather than read as records.
+
+    It could be ``(position_id, pnl)`` or ``(position_id, ts_event)``, and the
+    second reading turns a timestamp into a 1.7e18 PnL that ``> 0`` counts as a
+    win. Fabricating a number is the one outcome this module exists to prevent,
+    so the answer is None. No build in reach emits a 2-column row.
+    """
+    assert normalize_series([("P-1", 10.0), ("P-2", -4.0)]) is None
+    assert normalize_series([("P-1", 1_700_000_000_000_000_000)]) is None
+    assert normalize_series([[0, 1.0], [1, 2.0]]) is None
 
 
 def test_numeric_record_key_becomes_a_real_date_not_a_digit_prefix() -> None:
     """``ts_event`` is a nanosecond int; the date must be a date, not ``str(ns)[:10]``."""
-    rows = [(1_700_000_000_000_000_000, 10.0), (1_700_086_400_000_000_000, -4.0)]
+    rows = [
+        ("P-1", 1_700_000_000_000_000_000, 10.0),
+        ("P-2", 1_700_086_400_000_000_000, -4.0),
+    ]
 
     dates, _ = normalize_series(rows)
 
@@ -321,11 +332,35 @@ def test_a_row_index_is_not_read_as_an_epoch_timestamp() -> None:
     ``(index, value)`` rows are a real thing to pass, and reading the index as
     epoch nanoseconds fabricates 1970-01-01 for every row — a wrong x-axis label
     where the honest answer is a position string. This is the case that would
-    otherwise make the records path a new wrong-answer path.
+    otherwise make the records path a new wrong-answer path. A 2-column
+    ``(index, value)`` row is now refused outright, which satisfies the same
+    intent by a stronger route: absent rather than wrong.
     """
-    assert normalize_series([(0, 1.0), (1, 2.0)]) == (["0", "1"], [1.0, 2.0])
-    assert normalize_series([[1, 2], [3, 4], [5, 6]]) == (["0", "1", "2"], [2.0, 4.0, 6.0])
+    assert normalize_series([(0, 1.0), (1, 2.0)]) is None
+    assert normalize_series([[1, 2], [3, 4], [5, 6]]) is None
+    assert normalize_series([(0, 0, 1.0), (1, 1, 2.0)])[0] == ["0", "1"]
     assert normalize_series([("P-1", 1_700_000_000_000_000_000, 10.0)])[0] == ["2023-11-14"]
+
+
+def test_unhashable_record_key_drops_only_its_own_row() -> None:
+    """One row whose key cannot be a dict key must not take the whole series with it.
+
+    The outer handler turns any escaping exception into None, so a single
+    unhashable key used to discard every good row beside it — turning a guarded
+    denominator into an absent one, the exact regression this leaf removes.
+    """
+    rows = [
+        ("P-1", 1_700_000_000_000_000_000, 10.0),
+        (["unhashable"], 1_700_000_008_640_000_000, -99.0),
+        ("P-2", 1_700_000_017_280_000_000, 5.0),
+    ]
+
+    result = normalize_series(rows)
+
+    assert result is not None, "one bad row must not empty the denominator"
+    dates, values = result
+    assert values == [10.0, 5.0], "only the unhashable row is dropped"
+    assert len(dates) == 2
 
 
 def test_a_row_of_another_width_is_dropped_rather_than_truncated() -> None:
@@ -352,7 +387,7 @@ def test_exact_midnight_utc_stamps_round_trip_to_the_same_day() -> None:
     for offset in range(1_826):  # every exact-midnight-UTC stamp for five years
         moment = epoch + timedelta(days=19_723 + offset)  # 2024-01-01 onward
         stamp = (moment - epoch).days * day_ns  # integer ns, no float anywhere
-        labelled = normalize_series([(stamp, 1.0)])[0][0]
+        labelled = normalize_series([("P-1", stamp, 1.0)])[0][0]
         if labelled != moment.strftime("%Y-%m-%d"):
             wrong.append((stamp, labelled))
     assert wrong == [], f"{len(wrong)} midnights mislabelled, first {wrong[:3]}"
