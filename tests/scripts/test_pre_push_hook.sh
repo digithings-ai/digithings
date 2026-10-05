@@ -12,6 +12,10 @@
 #         • unresolvable diff base / failed diff refuse rather than skip
 #         • sensitive-path grep is not -q (pipefail + SIGPIPE false negative)
 #
+# DIG-1122 — execution-workspace branches (DIG-<n>-<title-slug>, the shape the
+#         Paperclip harness checks out) are in the taxonomy, while the
+#         near-misses that a loose prefix match would also admit are not.
+#
 # Usage: bash tests/scripts/test_pre_push_hook.sh
 # CI: pytest wrapper tests/scripts/test_pre_push_hook.py under ruff-and-scripts.
 set -euo pipefail
@@ -203,6 +207,37 @@ assert_exit 0 "non-sensitive task branch update (no trailer needed)" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/task/2483-safe $SAFE_TIP refs/heads/task/2483-safe $DEV_SHA"
 
+# ── DIG-1122: execution-workspace branches DIG-<n>-<title-slug> ──────────────
+# Paperclip checks out execution workspaces on `DIG-<n>-<title-slug>`, which
+# matched no taxonomy arm: every commit made there was unpushable by
+# construction. Uses real shas so the acceptance case also clears the scan.
+DIG_WS='DIG-47-digithings-cron-twelve-x-dispatch-counts-do-not-match-the-cron-duplicate-dispatches-and-silent-gaps'
+assert_exit 0 "execution-workspace branch DIG-<n>-<slug> accepted" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/$DIG_WS $SAFE_TIP refs/heads/$DIG_WS $DEV_SHA"
+
+# The narrowness cases matter as much as the acceptance one: a regex written as
+# a bare `DIG[a-z-]*` prefix would accept all three of these.
+assert_exit 1 "DIG-noNumber-slug refused (number required)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG-noNumber-slug $SAFE_TIP refs/heads/DIG-noNumber-slug $DEV_SHA"
+
+assert_exit 1 "DIGITHINGS/x refused (no digit after DIG)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIGITHINGS/x $SAFE_TIP refs/heads/DIGITHINGS/x $DEV_SHA"
+
+assert_exit 1 "DIG/47-slug refused (slash namespace is not the harness shape)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG/47-slug $SAFE_TIP refs/heads/DIG/47-slug $DEV_SHA"
+
+assert_exit 1 "DIG-47-refused-with-no-slug (slug required)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG-47- $SAFE_TIP refs/heads/DIG-47- $DEV_SHA"
+
+assert_exit 1 "DIG-47-SLUG refused (slug is lowercase only)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG-47-SLUG $SAFE_TIP refs/heads/DIG-47-SLUG $DEV_SHA"
+
 # ── #2483: live-trading co-sign matrix ───────────────────────────────────────
 LIVE_BLOCKED="$(make_live_tip <<'EOF'
 feat: touch live path
@@ -337,6 +372,38 @@ if grep -nE 'bot/\[a-z0-9-\]\+' "$HOOK" >/dev/null; then
   pass=$((pass + 1))
 else
   echo "FAIL [structure] branch_regex missing bot/[a-z0-9-]+"
+  fail=$((fail + 1))
+fi
+
+# DIG-1122: the execution-workspace arm, with its digit required, plus a help
+# line that names it. A refusal message that omits the shape the harness
+# actually produces is what made this look like a config error, not a policy gap.
+if grep -nE 'DIG/\[0-9\]\+\[a-z0-9-\]\+' "$HOOK" >/dev/null; then
+  echo "PASS [structure] DIG-<n>-<slug> present in branch_regex"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] branch_regex missing DIG/[0-9]+-[a-z0-9-]+"
+  fail=$((fail + 1))
+fi
+
+if awk '
+  /^[[:space:]]*DIG-\x3cn\x3e-\x3cslug\x3e/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] help text lists DIG-<n>-<slug>"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] Allowed-patterns help must list DIG-<n>-<slug>"
+  fail=$((fail + 1))
+fi
+
+# BRANCHING.md carries the no-blanket-push rule; the regex without it is the
+# destructive half of this change.
+if grep -nE 'DIG-\x3cn\x3e-\x3c' "$REPO_ROOT/BRANCHING.md" >/dev/null; then
+  echo "PASS [structure] BRANCHING.md documents the execution-workspace branch"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] BRANCHING.md must document DIG-<n>-<slug>"
   fail=$((fail + 1))
 fi
 
