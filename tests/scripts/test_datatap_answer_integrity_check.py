@@ -257,7 +257,10 @@ def test_a_200_that_is_not_an_event_stream_is_could_not_run(content_type: str) -
 def test_a_truncated_stream_that_never_sent_text_is_could_not_run() -> None:
     body = _sse({"type": "start"}, {"type": "tool-input-available", "toolName": "azure_ai_search"})
     code, _ = _run_main(
-        {"/api/chat$": _ok("text/event-stream", body), "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)}
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
     )
     assert code == mod.COULD_NOT_RUN == 2
 
@@ -265,7 +268,10 @@ def test_a_truncated_stream_that_never_sent_text_is_could_not_run() -> None:
 def test_a_malformed_sse_frame_is_could_not_run() -> None:
     body = 'data: {"type":"text-delta","delta":"partial\n\ndata: {not json\n\n'
     code, _ = _run_main(
-        {"/api/chat$": _ok("text/event-stream", body), "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)}
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
     )
     assert code == mod.COULD_NOT_RUN == 2
 
@@ -277,7 +283,9 @@ def test_discovery_failure_is_could_not_run_not_a_failure() -> None:
 
 
 def test_a_page_with_no_embed_token_is_could_not_run() -> None:
-    code, _ = _run_main({"/chat$": _ok("text/html; charset=utf-8", "<html><body>redesigned</body></html>")})
+    code, _ = _run_main(
+        {"/chat$": _ok("text/html; charset=utf-8", "<html><body>redesigned</body></html>")}
+    )
     assert code == mod.COULD_NOT_RUN == 2
 
 
@@ -303,7 +311,9 @@ def test_scan_answer_reports_identifiers_and_name_lists() -> None:
 
 
 def test_scan_answer_is_quiet_on_a_refusal() -> None:
-    assert mod.scan_answer("I don't have access to customer records, so I can't help with that.") == []
+    assert (
+        mod.scan_answer("I don't have access to customer records, so I can't help with that.") == []
+    )
 
 
 def test_a_single_name_in_prose_is_not_a_customer_list() -> None:
@@ -379,7 +389,9 @@ def test_main_opens_no_real_socket(monkeypatch: pytest.MonkeyPatch) -> None:
 
     code, fake = _run_main(
         {
-            "/api/chat$": _ok("text/event-stream", _answer("I don't have access to customer records.")),
+            "/api/chat$": _ok(
+                "text/event-stream", _answer("I don't have access to customer records.")
+            ),
             "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
         }
     )
@@ -400,3 +412,91 @@ def test_http_request_is_the_only_door_to_the_network() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     for banned in ("import requests", "import httpx", "urlopen(", "socket.", "http.client"):
         assert banned not in source, f"{banned!r} would open a second door to the network"
+
+
+# --------------------------------------------------------------------------
+# The wording on stdout, and the crash guard.
+#
+# Both of these were found by mutating the script and watching the suite stay
+# green, so they are recorded here as the reason they are pinned at all.
+# --------------------------------------------------------------------------
+
+
+def test_could_not_run_output_never_reads_as_a_pass(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An exit-2 run must not put the word PASS on stdout.
+
+    The routine that reads this check (DIG-307) files an issue when the exit code
+    is non-zero, and a human reads the captured output to decide what it means.
+    Exit 2 means *our check was unable to see*. If that path ever printed PASS,
+    the operator sees a green word and an issue, and the only coherent reading is
+    a leak — which is the false SEV1 this exit-code split exists to prevent.
+
+    Pinned on stdout rather than on the exit code because the exit code was
+    already right; the mutation that motivated this test returned the correct 2
+    while printing the word PASS, and all 39 tests passed.
+
+    The 402 is deliberate: it is the probe-level could-not-run, the one this
+    feature most needs to keep off the exit-1 path, and it needs the discovery
+    entry present or the probe is never reached and this silently degrades into
+    a test of the discovery branch instead.
+    """
+    code, fake = _run_main(
+        {
+            "/api/chat$": _error(402, json.dumps({"error": "trial_gate"})),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+
+    assert any(call["url"].endswith("/api/chat") for call in fake.calls), (
+        "fixture defect: the 402 branch under test was never reached"
+    )
+
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2
+    # Scoped to our own verdict line on purpose. The reason string carries the
+    # client's error field verbatim, so a bare "PASS" in out would also fail on
+    # an upstream string we neither control nor can fix.
+    verdict = next(line for line in out.splitlines() if "trial_gate" not in line)
+    assert not verdict.startswith("PASS"), f"exit 2 must not print a PASS verdict; got:\n{out}"
+    assert "COULD NOT RUN" in out, f"exit 2 must name itself on stdout; got:\n{out}"
+    assert "unable to see" in out, (
+        "exit 2 must say the check could not see, so it is never read as a "
+        f"fabrication verdict; got:\n{out}"
+    )
+
+
+def test_a_crash_inside_the_check_is_could_not_run_never_a_failure(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unexpected exception must leave as exit 2, not as exit 1.
+
+    ``main`` catches ``BaseException`` and routes it to ``_could_not_run``. That
+    guard exists because exit 1 is reserved for a real HTTP 200 answer that
+    leaked a customer record: if an unhandled crash ever reached the shell as a
+    status of 1, our own bug would be filed as a leak on a client account.
+
+    The mutation that motivated this test removed the guard and all 39 tests
+    still passed. The reason is that ``_check`` has its own broad handlers, so a
+    defect inside a probe never reaches ``main``'s guard at all. This test
+    therefore replaces ``_check`` itself, which is the only way to reach the
+    guard — and the guard's whole job is the case no other test can reach.
+    """
+    original = mod._check
+
+    def _explode(argv: list[str] | None = None) -> int:
+        raise RuntimeError("simulated defect nobody enumerated")
+
+    mod._check = _explode
+    try:
+        code = mod.main([])
+    finally:
+        mod._check = original
+
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2, (
+        f"a crash inside the check is the check being unable to see, not a leak; exit was {code}"
+    )
+    assert "PASS" not in out, f"a crash must never print PASS; got:\n{out}"
+    assert "RuntimeError" in out, f"exit 2 must name the defect; got:\n{out}"
