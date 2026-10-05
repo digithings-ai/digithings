@@ -65,6 +65,7 @@ crons = [
   "17 6 * * *",        # smoke-site
   "7 0 * * MON-FRI",   # twelve-x-asia
   "12 7 * * MON-FRI",  # twelve-x-london
+  "5 5 * * *",
   "17 12 * * MON-FRI", # twelve-x-new-york
   "4 */4 * * *",       # twelve-x-market-context-intraday
   "30 5 * * *",        # twelve-x-market-context-daily
