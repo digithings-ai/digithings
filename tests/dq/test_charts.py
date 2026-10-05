@@ -378,3 +378,73 @@ def test_rolling_equity_accepts_polars_series() -> None:
     pl_series = pl.Series("ret", rng.normal(0.001, 0.02, 80).tolist())
     result = _build_rolling_equity_chart(pl_series)
     assert result is None or _is_figure(result)
+
+
+# Criterion 13 — the chart path and the model path count the same series the same way
+# (DIG-428, L6 of DIG-474). The anti-drift locks below compare the chart entry points
+# against digiquant.stats.normalize_series directly; they must never be weakened.
+
+#: One value of each junk kind the honest denominator must drop: null, NaN, ±inf.
+_MESSY = [10.0, None, -5.0, float("nan"), float("inf"), 3.0, -1.0, float("-inf"), 9.0]
+#: Dates for the pandas shape only — normalize_series truncates these with ``[:10]``.
+_MESSY_DATES = [datetime.date(2023, 1, 1) + datetime.timedelta(days=i) for i in range(len(_MESSY))]
+_SHAPES = {
+    "pandas": _MockSeries(_MESSY, _MESSY_DATES),
+    "polars": pl.Series("value", _MESSY),
+    "list": _MESSY,
+}
+
+
+def _model_values(series: object) -> list[float]:
+    """The model path's view of a series — the values normalize_series keeps."""
+    from digiquant.stats import normalize_series
+
+    return normalize_series(series)[1]
+
+
+@pytest.mark.unit
+def test_extract_frame_agrees_with_normalize_series() -> None:
+    """_extract_frame must keep exactly the rows the model path counts (nulls/NaN/inf dropped)."""
+    from digiquant.charts.common import _extract_frame
+
+    frame = _extract_frame(_MESSY)
+    assert len(frame) == len(_model_values(_MESSY)) == 5
+    assert frame.schema == {"date": pl.Utf8, "value": pl.Float64}
+
+
+@pytest.mark.unit
+def test_count_winning_trades_agrees_with_normalize_series() -> None:
+    """The chart win count must equal the model path's ``> 0`` count over the same values."""
+    from digiquant.charts.trades import count_winning_trades
+
+    assert count_winning_trades(_MESSY) == sum(1 for v in _model_values(_MESSY) if v > 0) == 3
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("shape", sorted(_SHAPES))
+def test_anti_drift_lock_holds_for_every_series_shape(shape: str) -> None:
+    """Both locks hold for the pandas shape, the polars shape and a plain list."""
+    from digiquant.charts.common import _extract_frame
+    from digiquant.charts.trades import count_winning_trades
+
+    series = _SHAPES[shape]
+    frame = _extract_frame(series)
+    model = _model_values(series)
+    assert len(frame) == len(model)
+    assert count_winning_trades(series) == sum(1 for v in model if v > 0)
+
+
+@pytest.mark.unit
+def test_to_pandas_series_is_never_routed_through_to_pandas() -> None:
+    """A ``.to_pandas`` attribute must never be reached — see charts/trades.py:21-25."""
+
+    class _NoPyarrow(list):
+        def to_pandas(self):
+            raise ModuleNotFoundError("No module named 'pyarrow'")  # pragma: no cover
+
+    from digiquant.charts.common import _extract_frame
+    from digiquant.charts.trades import count_winning_trades
+
+    series = _NoPyarrow([1.0, -2.0, 3.0, float("nan")])
+    assert len(_extract_frame(series)) == 3
+    assert count_winning_trades(series) == 2
