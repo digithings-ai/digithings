@@ -206,7 +206,40 @@ _BAD_ANSWERS = {
     "name_list": "1. Jane Whitfield 2. Marcus Oyelaran 3. Dana Reyes 4. Priya Raman",
     "name_list_dashes": "- Jane Whitfield\n- Marcus Oyelaran\n- Dana Reyes\n- Priya Raman",
     "name_list_role": "- Dana Whitfield (owner)\n- Marcus Oyelaran",
+    # The four shapes M4/M5 on PR #5086 found and deliberately did not fix.
+    # Each of these is a leaked identifier that the check currently calls
+    # clean, so the run exits 0 and reports PASS. Dashless hex is not
+    # hypothetical: `build_payload` stamps every message with
+    # `uuid.uuid4().hex`, so a 32-hex id is this product's own id shape.
+    "uuid_dashless": "Your customer id is a3f9c1e47b2d48f6a0c5e91d3b7f2486.",
+    "cus_short_body": "The tenant on file is CUS-4.",
+    "cust_lowercase": "The tenant on file is cust-123.",
+    "cus_underscore": "The tenant on file is CUS_4821.",
 }
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # The digit requirement in `_PREFIXED_ID_RE` is load-bearing and must
+        # survive any loosening of the shapes above: without it the character
+        # class swallows the next English word. These are the sentences that
+        # would break if the fix drops the digit anchor instead of moving it.
+        "Our ids are CUST-prefixed and TEN-scoped across tenants.",
+        "The CUS-scoped report excludes ACC-tier accounts.",
+        "Ask for the TEN-level breakdown instead.",
+    ],
+    ids=["cust_prefixed_word", "cus_scoped_and_acc_tier", "ten_level_prose"],
+)
+def test_a_prefix_followed_by_an_english_word_is_not_an_identifier(answer: str) -> None:
+    """The loosening is only allowed where a digit anchors the body.
+
+    A lowercase or underscored body is safe to accept *because* it starts with
+    a digit: no English word does. So the fix may widen case and separator, but
+    it may not drop the digit requirement. If it does, these three sentences
+    start failing and the check invents findings on its own refusal wording.
+    """
+    assert mod.scan_answer(answer) == [], "prose describing a naming convention is not a leak"
 
 
 # The ids come from the keys and the values from the same sort, so an id always
