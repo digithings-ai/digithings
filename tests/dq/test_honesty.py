@@ -15,7 +15,12 @@ pytestmark = pytest.mark.unit
 
 from digiquant.stats.honesty import (  # noqa: E402
     DISCLAIMER,
+    REFUSE_FLOOR,
+    WARN_FLOOR,
+    GuardResult,
     HonestRate,
+    HonestRateBlock,
+    StabilitySplit,
     apply_guards,
     format_honest_rate,
     honest_rate,
@@ -154,3 +159,68 @@ def test_disclaimer_is_verbatim() -> None:
     assert DISCLAIMER == (
         "Historical conditional frequencies with sample sizes. Not predictions, not advice."
     )
+
+
+def test_block_inherits_every_honest_rate_field_and_adds_only_its_own() -> None:
+    """k/n/estimate/ci_lo/ci_hi/low_sample/refused come from the parent exactly once."""
+    parent = set(HonestRate.model_fields)
+    block = set(HonestRateBlock.model_fields)
+    assert parent <= block  # n=40
+    assert parent == {"k", "n", "estimate", "ci_lo", "ci_hi", "low_sample", "refused"}  # n=40
+    assert block - parent == set(
+        "schema basis n_unit warn_floor refuse_floor stability disclaimer".split()
+    )  # n=40
+    assert HonestRateBlock(k=30, n=40).k == 30 and HonestRateBlock(k=30, n=40).n == 40
+
+
+def test_block_schema_basis_and_n_unit_defaults_are_verbatim() -> None:
+    """Provenance strings ship exactly as specified — not paraphrased."""
+    b = HonestRateBlock(k=30, n=40)  # n=40
+    assert b.schema == "1.0"  # n=40
+    assert b.basis == "closed round trips (Nautilus realized PnL, one per closed position)"  # n=40
+    assert b.n_unit == "closed round trips"  # n=40
+
+
+def test_block_disclaimer_defaults_to_module_constant() -> None:
+    """The block carries the same fixed copy as the module constant."""
+    assert HonestRateBlock(k=30, n=40).disclaimer == DISCLAIMER  # n=40
+
+
+def test_block_stability_defaults_to_none_then_accepts_a_split() -> None:
+    """stability is optional; a populated StabilitySplit round-trips intact."""
+    assert HonestRateBlock(k=30, n=40).stability is None  # n=40
+    split = stability_split(20, 12, 20, 11)  # n1=20, n2=20
+    b = HonestRateBlock(k=23, n=40, stability=split)  # n=40
+    assert isinstance(b.stability, StabilitySplit)  # n=40
+    assert b.stability.agree is True and b.stability.first_half.n == 20  # n=40
+
+
+def test_block_builds_at_k_equals_n() -> None:
+    """k == n (every closed round trip a win) is a legal, unguarded block."""
+    b = HonestRateBlock(k=40, n=40)  # n=40
+    assert b.k == b.n == 40  # n=40
+    assert b.refused is False and b.low_sample is False  # n=40
+    assert b.estimate == pytest.approx(1.0, abs=1e-10) and b.ci_hi == 1  # n=40
+
+
+def test_block_refuses_below_refuse_floor_and_hides_the_estimate() -> None:
+    """n=9 (below refuse=10) — refused, and no number survives to be rendered."""
+    b = HonestRateBlock(k=5, n=9)  # n=9
+    assert b.refused is True and b.low_sample is True  # n=9
+    assert b.estimate is None and b.ci_lo is None and b.ci_hi is None  # n=9
+
+
+def test_block_flags_low_sample_below_warn_floor() -> None:
+    """n=29 (below warn=30, at/above refuse=10) — low sample but not refused."""
+    b = HonestRateBlock(k=14, n=29)  # n=29
+    assert b.low_sample is True and b.refused is False  # n=29
+    assert b.estimate == pytest.approx(14 / 29, abs=1e-10)  # n=29
+
+
+def test_block_carries_its_own_floors_and_applies_them() -> None:
+    """Floors are live fields on the block, not just decoration off GuardResult."""
+    assert HonestRateBlock(k=30, n=40).warn_floor == WARN_FLOOR  # n=40
+    assert HonestRateBlock(k=30, n=40).refuse_floor == REFUSE_FLOOR  # n=40
+    assert GuardResult.model_fields["refuse_floor"].default == REFUSE_FLOOR  # n=40
+    lax = HonestRateBlock(k=5, n=12, warn_floor=5, refuse_floor=5)  # n=12
+    assert lax.refused is False and lax.low_sample is False  # n=12
