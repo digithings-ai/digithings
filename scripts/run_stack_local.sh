@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start digikey, digiquant, digisearch, digismith, digigraph (+ optional LiteLLM) on the same ports as Docker Compose
+# Start digikey, digiquant, digisearch, digitrace, digigraph (+ optional LiteLLM) on the same ports as Docker Compose
 # (8005 digikey, 8000–8003, 4000). No containers. digichat: `make digichat-dev`.
 #
 # Prerequisites (repo-root .venv recommended):
@@ -9,7 +9,7 @@
 #     -e ./digillm \
 #     -e "./digigraph[dev]" \
 #     -e ./digisearch \
-#     -e "./digismith[langsmith]"
+#     -e "./digitrace[tracing]"
 # Optional: pip install 'litellm[proxy]'  (or set OPENAI_API_BASE in .env to a real OpenAI-compatible URL)
 #
 # Usage: ./scripts/run_stack_local.sh
@@ -41,7 +41,7 @@ else
   PYTHON="python3"
 fi
 
-PYTHONPATH="${ROOT}/digibase/src:${ROOT}/digikey/src:${ROOT}/digiquant/src:${ROOT}/digigraph/src:${ROOT}/digisearch/src:${ROOT}/digismith/src:${ROOT}"
+PYTHONPATH="${ROOT}/digibase/src:${ROOT}/digikey/src:${ROOT}/digiquant/src:${ROOT}/digigraph/src:${ROOT}/digisearch/src:${ROOT}/digitrace/src:${ROOT}"
 export PYTHONPATH
 
 DATA_DIR="${DIGIQUANT_DATA_DIR:-$ROOT/digiquant/data}"
@@ -153,9 +153,9 @@ env PYTHONPATH="$PYTHONPATH" \
 append_pid $!
 sleep 1
 
-echo "Starting digismith on http://127.0.0.1:${PORT_SMITH} ..."
+echo "Starting digitrace on http://127.0.0.1:${PORT_SMITH} ..."
 env PYTHONPATH="$PYTHONPATH" \
-  "$PYTHON" -m uvicorn digismith.server:app --host 127.0.0.1 --port "$PORT_SMITH" &
+  "$PYTHON" -m uvicorn digitrace.server:app --host 127.0.0.1 --port "$PORT_SMITH" &
 append_pid $!
 sleep 1
 
@@ -164,7 +164,7 @@ env PYTHONPATH="$PYTHONPATH" \
   DIGIQUANT_URL="http://127.0.0.1:${PORT_QUANT}" \
   DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" \
   DIGISEARCH_URL="http://127.0.0.1:${PORT_SEARCH}" \
-  DIGISMITH_URL="http://127.0.0.1:${PORT_SMITH}" \
+  DIGITRACE_URL="http://127.0.0.1:${PORT_SMITH}" \
   OPENAI_API_BASE="$OPENAI_API_BASE" \
   DIGI_CONFIG_PATH="$DIGI_CONFIG_PATH" \
   DIGI_MODEL_MODES_FILE="$DIGI_MODEL_MODES_FILE" \
@@ -192,7 +192,7 @@ echo "  digikey:    http://127.0.0.1:${PORT_DK}/health  (issue keys: python -m d
 echo "  LiteLLM:    http://127.0.0.1:${LLM_PORT}/health   (OPENAI_API_BASE=$OPENAI_API_BASE)"
 echo "  digiquant:  http://127.0.0.1:${PORT_QUANT}/health"
 echo "  digisearch: http://127.0.0.1:${PORT_SEARCH}/health"
-echo "  digismith:  http://127.0.0.1:${PORT_SMITH}/health"
+echo "  digitrace:  http://127.0.0.1:${PORT_SMITH}/health"
 echo "  digigraph:  http://127.0.0.1:${PORT_GRAPH}/health"
 echo ""
 echo "digichat (Next.js, hot reload):"

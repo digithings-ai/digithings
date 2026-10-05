@@ -1,0 +1,45 @@
+{
+  "endpointSource": "docs/openapi/*.json (paths)",
+  "generatedAt": "2026-10-02T09:31:50Z",
+  "mcpSource": "module MCP server decorator sites",
+  "modules": {
+    "digichat": {
+      "endpoints": 7
+    },
+    "digigraph": {
+      "endpoints": 15,
+      "mcpTools": 5
+    },
+    "digikey": {
+      "endpoints": 9
+    },
+    "digiquant": {
+      "endpoints": 23,
+      "mcpTools": 127
+    },
+    "digisearch": {
+      "endpoints": 36,
+      "mcpTools": 16
+    },
+    "digitrace": {
+      "endpoints": 3
+    },
+    "digivault": {
+      "endpoints": 14,
+      "mcpTools": 5
+    }
+  },
+  "versionSource": "pyproject.toml / package.json declared version",
+  "versions": {
+    "digibase": "0.1.0",
+    "digichat": "2.4.0",
+    "digiclaw": "0.1.0",
+    "digigraph": "0.1.0",
+    "digikey": "0.1.0",
+    "digiquant": "0.1.0",
+    "digisearch": "0.1.0",
+    "digiskills": "0.2.1",
+    "digitrace": "0.1.0",
+    "digivault": "0.1.0"
+  }
+}

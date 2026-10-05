@@ -11,6 +11,10 @@ is absent. It is a follow-up to #4069 (the family landed in PR #4085) and was
 last widened by #4837 (130-function coverage: 15 probe-backed Cloud reads and
 13 inert workspace/broker tools joined the gated set).
 
+> **Credential ownership**: See `docs/ops/credential-ownership.md` for the single-owner rule.
+> Canonical store = GitHub Actions `cron` environment secret `GLOOMBERB_SESSION_COOKIE`.
+> Local `.env` is developer convenience only. Refresh path = manual `gh secret set`.
+
 ## What happens without the cookie
 
 The absent-cookie path is a **supported state**, not a failure: the 47 free tools
@@ -20,7 +24,7 @@ the network.
 - **Gated tools return `auth_required` with no HTTP request.** When
   `GLOOMBERB_SESSION_COOKIE` is unset the client short-circuits before any
   request and returns a non-retryable `DigifetchError(code="auth_required",
-  message="… GLOOMBERB_SESSION_COOKIE is not set")` (`client.py:2248-2254`).
+  message="... GLOOMBERB_SESSION_COOKIE is not set")` (`client.py:2248-2254`).
   Zero bytes leave the process.
 - **Pro-only tools return `pro_required` for a valid free session.** A verified
   free session that calls `digifetch_transcripts`, `digifetch_screener`, or
@@ -139,7 +143,7 @@ runbook.
 `GLOOMBERB_SESSION_COOKIE` **is forwarded** to the hosted container
 (wiring shipped in #4260): the name is in `DigiQuantMcpContainer.envVars`
 (`apps/digithings-stack-cloudflare/src/index.ts`) beside
-`DIGIQUANT_MCP_SCOPE`, `DIGIQUANT_MARKET_DATA_BACKEND`, `FRED_API_KEY`, and the
+`DIGIQUANT_MCP_SCOPE`, `DIGIQUANT_MARKET_DATA_BACKEND`, and the
 four `R2_*` names; that set is pinned by `tests/scripts/test_mcp_container.py`.
 Until an operator sets the secret the variable is empty, so the gated tools on
 that surface still answer the typed `auth_required`.
@@ -162,8 +166,10 @@ part of setting the cookie.
 No `GLOOMBERB_` variable is set in any workflow today (verified 2026-09-16), so
 the pipeline's in-process agent surface filters the gated tools out
 (`agent_tools.py:261-292`) and there is nothing to rotate there yet. If a
-pipeline phase ever needs a gated tool, the placement is a repository secret
-feeding that job — tracked as future work, deliberately not documented as live.
+pipeline phase ever needs a gated tool, the placement is the **GitHub Actions
+`cron` environment secret** `GLOOMBERB_SESSION_COOKIE` (canonical store per
+`docs/ops/credential-ownership.md`) — tracked as future work, deliberately not
+documented as live.
 
 ## Verify the cookie works
 
@@ -212,8 +218,9 @@ session is valid but not entitled to a Pro route (you called one of the three
 
 ## Related
 
-- Design spec: [`docs/superpowers/specs/2026-09-16-gloomberb-session-cookie-runbook-design.md`](../superpowers/specs/2026-09-16-gloomberb-session-cookie-runbook-design.md)
-- Family spec: [`docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../superpowers/specs/2026-09-12-digifetch-scoping-design.md)
-- Component map: [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md)
+- Credential ownership register: `docs/ops/credential-ownership.md`
+- Design spec: `docs/superpowers/specs/2026-09-16-gloomberb-session-cookie-runbook-design.md`
+- Family spec: `docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`
+- Component map: `digiquant/ARCHITECTURE.md`
 - Origin / tracking issues: [#4069](https://github.com/digithings-ai/digithings/issues/4069), [#4110](https://github.com/digithings-ai/digithings/issues/4110), [#4101](https://github.com/digithings-ai/digithings/issues/4101), [#4837](https://github.com/digithings-ai/digithings/issues/4837)
 - Hosted-container forwarding (shipped): [#4260](https://github.com/digithings-ai/digithings/issues/4260)

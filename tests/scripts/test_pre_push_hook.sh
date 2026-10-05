@@ -183,6 +183,21 @@ assert_exit 1 "disallowed remote URL" \
   "$FIXTURE" "https://evil.example/digithings.git" \
   "refs/heads/task/1-legit $SAFE_TIP refs/heads/task/1-legit $ZERO40"
 
+ORIGIN_MIRROR_URL='https://origin.cursor.com/chrizefan/digithings.git'
+ORIGIN_LOCAL_URL='https://origin.cursor.com/chrizefan/digithings.git/local'
+assert_exit 0 "promotion branch to Origin mirror URL" \
+  "$FIXTURE" "$ORIGIN_MIRROR_URL" \
+  "refs/heads/task/2483-safe $SAFE_TIP refs/heads/task/2483-safe $DEV_SHA"
+assert_exit 1 "origin/* draft toward GitHub" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/origin/draft $SAFE_TIP refs/heads/origin/draft $ZERO40"
+assert_exit 0 "origin/* draft toward Origin-only endpoint" \
+  "$FIXTURE" "$ORIGIN_LOCAL_URL" \
+  "refs/heads/origin/draft $SAFE_TIP refs/heads/origin/draft $ZERO40"
+assert_exit 1 "promotion branch toward Origin-only endpoint" \
+  "$FIXTURE" "$ORIGIN_LOCAL_URL" \
+  "refs/heads/task/1-legit $SAFE_TIP refs/heads/task/1-legit $ZERO40"
+
 # ── non-sensitive in-taxonomy push allowed without trailer ───────────────────
 assert_exit 0 "non-sensitive task branch update (no trailer needed)" \
   "$FIXTURE" "$ORIGIN_URL" \

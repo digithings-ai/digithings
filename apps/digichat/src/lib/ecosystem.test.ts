@@ -38,7 +38,7 @@ describe("parseEndpointsPayload", () => {
       parseEndpointsPayload({
         digigraphUrl: "http://127.0.0.1:8000",
         digiquantUrl: "http://10.0.0.1:8001",
-        digismithUrl: "http://127.0.0.1:8003",
+        digitraceUrl: "http://127.0.0.1:8003",
       })
     ).toBeNull();
   });
@@ -47,7 +47,7 @@ describe("parseEndpointsPayload", () => {
     const parsed = parseEndpointsPayload({
       digigraphUrl: "http://127.0.0.1:8000",
       digiquantUrl: "http://127.0.0.1:8001",
-      digismithUrl: "http://127.0.0.1:8003",
+      digitraceUrl: "http://127.0.0.1:8003",
       digisearchUrl: "http://127.0.0.1:8002",
     });
     expect(parsed?.digigraphUrl).toBe("http://127.0.0.1:8000");

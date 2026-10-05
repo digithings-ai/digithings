@@ -197,27 +197,6 @@
       "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
       "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
     },
-    "/openwiki/digismith/architecture.md": {
-      "pageVersion": "sha256:cd86de9328fafbcd5f199dd2dae35e19255bf25747a8d1bdcc58c4e9ffd78e39",
-      "completedBy": "opencode",
-      "completedRunId": "474bb78a-fd57-4aa5-b23b-e7b077d64042",
-      "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
-      "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
-    },
-    "/openwiki/digismith/status-api-and-operations.md": {
-      "pageVersion": "sha256:be8d2e5e70181b5a5ed42a59760cfe9cd224cf42f5df144a8f8da7c8a29c751d",
-      "completedBy": "opencode",
-      "completedRunId": "474bb78a-fd57-4aa5-b23b-e7b077d64042",
-      "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
-      "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
-    },
-    "/openwiki/digismith/tracing-and-redaction.md": {
-      "pageVersion": "sha256:3ca61a930eda25bccef15fc481a2a16d6f526aeffcc5c6efc766e14cab7e10ea",
-      "completedBy": "opencode",
-      "completedRunId": "474bb78a-fd57-4aa5-b23b-e7b077d64042",
-      "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
-      "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
-    },
     "/openwiki/digivault/architecture.md": {
       "pageVersion": "sha256:0b95bccdbb8b7fe63dffe9340d512ec6398c6c2ea6f9a43a09776f9658f56322",
       "completedBy": "openwiki/0.5.0",
@@ -278,6 +257,27 @@
       "pageVersion": "sha256:b117eb731de97f54e88835a2046623708c3bd638bed01d1b3b3911cda98f69b0",
       "completedBy": "openwiki/0.5.0",
       "completedRunId": "7a17ee0e-d06a-4f0c-a7a4-252c47022e8d",
+      "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
+      "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
+    },
+    "/openwiki/digitrace/architecture.md": {
+      "pageVersion": "sha256:cd86de9328fafbcd5f199dd2dae35e19255bf25747a8d1bdcc58c4e9ffd78e39",
+      "completedBy": "opencode",
+      "completedRunId": "474bb78a-fd57-4aa5-b23b-e7b077d64042",
+      "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
+      "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
+    },
+    "/openwiki/digitrace/status-api-and-operations.md": {
+      "pageVersion": "sha256:be8d2e5e70181b5a5ed42a59760cfe9cd224cf42f5df144a8f8da7c8a29c751d",
+      "completedBy": "opencode",
+      "completedRunId": "474bb78a-fd57-4aa5-b23b-e7b077d64042",
+      "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
+      "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
+    },
+    "/openwiki/digitrace/tracing-and-redaction.md": {
+      "pageVersion": "sha256:3ca61a930eda25bccef15fc481a2a16d6f526aeffcc5c6efc766e14cab7e10ea",
+      "completedBy": "opencode",
+      "completedRunId": "474bb78a-fd57-4aa5-b23b-e7b077d64042",
       "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
       "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
     }

@@ -162,7 +162,7 @@ def aggregate(
         ranked = enrich_rows(ranked, "value", names, display_field="name", missing="?")
         ranked = [entry for entry in ranked if not is_automation_login(entry.get("name"))]
     if group_by == "customer" and customer_names:
-        # Same shape as the owner branch: enrich with the masked display,
+        # Same shape as the owner branch: enrich with the full display,
         # then drop automation customers (mapped as-is) post-rank.
         names = {str(raw): display for raw, display in customer_names.items()}
         ranked = enrich_rows(ranked, "value", names, display_field="name", missing="?")

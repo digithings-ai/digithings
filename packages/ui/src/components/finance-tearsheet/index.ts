@@ -33,6 +33,7 @@ export {
   viewWindowLastYear,
   matchLookbackPreset,
   viewsNear,
+  sliceByView,
   type CandlestickChartProps,
   type TimeSeriesProps,
   type MultiTimeSeriesProps,

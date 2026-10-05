@@ -38,7 +38,7 @@ export const PRICING_TIERS: readonly PricingTier[] = [
     name: "Managed",
     price: "Coming soon",
     desc: "Hosted digiquant with managed upgrades and observability. In development.",
-    features: ["Everything in Self-hosted", "Managed upgrades", "Hosted tracing (digismith)"],
+    features: ["Everything in Self-hosted", "Managed upgrades", "Hosted tracing (digitrace)"],
     cta: { label: "Join the waitlist", email: CONTACT_EMAIL, subject: WAITLIST_SUBJECT },
     featured: true,
   },

@@ -6,29 +6,32 @@ export type ProviderId = "openrouter" | "openai" | "anthropic" | "gemini" | "xai
 
 export type ProviderModel = { id: string; label: string };
 
+// Ids and order are the fallbackModels in config/byok-providers.json.
+// providerSettings.test.ts reads that file; do not drift these by hand.
 export const PROVIDER_MODELS: Record<ProviderId, ProviderModel[]> = {
   openrouter: [
     { id: "openai/gpt-4o-mini", label: "GPT-4o mini" },
+    { id: "openai/gpt-4o", label: "GPT-4o" },
     { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
     { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
-    { id: "deepseek/deepseek-chat-v3", label: "DeepSeek V3" },
   ],
   openai: [
     { id: "gpt-4o-mini", label: "GPT-4o mini" },
     { id: "gpt-4o", label: "GPT-4o" },
-    { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+    { id: "o4-mini", label: "o4-mini" },
   ],
   anthropic: [
-    { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-    { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
+    { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+    { id: "claude-opus-4-5", label: "Claude Opus 4.5" },
   ],
   gemini: [
-    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+    { id: "gemini/gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite" },
+    { id: "gemini/gemini-3.5-flash", label: "Gemini 3.5 Flash" },
+    { id: "gemini/gemini-3.7-flash", label: "Gemini 3.7 Flash" },
   ],
   xai: [
-    { id: "grok-4-3", label: "Grok 4.3" },
+    { id: "grok-4.3", label: "Grok 4.3" },
     { id: "grok-4.5", label: "Grok 4.5" },
   ],
 };

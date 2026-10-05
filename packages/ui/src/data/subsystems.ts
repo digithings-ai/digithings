@@ -32,7 +32,7 @@ export const subsystems: Subsystem[] = [
     role: "Scheduled macro & market research",
     tagline: "Research, persisted — structured views, not prose.",
     summary: [
-      "Scheduled LangGraph research cycles across a configurable universe, pulling from open data sources (FRED, Treasury, CoinGecko, SEC/EDGAR) on one daily graph, with per-artifact skip, edit, or full refresh.",
+      "Scheduled LangGraph research cycles across a configurable universe, pulling from open data sources (FRED, Treasury, SEC/EDGAR) on one daily graph, with per-artifact skip, edit, or full refresh.",
       "Every cycle writes structured, versioned views to Supabase — re-used downstream, and fully auditable.",
     ],
     stack: [
@@ -40,7 +40,6 @@ export const subsystems: Subsystem[] = [
       { name: "Polars", icon: "polars" },
       { name: "Supabase", icon: "supabase" },
       { name: "FRED", icon: null, mono: "FRED" },
-      { name: "CoinGecko", icon: null, mono: "CG" },
     ],
     dockerCmd: "docker compose up -d digiquant",
     initSnippet: {

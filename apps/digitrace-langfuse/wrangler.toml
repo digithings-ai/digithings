@@ -1,0 +1,100 @@
+# digitrace — self-hosted Langfuse on Cloudflare Containers (#4930 Phase 1).
+# Langfuse Web (UI + API + OTLP) and Langfuse Worker (queues) as two Containers.
+# ClickHouse + Redis are EXTERNAL (managed/VM) — never a lite CF Container for CH.
+# Secrets via `wrangler secret put` only — never commit values.
+#
+# HUMAN GATE — public hostname: enable the custom-domain route below only after
+# Platform approves DNS for trace.digithings.ai (preferred) or langfuse.digithings.ai.
+name = "digitrace-langfuse"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+# Keep workers.dev off until the public hostname HUMAN GATE lands — avoid a
+# guessable *.workers.dev front for the Langfuse UI/API.
+workers_dev = false
+
+[observability]
+enabled = true
+
+# R2 event uploads use S3-compatible env inside the Containers
+# (LANGFUSE_S3_EVENT_UPLOAD_*), not this Worker binding. Binding reserved for
+# future edge helpers; bucket must still be created by a human (see runbook).
+[[r2_buckets]]
+binding = "LANGFUSE_EVENTS"
+bucket_name = "digitrace-langfuse-events"
+
+# HUMAN GATE — infra/network: uncomment after DNS + secret puts are ready.
+# [[routes]]
+# pattern = "trace.digithings.ai"
+# zone_name = "digithings.ai"
+# custom_domain = true
+
+[[containers]]
+class_name = "LangfuseWebContainer"
+# image / image_build_context resolve relative to THIS config file.
+image = "../../Dockerfile.digitrace-langfuse-web"
+image_build_context = "../.."
+max_instances = 2
+# Web needs real RAM (lite = 256MiB is far too small for Next.js Langfuse).
+instance_type = "standard-2"
+
+[[containers]]
+class_name = "LangfuseWorkerContainer"
+image = "../../Dockerfile.digitrace-langfuse-worker"
+image_build_context = "../.."
+max_instances = 1
+# Queue drain needs CPU/RAM; same floor as Web. CH stays external.
+instance_type = "standard-2"
+
+[[durable_objects.bindings]]
+name = "LANGFUSE_WEB"
+class_name = "LangfuseWebContainer"
+
+[[durable_objects.bindings]]
+name = "LANGFUSE_WORKER"
+class_name = "LangfuseWorkerContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LangfuseWebContainer", "LangfuseWorkerContainer"]
+
+# Secrets (wrangler secret put) — never commit values. Full checklist:
+#   docs/ops/digitrace-langfuse.md
+#
+# Core Langfuse:
+#   DATABASE_URL              # dedicated Postgres DB/schema on house Postgres
+#   NEXTAUTH_SECRET
+#   SALT
+#   ENCRYPTION_KEY            # openssl rand -hex 32
+#   NEXTAUTH_URL              # public origin, e.g. https://trace.digithings.ai
+#
+# ClickHouse (external managed/VM — NOT a CF lite Container):
+#   CLICKHOUSE_URL
+#   CLICKHOUSE_MIGRATION_URL
+#   CLICKHOUSE_USER
+#   CLICKHOUSE_PASSWORD
+#   CLICKHOUSE_DB             # optional; default "default"
+#
+# Redis (external managed/VM):
+#   REDIS_CONNECTION_STRING   # preferred; or REDIS_HOST + REDIS_PORT + REDIS_AUTH
+#
+# R2 S3-compatible event upload (bucket digitrace-langfuse-events):
+#   LANGFUSE_S3_EVENT_UPLOAD_BUCKET
+#   LANGFUSE_S3_EVENT_UPLOAD_REGION
+#   LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT
+#   LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
+#   LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+#   LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE  # usually "true" for R2
+#
+# Optional media bucket (can share events bucket with a media/ prefix):
+#   LANGFUSE_S3_MEDIA_UPLOAD_*
+
+[vars]
+# Single-node ClickHouse (managed OK): disable ON CLUSTER statements.
+CLICKHOUSE_CLUSTER_ENABLED = "false"
+# Path-style S3 for Cloudflare R2.
+LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE = "true"
+LANGFUSE_S3_EVENT_UPLOAD_BUCKET = "digitrace-langfuse-events"
+LANGFUSE_S3_EVENT_UPLOAD_PREFIX = "events/"
+# Region "auto" is the R2 convention when using the account S3 API endpoint.
+LANGFUSE_S3_EVENT_UPLOAD_REGION = "auto"

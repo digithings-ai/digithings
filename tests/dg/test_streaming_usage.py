@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from typing import Any
 
 import pytest
@@ -55,6 +56,57 @@ def _usage_totals(chunks: list[str]) -> list[dict[str, int]]:
 
 def _stream() -> Any:
     return _stream_completions_progressive(_request(), "hi", None)
+
+
+def test_dead_worker_does_not_leave_the_sse_poll_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A worker that exits without ``done`` must not leave the 0.5s get loop running.
+
+    ``run_digigraph_workflow_streaming`` emits ``done`` on the paths it handles.
+    An exception outside that set kills the thread and never enqueues ``done``.
+    The consumer used to ``continue`` on every ``queue.Empty``, so the response
+    never reached stop / ``[DONE]``. A live worker between events must still be
+    waited on — only a dead worker with an empty queue ends the poll.
+    """
+
+    def fake_workflow(_req: Any, _queue: Any, _cancel: Any) -> None:
+        raise LookupError("worker died before done")
+
+    monkeypatch.setattr(
+        "digigraph.server.run_digigraph_workflow_streaming",
+        fake_workflow,
+    )
+    holder: dict[str, list[str]] = {}
+
+    def consume() -> None:
+        holder["chunks"] = list(_stream())
+
+    thread = threading.Thread(target=consume, daemon=True)
+    thread.start()
+    thread.join(2.0)
+    assert not thread.is_alive(), "SSE consumer kept polling after the worker exited"
+    text = "".join(holder["chunks"])
+    assert "workflow stream ended before completion" in text
+    assert "data: [DONE]" in text
+
+
+def test_live_worker_is_polled_until_done(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An Empty timeout while the worker is still alive must not end the stream."""
+
+    def fake_workflow(_req: Any, queue: Any, _cancel: Any) -> None:
+        time.sleep(0.8)
+        queue.put(("content", "still-here"))
+        queue.put(("done", None))
+
+    monkeypatch.setattr(
+        "digigraph.server.run_digigraph_workflow_streaming",
+        fake_workflow,
+    )
+    chunks = list(_stream())
+    text = "".join(chunks)
+    assert "still-here" in text
+    assert "data: [DONE]" in text
 
 
 def test_single_stream_emits_its_own_usage_chunk(monkeypatch: pytest.MonkeyPatch) -> None:

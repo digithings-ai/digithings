@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from digivoice.paste import KEYSTROKE_SCRIPT, paste
+from digivoice.paste import KEYSTROKE_SCRIPT, copy_to_clipboard, paste
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
 
@@ -65,3 +65,15 @@ def test_a_failed_clipboard_copy_does_not_keystroke() -> None:
     assert result.pasted is False
     assert "broken pipe" in result.detail
     assert runner.programs == ["pbcopy"]
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n"])
+def test_blank_text_is_never_pasted_or_copied(blank: str) -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(), "osascript": FakeReply()})
+    probe = FakeProbe(commands=dict(DARWIN_TOOLS))
+    pasted = paste("darwin", probe, runner, blank)
+    copied = copy_to_clipboard("darwin", probe, runner, blank)
+    assert (pasted.attempted, pasted.pasted) == (False, False)
+    assert (copied.attempted, copied.pasted) == (False, False)
+    assert "empty" in pasted.detail
+    assert runner.calls == []

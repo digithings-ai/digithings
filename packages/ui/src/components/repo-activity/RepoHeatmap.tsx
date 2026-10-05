@@ -16,6 +16,15 @@ export type RepoHeatmapProps = {
   weeks?: number;
   /** Window end (UTC day). Defaults to today. Test seam only. */
   end?: Date;
+  /**
+   * Grow the squares to fill the container instead of scrolling it. The cell
+   * size is normally a fixed 10px and `.ra-heat-body` scrolls when the history
+   * is wider than its column; with `fit` the grid takes 100% of the column and
+   * each cell keeps a 1:1 aspect ratio, so the squares get bigger as the column
+   * widens and smaller as it narrows — the count still picks how many weeks are
+   * drawn (see `weeks`), the layout picks how large they are drawn.
+   */
+  fit?: boolean;
   className?: string;
 };
 
@@ -36,6 +45,23 @@ const COLOR_SCALE = [
 
 const DAY_LABELS = new Set(["Mon", "Wed", "Fri"]);
 
+/**
+ * Hover text for one square. States the day, the total, and — when the caller
+ * bucketed the sources — the split behind it, because "5 contributions" and
+ * "5 commits" are different facts and the graph alone cannot tell them apart.
+ */
+function cellTitle(date: string, count: number, day: HeatDay | undefined): string {
+  const noun = count === 1 ? "contribution" : "contributions";
+  if (day && (day.commits != null || day.pulls != null || day.issues != null)) {
+    const parts: string[] = [];
+    if (day.commits) parts.push(`${day.commits} commit${day.commits === 1 ? "" : "s"}`);
+    if (day.pulls) parts.push(`${day.pulls} PR${day.pulls === 1 ? "" : "s"}`);
+    if (day.issues) parts.push(`${day.issues} issue${day.issues === 1 ? "" : "s"}`);
+    if (parts.length) return `${date} — ${count} ${noun}: ${parts.join(", ")}`;
+  }
+  return `${date} — ${count} ${noun}`;
+}
+
 export function RepoHeatmap({
   pulls,
   commits = [],
@@ -43,14 +69,18 @@ export function RepoHeatmap({
   data,
   weeks = 53,
   end,
+  fit = false,
   className,
 }: RepoHeatmapProps) {
   const days: HeatDay[] =
     data ?? bucketContributions(pulls, commits, closedIssues, weeks, end ?? new Date());
   const total = days.reduce((m, d) => m + d.count, 0);
-  const cls = ["ra-heat", className ?? ""].filter(Boolean).join(" ");
+  const cls = ["ra-heat", fit ? "ra-heat--fit" : "", className ?? ""].filter(Boolean).join(" ");
   const range = weeks >= 50 ? "the last year" : `the last ${weeks} weeks`;
   const points = days.map((d) => ({ date: d.date, count: d.count }));
+  // The grid hands back its own cells, so the per-day split is looked up by
+  // date to build the hover title.
+  const byDate = new Map(days.map((d) => [d.date, d]));
 
   return (
     <div className={cls}>
@@ -117,7 +147,7 @@ export function RepoHeatmap({
                       key={`${cell.column}-${cell.row}`}
                       className="ra-heat-cell"
                       data-level={cell.level}
-                      title={`${date} — ${n} contribution${n === 1 ? "" : "s"}`}
+                      title={cellTitle(date, n, byDate.get(date))}
                     />
                   );
                 }}

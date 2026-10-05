@@ -8,6 +8,10 @@
 .ts-tone-mute.ts-line { stroke: var(--ink-soft); }
 .ts-tone-mute.ts-area { fill: var(--ink-soft); }
 .ts-line-dashed { stroke-dasharray: 5 4; }
+/* Round dots for the benchmark leg: zero-length dash + round caps reads as
+   dots at any stroke width, and stays dots (not dashes) when the chart
+   compresses many points into few pixels. */
+.ts-line-dotted { stroke-dasharray: 0.1 5; stroke-linecap: round; }
 
 .ts-chart-legend-line-up { width: 18px; height: 0; border-top: 2px solid var(--up); }
 .ts-chart-legend-line-down { width: 18px; height: 0; border-top: 2px solid var(--down); }

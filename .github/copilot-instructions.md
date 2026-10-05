@@ -39,7 +39,7 @@
 | `digigraph` | 8000 | LangGraph orchestration brain — MCP tools, OpenAI-compatible API | [digigraph/AGENTS.md](digigraph/AGENTS.md) |
 | `digiquant` | 8001 | NautilusTrader backtest/optimize, strategy registry | [digiquant/AGENTS.md](digiquant/AGENTS.md) |
 | `digisearch` | 8002 | RAG pipeline — ingest, chunk, embed, vector search | [digisearch/AGENTS.md](digisearch/AGENTS.md) |
-| `digismith` | 8003 | LangSmith-aligned observability library + status API | [digismith/AGENTS.md](digismith/AGENTS.md) |
+| `digitrace` | 8003 | LangSmith-aligned observability library + status API | [digitrace/AGENTS.md](digitrace/AGENTS.md) |
 | `digiclaw` | — | Heartbeat runner + append-only JSONL audit log | [digiclaw/AGENTS.md](digiclaw/AGENTS.md) |
 | `digibase` | — | Shared Python library — error envelopes, HTTP helpers, OTel | [digibase/AGENTS.md](digibase/AGENTS.md) |
 | `digikey` | 8005 | JWT + scoped API key auth plane — RS256, JWKS, token exchange | [digikey/AGENTS.md](digikey/AGENTS.md) |

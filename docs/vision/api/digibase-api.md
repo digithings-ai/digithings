@@ -46,7 +46,7 @@ Shared Python library imported by every service — not a network surface.
 Pydantic, FastAPI, Prometheus, OpenTelemetry
 
 ## Related
-digismith, digisearch
+digitrace, digisearch
 
 ## Links
 - [Source](https://github.com/digithings-ai)

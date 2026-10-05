@@ -23,7 +23,7 @@ export async function GET() {
   };
 
   const eco = await getEcosystemEndpoints();
-  // digigraph/digiquant/digismith always have a default URL (see ecosystem.ts
+  // digigraph/digiquant/digitrace always have a default URL (see ecosystem.ts
   // DEFAULTS), unlike digisearchUrl, so URL presence alone can't signal
   // "not deployed here" for them — check the capability flag directly.
   if (isServiceCapabilityEnabled("digigraph")) {
@@ -32,8 +32,8 @@ export async function GET() {
   if (isServiceCapabilityEnabled("digiquant")) {
     await pingHealth(eco.digiquantUrl, "digiquant", checks);
   }
-  if (isServiceCapabilityEnabled("digismith")) {
-    await pingHealth(eco.digismithUrl, "digismith", checks);
+  if (isServiceCapabilityEnabled("digitrace")) {
+    await pingHealth(eco.digitraceUrl, "digitrace", checks);
   }
   if (eco.digisearchUrl?.trim()) {
     await pingHealth(eco.digisearchUrl, "digisearch", checks);
@@ -53,13 +53,13 @@ export async function GET() {
 
   const digraphOk = !isServiceCapabilityEnabled("digigraph") || checks.digraph === "ok";
   const digiquantOk = !isServiceCapabilityEnabled("digiquant") || checks.digiquant === "ok";
-  const digismithOk = !isServiceCapabilityEnabled("digismith") || checks.digismith === "ok";
+  const digitraceOk = !isServiceCapabilityEnabled("digitrace") || checks.digitrace === "ok";
   const digisearchOk = !eco.digisearchUrl?.trim() || checks.digisearch === "ok";
 
   const ok =
     digraphOk &&
     digiquantOk &&
-    digismithOk &&
+    digitraceOk &&
     digisearchOk &&
     (checks.database === "ok" || checks.database === "skipped");
 

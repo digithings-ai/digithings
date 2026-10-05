@@ -104,14 +104,14 @@ brain from the D1 corpus digivault actually serves in production.
 
 ### digithings.ai CI (`main`)
 
-Corpus refresh for client #0 is automated by
-[`.github/workflows/docs-onboard-digithings.yml`](../../.github/workflows/docs-onboard-digithings.yml)
-on relevant pushes to `main` (and `workflow_dispatch`). The Action dry-runs
-classification, then on apply writes a filesystem vault (`--sinks vault`) and runs
+Corpus refresh for client #0 uses the operator path below; the former
+`docs-onboard-digithings.yml` Action was removed in the strict-essentials cut.
+The local path dry-runs classification, then on apply writes a filesystem vault
+(`--sinks vault`) and runs
 `scripts/d1_sync.py` to publish that vault into Cloudflare D1 (`clients/digithings`)
-under the `production` environment — the same dry-run/apply CI shape as
-[`sync-architecture-vault.yml`](../../.github/workflows/sync-architecture-vault.yml),
-though that pipeline is a separate, still-Supabase-backed corpus
+under the `production` environment — the same dry-run/apply shape as the former
+`sync-architecture-vault.yml` pipeline, which was also removed in the
+strict-essentials cut. That was a separate, still-Supabase-backed corpus
 (`architecture_notes`) unrelated to this D1 publish.
 
 digisearch dual-sink remains an **operator / local** step (or legacy

@@ -50,7 +50,7 @@ docker compose --profile heartbeat up -d heartbeat
 HTTPx, digibase
 
 ## Related
-digiquant, digismith
+digiquant, digitrace
 
 ## Links
 - [Source](https://github.com/digithings-ai)

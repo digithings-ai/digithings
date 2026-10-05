@@ -116,7 +116,7 @@ docker compose -f infra/digichat-release/compose.profile-a.yml \
   --env-file infra/digichat-release/.env.profile-a up -d
 ```
 
-Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+Does **not** start digiquant / digisearch / digitrace / heartbeat / observability.
 
 Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../../docs/templates/self-host/README.md)
 (`make up-ghcr` + `--profile digichat --profile digivault`).

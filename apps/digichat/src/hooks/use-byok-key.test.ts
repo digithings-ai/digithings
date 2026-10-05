@@ -104,14 +104,14 @@ describe("validateBYOKModel", () => {
 
   it("requires model for Anthropic and Gemini", () => {
     expect(validateBYOKModel("", "anthropic")).not.toBeNull();
-    expect(validateBYOKModel("claude-sonnet-4-20250514", "anthropic")).toBeNull();
+    expect(validateBYOKModel("claude-sonnet-4-6", "anthropic")).toBeNull();
     expect(validateBYOKModel("", "gemini")).not.toBeNull();
-    expect(validateBYOKModel("gemini/gemini-2.0-flash", "gemini")).toBeNull();
+    expect(validateBYOKModel("gemini/gemini-3.5-flash-lite", "gemini")).toBeNull();
   });
 
   it("requires model for x.ai", () => {
     expect(validateBYOKModel("", "xai")).not.toBeNull();
-    expect(validateBYOKModel("grok-4-3", "xai")).toBeNull();
+    expect(validateBYOKModel("grok-4.3", "xai")).toBeNull();
   });
 
   it("does not require model for OpenAI", () => {
@@ -252,10 +252,10 @@ describe("BYOK provider/model preference cookie (non-secret, client-side)", () =
   });
 
   it("round-trips a written preference", () => {
-    writeByokPrefCookie("anthropic", "claude-sonnet-4-20250514");
+    writeByokPrefCookie("anthropic", "claude-sonnet-4-6");
     expect(readByokPrefCookie()).toEqual({
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
     });
   });
 
@@ -278,7 +278,7 @@ describe("BYOK provider/model preference cookie (non-secret, client-side)", () =
   });
 
   it("deleteByokPrefCookie removes a previously written preference", () => {
-    writeByokPrefCookie("anthropic", "claude-sonnet-4-20250514");
+    writeByokPrefCookie("anthropic", "claude-sonnet-4-6");
     expect(readByokPrefCookie()).not.toBeNull();
     deleteByokPrefCookie();
     expect(readByokPrefCookie()).toBeNull();
@@ -291,10 +291,10 @@ describe("useBYOKKey().clearKey (Fix 3 regression: must delete the cookie, not r
   });
 
   it("deletes the remembered preference cookie instead of resetting it to openrouter", () => {
-    writeByokPrefCookie("anthropic", "claude-sonnet-4-20250514");
+    writeByokPrefCookie("anthropic", "claude-sonnet-4-6");
     expect(readByokPrefCookie()).toEqual({
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
     });
 
     const { result, unmount } = renderHookLocally(() => useBYOKKey());
@@ -312,7 +312,7 @@ describe("useBYOKKey().clearKey (Fix 3 regression: must delete the cookie, not r
   it("still resets the in-memory session state to the empty/openrouter default", () => {
     const { result, unmount } = renderHookLocally(() => useBYOKKey());
     act(() => {
-      result.current.setKey("sk-ant-live-key", "anthropic", "claude-sonnet-4-20250514");
+      result.current.setKey("sk-ant-live-key", "anthropic", "claude-sonnet-4-6");
     });
     expect(result.current.isSet).toBe(true);
 

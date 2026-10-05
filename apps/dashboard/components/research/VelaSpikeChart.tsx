@@ -106,8 +106,6 @@ export function VelaSpikeChart({
     <div className="space-y-1.5" data-testid="vela-spike-chart">
       <p className="font-mono text-[11px] text-ink-soft">
         {symbol} · {timeframe} · {bars.length} bars · {fmtDay(first.t)}–{fmtDay(last.t)}
-        {' · '}
-        <span className="rounded border border-hair px-1 text-ink-mute">experimental</span>
       </p>
       <div ref={hostRef} data-testid="vela-spike-host" className="h-[320px] w-full" />
       {mountError ? (

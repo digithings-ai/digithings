@@ -17,8 +17,10 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 | `digithings.ai/embed*`, digichat APIs, `/_dtchat*` | Worker → **one** digichat Container | BFF; tenants via `DIGICHAT_EMBED_TENANTS` |
 | `graph.digithings.ai` | Worker → **one** Profile A stack Container | digigraph (chat brain) |
 | `key.digithings.ai` | same stack Container | digikey (JWT / BFF) |
-| digisearch + digivault + LiteLLM | loopback inside stack Container | RAG / vault / LLM router |
+| `search.digithings.ai` | same stack Container | digisearch `:8002` (JWT `digisearch:query`; public Worker route) |
+| digivault + LiteLLM | loopback inside stack Container | vault / LLM router — **not** published hostnames |
 
+- digisearch in-container callers still use `http://127.0.0.1:8002`; the process binds `0.0.0.0:8002` so the Worker can proxy (`wrangler.toml` search route comments, #4071).
 - digithings has **no Azure**. DataTap Azure digichat is client-only.
 - Do **not** use `chat.digithings.ai` as the marketing path host; public URLs stay under `digithings.ai/chat…`.
 - **Preferred digichat host:** Cloudflare Containers (Workers Paid) — [`apps/digichat-cloudflare/`](../../apps/digichat-cloudflare/README.md).
@@ -27,7 +29,7 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 - **Fallback (no Paid):** operator Compose + named Tunnel if Workers Paid is unavailable.
 - Pages Function OpenRouter digivault loop is **retired** (410).
 - New marketing chats = new Pages `/chat/<slug>` + embed-tenant row — **not** a new Container.
-- **Human gate:** publishing `graph.` / `key.` hostnames is new network exposure; secrets only via `wrangler secret put`.
+- **Human gate:** publishing `graph.` / `key.` / `search.` hostnames is new network exposure (`search.digithings.ai` is owner-approved for CI web grounding, #4063); secrets only via `wrangler secret put`.
 
 ### Historical notes
 

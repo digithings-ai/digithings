@@ -20,6 +20,7 @@ vi.mock('@luxalgo/vela', () => ({
 }));
 
 import VelaSpikeChart, { type VelaSpikeBar } from './VelaSpikeChart';
+import { barsResponseToVelaBars } from '@/lib/vela-bars';
 
 const BARS: VelaSpikeBar[] = [
   { t: 1727740800000, o: 100, h: 104, l: 99, c: 103, v: 1200 },
@@ -83,5 +84,41 @@ describe('VelaSpikeChart mount (happy-dom, @luxalgo/vela mocked)', () => {
     await renderAndWaitForMount();
     act(() => root!.unmount());
     expect(velaMock.destroyed).toBe(1);
+  });
+
+  it('data path: BarsResponse-shaped crypto payload maps onto offline constructor args', async () => {
+    // #4879 data path — the page fetches keyless GET /bars and maps each
+    // BarsBar through barsResponseToVelaBars; the constructor must see the
+    // mapped offline `data` shape with the normalized (lowercase) timeframe.
+    const payload = {
+      symbol: 'BTC-USD',
+      timeframe: '1d',
+      limit: 120,
+      count: 2,
+      bars: [
+        { timestamp: '2024-10-01', open: 100, high: 104, low: 99, close: 103, volume: 1200 },
+        { timestamp: '2024-10-02', open: 103, high: 107, low: 102, close: 106, volume: null },
+      ],
+      source: 'gloomberb',
+      stale: false,
+      delay_note: null,
+    };
+    const mapped = barsResponseToVelaBars(payload);
+    expect(mapped).toHaveLength(2);
+
+    act(() => {
+      root!.render(createElement(VelaSpikeChart, { bars: mapped, symbol: 'BTC-USD', timeframe: '1d' }));
+    });
+    await vi.waitFor(() => expect(velaMock.instances).toHaveLength(1));
+
+    const [{ options }] = velaMock.instances;
+    expect(options.timeframe).toBe('1d');
+    expect(options.live).toBe(false);
+    expect(options).not.toHaveProperty('provider');
+    expect(options.data).toEqual([
+      { time: Date.parse('2024-10-01'), open: 100, high: 104, low: 99, close: 103, volume: 1200 },
+      { time: Date.parse('2024-10-02'), open: 103, high: 107, low: 102, close: 106 },
+    ]);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
