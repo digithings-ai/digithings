@@ -11,9 +11,13 @@ import polars as pl
 import pytest
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import (
+    _account_balance_path,
+    _balance_path_metrics,
     _build_result,
     _extract_pnl,
+    _max_drawdown_from_balance_path,
     _run_multi_symbol_backtest,
+    _sharpe_from_balance_path,
     run_nautilus_backtest,
 )
 
@@ -133,6 +137,21 @@ def _symbol_result(
 # ---------------------------------------------------------------------------
 
 
+def _account_report(rows: list[dict], *, day_gap: float = 1.0) -> pd.DataFrame:
+    """Account report shaped like the real one: one row per day, unnamed DatetimeIndex.
+
+    The real ``generate_account_report()`` frame carries an unnamed UTC DatetimeIndex,
+    which is what ``_account_timestamps`` has to resolve without a column name.
+    """
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2024-01-02", tz="UTC") + pd.Timedelta(days=day_gap * i)
+            for i in range(len(rows))
+        ],
+    )
+    return pd.DataFrame(rows, index=index)
+
+
 @pytest.mark.unit
 class TestExtractPnl:
     def _report(self, **kwargs) -> pd.DataFrame:
@@ -202,6 +221,121 @@ class TestExtractPnl:
         pnl, ret = _extract_pnl(report)
         assert pnl == 0.0
         assert ret == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Balance path: the single source of truth for Sharpe and max drawdown
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestBalancePath:
+    def test_none_report_has_no_metrics(self) -> None:
+        assert _balance_path_metrics(None) == {"sharpe": None, "max_dd": None}
+
+    def test_empty_report_has_no_metrics(self) -> None:
+        assert _balance_path_metrics(pd.DataFrame()) == {"sharpe": None, "max_dd": None}
+
+    def test_unparseable_balance_has_no_metrics(self) -> None:
+        report = _account_report([{"total": "not-a-number"}])
+        assert _balance_path_metrics(report) == {"sharpe": None, "max_dd": None}
+
+    def test_total_takes_precedence_over_balance_and_equity(self) -> None:
+        report = _account_report(
+            [{"total": 1_000_000.0, "balance": 800_000.0, "equity": 700_000.0}],
+        )
+        balances, _ = _account_balance_path(report)
+        assert balances == [1_000_000.0]
+
+    def test_balance_used_when_total_absent(self) -> None:
+        report = _account_report([{"balance": 900_000.0}, {"balance": 950_000.0}])
+        balances, _ = _account_balance_path(report)
+        assert balances == [900_000.0, 950_000.0]
+
+    def test_string_balance_with_currency_suffix_is_parsed(self) -> None:
+        report = _account_report([{"total": "1000000.00 USD"}, {"total": "1050000.00 USD"}])
+        balances, _ = _account_balance_path(report)
+        assert balances == [1_000_000.0, 1_050_000.0]
+
+    def test_unnamed_datetime_index_supplies_timestamps(self) -> None:
+        """The real report index is unnamed, so it must be read from pandas."""
+        report = _account_report(
+            [{"total": 1_000_000.0}, {"total": 1_100_000.0}, {"total": 1_200_000.0}],
+        )
+        _, seconds = _account_balance_path(report)
+        assert seconds is not None
+        assert len(seconds) == 3
+        assert seconds[1] - seconds[0] == pytest.approx(86400.0)
+
+    def test_named_index_is_found_as_a_column(self) -> None:
+        report = _account_report(
+            [{"total": 1_000_000.0}, {"total": 1_100_000.0}, {"total": 1_200_000.0}],
+        )
+        report.index.name = "ts_event"
+        balances, seconds = _account_balance_path(report)
+        assert len(balances) == 3
+        assert seconds is not None
+        assert seconds[-1] - seconds[0] == pytest.approx(2 * 86400.0)
+
+    def test_range_index_leaves_sharpe_none_but_keeps_drawdown(self) -> None:
+        """A bare RangeIndex has no elapsed time, so it cannot be annualised."""
+        report = pd.DataFrame([{"total": 1_000_000.0}, {"total": 950_000.0}])
+        metrics = _balance_path_metrics(report)
+        assert metrics["sharpe"] is None
+        assert metrics["max_dd"] == pytest.approx(-5.0)
+
+    def test_fewer_than_two_returns_has_no_sharpe(self) -> None:
+        assert _sharpe_from_balance_path([1_000_000.0], None) is None
+        assert _sharpe_from_balance_path([1_000_000.0, 1_100_000.0], None) is None
+
+    def test_zero_stdev_has_no_sharpe(self) -> None:
+        seconds = [0.0, 86400.0, 2 * 86400.0]
+        assert _sharpe_from_balance_path([1_000_000.0, 1_000_000.0, 1_000_000.0], seconds) is None
+
+    def test_sharpe_is_annualised_by_observation_count_over_years(self) -> None:
+        balances = [1_000_000.0, 1_010_000.0, 1_000_000.0, 1_040_000.0]
+        seconds = [float(i * 86400) for i in range(len(balances))]
+        returns = [(b - a) / a for a, b in zip(balances, balances[1:])]
+        mean = sum(returns) / len(returns)
+        variance = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
+        years = (seconds[-1] - seconds[0]) / (365.25 * 86400.0)
+        expected = mean / variance**0.5 * (len(returns) / years) ** 0.5
+        assert _sharpe_from_balance_path(balances, seconds) == pytest.approx(expected)
+
+    def test_flat_path_has_no_drawdown(self) -> None:
+        assert _max_drawdown_from_balance_path([]) is None
+        assert _max_drawdown_from_balance_path([1_000_000.0]) == pytest.approx(0.0)
+        assert _max_drawdown_from_balance_path([1_000_000.0, 1_000_000.0]) == pytest.approx(0.0)
+
+    def test_drawdown_is_worst_peak_to_trough(self) -> None:
+        balances = [1_000_000.0, 1_100_000.0, 880_000.0, 1_050_000.0]
+        assert _max_drawdown_from_balance_path(balances) == pytest.approx(-20.0)
+
+    def test_drawdown_is_never_milder_than_the_end_state_loss(self) -> None:
+        """Drawdown must be at least as bad as the final loss.
+
+        This is the invariant that makes a -76% drawdown beside a -3.1% return
+        impossible: the final balance sits inside the peak-to-trough window, so the
+        worst drawdown can never be milder than where the account ended up.
+        """
+        balances = [1_000_000.0, 1_200_000.0, 969_000.0, 950_000.0]
+        drawdown = _max_drawdown_from_balance_path(balances)
+        total_return_pct = (balances[-1] - balances[0]) / balances[0] * 100.0
+        assert drawdown <= total_return_pct + 1e-9
+
+    def test_drawdown_covers_an_interior_trough_the_end_state_misses(self) -> None:
+        """A trough below the end is still drawdown, even with a peak at the start.
+
+        This is why the unconditional ``|dd| <= |total_return_pct|`` form is wrong:
+        here the peak IS the starting balance and the drawdown is legitimately worse
+        (-5.1%) than the start-to-end loss (-3.1%), the same shape as the AAPL golden row.
+        """
+        balances = [1_000_000.0, 949_000.0, 969_000.0]
+        drawdown = _max_drawdown_from_balance_path(balances)
+        total_return_pct = (balances[-1] - balances[0]) / balances[0] * 100.0
+        assert drawdown == pytest.approx(-5.1)
+        assert drawdown <= total_return_pct + 1e-9
+        assert abs(drawdown) > abs(total_return_pct)
 
 
 # ---------------------------------------------------------------------------
@@ -331,60 +465,90 @@ class TestHonestStatusOnExtractionFailure:
         assert result.total_pnl == 0.0
         assert "pnl" in result.message.lower()
 
-    def test_analyzer_exception_is_partial_and_names_missing_metrics(self) -> None:
+    def test_analyzer_exception_is_partial_but_balance_path_still_feeds_drawdown(self) -> None:
         analyzer = _StubAnalyzer(returns_stats=None, pnls_stats=None, raise_on_returns=True)
-        engine = _StubEngine(analyzer, pd.DataFrame([{"total": 1_050_000.0}]))
+        engine = _StubEngine(
+            analyzer,
+            _account_report([{"total": 1_000_000.0}, {"total": 1_050_000.0}]),
+        )
         with _patched_single_run(engine):
             result = run_nautilus_backtest(strategy_name="s", symbols=["BTC"], data_path="BTC.csv")
         assert result is not None
         assert result.status == "partial"
         assert result.total_pnl == pytest.approx(50_000.0)
         assert result.sharpe_ratio is None
-        assert result.max_drawdown_pct is None
+        assert result.max_drawdown_pct == pytest.approx(0.0)
         assert "sharpe_ratio" in result.message
-        assert "max_drawdown_pct" in result.message
         assert "returns analyzer exploded" in result.message
 
-    def test_absent_sharpe_key_is_none_and_partial(self) -> None:
+    def test_analyzer_stats_never_feed_sharpe_or_drawdown(self) -> None:
+        """The analyzer's own keys are ignored: both metrics come from the balance path."""
         analyzer = _StubAnalyzer(
-            returns_stats={"Sortino Ratio": 0.5},
+            returns_stats={"Sortino Ratio": 0.5, "Sharpe Ratio (252 days)": 99.0},
             pnls_stats={"Max Drawdown %": -7.0},
         )
-        engine = _StubEngine(analyzer, pd.DataFrame([{"total": 1_100_000.0}]))
+        engine = _StubEngine(
+            analyzer,
+            _account_report(
+                [{"total": 1_000_000.0}, {"total": 900_000.0}, {"total": 1_100_000.0}],
+            ),
+        )
         with _patched_single_run(engine):
             result = run_nautilus_backtest(strategy_name="s", symbols=["BTC"], data_path="BTC.csv")
         assert result is not None
-        assert result.sharpe_ratio is None
-        assert result.status == "partial"
-        assert "sharpe_ratio" in result.message
-        assert result.max_drawdown_pct == pytest.approx(-7.0)
+        assert result.status == "ok"
+        assert result.total_pnl == pytest.approx(100_000.0)
+        assert result.sharpe_ratio is not None
+        assert result.sharpe_ratio != pytest.approx(99.0)
+        assert result.max_drawdown_pct == pytest.approx(-10.0)
 
     def test_unparseable_perf_stats_is_partial(self) -> None:
         analyzer = _StubAnalyzer(
             returns_stats={"Sharpe Ratio (252 days)": "n/a"},
             pnls_stats={"Max Drawdown %": "n/a"},
         )
-        engine = _StubEngine(analyzer, pd.DataFrame([{"total": 1_100_000.0}]))
+        engine = _StubEngine(
+            analyzer,
+            _account_report([{"total": 1_000_000.0}, {"total": 1_100_000.0}]),
+        )
         with _patched_single_run(engine):
             result = run_nautilus_backtest(strategy_name="s", symbols=["BTC"], data_path="BTC.csv")
         assert result is not None
         assert result.status == "partial"
         assert "sharpe_ratio" in result.message
-        assert "max_drawdown_pct" in result.message
+        assert result.sharpe_ratio is None
+        assert result.max_drawdown_pct == pytest.approx(0.0)
 
     def test_healthy_run_stays_ok(self) -> None:
         analyzer = _StubAnalyzer(
             returns_stats={"Sharpe Ratio (252 days)": 1.5},
             pnls_stats={"Max Drawdown %": -8.0},
         )
-        engine = _StubEngine(analyzer, pd.DataFrame([{"total": 1_200_000.0}]))
+        engine = _StubEngine(
+            analyzer,
+            _account_report(
+                [{"total": 1_000_000.0}, {"total": 900_000.0}, {"total": 1_200_000.0}],
+            ),
+        )
         with _patched_single_run(engine):
             result = run_nautilus_backtest(strategy_name="s", symbols=["BTC"], data_path="BTC.csv")
         assert result is not None
         assert result.status == "ok"
         assert result.total_pnl == pytest.approx(200_000.0)
-        assert result.sharpe_ratio == pytest.approx(1.5)
-        assert result.max_drawdown_pct == pytest.approx(-8.0)
+        assert result.sharpe_ratio is not None
+        assert result.max_drawdown_pct == pytest.approx(-10.0)
+
+    def test_single_balance_row_has_no_sharpe(self) -> None:
+        """One balance row is not a return series, so the Sharpe stays None."""
+        analyzer = _StubAnalyzer(returns_stats={"Sharpe Ratio (252 days)": 1.5})
+        engine = _StubEngine(analyzer, _account_report([{"total": 1_200_000.0}]))
+        with _patched_single_run(engine):
+            result = run_nautilus_backtest(strategy_name="s", symbols=["BTC"], data_path="BTC.csv")
+        assert result is not None
+        assert result.sharpe_ratio is None
+        assert result.status == "partial"
+        assert "sharpe_ratio" in result.message
+        assert result.max_drawdown_pct == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------

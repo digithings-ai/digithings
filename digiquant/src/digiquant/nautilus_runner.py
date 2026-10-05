@@ -6,10 +6,19 @@ Internal structure
 ------------------
 _prepare_bar_data      — Polars OHLCV -> pandas + Nautilus BarType + bars list
 _build_engine          — configure BacktestEngine with venue/instrument/data/strategy
+_account_balance_path  — whole account report -> (balance series, timestamps)
+_balance_path_metrics  — Sharpe + max drawdown from that balance series
 _extract_pnl           — parse account report -> (total_pnl, total_return_pct)
-_extract_perf_stats    — pull Sharpe, max-drawdown, series from portfolio analyzer
+_extract_perf_stats    — balance-path Sharpe/drawdown + series from portfolio analyzer
 _build_result          — assemble BacktestResult from raw engine outputs
 _run_backtest_ohlcv    — orchestrates the above; writes tearsheet if requested
+
+Sharpe and max drawdown come from the account-report balance path, NOT from the
+portfolio analyzer: ``analyzer.returns()`` holds one observation per *closed
+position*, so annualising it by 252 trading days produced numbers like -76 Sharpe
+and -76% drawdown next to a -3.1% total return. The balance path already in hand
+is the equity curve, and deriving all three metrics from it makes them mutually
+consistent by construction.
 """
 
 from __future__ import annotations
@@ -50,6 +59,17 @@ BACKTEST_RESULTS_DIR = "backtest_results"
 # Venue starting cash. Single source of truth for sizing + PnL baseline.
 STARTING_BALANCE_USD = 1_000_000.0
 
+# Balance columns in precedence order: first column present with a non-null cell wins.
+BALANCE_COLUMNS = ("total", "balance", "equity")
+
+# Timestamp column names to look for after pl.from_pandas() has folded a *named*
+# pandas index into a column. The Nautilus account report index is unnamed, so this
+# is a runtime fallback, never an assumption.
+_ACCOUNT_TIMESTAMP_COLUMNS = ("ts_event", "timestamp", "index")
+
+# 365.25 days in seconds — the year length used to annualise the balance path.
+_YEAR_SECONDS = 365.25 * 86400.0
+
 # Default position size, as a fraction of starting balance, expressed in notional.
 # trade_size (units) = floor(STARTING_BALANCE_USD * fraction / first_price), min 1.
 # Notional-based so a fixed unit count doesn't over-leverage high-priced instruments
@@ -57,6 +77,20 @@ STARTING_BALANCE_USD = 1_000_000.0
 # AccountBalanceNegative after a handful of bars). 2% of $1M ≈ 1 BTC at ~$13.6k, a
 # size known to complete the full BTC-USD run.
 DEFAULT_NOTIONAL_FRACTION = 0.02
+
+# Drawdown invariant, stated for tests and reviewers. Given a balance path that
+# starts at STARTING_BALANCE_USD, the worst peak-to-trough fall can never be milder
+# than the end-state loss: |dd| <= |total_return_pct| whenever the peak IS the
+# starting balance (the path never rose above its start), and in the general case
+# the weaker but unconditional bound is dd <= total_return_pct.
+#
+# The CTO brief proposed |dd| <= |total_return_pct| unconditionally. That is false
+# for its own golden AAPL row (max_dd -5.11 against total_return_pct -3.10): once the
+# account trades up, the peak exceeds the start and the trough-to-peak fall is
+# legitimately larger than the start-to-end loss. The unconditional bound used in
+# the regression tests is dd <= total_return_pct, which still forbids the original
+# -76.53% drawdown beside a -3.10% return.
+DRAWDOWN_NOT_MILDER_THAN_END_LOSS = "dd <= total_return_pct"
 
 
 def _default_trade_size(first_price: float, balance: float, fraction: float) -> Decimal:
@@ -274,12 +308,168 @@ def _build_engine(
     return engine
 
 
+def _to_float(value: Any) -> float | None:
+    """Parse one account-report cell into a float, or ``None`` when unusable.
+
+    Nautilus emits the account total either as a number or as ``"1000000.00 USD"``;
+    a leading ``1.05e6 USD`` form is also accepted.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        parts = value.strip().split()
+        if not parts:
+            return None
+        try:
+            return float(parts[0])
+        except ValueError:
+            return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(parsed) else parsed
+
+
+def _account_timestamps(account_report: Any, df: pl.DataFrame) -> list[float] | None:
+    """Epoch seconds for each report row, or ``None`` when no usable index exists.
+
+    ``pl.from_pandas`` keeps a *named* pandas index as a column and drops an unnamed
+    one. The Nautilus account report index is unnamed, so the fallback reads the
+    pandas index directly rather than guessing a column name.
+    """
+    index = getattr(account_report, "index", None)
+    index_name = getattr(index, "name", None)
+    values: list[Any] | None = None
+    if isinstance(index_name, str) and index_name in df.columns:
+        values = df.get_column(index_name).to_list()
+    elif index is not None and len(index) == df.height:
+        values = list(index)
+    else:
+        for candidate in _ACCOUNT_TIMESTAMP_COLUMNS:
+            if candidate in df.columns:
+                values = df.get_column(candidate).to_list()
+                break
+    if values is None:
+        return None
+    seconds: list[float] = []
+    for value in values:
+        if isinstance(value, datetime):
+            # Naive timestamps are read as UTC; only differences are used downstream.
+            seconds.append(
+                (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+            )
+        elif isinstance(value, bool):
+            return None
+        elif isinstance(value, int | float) and not math.isnan(float(value)):
+            # A bare RangeIndex carries no elapsed time: annualising on it is wrong.
+            return None
+        else:
+            return None
+    return seconds
+
+
+def _account_balance_path(account_report: Any) -> tuple[list[float], list[float] | None]:
+    """Read the *whole* account-report balance path: ``(balances, epoch_seconds)``.
+
+    ``epoch_seconds`` is ``None`` when the report carries no usable timestamps, which
+    leaves the annualised Sharpe ``None`` while still allowing max drawdown. Rows
+    whose balance cell cannot be parsed are dropped from both lists.
+    """
+    if account_report is None:
+        return [], None
+    try:
+        df = pl.from_pandas(account_report)
+    except _PNL_PARSE_ERRORS:
+        return [], None
+    column = next((name for name in BALANCE_COLUMNS if name in df.columns), None)
+    if column is None:
+        return [], None
+    stamps = _account_timestamps(account_report, df)
+    balances: list[float] = []
+    seconds: list[float] = []
+    for row, cell in enumerate(df.get_column(column).to_list()):
+        value = _to_float(cell)
+        if value is None:
+            continue
+        balances.append(value)
+        if stamps is not None and row < len(stamps):
+            seconds.append(stamps[row])
+    if not balances:
+        return [], None
+    if stamps is None or len(seconds) != len(balances):
+        return balances, None
+    return balances, seconds
+
+
+def _sharpe_from_balance_path(balances: list[float], seconds: list[float] | None) -> float | None:
+    """Annualised Sharpe of the balance path, risk-free rate 0.
+
+    ``mean(returns) / stdev(returns) * sqrt(n_returns / years)``. The scaler is the
+    observation count over elapsed years and deliberately *not* ``sqrt(252)``: the
+    balance path has one observation per fill, so it is irregular in time and a
+    trading-day scaler would misstate it by an order of magnitude.
+
+    Returns ``None`` whenever the value is undefined — fewer than two returns, no
+    timestamps, non-positive elapsed time, or zero dispersion — instead of a
+    fabricated 0.0.
+    """
+    if seconds is None or len(balances) < 3:
+        return None
+    returns: list[float] = []
+    for previous, current in zip(balances, balances[1:]):
+        if previous == 0:
+            return None
+        returns.append((current - previous) / previous)
+    years = (seconds[-1] - seconds[0]) / _YEAR_SECONDS
+    if years <= 0:
+        return None
+    mean = sum(returns) / len(returns)
+    # Sample standard deviation (ddof=1), matching the convention the golden values
+    # were measured with.
+    variance = sum((value - mean) ** 2 for value in returns) / (len(returns) - 1)
+    if variance <= 0:
+        return None
+    return mean / math.sqrt(variance) * math.sqrt(len(returns) / years)
+
+
+def _max_drawdown_from_balance_path(balances: list[float]) -> float | None:
+    """Worst peak-to-trough fall of the balance path as a negative percent.
+
+    ``min((bal - cummax(bal)) / cummax(bal)) * 100``. ``None`` only when there is no
+    balance path at all; a flat or single-row path legitimately draws down 0.0.
+    """
+    if not balances:
+        return None
+    peak = balances[0]
+    worst = 0.0
+    for value in balances:
+        peak = max(peak, value)
+        if peak > 0:
+            worst = min(worst, (value - peak) / peak)
+    return normalize_drawdown_pct(worst * 100.0)
+
+
+def _balance_path_metrics(account_report: Any) -> dict[str, float | None]:
+    """Sharpe and max drawdown derived from the account-report balance path.
+
+    The single source of truth for both metrics, so ``total_return_pct`` (the change
+    of the final balance), ``max_drawdown_pct`` and ``sharpe_ratio`` cannot disagree.
+    """
+    balances, seconds = _account_balance_path(account_report)
+    return {
+        "sharpe": _sharpe_from_balance_path(balances, seconds),
+        "max_dd": _max_drawdown_from_balance_path(balances),
+    }
+
+
 def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[float, float]:
     """Parse Nautilus account report -> (total_pnl, total_return_pct).
 
-    Returns (0.0, 0.0) when the report cannot be parsed. Any failure message is
-    appended to ``errors`` so callers can surface an error status rather than a
-    fabricated zero-PnL success.
+    Reads the final balance only; ``_balance_path_metrics`` derives Sharpe and max
+    drawdown from the same series. Returns (0.0, 0.0) when the report cannot be
+    parsed. Any failure message is appended to ``errors`` so callers can surface an
+    error status rather than a fabricated zero-PnL success.
     """
 
     def _fail(msg: str) -> tuple[float, float]:
@@ -296,28 +486,32 @@ def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[
             return _fail("PnL extraction failed: account report is empty")
         last_row = df.row(-1, named=True)
         initial = STARTING_BALANCE_USD
-        raw_balance = None
-        for col_name in ("total", "balance", "equity"):
+        final_balance = None
+        for col_name in BALANCE_COLUMNS:
             if col_name in last_row and last_row[col_name] is not None:
-                raw_balance = last_row[col_name]
+                final_balance = _to_float(last_row[col_name])
                 break
-        if raw_balance is None:
+        if final_balance is None:
             return _fail(
-                "PnL extraction failed: no recognised balance column in %s" % list(last_row.keys())
+                "PnL extraction failed: no usable balance column in %s" % list(last_row.keys())
             )
-        # Nautilus may return "1000000.00 USD" or a numeric value
-        if isinstance(raw_balance, str):
-            final_balance = float(raw_balance.strip().split()[0])
-        else:
-            final_balance = float(raw_balance)
         total_pnl = final_balance - initial
         return total_pnl, (total_pnl / initial) * 100.0
     except _PNL_PARSE_ERRORS as e:
         return _fail(f"PnL extraction failed: {e}")
 
 
-def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
-    """Extract Sharpe, max-drawdown and raw series from the portfolio analyzer.
+def _extract_perf_stats(
+    engine: Any,
+    USD: Any,
+    account_report: Any = None,
+) -> dict[str, Any]:
+    """Sharpe and max drawdown from the balance path, series from the analyzer.
+
+    ``sharpe`` and ``max_dd`` are derived from ``account_report``'s balance path by
+    ``_balance_path_metrics``. The analyzer is still read for the raw per-trade
+    series the tearsheet renders, but never for a metric: its returns are per closed
+    position, not an equity curve.
 
     ``errors`` records analyzer/parse failures and ``missing`` names metrics that
     remained ``None``, so callers can mark a result ``partial`` instead of
@@ -334,54 +528,18 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
         "errors": [],
         "missing": [],
     }
+    result.update(_balance_path_metrics(account_report))
     try:
         analyzer = engine.portfolio.analyzer
-        stats_returns = analyzer.get_performance_stats_returns()
-        result["stats_returns"] = stats_returns
-        if stats_returns:
-            raw = stats_returns.get("Sharpe Ratio (252 days)")
-            if raw is not None:
-                v = float(raw)
-                result["sharpe"] = v if not math.isnan(v) else None
-
-        stats_pnls = analyzer.get_performance_stats_pnls()
-        result["stats_pnls"] = stats_pnls
-        if stats_pnls:
-            dd = None
-            for key in ("Max Drawdown %", "Max Drawdown"):
-                if stats_pnls.get(key) is not None:
-                    dd = stats_pnls[key]
-                    break
-            if dd is not None:
-                v = float(dd)
-                normalized = normalize_drawdown_pct(v if not math.isnan(v) else None)
-                result["max_dd"] = normalized
-
+        result["stats_returns"] = analyzer.get_performance_stats_returns()
+        result["stats_pnls"] = analyzer.get_performance_stats_pnls()
         if hasattr(analyzer, "get_performance_stats_general"):
             result["stats_general"] = analyzer.get_performance_stats_general()
-
         if hasattr(analyzer, "returns"):
             result["returns_series"] = analyzer.returns()
-
         if hasattr(analyzer, "realized_pnls"):
             rp = analyzer.realized_pnls(USD)
             result["realized_pnls_series"] = rp if rp is not None and len(rp) > 0 else None
-
-        # Fallback max-drawdown from returns series
-        if (
-            result["max_dd"] is None
-            and result["returns_series"] is not None
-            and len(result["returns_series"]) > 0
-        ):
-            try:
-                cum = (1 + result["returns_series"]).cumprod()
-                peak = cum.cummax()
-                dd_pct = (peak - cum) / peak.replace(0, 1) * 100
-                result["max_dd"] = normalize_drawdown_pct(
-                    float(dd_pct.max()) if not dd_pct.empty else None
-                )
-            except _PNL_PARSE_ERRORS as e:
-                logger.debug("Failed to compute max drawdown from returns series: %s", e)
     except _ANALYZER_ERRORS as e:
         logger.warning("Failed to extract performance stats from Nautilus analyzer: %s", e)
         result["errors"].append(f"performance stats unavailable: {e}")
@@ -521,7 +679,7 @@ def _run_backtest_ohlcv(
 
     pnl_errors: list[str] = []
     total_pnl, total_return_pct = _extract_pnl(account_report, errors=pnl_errors)
-    perf = _extract_perf_stats(engine, USD)
+    perf = _extract_perf_stats(engine, USD, account_report)
 
     engine.dispose()
 
