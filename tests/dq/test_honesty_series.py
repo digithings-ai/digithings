@@ -7,7 +7,6 @@ pandas.
 
 from __future__ import annotations
 
-import inspect
 import math
 import re
 from datetime import datetime, timedelta, timezone
@@ -242,17 +241,24 @@ def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> No
     The skip keys on the build's **capability** to emit a record row, not on the
     shape that came back. Keying on the observed shape would be the trap: a
     nautilus that reverted 1.230.0 to ``{pid: pnl}`` would then skip on the one
-    build whose whole job is to prove rows exist. ``add_trade`` gained its
-    ``ts_event`` parameter in the same release that started returning rows, so it
-    is the honest gate — a build that accepts a timestamp must return one.
+    build whose whole job is to prove rows exist.
+
+    It is probed by *calling*, not by reading ``add_trade``'s signature. A
+    signature test would be a second version of the same mistake one level down:
+    it would have to match the parameter's name, so a build that still emitted
+    rows but renamed ``ts_event`` to ``event_ts`` — or dropped
+    ``__text_signature__``, which makes ``inspect.signature`` fail differently on
+    3.12 and 3.13 — would skip on exactly the builds that prove rows exist.
+    Asking the engine whether it accepts a timestamp has no such failure mode.
     """
     pyo3 = _pyo3()
     usd = pyo3.Currency.from_str("USD")
     analyzer = pyo3.PortfolioAnalyzer()
-    if "ts_event" not in inspect.signature(analyzer.add_trade).parameters:
-        pytest.skip("add_trade has no ts_event, so this build cannot emit record rows")
     ts = 1_700_000_000_000_000_000
-    _add_trade(analyzer, pyo3, usd, "P-1", 10.0, ts)
+    try:
+        analyzer.add_trade(pyo3.PositionId("P-1"), ts, pyo3.Money(10.0, usd))
+    except TypeError:
+        pytest.skip("add_trade rejects a ts_event, so this build cannot emit record rows")
 
     raw = analyzer.realized_pnls(usd)
 

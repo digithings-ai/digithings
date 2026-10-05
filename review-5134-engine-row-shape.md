@@ -227,9 +227,7 @@ claimed numbers looked wrong to me at first: the three-file set I guessed first 
 
 ### N2 (nit) — `test_the_engine_really_emits_three_column_rows_with_a_real_timestamp` is long
 
-`:229` — 63 characters of test name. Every other test in the file is descriptive but shorter
-(`test_returns_dict_is_no_longer_read_as_its_timestamps` is the longest at 56). Suggested:
-`test_the_engine_emits_three_column_rows_with_a_real_timestamp`. Purely cosmetic.
+`:229` — **83** characters of test name. Not the longest in the file: `test_two_column_rows_fail_closed_rather_than_guessing_the_value_column` is 85 (`:354`) and `test_case_4_recorded_trade_replaces_the_added_one_for_one_round_trip` ties it at 83 (`:279`), so this is the third-longest of 29. Suggested: `test_the_engine_emits_three_column_rows_with_a_real_timestamp`. Purely cosmetic.
 
 ---
 
@@ -247,9 +245,12 @@ claimed numbers looked wrong to me at first: the three-file set I guessed first 
   load-bearing rather than incidentally satisfied by engine-side collapsing.
 - **Repo rules.** No capitalized `Digi*` in the new hunk or the commit message. No pandas.
   No pydantic. `ruff check` clean, `ruff format --check` clean, no line over 100 in the new
-  hunk (longest is the `:264` assert at 88). Strict typing intact — the function returns `None`
+  hunk (the added hunk's longest is `:256` at 92 chars). Strict typing intact — the function returns `None`
   and the only untyped locals are `pyo3`/`usd`/`analyzer`/`raw`/`row`, matching the existing
-  `_pyo3`/`_analyzer_with_trades` convention in the same file.
+  `_pyo3`/`_analyzer_with_trades` convention in the same file. Note the file's longest line
+  overall is `:410` at exactly 100 — the `ruff.toml` limit, so compliant but with no headroom.
+  All line numbers in this record are as of the reviewed commit `93807d0cf`; later commits
+  (`5bb985d2f`) shift them.
 - **File conventions.** Docstring style matches (imperative summary line, `` `` `` for code
   refs, then the "why"). Helper reuse is correct — the test needs a custom `ts`, which
   `_analyzer_with_trades` cannot supply since it hardcodes the default, so calling `_add_trade`
