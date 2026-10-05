@@ -1,0 +1,235 @@
+Terms of Service | Gloomberb
+Gloomberb
+Plugins
+Changelog
+Cloud
+2.4k
+Download
+D
+Terms of Service
+Effective
+September 26, 2026
+These Terms of Service (the “Terms”) are a binding agreement between you and Cold Start Ventures Limited, a company incorporated in Hong Kong (“Cold Start”, “we”, “us” or “our”). They govern your access to and use of Gloom and Gloomberb, including gloom.sh, gloomberb.com and term.gloom.sh, the Gloom desktop, terminal and mobile apps, Gloom Cloud, the News API, our MCP server and APIs, and any related services (together, the “Services”).
+By creating an account, starting a trial, buying a subscription or otherwise using the Services, you agree to these Terms and acknowledge our Privacy Policy. If you use the Services on behalf of an organization, you agree to these Terms for that organization and confirm that you have authority to bind it. If you do not agree, do not use the Services.
+Section 19 requires most disputes to be resolved by individual arbitration in Hong Kong and waives class actions. Please read it carefully.
+1
+.
+The Services
+2
+.
+Open-source software
+3
+.
+Eligibility and accounts
+4
+.
+No investment advice
+5
+.
+Market data and third-party content
+6
+.
+AI features
+7
+.
+Broker connections
+8
+.
+Subscriptions, trials and billing
+9
+.
+Refunds
+10
+.
+Your content
+11
+.
+Acceptable use
+12
+.
+APIs, MCP and keys
+13
+.
+Third-party services and plugins
+14
+.
+Our intellectual property
+15
+.
+Suspension and termination
+16
+.
+Disclaimers
+17
+.
+Limitation of liability
+18
+.
+Indemnity
+19
+.
+Governing law and disputes
+20
+.
+Changes to these Terms
+21
+.
+General
+22
+.
+Contact
+1
+.
+The Services
+Gloom is a research terminal for investors. The Services include the open-source Gloomberb app, the hosted Gloom Cloud features that require an account (such as sync, live market data, news, Ask Gloom, chat, alerts and broker connections), paid plans such as Gloom Pro, team plans and the News API, and our developer interfaces.
+We may add, change, suspend or remove features, data sources, plans or limits at any time. If a change materially reduces a paid feature you are currently paying for, we will give you reasonable notice, and you may cancel as described in Section 8.
+2
+.
+Open-source software
+The Gloomberb source code is published under the MIT License. Your use, copying, modification and distribution of that source code is governed by the MIT License, and nothing in these Terms limits the rights it grants you.
+These Terms govern the hosted Services, our accounts and APIs, the data and content we provide, and the builds we distribute. The MIT License does not grant any right to use the Gloom or Gloomberb names, logos or other brand features, except as needed to describe the origin of the software accurately.
+3
+.
+Eligibility and accounts
+You must be at least 18 years old, or the age of majority where you live if higher, to create an account or buy a subscription. You may not use the Services if you are barred from doing so under applicable law, including sanctions laws.
+You agree to provide accurate account information and keep it up to date. You are responsible for all activity under your account, API keys, MCP connections and device sign-ins. Keep your password and keys confidential, do not share your account with others, and contact us promptly at hello@gloom.sh if you believe your account or a key has been compromised.
+4
+.
+No investment advice
+The Services are provided for information and research purposes only. Cold Start is not a broker-dealer, investment adviser, financial planner or exchange, and is not registered or licensed as any of these in any jurisdiction.
+Nothing in the Services, including prices, charts, screens, news, filings, transcripts, ratings, alerts, AI-generated answers, theses or content posted by other users, is investment, financial, legal, tax or accounting advice, a recommendation to buy, sell or hold any security or other asset, or an offer or solicitation to do so.
+You are solely responsible for your investment and trading decisions and for evaluating the information you use to make them. Investing involves risk, including the loss of principal, and past performance does not predict future results. Consider consulting a licensed professional before acting on any information.
+5
+.
+Market data and third-party content
+Market data, news, filings, transcripts and other content in the Services come from exchanges, data vendors, public sources and other third parties. This content may be delayed, incomplete, inaccurate or interrupted. Free plans receive delayed data, and real-time availability depends on your plan and on our providers. Do not rely on the Services where timing or accuracy is critical.
+Unless your plan or a written agreement with us says otherwise, data and content you receive through the Services are for your own personal or internal use. You may not resell, redistribute, publicly display or make them available to others as a data feed or in a competing product. Our data providers may impose additional terms, and their rights in their content are reserved.
+News articles, social posts and other third-party content belong to their owners. Links to third-party websites are provided for convenience, and we are not responsible for their content or practices.
+6
+.
+AI features
+Some features, including Ask Gloom, command suggestions, generated theses and AI participants in chat, use artificial intelligence models provided by third parties. AI output can be wrong, incomplete, outdated or inconsistent, and may present guesses as facts. Verify AI output independently before relying on it. AI output is subject to Section 4.
+To answer your requests, AI features may read the data in your workspace, such as your portfolios and watchlists, and send it to our AI providers as described in our Privacy Policy. Do not submit information you are not allowed to share. We may apply usage limits to AI features and change the models we use.
+7
+.
+Broker connections
+If you connect a brokerage account, such as Interactive Brokers, you authorize us to access the account information and perform the actions covered by the permissions you grant, for the purpose of providing the Services to you. Your brokerage account remains governed by your agreement with your broker.
+We do not trade on your behalf or at our own discretion. Any order you place through the Services is your own instruction to your broker, and you are responsible for reviewing it before you submit it. Order instructions created through Gloom Cloud are saved with your broker and are only submitted if you review and confirm them there. We are not responsible for the acts, omissions, outages or data of your broker, or for orders that are rejected, delayed or executed at prices you did not expect.
+You can disconnect a broker at any time from Gloom or from your broker. Broker credentials you enter in the local app stay on your device and are not sent to us.
+8
+.
+Subscriptions, trials and billing
+Paid plans, including Gloom Pro, team plans, the News API and add-ons, are billed in advance on a monthly or annual basis at the price shown at checkout, plus any applicable taxes. Payments are processed by Stripe, and your payment is also subject to Stripe’s terms.
+Subscriptions renew automatically at the end of each billing period and your payment method will be charged, unless you cancel before the renewal date. You can cancel at any time from your account settings. Cancellation takes effect at the end of the current billing period, and you keep paid access until then.
+Free trials are limited to one per account and require a payment method. Unless you cancel before the trial ends, your subscription starts and you will be charged when the trial ends. Promotional prices, discounts and retention offers apply only for the period and on the conditions stated when they are offered.
+We may change our prices. Price changes for an existing subscription take effect at your next renewal after we give you reasonable advance notice. If a payment fails, we may suspend paid features until it is resolved.
+Team plans may be subject to an order form or separate written agreement. Team administrators control membership and seats, and paid access for team members ends when they are removed or when the team plan ends.
+9
+.
+Refunds
+All payments are final and non-refundable. We do not provide refunds or credits for any reason, including partial billing periods, unused features, subscriptions that renew or trials that convert because they were not cancelled in time, or accounts that are deleted, suspended or terminated, except where required by law. If you believe you were charged in error, contact hello@gloom.sh within 30 days of the charge.
+Nothing in these Terms limits any rights you may have under mandatory consumer protection laws in your country of residence.
+10
+.
+Your content
+You keep ownership of the content you create or upload to the Services, such as portfolios, watchlists, layouts, notes, theses, prompts, chat messages and feedback (“Your Content”). You grant us a worldwide, non-exclusive, royalty-free license to host, store, copy, process, transmit and display Your Content as needed to operate, secure and improve the Services and to provide them to you, including through our service providers. This license ends when Your Content is deleted from our systems, except for content you have shared with others as described below.
+Some content is visible to others by design, including your public profile, chat messages in public channels, content you share with a team and share links you create. You control your public profile in your account settings. Content you share with a team may remain available to the team after you leave it or delete your account.
+You are responsible for Your Content and confirm that you have the rights needed to submit it. If you send us suggestions or feedback, we may use them without restriction or compensation.
+11
+.
+Acceptable use
+You agree not to, and not to help anyone else to:
+break any law or regulation, or infringe or misappropriate anyone’s rights;
+manipulate markets, promote pump-and-dump or similar schemes, spread information you know to be false to influence prices, or promote securities without disclosing compensation you receive;
+harass, threaten, defame or impersonate others, post hateful or sexually explicit content, spam, or share other people’s personal data without permission;
+scrape, crawl or bulk download data from the Services, or use the Services to build a competing product or dataset, except through the interfaces and within the limits we offer for that purpose;
+bypass or interfere with authentication, rate limits, usage limits, plan restrictions, data delays or other access controls;
+share, sell or transfer accounts, subscriptions or API keys;
+introduce malware, overload or disrupt the Services, or probe or test their security without our written permission (report vulnerabilities to hello@gloom.sh instead);
+reverse engineer the hosted Services, except as allowed by law or by the license of the open-source code.
+We may remove content, limit features, or suspend accounts that we reasonably believe violate these Terms or put the Services, our users or third parties at risk.
+12
+.
+APIs, MCP and keys
+Use of the News API, our MCP server and other developer interfaces is subject to these Terms, our documentation and the limits of your plan. Keys are personal to you and must be kept secret. We may monitor usage, apply rate limits, and revoke or rotate keys that are exposed, abused or used in breach of these Terms.
+You may build applications that use our interfaces for yourself or for users who have their own access, but you may not offer our data or interfaces as a standalone feed or service to third parties without our written permission.
+13
+.
+Third-party services and plugins
+The Services may let you use or connect third-party services, such as brokers, payment providers, add-ons and plugins published by other developers. Third-party services are governed by their own terms and privacy policies, and we are not responsible for them. Plugins listed in our registry are provided by their authors, are not reviewed or endorsed by us unless we say so, and are installed at your own risk.
+14
+.
+Our intellectual property
+Except for the open-source code and Your Content, the Services, including our hosted software, designs, data compilations, documentation and the Gloom and Gloomberb names and logos, are owned by Cold Start or its licensors and are protected by intellectual property laws.
+Subject to these Terms, we grant you a limited, revocable, non-exclusive, non-transferable license to access and use the Services for your personal use or, under a team plan, for the internal use of your organization. All rights not expressly granted are reserved.
+15
+.
+Suspension and termination
+You may stop using the Services at any time. You can delete your account from the account settings in the Gloom apps or by contacting us. Deleting your account cancels any active subscription immediately, and the remaining period is not refunded.
+We may suspend or terminate your access, with or without notice, if you breach these Terms, if your use creates risk or possible legal exposure for us or others, if we are required to by law, or if we stop offering the Services. Where reasonable, we will give you notice first.
+Sections 4, 5, 10, 14 and 16 through 21 survive any termination of these Terms.
+16
+.
+Disclaimers
+THE SERVICES, INCLUDING ALL DATA, CONTENT AND AI OUTPUT, ARE PROVIDED “AS IS” AND “AS AVAILABLE”. TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT AND ACCURACY.
+WE DO NOT WARRANT THAT THE SERVICES WILL BE UNINTERRUPTED, TIMELY, SECURE OR ERROR-FREE, THAT DATA WILL BE ACCURATE, COMPLETE OR CURRENT, OR THAT ANY CONTENT WILL BE PRESERVED WITHOUT LOSS.
+17
+.
+Limitation of liability
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, COLD START AND ITS DIRECTORS, OFFICERS, EMPLOYEES, CONTRACTORS, LICENSORS AND DATA PROVIDERS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL OR TRADING OR INVESTMENT LOSSES, ARISING OUT OF OR RELATING TO THE SERVICES OR THESE TERMS, EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, OUR TOTAL LIABILITY FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THE SERVICES OR THESE TERMS IS LIMITED TO THE GREATER OF THE AMOUNTS YOU PAID US FOR THE SERVICES IN THE 12 MONTHS BEFORE THE EVENT GIVING RISE TO THE CLAIM, OR ONE HUNDRED US DOLLARS (US$100).
+Nothing in these Terms excludes or limits liability that cannot be excluded or limited under applicable law, including liability for fraud or for death or personal injury caused by negligence.
+18
+.
+Indemnity
+To the extent permitted by law, you will indemnify and hold harmless Cold Start and its directors, officers, employees and contractors from any claims, losses, liabilities and expenses, including reasonable legal fees, arising out of Your Content, your use of the Services in breach of these Terms, or your violation of any law or third-party right.
+19
+.
+Governing law and disputes
+These Terms and any dispute arising out of or relating to them or the Services are governed by the laws of the Hong Kong Special Administrative Region, without regard to its conflict of laws rules.
+Before starting formal proceedings, you agree to contact us at hello@gloom.sh and try to resolve the dispute informally for at least 30 days.
+Any dispute, controversy or claim arising out of or relating to these Terms or the Services, including their existence, validity, interpretation, performance, breach or termination, that is not resolved informally will be finally resolved by arbitration administered by the Hong Kong International Arbitration Centre under the HKIAC Administered Arbitration Rules in force when the notice of arbitration is submitted. The seat of arbitration is Hong Kong, the tribunal will consist of one arbitrator, and the proceedings will be conducted in English.
+Disputes will be resolved only on an individual basis. You waive any right to bring or take part in a class, collective, consolidated or representative action or arbitration.
+Either party may seek urgent injunctive or other equitable relief from any court of competent jurisdiction to protect its intellectual property or confidential information. If you are a consumer and mandatory law in your country of residence gives you the right to bring claims in your local courts or under your local law, this section does not take that right away.
+20
+.
+Changes to these Terms
+We may update these Terms from time to time. We will post the updated Terms on this page and change the effective date above. If a change is material, we will give you reasonable advance notice by email or in the Services before it takes effect. By continuing to use the Services after the updated Terms take effect, you accept them. If you do not agree, you must stop using the Services and may cancel your subscription.
+21
+.
+General
+These Terms, together with our Privacy Policy and any order form or written agreement for your plan, are the entire agreement between you and Cold Start about the Services and replace any prior agreements on that subject. If an order form or written agreement conflicts with these Terms, it prevails for the Services it covers.
+If any provision of these Terms is found unenforceable, the rest remain in effect. Our failure to enforce a provision is not a waiver. You may not assign or transfer these Terms without our consent. We may assign them in connection with a merger, acquisition, reorganization or sale of assets. No third party has any right to enforce these Terms, including under the Contracts (Rights of Third Parties) Ordinance (Cap. 623).
+We are not liable for delays or failures caused by events beyond our reasonable control, including outages of third-party providers or markets. We may send you notices by email to the address on your account or through the Services. These Terms are written in English, and any translation is for convenience only.
+22
+.
+Contact
+Cold Start Ventures Limited, Hong Kong. Email: hello@gloom.sh.
+[
+Gloom
+]
+Home
+Cloud
+For firms
+Download
+[
+Resources
+]
+Docs
+Data coverage
+Transcripts
+Executive pay
+Risk factors
+Plugins
+Blog
+Alternatives
+Bloomberg alternatives
+[
+Legal
+]
+Privacy
+Terms
+[Connect]
+GitHub 2.4k
+Contact us
+© 2026 Gloomberb

@@ -1,0 +1,51 @@
+# Vendor terms index — Gloomberb
+
+Boundary: `docs/VENDOR_CONTENT_BOUNDARY.md` (OSS Researcher, DIG-503).
+
+Every entry answers boundary checklist step 6: vendor, access method, classification, artefact
+hash, decision date, decider, Counsel memo reference.
+
+---
+
+## Browser session cookie replayed against the Gloom Cloud API
+
+| Field | Value |
+|-------|-------|
+| Vendor | Gloomberb / Gloom — operated by Cold Start Ventures Limited (Hong Kong) |
+| Access method | A logged-in browser's session cookie, copied out of browser storage and replayed as a credential from code against `https://api.gloom.sh`. Not the News API, not the MCP server, not an issued key. |
+| Terms URL | `https://gloom.sh/terms` (HTTP 200) |
+| Retrieved | 2026-10-05T20:34:28Z |
+| Terms effective | 2026-09-26 |
+| Artefact (HTML) | `docs/vendor-terms/gloomber/gloomber-terms-2026-10-05.html` |
+| sha256 (HTML) | `6f781a39c8a54ddd83eb1004a90e534dda77a6090d9f1bc5e418dcd3bffaa0fc` |
+| Artefact (text extract) | `docs/vendor-terms/gloomber/gloomber-terms-2026-10-05.txt` |
+| sha256 (text) | `0cd96156b00c81ad140aaa9aaa82ffcb84c3bcf29324c60112bd3b1966d1f265` |
+| Relevant clauses | §2 (open-source licence covers code, not data), §3 (account owner liable for all activity, keys and sign-ins), §5 (free plans get delayed data; data for "personal or internal use" only; no redistribution or competing product), §11 (no scraping, no bypassing authentication or data delays, except "through the interfaces and within the limits we offer for that purpose"), §12 (developer interfaces subject to the terms and plan limits; no standalone feed to third parties without written permission), §14 (licence is for "personal use or, under a team plan, for the internal use of your organization"), §15 (suspension for breach), §18 (we indemnify them for use in breach), §19 (Hong Kong law, HKIAC arbitration) |
+| Classification | **Unclear** — escalate to Counsel (boundary step 5) |
+| Position record | [`POSITION-2026-10-05-session-cookie.md`](POSITION-2026-10-05-session-cookie.md) |
+| Decision date | 2026-10-05 |
+| Decider | Security (`b14d7a18-99b9-4c04-899b-efdd4676cfd0`), on DIG-1194 |
+| Counsel memo | **None yet.** Raised for Counsel on DIG-1194. No merge of new Gloomber access work until Counsel signs off in writing, per boundary step 5. |
+| Operational effect | `GLOOMBERB_ENABLED` remains the kill switch and defaults to on. No credential was rotated, revoked or newly created by this entry. |
+
+---
+
+## Why this entry exists
+
+Counsel flagged in DIG-503 that this is the same pattern as PrimeMarket with a second vendor, and
+declined to guess at what Gloom's terms allow. Nobody had read them. They are 3,072 words long,
+served from a live URL, and take eleven minutes to read. That is the whole failure mode: not a
+missing legal opinion, a missing document.
+
+## Known gaps in this index
+
+- **PrimeMarket is not indexed.** `docs/VENDOR_CONTENT_BOUNDARY.md` records a Prime Terminal
+  artefact and sha256 from DIG-503, but no artefact was ever committed and no copy exists on any
+  machine we can reach. The hash in that document is therefore not verifiable. Tracked separately —
+  this index does not re-adjudicate PrimeMarket, which is DIG-461 / DIG-478 territory.
+- **This index is per vendor, not per access method.** Gloom offers several surfaces (the News API,
+  the MCP server, `api.gloom.sh`, the local open-source app). Only one access method is classified
+  here. A later entry must classify each method separately — a key-based method and a cookie-based
+  method against the same terms can land on different classifications.
+- **Terms change.** §20 lets Cold Start update the terms and change the effective date on this page.
+  Re-retrieve before relying on this entry after 2026-04-05 (six months) or on any notice of change.
