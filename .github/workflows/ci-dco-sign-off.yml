@@ -45,7 +45,14 @@ jobs:
           echo "Checking commits in range ${BASE_SHA}..${HEAD_SHA}"
 
           # Get all commits in the range.
-          COMMITS=$(git rev-list "${BASE_SHA}..${HEAD_SHA}")
+          #
+          # --no-merges: a merge commit is written by git, not by a person,
+          # so it carries no Signed-off-by trailer and no amend can add one.
+          # A merge also introduces no new code to dedicate copyright over —
+          # the commits it brought in are themselves in the range and are
+          # checked. kernel.org, Kubernetes and OpenStack all skip merges the
+          # same way. DIG-925: this red could not be fixed by amending.
+          COMMITS=$(git rev-list --no-merges "${BASE_SHA}..${HEAD_SHA}")
 
           if [ -z "$COMMITS" ]; then
             echo "No commits to check."
