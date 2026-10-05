@@ -5,11 +5,19 @@
  * probe URLs when the job kind is "probe".
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
+ *
+ * A cron that fires with no enabled job behind it raises an alarm on the
+ * twelve-x issues path (DIG-732): unrecognised_cron, which is a different class
+ * from a required cron being absent. The required set itself is
+ * `src/required-triggers.ts` and is checked against the deployed trigger list,
+ * not only against wrangler.toml.
  */
 import { dispatch, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
+import { raiseViolationAlarms } from "./trigger-alarm";
+import { unrecognisedCronViolation } from "./trigger-contract";
 
 export type StartedRun = {
   job_id: string;
@@ -26,6 +34,11 @@ type RunOptions = {
   awaitDispatch?: boolean;
   /** Manual /kick may start paused jobs; scheduled() never sets this. */
   includeDisabled?: boolean;
+  /**
+   * A cron tick with no job behind it is deployment drift, so it alarms.
+   * POST /kick leaves this off: a human typing a cron by hand is not drift.
+   */
+  alarmUnmapped?: boolean;
 };
 
 export function houseArgs(
@@ -78,7 +91,25 @@ async function runJobsForCron(
   const pending: Promise<StartedRun>[] = [];
 
   if (jobs.length === 0) {
-    console.error(JSON.stringify({ cron, error: "unmapped_cron" }));
+    const violation = unrecognisedCronViolation(cron);
+    // Still one line per occurrence for observability search, now carrying the
+    // class. Before DIG-732 this was the whole response to a trigger that fires
+    // with nothing behind it.
+    console.error(
+      JSON.stringify({ cron, error: "unmapped_cron", alarm_class: violation.class }),
+    );
+    // A cron whose only owner is a deliberately disabled job (`house-run-10/11/12`
+    // keep their cron lines as retry slots) is a known configuration, not drift.
+    // Alarming on it would cry wolf three times a day. Alarm only when no job
+    // row at all claims the cron.
+    const knownDisabledSlot = jobsForCron(cron, { includeDisabled: true }).length > 0;
+    if (opts.alarmUnmapped && !knownDisabledSlot) {
+      // waitUntil, not await: the tick has nothing to dispatch, and the alarm
+      // must not become a reason for scheduled() to throw.
+      ctx.waitUntil(
+        raiseViolationAlarms(env, [violation], "the deployed trigger list, at the tick that fired"),
+      );
+    }
   }
   for (const job of jobs) {
     if (job.etOpenGate && !opts.force && !shouldDispatchAtOpen(cron, scheduledTime)) {
@@ -152,7 +183,9 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    await runJobsForCron(controller.cron, controller.scheduledTime, env, ctx);
+    await runJobsForCron(controller.cron, controller.scheduledTime, env, ctx, {
+      alarmUnmapped: true,
+    });
   },
 
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
