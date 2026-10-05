@@ -123,10 +123,25 @@ class Secret:
 
 @dataclass
 class Report:
-    """The ageing result, plus whatever could not be checked."""
+    """The ageing result, plus whatever could not be checked.
+
+    `readable` is how many levels were actually served. It cannot be inferred from
+    `secrets` and `unavailable`: `main()`'s `--file-names` path builds a report
+    with both empty having read nothing at all, which is indistinguishable from a
+    repo whose listings all came back empty. Deriving "nothing to age" from that
+    produced a run that printed "Every level was readable" over a zero-byte file
+    and exited 0. `None` means "not stated", so a hand-built report keeps working
+    and only `collect()` — the one path that knows — asserts a number.
+    """
 
     secrets: list[Secret] = field(default_factory=list)
     unavailable: dict[str, str] = field(default_factory=dict)
+    readable: int = 0
+
+    @property
+    def read_any(self) -> bool:
+        """Whether any level was actually served. False means no count is possible."""
+        return self.readable > 0
 
     def overdue(self, max_age_days: int) -> list[Secret]:
         """Overdue names, widest scope first, then oldest first."""
@@ -480,6 +495,8 @@ def collect(root: Path, repo: str, org: str, environment: str = "cron") -> Repor
         report.secrets.extend(secrets)
         if reason:
             report.unavailable[scope] = reason
+        else:
+            report.readable += 1
     return report
 
 
@@ -527,6 +544,57 @@ def gate_markdown(
     return lines
 
 
+def ageing_verdict(report: Report, max_age_days: int, per_level_position: str) -> str:
+    """The one sentence that says what this run concluded about staleness.
+
+    Both renderers call this, because they were two hand-maintained copies of the
+    same judgement and they disagreed: `markdown()` keyed "nothing could be aged"
+    on `report.secrets` while `render()` added `and report.unavailable`, so a
+    report where every level was readable but held nothing printed a bare
+    `0 of 0 listed` on stdout while the summary claimed nothing had been read.
+    Neither was right — every level *had* been read, and the honest answer for an
+    empty repo is that there is nothing to age.
+
+    A shared function is the only version of "the two must agree" that a
+    reviewer does not have to take on trust. `per_level_position` is "above" from
+    `render()` and "below" from `markdown()`, because only `render()` lists the
+    unread levels ahead of this line; hard-coding one of them was a sentence that
+    was simply false in the other renderer.
+    """
+    overdue = report.overdue(max_age_days)
+    if not report.secrets:
+        if report.read_any:
+            return (
+                f"Every level was readable and none of them holds a secret, so there "
+                f"is nothing to age. All {report.readable} level(s) were served."
+            )
+        if not report.unavailable:
+            # Nothing was listed and nothing failed, so naming a count of unread
+            # levels would read as "0 of 0 could not be read", i.e. a clean bill.
+            # This is the `--file-names` case: a hand-made list, never an API read.
+            return (
+                "No secrets could be aged: nothing was read, so no count is possible. "
+                "This run did not read the live secret listings."
+            )
+        return (
+            f"No secrets could be aged: {len(report.unavailable)} level(s) could "
+            f"not be read, so no count is possible. The per-level reason is "
+            f"{per_level_position}."
+        )
+    if report.unavailable:
+        return (
+            f"{len(overdue)} name(s) past {max_age_days} days among the "
+            f"{len(report.secrets)} that could be read; {len(report.unavailable)} "
+            "level(s) could not be read. That is not a clean bill of health."
+        )
+    if overdue:
+        return f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed."
+    return (
+        f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} "
+        "listed. No action needed."
+    )
+
+
 def markdown(
     report: Report,
     max_age_days: int,
@@ -542,8 +610,13 @@ def markdown(
         "",
     ]
     if report.secrets:
+        listed = f"**{len(report.secrets)}** listed secrets"
+        # On a partial read the denominator is the count that was read, so it must
+        # say so here rather than only in the trailing `## Levels not checked`.
+        if report.unavailable:
+            listed += " (of the levels that could be read)"
         lines += [
-            f"**{len(overdue)}** of **{len(report.secrets)}** listed secrets are past",
+            f"**{len(overdue)}** of {listed} are past",
             f"**{max_age_days} days** since last written.",
             "",
         ]
@@ -552,9 +625,15 @@ def markdown(
         # set, and it was the exact sentence a run printed while every listing 403'd.
         # Appended rather than added to the list, because a wrapped string literal
         # inside a list is implicit concatenation, which CodeQL reads as a lost comma.
+        # `readable` distinguishes "every level was served and holds nothing" from
+        # "nothing was served", which read identically from the two containers alone.
         lines.append(
-            "**No secrets could be aged.** Nothing below says anything about whether "
-            "a secret is stale, because nothing was read."
+            f"**Every level was readable and none of them holds a secret.** All "
+            f"{report.readable} level(s) were served and came back empty, so there is "
+            "nothing to age. That is a real answer rather than a failed read."
+            if report.read_any
+            else "**No secrets could be aged.** Nothing below says anything about "
+            "whether a secret is stale, because nothing was read."
         )
         lines.append("")
     if overdue:
@@ -569,20 +648,13 @@ def markdown(
             "Rotate, or record here why a name is deliberately long-lived. A name "
             "only counts as rotated when its **last-written date** moves."
         )
-    elif report.unavailable:
-        if report.secrets:
-            missed = ", ".join(f"`{scope}`" for scope in sorted(report.unavailable))
-            lines.append(
-                f"Nothing is past {max_age_days} days **among the levels that could be "
-                f"read**, but {missed} could not be. That is not a clean bill of "
-                "health: a level nobody read cannot report a stale name. The per-level "
-                "reason is below."
-            )
-        # With nothing read at all the header has already said so. Adding a sentence
-        # about "the levels that could be read" would be a claim about an empty set,
-        # which is the shape of bug this whole change is about.
-    else:
-        lines.append(f"Nothing is past {max_age_days} days. No action needed.")
+    # The verdict closes the report whether or not anything is overdue. It used to
+    # sit in an `elif` behind `if overdue:`, which made the partial-read qualifier
+    # unreachable in exactly the case it exists for — an overdue name plus an
+    # unread level printed a bare `1 of 1 listed` and disclosed the gap only in the
+    # trailing `## Levels not checked`. This is the artefact a human reads first,
+    # so it is the one that must not overstate.
+    lines.append(ageing_verdict(report, max_age_days, "below"))
     if report.unavailable:
         lines += ["", "## Levels not checked", ""]
         lines += [f"- `{scope}` — {reason}" for scope, reason in sorted(report.unavailable.items())]
@@ -593,9 +665,14 @@ def markdown(
 def ordered_scopes(report: Report) -> list[str]:
     """Every level the report actually holds, widest blast radius first.
 
-    A level that read successfully but holds nothing still prints, as `0 name(s)`:
-    for the `cron` environment that is the signal the migration has not landed yet,
-    and silence would read as "nothing to see".
+    A level that read successfully but holds nothing does not appear here, and
+    cannot: `Report` carries `secrets` and `unavailable` only, so a scope that
+    returned an empty list lands in neither. An earlier version of this docstring
+    claimed such a scope printed as `0 name(s)` and used that as its reason to
+    exist — a claim `Report` cannot represent, and one the test at
+    `test_secret_staleness_check.py` asserts against (`assert "cron:" not in out`).
+    The empty-but-readable case is handled by `ageing_verdict` instead, which can
+    see it, because it reads `secrets` and `unavailable` together.
     """
     present = {secret.scope for secret in report.secrets}
     return sorted(present, key=lambda scope: (SCOPE_ORDER.get(scope, 99), scope))
@@ -619,9 +696,8 @@ def render(
             )
     for scope, reason in sorted(report.unavailable.items()):
         out.append(f"{scope}: NOT CHECKED — {reason}")
-    overdue = report.overdue(max_age_days)
     out.append("")
-    out.append(f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed.")
+    out.append(ageing_verdict(report, max_age_days, "above"))
     if gates is not None:
         rows, unavailable = gates
         out.append("")
@@ -854,12 +930,16 @@ def main(argv: list[str] | None = None) -> int:
 
     root = REPO_ROOT
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None
+    read_from_file = bool(args.file_names)
     if args.file_names:
         try:
             report = Report(secrets=parse_tsv(args.file_names.read_text(encoding="utf-8")))
         except (OSError, ValueError) as exc:
             print(f"secret_staleness_check: {exc}", file=sys.stderr)
             return 2
+        # `readable` stays 0: the file is a hand-made list, not a served listing, and
+        # reporting its contents as "every level was readable" would claim an API read
+        # that never happened.
     else:
         slug = repo_slug(root)
         if slug is None:
@@ -882,13 +962,17 @@ def main(argv: list[str] | None = None) -> int:
         if slug is None:
             print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
             return 2
-        if not report.secrets:
+        if not report.read_any:
             # A tracker whose whole body is "I read nothing" is a monthly false alarm: it
             # looks like the rotation control is running when it is not, and it trains
             # readers to ignore the one issue that would carry real names. Every level
             # being unreadable is the normal case from CI, where the listings need a token
             # the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE. So a run that aged nothing
             # opens nothing, and clears up any tracker an earlier run already left open.
+            # Keyed on `read_any`, not `secrets`: a run where the listings were served and
+            # came back empty did measure something, and closing its tracker on the note
+            # below — which asserts every level 403'd — would put a false claim on the
+            # permanent record next to a stdout that says the opposite.
             print(close_unmeasurable_tracker(root, f"{slug[0]}/{slug[1]}"))
         else:
             print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
@@ -900,6 +984,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.fail_overdue and report.overdue(args.max_age_days):
         return 1
     if args.strict_offline and report.unavailable:
+        return 1
+    if args.strict_offline and read_from_file:
+        # The module docstring promises this refuses to report success when the input
+        # came from a file, and the previous check (`report.unavailable`) could never
+        # fire on that path because the offline report has no unread levels. A file
+        # read is not evidence about the live API, so it fails here too.
+        print(
+            "secret_staleness_check: --strict-offline with --file-names cannot verify "
+            "the live API; refusing to report success",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
