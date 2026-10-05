@@ -35,7 +35,7 @@ Robustness contract for every primitive: null → `—`; long text wraps or clam
 | book-kpis | KpiGrid | `/brief` + `/performance` | extend | 5-day return, max/current drawdown (+dates), positions open/unmarked, NAV USD |
 | decision | Prose | `/brief` | extend | `data.decision {lead, body, run_date}` |
 | risks | BulletList | `/brief` | extend | `data.risks: string[]` |
-| signals | DataTable | `/v1/tables/theses` | table | add `GET /theses?needs_resolution=` |
+| signals | DataTable | `/theses/signals` | table | wire the existing route; do **not** add `?needs_resolution=` — that is not a core `theses` column (see [DIG-442](/DIG/issues/DIG-442)), so the route currently returns an empty book
 | book (holdings) | DataTable (grp/total/bar) | `/allocations` | extend | name, sleeve, shares, value, day_return_pct, thesis_id, mark_source; `data.cash_value/book_value` |
 | sleeves | DataTable + bar | `/allocations` | extend | `data.sleeves [{sleeve, names, weight_pct}]` |
 | movers | DataTable | `/allocations` | extend | `?sort=day&limit=` |

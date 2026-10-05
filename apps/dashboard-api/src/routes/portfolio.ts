@@ -174,6 +174,13 @@ async function theses(req: Request, ctx: RouteCtx<Env>, onlySignals: boolean): P
   if ("error" in rows) return rows.error;
   const vehicles = await read(ctx.env, "thesis_vehicles", "select=*&order=date.desc&limit=2000");
   if ("error" in vehicles) return vehicles.error;
+  // DIG-442: `needs_resolution` is not a column of core `theses` — no migration
+  // declares it and no writer populates it — so this predicate is false for every
+  // real row and /theses/signals can only ever be empty. It is left in place,
+  // labelled, rather than deleted: what "a signal" should mean is a board
+  // decision (status-derived, confidence-derived, a new populated column, or
+  // deliberately nothing), and choosing here would invent a semantic the core
+  // book has never had. Do not read this as a live filter.
   const filtered = onlySignals ? rows.rows.filter((r) => r.needs_resolution === true) : rows.rows;
   const tip = maxThesisDate(filtered);
   // Vehicles are dated too. Holding them at every date would show each thesis
