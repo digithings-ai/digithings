@@ -1340,3 +1340,68 @@ def test_the_workflow_runs_the_gates_only_mode_and_needs_no_issues_scope(
     # The ageing input is meaningless once nothing is aged.
     assert "max_age_days" not in text
     assert "DIG-477" in text
+    # The summary write is the whole point of the run under D: the ageing report is
+    # gone, so what the run page says about the gate is the deliverable. Dropping this
+    # argument leaves every other test green while the job says nothing.
+    assert '--summary "$GITHUB_STEP_SUMMARY"' in run_steps
+
+
+def _workflow_script_lines() -> list[str]:
+    """The shell commands of the check step, with `#` comments removed.
+
+    Comment stripping is load-bearing, not tidiness. See
+    `test_the_workflow_still_prints_its_report_when_the_gate_has_drifted`.
+    """
+    workflow = yaml.safe_load(
+        (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
+    )
+    # Only the step that RUNS the check. `Show the report` is a separate step whose
+    # last line is a `cat`, so including it would make "last command" meaningless.
+    block = next(
+        str(step.get("run", ""))
+        for step in workflow["jobs"]["check"]["steps"]
+        if "secret_staleness_check.py" in str(step.get("run", ""))
+    )
+    return [
+        ln.strip() for ln in block.splitlines() if ln.strip() and not ln.strip().startswith("#")
+    ]
+
+
+@pytest.mark.unit
+def test_the_workflow_still_prints_its_report_when_the_gate_has_drifted() -> None:
+    """`bash -e` swallows the report on the one run that needs it.
+
+    GitHub runs a Linux `run:` block under `bash -e`. Gate drift is the ONLY thing
+    that makes this script exit non-zero, so under `-e` the step aborted at the
+    `python3` line and the `cp` that puts the report in the log never ran. The
+    failure run — the only one a human reads — then had no report body in the log,
+    and `Show the report` failed with "No such file or directory" for a reason that
+    had nothing to do with the gate. Found by review of #5091.
+    """
+    text = _workflow_script_lines()
+
+    # Assertions run over COMMANDS ONLY, with `#` comments stripped. Asserting on the
+    # raw file text is how this test passed three mutants in a row during review of
+    # #5091: the step's own explanatory comment quotes `set +e` and `exit "$rc"`, so
+    # deleting both from the shell script left every `in text` assertion satisfied by
+    # the prose describing them. A comment must never be able to satisfy an assertion
+    # about what the shell runs.
+    joined = "\n".join(text)
+
+    assert "set +e" in text, f"set +e missing from the run commands:\n{joined}"
+    # The invocation is line-continued, so position is asserted on the joined text
+    # rather than on list indices: `--gates-only` is its own element.
+    assert joined.index("set +e") < joined.index("python3 scripts/secret_staleness_check.py"), (
+        f"set +e comes after the invocation, so the step still aborts on drift:\n{joined}"
+    )
+    py_at = joined.index("python3 scripts/secret_staleness_check.py")
+    rc_at = joined.index("rc=$?")
+    cp_at = joined.index('cp "$GITHUB_STEP_SUMMARY"')
+    ex_at = joined.index('exit "$rc"')
+    # Order is the whole point: capture, then copy, then re-raise. Anything else and
+    # the report is either missed or the failure is swallowed.
+    assert py_at < rc_at < cp_at < ex_at, f"the run is not capture-copy-raise in order:\n{joined}"
+    # And the re-raise has to be the LAST command, or something after it masks it.
+    assert text[-1].strip() == 'exit "$rc"', (
+        f"the run does not end by re-raising the captured exit code:\n{joined}"
+    )
