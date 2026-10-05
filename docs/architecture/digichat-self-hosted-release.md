@@ -37,12 +37,12 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 
 | Artifact | Status | Notes |
 |---|---|---|
-| **Git tag** `digichat-vX.Y.Z` | Exists | the former `release-please-digichat.yml` workflow on `develop` (removed in the strict-essentials cut); see [RELEASES.md](../../RELEASES.md) for the current tagging process. Changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.3.2` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | the former `publish-digichat-image.yml` workflow (removed in the strict-essentials cut); see [RELEASES.md](../../RELEASES.md) for the current artifact path. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
+| **Git tag** `digichat-vX.Y.Z` | Exists | cut on `develop`; see [RELEASES.md](../../RELEASES.md) for the current tagging process (the `release-please-digichat.yml` workflow was removed in the strict-essentials cut). Changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.4.0` (`private: true` in package.json). A tag resolves to exactly one commit — `digichat-v2.3.2` → `14639ac0c`. |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | **Does not exist** | the former `publish-digichat-image.yml` workflow was removed in the strict-essentials cut and has not been replaced; the package is absent from GHCR (verified 2026-10-06 — anonymous pull `401`, org package list empty). No image is published from this repo today. Restore path and image→commit binding: [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md). `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
-| **DataTap path** | Client-side (out of repo) | Pulls same GHCR image into client Azure (ACA); GHCR→ACR mirror is a **manual** client ops step (documented in phase plans, not a digithings workflow). |
+| **DataTap path** | Client-side (out of repo) | Runs in the client's Azure Container App, fed by `datatapchatregistry.azurecr.io`. **No GHCR→ACR mirror step exists** — that was a planned shape, not an implemented one. The images in that registry were hand-built and hand-pushed: half its tags are ad-hoc debug names (`-error1`…`-error3`, `-counter1`…`-counter9`, `-boot1`, `-welcome1/2`, `-textleak-…`) that no workflow produced, and none carries an OCI annotation naming its build commit. Current state, the promotion runbook and the image→commit binding check: [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md). |
 
 ### Target (what we want operators / clients to use)
 
@@ -57,6 +57,8 @@ release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digicha
 promote develop → main   → cut release/vX.Y.Z from main (that version's patch line)
 client / digithings ops  → pull image + set env + choose profile A or B
 ```
+
+The middle arrow is **aspirational** — `publish-digichat-image` no longer exists, so no image is published today. Restoring it is the first decision in [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md) §1.
 
 ---
 
