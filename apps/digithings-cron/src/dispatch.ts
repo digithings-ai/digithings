@@ -32,6 +32,14 @@ export type DispatchResult = {
  */
 export const MISSING_REQUIRED_ARG = "missing_required_arg";
 
+/**
+ * Stable prefix on the undeclared-input refusal so POST /kick can answer a
+ * legible 400 undeclared_workflow_input instead of the bare 500 that an
+ * unrecognised GitHub 422 used to become. Keep in sync with the throw in
+ * dispatchGithub and with the prefix check in POST /kick.
+ */
+export const UNDECLARED_INPUT = "undeclared_workflow_input";
+
 export function workflowDispatchUrl(repo: string, workflow: string): string {
   return `${GH_API}/repos/${repo}/actions/workflows/${workflow}/dispatches`;
 }
@@ -47,6 +55,76 @@ function isBenign422(body: string): boolean {
     lower.includes("already running") ||
     lower.includes("workflow is already running")
   );
+}
+
+/**
+ * The input keys a GitHub 422 blames for an undeclared key, [] when the
+ * refusal is recognised but spells the keys in a shape we do not parse, or
+ * null when the body is some other 422 entirely (so the caller leaves it on
+ * the existing paths).
+ *
+ * GitHub has shipped two spellings and both carry the same marker:
+ *   Unexpected inputs provided to workflow: ["dates"]
+ *   Unexpected inputs provided to workflow: workflow_dispatch: unexpected key(s) 'dates', relative to 'a'
+ * Naming the keys is a nicety, not the gate. The marker alone already turns
+ * the 500 into a 400, so a future spelling degrades to a message without the
+ * key list instead of back to an opaque 500.
+ */
+function undeclaredInputKeys(body: string): string[] | null {
+  if (!body.toLowerCase().includes("unexpected inputs provided")) return null;
+
+  // Scan string VALUES rather than the raw text. GitHub puts the refusal in a
+  // `message` field, but that field is neither guaranteed nor top-level, and
+  // on a JSON body whose object keys happen to precede the message a raw scan
+  // would read a field name as the offending input name.
+  for (const candidate of messageCandidates(body)) {
+    if (!candidate.toLowerCase().includes("unexpected inputs provided")) continue;
+    const keys = keysFromMessage(candidate);
+    if (keys.length > 0) return keys;
+  }
+
+  return [];
+}
+
+/** Every string in a JSON body, or `[body]` when it is not JSON. */
+function messageCandidates(body: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [body];
+  }
+  const strings: string[] = [];
+  const collect = (node: unknown): void => {
+    if (typeof node === "string") strings.push(node);
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node !== null && typeof node === "object") {
+      for (const value of Object.values(node)) collect(value);
+    }
+  };
+  collect(parsed);
+  return strings;
+}
+
+function keysFromMessage(message: string): string[] {
+  // Quotes and backslashes terminate a token, because an undecoded body can
+  // still carry JSON escaping here. This is a tokeniser, not a whitelist of
+  // GitHub's input-name charset, so it does not reject a key it should not.
+  const quoted = (s: string): string[] =>
+    [...s.matchAll(/["']([^"'\\]+)["']/g)].map((m) => m[1]);
+
+  for (const bracketed of message.matchAll(/\[[^\]]*\]/g)) {
+    const keys = quoted(bracketed[0]);
+    if (keys.length > 0) return keys;
+  }
+
+  const relative = message.match(/unexpected key\(s\)\s+(.*?)(?:,?\s+relative to\b|$)/is);
+  if (relative) {
+    const keys = quoted(relative[1]);
+    if (keys.length > 0) return keys;
+  }
+
+  return [];
 }
 
 function isRateLimited(status: number, body: string): boolean {
@@ -270,12 +348,18 @@ async function dispatchGithub(
   const dryRun = env.DRY_RUN === "1";
   let url: string;
   let body: Record<string, unknown>;
+  // What this dispatch targets, in the words the refusal messages use. Only
+  // the workflow_dispatch branch sends inputs, so a 422 blaming an input key
+  // can only come from there, but both branches set this so the label can
+  // never name the wrong target.
+  let target: string;
 
   if (job.kind === "workflow_dispatch" || job.kind === "container" || job.kind === "probe") {
     if (!job.workflow || !job.ref) {
       throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
     }
     url = workflowDispatchUrl(job.repo, job.workflow);
+    target = `${job.workflow} on ref ${job.ref}`;
     // Per-request args are merged over the row's static inputs, not substituted
     // for them: a kick that passes only `dates` must still carry the row's
     // `backfill_snapshots`. Keys the job never declared still reach the
@@ -304,6 +388,7 @@ async function dispatchGithub(
     }
     url = repositoryDispatchUrl(job.repo);
     body = { event_type: job.event_type, client_payload: {} };
+    target = `repository_dispatch ${job.event_type} on ${job.repo}`;
   }
 
   if (dryRun) {
@@ -349,6 +434,37 @@ async function dispatchGithub(
         attempt,
       });
       return { ok: true, status, dry_run: false };
+    }
+
+    // A 422 blaming an undeclared input key is the operator naming a key the
+    // workflow does not declare, not a transient fault. Retrying it would
+    // repeat the same refusal, so it fails closed on the first attempt like
+    // the guard above. The message is the whole point: index.ts hands it to
+    // the operator as the /kick 400 detail, verbatim.
+    //
+    // Placed FIRST, above the benign-422 and rate-limit checks, because the
+    // marker is the one thing the operator can act on. GitHub does not send
+    // these together, so the order is a deliberate tie-break rather than a
+    // claim about GitHub: if a body ever carried both an undeclared key and
+    // "already running", the bad key must still be reported, or the row
+    // returns ok forever and the operator never learns the key is wrong.
+    const undeclared = undeclaredInputKeys(text);
+    if (undeclared !== null) {
+      const named = undeclared.length > 0 ? `: ${undeclared.join(", ")}` : "";
+      logLine({
+        cron,
+        repo: job.repo,
+        job: job.id,
+        github_status: status,
+        dry_run: false,
+        note: "undeclared_workflow_input",
+        undeclared_keys: undeclared,
+        error: text.slice(0, 500),
+      });
+      throw new Error(
+        `${UNDECLARED_INPUT}: job ${job.id}: ${target} does not declare the ` +
+          `input key(s)${named}. GitHub refused the dispatch, so no run started.`,
+      );
     }
 
     if (status === 422 && isBenign422(text)) {

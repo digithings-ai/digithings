@@ -14,8 +14,21 @@ export type Job = {
   /**
    * Input keys of which at least one must carry a non-empty value (static
    * inputs plus per-request `/kick` args) before this row may be dispatched.
-   * Unset means no requirement. Enforced in dispatchGithub BEFORE any dispatch,
-   * dry-run or real, so a refusal never reaches api.github.com.
+   * Unset means no requirement.
+   *
+   * Enforced in dispatchGithub BEFORE any dispatch, dry-run or real, so a
+   * refusal never reaches api.github.com. Scope that honestly: the guard sits
+   * on the branch that sends `inputs`, so it covers kind "workflow_dispatch"
+   * (and "container"/"probe" only if GITHUB_OVERRIDE_JOBS routes them to
+   * GitHub). It does NOT cover kind "repository_dispatch", which the else
+   * branch serves without inputs and without ever consulting this option. That
+   * gap is deliberate, not an oversight: a repository_dispatch carries no
+   * inputs at all, so there is nothing for the option to require. It is pinned
+   * by a test in dispatch.test.ts.
+   *
+   * Only wd() accepts the option. cj() and pj() do not, and no constructor
+   * builds a repository_dispatch row, so a row declared through the shipped
+   * constructors cannot reach an uncovered path.
    */
   requiredKickArgs?: readonly string[];
   event_type?: string;
@@ -375,7 +388,13 @@ export const JOBS: readonly Job[] = [
    *   nodes/snapshot_publish.py    develop == main == 66ee88ae
    *   scripts/backfill_snapshots.py develop == main == 8e65ffd8
    * Re-verify both before switching the row on, and prefer flipping it on
-   * `main` if they ever diverge.
+   * `main` if they ever diverge. If you do switch it on with a real cron,
+   * know where the guard fails: `requiredKickArgs` refuses any tick that
+   * carries no date bound, and on the scheduled path that throw lands in
+   * `ctx.waitUntil`, not in a response. The tick still fails closed, but as an
+   * unhandled rejection with nothing to answer, so every 30 February dies
+   * quietly in the log instead of reporting why. Give the row a real
+   * `inputs` date bound before enabling it, or leave it disabled.
    *
    * Static inputs are deliberately just `{ backfill_snapshots: "true" }`:
    *  - It is a subset of what twelve-x `develop` declares today, so this row
@@ -388,7 +407,11 @@ export const JOBS: readonly Job[] = [
    *    re-projects each one with a fresh `as_of=now`. That rewrites
    *    fx_consensus_snapshot (both views), fx_confluence_snapshot and
    *    fx_events_snapshot for the whole history, and each `_upsert` then prunes
-   *    any older generation for that run_date. `requiredKickArgs` below makes
+   *    any older generation for that run_date. ("Each" runs one way: a
+   *    `run_date` whose confluence and events lists both come back empty hits
+   *    `_upsert` returning 0 before its `_prune`, so that date is rewritten
+   *    without being pruned. Overstating the blast radius is the safe
+   *    direction to be wrong in.) `requiredKickArgs` below makes
    *    the row REFUSE a kick that carries none of since/dates/until, before any
    *    dispatch. The GitHub UI still has the same exposure; this row no longer
    *    walks into it.

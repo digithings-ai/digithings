@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   dispatch,
   MISSING_REQUIRED_ARG,
+  UNDECLARED_INPUT,
   repositoryDispatchUrl,
   workflowDispatchUrl,
 } from "./dispatch";
@@ -769,5 +770,194 @@ describe("requiredKickArgs guard (DIG-369)", () => {
     // index.ts matches on this exact string; changing one without the other
     // silently turns a legible refusal back into an opaque 500.
     expect(MISSING_REQUIRED_ARG).toBe("missing_required_arg");
+    expect(UNDECLARED_INPUT).toBe("undeclared_workflow_input");
+  });
+});
+
+/**
+ * An operator typing `dates` passes requiredKickArgs (it is a listed key and
+ * carries a value) and only finds out at api.github.com that maintenance.yml
+ * does not declare it. GitHub refuses the dispatch, so nothing runs and nothing
+ * changes, but the refusal used to reach /kick as a bare 500 with the key
+ * buried in a log line. DIG-457 maps it to a named, legible 400.
+ */
+describe("an undeclared workflow_dispatch input key is a legible refusal (DIG-457)", () => {
+  const row = jobsForCron("0 0 30 2 *", { includeDisabled: true })[0]!;
+
+  function stub422(body: string): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn(async () => new Response(body, { status: 422 }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  // The refusal message is the deliverable, so these tests read it rather than
+  // pattern-match it. Fails the test if the dispatch resolves at all.
+  async function refusal(promise: Promise<unknown>): Promise<Error> {
+    return promise.then(
+      () => {
+        throw new Error("expected the dispatch to be refused, but it resolved");
+      },
+      (err: unknown) => err as Error,
+    );
+  }
+
+  const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+
+  // Both spellings GitHub has shipped. The second is what the API returns for
+  // the dispatch endpoint proper; the first is the summary form quoted in the
+  // DIG-55 review.
+  it.each([
+    [
+      "JSON array form",
+      '{"message":"Unexpected inputs provided to workflow: [\\"dates\\"]"}',
+      "dates",
+    ],
+    [
+      "relative-to form",
+      "Unexpected inputs provided to workflow: workflow_dispatch: unexpected key(s) 'dates', relative to 'backfill_snapshots', 'since'",
+      "dates",
+    ],
+  ])("names the offending key in the %s", async (_label, body, key) => {
+    const fetchMock = stub422(body);
+    await expect(dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } })).rejects.toThrow(
+      new RegExp(`${UNDECLARED_INPUT}[\\s\\S]*${key}`),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("names every offending key when GitHub names several", async () => {
+    stub422('Unexpected inputs provided to workflow: ["dates", "until"]');
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, {
+        args: { dates: "2026-06-02", until: "2026-06-03" },
+      }),
+    );
+    expect(err.message).toContain("dates, until");
+  });
+
+  it("says the key is not declared by the workflow on the target ref", async () => {
+    stub422('Unexpected inputs provided to workflow: ["dates"]');
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } }),
+    );
+    expect(err.message).toContain("maintenance.yml on ref develop");
+    expect(err.message).toMatch(/does not declare/);
+  });
+
+  // A future GitHub spelling must not fall back to the opaque 500 the marker
+  // exists to remove. The key list is the nicety; the 400 is the point.
+  it("still refuses legibly when no key can be parsed out of the body", async () => {
+    const fetchMock = stub422("Unexpected inputs provided to workflow.");
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } }),
+    );
+    expect(err.message).toContain(UNDECLARED_INPUT);
+    expect(err.message).toContain("maintenance.yml on ref develop");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Scanning JSON VALUES rather than raw text: a body whose message is nested
+  // must not have an object key read back as the offending input name. The
+  // field name here is the trap: "message" is a perfectly good string that a
+  // raw-text bracket scan would happily report to the operator as a bad key.
+  it("reads the key out of a nested message, not an object field name", async () => {
+    stub422('{"errors":[{"message":"Unexpected inputs provided to workflow: [\\"dates\\"]"}]}');
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } }),
+    );
+    expect(err.message).toContain(": dates.");
+    expect(err.message).not.toContain("message");
+  });
+
+  it("keeps scanning past a bracket group that names no key", async () => {
+    stub422('Unexpected inputs provided to workflow: [see docs] and ["dates"]');
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } }),
+    );
+    expect(err.message).toContain(": dates.");
+  });
+
+  // Deterministic refusals must not burn retries: the second call would fail
+  // identically and delay the operator's answer by two backoffs. The body
+  // carries a rate-limit marker too, so this test fails if the branch is ever
+  // moved below the retry check — which is the property worth pinning, since a
+  // marker-free 422 already failed once before this change existed.
+  it("does not retry, even when the body also reads as a rate limit", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          '{"message":"secondary rate limit. Unexpected inputs provided to workflow: [\\"dates\\"]"}',
+          { status: 422, headers: { "Retry-After": "0" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } }),
+    );
+    expect(err.message).toContain(UNDECLARED_INPUT);
+    expect(err.message).not.toContain("retries exhausted");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Same tie-break the other way: the undeclared key is the part the operator
+  // can act on. Returning ok here would hide a wrong key permanently.
+  it("reports the key even when the body also reads as already-running", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          '{"message":"Workflow is already running. Unexpected inputs provided to workflow: [\\"dates\\"]"}',
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const err = await refusal(
+      dispatch(env, row, row.cron, 0, { args: { dates: "2026-06-02" } }),
+    );
+    expect(err.message).toContain(UNDECLARED_INPUT);
+    expect(err.message).toContain(": dates.");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // The branch must not swallow anything else. A rate limit is still a 429 to
+  // retry, and every other failure keeps the existing "HTTP <status>" throw so
+  // /kick still 500s on them.
+  it.each([
+    ["403", "forbidden", 403],
+    ["500", "server error", 500],
+    ["404", "Not Found", 404],
+  ])("leaves a %s on the existing throw", async (_label, body, status) => {
+    const fetchMock = vi.fn(async () => new Response(body, { status }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      dispatch(env, row, row.cron, 0, { args: { since: "2026-06-02" } }),
+    ).rejects.toThrow(new RegExp(`HTTP ${status}`));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a rate limit retryable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("secondary rate limit", {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await dispatch(env, row, row.cron, 0, { args: { since: "2026-06-02" } });
+    expect(result.status).toBe(204);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves an already-running 422 on the benign path", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response("Workflow is already running", { status: 422 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await dispatch(env, row, row.cron, 0, { args: { since: "2026-06-02" } });
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(422);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

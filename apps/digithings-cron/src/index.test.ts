@@ -356,7 +356,9 @@ describe("GET /runs", () => {
 describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
   const SENTINEL = "0 0 30 2 *";
 
-  function envFor(githubFetch: () => Promise<Response>): Env {
+  // The fetch stub is installed by each test on globalThis, so this only has to
+  // supply the env the route reads.
+  function envFor(): Env {
     return {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
@@ -369,7 +371,7 @@ describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
   it("answers 400 missing_required_arg on a bare kick, and never dispatches", async () => {
     const githubFetch = vi.fn();
     vi.stubGlobal("fetch", githubFetch);
-    const env = envFor(githubFetch as unknown as () => Promise<Response>);
+    const env = envFor();
     env.RUNNER = undefined;
     const res = await worker.fetch(kick({ cron: SENTINEL }), env, executionContext([]));
     expect(res.status).toBe(400);
@@ -387,7 +389,7 @@ describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
   ])("refuses %s the same way", async (_label, args) => {
     const githubFetch = vi.fn();
     vi.stubGlobal("fetch", githubFetch);
-    const env = envFor(githubFetch as unknown as () => Promise<Response>);
+    const env = envFor();
     env.RUNNER = undefined;
     const res = await worker.fetch(kick({ cron: SENTINEL, args }), env, executionContext([]));
     expect(res.status).toBe(400);
@@ -400,7 +402,7 @@ describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
       async () => new Response(null, { status: 204 }),
     );
     vi.stubGlobal("fetch", githubFetch);
-    const env = envFor(githubFetch as unknown as () => Promise<Response>);
+    const env = envFor();
     env.RUNNER = undefined;
     const res = await worker.fetch(
       kick({ cron: SENTINEL, args: { since: "2026-06-02" } }),
@@ -417,5 +419,90 @@ describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
       ref: "develop",
       inputs: { backfill_snapshots: "true", since: "2026-06-02" },
     });
+  });
+});
+
+/**
+ * DIG-457. `dates` is named in the guard's own refusal message, so it is the
+ * most likely operator mistake, and today it is not one the guard can catch:
+ * it carries a value, so the guard lets it through, and GitHub refuses it.
+ * The dispatch fails safe (no run starts), but the operator saw a bare 500.
+ * This route must name the key instead.
+ */
+describe("POST /kick names an undeclared workflow_dispatch input key (DIG-457)", () => {
+  const SENTINEL = "0 0 30 2 *";
+
+  function envFor(): Env {
+    return {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "github-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER_AUTH_TOKEN: "runner-token",
+    } as Env;
+  }
+
+  it("answers 400 undeclared_workflow_input naming the key, and does not retry", async () => {
+    const githubFetch = vi.fn(
+      async () =>
+        new Response('{"message":"Unexpected inputs provided to workflow: [\\"dates\\"]"}', {
+          status: 422,
+        }),
+    );
+    vi.stubGlobal("fetch", githubFetch);
+    const env = envFor();
+    env.RUNNER = undefined;
+
+    const res = await worker.fetch(
+      kick({ cron: SENTINEL, args: { dates: "2026-06-02" } }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; cron: string; detail: string };
+    expect(body.error).toBe("undeclared_workflow_input");
+    expect(body.cron).toBe(SENTINEL);
+    expect(body.detail).toContain("dates");
+    expect(body.detail).toContain("maintenance.yml on ref develop");
+    expect(body.detail).toMatch(/does not declare/);
+    // One attempt. A second identical 422 would only delay the answer.
+    expect(githubFetch).toHaveBeenCalledTimes(1);
+  });
+
+  // The route does not build this 500 itself; it rethrows, and the platform
+// renders an uncaught throw as a 500. Asserting the rethrow is the
+  // discriminating check, since the new 400 branch must not have caught it.
+  it("still rethrows a failure it does not recognise, so the route still 500s", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("forbidden", { status: 403 })),
+    );
+    const env = envFor();
+    env.RUNNER = undefined;
+
+    await expect(
+      worker.fetch(
+        kick({ cron: SENTINEL, args: { since: "2026-06-02" } }),
+        env,
+        executionContext([]),
+      ),
+    ).rejects.toThrow(/HTTP 403/);
+  });
+
+  it("leaves the DIG-369 bare-kick 400 in place", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const env = envFor();
+    env.RUNNER = undefined;
+
+    const res = await worker.fetch(kick({ cron: SENTINEL }), env, executionContext([]));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; cron: string; detail: string };
+    expect(body.error).toBe("missing_required_arg");
+    expect(body.cron).toBe(SENTINEL);
+    expect(body.detail).toContain("since");
+    expect(githubFetch).not.toHaveBeenCalled();
   });
 });

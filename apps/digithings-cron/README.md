@@ -30,10 +30,28 @@ workflow_dispatch and logs `github_override` at error.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
+## POST /kick refusals
+
+`POST /kick` answers 400 for a request the Worker refuses on purpose, and both
+refusals name the reason in `detail` so the operator does not retry blind:
+
+- `400 missing_required_arg` — a row declared `requiredKickArgs` and the
+  request carried none of them (no date bound). Nothing is dispatched.
+- `400 undeclared_workflow_input` — the request carried an input key the
+  workflow on the target ref does not declare. GitHub refused the dispatch, so
+  no run started. `detail` names the workflow and the ref, and the offending key
+  or keys whenever GitHub names them in the body.
+
+Both bodies are `{error, cron, detail}`. Every other dispatch failure keeps its
+existing shape and reaches the caller as a 500 — an unrecognised 422 is not
+guessed at. Note `started` is absent from a refusal body: the dispatch fails
+before the run list is returned, so on a cron shared by more than one row a
+sibling row may already have been dispatched.
+
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(37 expressions after twelve-x digisearch parity). House-run is
+(38 expressions after twelve-x digisearch parity). House-run is
 weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
 `house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
 `checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.

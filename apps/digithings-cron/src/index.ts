@@ -6,7 +6,12 @@
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */
-import { dispatch, MISSING_REQUIRED_ARG, type DispatchResult } from "./dispatch";
+import {
+  dispatch,
+  MISSING_REQUIRED_ARG,
+  UNDECLARED_INPUT,
+  type DispatchResult,
+} from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
@@ -231,12 +236,23 @@ export default {
           includeDisabled: true,
         });
       } catch (err) {
-        // A row that refuses the request (see requiredKickArgs) must read as a
-        // deliberate refusal, not an opaque 500 an operator retries blind. Every
-        // other dispatch failure keeps its existing shape.
+        // Two refusals read as deliberate operator errors, not opaque 500s to
+        // retry blind: a row that demanded a key and got none
+        // (requiredKickArgs), and a key the workflow on the target ref does
+        // not declare. Every other dispatch failure keeps its existing shape.
+        //
+        // `cron` is in the body so the operator can see which schedule
+        // refused. started/skipped are not: runJobsForCron rejects before it
+        // returns them. Harmless while each cron maps to one row, and it
+        // stops being harmless the moment a second row shares a cron string,
+        // because a sibling row may already have been dispatched alongside
+        // the refusal. Recorded here rather than papered over.
         const detail = err instanceof Error ? err.message : String(err);
         if (detail.startsWith(MISSING_REQUIRED_ARG)) {
-          return Response.json({ error: MISSING_REQUIRED_ARG, detail }, { status: 400 });
+          return Response.json({ error: MISSING_REQUIRED_ARG, cron, detail }, { status: 400 });
+        }
+        if (detail.startsWith(UNDECLARED_INPUT)) {
+          return Response.json({ error: UNDECLARED_INPUT, cron, detail }, { status: 400 });
         }
         throw err;
       }
