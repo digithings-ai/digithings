@@ -61,6 +61,12 @@ CRED_VALUE_PATTERNS = [
     # tracked example files begins with `AKIA` - the prefix carries the signal,
     # the class only bounds the length.
     r'^AKIA[A-Za-z0-9]{16,}',
+    # AWS temporary (STS) access key IDs, `ASIA`, are the same 20 characters in
+    # total and are issued in real deployments, so they take the same floor.
+    # Leaving this prefix out reported a temporary credential clean behind a
+    # comment while the identical bare key was reported, which is the exact
+    # false negative this list exists to close.
+    r'^ASIA[A-Za-z0-9]{16,}',
     # HuggingFace. `hf_` is 3, then an opaque 34-character token.
     r'^hf_[A-Za-z0-9]{20,}',
     # Slack. A bot token is three hyphen-separated groups after the prefix, so
