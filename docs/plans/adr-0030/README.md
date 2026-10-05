@@ -2,6 +2,8 @@
 
 > **For agentic workers:** Implement one package file under `docs/plans/adr-0030/packages/`. Do not implement a wave from this page alone. This plan is **Proposed** for Chris to skim via One. It does not mark implementation done, and it does not amend ADR-0030's Accepted text.
 
+⚠️ **HOLD — PrimeMarket (PMT) access recipe** — Package **P22** and the `twelve_x/nodes/scrape.py` mapping are frozen. The vendor's Terms of Use (§11–12) prohibit the access method. Publication awaits a decision on DIG-478. See [HOLD-Primarket.md](HOLD-Primarket.md). **The generic `digifetch` library is NOT held.**
+
 **Goal:** Name and stub the swappable stage handoffs so digiquant and twelve-x can be composed as one pipeline family, without changing recommendation policy and without enabling execution.
 
 **Architecture:** Stage 1 emits `ResearchDigest`. Stage 2 is either `digiquant.portfolio` (long horizon) or twelve-x trade generation (short horizon, package stays in `digithings-ai/twelve-x`). Stage 3 is only `digiquant.execution`, and it stays off for twelve-x. Adapters are pure Pydantic functions in `digiquant.stages`. They do not invoke graphs, write Supabase, or build `OrderIntent` rows.
