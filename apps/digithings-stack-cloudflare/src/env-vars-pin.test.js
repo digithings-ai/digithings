@@ -51,7 +51,6 @@ const indexSource = readFileSync(
 const MCP_SCOPED_VARS = new Set([
   "DIGIQUANT_MCP_SCOPE",
   "DIGIQUANT_MARKET_DATA_BACKEND",
-  "FRED_API_KEY",
   "R2_ACCOUNT_ID",
   "R2_BUCKET",
   "R2_ACCESS_KEY_ID",

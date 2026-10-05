@@ -483,7 +483,7 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+Per-component secrets (`wrangler secret put`, never committed):
 `GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
 R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
@@ -503,7 +503,6 @@ Owner applies the six secrets from `apps/digithings-stack-cloudflare/`
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
@@ -655,9 +654,9 @@ cleared per sample, no network): Task 1 Supabase technicals p50 1413.2ms
 
 Prod gate (human): Worker-edge digikey JWT enforcement (scope
 `digiquant:backtest`) must land before production MCP use — not
-implemented here. Owner actions: `FRED_API_KEY` + `CORE_POSTGRES_URI`
-are MISSING from GitHub secrets (refresh cron + backfill need them); live
-refresh runs stay supervised with the operator.
+implemented here. Owner actions: `CORE_POSTGRES_URI` is MISSING from GitHub
+secrets (refresh cron + backfill need it); live refresh runs stay supervised
+with the operator.
 
 ### CLI (`python -m digiquant` / `digiquant`)
 
