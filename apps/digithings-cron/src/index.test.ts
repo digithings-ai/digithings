@@ -94,6 +94,49 @@ describe("scheduled", () => {
     expect(runnerFetch).not.toHaveBeenCalled();
   });
 
+  // DIG-732: before this, an unmapped cron was one console.error line that
+  // nobody read. A trigger that fires with nothing behind it is deployment
+  // drift, so the tick must open an issue on the twelve-x path under the
+  // unrecognised-cron label — never the missing-required-trigger label, which
+  // means the opposite (a required cron is gone).
+  it("raises the unrecognised-cron alarm when a tick maps to no job", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        const status = String(url).includes("/labels/") ? 200 : 201;
+        return new Response(JSON.stringify({ html_url: "https://example.test/1" }), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    const pending: Promise<unknown>[] = [];
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "github-token" };
+
+    await worker.scheduled(
+      { cron: "13 4 * * *", scheduledTime: Date.UTC(2026, 8, 5, 4, 13) } as ScheduledController,
+      env,
+      executionContext(pending),
+    );
+    await Promise.all(pending);
+
+    const issues = calls.filter((call) => call.url.endsWith("/issues"));
+    expect(issues).toHaveLength(1);
+    expect(issues[0].url).toBe("https://api.github.com/repos/digithings-ai/twelve-x/issues");
+    const body = JSON.parse(String(issues[0].init?.body)) as {
+      title: string;
+      labels: string[];
+      body: string;
+    };
+    expect(body.labels).toEqual(["cron-unrecognised-trigger"]);
+    expect(body.title).toBe("Unrecognised cron trigger — 13 4 * * *");
+    expect(body.body).toContain("13 4 * * *");
+    // Only the issue write: an unmapped tick dispatches nothing.
+    expect(calls.filter((call) => call.url.includes("/dispatches"))).toHaveLength(0);
+  });
+
   it("dispatches checkpoint-archive to digiquant-runner", async () => {
     const githubFetch = vi.fn();
     vi.stubGlobal("fetch", githubFetch);
