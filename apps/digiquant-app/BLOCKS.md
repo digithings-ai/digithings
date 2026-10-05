@@ -8,7 +8,7 @@ Route status: **exists** (CONTRACT §6) · **extend** (add fields to an existing
 
 | primitive | covers (mock class) | status |
 |---|---|---|
-| `Window` | `.sec` + eyebrow bar (`NN / label`, right slot, hairline frame, body scrolls) | done |
+| `Window` | `.sec` + eyebrow bar (`NN / label`, right slot, hairline frame, body scrolls). The right slot is the **age footer** — `as of 2026-09-17 · 12 trading days old · stale` — built by `lib/block-age.ts` off the block's `asOf` stamp; an undated block keeps the route. A state word, not a colour, carries the severity. | done |
 | `DataTable` | `.tw` — sticky th, `.num`, row variants `sel/total/grp`, inline weight bar, wrap/clamp for long text | partial |
 | `KpiGrid` | `.kpis/.kpi` (label / value / sub, tones) | done |
 | `Badge` / `Chip` | `.badge` ok/wip/gap/unavailable/live/kind(OPEN·ADD·TRIM·EXIT)/state(active·watch·exited), `.chip` paper | todo |
