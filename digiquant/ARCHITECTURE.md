@@ -582,6 +582,21 @@ inside the window and takes the `_restated` path (a full-history re-pull) where 
 used to be invisible; that is the intended sealing behaviour, at the cost of an
 occasional extra re-pull.
 
+The cadence exemption is per-series, so it also needs a whole-leg guard. `history-only`
+on a slow-cadence series is exempt on its own (one series sitting out its release cycle
+is not an outage), but a *total* macro-feed death made every outcome exempt at once:
+`failed` came back empty, `staleness_gate` is only a date-gap check over the max
+`as_of` that a whole-leg freeze does not move, and the run exited 0 claiming fresh with
+the macro panel frozen at the last good seal (DIG-694 / DIG-981).
+`_macro_leg_dead(outcomes, exempt)` suspends the exemption when **more than one** exempt
+series is silent **and** nothing else in the run soft-failed, so the operator sees the
+`fred__*` ids in `artifact["failed"]`. The second clause is what keeps it sound: if any
+other outcome soft-failed, the per-series filter already left a non-exempt entry in
+`failed` and the run is stale anyway, so the aggregate can only ever name the macro
+tickers the exemption was swallowing. A daily or `error` outcome is never exempt at any
+cadence. Staleness flag only — no money, rate or weight arithmetic. Contract tests:
+`tests/scripts/test_macro_death_is_not_silent.py`.
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
