@@ -593,6 +593,108 @@ describe("toDigiChatActivity — a negative claim requires a retrieval", () => {
     expect(zeroHitRows(toDigiChatActivity(spans))).toEqual([]);
   });
 
+  it("holds for a payload shape nobody has listed, not just the ones we probed", () => {
+    // The property, pinned generally rather than as a shape list. The payloads
+    // reach the projector as raw `toolResult` spans — standardPartsToSpans
+    // projects a settled tool part without its output, so going through the
+    // parts path here would test the projection, not the guard, and every
+    // payload would collapse to the same span. `records` carries a real hit in
+    // a shape we cannot read: the sharpest case, because "no hits" there
+    // contradicts the payload in front of us.
+    const payloads: unknown[] = [
+      { connections: [] },
+      { rows: 3 },
+      { records: [{ id: "x" }] },
+      { some_future_mcp_shape: { nested: true } },
+    ];
+
+    for (const toolResult of payloads) {
+      const rows = toDigiChatActivity([
+        {
+          operation: "execute_tool",
+          toolName: "some_mcp_tool",
+          query: "acme",
+          status: "completed",
+          label: "Searched for: \"acme\"",
+          toolResult,
+        },
+      ]);
+
+      expect(zeroHitRows(rows), JSON.stringify(toolResult)).toEqual([]);
+      expect(rows.some((r) => "count" in r), JSON.stringify(toolResult)).toBe(false);
+      expect(
+        rows.find((r) => r.kind === "status"),
+        JSON.stringify(toolResult)
+      ).toMatchObject({ outcome: { name: "some_mcp_tool", query: "acme", state: "unreadable" } });
+    }
+  });
+
+  it("says an unreadable result is unreadable for any tool, not only MCP ones", () => {
+    // One of our own search tools, but it came back with something we cannot
+    // count. `count: 0` here would contradict the payload that exists, so the
+    // payload — not the tool's name — is what makes this an unknown. Without
+    // this, a name-only guard reads as: ours means empty, and the two halves of
+    // the rule would be silently conflated.
+    const rows = toDigiChatActivity([
+      {
+        operation: "execute_tool",
+        toolName: "digisearch",
+        query: "auth",
+        status: "completed",
+        label: 'Searched for: "auth"',
+        toolResult: { chunks: [] },
+      },
+    ]);
+
+    expect(zeroHitRows(rows)).toEqual([]);
+    expect(rows.some((r) => "count" in r)).toBe(false);
+    expect(rows.find((r) => r.kind === "status")).toMatchObject({
+      outcome: { name: "digisearch", query: "auth", state: "unreadable" },
+    });
+  });
+
+  it("still claims no hits for a settled search tool that produced no retrieve span", () => {
+    // The one legitimate zero, on the path the embed actually uses:
+    // standardPartsToSpans settles a completed tool part into a single
+    // `completed` span with no retrieve span and no toolResult. An empty answer
+    // from a tool we know searches is a real answer, so this must keep working —
+    // a real empty result and a tool whose output we cannot read are different
+    // cases, and collapsing them loses the honest negative the guard depends on.
+    const spans = standardPartsToSpans([
+      {
+        type: "tool-digisearch",
+        toolCallId: "t1",
+        state: "output-available",
+        input: { query: "auth" },
+        output: { label: 'Searched for: "auth"' },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(spans).toHaveLength(1);
+    expect(toDigiChatActivity(spans)).toEqual([
+      { kind: "tool_result", name: "digisearch", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("does not claim no hits for a settled search tool whose retrieve came back empty", () => {
+    // The same path with the retrieve output present but no documents: the
+    // retrieve span itself is the evidence a retrieval ran, and `hitCount: 0`
+    // from upstream is a real zero.
+    const spans = standardPartsToSpans([
+      {
+        type: "tool-digisearch",
+        toolCallId: "t1",
+        state: "output-available",
+        input: { query: "auth" },
+        output: { label: "Sources", documents: [] },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(toDigiChatActivity(spans)).toEqual([
+      { kind: "tool_result", name: "digisearch", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
   it("still claims no hits when a search completed and produced no retrieve span", () => {
     // The one legitimate zero: the search provably ran (started + completed)
     // and no retrieve span followed. This must keep working — a real empty
