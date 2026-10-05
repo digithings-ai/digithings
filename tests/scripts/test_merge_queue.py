@@ -223,9 +223,298 @@ def test_an_ignored_check_cannot_fail_the_queue() -> None:
         merge_method=policy.merge_method,
         delete_branch=policy.delete_branch,
         required_checks=policy.required_checks,
+        required_checks_by_repo=policy.required_checks_by_repo,
         ignored_checks=frozenset({"advisory-score"}),
     )
     assert mq.evaluate(pr, policy, acting_role="cto", base="develop", attest_role="qa").eligible
+
+
+# --- which checks are required, and telling misconfiguration from a red build --
+
+
+def test_required_checks_are_resolved_per_repo() -> None:
+    """Two repos in this org report different names, so one global list cannot serve both.
+
+    `digithings` runs every test suite through reusable workflows, so GitHub reports
+    each as `<caller> / test` — `digibase / test`, `digiclaw / test`, and eleven more —
+    and names nothing `test`. `twelve-x` runs one job and does report a bare `test`.
+    A single hardcoded list is therefore wrong for one of them, and DIG-690 measured
+    which: 28 PRs blocked, every one of them on `required check 'test' has not
+    reported`, in a repo where no PR has ever reported it.
+    """
+    policy = mq.load_policy()
+    assert policy.required_for("digithings-ai/twelve-x") == ("test",)
+    digithings = policy.required_for("digithings-ai/digithings")
+    assert "test" not in digithings, "a bare `test` never reports on digithings"
+    assert "Required checks passed" in digithings
+    assert "doc-links + agents-init" in digithings
+    assert "mypy — digibase + digikey" in digithings
+    # An unlisted repo still gets a gate rather than none: the failure that matters
+    # here is a silent pass, not a refusal.
+    assert policy.required_for("digithings-ai/digithings-ops")
+
+
+def test_a_required_check_that_no_pr_in_the_queue_ever_reports_is_a_misconfiguration() -> None:
+    """A gate name that cannot match must say so, not look like 28 red CI runs.
+
+    The whole cost of DIG-690 was that `required check 'test' has not reported` reads
+    identically whether CI is broken or the gate is misnamed, so an operator's first
+    move is to go look at CI. Comparing against everything the queue actually reported
+    is what separates the two — and it still blocks, because a gate that names nothing
+    must not become a gate that names nothing and merges.
+    """
+    pr = _pr(1, test_conclusion=None)
+    pr["statusCheckRollup"] = [
+        {
+            "__typename": "CheckRun",
+            "name": "digibase / test",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "Required checks passed",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+    unmatched, reported = mq.unmatched_required_checks([pr], ("test",))
+    assert unmatched == ("test",)
+    assert "digibase / test" in reported and "Required checks passed" in reported
+    # Nothing reported anywhere is a different problem — CI never ran — and must not
+    # be reported as a naming problem.
+    assert mq.unmatched_required_checks([_pr(2, test_conclusion=None)], ("test",)) == ((), ())
+
+
+def test_a_required_check_that_any_pr_reports_is_not_called_a_misconfiguration() -> None:
+    """The path-filtered case is the one the gate exists for, so it must stay quiet.
+
+    One PR touching only Python legitimately has no `digichat / test`. If that counted
+    as misconfiguration, the detector would fire on correct behaviour and train
+    operators to ignore it.
+    """
+    python_only = _pr(1, test_conclusion=None)
+    python_only["statusCheckRollup"] = [
+        {
+            "__typename": "CheckRun",
+            "name": "Required checks passed",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        }
+    ]
+    full_suite = _pr(2, test_conclusion=None)
+    full_suite["statusCheckRollup"] = python_only["statusCheckRollup"] + [
+        {
+            "__typename": "CheckRun",
+            "name": "digichat / test",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        }
+    ]
+    # `digichat / test` is absent from the Python-only PR and present on the other.
+    # Required everywhere, reported by *someone* — which is the gate working, not a
+    # naming mistake, so there is nothing to announce.
+    assert mq.unmatched_required_checks([python_only, full_suite], ("digichat / test",)) == (
+        (),
+        ("Required checks passed", "digichat / test"),
+    )
+
+
+def test_a_misconfigured_gate_is_announced_once_and_still_blocks(gh_stub: Any) -> None:
+    """The condition that cost DIG-690 28 PRs, stated as a test.
+
+    The announcement goes to stderr because it is a diagnostic, not queue state — a
+    line of warning mixed into the `list` table would read as a PR's reason for
+    blocking. It must name the offending check, name what CI *is* reporting so the
+    reader does not go looking for a red build, and point at the file to edit.
+    """
+    prs = [_pr(1), _pr(2, created="2026-10-02T00:00:00Z")]
+    for pr in prs:
+        pr["statusCheckRollup"] = [
+            {
+                "__typename": "CheckRun",
+                "name": "digibase / test",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            }
+        ]
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("list", "--repo", "digithings-ai/digithings", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK
+    err = done.stderr
+    assert "misconfigured required check" in err
+    assert "not a red build" in err
+    # Names the gate that cannot match...
+    for name in ("Required checks passed", "doc-links + agents-init", "mypy — digibase + digikey"):
+        assert f"'{name}'" in err, name
+    # ...and what CI is really producing, so the reader stops hunting for a failure.
+    assert "digibase / test" in err
+    assert "required_checks_by_repo" in err
+    # Every PR is still blocked. The announcement is additive: a gate that names
+    # nothing must not become a gate that names nothing and merges.
+    assert "blocked (2)" in done.stdout
+    assert "has not reported" in done.stdout
+
+
+def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall_of_names(
+    gh_stub: Any,
+) -> None:
+    """A digithings PR reports 58 distinct checks. Listing all of them is not a fix.
+
+    The reader is told one name is wrong and needs to know what the right one is; a
+    58-item dump makes them open a second tool to compare against, which is the work
+    the announcement exists to save. So it names the near misses — the reported checks
+    sharing a word with the gate — and counts the rest.
+    """
+    # Deliberately none of digithings' three required contexts — that is the DIG-690
+    # shape. The decoys are what the reader has to choose from instead.
+    reported = [
+        {"__typename": "CheckRun", "name": name, "status": "COMPLETED", "conclusion": "SUCCESS"}
+        for name in (
+            "path-filter",
+            "changes",
+            "score",
+            "web",
+            "gitleaks-scan",
+            "doc-links + agents-init",
+        )
+    ]
+    prs = [_pr(1)]
+    prs[0]["statusCheckRollup"] = reported
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("list", "--repo", "digithings-ai/digithings", "--acting-role", "cto")
+    err = done.stderr
+    assert "6 distinct checks did report" in err
+    # `mypy` is required, unmatchable, and shares a word with nothing reported —
+    # so no near miss is offered for it and the message must not imply one exists.
+    assert "'mypy — digibase + digikey'" in err
+    assert "nearest:" not in err
+    assert "gh pr checks" in err
+
+    near = mq._near_misses(("test",), ("digibase / test", "digiclaw / test", "path-filter"))
+    assert near[:2] == ["digibase / test", "digiclaw / test"]
+    assert "path-filter" not in near, "no shared word; listing it would be noise"
+    # Word-based, so an unrelated check that merely contains the letters is excluded.
+    assert mq._near_misses(("mypy",), ("mypy — digibase + digikey", "npm-audit")) == [
+        "mypy — digibase + digikey"
+    ]
+    # Bounded: an org with fifty near-identical suite names does not produce a wall.
+    many = tuple(f"suite-{i} / test" for i in range(50))
+    assert len(mq._near_misses(("test",), many)) == 4
+
+
+def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
+    gh_stub: Any,
+) -> None:
+    """Why there is no once-per-invocation guard — pinned so nobody adds one blind.
+
+    An earlier version of this code carried an `announced` flag, and a mutation
+    deleting it escaped the suite. That was not a coverage gap: the flag was
+    unreachable-by-construction. A required name that no PR reports means every PR
+    fails the check gate, so nothing is eligible, so `run` breaks out of its re-read
+    loop after the first read and the warning can only ever print once. The flag was
+    defending against a state the gate itself makes impossible.
+
+    Asserting "the warning printed once" would pass for the wrong reason, so this
+    asserts the *reason* instead: the run reads the queue once, merges nothing, and
+    says why. If someone ever makes a misconfigured gate stop blocking, this fails
+    and the flag becomes necessary again.
+    """
+    # No PR reports `mypy — digibase + digikey`, so the gate cannot be satisfied.
+    # Everything else is green and approved, so these PRs are blocked on the gate
+    # alone — remove the misnaming and both would merge.
+    reported = [
+        {"__typename": "CheckRun", "name": name, "status": "COMPLETED", "conclusion": "SUCCESS"}
+        for name in ("Required checks passed", "doc-links + agents-init")
+    ]
+    prs = []
+    for number in (1, 2):
+        pr = _pr(number)
+        pr["statusCheckRollup"] = reported
+        pr["reviews"] = [{"author": {"login": "someone-else"}, "state": "APPROVED"}]
+        prs.append(pr)
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+    done = _run("run", "--repo", "digithings-ai/digithings", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK
+    # One read, because the first read found nothing eligible and the loop stopped.
+    assert len(stub.matching("pr list")) == 1
+    assert not stub.matching("pr merge")
+    assert done.stderr.count("misconfigured required check") == 1
+    # And the reason is named, not just the count, so the reader knows what to edit.
+    assert "'mypy — digibase + digikey'" in done.stderr
+
+
+def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
+    """The negative case, pinned so the detector cannot be "fixed" into noise.
+
+    twelve-x is the repo where a bare `test` is correct. If the announcement fired
+    there, the fix would have swapped a hard block for a permanent warning, which is
+    the same failure wearing a different hat.
+    """
+    prs = [_pr(1), _pr(2, created="2026-10-02T00:00:00Z")]
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
+    done = _run("list", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OK
+    assert "misconfigured" not in done.stderr
+    assert done.stderr.strip() == "", done.stderr
+    # These PRs block on review (no non-author approval), not on the gate — so the
+    # silence is not just "everything was blocked anyway". The check gate passed:
+    # with the wrong list every one of them would say `required check 'test'`.
+    assert "required check" not in done.stdout
+
+
+def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) -> None:
+    """The audit trail has to name the gate that ran, not the policy default.
+
+    Otherwise every merge comment on digithings would claim the merge relied on a
+    `test` check that did not exist, which is the one claim the queue's whole
+    comment exists to make reliable.
+    """
+    prs = [_pr(42, head_sha="c" * 40, test_conclusion=None)]
+    prs[0]["statusCheckRollup"] = [
+        {
+            "__typename": "CheckRun",
+            "name": "Required checks passed",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "doc-links + agents-init",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "mypy — digibase + digikey",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+    stub = _queue_stub(
+        gh_stub(
+            gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^pr merge", stdout=""),
+            gh_rule(r"^pr comment", stdout=""),
+        ),
+        prs,
+    )
+    _run(
+        "run", "--repo", "digithings-ai/digithings", "--acting-role", "cto", "--attest-review", "qa"
+    )
+    comments = stub.matching("pr comment 42")
+    assert len(comments) == 1
+    body = comments[0][comments[0].index("--body") + 1]
+    assert "Required checks passed" in body
+    assert "doc-links + agents-init" in body
+    assert "mypy — digibase + digikey" in body
 
 
 # --- review: who is allowed to say the code was read --------------------------

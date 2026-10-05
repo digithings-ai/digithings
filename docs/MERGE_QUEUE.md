@@ -55,7 +55,7 @@ into "I reviewed it and merged it".
 | Gate | Rule |
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
-| Required check | `test` must have **reported** from a workflow run, and concluded `SUCCESS`. |
+| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** from a workflow run, and concluded `SUCCESS`. For `twelve-x` that is `test`. For `digithings` it is `Required checks passed`, `doc-links + agents-init` and `mypy — digibase + digikey`. |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
@@ -73,9 +73,30 @@ service on the required list. See `CODE_REVIEW_BASELINE.md`.
 **A green commit status is not a passing build.** GitHub's commit status docs are explicit
 that "any person or integration with write permissions can set the state of any status
 check". So a required check only satisfies the gate if it arrived as a *check run* — one
-bound to an Actions workflow — not as a bare status anyone with write access can type. On
-this org the `test` check is a check run, so this costs nothing; it is here because the
+bound to an Actions workflow — not as a bare status anyone with write access can type. Every
+required check on both repos is a check run, so this costs nothing; it is here because the
 alternative is a queue that any agent holding a token could green-light its own PR.
+
+**Required check names are per repo, and a name that matches nothing is called out
+separately.** The two repos in this org report different names for the same idea:
+`twelve-x` runs one job called `test`, while `digithings` drives every suite through
+reusable workflows, so GitHub reports `digibase / test`, `digiclaw / test` and ten
+more, and names nothing `test` at all. A single global list can therefore only be
+right for one of them — and when it is wrong it is *silently* wrong, because an
+unmatched required name produces `required check 'test' has not reported`, which is
+byte-identical to the message for an untested PR. That is exactly how DIG-690 blocked
+all 28 open `digithings` PRs with a gate that could never pass and no way to tell it
+apart from CI being broken.
+
+So `required_checks_by_repo` carries the real names, an unlisted repo falls back to
+`defaults.required_checks` (never to nothing — a queue that stops checking is worse
+than one that refuses), and `list`/`run` additionally compare the required names
+against everything the queue *did* report. A name absent from **every** open PR while
+other checks did report is announced on stderr as a misconfiguration, naming the gate
+that cannot match, what CI is really reporting, and the file to edit. It is compared
+against the union rather than per PR, so the legitimate path-filtered case — one
+Python-only PR with no `digichat / test` — stays quiet. **It only ever warns; it never
+unblocks.** A gate that cannot match must still block.
 
 **A bot's approval is not a review.** `coderabbitai[bot]` approving a PR means a linter
 found nothing to complain about, not that a person owns the change. GitHub's own review

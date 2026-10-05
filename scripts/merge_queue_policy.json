@@ -21,7 +21,16 @@
   "defaults": {
     "merge_method": "squash",
     "delete_branch": true,
-    "required_checks": ["test"]
+    "required_checks": ["test"],
+    "required_checks_note": "Fallback for any repo with no entry in required_checks_by_repo. It is correct for digithings-ai/twelve-x, whose CI is one job named `test`. It is wrong for digithings-ai/digithings — see DIG-690."
   },
+  "required_checks_by_repo": {
+    "digithings-ai/digithings": [
+      "Required checks passed",
+      "doc-links + agents-init",
+      "mypy — digibase + digikey"
+    ]
+  },
+  "required_checks_by_repo_note": "These three are not a guess: they are the contexts the repo's own branch protection on `develop` requires, read from GET /repos/digithings-ai/digithings/branches/develop/protection/required_status_checks (strict: true). They were chosen to match GitHub rather than to match ci.yml's job names, so the queue cannot approve something GitHub would refuse. `Required checks passed` is an `if: always()` aggregate job that needs every other job in ci.yml, so requiring it is strictly stronger than requiring any one suite — and it is a single stable name, where the per-suite names are `digibase / test`, `digiclaw / test`, … (reusable workflows), which is why a bare `test` matches nothing here.",
   "github_identity_note": "Both authorities merge with the same org credential, so GitHub sees one committer. The role is an assertion the runner records in its audit comment, and an identity GitHub cannot enforce. Two things compensate: merge_queue.py refuses any role that is not on this roster, and it refuses an attestation that comes from the same role as the one doing the merge. Note what that does NOT give you: it cannot tell that the attesting role did not also author the PR, because a single login cannot be attributed to two roles. Treat editing this file to add a role as a policy change that needs the CEO, not a routine edit."
 }
