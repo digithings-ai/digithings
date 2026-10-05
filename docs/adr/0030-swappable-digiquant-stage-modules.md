@@ -3,6 +3,13 @@
 **Status:** Accepted (2026-09-29)
 **Date:** 2026-09-29
 **Accept:** Human Gate via One / Chris on [#4763](https://github.com/digithings-ai/digithings/pull/4763).
+**Partial hold (2026-10-05, DIG-503):** the stage boundaries below stand and are
+not reopened. What is held is *publishing the twelve-x research-producer scrape
+path from this public repository* — package P22 and the mapping in the ADR-0030
+plan. The vendor's Terms prohibit the access method. Read
+[`../plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md) before
+implementing anything under the twelve-x research stage. This hold does not
+amend the Accepted text below; it annotates it.
 **Related epic:** [#4762](https://github.com/digithings-ai/digithings/issues/4762)
 **Amends (reading only; historical bodies stay):** [ADR-0015](0015-atlas-vs-hermes.md), [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md)
 **Extends:** [ADR-0014](0014-atlas-in-digiquant.md) (finance graphs live in `digiquant/`), [docs/VISION.md](../VISION.md) (research / portfolio / execution under digiquant)
@@ -105,7 +112,7 @@ Reader contracts the hub already depends on (twelve-x writes, dashboard reads):
 - Trade ideas: `fx_trade_ideas_snapshot` (`FxTradeIdeaRow`: `run_date`, `rank`, `pair`, `direction`, `title`, `thesis`, `catalyst`, `levels`, `citations`, optional `trade_levels`, `evidence`, `idea_id`, optional `timeframe`). `fx_confluence_snapshot` is the ranked confluence board; its `components` jsonb carries a free-string `timeframe` (a hub test uses `1-3M`). `fx_idea_eval` scores successor-clock outcomes.
 - There is **no** `OrderIntent` (or other digiquant execution type) on these rows.
 
-`digifetch` extracted browser/HTTP mechanics from twelve-x scrapers and names `twelve-x/nodes/scrape.py` and `twelve-x/fx_calendar/scraper.py` as the requirements source. Site login, Prime Market selectors, the research-file AJAX call, Trading Economics calendar parsing, and PDF text stay in twelve-x. Wiring those scrapers onto digifetch is still deferred (`digifetch/ARCHITECTURE.md`). `digillm` notes twelve-x as a consumer (`nodes/llm.py` in the vision docs). This ADR does not claim those files were re-read.
+`digifetch` extracted browser/HTTP mechanics from twelve-x scrapers and names `twelve-x/nodes/scrape.py` and `twelve-x/fx_calendar/scraper.py` as the requirements source. Site login, vendor selectors, the vendor AJAX call, calendar parsing, and document text stay in twelve-x. Wiring those scrapers onto digifetch is still deferred (`digifetch/ARCHITECTURE.md`). `digillm` notes twelve-x as a consumer (`nodes/llm.py` in the vision docs). This ADR does not claim those files were re-read.
 
 ### Composition diagram (target)
 
