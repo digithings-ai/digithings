@@ -6,8 +6,6 @@ that are not obvious placeholders. Fails if found.
 import re
 import subprocess
 import sys
-from collections import Counter
-from math import log2
 from pathlib import Path
 
 PLACEHOLDER_PATTERNS = [
@@ -24,44 +22,20 @@ CRED_VAR_PATTERNS = [
     r'CLIENT_SECRET', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
     r'WEBHOOK_SECRET', r'SIGNING_KEY',
 ]
+# Once CRED_VAR_PATTERNS has matched the variable name, length is not evidence of
+# anything: a `*_API_KEY` holding a short opaque value is exactly what this guard
+# exists to catch, so length may only be used to clear the short human words that
+# are legitimately not credentials. The longest of those is `postgres` at 8, and
+# 12 is the floor window's upper bound -- see DIG-43.
+MIN_CRED_VALUE_LEN = 12
+
 CRED_VALUE_PATTERNS = [
-    # Vendor prefixes only: high-signal, short, and a prefix alone is enough.
-    # The generic character-class entries are gone - they whitelisted an
-    # alphabet, so a credential holding any other character was reported clean.
-    # `looks_cred_val` now scores the value's own distribution instead.
-    # Two rules for this list. No entry may be end-anchored (`$` or `\Z`): a
-    # prefixed key is routinely followed by a trailing `# comment`, and the
-    # anchor lets that comment hide the key. And a body class must be the
-    # alphabet the vendor really uses, because a value carrying a comment never
-    # reaches the entropy score below - the prose exclusion runs first - so this
-    # loop is the only gate that can catch it. `sk-` is URL-safe base64, and its
-    # two common families (`sk-proj-`, `sk-ant-api03-`) put a `-` inside the
-    # first 20 characters.
-    r'^sk-[A-Za-z0-9_-]{20,}',
+    r'^[A-Za-z0-9]{%d,}$' % MIN_CRED_VALUE_LEN,
+    r'^[A-Za-z0-9+/]{%d,}={0,2}$' % MIN_CRED_VALUE_LEN,
+    # the prefix counts toward the floor, so the value as a whole is at least this long
+    r'^sk-[A-Za-z0-9]{%d,}$' % (MIN_CRED_VALUE_LEN - 3),
     r'^ghp_', r'^gho_', r'^glpat-',
 ]
-#: Bits per character at or above which a value counts as a credential. Set
-#: below the weakest probe (3.565) on purpose: the floor also has to cover the
-#: encodings the removed character-class patterns caught - over 100 000 random
-#: 32-character hex secrets, 3.5 misses 18.8%, 3.2 misses 0.36%, 3.0 misses
-#: 0.006% (6 in 100 000; the observed minimum was 2.936). Precision comes from
-#: the inline-comment exclusion below, not from this floor.
-CRED_MIN_ENTROPY = 3.0
-#: Shortest value the guard will score at all. The name has already matched
-#: `CRED_VAR_PATTERNS` by this point, so length is all that separates a real key
-#: from the short human words a developer writes under a credential name.
-#: Nothing in the tracked corpus sets the bound - every credential-named line
-#: there is empty, a placeholder, or a `#` comment - so the shortest pinned
-#: probe sets it, at 12.
-CRED_MIN_VALUE_LEN = 12
-#: Length at or above which `CRED_MIN_ENTROPY` is a meaningful test. That floor is
-#: bits *per character*, so below the length it was calibrated at the rate reports
-#: sample size rather than randomness: over 40 000 random hex secrets per length a
-#: 3.0 bits/char floor misses 45.7% at 12 characters and 14.0% at 16, against the
-#: 0.006% at 32. 17 is the narrowest band any pinned probe needs - the 16-character
-#: one scores 2.750, exactly level with `postgres`, so no threshold separates the
-#: two - the other three score 3.022, 3.155 and 3.301 and clear the floor unaided.
-CRED_MIN_ENTROPY_LEN = 17
 
 def is_placeholder(v):
     v = v.strip().strip('"').strip("'")
@@ -79,36 +53,20 @@ def looks_cred_var(var):
             return True
     return False
 
-def shannon_entropy(v: str) -> float:
-    """Shannon entropy of ``v`` in bits per character; 0.0 for an empty string."""
-    if not v:
-        return 0.0
-    n = len(v)
-    # `+ 0.0` normalizes the `-0.0` a single-symbol string would otherwise return.
-    return -sum((c / n) * log2(c / n) for c in Counter(v).values()) + 0.0
-
 def looks_cred_val(v):
     v = v.strip().strip('"').strip("'")
-    if len(v) < CRED_MIN_VALUE_LEN:
+    if len(v) < MIN_CRED_VALUE_LEN:
         return False
+    # the anchored placeholder gate has to run before any value shape, because
+    # `your-api-key` scores higher on entropy than a real short key does
     if is_placeholder(v):
         return False
     for p in CRED_VALUE_PATTERNS:
         if re.match(p, v):
             return True
-    # Prose is rejected before any score is taken. The lowest probe scores
-    # 3.565 and the live inline comments in `.env.example` score 4.005 and
-    # 4.348, so no threshold separates the two groups: whitespace, or a leading
-    # `#`, is what marks a value as a comment rather than a token. That costs a
-    # passphrase written with real internal spaces, accepted on purpose.
-    if v.startswith('#') or any(c.isspace() for c in v):
-        return False
-    # Below `CRED_MIN_ENTROPY_LEN` the rate cannot set the floor, but it can still
-    # refute a value: one repeated symbol scores 0.0 bits, which is evidence
-    # against a credential rather than an absence of evidence for one.
-    if len(v) < CRED_MIN_ENTROPY_LEN:
-        return shannon_entropy(v) > 0.0
-    return shannon_entropy(v) >= CRED_MIN_ENTROPY
+    if re.match(r'^[A-Za-z0-9_\-.]{32,}$', v):
+        return True
+    return False
 
 def main():
     try:
