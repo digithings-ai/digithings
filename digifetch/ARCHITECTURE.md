@@ -83,7 +83,7 @@ yielded so the caller can pull `context.cookies()` and hand them to
 `HttpFetcher` for an authenticated plain-HTTP follow-up.
 
 `BrowserConfig` carries the only knobs both twelve-x scrapers actually vary:
-`headless`, `user_agent` (TE sets a desktop-Chrome UA; primemarket leaves it
+`headless`, `user_agent` (TE sets a desktop-Chrome UA; scraper B leaves it
 default), `default_timeout_ms` (TE uses 45 000), `browser` (both use chromium),
 `viewport`, and `launch_args`.
 
@@ -177,9 +177,9 @@ not re-applied).
 |--------------------------------------|----------------------------|
 | `sync_playwright()` → `chromium.launch(headless=True)` → `new_context(user_agent=…)` → `new_page()` → `set_default_timeout(…)` → `browser.close()` (both scrapers) | `browser_session(BrowserConfig(...))` context manager |
 | TE: `for attempt in range(navigation_retries): … time.sleep(2.0*attempt)` | `with_retry(lambda: …navigate…, RetryPolicy(...))` |
-| TE: `time.sleep(show_more_pause_s)` between "show more" clicks; primemarket: implicit pacing of AJAX calls | `RateLimiter(min_interval=…).acquire()` |
-| primemarket: capture `context.cookies()` → `requests.post(AJAX_URL, data={…}, cookies=…, timeout=30).raise_for_status()` → S3 URL text | `cookies_from_playwright(ctx.cookies())` + `HttpFetcher.fetch(url, method="POST", data=…, cookies=…)` → `FetchResult.text` |
-| primemarket (downstream): download the PDF bytes from the S3 URL | `HttpFetcher.download(s3_url)` → `DownloadResult.content` |
+| TE: `time.sleep(show_more_pause_s)` between "show more" clicks; scraper B: implicit pacing of AJAX calls | `RateLimiter(min_interval=…).acquire()` |
+| scraper B: capture `context.cookies()` → `requests.post(AJAX_URL, data={…}, cookies=…, timeout=30).raise_for_status()` → S3 URL text | `cookies_from_playwright(ctx.cookies())` + `HttpFetcher.fetch(url, method="POST", data=…, cookies=…)` → `FetchResult.text` |
+| scraper B (downstream): download the PDF bytes from the S3 URL | `HttpFetcher.download(s3_url)` → `DownloadResult.content` |
 | TE: `page.content()` → `parse_calendar_html(html)` | engine yields the live `page`; caller calls `page.content()` and parses — **parsing stays site-specific** |
 
 ## Deliberately NOT extracted (stays site-specific in twelve-x)
@@ -195,15 +195,14 @@ transport*; the consumer owns *what to do on the page* and *how to read it*.
   the live `page`; the caller logs in. **Deferred:** a generic login abstraction
   (credential injection + a declarative selector/step model) is a candidate for
   the second consumer, not now.
-- **Selectors and URLs.** `PRIMEMARKET_*` selectors/URLs, `TE_CALENDAR_URL`,
-  the `#showMore` selector list — config in twelve-x.
+- **Selectors and URLs.** `TE_CALENDAR_URL`, the `#showMore` selector list — config in twelve-x.
 - **Pagination policy.** TE's "click show-more up to N times" loop is
   site-specific (selector list + stop condition). It *uses* `RateLimiter` for
   pacing but the click loop itself stays in twelve-x.
 - **HTML / DOM parsing.** `parse_calendar_html`, the table/regex parsers,
   `country_code`, `_category_from_mention`, row extraction (`tdFileName`, …) —
   all twelve-x.
-- **Domain models.** `CalendarEvent`, the primemarket `FileMeta` row shape, the
+- **Domain models.** `CalendarEvent`, the `FileMeta` row shape, the
   "today + yesterday" rolling window, `stable_external_id`.
 - **PDF text extraction.** `pdfplumber` parsing stays in twelve-x; digifetch
   hands back raw bytes and does **not** depend on pdfplumber.
@@ -222,7 +221,7 @@ transport*; the consumer owns *what to do on the page* and *how to read it*.
   *mirror* the digibase timeout envelope as a local constant.
 - **Composable retry, not retrying primitives.** `with_retry` wraps a callable
   rather than being a flag on `fetch`/`browser_session`. This matches the two
-  consumers' differing needs (TE retries *navigation*; primemarket retries
+  consumers' differing needs (TE retries *navigation*; scraper B retries
   *AJAX*) without a combinatorial set of `retry=` parameters, and lets a caller
   wrap a whole multi-step page interaction in one retry.
 - **Injected `sleep`/`clock`/`rand` everywhere time passes.** Makes the retry
@@ -246,10 +245,11 @@ transport*; the consumer owns *what to do on the page* and *how to read it*.
 timeouts, rate limits, and the SSRF `allowed_hosts` allowlist are passed in by
 the caller (config objects / function arguments). This keeps the engine
 deployment-agnostic and side-effect-free on import — site config
-(`PRIMEMARKET_*`, `TE_CALENDAR_URL`, credentials) lives in the consumer
-(twelve-x `config.py`). A consumer that wants an operator env var (e.g.
-`digisearch`'s `DIGISEARCH_FETCH_ALLOWED_HOSTS`) reads it and passes
-`allowed_hosts=` in.
+(`TE_CALENDAR_URL`, credentials) lives in the consumer (twelve-x `config.py`).
+A consumer that wants an operator env var (e.g. `digisearch`'s
+`DIGISEARCH_FETCH_ALLOWED_HOSTS`) reads it and passes `allowed_hosts=` in.
+
+**The library ships no vendor access and no vendor authorisation; you bring your own.**
 
 ## Testing
 
