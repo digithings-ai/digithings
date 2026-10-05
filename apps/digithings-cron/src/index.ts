@@ -7,7 +7,7 @@
  * await the container job.
  */
 import { buildPlan } from "./backfill";
-import { BackfillLedger, type RemediationState } from "./backfill-do";
+import type { BackfillLedger, RemediationState } from "./backfill-do";
 import { dispatch, dispatchWorkflow, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
@@ -20,7 +20,6 @@ import { jobsForCron, type Job } from "./jobs";
  * `wrangler deploy` fails with "not exported in your entrypoint file", which no
  * test or typecheck in CI sees.
  */
-export { BackfillLedger };
 
 export type StartedRun = {
   job_id: string;
