@@ -255,8 +255,12 @@ def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> No
     usd = pyo3.Currency.from_str("USD")
     analyzer = pyo3.PortfolioAnalyzer()
     ts = 1_700_000_000_000_000_000
+    # Built outside the probe: only ``add_trade``'s arity is under test, so a
+    # TypeError from constructing these must fail loudly rather than skip.
+    position_id = pyo3.PositionId("P-1")
+    money = pyo3.Money(10.0, usd)
     try:
-        analyzer.add_trade(pyo3.PositionId("P-1"), ts, pyo3.Money(10.0, usd))
+        analyzer.add_trade(position_id, ts, money)
     except TypeError:
         pytest.skip("add_trade rejects a ts_event, so this build cannot emit record rows")
 
