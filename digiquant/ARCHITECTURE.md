@@ -1438,6 +1438,79 @@ window-day share. Pins:
 `nautilus_trader`, pandas or matplotlib anywhere; the frozen harness is imported,
 never edited.
 
+#### Gold has a Stage A weight calibration over BOTH pin sets (#4804)
+
+`scripts/run_gold_stage_a_weights.py` is the **glue** between two halves that
+already exist, not a third calibration. It reads the per-indicator best-fitted
+params out of `.scratch/gold_pin_set_fits.json` (the indicator grid sweep is **not**
+re-run and no param is re-derived — a missing artifact is a clean `ValueError`),
+builds each leg's z with the harness's own `build_z`, and hands the vectors to the
+**shipped** `stage_a.optimize_stage_a_weights`. The anchor is the same no-trend
+anchor the harness uses: `anchor_z()`, i.e. the shipped `rolling_z` rails at
+rolling 90d / z 1.0. Zero production edits.
+
+**Four runs, always all four:** both approved pin sets × both `require_extras`
+settings. `require_extras=False` can return a **valuation-only** composite — a real
+finding, and it is reported rather than buried — so `require_extras=True` runs beside
+it and forces at least one extra, which means a real blend has to win on the same
+objective. Reporting only the flattering row would make the experiment dishonest, so
+the console table always carries both settings for both pin sets.
+
+| pin set | `require_extras` | objective | spread | trough_frac | peak_frac | weights |
+|---|---|---|---|---|---|---|
+| `gold_v1` | `False` | 128.7594 | 84.0786 | 0.8404 | 0.9468 | `valuation=1.0` (valuation-only) |
+| `gold_v1` | `True` | 121.9177 | 76.8380 | 0.8564 | 0.9468 | `valuation=1.0, real_rate=0.5` |
+| `gold_v2` | `False` | 111.3160 | 71.8337 | 0.8173 | 0.7620 | `valuation=1.0` (valuation-only) |
+| `gold_v2` | `True` | 99.3702 | 61.3980 | 0.7933 | 0.7256 | `valuation=1.0, sma_band=0.5` |
+
+For comparison, the **published `btc_sdca` reference shape** is
+`valuation=1.0, m2=0.5, dxy=0.5, weekly_macd=0.5, weekly_rsi=0.25` (SMA band and
+BTC/ETH RS at 0) — five legs, four of them partial-weight. It is reported for shape
+comparison only: nothing here is copied from it, tuned toward it, or benchmarked
+against it. Gold's winners are **narrower** than that precedent — a single 0.5 leg on
+top of valuation — and both pin sets' `require_extras=True` rows score *below* their
+own valuation-only rows, which is the finding, not a defect to tune away.
+
+**The objective is the DIAGNOSTIC cycle-overlap objective, NOT the published
+keep/drop.** It is `cycle_overlap_score.objective` =
+`spread + 25 × (trough_in_accumulate_frac + peak_in_distribute_frac)`, with the
+frozen accumulate band `<= 35.0` and distribute band `>= 80.0`: a *shape* diagnostic
+asking how well composite risk lines up with the pinned cycle windows. The published
+Stage A keep/drop is `optimize_stage_a_by_backtest` on in-sample `vs_flat_dca_pct`
+subject to a 10% capital-deployed floor and a 50% drawdown cap — not vs-lump, not
+Sharpe, and not this objective. **This run does not constitute the published
+keep/drop**, and no weight above is promoted on its strength. It is also IN-SAMPLE
+twice over (each leg's params are a max over the indicator grid, each weight a max
+over the weight grid, both scored against windows derived from the same GLD history),
+so it is a partly-selected upper bound. Stage A only: Stage B
+(`run_sdca_walk_forward`) freezes weights, then `regularize`. Research-only.
+
+**Search pool, and every exclusion is recorded.** `search_names` is the frozen
+`verdict == "keep"` pool — the same filter `candidate_pool()` applies in the harness.
+Two exclusion reasons are recorded per name, never applied silently: *no
+non-degenerate grid row* (the hard rule — passing such a name would ask
+`risk_from_weighted_z` for a series it cannot build) and *frozen `verdict != keep`*
+(a **feasibility** decision: the shipped optimizer sweeps the full `itertools.product`,
+so 12 non-degenerate names is `3^12 × 3 = 1,594,323` evaluations at the measured
+~5.6 ms each, i.e. ~2.5 h per run and ~10 h for four runs). Narrowing along an
+already-ruled keep/drop line beats a sweep that never finishes, and it is stated as
+the decision it is.
+
+Artifact (UNTRACKED): `.scratch/gold_stage_a_weights.json` — per run the winning
+weights as plain data, the full `CycleOverlapScore`, `num_evaluations`, the
+`search_names` actually searched, and every exclusion with its reason. The risk curve
+is deliberately not serialized. Chart: `scripts/plot_gold_stage_a_weights.py` →
+`gold_stage_a_weights.svg` (`/gold_charts/gold_stage_a_weights.svg`) — four stacked
+panels (one per run) over the GLD calendar, the 35.0/80.0 band rails drawn on every
+panel, each panel's pin-set trough/peak windows shaded and marked, the
+`require_extras=False` valuation-only rows shown beside the `True` rows, and a footer
+stating in substance that this is IN-SAMPLE, that the cycle-overlap objective is a
+DIAGNOSTIC, and that this is **not** a performance claim and **not** a backtest
+result. Pins: `tests/dq/strategies/sdca/test_gold_stage_a_weights.py` (20 pins,
+including an independent re-sweep of the weight grid that must agree with the shipped
+optimizer's argmax, so a silently-narrowed grid cannot pass). No `nautilus_trader`,
+pandas or matplotlib anywhere.
+
 **Composite formula (BTC charts default to a single rail).**
 
 ```
