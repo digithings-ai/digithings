@@ -527,6 +527,44 @@ def gate_markdown(
     return lines
 
 
+def ageing_verdict(report: Report, max_age_days: int) -> str:
+    """The one sentence that says what this run concluded about staleness.
+
+    Both renderers call this, because they were two hand-maintained copies of the
+    same judgement and they disagreed: `markdown()` keyed "nothing could be aged"
+    on `report.secrets` while `render()` added `and report.unavailable`, so a
+    report where every level was readable but held nothing printed a bare
+    `0 of 0 listed` on stdout while the summary claimed nothing had been read.
+    Neither was right — every level *had* been read, and the honest answer for an
+    empty repo is that there is nothing to age.
+
+    A shared function is the only version of "the two must agree" that a
+    reviewer does not have to take on trust.
+    """
+    overdue = report.overdue(max_age_days)
+    if not report.secrets:
+        if report.unavailable:
+            return (
+                f"No secrets could be aged: {len(report.unavailable)} level(s) could "
+                "not be read, so no count is possible. The per-level reason is above."
+            )
+        return (
+            "Every level was readable and none of them holds a secret, so there is nothing to age."
+        )
+    if report.unavailable:
+        return (
+            f"{len(overdue)} name(s) past {max_age_days} days among the "
+            f"{len(report.secrets)} that could be read; {len(report.unavailable)} "
+            "level(s) could not be read. That is not a clean bill of health."
+        )
+    if overdue:
+        return f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed."
+    return (
+        f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} "
+        "listed. No action needed."
+    )
+
+
 def markdown(
     report: Report,
     max_age_days: int,
@@ -542,12 +580,17 @@ def markdown(
         "",
     ]
     if report.secrets:
+        listed = f"**{len(report.secrets)}** listed secrets"
+        # On a partial read the denominator is the count that was read, so it must
+        # say so here rather than only in the trailing `## Levels not checked`.
+        if report.unavailable:
+            listed += " (of the levels that could be read)"
         lines += [
-            f"**{len(overdue)}** of **{len(report.secrets)}** listed secrets are past",
+            f"**{len(overdue)}** of {listed} are past",
             f"**{max_age_days} days** since last written.",
             "",
         ]
-    else:
+    elif report.unavailable:
         # "0 of 0 listed secrets are past 90 days" is a positive claim about an empty
         # set, and it was the exact sentence a run printed while every listing 403'd.
         # Appended rather than added to the list, because a wrapped string literal
@@ -555,6 +598,13 @@ def markdown(
         lines.append(
             "**No secrets could be aged.** Nothing below says anything about whether "
             "a secret is stale, because nothing was read."
+        )
+        lines.append("")
+    else:
+        lines.append(
+            "**Every level was readable and none of them holds a secret.** There is "
+            "nothing to age, which is a real answer rather than a failed read: it "
+            "means the listings were served and came back empty."
         )
         lines.append("")
     if overdue:
@@ -569,20 +619,13 @@ def markdown(
             "Rotate, or record here why a name is deliberately long-lived. A name "
             "only counts as rotated when its **last-written date** moves."
         )
-    elif report.unavailable:
-        if report.secrets:
-            missed = ", ".join(f"`{scope}`" for scope in sorted(report.unavailable))
-            lines.append(
-                f"Nothing is past {max_age_days} days **among the levels that could be "
-                f"read**, but {missed} could not be. That is not a clean bill of "
-                "health: a level nobody read cannot report a stale name. The per-level "
-                "reason is below."
-            )
-        # With nothing read at all the header has already said so. Adding a sentence
-        # about "the levels that could be read" would be a claim about an empty set,
-        # which is the shape of bug this whole change is about.
-    else:
-        lines.append(f"Nothing is past {max_age_days} days. No action needed.")
+    # The verdict closes the report whether or not anything is overdue. It used to
+    # sit in an `elif` behind `if overdue:`, which made the partial-read qualifier
+    # unreachable in exactly the case it exists for — an overdue name plus an
+    # unread level printed a bare `1 of 1 listed` and disclosed the gap only in the
+    # trailing `## Levels not checked`. This is the artefact a human reads first,
+    # so it is the one that must not overstate.
+    lines.append(ageing_verdict(report, max_age_days))
     if report.unavailable:
         lines += ["", "## Levels not checked", ""]
         lines += [f"- `{scope}` — {reason}" for scope, reason in sorted(report.unavailable.items())]
@@ -593,9 +636,14 @@ def markdown(
 def ordered_scopes(report: Report) -> list[str]:
     """Every level the report actually holds, widest blast radius first.
 
-    A level that read successfully but holds nothing still prints, as `0 name(s)`:
-    for the `cron` environment that is the signal the migration has not landed yet,
-    and silence would read as "nothing to see".
+    A level that read successfully but holds nothing does not appear here, and
+    cannot: `Report` carries `secrets` and `unavailable` only, so a scope that
+    returned an empty list lands in neither. An earlier version of this docstring
+    claimed such a scope printed as `0 name(s)` and used that as its reason to
+    exist — a claim `Report` cannot represent, and one the test at
+    `test_secret_staleness_check.py` asserts against (`assert "cron:" not in out`).
+    The empty-but-readable case is handled by `ageing_verdict` instead, which can
+    see it, because it reads `secrets` and `unavailable` together.
     """
     present = {secret.scope for secret in report.secrets}
     return sorted(present, key=lambda scope: (SCOPE_ORDER.get(scope, 99), scope))
@@ -619,9 +667,8 @@ def render(
             )
     for scope, reason in sorted(report.unavailable.items()):
         out.append(f"{scope}: NOT CHECKED — {reason}")
-    overdue = report.overdue(max_age_days)
     out.append("")
-    out.append(f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed.")
+    out.append(ageing_verdict(report, max_age_days))
     if gates is not None:
         rows, unavailable = gates
         out.append("")

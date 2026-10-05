@@ -982,3 +982,120 @@ def test_the_summary_still_reassures_when_everything_was_read(
 
     assert "No action needed" in body
     assert "of **1** listed secrets" in body
+
+
+@pytest.mark.unit
+def test_stdout_does_not_count_zero_of_zero_as_a_clean_result(checker: object) -> None:
+    """`render()` printed `0 name(s) past 90 days of 0 listed` while every level 403'd.
+
+    The summary half of this was already fixed; the console half was not, so the run
+    log still ended on a zero count. Both renderers have to agree.
+    """
+    report = checker.Report(unavailable={"cron": "HTTP 403", "org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "of 0 listed" not in out
+    assert "0 name(s) past 90 days of 0" not in out
+    assert "No secrets could be aged" in out
+    # The per-level reasons still print, so the reader learns *why* nothing aged.
+    assert "NOT CHECKED" in out
+
+
+@pytest.mark.unit
+def test_stdout_count_is_qualified_when_only_some_levels_read(checker: object) -> None:
+    """A partial read must not print a bare count either: 1 read of 2 levels is not a verdict."""
+    report = checker.Report(secrets=[_age(checker, 200)], unavailable={"org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "1 name(s) past 90 days of 1 listed" not in out
+    assert "among the 1 that could be read" in out
+    assert "not a clean bill of health" in out
+
+
+@pytest.mark.unit
+def test_stdout_qualifies_a_partial_read_when_nothing_is_overdue(checker: object) -> None:
+    """The zero-overdue partial read is the shape closest to the original bug.
+
+    Nothing is overdue, so the count reads `0`, and a bare `0 name(s) past 90
+    days` line is exactly what a skimming reader parses as a clean result.
+    """
+    report = checker.Report(secrets=[_age(checker, 10)], unavailable={"org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "0 name(s) past 90 days of 1 listed" not in out
+    assert "among the 1 that could be read" in out
+    assert "not a clean bill of health" in out
+
+
+@pytest.mark.unit
+def test_a_partial_read_with_something_overdue_is_qualified_in_the_summary(checker: object) -> None:
+    """An overdue name plus an unread level must not lead with a bare `1 of 1`.
+
+    The partial-read qualifier used to sit behind `if overdue:`, so it was
+    unreachable in precisely this case and the summary — the artefact a human
+    reads first — disclosed the missing level only in the trailing section.
+    """
+    report = checker.Report(secrets=[_age(checker, 200)], unavailable={"org": "needs admin:org"})
+    body = checker.markdown(report, 90)
+
+    assert "not a clean bill of health" in body
+    assert "of the levels that could be read" in body
+
+
+@pytest.mark.unit
+def test_an_empty_but_readable_repo_is_not_reported_as_a_failed_read(checker: object) -> None:
+    """Every level readable, none holding a secret: a real answer, not a 0-of-0.
+
+    `collect()` returns `([], None)` for a level that reads but is empty, so this
+    lands in neither `secrets` nor `unavailable` and is reachable. The old code
+    printed `0 name(s) past 90 days of 0 listed` on stdout and claimed on the
+    summary that nothing had been read — both false.
+    """
+    report = checker.Report()
+
+    out = checker.render(report, 90)
+    assert "of 0 listed" not in out
+    assert "Every level was readable" in out
+
+    body = checker.markdown(report, 90)
+    assert "No secrets could be aged" not in body
+    assert "because nothing was read" not in body
+    assert "Every level was readable" in body
+
+
+@pytest.mark.unit
+def test_the_two_renderers_never_disagree_about_the_verdict(checker: object) -> None:
+    """The invariant both renderers must satisfy, over every reachable shape.
+
+    They were two hand-maintained copies of one judgement and they drifted, so the
+    agreement is pinned here rather than asserted in a comment.
+    """
+    old, fresh = _age(checker, 200), _age(checker, 10)
+    shapes = {
+        "nothing readable": checker.Report(
+            unavailable={"cron": "403", "org": "403", "repo": "403"}
+        ),
+        "partial, nothing overdue": checker.Report(secrets=[fresh], unavailable={"org": "403"}),
+        "partial, overdue": checker.Report(secrets=[old], unavailable={"org": "403"}),
+        "full read, nothing overdue": checker.Report(secrets=[fresh]),
+        "full read, overdue": checker.Report(secrets=[old]),
+        "full read, empty": checker.Report(),
+    }
+
+    for label, report in shapes.items():
+        verdict = checker.ageing_verdict(report, 90)
+        assert verdict in checker.render(report, 90), label
+        assert verdict in checker.markdown(report, 90), label
+
+        if not report.secrets or report.unavailable:
+            assert "No action needed" not in checker.markdown(report, 90), label
+
+
+@pytest.mark.unit
+def test_stdout_still_counts_when_every_level_read(checker: object) -> None:
+    """The fix must not cost the ordinary case its count line."""
+    report = checker.Report(secrets=[_age(checker, 200)])
+    out = checker.render(report, 90)
+
+    assert "1 name(s) past 90 days of 1 listed" in out
+    assert "No secrets could be aged" not in out
