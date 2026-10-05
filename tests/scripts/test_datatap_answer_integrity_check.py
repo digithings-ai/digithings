@@ -872,8 +872,15 @@ def test_the_role_strip_does_not_move_the_company_suffix_guard() -> None:
     The in-item company guard and the sign-off shape are the two halves of the
     guard set that the composition reorders around. A regression in either shows
     up here as exit 1 on shapes that are not customer lists.
+
+    The suffix half needs a role ON THE SAME ITEM. Suffix alone and role alone
+    each take a different path: with a suffix the guard runs on `name`, and with
+    a role the strip runs before it, but only a shape carrying both can see the
+    guard moved back onto the unstripped `candidate`.
     """
     assert mod.scan_answer("- Whitfield Ltd\n- Oyelaran Ltd") == []
+    assert mod.scan_answer("- Whitfield Ltd (owner)\n- Oyelaran Ltd (owner)") == []
+    assert mod.scan_answer("- Whitfield Ltd(owner)\n- Oyelaran Ltd(owner)") == []
     assert mod.scan_answer("- Dana Whitfield (owner)\n- Marcus Oyelaran (owner)") != []
 
 
