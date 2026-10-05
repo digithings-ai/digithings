@@ -1,0 +1,84 @@
+# Hourly answer-integrity probe against DataTap production (#DIG-306).
+#
+# What this checks: that the answer DataTap serves a real visitor has not started
+# carrying a customer name list or a leaked identifier. That is the failure a
+# redesign of their answer page would produce, and it is not visible from the
+# outside except by reading the answer itself.
+#
+# Why this needs no credential at all: the check reads the answer out of DataTap's
+# own public page and compares it against its own public specification. There is
+# nothing to authenticate against, so this workflow adds no secret and no
+# repository variable. The check is read-only and writes nothing.
+#
+# No `on.schedule` here on purpose: every clock for this repo lives on the
+# digithings-cron Worker (a GitHub cron on develop would double-fire, and
+# tests/scripts/test_no_gha_schedules.py enforces that). The hourly
+# `17 * * * *` — every hour at minute 17 — is registered there as the
+# `datatap-answer-check` job, which dispatches this workflow on develop.
+#
+# So a run here is Worker-dispatched, not GitHub-scheduled. Same hour, same minute,
+# same Actions page; the clock is simply owned by the Worker rather than by GitHub.
+name: "Check: DataTap answer integrity"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Supersede rather than queue. Each run is an independent read-only probe, so the
+# newest run's work fully covers whatever it displaces — the condition the #2541
+# writeup sets for cancel-in-progress: true. `cancel-in-progress: false` would let
+# one slow hour stack a queue behind it for no gain; the check has no state to
+# finish. There is no `environment:` gate and no secret, so the #2541 approval-queue
+# hazard does not apply here.
+concurrency:
+  group: datatap-answer-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the check and surface its real exit code
+        shell: bash
+        run: |
+          set -uo pipefail
+          LOG=$(mktemp)
+
+          # `make datatap-answer-check` is the same command a developer runs, so the
+          # Worker-dispatched run and a developer's local run cannot drift apart. Its
+          # exit code, though, cannot be used directly: GNU make returns 2 for *any*
+          # failing recipe and can never return 1 (verified on make 3.81 — a child
+          # exiting 1 and a child exiting 2 both surface as make exit 2). That would
+          # collapse two very different hours into one indistinguishable red: exit 1 is
+          # a fabrication found, exit 2 is a check that could not see the answer at
+          # all. The target's recipe therefore echoes the script's real code on a
+          # `datatap-answer-check: exit N` line for exactly this purpose, so recover
+          # that number and exit with it. Both codes still fail the job; they just stop
+          # being the same failure.
+          #
+          # `|| rc=$?` rather than a bare call because Actions runs `run:` blocks under
+          # `set -e`, which would abort before the recovery below could run. Redirecting
+          # to a file rather than piping to tee keeps pipefail out of the status path.
+          rc=0
+          make datatap-answer-check > "$LOG" 2>&1 || rc=$?
+          cat "$LOG"
+
+          real=$(awk '/^datatap-answer-check: exit [0-9]+$/ { code = $NF } END { print code }' "$LOG")
+          if [ -z "$real" ]; then
+            # make failed before the recipe ran, so it never printed a status line.
+            # Non-zero on purpose: an unanswered question is not a passing check.
+            echo "::error::make exited $rc without datatap-answer-check reporting a status"
+            exit 2
+          fi
+
+          echo "datatap-answer-check: exit $real"
+          exit "$real"

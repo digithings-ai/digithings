@@ -288,6 +288,9 @@ export const JOBS: readonly Job[] = [
   // so nothing lands on a shared runner's worst moment.
   wd("secret-staleness", "17 6 1 * *", DIGITHINGS, "secret-staleness-check.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
+  // Hourly answer-integrity probe against DataTap production. Clock lives here,
+  // not on the workflow: develop carries no on.schedule (#DIG-306). Read-only.
+  wd("datatap-answer-check", "17 * * * *", DIGITHINGS, "datatap-answer-check.yml"),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).
