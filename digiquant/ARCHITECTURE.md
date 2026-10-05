@@ -1511,6 +1511,126 @@ including an independent re-sweep of the weight grid that must agree with the sh
 optimizer's argmax, so a silently-narrowed grid cannot pass). No `nautilus_trader`,
 pandas or matplotlib anywhere.
 
+#### The PUBLISHED gold Stage A: `optimize_stage_a_by_backtest` on in-sample vs-flat-DCA (#4804)
+
+`scripts/run_gold_published_stage_a.py` runs the **published** keep/drop, the one the
+house rules name, as distinct from the cycle-overlap diagnostic recorded above. It is
+still glue: the search is the shipped `weight_search.optimize_stage_a_by_backtest`, on
+the **shipped frozen grids it declares** — read from that function's own signature at run
+time via `inspect.signature`, so the runner cannot widen or narrow them even by accident.
+Rails are the shipped no-trend `rolling_z` anchor (rolling 90d / z 1.0), refit per fold on
+the in-sample window only. The curve is the shipped `gold_reselect` preset shape, resolved
+by name. No power-law and no generic `log_linear` / `log_quadratic` steer for gold appears
+anywhere in the file. Objective: in-sample `vs_flat_dca_pct` — **not** vs-lump, **not**
+Sharpe, **not** cycle overlap.
+
+**Two read-first facts that shaped the design.**
+
+1. **The objective does not consume cycle windows.** `optimize_stage_a_by_backtest` has
+   no `windows` / `cycle_windows` parameter at all; it cuts its own folds from the
+   calendar. So **ONE run is correct**, and the gold pin sets are not an input. (The
+   preceding diagnostic *did* consume them, which is one reason its answer differs.) The
+   `SdcaAssetProfile` model still requires a `cycle_windows` field, so the profile carries
+   `gold_v1()` to satisfy the schema; it influences nothing in the artifact.
+2. **No gold profile exists.** `asset_profile.py` ships `btc_v1()` and `eth_research_v1()`
+   only. That src file was **deliberately not edited** — adding a gold factory is a source
+   change the owner has not asked for. The profile is built from the module's own public
+   surface (the `SdcaAssetProfile` constructor) using the allowlist the module already
+   publishes: `GOLD_MACRO_NAMES + GENERIC_TECHNICAL_NAMES` (13 names), fed through
+   `stage_a_search_names(profile)`. The search name set is never hand-picked.
+   `tests/…/test_gold_published_stage_a.py` fails if a gold factory ever ships, so the
+   runner cannot silently keep building its own.
+
+**The result — the published objective OVERTURNS the diagnostic's collapse.**
+
+| run | evals | IN-SAMPLE vs-flat-DCA | feasible folds | weights |
+|---|---|---|---|---|
+| baseline (valuation-only) | 2 | +16.713 | 2/3 | `valuation=1.0` |
+| **joint sweep** | **2,186** | **+119.964** | **3/3** | `valuation=0.5, weekly_rsi=1.0, weekly_macd=1.0` |
+
+Per-extra, each row a single-leg call to the shipped search against the valuation-only
+baseline. **The verdict vocabulary is keep / flat, not keep / drop**, and that is
+structural rather than stylistic: a one-name sweep shares its grid with the valuation-only
+row, so its best is `max(baseline, leg-on)` and can never fall below the baseline. A leg
+that hurts and a leg that merely does not help are the same observation here.
+
+| extra | decision | weight | IN-SAMPLE vs-flat-DCA | Δ vs baseline | in joint sweep | worst scored window |
+|---|---|---|---|---|---|---|
+| `weekly_rsi` | keep | 0.5 | +104.499 | +87.786 | yes | 5.7% (`fold0_is`) |
+| `weekly_macd` | keep | 0.5 | +87.639 | +70.926 | yes | 11.0% (`fold0_is`) |
+| `uup` | keep | 1.0 | +34.887 | +18.175 | no (coverage) | 53.7% (`fold0_is`) |
+| `walcl` | keep | 1.0 | +31.561 | +14.848 | no (coverage) | 35.3% (`fold0_is`) |
+| `real_rate` | keep | 1.0 | +29.549 | +12.836 | yes | 1.7% (`fold0_is`) |
+| `gdx_gld` | keep | 1.0 | +28.004 | +11.291 | no (coverage) | 36.1% (`fold0_is`) |
+| `gld_slv` | keep | 1.0 | +23.047 | +6.334 | no (coverage) | 34.6% (`fold0_is`) |
+| `nfci` | keep | 0.5 | +20.990 | +4.277 | yes | 1.8% (`fold0_is`) |
+| `breakeven_5y` | keep | 1.0 | +19.352 | +2.639 | yes | 1.7% (`fold0_is`) |
+| `sma_band` | keep | 0.5 | +17.003 | +0.290 | yes | 2.6% (`fold0_is`) |
+| `gvz` | flat | 0.0 | +16.713 | +0.000 | no (coverage) | 82.5% (`fold0_is`) |
+| `hy_oas` | flat | 0.0 | +16.713 | +0.000 | no (coverage) | 100.0% (`fold2_oos`) |
+| `ig_oas` | flat | 0.0 | +16.713 | +0.000 | no (coverage) | 100.0% (`fold2_oos`) |
+
+The winner is **three legs with two at full weight**, against the published `btc_sdca`
+reference shape `valuation=1.0, m2=0.5, dxy=0.5, weekly_macd=0.5, weekly_rsi=0.25`
+(compared for shape only — nothing copied from it, tuned toward it, or benchmarked
+against it). The diagnostic run collapsed gold to valuation plus at most one 0.5 leg; the
+published objective **overturns that**, selecting two full-weight oscillator legs. That is
+a headline finding, not a nuisance — but it is a finding about two different objectives
+answering two different questions, so it is **not** a licence to blend them.
+
+**Feasibility call (explicit, recorded in four places).** The joint sweep is `3**len(names)`
+× 3 valuation values. The full 13-name allowlist projects to `3**13 × 3 = 4,782,969`
+evaluations at the **measured 33.0 ms/eval ≈ 43.9 h** — it does not fit a session. The
+joint sweep runs 6 of 13 names, selected on a **coverage** rule (a data property, never a
+score): a leg must have z on at least 75% of its **worst scored window**. The window, not
+the span average, is the right granularity — the macro legs' missing history sits in the
+*earliest* in-sample fold, so `uup` averages 13.4% missing across the searchable span while
+missing 53.7% of `fold0_is`. Averaging would have let all 11 non-dead legs through and
+re-created the infeasibility. Every excluded name is named with its measured coverage and
+the window that failed, and **every one of the 13 still carries a single-leg probe row**, so
+no allowlist name goes unreported. Recorded in the script note (`FEASIBILITY_NOTE`), the
+JSON, the console and here.
+
+**The rank does NOT gate on the floor or the cap.** `_is_rank_score` is the plain mean
+in-sample `vs_flat_dca_pct`; the feasibility flag is recorded per fold and Stage B
+enforces it, but nothing here vetoes a row. A second wrinkle worth knowing: the floor is
+measured on **NET** `capital_deployed_pct` in Stage A (`weight_search.py`) but on **PEAK**
+`capital_deployed_peak_pct` in Stage B (`walk_forward.is_feasible`) — which is why the
+baseline's fold 0 reads infeasible here on peak-deployed 100.0% (net −47.33% after selling
+into strength).
+
+**OOS IS REPORTED, WAS NOT USED TO SELECT, AND IS STRUCTURALLY VOID.** Every out-of-sample
+window in this run deployed **zero** capital, so every OOS figure is the same all-cash book
+(`−6.491` for every weight vector, baseline included). The cause is in the rails, not the
+script: `optimize_stage_a_by_backtest` refits rails on each fold's in-sample window and
+evaluates OOS on those rails (correct per the #3173 no-leak rule, and fine for a model that
+**extrapolates** — the trend rails do), but `RollingZRiskModel` is a *trailing* model whose
+`rails()` left-joins a stored `(date, mu, sigma)` table. Every date outside the fit window
+returns null rails → null risk → no trades → all cash. **The no-trend rolling-z anchor and
+the engine's per-fold walk-forward are not compatible as written.** In-sample numbers are
+unaffected (in-sample dates are inside the fit window). `run_gold_curve_search.py` already
+carries a "causal rolling" concatenated-history path on this branch and calls the engine
+walk-forward void for these rails; Stage B must use that path or rails that extrapolate.
+Reported, not worked around — a fix belongs in `walk_forward.py` or `rolling_z.py`, which
+are owner territory.
+
+Artifact (UNTRACKED): `.scratch/gold_published_stage_a.json` — per run the winning weights
+as plain data, both means, `num_evaluations`, per-fold IS **and** OOS metrics with the
+feasibility flag, the measured coverage of every allowlist name, every exclusion with the
+window that failed, the projected un-narrowed cost, `oos_is_degenerate`, and every
+disclosure label. Wall time is deliberately **not** in the artifact (it is a property of the
+machine, not a result, and would make the record undiffable against itself); it prints on the
+console. Chart: `scripts/plot_gold_published_stage_a.py` → `gold_published_stage_a.svg`
+(`/gold_charts/gold_published_stage_a.svg`, HTTP 200) — hand-rolled stdlib SVG mirroring
+`plot_gold_pin_set_fits.py`, five panels: keep/no-keep per extra against the baseline
+(no-keep hatched as well as recoloured), deployed capital against the 10% floor, drawdown
+against the 50% cap, the shape comparison, and OOS **below a heavy rule and marked VOID**.
+Pins: `tests/dq/strategies/sdca/test_gold_published_stage_a.py` (35 pins, including an
+independent re-sweep that must agree with the shipped argmax *and* its evaluation count, a
+source-level check that the shipped rank cannot read the OOS field, and a computed check
+that an all-cash OOS is detected rather than presented as evidence). No `nautilus_trader`,
+pandas or matplotlib anywhere.
+
 **Composite formula (BTC charts default to a single rail).**
 
 ```
