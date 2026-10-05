@@ -270,6 +270,104 @@ def test_slow_cadence_failure_alongside_a_daily_failure_still_fails_loud(
     )
 
 
+def test_main_run_exits_nonzero_and_names_the_whole_leg(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """End-to-end through ``main()``: the exit code and the published artifact.
+
+    Every other test in this file executes the reduction with a namespace it
+    builds itself, including its own ``exempt`` set. That is deliberate -- the
+    comprehension is not reachable by import -- but it means none of them
+    exercise ``main``'s own ``exempt`` binding. This one pins the whole-leg
+    shape end-to-end: the exit code the workflow alerts on, and the ``failed``
+    list an operator debugs from.
+    """
+    # Imported inside the test so this file stays runnable on its own; the
+    # sibling already imports the real script through the same importlib seam.
+    from tests.scripts.test_market_data_restatement_4621 import (
+        HIST,
+        FakeStore,
+        _run_main,
+        price_frame,
+        price_rows,
+    )
+
+    store = FakeStore()
+    store.histories["SPY"] = price_frame(price_rows(HIST))
+    store.lives["SPY"] = price_frame(price_rows(HIST))
+    # Four monthly series, all dead, plus one daily macro series, also dead --
+    # the shape that must name *both* the macro leg and the daily failure.
+    specs = [("fred", s, "monthly") for s in ("M2SL", "PCEPI", "UNRATE", "CPIAUCSL")]
+    specs.append(("fred", "DGS10", None))
+    for source, series, _cadence in specs:
+        store.macros[(source, series)] = [
+            {"source": source, "series_id": series, "obs_date": "2026-07-01", "value": 84.0},
+        ]
+        store.macro_empty.add((source, series))
+
+    rc, artifact = _run_main(monkeypatch, tmp_path, store, specs, "2026-09-23")
+
+    assert rc == 1, "a dead macro leg must exit non-zero so the workflow alerts"
+    assert artifact["stale"] is True
+    assert set(artifact["failed"]) == {
+        f"fred__{s}" for s in ("M2SL", "PCEPI", "UNRATE", "CPIAUCSL", "DGS10")
+    }, "the artifact must name every dead macro series, not just the daily one"
+
+
+def test_main_run_keeps_the_daily_leg_unexempt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The exemption is cadence-scoped, end to end: a daily dead series still fails.
+
+    This is not a restatement of
+    ``test_market_data_restatement_4621::test_slow_macro_history_only_does_not_fail_run``
+    (that one pins the quiet side, and it is what catches ``main``'s ``exempt``
+    binding collapsing to an empty set). This pins the opposite direction.
+
+    The fixture is deliberately uneven: two monthly series dead, one *daily*
+    series dead, and a second daily series that came back fine. If the exemption
+    over-reached to every macro id, the healthy series would join the exempt set,
+    unanimity over that set would fail to hold, and the two dead daily series
+    would be silently exempt -- the run would exit 0 while a daily macro feed
+    was dead. Uneven is what makes the mutant visible; an all-dead panel hides it.
+    """
+    from tests.scripts.test_market_data_restatement_4621 import (
+        HIST,
+        FakeStore,
+        _run_main,
+        price_frame,
+        price_rows,
+    )
+
+    store = FakeStore()
+    store.histories["SPY"] = price_frame(price_rows(HIST))
+    store.lives["SPY"] = price_frame(price_rows(HIST))
+    specs = [
+        ("fred", "M2SL", "monthly"),
+        ("fred", "PCEPI", "monthly"),
+        ("fred", "DGS10", None),
+        ("fred", "DFII10", None),
+    ]
+    for source, series, _cadence in specs:
+        store.macros[(source, series)] = [
+            {"source": source, "series_id": series, "obs_date": "2026-07-01", "value": 84.0},
+        ]
+    # Three of the four are dead; DFII10 answers normally.
+    for series in ("M2SL", "PCEPI", "DGS10"):
+        store.macro_empty.add(("fred", series))
+    store.macro_lives[("fred", "DFII10")] = [
+        {"source": "fred", "series_id": "DFII10", "obs_date": "2026-09-20", "value": 1.5},
+    ]
+
+    rc, artifact = _run_main(monkeypatch, tmp_path, store, specs, "2026-09-23")
+
+    assert rc == 1, "a dead daily macro series must fail the run whatever its neighbours do"
+    assert "fred__DGS10" in artifact["failed"], (
+        "the daily series is not cadence-exempt and must be named"
+    )
+    assert "fred__DFII10" not in artifact["failed"]
+
+
 def test_stale_comprehension_keeps_a_whole_leg_guard() -> None:
     """The aggregate is *called* from the comprehension, not computed beside it.
 
