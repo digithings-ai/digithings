@@ -14,14 +14,18 @@ preflight and every read endpoint in the stack. Do not "fix" that test.
 
 from __future__ import annotations
 
+import importlib
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastapi import APIRouter, FastAPI
 
-import digibase
+from digibase import ROUTE_UNREGISTERED as _published_code
+from digibase import __all__ as _digibase_all
 from digibase import art9
+
+_digibase = importlib.import_module("digibase")
 
 pytestmark = pytest.mark.unit
 
@@ -46,10 +50,12 @@ def _digigraph_like_app() -> FastAPI:
     v1 = APIRouter(prefix="/v1")
 
     @v1.post("/chat/completions")
-    def _chat() -> None: ...
+    def _chat() -> None:
+        return None
 
     @v1.get("/models")
-    def _models() -> None: ...
+    def _models() -> None:
+        return None
 
     app = FastAPI()
     app.include_router(v1)
@@ -142,7 +148,7 @@ def test_refusal_reason_carries_the_stable_code() -> None:
 def test_route_unregistered_code_is_published() -> None:
     """Downstream leaves match on the code, so it is part of the public surface."""
     assert art9.ROUTE_UNREGISTERED == "art9:route_unregistered"
-    assert digibase.ROUTE_UNREGISTERED == art9.ROUTE_UNREGISTERED
+    assert _published_code == art9.ROUTE_UNREGISTERED
 
 
 def test_registry_symbols_are_re_exported_from_the_package() -> None:
@@ -160,8 +166,8 @@ def test_registry_symbols_are_re_exported_from_the_package() -> None:
         "iter_ingest_routes",
         "route_kind",
     ):
-        assert name in digibase.__all__, f"digibase must re-export {name}"
-        assert getattr(digibase, name) is getattr(art9, name)
+        assert name in _digibase_all, f"digibase must re-export {name}"
+        assert getattr(_digibase, name) is getattr(art9, name)
 
 
 def test_registered_route_under_declared_prefix_is_allowed() -> None:
@@ -277,7 +283,8 @@ def test_trailing_slash_on_a_registered_route_is_still_registered() -> None:
     router = APIRouter(prefix="/ingest")
 
     @router.post("/")
-    def _ingest() -> None: ...
+    def _ingest() -> None:
+        return None
 
     app = FastAPI()
     app.include_router(router)
@@ -382,7 +389,8 @@ def test_iter_ingest_routes_traverses_nested_routers() -> None:
     inner = APIRouter()
 
     @inner.post("/completions")
-    def _chat() -> None: ...
+    def _chat() -> None:
+        return None
 
     outer = APIRouter(prefix="/v1/chat")
     outer.include_router(inner)
@@ -401,7 +409,8 @@ def test_iter_ingest_routes_descends_into_a_mounted_sub_app() -> None:
     sub = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 
     @sub.post("/by-path")
-    def _by_path() -> None: ...
+    def _by_path() -> None:
+        return None
 
     app = FastAPI()
     app.mount("/v1/notes", sub)
