@@ -41,6 +41,13 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
 SystemExit message on missing credentials/URIs (fail closed, like backfill).
 
+Staleness is evaluated per series *and* per leg. A monthly/quarterly macro
+series that published nothing is exempt (#4621), but a slow series
+exhausts a 120/240-day live window, so several of them going quiet at once
+is feed death, not a release calendar: when every failing macro series is a
+slow one, the per-series exemption is suspended and the run exits 1
+(:func:`_macro_leg_dead`).
+
 No vendor API key is needed on this path: the macro panel is sealed from
 anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
 the newest page per series (``window_limit`` by cadence, a 1000-row tail on
@@ -829,6 +836,36 @@ def _slow_macro_exempt_ids(macro_specs: list[tuple[str, str, str | None]]) -> se
     }
 
 
+def _macro_leg_dead(outcomes: list[dict[str, Any]], exempt: set[str]) -> bool:
+    """True when every failing macro series is a slow one (DIG-694 follow-up).
+
+    The #4621 exemption is per-series, keyed on cadence alone, so it cannot see
+    a leg: when every macro series comes back ``history-only`` at once, each
+    outcome is individually exempt, ``failed`` comes back empty and the run
+    exits 0 claiming fresh while the macro panel is frozen at the last good
+    seal. ``staleness_gate`` cannot cover it either -- it is a date-gap check
+    over the max ``as_of`` across datasets, and a whole-leg freeze leaves the
+    best ``as_of`` untouched.
+
+    Two conditions, and both are needed:
+
+    * **more than one** exempt series silent. One slow series sitting out its
+      release cycle is the #4621 exemption and stays quiet. Real macro
+      cadences are staggered (M2SL lands late in the month, UNRATE/CPI/PCE in
+      the middle), so a *simultaneous* silence across several slow series is
+      not a release calendar, it is the feed.
+    * **nothing else soft-failed**. If any other outcome in the run is a soft
+      fail then the per-series filter has already left a non-exempt entry in
+      ``failed`` and the run is stale regardless, so this guard can never be the
+      thing that hides an outage -- it only ever names the macro tickers that
+      the per-series exemption was swallowing.
+    """
+    silent = [o for o in outcomes if o["mode"] == MODE_HISTORY_ONLY and o["ticker"] in exempt]
+    if len(silent) <= 1:
+        return False
+    return len(silent) == len([o for o in outcomes if o["mode"] in _SOFT_FAIL_MODES])
+
+
 def _live_window_days(cadence: str | None) -> int:
     """Live fetch window for a series' declared cadence (default: daily, 45d)."""
     if not cadence:
@@ -1438,13 +1475,19 @@ def main(argv: list[str] | None = None) -> int:
     gate = staleness_gate(new_as_of, run)
     # Cadence-aware stale gate (#4621): a slow series sitting out its release
     # cycle is expected quiet, not an outage. Real feed death — daily price
-    # errors/history-only, or any macro error — still fails loud.
+    # errors/history-only, or any macro error — still fails loud. A whole-leg
+    # macro outage is not a release calendar: the per-series exemption is
+    # suspended when every failing macro series is a slow one (#694 follow-up).
     exempt = _slow_macro_exempt_ids(macro_specs)
     failed = [
         o
         for o in outcomes
         if o["mode"] in _SOFT_FAIL_MODES
-        and not (o["ticker"] in exempt and o["mode"] == MODE_HISTORY_ONLY)
+        and not (
+            o["ticker"] in exempt
+            and o["mode"] == MODE_HISTORY_ONLY
+            and not _macro_leg_dead(outcomes, exempt)
+        )
     ]
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
