@@ -2,7 +2,7 @@
 
 Replaces the ad-hoc ``time.sleep(pause_s)`` pauses sprinkled through twelve-x's
 TradingEconomics scraper (between "show more" clicks) and the AJAX loop in the
-primemarket node with one explicit, testable limiter: it guarantees at least
+scraper B node with one explicit, testable limiter: it guarantees at least
 ``min_interval`` seconds between successive :meth:`RateLimiter.acquire` calls.
 
 YAGNI by design
