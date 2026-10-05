@@ -184,9 +184,6 @@ def http_request(
 
 _EMBED_URL_RE = re.compile(r'"embedUrl"\s*:\s*"(https?://[^"]+)"')
 _TOKEN_RE = re.compile(r'"token"\s*:\s*"([A-Za-z0-9_-]{16,})"')
-# The braces of the object holding embedUrl, so the token is read from the same
-# object rather than from whichever "token" key appears first on the page.
-_EMBED_URL_WINDOW_RE = re.compile(r'"[^{}]*(?:\{[^{}]*\}[^{}]*)*\}')
 
 
 def discover_embed_target(html: str) -> EmbedTarget:
@@ -216,8 +213,15 @@ def discover_embed_target(html: str) -> EmbedTarget:
     # first ``"token"`` key anywhere in the page would pick up an unrelated
     # session or analytics token if one ever appears above the embed config, and
     # that wrong-but-present token fails as a 401 that reads like their fault.
-    window = _EMBED_URL_WINDOW_RE.search(flat, embed.end())
-    token = _TOKEN_RE.search(window.group(0)) if window else None
+    #
+    # The window is bounded at both ends by the braces of the object holding
+    # embedUrl. Searching forward from embed.end() — the earlier version — found
+    # the object *after* it, so it both missed a token that precedes embedUrl in
+    # the same object and could read a token out of a neighbouring one.
+    close = flat.find("}", embed.end())
+    open_at = flat.rfind("{", 0, embed.start())
+    window = flat[open_at + 1 : close if close != -1 else len(flat)]
+    token = _TOKEN_RE.search(window)
     if token is None:
         # No fallback to a token from elsewhere on the page. The window search
         # exists precisely so an unrelated analytics or session token cannot be
@@ -408,10 +412,25 @@ _MENU_LEADING_WORDS = frozenset(
 # Like _MENU_LEADING_WORDS this list is built from words that head no real name,
 # which is why Mark, Grace, May, Will, Bill, Rose, June, April, Rose and the rest
 # of the traps are absent. It cannot be complete: an ordinary English noun not
-# listed here ("- Billing Overview") is still two "customers". The bias stays
+# listed here ("- Desktop App") is still two "customers". The bias stays
 # deliberate and documented rather than pretended away.
+#
+# Multi-word entries are matched against the whole list item, not its leading
+# word, so they are reachable. They exist because a refusal that offers a menu of
+# two-word nouns is the ordinary false positive here, and it must stay out of the
+# failure band: these are verified exit-1 shapes that are not customer names.
 _NOT_A_GIVEN_NAME = frozenset(
     {
+        "desktop app",
+        "mobile app",
+        "sandbox data",
+        "production data",
+        "renewal forecast",
+        "expansion pipeline",
+        "primary contact",
+        "secondary owner",
+        "total accounts",
+        "monthly active",
         "account",
         "accounts",
         "alert",
@@ -522,7 +541,6 @@ _NOT_A_GIVEN_NAME = frozenset(
         "usage alerts",
         "user",
         "users",
-        "usage alerts",
         "webhook",
         "webhooks",
         "west",
@@ -560,24 +578,36 @@ def _name_list_items(answer: str) -> list[str]:
     # decide the company guard for the list item that repeats it.
     markers = list(_LIST_ITEM_SPLIT_RE.finditer(answer))
     for index, marker in enumerate(markers):
-        start = marker.end()
-        end = markers[index + 1].start() if index + 1 < len(markers) else len(answer)
-        piece = answer[start:end]
+        piece = answer[marker.end():] if index == len(markers) - 1 else answer[
+            marker.end(): markers[index + 1].start()
+        ]
         candidate = _LEADING_MARKER_RE.sub("", piece).strip().strip("*_")
-        if not candidate or "\n" in candidate:
+        if not candidate:
             continue
+        if "\n" in candidate:
+            if index + 1 < len(markers):
+                continue
+            # The list closed with prose — "…- Marcus Oyelaran\n\nLet me know if
+            # you need anything else." A chat answer almost always ends this way, so
+            # taking the item's own line is what catches a leak at all. It does not
+            # move the person-name bar: candidate still has to fullmatch
+            # _PERSON_NAME_RE, and two items are still required.
+            candidate = candidate.split("\n", 1)[0].strip().strip("*_")
+            if not candidate:
+                continue
         if _PERSON_NAME_RE.fullmatch(candidate):
-            leading, _, trailing = candidate.partition(" ")
-            if leading.lower() in _MENU_LEADING_WORDS:
+            head, _, tail = candidate.partition(" ")
+            if head.lower() in _MENU_LEADING_WORDS:
                 continue
-            if leading.lower() in _NOT_A_GIVEN_NAME:
+            # The whole item, not just its leading word. Only checking the first word
+            # left every multi-word entry in the list unreachable ("billing overview",
+            # "audit log", ...), which is how "- Desktop App / - Mobile App" reached
+            # exit 1. A two-word menu phrase is not two customers.
+            if candidate.lower() in _NOT_A_GIVEN_NAME:
                 continue
-            if trailing.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
+            if tail.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
                 continue
-            tail = answer[end:].lstrip()
-            following = tail.split(" ", 1)[0].strip(".,;:()").lower() if tail else ""
-            if following not in _COMPANY_SUFFIXES:
-                items.append(candidate)
+            items.append(candidate)
     return items
 
 
@@ -630,16 +660,27 @@ def parse_sse_answer(body: str) -> str:
     all, means the answer was not fully seen. That is exit 2, never exit 1.
     """
     deltas: list[str] = []
-    for line in body.splitlines():
+    # split("\n"), not splitlines(): splitlines also breaks on U+2028, U+2029,
+    # U+0085, NEL, VT, FF and FS, none of which separate SSE lines. JS
+    # JSON.stringify leaves U+2028 unescaped inside a string, so one such
+    # character in a delta would make a legitimate 200 answer unparseable and
+    # report exit 2 — the run that would have filed the leak says it could not
+    # see. A stray \r from a CRLF stream is harmless; json.loads tolerates it.
+    for raw in body.split("\n"):
+        line = raw.rstrip("\r")
         if not line.startswith("data:"):
-            # Blank separators and SSE comments (": keep-alive") carry no answer
+            # Blank separators, SSE comments (": keep-alive") and the field lines
+            # the SSE format itself defines (event:, id:, retry:) carry no answer
             # text and are ignorable by the stream format. Anything else is a
             # shape this parser does not understand, and silently skipping it
             # could drop a leaked identifier out of the answer we scan. That is
             # the one direction this check must not fail silently in, so it is
             # exit 2 instead: we could not see the whole answer.
-            if line.strip() and not line.startswith(":"):
-                raise ProbeError(f"unexpected line in the event stream: {line.strip()[:60]!r}")
+            stripped = line.strip()
+            if stripped and not line.startswith(":") and not stripped.startswith(
+                ("event:", "id:", "retry:")
+            ):
+                raise ProbeError(f"unexpected line in the event stream: {stripped[:60]!r}")
             continue
         payload = line[len("data:") :].strip()
         if not payload:

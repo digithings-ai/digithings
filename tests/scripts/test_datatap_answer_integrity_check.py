@@ -39,6 +39,18 @@ def _load_module():
 
 mod = _load_module()
 
+# Tests below assign ``mod.http_request = fake`` and never restore it, so the
+# real function would be gone for any later test that forgets its own fake. A
+# test that relied on that got a previous test's fake instead of the network
+# code. Capture it once, and restore it after every test.
+_REAL_HTTP_REQUEST = mod.http_request
+
+
+@pytest.fixture(autouse=True)
+def _restore_the_http_request_seam() -> None:
+    yield
+    mod.http_request = _REAL_HTTP_REQUEST
+
 EMBED_BASE = "https://digichat.jollygrass-53364db9.eastus2.azurecontainerapps.io"
 DISCOVERY_HTML = (
     "<!DOCTYPE html><html><body><script>self.__next_f.push("
@@ -359,7 +371,17 @@ def test_the_check_reads_no_credential_from_the_environment() -> None:
 
 def test_the_check_writes_no_persistence() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    for forbidden in ("open(", "sqlite3", "@/db", "conversations", "requests.post"):
+    for forbidden in (
+        "open(",
+        "sqlite3",
+        "@/db",
+        "conversations",
+        "requests.post",
+        "write_text",
+        "write_bytes",
+        "os.remove",
+        "shutil.",
+    ):
         assert forbidden not in source, f"{forbidden!r} would breach the read-only proof"
 
 
@@ -410,8 +432,21 @@ def test_http_request_is_the_only_door_to_the_network() -> None:
     above, cannot be satisfied by a substring they cannot tell apart.
     """
     source = SCRIPT.read_text(encoding="utf-8")
-    for banned in ("import requests", "import httpx", "urlopen(", "socket.", "http.client"):
+    for banned in (
+        "import requests",
+        "import httpx",
+        "urlopen(",
+        "socket.",
+        "http.client",
+        "subprocess",
+        "urllib.request.urlopen",
+    ):
         assert banned not in source, f"{banned!r} would open a second door to the network"
+    # The module's own ``_fetch`` alias is the one legitimate call site, so the pin
+    # is on the count and not on the symbol: banning "_fetch(" outright would have
+    # been satisfied by renaming it, and counting is what catches a second door.
+    assert source.count("_fetch(") == 1, "exactly one _fetch call site is allowed"
+
 
 
 # --------------------------------------------------------------------------
@@ -500,3 +535,166 @@ def test_a_crash_inside_the_check_is_could_not_run_never_a_failure(
     )
     assert "PASS" not in out, f"a crash must never print PASS; got:\n{out}"
     assert "RuntimeError" in out, f"exit 2 must name the defect; got:\n{out}"
+
+# --------------------------------------------------------------------------
+# Review findings on 8a539aebc. Each of these is a shape the reviewer verified
+# by hand, so the shape is pinned here rather than left to the next reader.
+# --------------------------------------------------------------------------
+
+
+def test_a_name_list_closed_by_a_signoff_is_still_caught() -> None:
+    """A chat answer almost always ends with prose after the list.
+
+    The last item's slice used to run to end-of-answer, so the whole-item test
+    discarded it and "- Jane Whitfield\\n- Marcus Oyelaran\\n\\nLet me know if
+    you need anything else." came back clean. That is the default shape of the
+    answer a fabricating assistant would produce, so the leak went unseen.
+    """
+    answer = (
+        "- Jane Whitfield\n- Marcus Oyelaran\n\nLet me know if you need anything else."
+    )
+    assert mod.scan_answer(answer) != []
+
+
+def test_catching_a_prose_closed_list_does_not_lower_the_name_bar() -> None:
+    """The fix must not turn one name in prose into a finding.
+
+    ``test_a_single_name_in_prose_is_not_a_customer_list`` covers the sentence
+    form. This covers the bullet form with a signoff, which is the shape the
+    fix actually touches.
+    """
+    assert mod.scan_answer("- Jane Whitfield\n\nAnything else I can help with?") == []
+    assert mod.scan_answer(
+        "I can discuss Contoso Retail Ltd in general terms."
+    ) == []
+
+
+def test_a_two_word_menu_with_a_signoff_is_not_a_customer_list() -> None:
+    """The other side of the same fix: menus must stay out of the failure band.
+
+    Only the leading word used to be checked against the blocklist, which left
+    every multi-word entry unreachable, so these fired at exit 1.
+    """
+    for menu in (
+        "- Desktop App\n- Mobile App\n\nLet me know!",
+        "- Sandbox Data\n- Production Data",
+        "- Renewal Forecast\n- Expansion Pipeline",
+        "- Primary Contact\n- Secondary Owner",
+        "- Total Accounts\n- Monthly Active",
+        "- Billing Overview\n- Audit Log",
+        "1. Open Settings 2. Choose Integrations",
+    ):
+        assert mod.scan_answer(menu) == [], f"{menu!r} is a help menu, not two customers"
+
+
+def test_every_multi_word_blocklist_entry_is_reachable() -> None:
+    """No dead entries.
+
+    Seven entries ("audit log", "billing overview", ...) could never match,
+    because the guard consulted the leading word only. A blocklist that silently
+    stops working is how a refusal menu ends up filing a SEV1 on a client, so the
+    reachability is asserted rather than assumed.
+    """
+    phrases = sorted(word for word in mod._NOT_A_GIVEN_NAME if " " in word)
+    assert len(phrases) >= 7, f"expected the multi-word entries, found {phrases}"
+    for phrase in phrases:
+        title = " ".join(part.capitalize() for part in phrase.split())
+        assert mod.scan_answer(f"- {title}\n- Secondary Choice") == [], (
+            f"{title!r} is listed but does not suppress a menu item"
+        )
+
+
+def test_an_sse_field_line_is_ignored_rather_than_unparseable() -> None:
+    """`event:`, `id:` and `retry:` are field lines the SSE format defines.
+
+    They were raised as "unexpected line in the event stream", so a
+    proxy-injected ``retry:`` would blind the check to a permanent exit 2.
+    """
+    body = (
+        "event: message\n"
+        'data: {"type":"start"}\n\n'
+        'data: {"type":"text-delta","delta":"I have no customer data."}\n\n'
+        "retry: 3000\n"
+        'data: {"type":"finish"}\n\n'
+        "data: [DONE]\n\n"
+    )
+    assert mod.parse_sse_answer(body) == "I have no customer data."
+
+
+def test_a_crlf_event_stream_still_parses() -> None:
+    body = (
+        'data: {"type":"start"}\r\n\r\n'
+        'data: {"type":"text-delta","delta":"Clean."}\r\n\r\n'
+    )
+    assert mod.parse_sse_answer(body) == "Clean."
+
+
+def test_an_unrecognised_line_is_still_exit_two_material() -> None:
+    """The relaxation above must not become a silent skip.
+
+    A line that is neither blank, nor a comment, nor a defined field line, nor a
+    ``data:`` frame could carry a leaked identifier out of the answer we scan.
+    """
+    with pytest.raises(mod.ProbeError):
+        mod.parse_sse_answer('data: {"type":"text-delta","delta":"x"}\n\n{"partial": true}\n')
+
+
+def test_the_token_is_read_from_the_object_that_holds_the_embed_url() -> None:
+    """The same-object window is bounded at both ends by that object's braces.
+
+    Searching forward from embed.end() found the object *after* it, which both
+    missed a token preceding embedUrl and could read one out of a neighbour.
+    """
+    token = "t" * 48
+    after = m_discovery_html(f'{{"embedUrl":"https://x/embed","token":"{token}"}}')
+    assert mod.discover_embed_target(after).token == token
+
+    before = m_discovery_html(f'{{"token":"{token}","embedUrl":"https://x/embed"}}')
+    assert mod.discover_embed_target(before).token == token
+
+    # A neighbouring object must not be able to supply the token.
+    neighbour = m_discovery_html(f'{{"embedUrl":"https://x/embed"}}{{"token":"{token}"}}')
+    with pytest.raises(mod.ProbeError):
+        mod.discover_embed_target(neighbour)
+
+
+def test_the_real_http_request_turns_a_402_into_a_response() -> None:
+    """The branch that turns a production 402 into exit 2, pinned.
+
+    The whole suite swaps ``http_request`` for a fake, so the real function —
+    including its ``HTTPError`` arm — had no coverage at all. A 402 from the
+    client's platform is the case most likely to be met in production.
+    """
+    import email.message
+    import io
+    from urllib.error import HTTPError
+
+    def _raise(request, timeout=None):
+        headers = email.message.Message()
+        headers["content-type"] = "application/json"
+        raise HTTPError(
+            request.full_url,
+            402,
+            "Payment Required",
+            headers,
+            io.BytesIO(b'{"error":"trial_gate"}'),
+        )
+
+    original = mod._fetch
+    mod._fetch = _raise
+    try:
+        response = _REAL_HTTP_REQUEST("POST", "https://example.invalid/api/chat", body=b"{}")
+    finally:
+        mod._fetch = original
+
+    assert response.status == 402
+    assert response.content_type == "application/json"
+    assert "trial_gate" in response.body
+
+
+def m_discovery_html(config: str) -> str:
+    """Rebuild the page with a different config object in place of the live one."""
+    original = (
+        '{\\"embedUrl\\":\\"' + EMBED_BASE + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}'
+    )
+    return DISCOVERY_HTML.replace(original, "{" + config.replace('"', '\\"') + "}")
