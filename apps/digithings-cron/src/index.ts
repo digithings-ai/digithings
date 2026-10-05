@@ -10,6 +10,8 @@ import { dispatch, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
+import { raiseTriggerAlarms } from "./trigger-alarm";
+import { UNMAPPED_CRON } from "./triggers";
 
 export type StartedRun = {
   job_id: string;
@@ -26,6 +28,12 @@ type RunOptions = {
   awaitDispatch?: boolean;
   /** Manual /kick may start paused jobs; scheduled() never sets this. */
   includeDisabled?: boolean;
+  /**
+   * True when a human deliberately asked for this cron, i.e. POST /kick.
+   * An unmapped cron from a kick is a probe result, not a deployed trigger, so
+   * it must not raise the `unmapped_cron` alarm. scheduled() never sets this.
+   */
+  probe?: boolean;
 };
 
 export function houseArgs(
@@ -78,7 +86,16 @@ async function runJobsForCron(
   const pending: Promise<StartedRun>[] = [];
 
   if (jobs.length === 0) {
-    console.error(JSON.stringify({ cron, error: "unmapped_cron" }));
+    // A cron reached the Worker and no enabled job claims it. That is a fault
+    // in the deployed trigger list, not a curiosity, so it is an alarm on the
+    // twelve-x path (DIG-732) rather than the log line it used to be. A kick
+    // that names an unmapped cron is a probe, so it stays a log line.
+    console.error(JSON.stringify({ cron, error: UNMAPPED_CRON }));
+    if (!opts.probe) {
+      // One extra subrequest on a path that dispatched nothing, so it cannot
+      // cost a dispatch. waitUntil: a slow alarm must not delay the Worker.
+      ctx.waitUntil(raiseTriggerAlarms(env, [{ alarm_class: UNMAPPED_CRON, cron }]));
+    }
   }
   for (const job of jobs) {
     if (job.etOpenGate && !opts.force && !shouldDispatchAtOpen(cron, scheduledTime)) {
@@ -227,6 +244,7 @@ export default {
         args,
         awaitDispatch: true,
         includeDisabled: true,
+        probe: true,
       });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }
