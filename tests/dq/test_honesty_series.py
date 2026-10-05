@@ -7,6 +7,7 @@ pandas.
 
 from __future__ import annotations
 
+import inspect
 import math
 import re
 from datetime import datetime, timedelta, timezone
@@ -231,25 +232,29 @@ def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> No
 
     Every other case here proves the normalizer *handles* ``(pid, ts_event, pnl)``.
     This one proves the engine *produces* it, so a future nautilus that changes
-    the row width is caught here rather than silently losing the whole denominator
-    in ``nautilus_runner.py``.
+    the row width — or stops producing rows at all — is caught here rather than
+    silently losing the whole denominator in ``nautilus_runner.py``.
 
     Measured on 1.230.0, the build that returns rows: a ``list`` of ``(str, int,
     float)`` triples whose second column is the ``ts_event`` the trade was
-    stamped with. On 1.223.0/1.228.0 the same call returns ``{pid: pnl}`` — no
-    rows to pin, and the dict path in ``normalize_series`` handles the value — so
-    this skips there rather than asserting a shape that build does not have.
+    stamped with.
+
+    The skip keys on the build's **capability** to emit a record row, not on the
+    shape that came back. Keying on the observed shape would be the trap: a
+    nautilus that reverted 1.230.0 to ``{pid: pnl}`` would then skip on the one
+    build whose whole job is to prove rows exist. ``add_trade`` gained its
+    ``ts_event`` parameter in the same release that started returning rows, so it
+    is the honest gate — a build that accepts a timestamp must return one.
     """
     pyo3 = _pyo3()
     usd = pyo3.Currency.from_str("USD")
     analyzer = pyo3.PortfolioAnalyzer()
+    if "ts_event" not in inspect.signature(analyzer.add_trade).parameters:
+        pytest.skip("add_trade has no ts_event, so this build cannot emit record rows")
     ts = 1_700_000_000_000_000_000
     _add_trade(analyzer, pyo3, usd, "P-1", 10.0, ts)
 
     raw = analyzer.realized_pnls(usd)
-
-    if isinstance(raw, dict):
-        pytest.skip(f"this build returns a dict, not record rows: {type(raw).__name__}")
 
     assert isinstance(raw, list) and len(raw) == 1, f"expected one row, got {raw!r}"
     row = raw[0]
