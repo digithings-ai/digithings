@@ -217,6 +217,26 @@ def test_block_flags_low_sample_below_warn_floor() -> None:
     assert b.estimate == pytest.approx(14 / 29, abs=1e-10)  # n=29
 
 
+def test_block_derives_the_interval_and_ignores_a_caller_supplied_estimate() -> None:
+    """estimate/ci_lo/ci_hi come from k/n; a caller cannot pin a rate that disagrees.
+
+    Regression for the review finding that `HonestRateBlock(k=5, n=10,
+    estimate=0.999)` kept 0.999 and left both CI bounds None — a block with a
+    number and no interval, the exact incoherence the refused branch avoids.
+    """
+    w = wilson(5, 10)  # n=10
+    b = HonestRateBlock(k=5, n=10, estimate=0.999)  # n=10
+    assert (b.estimate, b.ci_lo, b.ci_hi) == (w.estimate, w.lo, w.hi)  # n=10
+    assert b.estimate == pytest.approx(0.5, abs=1e-10)  # n=10
+    # A refused sample keeps no number even when one is forced in.  # n=3
+    forced = HonestRateBlock(k=1, n=3, estimate=0.9, ci_lo=0.1, ci_hi=0.99)  # n=3
+    assert forced.refused and forced.estimate is None  # n=3
+    assert forced.ci_lo is None and forced.ci_hi is None  # n=3
+    # Agrees with the module's own render-ready constructor.  # n=40
+    peer = honest_rate(30, 40)  # n=40
+    assert HonestRateBlock(k=30, n=40).estimate == peer.estimate  # n=40
+
+
 def test_block_carries_its_own_floors_and_applies_them() -> None:
     """Floors are live fields on the block, not just decoration off GuardResult."""
     assert HonestRateBlock(k=30, n=40).warn_floor == WARN_FLOOR  # n=40

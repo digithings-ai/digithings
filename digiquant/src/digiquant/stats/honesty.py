@@ -79,9 +79,14 @@ class HonestRateBlock(HonestRate):
     """``HonestRate`` plus what a surface needs to label it honestly.
 
     ``k`` counts closed round trips with realized PnL > 0; a breakeven close
-    (``pnl == 0``) is a loss — counted in ``n`` but not in ``k``. The floors
-    are re-applied from ``n`` here, so a renderer can never be handed an
-    unguarded rate; a refused sample keeps no estimate and no interval.
+    (``pnl == 0``) is a loss — counted in ``n`` but not in ``k``.
+
+    Construction re-derives the guard flags *and* the Wilson interval from
+    ``k``/``n``, so a block cannot be built unguarded, cannot be built with a
+    caller-pinned estimate beside an interval from different counts, and a
+    refused sample keeps neither number nor interval. Like every model in this
+    module the fields stay writable afterwards; the guarantee is at
+    construction.
     """
 
     schema: str = "1.0"
@@ -94,19 +99,16 @@ class HonestRateBlock(HonestRate):
 
     @model_validator(mode="after")
     def _guard(self) -> HonestRateBlock:
-        """Re-derive the guard flags from n; fill in or strip the interval."""
+        """Re-derive the guards and the interval; a caller cannot pin a rate."""
         if self.k > self.n:
             raise ValueError(f"impossible counts: k={self.k} n={self.n}")
         self.low_sample = self.n < self.warn_floor
         self.refused = self.n < self.refuse_floor
-        if self.refused:
-            self.estimate = None
-            self.ci_lo = None
-            self.ci_hi = None
-        elif self.estimate is None:
-            w = wilson(self.k, self.n)
-            if w is not None:
-                self.estimate, self.ci_lo, self.ci_hi = w.estimate, w.lo, w.hi
+        w = wilson(self.k, self.n)
+        if self.refused or w is None:
+            self.estimate = self.ci_lo = self.ci_hi = None
+        else:
+            self.estimate, self.ci_lo, self.ci_hi = w.estimate, w.lo, w.hi
         return self
 
 
