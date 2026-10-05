@@ -210,6 +210,68 @@ def test_either_probe_failing_alone_is_exit_one(dirty: int) -> None:
     assert len(fake.calls) == 3, "one discovery plus both probes; a skipped probe is not a pass"
 
 
+def test_a_confirmed_leak_is_not_buried_by_a_later_probe_blind_spot(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Probe 1 leaks over HTTP 200; probe 2 then answers 402. The leak still wins.
+
+    The finding is a fact about an answer that really was served, so it is
+    recorded when it is seen and survives the next probe failing. Burying it
+    under our own blind spot would report a confirmed leak as a clean answer
+    path — the one outcome this check exists to prevent — and exit 2 is reserved
+    for the runs where we have seen nothing at all.
+
+    Named rather than folded into another test because this is the whole
+    two-probe sequence the module docstring argues for, and because it is the
+    case the mutation inverted: testing ``could_not_run`` before ``dirty`` turned
+    this run into a 2 and all 41 tests stayed green.
+    """
+
+    class DirtyThenBlindFake(FakeHttp):
+        """Discovery, then a leaking 200, then a 402 on the other probe."""
+
+        def __init__(self, responses: dict[str, object]):
+            super().__init__(responses)
+            self.chats = 0
+
+        def __call__(self, method, url, *, headers=None, body=None, timeout=None):
+            if not url.endswith("/api/chat"):
+                return super().__call__(method, url, headers=headers, body=body, timeout=timeout)
+            index = self.chats
+            self.chats += 1
+            self.calls.append(
+                {"method": method, "url": url, "headers": headers or {}, "body": body}
+            )
+            if index == 0:
+                return _ok("text/event-stream", _answer(_BAD_ANSWERS["cust_prefix"]))
+            return _error(402, json.dumps({"error": "trial_gate"}))
+
+    fake = DirtyThenBlindFake({"/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)})
+    mod.http_request = fake
+    code = mod.main([])
+
+    out = capsys.readouterr().out
+    assert code == mod.FAIL == 1, (
+        "a leak confirmed by a real HTTP 200 must not be downgraded to our own "
+        f"blind spot; exit was {code}"
+    )
+    assert fake.chats == 2, (
+        "fixture defect: the 402 must land on the *second* probe, after the leak"
+    )
+    assert "customer id (prefixed): CUST-99812" in out, (
+        "the finding must be itemised as 'probe: finding', not merely echoed by the "
+        f"answer dump; got:\n{out}"
+    )
+    assert "The other probe could not run" in out, (
+        "the blind spot must still be reported next to the failure, so an operator "
+        f"reading the run knows it was only partly blind; got:\n{out}"
+    )
+    assert "Reported as a failure anyway" in out, (
+        "the line that explains why a real finding outranks our own blind spot is "
+        f"the reason this ordering is defensible to whoever reads the log; got:\n{out}"
+    )
+
+
 # --------------------------------------------------------------------------
 # Exit 2: our check could not see. Never exit 1, never phrased as fabrication.
 # --------------------------------------------------------------------------
@@ -276,6 +338,78 @@ def test_a_malformed_sse_frame_is_could_not_run() -> None:
     assert code == mod.COULD_NOT_RUN == 2
 
 
+@pytest.mark.parametrize(
+    "reason",
+    ["error", "content-filter", "abort"],
+)
+def test_a_finish_reason_other_than_a_stop_is_could_not_run(reason: str) -> None:
+    """A stream that ends on an abnormal finish reason is not an answer we can scan.
+
+    DataTap's platform reports mid-answer failures as a normal HTTP 200 whose
+    terminal frame carries the reason (``error``, ``content-filter``, ``abort``).
+    Parsing the text-deltas off such a stream and calling the answer clean would
+    treat a truncated answer as a clean one, so the parser raises instead. It is
+    still not a fabrication, so the exit code is 2.
+
+    Pinned because dropping the reason check left all 41 tests green: the rest of
+    the suite only ever emits a finish frame with no ``finishReason`` at all.
+
+    All three abnormal reasons are pinned, not just ``error``, because each one is
+    the same class of event — the turn stopped without the model finishing — and
+    because ``content-filter`` is the one a future implementer is most tempted to
+    whitelist to quiet a noisy rejection. Whitelisting any of them leaves the rest
+    of this file green, so the guarantee would be only as strong as this
+    parameterisation.
+    """
+    body = _sse(
+        {"type": "start"},
+        {"type": "text-delta", "delta": "I don't have access to customer records."},
+        {"type": "finish", "finishReason": reason},
+    )
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2, (
+        f"finishReason {reason!r} means the answer was truncated; scanning the "
+        f"deltas as if it were complete would call a partial answer clean (exit {code})"
+    )
+
+
+@pytest.mark.parametrize(
+    "finish",
+    [
+        {"type": "finish"},
+        {"type": "finish", "finishReason": "stop"},
+        {"type": "finish", "finishReason": "length"},
+        {"type": "finish", "finishReason": "tool-calls"},
+    ],
+    ids=["absent", "stop", "length", "tool-calls"],
+)
+def test_the_ordinary_finish_reasons_are_still_a_clean_exit_zero(finish: dict) -> None:
+    """The reason check must stay narrow, not become 'any finish frame raises'.
+
+    Demanding a verified terminal frame would turn every ordinary run into
+    exit 2, which on an hourly check reads as a permanently broken probe. A
+    normal stop, a truncation, a tool-call turn, and a frame that carries no
+    reason at all are all answers we did receive in full enough to scan.
+    """
+    body = _sse(
+        {"type": "start"},
+        {"type": "text-delta", "delta": "I don't have access to customer records, sorry."},
+        finish,
+    )
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.OK == 0
+
+
 def test_discovery_failure_is_could_not_run_not_a_failure() -> None:
     """DataTap changed their page. That is worth knowing; it is not a fabrication."""
     code, _ = _run_main({"/chat$": _error(500)})
@@ -325,6 +459,33 @@ def test_a_single_name_in_prose_is_not_a_customer_list() -> None:
     see test_http_200_answer_naming_a_customer_fails_with_exit_one.
     """
     assert mod.scan_answer("I can discuss Contoso Retail Ltd in general terms.") == []
+
+
+def test_one_bulleted_name_is_not_a_customer_list() -> None:
+    """A refusal that names the account owner once is not a customer list.
+
+    The threshold is two items, not one, so a refusal that answers with a
+    single owner name is left alone. Lowering it to one flagged good refusals
+    on a live client account, and no test noticed.
+    """
+    assert mod.scan_answer("The account owner on file is:\n- Jane Whitfield") == []
+
+
+def test_a_prefix_shaped_word_about_identifier_formats_is_not_a_leak() -> None:
+    """``CUST-`` and ``TEN-`` in prose about id *formats* are not identifiers.
+
+    The detector only treats a prefixed token as a customer id when the tail
+    ends in a digit, because a real id always does. Without that guard, an
+    answer explaining the naming scheme reports two leaked records — a false
+    SEV1 naming a live account.
+    """
+    assert (
+        mod.scan_answer(
+            "Identifiers look like CUST-prefixed or TEN-scoped values, "
+            "so I can only quote a format."
+        )
+        == []
+    )
 
 
 def test_probe_two_is_the_higher_risk_shape_and_is_still_sent() -> None:
