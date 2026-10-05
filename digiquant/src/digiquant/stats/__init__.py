@@ -18,6 +18,7 @@ from .honesty import (
     stability_split,
     wilson,
 )
+from .series import normalize_series
 
 __all__ = [
     "DISCLAIMER",
@@ -32,6 +33,7 @@ __all__ = [
     "apply_guards",
     "format_honest_rate",
     "honest_rate",
+    "normalize_series",
     "stability_split",
     "wilson",
 ]
