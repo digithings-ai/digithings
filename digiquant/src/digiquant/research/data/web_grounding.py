@@ -14,6 +14,13 @@ rows retries once without the ``include_domains`` allowlist (logged at debug lev
 failing (#4086) — every row still comes from the tool, so the invariant holds.
 Skipped-by-design segments (fresh ingested FRED layer, ``live_search=False``)
 never reach this module.
+
+Refused domains (DIG-1133, ``search_refusals.REFUSED_SEARCH_DOMAINS``) never
+reach the tool call at all: they are stripped from ``include_domains``, ride in
+``exclude_domains`` so the unscoped #4086 retry cannot reintroduce them, and any
+surviving row from a refused host is dropped. That is containment for a surface
+Counsel rated UNSURE-to-LIKELY under 5 U.S.C. 13107(c)(1)(B) — **not** a
+clearance, and reversible by deleting entries from that one constant.
 """
 
 from __future__ import annotations
@@ -27,6 +34,11 @@ from typing import (
 )
 
 import yaml
+
+from digiquant.research.data.search_refusals import (
+    REFUSED_SEARCH_DOMAINS,
+    is_refused_search_domain,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +90,44 @@ def _domains_for(segment: str, cfg: dict[str, Any]) -> list[str] | None:
     per_segment = cfg.get("per_segment") or {}
     domains = per_segment.get(segment) or cfg.get("web_allowed_websites", [])
     return list(domains)[:_MAX_ALLOWED_DOMAINS] or None
+
+
+def _apply_search_refusals(
+    include_domains: list[str] | None, exclude_domains: list[str] | None
+) -> tuple[list[str], list[str]]:
+    """Strip refused hosts from the allowlist and pin them into the deny list.
+
+    Deny-by-default, three ways at once (DIG-1133):
+
+    1. a refused domain never leaves as ``include_domains`` — narrowing the yaml
+       alone would leave the slot free;
+    2. it always rides in ``exclude_domains``, which is what the #4086 unscoped
+       retry still sends, so relaxing the allowlist cannot reintroduce it;
+    3. refused entries lead the deny list, so the 20-entry truncation can never
+       drop the gate in favour of an operator's tuning entry.
+
+    Returns ``(include_domains, exclude_domains)``. Reversing any of this is
+    deleting entries from ``search_refusals.REFUSED_SEARCH_DOMAINS``.
+    """
+    requested = list(include_domains or [])
+    scoped = [d for d in requested if not is_refused_search_domain(d)]
+    if len(scoped) != len(requested):
+        logger.warning(
+            "include_domains named refused domains %s (DIG-1133) - dropping them; "
+            "control that list in search_refusals.REFUSED_SEARCH_DOMAINS, not here",
+            [d for d in requested if is_refused_search_domain(d)],
+        )
+    operator_excludes = [d for d in (exclude_domains or []) if not is_refused_search_domain(d)]
+    # Refused first: the deny is not something the operator cap may truncate away.
+    excluded = [d for d in REFUSED_SEARCH_DOMAINS if d not in operator_excludes] + operator_excludes
+    if len(excluded) > _MAX_EXCLUDED_DOMAINS:
+        logger.warning(
+            "exclude_domains has %d entries; digisearch caps it at %d - ignoring the rest",
+            len(excluded),
+            _MAX_EXCLUDED_DOMAINS,
+        )
+        excluded = excluded[:_MAX_EXCLUDED_DOMAINS]
+    return scoped, excluded
 
 
 def _pipeline_bearer() -> str | None:
@@ -132,6 +182,9 @@ def call_web_search_tool(
     the default path must not send it. Returns ``{"summary", "sources"}`` in the
     digigraph-compatible shape, plus ``relaxed_domains: True`` when the
     allowlist had to be relaxed.
+    Refused domains (DIG-1133) are enforced on every call whatever the caller
+    passes: :func:`_apply_search_refusals` before the call, a row-level
+    post-filter after it.
     Raises ``RuntimeError`` when the service errors or when both the
     scoped search and its unscoped retry yield no rows (#4086).
     Never imports digisearch directly — the call goes over HTTP
@@ -190,10 +243,27 @@ def call_web_search_tool(
             timeout=timeout_s,
             **kwargs,
         )
-        return (tool_out or {}).get("results") or []
+        rows_out = (tool_out or {}).get("results") or []
+        if rows_out:
+            kept = [
+                row
+                for row in rows_out
+                if not (
+                    isinstance(row, dict) and is_refused_search_domain(str(row.get("doc_id") or ""))
+                )
+            ]
+            if len(kept) != len(rows_out):
+                # The hosted providers post-filter by domain, so this is defence
+                # in depth — not a place to be quiet about a refusal landing.
+                logger.warning(
+                    "digisearch web_search returned %d row(s) from refused domains "
+                    "(DIG-1133); dropped",
+                    len(rows_out) - len(kept),
+                )
+            rows_out = kept
+        return rows_out
 
-    scoped = list(include_domains or [])
-    excluded = list(exclude_domains or [])
+    scoped, excluded = _apply_search_refusals(include_domains, exclude_domains)
     rows = _search(scoped)
     relaxed_domains = False
     if not rows and scoped:
