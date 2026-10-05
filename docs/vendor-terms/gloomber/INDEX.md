@@ -94,6 +94,54 @@ acquisition method that was removed from the public docs.
 
 ---
 
+## Accepted use — 2026-10-06
+
+Appended 2026-10-06 by Security. Nothing above this line is edited by it.
+
+Chris was shown Counsel's **Prohibited, confirmed** memo and answered four questions
+on DIG-1194. His answers, in the order asked:
+
+| Question | Answer |
+|---|---|
+| The 42 cookie-gated tools | **keep them running** — *"our tools don't have clients yet, I'm just experimenting with the cookie method. I won't publish yet."* |
+| Custody of the cookie | **move it to Bitwarden** |
+| Contact with `hello@gloom.sh` | **not authorised** — his reply was a strategy note about other vendors, not permission for Cold Start |
+| Payment method on the account | **none** |
+
+**What this entry now says.** A prohibited access method is in deliberate use, accepted
+by the decision owner on 2026-10-06 with the finding in front of him. The acceptance is
+**of an internal experiment only**. It lapses if anything about the method is published,
+if a hosted or client-facing surface can reach the gated tools, if the plan changes, if
+the account is closed, or if Counsel's position changes. §12 is the reason the second
+tripwire exists: it permits apps "for yourself **or for users who have their own
+access**", which is not the same permission as our own experiment.
+
+**Three facts this entry would otherwise get wrong, so they are corrected here.**
+
+1. **No money is at stake.** No payment method is on the account, so §8 cannot have
+   auto-converted a trial and §15/§9 deletion refunds nothing because nothing was
+   charged. Counsel's billing question is answered; account deletion is money-safe
+   whenever Chris wants it, and is not authorised only because "keep it running" keeps
+   the account.
+2. **The credential still has no home.** Chris authorised the Bitwarden move; it is
+   blocked. The `keymaster` machine account authenticates, `bws project list` returns
+   nothing, and `bws project create` is refused with *"maximum number of projects (3)
+   for this plan"* — quota exhausted, no grant on any existing project. Granting that
+   is an owner action in Bitwarden. Until it happens the credential is one line of one
+   gitignored `.env`, with no owner, no expiry and no inventory row. Tracked on
+   DIG-95.
+3. **No scheduled ingest holds the cookie.** `git grep GLOOMBERB -- .github/workflows/`
+   is empty, so the "canonical GitHub Actions `cron` env secret" named in the runbook
+   does not exist. Whether the deployed `digithings-stack` Worker holds it as a secret
+   is **unverified** — it needs a `CLOUDFLARE_API_TOKEN` that Security does not hold.
+   That is the difference between a local experiment and production traffic, so it is
+   worth one command from DevOps (DIG-1232).
+
+No vendor was contacted. No credential was destroyed. No secret value was printed,
+moved or pasted.
+
+---
+
 ## Known gaps in this index
 
 - **PrimeMarket is not indexed.** `docs/VENDOR_CONTENT_BOUNDARY.md` records a Prime Terminal
