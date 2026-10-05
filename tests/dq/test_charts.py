@@ -502,6 +502,21 @@ def test_to_pandas_series_is_never_routed_through_to_pandas() -> None:
 # genuine disagreement between two independent readers.
 
 
+def _add_trade(analyzer, pyo3, usd, pid, pnl):
+    """``add_trade`` with the arity this build has: 2 args to 1.228, 3 from 1.230.
+
+    CI installs 1.230.0 from ``uv.lock``, where ``ts_event`` became a required third
+    argument; the local venvs run 1.223/1.228, where passing three is a TypeError.
+    Probing is the only way to be right on every build the repo allows
+    (``nautilus_trader>=1.190,<2``) without pinning a version it does not pin.
+    """
+    position_id, money = pyo3.PositionId(pid), pyo3.Money(float(pnl), usd)
+    try:
+        analyzer.add_trade(position_id, money)
+    except TypeError:
+        analyzer.add_trade(position_id, 1_700_000_000_000_000_000, money)
+
+
 def _analyzer_record_series():
     """A real ``realized_pnls()`` return value, or skip when nautilus is absent."""
     pyo3 = pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
@@ -511,7 +526,7 @@ def _analyzer_record_series():
     # ("invalid f64 for 'amount', was NaN"), so a non-finite *row* is only
     # reachable as a literal — which is where the dropping rule is pinned.
     for pid, pnl in (("P-1", 10.0), ("P-2", -4.0), ("P-3", 0.0)):
-        analyzer.add_trade(pyo3.PositionId(pid), pyo3.Money(float(pnl), usd))
+        _add_trade(analyzer, pyo3, usd, pid, pnl)
     return analyzer.realized_pnls(usd)
 
 
@@ -551,7 +566,7 @@ def test_anti_drift_lock_holds_for_1230_record_rows() -> None:
 
 
 @pytest.mark.unit
-def test_all_realized_pnl_builders_render_the_engines_own_dict() -> None:
+def test_all_realized_pnl_builders_render_the_engines_own_records() -> None:
     """Every builder must survive the shape the analyzer actually returns.
 
     Three of the four that take the series — the distribution, the per-trade bars
@@ -560,7 +575,6 @@ def test_all_realized_pnl_builders_render_the_engines_own_dict() -> None:
     ``AttributeError`` and returned ``ChartUnavailable`` on every real build,
     while reading as covered callers. This pins all four on the engine's output.
     """
-    pyo3 = pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
     from digiquant.charts.trades import (
         _build_cumulative_trade_pnl,
         _build_per_trade_pnl_bars,
@@ -568,11 +582,7 @@ def test_all_realized_pnl_builders_render_the_engines_own_dict() -> None:
         _build_trade_pnl_distribution_chart,
     )
 
-    usd = pyo3.Currency.from_str("USD")
-    analyzer = pyo3.PortfolioAnalyzer()
-    for pid, pnl in (("P-1", 10.0), ("P-2", -4.0), ("P-3", 0.0)):
-        analyzer.add_trade(pyo3.PositionId(pid), pyo3.Money(float(pnl), usd))
-    realized = analyzer.realized_pnls(usd)
+    realized = _analyzer_record_series()
 
     builders = (
         _build_realized_pnl_chart,
