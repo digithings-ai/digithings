@@ -13,6 +13,16 @@ from typing import Any  # score:allow untyped any — duck-typed series boundary
 
 _NS_PER_SECOND = 1_000_000_000
 
+#: Floor below which an ``int`` is a row index, not a clock. 1000 s in nanoseconds.
+_MIN_NS_STAMP = 1_000_000_000_000
+
+
+def _ns_stamp(candidate: Any) -> int | None:
+    """candidate as a nanosecond timestamp, or None when it cannot plausibly be one."""
+    if not isinstance(candidate, int) or isinstance(candidate, bool):
+        return None
+    return candidate if abs(candidate) >= _MIN_NS_STAMP else None
+
 
 def _finite_or_none(value: Any) -> float | None:
     """value as a finite float, or None if null, non-numeric or non-finite."""
@@ -31,10 +41,16 @@ def _record_date(key: Any, ts_event: Any) -> str | None:
     ``ts_event`` is Unix-epoch nanoseconds on every build that carries one, so the
     date is derived from it. Truncating instead (``str(ns)[:10]``, as the pandas
     shape does) would yield the first ten digits of the epoch, not a date.
+
+    An ``int`` counts as a timestamp only when it is large enough to be one. A
+    2-column ``(index, value)`` row is otherwise indistinguishable from a
+    ``(position_id, ts_event)`` row, and reading a row index as an epoch stamp
+    fabricates ``1970-01-01`` — a wrong date on the chart axis, where the honest
+    answer is a position label.
     """
-    stamp = ts_event if isinstance(ts_event, int) and not isinstance(ts_event, bool) else None
-    if stamp is None and isinstance(key, int) and not isinstance(key, bool):
-        stamp = key
+    stamp = _ns_stamp(ts_event)
+    if stamp is None:
+        stamp = _ns_stamp(key)
     if stamp is None:
         return None
     try:
@@ -53,10 +69,20 @@ def _records_from(rows: list[Any]) -> list[tuple[Any, Any, Any]] | None:
     ``{ts_ns: return}`` dict. All of them reach this function unconverted from
     ``nautilus_runner.py``, so they are recognised here, before the series probes.
     The value is the last column, and a 2-column row is read as ``(key, value)``.
+
+    Every row is checked, not just the first: a row of some other width would
+    otherwise be silently truncated to its last element, which reports a number
+    from a row the caller never meant as a record. An unrecognised row drops the
+    whole batch back to the series path, where it fails closed.
     """
-    if not rows or not isinstance(rows[0], (tuple, list)) or len(rows[0]) not in (2, 3):
+    if not rows:
         return None
-    return [(row[0], row[1] if len(row) == 3 else None, row[-1]) for row in rows]
+    records: list[tuple[Any, Any, Any]] = []
+    for row in rows:
+        if not isinstance(row, (tuple, list)) or len(row) not in (2, 3):
+            return None
+        records.append((row[0], row[1] if len(row) == 3 else None, row[-1]))
+    return records
 
 
 def _from_records(records: list[tuple[Any, Any, Any]]) -> tuple[list[str], list[float]] | None:
@@ -104,7 +130,10 @@ def normalize_series(series: Any) -> tuple[list[str], list[float]] | None:
 
     An object offering ``.values``/``.index``/``.to_list()``/``.tolist()`` has
     declared itself a series by protocol, so only a mapping or a bare iterable is
-    probed for records.
+    probed for records. The cost of that exemption is stated here so it is not
+    rediscovered as a bug: records wrapped in such a container — a numpy array of
+    record rows, say — are read as a series and come back ``None`` unless every
+    element is itself floatable. No build in reach returns one.
 
     Non-finite and null values are dropped in both. Returns None for None, an
     empty result, or any failure. No polars, no pandas, no pyarrow. An iterable

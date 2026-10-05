@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -312,6 +313,49 @@ def test_numeric_record_key_becomes_a_real_date_not_a_digit_prefix() -> None:
     dates, _ = normalize_series(rows)
 
     assert dates == ["2023-11-14", "2023-11-15"]
+
+
+def test_a_row_index_is_not_read_as_an_epoch_timestamp() -> None:
+    """An ``int`` below the ns floor is an index, not a clock.
+
+    ``(index, value)`` rows are a real thing to pass, and reading the index as
+    epoch nanoseconds fabricates 1970-01-01 for every row — a wrong x-axis label
+    where the honest answer is a position string. This is the case that would
+    otherwise make the records path a new wrong-answer path.
+    """
+    assert normalize_series([(0, 1.0), (1, 2.0)]) == (["0", "1"], [1.0, 2.0])
+    assert normalize_series([[1, 2], [3, 4], [5, 6]]) == (["0", "1", "2"], [2.0, 4.0, 6.0])
+    assert normalize_series([("P-1", 1_700_000_000_000_000_000, 10.0)])[0] == ["2023-11-14"]
+
+
+def test_a_row_of_another_width_is_dropped_rather_than_truncated() -> None:
+    """A 4-column row must not silently yield its last element as a PnL."""
+    # A 4-column row is dropped whole, never truncated to its last element
+    assert normalize_series([("P-1", 1_700_000_000_000_000_000, 10.0, 1)]) is None
+    assert (
+        normalize_series([("P-1", 1_700_000_000_000_000_000, 10.0), ("P-2", 1, -4.0, 99.0)]) is None
+    )
+    # A batch with a non-row in it falls back to the plain series path, which drops
+    # the element it cannot read rather than inventing a PnL for it.
+    assert normalize_series([("P-1", 10.0), 5.0]) == (["1"], [5.0])
+
+
+def test_exact_midnight_utc_stamps_round_trip_to_the_same_day() -> None:
+    """Pins the ns->date boundary, which two comment threads got wrong by hand.
+
+    Every exact-midnight-UTC stamp over five years is checked, because the defect
+    that was reported and then retracted was a boundary claim nobody had measured.
+    """
+    day_ns = 86_400_000_000_000
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    wrong = []
+    for offset in range(1_826):  # every exact-midnight-UTC stamp for five years
+        moment = epoch + timedelta(days=19_723 + offset)  # 2024-01-01 onward
+        stamp = (moment - epoch).days * day_ns  # integer ns, no float anywhere
+        labelled = normalize_series([(stamp, 1.0)])[0][0]
+        if labelled != moment.strftime("%Y-%m-%d"):
+            wrong.append((stamp, labelled))
+    assert wrong == [], f"{len(wrong)} midnights mislabelled, first {wrong[:3]}"
 
 
 def test_returns_dict_is_no_longer_read_as_its_timestamps() -> None:

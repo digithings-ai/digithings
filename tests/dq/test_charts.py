@@ -494,6 +494,12 @@ def test_to_pandas_series_is_never_routed_through_to_pandas() -> None:
 # so these two run on a real pyo3 analyzer's own ``realized_pnls()`` output and on
 # the 1.230.0 record rows. Constructing an analyzer is not running a backtest
 # (#42 does not apply).
+#
+# What this is, precisely: a smoke lock, not a two-reader drift lock. Both sides
+# reduce to normalize_series, so the equality cannot fail unless that function is
+# itself wrong. The signal is the non-empty assertion and the fact that neither
+# call raises — the fabricated-series locks above are the ones that would catch a
+# genuine disagreement between two independent readers.
 
 
 def _analyzer_record_series():
@@ -542,3 +548,42 @@ def test_anti_drift_lock_holds_for_1230_record_rows() -> None:
     assert len(model) == 3
     assert count_winning_trades(_ANALYZER_ROWS_1230) == sum(1 for v in model if v > 0) == 1
     assert len(_extract_frame(_ANALYZER_ROWS_1230)) == len(model)
+
+
+@pytest.mark.unit
+def test_all_realized_pnl_builders_render_the_engines_own_dict() -> None:
+    """Every builder must survive the shape the analyzer actually returns.
+
+    Three of the four that take the series — the distribution, the per-trade bars
+    and the cumulative PnL — read their input themselves through
+    ``.values.tolist()``. On a ``dict`` that is a bound method, so they raised
+    ``AttributeError`` and returned ``ChartUnavailable`` on every real build,
+    while reading as covered callers. This pins all four on the engine's output.
+    """
+    pyo3 = pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
+    from digiquant.charts.trades import (
+        _build_cumulative_trade_pnl,
+        _build_per_trade_pnl_bars,
+        _build_realized_pnl_chart,
+        _build_trade_pnl_distribution_chart,
+    )
+
+    usd = pyo3.Currency.from_str("USD")
+    analyzer = pyo3.PortfolioAnalyzer()
+    for pid, pnl in (("P-1", 10.0), ("P-2", -4.0), ("P-3", 0.0)):
+        analyzer.add_trade(pyo3.PositionId(pid), pyo3.Money(float(pnl), usd))
+    realized = analyzer.realized_pnls(usd)
+
+    builders = (
+        _build_realized_pnl_chart,
+        _build_trade_pnl_distribution_chart,
+        _build_per_trade_pnl_bars,
+        _build_cumulative_trade_pnl,
+    )
+    unavailable = {}
+    for builder in builders:
+        rendered = builder(realized)
+        if type(rendered).__name__ == "ChartUnavailable":
+            unavailable[builder.__name__] = rendered
+
+    assert unavailable == {}, f"a builder refused the engine's own output: {unavailable}"
