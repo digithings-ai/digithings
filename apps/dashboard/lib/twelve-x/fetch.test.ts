@@ -15,6 +15,8 @@ import {
   getTradeIdeaArchive,
   getTradeIdeaHistory,
   getFxFixSeries,
+  getConsensusTimeSeries,
+  computeConsensusDeltaSet,
 } from './fetch';
 import type {
   FxBriefRow,
@@ -57,6 +59,16 @@ const macroDb = vi.hoisted(() => ({
   rows: [] as { series_id: string; obs_date: string; value: number | null }[],
 }));
 
+/**
+ * `fx_consensus_snapshot` fixture for the DIG-57 leaf 3 generation dedupe.
+ * `queries` records one entry per AWAITED read of this table, so a test can prove
+ * the client-side generation filter costs no extra round trip.
+ */
+const consensusDb = vi.hoisted(() => ({
+  rows: [] as Partial<FxConsensusSnapshotRow>[],
+  queries: [] as { columns: string; eq: [string, string | boolean][] }[],
+}));
+
 vi.mock('./supabase', () => {
   type Payload = { data: unknown[] | null; error: unknown };
   interface TradeIdeasBuilder {
@@ -66,6 +78,12 @@ vi.mock('./supabase', () => {
     lte: (column: string, value: string) => TradeIdeasBuilder;
     order: (column: string, options?: unknown) => TradeIdeasBuilder;
     limit: (count: number) => TradeIdeasBuilder;
+    then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
+  }
+  interface ConsensusBuilder {
+    select: (columns: string) => ConsensusBuilder;
+    eq: (column: string, value: string | boolean) => ConsensusBuilder;
+    order: (column: string, options?: unknown) => ConsensusBuilder;
     then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
   }
   const makeBuilder = (): TradeIdeasBuilder => {
@@ -113,11 +131,44 @@ vi.mock('./supabase', () => {
     };
     return builder;
   };
+  const makeConsensusBuilder = (): ConsensusBuilder => {
+    const query: { columns: string; eq: [string, string | boolean][] } = { columns: '', eq: [] };
+    const builder: ConsensusBuilder = {
+      select: (columns) => {
+        query.columns = columns;
+        return builder;
+      },
+      eq: (column, value) => {
+        query.eq.push([column, value]);
+        return builder;
+      },
+      order: () => builder,
+      // PostgREST applies .eq SERVER-side, so emulating it keeps the fixture honest:
+      // an unweighted or other-timeframe row never reaches the client, and the
+      // one-round-trip assertion cannot be satisfied by a second filtered read.
+      then: (onFulfilled) => {
+        consensusDb.queries.push(query);
+        return Promise.resolve(
+          onFulfilled({
+            data: consensusDb.rows.filter((r) =>
+              query.eq.every(([column, value]) => {
+                const row = r as unknown as Record<string, unknown>;
+                return row[column] === value;
+              }),
+            ),
+            error: null,
+          }),
+        );
+      },
+    };
+    return builder;
+  };
   return {
     isTwelveXConfigured: () => true,
     twelveXSupabase: {
-      from: (table: string): TradeIdeasBuilder => {
+      from: (table: string): TradeIdeasBuilder | ConsensusBuilder => {
         if (table === 'fx_idea_eval') return makeIdeaEvalBuilder();
+        if (table === 'fx_consensus_snapshot') return makeConsensusBuilder();
         if (table !== 'fx_trade_ideas_snapshot') throw new Error(`unexpected table: ${table}`);
         return makeBuilder();
       },
@@ -473,6 +524,273 @@ describe('getFxFixSeries', () => {
     macroDb.rows = [];
     const out = await getFxFixSeries(['EUR/USD'], 5000);
     expect(out['EUR/USD']).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * DIG-320 (DIG-57 leaf 3) — one generation per (run_date, currency)
+ *
+ * Fixture provenance: `fx_consensus_snapshot` read from production on
+ * 2026-10-04. A rerun of a run_date publishes a WHOLE second generation
+ * beside the first, so most (run_date, currency) keys come back duplicated.
+ * `run_date` 2026-06-02 holds three generations:
+ *   2026-06-17 14:47:45.587511+00  19 rows / 10 currencies
+ *   2026-06-30 23:00:54.339621+00   5 rows /  5 currencies  (partial rerun)
+ *   2026-07-23 22:43:39.052539+00 23 rows / 10 currencies
+ * The stamps keep their 6 fractional-second digits, which is what the
+ * database returns. The middle generation is PARTIAL, so resolving by
+ * generation would delete the five currencies only it republished; the
+ * guard keys on (run_date, currency) instead. Which currencies and
+ * row counts go with each generation are a fixture choice — the stamp
+ * instants and the duplicated-key shape are not.
+ * ------------------------------------------------------------------ */
+
+const G_OLDEST = '2026-06-17 14:47:45.587511+00';
+const G_PARTIAL = '2026-06-30 23:00:54.339621+00';
+const G_NEWEST = '2026-07-23 22:43:39.052539+00';
+
+const CURRENCIES = [
+  'USD',
+  'EUR',
+  'JPY',
+  'GBP',
+  'CHF',
+  'CAD',
+  'AUD',
+  'NZD',
+  'SEK',
+  'NOK',
+] as const;
+const PARTIAL_CURRENCIES = ['USD', 'EUR', 'JPY', 'GBP', 'CHF'] as const;
+
+/** A weighted medium-horizon consensus row; only the dedupe and delta legs carry meaning. */
+function consensusRow(
+  run_date: string,
+  currency: string,
+  as_of: string,
+  overrides: Partial<FxConsensusSnapshotRow> = {}
+): FxConsensusSnapshotRow {
+  return {
+    run_date,
+    currency,
+    timeframe: 'medium',
+    horizon_weeks: 4,
+    weighted: true,
+    score: 0,
+    confidence: 0.5,
+    agreement: 0.5,
+    tilt: 0,
+    n_eff: 1,
+    n_brokers: 1,
+    n_views: 1,
+    bullish_pct: 0.25,
+    bearish_pct: 0.25,
+    neutral_pct: 0.25,
+    watch_pct: 0.25,
+    as_of,
+    ...overrides,
+  };
+}
+
+function generation(
+  run_date: string,
+  as_of: string,
+  currencies: readonly string[],
+  scoreBase: number
+): FxConsensusSnapshotRow[] {
+  return currencies.map((currency, i) =>
+    consensusRow(run_date, currency, as_of, {
+      score: scoreBase + i / 10,
+      confidence: 0.4 + i / 100,
+    })
+  );
+}
+
+/** The production 2026-06-02 shape: three generations, the middle one partial. */
+function threeGenerations(run_date = '2026-06-02'): FxConsensusSnapshotRow[] {
+  return [
+    ...generation(run_date, G_OLDEST, CURRENCIES, 1),
+    ...generation(run_date, G_PARTIAL, PARTIAL_CURRENCIES, 2),
+    ...generation(run_date, G_NEWEST, CURRENCIES, 3),
+  ];
+}
+
+/**
+ * Production duplication across the whole read: 2026-06-01..2026-06-05 and
+ * 2026-06-08 each carry two whole generations, so 9-10 of their keys are
+ * duplicated. 2026-06-01 drops one currency, the rest carry all ten.
+ */
+const DUPLICATED_DATES = [
+  '2026-06-01',
+  '2026-06-02',
+  '2026-06-03',
+  '2026-06-04',
+  '2026-06-05',
+  '2026-06-08',
+] as const;
+
+function duplicatedGenerations(): FxConsensusSnapshotRow[] {
+  return DUPLICATED_DATES.flatMap((run_date, d) => {
+    const currencies = d === 0 ? CURRENCIES.slice(0, 9) : CURRENCIES;
+    // Two whole generations per date, 90 minutes apart, oldest first.
+    return [
+      ...generation(run_date, `${run_date}T22:00:00.000000+00:00`, currencies, 1),
+      ...generation(run_date, `${run_date}T23:30:00.000000+00:00`, currencies, 3),
+    ];
+  });
+}
+
+describe('getConsensusTimeSeries generation dedupe', () => {
+  beforeEach(() => {
+    consensusDb.rows = [];
+    consensusDb.queries = [];
+  });
+
+  afterEach(() => {
+    consensusDb.rows = [];
+    consensusDb.queries = [];
+  });
+
+  // DIG-57 spec acceptance test 12.
+  it('returns at most one row per run_date + currency', async () => {
+    consensusDb.rows = duplicatedGenerations();
+
+    const out = await getConsensusTimeSeries('medium');
+
+    const keys = out.map((r) => `${r.run_date}|${r.currency}`);
+    expect(keys).toHaveLength(new Set(keys).size);
+    // 9 currencies on 2026-06-01, ten on each of the other five dates.
+    expect(out).toHaveLength(9 + 10 * (DUPLICATED_DATES.length - 1));
+  });
+
+  it('keeps the newest generation and keeps the series oldest→newest', async () => {
+    consensusDb.rows = duplicatedGenerations();
+
+    const out = await getConsensusTimeSeries('medium');
+
+    for (const row of out) {
+      expect(row.as_of).toBe(`${row.run_date}T23:30:00.000000+00:00`);
+    }
+    // `computeConsensusDeltaSet` walks the array from the end to find the newest
+    // run_date, so the dedupe must not reorder what the query ordered.
+    const dates = out.map((r) => r.run_date);
+    expect(dates).toEqual([...dates].sort());
+  });
+
+  it('keeps a currency that only a stale generation published', async () => {
+    // The newest generation dropped CHF; only the partial middle generation
+    // republished it. Resolving per generation would delete CHF outright.
+    consensusDb.rows = [
+      ...generation('2026-06-02', G_OLDEST, CURRENCIES, 1),
+      ...generation('2026-06-02', G_PARTIAL, PARTIAL_CURRENCIES, 2),
+      ...generation('2026-06-02', G_NEWEST, CURRENCIES.filter((c) => c !== 'CHF'), 3),
+    ];
+
+    const out = await getConsensusTimeSeries('medium');
+
+    const byCcy = new Map(out.map((r) => [r.currency, r.as_of]));
+    expect([...byCcy.keys()].sort()).toEqual([...CURRENCIES].sort());
+    expect(byCcy.get('CHF')).toBe(G_PARTIAL);
+    expect(byCcy.get('USD')).toBe(G_NEWEST);
+  });
+
+  it('applies the dedupe client-side in a single query', async () => {
+    consensusDb.rows = duplicatedGenerations();
+
+    await getConsensusTimeSeries('medium');
+
+    expect(consensusDb.queries).toHaveLength(1);
+    expect(consensusDb.queries[0].eq).toEqual([
+      ['weighted', true],
+      ['timeframe', 'medium'],
+    ]);
+  });
+
+  it('ignores rows outside the requested timeframe or weight', async () => {
+    consensusDb.rows = [
+      ...threeGenerations(),
+      consensusRow('2026-06-02', 'USD', G_NEWEST, { timeframe: 'long' }),
+      consensusRow('2026-06-02', 'EUR', G_NEWEST, { weighted: false }),
+    ];
+
+    const out = await getConsensusTimeSeries('medium');
+
+    expect(out).toHaveLength(CURRENCIES.length);
+    expect(out.every((r) => r.timeframe === 'medium' && r.weighted)).toBe(true);
+  });
+});
+
+describe('computeConsensusDeltaSet generation dedupe', () => {
+  // DIG-57 spec acceptance test 11. The function is exported and pure, so it is
+  // handed raw rows here — the defensive pass must not depend on the read.
+  it('returns one movers entry per currency over two generations of one date', () => {
+    const series = [
+      // Previous run_date: one generation.
+      ...generation('2026-06-01', G_OLDEST, CURRENCIES, 0),
+      // Newest run_date: two generations of the same date, older first.
+      ...generation('2026-06-02', G_OLDEST, CURRENCIES, 1),
+      ...generation('2026-06-02', G_NEWEST, CURRENCIES, 3),
+    ];
+
+    const deltas = computeConsensusDeltaSet(series);
+
+    expect(deltas.runDate).toBe('2026-06-02');
+    expect(deltas.prevRunDate).toBe('2026-06-01');
+    expect(deltas.byCurrency).toHaveProperty('USD');
+    expect(deltas.byCurrency.USD.scoreNow).toBe(
+      series.find((r) => r.run_date === '2026-06-02' && r.currency === 'USD' && r.as_of === G_NEWEST)
+        ?.score
+    );
+    // `byCurrency` is keyed per currency; `movers` is the capped top-6, so uniqueness
+    // is the invariant here, not coverage.
+    expect(Object.keys(deltas.byCurrency).sort()).toEqual([...CURRENCIES].sort());
+    const currencies = deltas.movers.map((m) => m.currency);
+    expect(currencies).toHaveLength(new Set(currencies).size);
+    expect(currencies.length).toBeLessThanOrEqual(6);
+    expect(currencies.every((c) => (CURRENCIES as readonly string[]).includes(c))).toBe(true);
+  });
+
+  it('scores the delta against the newest generation, not whichever arrived last', () => {
+    const series = [
+      consensusRow('2026-06-01', 'USD', G_OLDEST, { score: 0.2, confidence: 0.5 }),
+      // A stale generation that arrived last and would win a last-write-wins loop.
+      consensusRow('2026-06-02', 'USD', G_PARTIAL, { score: 0.8, confidence: 0.9 }),
+      consensusRow('2026-06-02', 'USD', G_NEWEST, { score: -0.4, confidence: 0.3 }),
+    ];
+
+    const deltas = computeConsensusDeltaSet(series);
+
+    expect(deltas.byCurrency.USD.scoreNow).toBe(-0.4);
+    expect(deltas.byCurrency.USD.scorePrev).toBe(0.2);
+    expect(deltas.byCurrency.USD.scoreDelta).toBeCloseTo(-0.6, 10);
+    expect(deltas.byCurrency.USD.confidenceDelta).toBeCloseTo(-0.2, 10);
+    expect(deltas.byCurrency.USD.flippedDirection).toBe(true);
+    expect(deltas.movers).toHaveLength(1);
+    expect(deltas.movers[0]).toEqual({
+      currency: 'USD',
+      scoreNow: -0.4,
+      scoreDelta: deltas.byCurrency.USD.scoreDelta,
+      absDelta: Math.abs(deltas.byCurrency.USD.scoreDelta ?? 0),
+      direction: 'down',
+    });
+  });
+
+  it('does not mutate the caller series', () => {
+    const series = threeGenerations();
+    const snapshot = series.map((r) => `${r.run_date}|${r.currency}|${r.as_of}`);
+
+    computeConsensusDeltaSet(series);
+
+    expect(series.map((r) => `${r.run_date}|${r.currency}|${r.as_of}`)).toEqual(snapshot);
+  });
+
+  it('still returns the empty set for an empty series', () => {
+    expect(computeConsensusDeltaSet([])).toEqual({
+      runDate: null,
+      prevRunDate: null,
+      byCurrency: {},
+      movers: [],
+    });
   });
 });
 
