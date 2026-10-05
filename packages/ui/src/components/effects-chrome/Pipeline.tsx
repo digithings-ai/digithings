@@ -27,18 +27,26 @@ export type PipelineNode = {
   /** Mono node name — "ingest", "backtest" … */
   label: string;
   status: PipelineStatus;
+  /**
+   * One line saying what this stage does, rendered under the name in the detail
+   * panel. Optional, and the only field here that is not a run diagnostic: a
+   * pipeline drawn as a *definition* rather than as a completed run has nothing
+   * to report for wall time or tokens but still has to explain itself.
+   */
+  note?: string;
   /** Preformatted wall-time read — "2.41s", "120ms", "—". */
-  ms: string;
+  ms?: string;
   /** Preformatted token read — "8.2k", "—". */
-  tokens: string;
+  tokens?: string;
   /** Model / engine chip — "opus", "nautilus", "polars" … */
-  model: string;
-  /** What fed in — one preformatted line. */
-  inputs: string;
+  model?: string;
+  /** What fed in — one preformatted line. Absent for a stage drawn as a
+   *  definition, where nothing was measured and no artefact was handed over. */
+  inputs?: string;
   /** What came out — one preformatted line. */
-  outputs: string;
+  outputs?: string;
   /** Preformatted cost read — "$0.11", "—". */
-  cost: string;
+  cost?: string;
 };
 
 export type PipelineColumn = {
@@ -125,10 +133,12 @@ export function Pipeline({ columns, summary, defaultSelectedId, onSelect, classN
                         for why). */}
                     <span className="pl-sr">{n.status}</span>
                   </span>
-                  <span className="pl-node-diag">
-                    <span>{n.ms}</span>
-                    <span className="pl-node-tok">{n.tokens} tok</span>
-                  </span>
+                  {n.ms || n.tokens ? (
+                    <span className="pl-node-diag">
+                      {n.ms ? <span>{n.ms}</span> : null}
+                      {n.tokens ? <span className="pl-node-tok">{n.tokens} tok</span> : null}
+                    </span>
+                  ) : null}
                 </Button>
               ))}
             </div>
@@ -157,37 +167,58 @@ export function Pipeline({ columns, summary, defaultSelectedId, onSelect, classN
           <div className="pl-detail-head">
             <span className={`pl-pip pl-pip--${sel.status}`} aria-hidden="true" />
             <span className="pl-detail-name">{sel.label}</span>
-            <span className="pl-detail-model">{sel.model}</span>
+            {sel.model ? <span className="pl-detail-model">{sel.model}</span> : null}
             <span className={`pl-detail-status pl-detail-status--${sel.status}`}>{sel.status}</span>
           </div>
-          <dl className="pl-io">
-            <div>
-              <dt>inputs</dt>
-              <dd>{sel.inputs}</dd>
+          {sel.note ? <p className="pl-note">{sel.note}</p> : null}
+          {sel.inputs || sel.outputs ? (
+            <dl className="pl-io">
+              {sel.inputs ? (
+                <div>
+                  <dt>inputs</dt>
+                  <dd>{sel.inputs}</dd>
+                </div>
+              ) : null}
+              {sel.outputs ? (
+                <div>
+                  <dt>outputs</dt>
+                  <dd>{sel.outputs}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+          {/* Only the diagnostics this node actually has. A pipeline drawn as a
+              definition has no wall time or token count to report, and printing
+              an em dash row for each of them would read as a measurement that
+              came back empty rather than one that was never taken. */}
+          {[sel.ms, sel.tokens, sel.model, sel.cost].some(Boolean) ? (
+            <div className="pl-diag-grid">
+              {sel.ms ? (
+                <div>
+                  <span className="pl-diag-k">wall time</span>
+                  <span className="pl-diag-v">{sel.ms}</span>
+                </div>
+              ) : null}
+              {sel.tokens ? (
+                <div>
+                  <span className="pl-diag-k">tokens</span>
+                  <span className="pl-diag-v">{sel.tokens}</span>
+                </div>
+              ) : null}
+              {sel.model ? (
+                <div>
+                  <span className="pl-diag-k">model</span>
+                  <span className="pl-diag-v">{sel.model}</span>
+                </div>
+              ) : null}
+              {sel.cost ? (
+                <div>
+                  <span className="pl-diag-k">cost</span>
+                  <span className="pl-diag-v">{sel.cost}</span>
+                </div>
+              ) : null}
             </div>
-            <div>
-              <dt>outputs</dt>
-              <dd>{sel.outputs}</dd>
-            </div>
-          </dl>
-          <div className="pl-diag-grid">
-            <div>
-              <span className="pl-diag-k">wall time</span>
-              <span className="pl-diag-v">{sel.ms}</span>
-            </div>
-            <div>
-              <span className="pl-diag-k">tokens</span>
-              <span className="pl-diag-v">{sel.tokens}</span>
-            </div>
-            <div>
-              <span className="pl-diag-k">model</span>
-              <span className="pl-diag-v">{sel.model}</span>
-            </div>
-            <div>
-              <span className="pl-diag-k">cost</span>
-              <span className="pl-diag-v">{sel.cost}</span>
-            </div>
-          </div>
+          ) : null}
         </div>
       ) : null}
     </div>

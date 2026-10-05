@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 describe("ContactMailto call sites", () => {
   it("keeps every page contact link on the shared ContactMailto instead of a raw mailto: anchor", () => {
     const pages = [
-      "../app/page.tsx",
+      "../components/landing/LandingPage.tsx",
       "../app/team/page.tsx",
       "../app/services/page.tsx",
       "../app/legal/privacy/page.tsx",
@@ -28,7 +28,7 @@ describe("ContactMailto call sites", () => {
 
   it("gives every showAddress call site non-empty fallback text, not a self-closing tag", () => {
     const pages = [
-      "../app/page.tsx",
+      "../components/landing/LandingPage.tsx",
       "../app/services/page.tsx",
       "../app/legal/privacy/page.tsx",
     ];

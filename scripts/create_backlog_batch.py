@@ -374,7 +374,7 @@ Integrate OpenBB SDK as the data aggregation layer beneath digistore. OpenBB uni
 ## Acceptance Criteria
 - [ ] OpenBB installed and configured in `digiquant/`
 - [ ] `DigiStoreOpenBBAdapter` wraps OpenBB calls with digistore caching
-- [ ] At minimum: price history, fundamental data (EdgarTools), macro (FRED), crypto (CoinGecko)
+- [ ] At minimum: price history, fundamental data (EdgarTools), macro (FRED), crypto (web search)
 - [ ] Cached data served from Supabase; only fetches fresh when cache is stale
 - [ ] Unit tests with mocked OpenBB responses
 - [ ] `digiquant/ARCHITECTURE.md` updated (data stack section)

@@ -16,7 +16,7 @@ okf_version: "0.2"
 - [digikey](digikey/)
 - [digiquant](digiquant/)
 - [digisearch](digisearch/)
-- [digismith](digismith/)
+- [digitrace](digitrace/)
 - [digivault](digivault/)
 - [libraries](libraries/)
 - [repo](repo/)

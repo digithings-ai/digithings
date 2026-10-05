@@ -5,9 +5,10 @@ Private Cloudflare Container Worker for the digiquant live cadence
 custom domain, no routes. digithings-cron is the only clock. It reaches this
 Worker over the `RUNNER` service binding.
 
-This Worker does not run the house research chain, broker credentials, Alpaca
-keys, or `--execute`. twelve-x stays `workflow_dispatch`. The execution probe
-is `--dry-run` only.
+The catalog includes `house-run` on this same class. digithings-cron still
+sends `repository_dispatch` until the clock flip. No broker credentials, no
+Alpaca keys, and no `--execute`. twelve-x stays `workflow_dispatch`. The
+execution probe is `--dry-run` only.
 
 ## Commands
 
@@ -165,8 +166,10 @@ On digiquant-runner: `RUNNER_AUTH_TOKEN`, `R2_ACCOUNT_ID`, `R2_BUCKET`,
 
 Phase 2 adds `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and
 `NOTIFY_FROM` for `execution-cron-check`. Missing names fail that probe
-closed (exit 2). Research-metrics and tearsheets do not need LLM, digikey,
-or LangSmith keys. Those stay off this Worker until the house run.
+closed (exit 2). Research-metrics and tearsheets do not need LLM or
+digikey keys. House-run web grounding does: Task 7 puts
+`DIGIQUANT_DIGIKEY_API_KEY` plus Langfuse OTLP names via the ops workflow
+below.
 
 `FRED_API_KEY` is gone from this path and must stay unset. #4794 PR3
 (#4817) removed the last FRED callers, including tearsheet
@@ -186,6 +189,36 @@ the wrangler process:
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 ```
 
+## Phase 3 Task 7 — house secret sync
+
+Put house `DIGIQUANT_DIGIKEY_API_KEY` and Langfuse OTLP names on Worker
+`digiquant-runner` from existing GitHub Actions secrets without printing
+values. Prefer `.github/workflows/sync-digiquant-runner-digikey-secret.yml`
+(`workflow_dispatch`) over a workstation `wrangler secret put`.
+
+This workflow lives on `develop` (the default branch). After it merges:
+
+```bash
+gh workflow run "Ops: sync digiquant-runner house secrets"
+```
+
+The job PUTs `secret_text` at `workers/scripts/digiquant-runner/secrets`:
+
+- `DIGIQUANT_DIGIKEY_API_KEY`
+- `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_BASE_URL`
+- `DIGITRACE_LANGFUSE_OTLP_ENDPOINT` = `${LANGFUSE_BASE_URL%/}/api/public/otel`
+- `DIGI_OTEL_HEADERS` = `Authorization=Basic` plus base64(`public:secret`)
+
+It logs the name and length only (`putting NAME on digiquant-runner (len=N)`).
+An empty Actions secret fails closed (`FAIL empty NAME`).
+`apps/digiquant-runner/wrangler.toml` has no env blocks, so each put is once
+on script `digiquant-runner` (develop/prod are not split). `env.ts`
+`dataPlaneEnv` forwards those names into the container; house-run's command
+`env` list copies them into the chain child. `allocation-shadow` stays
+`env: []`.
+
+Do not resume clocks from this sync.
+
 ## Phase 2 kicks
 
 ```bash
@@ -201,11 +234,34 @@ The same shape covers `12 0 * * *` (tearsheets), `5 22 * * *`
 
 ## Phase 3 note
 
-Phases 1–2 do not run the house research chain and do not write the
-skip-if-done ledger. A same-day GitHub Actions manual house success does not
-write `pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
+The house-run image stays on `DigiQuantRunnerContainer` (`standard-2`,
+`max_instances = 1`). Task 0 probe: phase2 Size=1274551802 (~1.187 GiB),
+house-candidate Size=1344917045 (~1.253 GiB). The bake keeps the frozen
+digiquant extras `prices` / `research` / `nautilus` and adds
+`uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres`.
+Extra copies are `digigraph`, `digillm`, `digitrace`, and
+`config/byok-providers.json`, plus `.github/digiquant-pipeline.yml`,
+`.github/workflows/pipeline-digiquant-allocation-shadow.yml`, and the
+`/opt/runner` scripts `house_chain_step.py`, `wake_stack.py`, and
+`web_search_preflight.py`.
+
+A same-day GitHub Actions manual house success does not write
+`pipeline-runs/house-run/<YYYY-MM-DD>/success.json`.
 
 The implementation plan is
 [docs/superpowers/plans/2026-09-30-digiquant-house-run-phase3.md](../superpowers/plans/2026-09-30-digiquant-house-run-phase3.md).
 Chris lock: one class, `DigiQuantRunnerContainer`, `instance_type = "standard-2"`.
 This note does not flip cron and does not deploy.
+
+## Phase 4 note
+
+Checkpoint archive still runs on the GitHub Actions schedule in
+`pipeline-checkpoint-archive.yml` (`30 13 * * *`). `smoke-site` and
+`smoke-stack` are still `workflow_dispatch` from digithings-cron. None of
+those clocks have moved. This note does not flip cron, delete a `schedule:`
+key, or deploy.
+
+The cutover plan (same class, `standard-2`, `max_instances = 1`) is
+[docs/superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md](../superpowers/plans/2026-10-01-digiquant-phase4-gha-cutover.md).
+Phase 3 Task 7 (secrets, deploy, house-run proof) stays a prerequisite and
+is not part of Phase 4.

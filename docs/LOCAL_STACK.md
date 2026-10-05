@@ -1,6 +1,6 @@
 # Local full stack (digikey + services + LiteLLM + digichat)
 
-Single reference for running **digikey**, **LiteLLM** (and optional **Ollama** / **OmniRoute**), **digigraph**, **digiquant**, **digisearch**, **digismith**, and **digichat** on loopback with **JWT auth** aligned across services.
+Single reference for running **digikey**, **LiteLLM** (and optional **Ollama** / **OmniRoute**), **digigraph**, **digiquant**, **digisearch**, **digitrace**, and **digichat** on loopback with **JWT auth** aligned across services.
 
 ## Architecture
 
@@ -16,7 +16,7 @@ flowchart TB
     DG[digigraph_8000]
     DQ[digiquant_8001]
     DS[digisearch_8002]
-    SM[digismith_8003]
+    SM[digitrace_8003]
     Oll[Ollama_optional]
     Omni[OmniRoute_optional]
   end
@@ -57,7 +57,7 @@ flowchart TB
    - **Optional funnel:** **`DIGIKEY_LITELLM_PROXY_KEY`** same as **`LITELLM_MASTER_KEY`** (Compose defaults this when unset).
    - **Local Ollama models only:** **`DIGI_MODEL_MODES_FILE=model_modes.local.yaml`** + **`DIGI_CONFIG_PATH`** mounted at `/app/config` for digigraph (see [config/model_modes.local.yaml](../config/model_modes.local.yaml)).
 
-2. **`make up`** — wait for healthy **digikey**, **litellm**, **digiquant**, **digisearch**, **digismith**, **digigraph**.
+2. **`make up`** — wait for healthy **digikey**, **litellm**, **digiquant**, **digisearch**, **digitrace**, **digigraph**.
 
 3. **Bootstrap digikey** — issue a **`dgk_live_`** key with **`POST /v1/admin/keys`** and `DIGIKEY_ADMIN_TOKEN`, or `python -m digikey.cli issue-key …` ([digikey/README.md](../digikey/README.md)).
 
@@ -93,15 +93,15 @@ Compose mounts [digiquant/data](../digiquant/data). Ensure `{SYMBOL}.csv` exists
 | `DIGIGRAPH_INTERNAL_URL` | `http://127.0.0.1:8000` |
 | `DIGIQUANT_INTERNAL_URL` | `http://127.0.0.1:8001` |
 | `DIGISEARCH_INTERNAL_URL` | `http://127.0.0.1:8002` |
-| `DIGISMITH_INTERNAL_URL` | `http://127.0.0.1:8003` |
-| `DIGICHAT_ENABLED_SERVICES` | `digigraph,digisearch,digiquant,digismith` |
+| `DIGITRACE_INTERNAL_URL` | `http://127.0.0.1:8003` |
+| `DIGICHAT_ENABLED_SERVICES` | `digigraph,digisearch,digiquant,digitrace` |
 | `DIGICHAT_DEV_AUTH` | `1` for password login without OIDC (see `digichat/ARCHITECTURE.md` in nested repo) |
 
 **Path C (digichat container):** Compose sets `DIGIGRAPH_INTERNAL_URL=http://digigraph:8000`, `DIGIKEY_URL=http://digikey:8005`, and **`DIGISEARCH_INTERNAL_URL=http://digisearch:8002`** for federated health parity.
 
 ## Path B — `make stack-local` (all services on the host, no Docker)
 
-Use this when you want the fastest edit/run cycle: **no containers**, standard loopback ports. [scripts/run_stack_local.sh](../scripts/run_stack_local.sh) starts **digikey** (SQLite default **`./.local_digikey.sqlite`**), optional **LiteLLM**, **digiquant**, **digisearch**, **digismith**, **digigraph**, with **`DIGIKEY_JWKS_URL=http://127.0.0.1:8005/.well-known/jwks.json`** for children. Pair with **digichat** on the host: **`make digichat-dev`** and **`digichat/.env.local`** using the same **`DIGIKEY_BFF_TOKEN`** as repo-root `.env` (see `digichat/ARCHITECTURE.md` § Host backends only, in the nested repo).
+Use this when you want the fastest edit/run cycle: **no containers**, standard loopback ports. [scripts/run_stack_local.sh](../scripts/run_stack_local.sh) starts **digikey** (SQLite default **`./.local_digikey.sqlite`**), optional **LiteLLM**, **digiquant**, **digisearch**, **digitrace**, **digigraph**, with **`DIGIKEY_JWKS_URL=http://127.0.0.1:8005/.well-known/jwks.json`** for children. Pair with **digichat** on the host: **`make digichat-dev`** and **`digichat/.env.local`** using the same **`DIGIKEY_BFF_TOKEN`** as repo-root `.env` (see `digichat/ARCHITECTURE.md` § Host backends only, in the nested repo).
 
 - If **`CHROMA_PATH`** is unset, **`DIGISEARCH_ALLOW_STUB=1`** is exported (substring stub — fine for smoke tests; use real Chroma for retrieval quality).
 - **LLM URL:** Root `.env` often sets **`OPENAI_API_BASE=http://host.docker.internal:11434/v1`** for Compose → Ollama on the host. **`run_stack_local.sh`** rewrites **`host.docker.internal` → `127.0.0.1`** so digigraph (running on the host) can connect. Ensure **Ollama** or **LiteLLM** is listening (e.g. `ollama serve`, or `http://127.0.0.1:4000/v1` if you start LiteLLM locally); otherwise chat/RAG returns a connection error.

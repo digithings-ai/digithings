@@ -110,6 +110,24 @@
     from { height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto)); }
     to { height: 0; }
   }
+
+  /* Entrance choreography (D1, #4429) — the staged hero reveal. Declared in
+     THIS block rather than a second one: web-theme.test.ts pins exactly one
+     `@theme inline`, because a second is how a token bridge drifts. */
+  --animate-appear: kit-appear 0.6s forwards ease-out;
+  --animate-appear-zoom: kit-appear-zoom 0.6s forwards ease-out;
+  --line-width: 1px;
+
+  @keyframes kit-appear {
+    0% { opacity: 0; transform: translateY(1rem); filter: blur(0.5rem); }
+    50% { filter: blur(0); }
+    100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+
+  @keyframes kit-appear-zoom {
+    0% { opacity: 0; transform: scale(0.5); }
+    100% { opacity: 1; transform: scale(1); }
+  }
 }
 
 /* Base element defaults shared by the React apps.
@@ -185,12 +203,418 @@ body {
 .dg-panel-head { display: flex; align-items: center; gap: 0.9rem; }
 .dg-panel-head h3 { font-family: var(--font-display); font-weight: 400; font-size: 1.9rem; letter-spacing: -0.01em; }
 .dg-tag { color: var(--ink-soft); margin: 0.7rem 0 0.4rem; }
-.dg-docker { font-family: var(--font-mono); font-size: 0.78rem; color: var(--term-ink); background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.5rem 0.7rem; margin-top: 0.8rem; overflow-x: auto; white-space: nowrap; }
+.dg-docker { font-family: var(--font-mono); font-size: 0.9rem; color: var(--term-ink); background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.5rem 0.7rem; margin-top: 0.8rem; overflow-x: auto; white-space: nowrap; }
 .dg-docker .prompt { color: var(--accent); }
 .dg-more { display: inline-block; margin-top: 0.9rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); }
 
 /* code block (module init snippet) */
 .codeblock { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 1.1rem 1.3rem; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.9; color: var(--term-ink); overflow-x: auto; white-space: pre-wrap; }
+
+/* ── the flat module grid (ModuleGrid, v13 stage 4) ────────────────────────
+   The angular sibling of the SVG graph: every module is a square-ish cell in
+   one grid for the whole run, the focused cell is the one the scroll selects,
+   and the detail sits in a flat panel beside it. No radius anywhere — this is
+   the canon's flat-corner grammar, where the graph above is the rounded one.
+   The grid is sized so all modules fit one viewport without an internal
+   scrollbar (12 cells at 4 columns = 3 rows). */
+/* ── mosaic v4: a fixed order that only resizes ────────────────────────────
+   No rail, no side panel, no per-cell logo or tier colour. Three fixed rows of
+   flat tiles; the focused tile grows in place and reveals its detail, so the
+   whole story stays in a single view.
+
+   The order is decided at module scope (`ROW_SIZES`), never by the layout
+   engine, because the owner's rule is that the tiles keep their places and only
+   the sizes move. v3 packed them widest-first to make the rows flush, which
+   silently made reading order a function of tile size — and it re-solved on
+   every focus step, so the tiles swapped places as the scroll advanced.
+
+   Both levels resize with `flex-grow`, which interpolates natively; a grid
+   `span` does not, so v3 could only jump. The rows are flex items of a column
+   container and the tiles are flex items of their row, so a row's width is
+   always exactly its parent's and the rows are flush by construction — the
+   property v3 needed a backtracking partition to reach. */
+.dg-mosaic--rows {
+  display: block;
+  position: relative;
+  /* Rail-bounded (#4429): the mosaic spans rail to rail — never the full
+     viewport — with one page-pad of air inside each rail, the same grammar
+     every section uses (Tailwind preflight is border-box, so the padding
+     insets inside the max-width). Tiles size against the frame width, not
+     the window.
+     Always-full (v16): the mosaic fills the stage at every scroll position —
+     landing, walk, and release. There is no height transition because height
+     no longer changes.
+     Packing box (v17): the tiles are absolutely positioned rects solved by
+     the squarified treemap in `ModuleGrid` (areas ∝ LOC, no fixed rows), so
+     the container is a plain relative box, not a flex column. Motion eases
+     each tile's translate/width/height between solves. On viewports taller
+     than the cap the grid stops growing instead of going cavernous (owner:
+     if the page gets too large the sections below should still come into
+     view). */
+  width: 100%;
+  max-width: calc(var(--frame-w) + 2 * var(--page-pad));
+  margin-inline: auto;
+  padding-inline: var(--page-pad);
+  height: 100%;
+  max-height: 64rem;
+  overflow: hidden;
+}
+/* Packed tiles are positioned by inline rects (left/top/width/height from the
+   treemap solve), so they leave normal flow here. Scoped to the mosaic face:
+   the stacked face keeps its flow tiles. The focus walk's size morph eases on
+   the brand curve — the treemap re-solves areas and CSS carries each tile to
+   its new rect. Opacity starts hidden until the first solve lands: the box is
+   measured one effect-tick after mount, and unpositioned tiles must not flash
+   piled at the corner (visibility, not opacity, so rest/focus/hover fading
+   stays untouched). */
+.dg-mosaic--rows .dg-cell {
+  position: absolute;
+  inset-block-start: 0;
+  left: 0; /* physical: the tile's translate is the treemap's physical x */
+  transition:
+    transform 0.5s var(--ease),
+    width 0.5s var(--ease),
+    height 0.5s var(--ease),
+    opacity 0.25s var(--ease),
+    background 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+/* Load and resize are layout, not motion (ModuleGrid sets both hooks): the
+   mosaic is unseen until its box has settled once, then fades in whole, and a
+   box change places tiles without easing them. Opacity on the container,
+   because visibility on a tile does not hide descendants that set their own. */
+.dg-mosaic--rows {
+  transition: opacity 0.4s var(--ease);
+}
+.dg-mosaic--rows:not([data-settled]) {
+  opacity: 0;
+}
+.dg-mosaic--rows:not([data-settled]) .dg-cell,
+.dg-mosaic--rows[data-resizing] .dg-cell {
+  transition:
+    opacity 0.25s var(--ease),
+    background 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+/* The mosaic's own stage sits below the pinned top bar — never behind it —
+   so the walk plays in the remaining viewport, vertically centred. Scoped
+   to the mosaic; the tour keeps the fullscreen stage. */
+.dg-stage--mosaic {
+  top: var(--dq-nav-h, 62px);
+  height: calc(100dvh - var(--dq-nav-h, 62px));
+  /* Dock padding (owner choreography): the grid breathes below the bar and
+     above the viewport bottom instead of sticking to either edge. Scoped to
+     the mosaic stage only; box-sizing keeps the padding inside the height. */
+  padding-block: clamp(1rem, 3vh, 2.5rem);
+  box-sizing: border-box;
+  /* Centred: the mosaic is full-height in every state that matters, so this
+     only binds on viewports taller than its cap — the grid sits mid-stage
+     instead of sticking to the hero. */
+  justify-content: center;
+}
+
+/* The stacked face — the same boxes on a phone, one per row.
+   There is no pinned track here, so the column is in normal flow and grows with
+   its content. Every tile is open: the tile under the reader's eye only lights
+   (`.dg-cell.on`, paint only), because opening one in flow would push the rest
+   of the page down under a moving thumb. The wrap carries the page's own
+   gutter because there is no stage to centre it. */
+.dg-stack-wrap {
+  padding-inline: var(--page-pad);
+  /* Breathing room below the section's top separator: the first card must sit
+     a step down from the line-t rule, not touch it. */
+  padding-block: clamp(1rem, 3vh, 2rem);
+}
+.dg-mosaic--stack { height: auto; gap: 0.5rem; }
+.dg-mosaic--stack .dg-mosaic-row { flex: 0 0 auto; transition: none; }
+/* The slide-up entrance wrapper (kit Reveal) is the row's flex child, not the
+   tile — so it carries the tile's flex share and stretches the tile to fill
+   it. Without this the wrapper would size to content and the tile would never
+   fill the row width. */
+.dg-mosaic--stack .dg-stack-reveal { flex: 1 1 auto; min-width: 0; display: flex; }
+.dg-mosaic--stack .dg-stack-reveal > .dg-cell { flex: 1 1 auto; }
+/* One tile per row, so the tile fills the row's width. `flex: 0 0 auto` here
+   would size the tile to its own max-content — which measured 760px on a 420px
+   viewport and pushed the whole page sideways. Height is content-driven because
+   the row is `flex: 0 0 auto` inside the column. */
+.dg-mosaic--stack .dg-cell { flex: 1 1 auto; min-width: 0; opacity: 0.72; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-mosaic--stack .dg-cell.on { opacity: 1; }
+.dg-mosaic-row { display: flex; flex: 1 1 0; min-height: 0; gap: 0.5rem; /* Stacked face only: the mosaic face has no rows since v17 (treemap). No size transition here in either face — the mosaic morph is motion `animate` on the tiles, the stack is content-driven. CSS keeps only the paint transitions below. */ }
+
+.dg-cell { position: relative; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 0; min-width: 0; min-height: 0; padding: 0.85rem 0.95rem; margin: 0; background: var(--surface); border: 1px solid var(--hair); border-radius: 0; text-align: left; cursor: pointer; overflow: hidden; opacity: 0.55; transition: opacity .25s var(--ease), background .25s var(--ease), box-shadow .25s var(--ease); }
+.dg-cell:hover { opacity: 0.85; }
+.dg-cell.on { opacity: 1; background: var(--surface-2, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); cursor: default; overflow-x: hidden; overflow-y: auto; }
+
+/* Name left, version right: the tile's identity line. The version sits in the
+   top-right corner where a reader scanning the mosaic can compare releases down
+   a column. The head wraps, and the version carries `margin-left: auto` so it
+   keeps its right edge on the line it lands on — both halves are `nowrap`, so
+   without the wrap a narrow tile had its name run underneath it. */
+.dg-mosaic-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.25rem 0.6rem; min-width: 0; }
+.dg-mosaic-version { margin-left: auto; text-align: right; }
+.dg-mosaic-name { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
+/* Mini tiles step the name down a notch instead of clipping it: the full
+   name still shows (never an abbreviation), just set smaller next to the
+   version, so the head fits ~135px with padding. */
+.dg-cell[data-tier="mini"] .dg-mosaic-name { font-size: 1.1rem; }
+
+/* The whole tile is the focus target, but the focused tile also owns real
+   controls (copy the compose command, ask digichat). A <button> cannot contain
+   another button, so the focus action is a transparent overlay *under* the body
+   rather than the body's parent; the body re-enables pointer events only on its
+   own controls, so every other click falls through to the overlay. The overlay
+   lives inside an `overflow: hidden` tile, so the global `:focus-visible`
+   outline (drawn outside the box) would be clipped — the ring is drawn just
+   inside the edge instead. */
+.dg-cell-focus { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.dg-cell.on .dg-cell-focus { cursor: default; }
+.dg-cell-focus:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dg-cell-body { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 auto; min-height: 0; pointer-events: none; }
+.dg-cell-body button { pointer-events: auto; }
+
+/* The three stated facts — lines of code, endpoints, MCP tools — stacked under
+   the name in every tile, focused or resting, so the box is a constant the
+   reader learns once. A label/value row each in the same `.dg-loc` mono
+   micro-type the corner figures used; the value is right-aligned with
+   `tabular-nums` so the column compares cleanly down the mosaic. */
+.dg-mosaic-facts { font-family: var(--font-mono); font-size: 0.86rem; line-height: 1.5; letter-spacing: 0.01em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+/* The packages sit at the foot of every tile, expanded or resting. `margin-top:
+   auto` pins them to the bottom so the boxes line up whether or not the tile is
+   open; the chips print their names, because the owner asked for the packages to
+   be readable "in the non-expanded view". On the focused tile they pack to the
+   right, directly above the compose line. */
+.dg-mosaic-stack { display: block; margin-top: auto; min-width: 0; }
+.dg-mosaic-stack .stack-row { margin-top: 0; }
+/* Focused tiles: the chips shrink to their own width and sit in the bottom-right,
+   just above the compose line. The cap wraps a long row into that corner
+   instead of stretching it across the card. */
+.dg-cell.on .dg-mosaic-stack { align-self: flex-end; width: fit-content; max-width: min(100%, 26rem); }
+.dg-cell.on .dg-mosaic-stack .stack-row { justify-content: flex-end; }
+/* Collapsed tiles keep the logo-only row on one scrolling line: wrapping
+   would spend unpredictable vertical room in narrow tiles (measured as a
+   46px overflow), while a horizontal scroll matches the docker chip grammar
+   and bounds the row to one line at every width. Focused tiles use the
+   wrapping named chips — the focus minimums always give them the room. */
+.dg-mosaic-stack .stack-row.compact { flex-wrap: nowrap; overflow-x: auto; }
+.dg-mosaic-role { font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.5; color: var(--ink-mute); }
+.dg-cell.on .dg-mosaic-role { color: var(--ink-soft); }
+.dg-mosaic-detail { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; min-width: 0; }
+/* The one part of the focused tile allowed to shrink. The tile is one row tall,
+   and the earlier version let the copy take as much as it wanted — which pushed
+   the compose command and the ask control out of the box on the longest modules
+   (digigraph, digivault). The copy shrinks, the stack row and the foot below are
+   pinned, and the lead paragraph is clamped, so the controls are always visible. */
+
+/* The WHY drawer's typewriter fill. Each owned word carries its index (`--i`)
+   and the word count (`--n`), and the drawer writes a single `--seam-fill`
+   (0..1) on the grid; the clamp below turns that into a per-word opacity, so
+   the sentence types itself out as the panel slides right. `--seam-fill`
+   defaults to 1, so SSR, no-JS and prefers-reduced-motion all render the full
+   line with no reveal. */
+.dg-seam-word {
+  opacity: clamp(0, calc(var(--seam-fill, 1) * var(--n) - var(--i)), 1);
+}
+/* The compose command and the CTA share the last line. The command wraps
+   on the focused tile so a zoomed page lengthens the card instead of
+   cutting the line off. */
+.dg-mosaic-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0; min-width: 0; flex: 0 0 auto; }
+.dg-mosaic-foot .dg-docker { margin-top: 0; min-width: 0; }
+.dg-mosaic-ask { margin-left: auto; white-space: nowrap; font-family: var(--font-mono); font-size: 0.9rem; color: var(--ink-mute); }
+button.dg-mosaic-ask { background: none; border: 0; padding: 0; cursor: pointer; }
+button.dg-mosaic-ask:hover { color: var(--ink); }
+
+/* The compose command is a control in the focused tile: a click copies it. The
+   `.dg-docker` skin is shared with the graph panel, where the command is plain
+   text, so the pointer affordance is scoped to the button form. */
+button.dg-docker { cursor: pointer; text-align: left; }
+button.dg-docker:hover { border-color: var(--hair-2); }
+button.dg-docker.is-copied { color: var(--accent); }
+
+/* Resting tiles clip detail that does not fit their share of the mosaic.
+   The focused tile unclamps its copy and grows inside the fixed grid.
+   Text that still exceeds that grid scrolls inside the card. */
+.dg-cell .dg-mosaic-detail { overflow: hidden; flex: 1 1 auto; min-height: 0; }
+.dg-cell.on .dg-mosaic-detail { overflow: visible; flex: 0 1 auto; min-height: auto; }
+.dg-cell.on .dg-docker { margin-top: 0; overflow: visible; white-space: normal; }
+.dg-cell.on .dg-mosaic-serves {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+
+/* The deeper description paragraphs: what the module is for, in its own words.
+   Only on the focused tile — a resting tile is a fraction of a row tall, so it
+   carries the name, version, stats box and role and nothing else. */
+.dg-mosaic-serves { color: var(--ink-mute); font-family: var(--font-mono); font-size: 0.94rem; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+
+/* Card density tiers (owner: a tile shows whatever fits, never clipped).
+   The tile's tier is set from its measured width and height (see
+   ModuleGrid): full shows everything; medium keeps the head plus the
+   logo-only package row and drops the role prose (the collapsed tile keeps
+   the owner's logo packages); mini keeps name + version only. Tiers
+   CROSS-FADE (opacity + visibility) instead of flipping display: tiles clip
+   (overflow hidden on .dg-cell) and the hidden content keeps its layout, so
+   a tier change is paint-only — no pop, no reflow. */
+.dg-cell .dg-mosaic-stack,
+.dg-cell .dg-mosaic-role,
+.dg-cell .dg-mosaic-detail {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s var(--ease), visibility 0s;
+}
+.dg-cell[data-tier="medium"] .dg-mosaic-role,
+.dg-cell[data-tier="medium"] .dg-mosaic-detail,
+.dg-cell[data-tier="mini"] .dg-mosaic-role,
+.dg-cell[data-tier="mini"] .dg-mosaic-stack,
+.dg-cell[data-tier="mini"] .dg-mosaic-detail {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s var(--ease), visibility 0s 0.3s;
+}
+/* The tiles whose content changes (gaining or losing focus) re-mount their
+   body (keyed in ModuleGrid) and fade in a beat into the rect morph, so the
+   new text lands in a box that has mostly grown instead of catching it
+   half-fitting. Resting tiles keep their body and never blink.
+   Transform/opacity only, per the kit's motion vocabulary. */
+.dg-cell-body { animation: dg-cell-in 0.3s var(--ease) 0.12s both; }
+@keyframes dg-cell-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+/* Reduced motion: every mosaic transition above goes instant — dock,
+   growth, tier fades, body crossfade. State changes still apply, with no animation. */
+@media (prefers-reduced-motion: reduce) {
+  .dg-mosaic--rows,
+  .dg-mosaic-row,
+  .dg-cell,
+  .dg-cell .dg-mosaic-stack,
+  .dg-cell .dg-mosaic-role,
+  .dg-cell .dg-mosaic-detail {
+    transition: none;
+  }
+  .dg-cell-body { animation: none; }
+}
+
+/* The stated figures. They are printed on the cell rather than implied by its
+   size, so the sizing is readable rather than felt — a reader can check that
+   digiquant's box is bigger because its figure is bigger. Right-aligned inside
+   `.dg-stats`, because that is the column the reader compares down. */
+.dg-loc {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dg-cell.on .dg-loc { color: var(--ink-soft); }
+
+/* The focus morph is the whole point of the mosaic, so the one place it
+   must not run is where motion is unwanted: focus then lands on the final
+   layout with no travel. The mosaic-face selector keeps the higher
+   specificity of the transition it cancels. */
+@media (prefers-reduced-motion: reduce) {
+  .dg-mosaic-row,
+  .dg-cell,
+  .dg-mosaic--rows .dg-cell { transition: none; }
+}
+
+
+
+/* Terminal registers (v15, #4429): the boot playback is a fixed box on the
+   landing page, so it must not grow as lines type in. `fill` stretches .term
+   to the wrapper's height; `compact` drops the body type a step. Both are
+   additive modifiers over the shared .term base in site.css. */
+.term--fill { display: flex; flex-direction: column; height: 100%; }
+.term--fill .term-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.term--compact .term-bar { padding: 0.55rem 0.9rem; }
+.term--compact .term-body { font-size: 0.72rem; line-height: 1.72; padding: 0.9rem 1rem 1rem; min-height: 0; }
+.term--compact { box-shadow: 0 28px 64px -40px rgba(0, 0, 0, 0.5); }
+
+/* digiquant band (v15, #4429): a deliberately foreign surface. The section is
+   tinted with digiquant's own accent over the page background and bounded by a
+   hairline above and below, so it reads as a different product's page sitting
+   inside the digithings page rather than another digithings band. Pair it with
+   `.accent-digiquant` on the same element so `--accent` resolves to the cyan. */
+.quant-band {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    transparent 72%
+  );
+  border-block: 1px solid var(--hair);
+}
+
+/* The dashboard mark, faded and slowly breathing, behind the digiquant band.
+   The owner asked for "the digiquant dashboard logo behind this digiquant
+   section and have it animated … a bit faded and animated … it gets zoomed in
+   … similar because that's the branding of the dashboard" — the same idea as
+   digiquant.io's nav mark, at watermark scale. Strokes draw in sequence while
+   the whole mark drifts between 0.9x and 1.06x; the reduced-motion block pins
+   it to a still frame. */
+.quant-mark {
+  display: block;
+  transform-origin: 50% 50%;
+  animation: quant-mark-zoom 16s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+.quant-mark .dq-stroke {
+  stroke-dasharray: var(--ol-len, 200);
+  stroke-dashoffset: 0;
+  animation: quant-mark-draw 16s ease-in-out infinite;
+}
+.quant-mark .dq-stroke-1 {
+  --ol-len: 120;
+}
+.quant-mark .dq-stroke-2 {
+  --ol-len: 190;
+  animation-delay: 0.3s;
+}
+.quant-mark .dq-stroke-3 {
+  --ol-len: 45;
+  animation-delay: 0.6s;
+}
+.quant-mark .dq-stroke-4 {
+  --ol-len: 165;
+  animation-delay: 0.9s;
+}
+@keyframes quant-mark-zoom {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.05;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.05;
+  }
+}
+@keyframes quant-mark-draw {
+  0% {
+    stroke-dashoffset: var(--ol-len, 200);
+    opacity: 0.35;
+  }
+  12% {
+    opacity: 1;
+  }
+  48%,
+  62% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: var(--ol-len, 200);
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quant-mark,
+  .quant-mark .dq-stroke {
+    animation: none;
+  }
+}
 
 /* mobile / reduced-motion stepper */
 .dg-stepper { display: flex; flex-direction: column; gap: 2rem; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }
@@ -198,6 +622,16 @@ body {
 .dg-graph-mini { max-width: 360px; margin-inline: auto; }
 @media (min-width: 720px) { .dg-step { grid-template-columns: 1fr 1.2fr; align-items: center; } }
 @media (max-width: 900px) { .dg-stage-grid { grid-template-columns: 1fr; } .dg-rail { display: none; } }
+
+/* ── disclosure rows (native <details>/<summary>) ───────────────────────────
+   A summary that opens something must read as clickable, and a bare <summary>
+   computes `cursor: auto` — so the affordance is owned here rather than
+   hand-rolled as an app-local `cursor-pointer` on every FAQ (canon: pointer
+   cursors are kit-level; apps/ utilities are refused). `list-style: none` plus
+   the webkit marker rule drop the default triangle so the caller can draw its
+   own indicator. ─────────────────────────────────────────────────────────── */
+.disclosure-row > summary { cursor: pointer; list-style: none; }
+.disclosure-row > summary::-webkit-details-marker { display: none; }
 
 /* ── ScrollyFeatures (useScrollyFeatures reference skin) ────────────────────
    Pinned section + progress rail (Graphite pattern). The hook owns state; this
@@ -375,5 +809,156 @@ body {
   .kit-pop[data-open],
   .kit-pop[data-closed] {
     animation: none;
+  }
+}
+
+/* ==========================================================================
+   PAGE GEOMETRY + ENTRANCE CHOREOGRAPHY (D1, #4429 — ported techniques)
+   --------------------------------------------------------------------------
+   Two things this kit was missing, both read out of launch-ui's source (MIT)
+   rather than invented:
+
+   1. `line-*` / `fade-*` / `glass-*` — a named utility vocabulary so sections
+      COMPOSE instead of hand-rolling a border or a mask each time. That
+      hand-rolling is exactly why the first pass of pages read as ad hoc.
+
+   2. `animate-appear` — the staged entrance. Every hero element carries it
+      with a `delay-*` class, starting from `opacity-0`; `forwards` means the
+      resting state after the run is the visible one, so nothing flashes.
+
+   Both are token-backed. NOTE for the canon guard: `line-*` deliberately
+   duplicates @digithings/design/site/site.css's legacy `.line-*` names — that
+   sheet is imported by apps that do NOT import this bridge, so neither can
+   own it exclusively. Declared here as `@utility` so Tailwind generates them
+   alongside its own.
+   ========================================================================== */
+
+/* ---- Layout rules: the persistent page geometry -------------------------
+   A section that runs the full container height between two vertical hairlines
+   reads as one built object rather than boxes in a column. `line-y` draws only
+   the inline edges (0 top/bottom), `line-x` only the block edges.
+
+   These two are the *rails*, and they draw at `--hair-2` rather than `--hair`.
+   At `--hair` (9% white) the rail was invisible against the page ground, which
+   defeats the technique: a guide nobody can see is not geometry. One step up
+   (15%) registers at a glance while staying below any content edge, so the rail
+   reads as structure rather than as a border.
+
+   `line-t` / `line-b` deliberately stay at `--hair`. They are section
+   *dividers* — a different role, and there are dozens of them; raising those
+   would change the rhythm of every page rather than the frame around it. The
+   weight classes are: content edge > rail > divider > ground. */
+/* Plain CSS, not @apply and not a var()-based shorthand: Tailwind's utility
+   generator resolves these at build time and a `var(--line-width, 1px)` inside
+   a shorthand did not survive (the border rendered 0px). A literal `1px` is
+   correct here — the hairline width is a canon constant, not a themed value. */
+@utility line-y {
+  border-left-width: 1px;
+  border-right-width: 1px;
+  border-style: solid;
+  border-color: var(--hair-2);
+}
+
+@utility line-x {
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+  border-style: solid;
+  border-color: var(--hair-2);
+}
+
+@utility line-t {
+  border-top-width: 1px;
+  border-style: solid;
+  border-color: var(--hair);
+}
+
+@utility line-b {
+  border-bottom-width: 1px;
+  border-style: solid;
+  border-color: var(--hair);
+}
+
+/* Must come AFTER the line-* rules in source order for equal specificity to
+   win, which is why it is declared here rather than with the others. */
+@utility line-dashed {
+  border-style: dashed;
+}
+
+/* ---- Fade masks: bleed an artefact into the page instead of cutting it ---
+   (`fade-bottom` on a hero section is what stops a product shot ending on a
+   hard edge.) */
+@utility fade-x {
+  mask-image: linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%);
+}
+
+@utility fade-y {
+  mask-image: linear-gradient(to top, transparent 0%, black 25%, black 75%, transparent 100%);
+}
+
+@utility fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
+}
+
+@utility fade-bottom {
+  mask-image: linear-gradient(to top, transparent 0%, black 35%);
+}
+
+@utility fade-top-lg {
+  mask-image: linear-gradient(to bottom, transparent 15%, black 100%);
+}
+
+@utility fade-bottom-lg {
+  mask-image: linear-gradient(to top, transparent 15%, black 100%);
+}
+
+@utility fade-left {
+  mask-image: linear-gradient(to right, transparent 0%, black 35%);
+}
+
+@utility fade-right {
+  mask-image: linear-gradient(to left, transparent 0%, black 35%);
+}
+
+/* ---- Glass: layered gradient surfaces over the flat ground -------------
+   Five depths. `hair` is this system's border token, so the edges stay in the
+   canon rather than reaching for a Tailwind palette. */
+@utility glass-1 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 80%, transparent), color-mix(in srgb, var(--surface) 40%, transparent));
+}
+
+@utility glass-2 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, var(--surface), color-mix(in srgb, var(--surface) 80%, transparent));
+}
+
+@utility glass-3 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 30%, transparent), color-mix(in srgb, var(--surface) 20%, transparent));
+}
+
+@utility glass-4 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--surface) 60%, transparent), color-mix(in srgb, var(--surface) 20%, transparent));
+}
+
+@utility glass-5 {
+  border: 1px solid var(--hair);
+  background-image: linear-gradient(to bottom, var(--surface), color-mix(in srgb, var(--surface) 20%, transparent));
+}
+
+/* ---- The entrance choreography: keyframes + tokens live in the one
+   @theme inline block above, per web-theme.test.ts. ---- */
+
+/* Reduced motion: the choreography parks elements at their END state rather
+   than their start state, so a reduced-motion visitor sees the finished page
+   immediately instead of a page of invisible elements. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-appear,
+  .animate-appear-zoom {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }

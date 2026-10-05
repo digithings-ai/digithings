@@ -81,11 +81,23 @@ export interface NavShellProps {
    * behavior, everywhere). "hover" is for a surface that doesn't scroll at
    * all (a fixed-height app view, not a document) — the bar starts hidden
    * and reveals only while the cursor sits in the top strip, so content can
-   * run all the way to the top the rest of the time. Keyboard/focus reach
-   * is unaffected either way: a hidden bar is still tab-reachable and
+   * run all the way to the top the rest of the time. "pinned" settles after
+   * 8px like "scroll" but never yields — for a document page whose bar
+   * should stay fixed to the top. Keyboard/focus reach is unaffected in
+   * every mode: a hidden bar is still tab-reachable and
    * `:focus-within` reveals it (nav-shell.css).
    */
-  autoHide?: "scroll" | "hover";
+  autoHide?: "scroll" | "hover" | "pinned";
+  /**
+   * Clip the bar's own band (its scrolled backdrop + bottom hairline) to the
+   * page column instead of the viewport edges. The row was always capped to
+   * `--wrap`; this is for a document whose sections are drawn between the
+   * persistent `LayoutLines`, so a full-bleed bar would paint across the very
+   * rules that define the page. Unset (the default) keeps the bar full-bleed —
+   * right for an app shell, wrong for this kind of page. Pass the same register
+   * as `LayoutLines` (`--frame-w`) so the band's edges land on the rules.
+   */
+  clipToFrame?: boolean;
 }
 
 /** Key for a NavItem: groups have no href, so the label carries the identity. */
@@ -464,6 +476,7 @@ export function NavShell({
   currentPath,
   skipTo,
   autoHide = "scroll",
+  clipToFrame = false,
 }: NavShellProps) {
   const navRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -489,16 +502,19 @@ export function NavShell({
 
   // Scroll grammar (canon: settle, then yield). Class flips outside React
   // state: scroll fires per frame and the bar's dress is pure presentation.
-  // Only for autoHide="scroll" — a surface using "hover" below typically
-  // doesn't scroll at all (window.scrollY would just stay pinned at 0), and
-  // even if it did, the two grammars shouldn't fight over the same class.
+  // "pinned" settles like "scroll" but never yields — the bar stays fixed
+  // to the top. Only for autoHide="hover" is this skipped below — a surface
+  // using "hover" typically doesn't scroll at all (window.scrollY would just
+  // stay pinned at 0), and even if it did, the two grammars shouldn't fight
+  // over the same class.
   useEffect(() => {
     const nav = navRef.current;
-    if (!nav || autoHide !== "scroll") return;
+    if (!nav || (autoHide !== "scroll" && autoHide !== "pinned")) return;
     let last = 0;
     const onScroll = () => {
       const y = window.scrollY;
       nav.classList.toggle("is-scrolled", y > 8);
+      if (autoHide !== "scroll") return;
       if (y > last && y > 180) nav.classList.add("is-hidden");
       else nav.classList.remove("is-hidden");
       last = y;
@@ -644,7 +660,7 @@ export function NavShell({
           collide — and it lets CSS pin the bar in place while a menu is open. */}
       <header
         ref={navRef}
-        className={`nav-shell${menuOpen ? " is-menu-open" : ""}`}
+        className={`nav-shell${menuOpen ? " is-menu-open" : ""}${clipToFrame ? " is-clipped" : ""}`}
         data-group-open={openGroup !== null}
       >
         <div className="nav-shell-row relative z-[56] mx-auto flex w-full max-w-[var(--wrap,1180px)] items-center justify-between gap-[1.5rem] px-[var(--gutter,1.5rem)] max-[880px]:gap-[1rem]">

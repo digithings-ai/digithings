@@ -123,7 +123,7 @@ Production must set `DIGIKEY_PRIVATE_KEY_PEM` to a stable RS256 private key
 (multiline PEM or base64) and set `DIGIKEY_ALLOW_EPHEMERAL_KEY=0`; digikey then
 fails closed at startup if the PEM is missing.
 
-Does **not** start digiquant / digisearch / digismith / heartbeat / observability.
+Does **not** start digiquant / digisearch / digitrace / heartbeat / observability.
 
 **Local / digithings website parity:** one supervisord image (same as Cloudflare
 Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`

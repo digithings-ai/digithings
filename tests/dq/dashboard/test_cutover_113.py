@@ -60,13 +60,12 @@ def test_cutover_stays_under_cutover_dir() -> None:
     assert CUTOVER_900.is_file()
 
 
-def test_db_migrate_and_verify_are_maxdepth_one() -> None:
-    migrate = (REPO_ROOT / ".github" / "workflows" / "db-migrate.yml").read_text(encoding="utf-8")
+def test_verify_and_rls_are_maxdepth_one() -> None:
+    # db-migrate.yml removed in GHA strict-essentials cut (2026-10-01); verify + rls remain.
     verify = (
         REPO_ROOT / "digiquant" / "scripts" / "research" / "verify-supabase-migrations.sh"
     ).read_text(encoding="utf-8")
     rls = (REPO_ROOT / "scripts" / "rls_proof" / "run.sh").read_text(encoding="utf-8")
-    assert "find digiquant/supabase/migrations -maxdepth 1" in migrate
     assert "-maxdepth 1 -name '*.sql'" in verify or '-maxdepth 1 -name "*.sql"' in verify
     assert "cutover/900_drop_anon_read_cutover.sql" in rls
     assert "113_drop_legacy_book_uniques" not in rls

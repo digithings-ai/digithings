@@ -39,11 +39,80 @@ describe("GET /api/byok/models", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 400 for any provider other than openrouter", async () => {
-    const res = await GET(req("/api/byok/models?provider=openai"));
+  it("returns 400 for a provider outside the BYOK allowlist", async () => {
+    const res = await GET(req("/api/byok/models?provider=not-a-provider"));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("unsupported_provider");
+  });
+
+  it("serves every non-openrouter BYOK provider from the vendored catalog, without fetching", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      for (const provider of ["openai", "gemini", "xai"]) {
+        const res = await GET(req(`/api/byok/models?provider=${provider}`));
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.provider).toBe(provider);
+        expect(body.source).toBe("catalog");
+        expect(typeof body.fetchedAt).toBe("string");
+        expect(Array.isArray(body.all)).toBe(true);
+        // Not just `isArray` — an empty bucket array passes that trivially and
+        // would let a broken catalogEntriesFor (or a stub that returned [])
+        // satisfy this test. These providers each have routable ids the house
+        // can actually serve, so the counts are the assertion that matters.
+        expect(body.all.length).toBeGreaterThan(0);
+      }
+      // Spot-check known routable ids so a filter that returns the *wrong*
+      // provider's rows still fails, and so a filter that returns too much
+      // fails too. xai routes grok-4.3 (dotted) and grok-4.5; before #5000 it
+      // also routed a dashed `grok-4-3` that xAI answers 404 for, which is what
+      // this assertion caught.
+      const xai = await (await GET(req("/api/byok/models?provider=xai"))).json();
+      expect(xai.all.map((m: { id: string }) => m.id)).toEqual(["grok-4.3", "grok-4.5"]);
+
+      // anthropic was the deliberate empty case until #5000: all three ids the
+      // house routed were the pinned claude-*-4-20250514 ids, which models.dev
+      // no longer carries, so none of its 16 catalog rows was servable and the
+      // picker fell back to byokModelPresets. #5000 re-pinned the routes to
+      // claude-haiku-4-5 / claude-opus-4-5 / claude-sonnet-4-6, so anthropic is
+      // now served from the catalog like every other non-openrouter provider.
+      // Asserted as the exact set: a new route that is not in the catalog, or a
+      // catalog row with no route, shows up as a mismatch in either direction.
+      const anthropic = await (await GET(req("/api/byok/models?provider=anthropic"))).json();
+      expect(anthropic.all.map((m: { id: string }) => m.id)).toEqual([
+        "claude-haiku-4-5",
+        "claude-opus-4-5",
+        "claude-sonnet-4-6",
+      ]);
+      // The catalog path is a local read: an upstream fetch here would mean this
+      // route had become a fetch proxy for arbitrary provider hosts.
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("keeps openrouter on the live path", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: [{ id: "openai/gpt-4o-mini" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    try {
+      const res = await GET(req("/api/byok/models?provider=openrouter"));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.source).toBe("live");
+      expect(body.provider).toBe("openrouter");
+      expect(fetchSpy).toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("rate-limits authenticated callers too, not just embed", async () => {

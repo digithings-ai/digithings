@@ -32,7 +32,10 @@ from digiquant.dashboard.research_retrieval.models import (
     content_digest,
     legacy_document_ref_id,
 )
-from digiquant.dashboard.research_retrieval.queries import RetrievalManifestMode
+from digiquant.dashboard.research_retrieval.queries import (
+    RetrievalManifestMode,
+    _theses_for_as_of,
+)
 from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     LoadedResearchState,
@@ -297,6 +300,40 @@ class TestQueryPortfolio:
         assert out["nav"]["nav"] == 1.02
         assert out["theses"][0]["thesis_id"] == "t1"
         assert out["decision_lessons"][0]["reflection"] == "waited for confirmation"
+
+    def test_theses_for_as_of_keeps_the_newest_date_when_history_is_long(self) -> None:
+        newest = [
+            {"date": "2026-06-18", "thesis_id": f"live-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(3)
+        ]
+        older = [
+            {"date": "2026-06-17", "thesis_id": f"old-{i}", "name": f"O{i}", "status": "ACTIVE"}
+            for i in range(40)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        active = _theses_for_as_of(client, as_of_date=date(2026, 6, 19))
+        assert sorted(row["thesis_id"] for row in active) == ["live-0", "live-1", "live-2"]
+
+    def test_theses_for_as_of_warns_when_the_latest_date_fills_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from digiquant.dashboard.research_retrieval.queries import _THESIS_ROW_CAP
+
+        newest = [
+            {
+                "date": "2026-06-18",
+                "thesis_id": f"live-{i}",
+                "name": f"T{i}",
+                "status": "ACTIVE",
+            }
+            for i in range(_THESIS_ROW_CAP)
+        ]
+        older = [{"date": "2026-06-17", "thesis_id": "old", "name": "Old", "status": "ACTIVE"}]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        with caplog.at_level("WARNING", logger="digiquant.dashboard.research_retrieval.queries"):
+            active = _theses_for_as_of(client, as_of_date=date(2026, 6, 19))
+        assert len(active) == _THESIS_ROW_CAP
+        assert any("row_cap" in record.message for record in caplog.records)
 
     def test_ticker_filter(self) -> None:
         client = FakeSupabaseClient(

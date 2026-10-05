@@ -27,11 +27,11 @@
 # search_tool   # registered via MCP registry
 # execute_tool  # registered via MCP registry
 
-# ── digismith ────────────────────────────────────────────────────────────────
+# ── digitrace ────────────────────────────────────────────────────────────────
 
 # configure_tracer is called at service startup via import side-effect in main.py
 # Vulture flags it as unused because it's not called within the library itself.
-# from digismith.tracer import configure_tracer
+# from digitrace.tracer import configure_tracer
 # configure_tracer  # called at service startup
 
 # ── digisearch ────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@
 #
 # KEPT — false positives by category:
 #   FASTAPI  (60%): all server.py route functions in digigraph, digisearch,
-#            digiquant, digikey, digismith — FastAPI/Starlette wires them via
+#            digiquant, digikey, digitrace — FastAPI/Starlette wires them via
 #            decorator; vulture cannot trace the ASGI registration.
 #   MCP      (60%): mcp_server.py functions in digigraph, digiquant, digisearch
 #            — registered via @server.list_tools / @server.call_tool decorators.

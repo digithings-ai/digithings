@@ -9,15 +9,15 @@ cmd="$(hook_field command)"
 # Normalize whitespace.
 norm="$(printf '%s' "$cmd" | tr -s '[:space:]' ' ')"
 
-# Allowed remote URL patterns (anchored).
-allowed_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?)$'
+# GitHub public/release remote, the Origin mirror, and the Origin-only /local endpoint.
+allowed_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@github\.com:digithings-ai/digithings(\.git)?|https://origin\.cursor\.com/chrizefan/digithings(\.git)?(/local/?)?)$'
 
 # Case: `git remote add <name> <url>` or `git remote set-url <name> <url>`
 if [[ "$norm" =~ git[[:space:]]+remote[[:space:]]+(add|set-url)[[:space:]]+([^[:space:]]+)[[:space:]]+([^[:space:]]+) ]]; then
   url="${BASH_REMATCH[3]}"
   if ! [[ "$url" =~ $allowed_url_regex ]]; then
     deny "refusing to add/set remote pointing at '$url'. \
-Only the pinned origin (github.com/digithings-ai/digithings) is allowed."
+Allowed: github.com/digithings-ai/digithings, or origin.cursor.com/chrizefan/digithings (and its /local endpoint)."
   fi
 fi
 

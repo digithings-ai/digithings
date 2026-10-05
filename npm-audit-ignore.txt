@@ -85,3 +85,32 @@ GHSA-rgj7-g3m4-5g8c
 # undici 7.29.0 (transitive: @ai-sdk/provider-utils in prod digichat server, jsdom + miniflare dev-only) — high: GHSA-rfgv needs undici WebSocket (unused anywhere in-repo), GHSA-w293 needs BalancedPool (unused; sole prod consumer uses plain Agent({connect}) + fetch). Refs #4838. Re-check on undici major bump or any new undici consumer.
 GHSA-rfgv-xxqx-mfg5
 GHSA-w293-vg96-wgc3
+
+# ── Accepted risk: braces 3.0.3 — no patched release exists ─────────────────
+#
+# Both remediations SECURITY.md prefers come before an ignore entry, and both
+# are closed here. The advisory covers braces <=3.0.3 and 3.0.3 is the newest
+# release npm has (`npm view braces version` -> 3.0.3, lockfile pin 3.0.3), so
+# there is no patched version to pin and no other version to swap to. npm's own
+# `fixAvailable` — "replace shadcn with 1.0.0", isSemVerMajor — is not a
+# remediation: it names a package unrelated to the vulnerable code and would be
+# a major downgrade.
+#
+# Reachability: braces is reached only as micromatch <- fast-glob, and fast-glob
+# only from tooling — eslint-config-next (a devDependency in all five workspaces
+# that declare it) and shadcn, the code-generation CLI that apps/digichat
+# declares under `dependencies`, which is why npm reports the chain as non-dev.
+# Nothing under apps/, packages/, scripts/ or tools/ imports braces, micromatch,
+# fast-glob, ts-morph, @ts-morph/common or shadcn, so no application code path
+# loads the glob engine.
+#
+# The advisory is a stack-exhaustion DoS that needs a deeply nested *pattern*.
+# Every pattern expanded through this copy is a literal in a committed config or
+# in a build tool's own source; none is assembled from request data. Exploiting
+# it would therefore require control of a glob string, which in this repo means
+# repo write access — a larger problem than the advisory.
+#
+# Matched per advisory, not per package (SECURITY.md "Scope note"), so a future
+# advisory against braces still blocks. Re-check when braces 3.0.4+ ships: bump
+# the pin and delete this block rather than extending the comment.
+GHSA-vfj7-8cjw-p6xm

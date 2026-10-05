@@ -249,29 +249,31 @@ def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> di
     return names
 
 
-def _mask_customer(email: Any, cid: Any) -> str:
-    """Masked customer display for rankings: ``m***@domain (id 98)``.
+def _display_customer(value: Any, cid: Any) -> str:
+    """Full customer display for rankings: ``jane.doe@example.test (id 7)``.
 
-    Customers are external PII on an anonymous embed — NEVER emit real
-    customer names or full emails, masked email + id only. Missing or
-    odd (non-email) input falls back to ``(id N)``.
+    Demo mode (#4944): real customer names and full emails are shown,
+    with the customer id appended when known so rankings still link to
+    the customer-history drill-down. Missing input falls back to
+    ``(id N)``; known text without a usable id renders as-is.
     """
-    text = str(email or "").strip() if email is not None else ""
-    local, sep, domain = text.partition("@")
-    if sep and text.count("@") == 1 and local and "." in domain and " " not in text:
-        return f"{local[0]}***@{domain} (id {cid})"
-    return f"(id {cid})"
+    text = str(value or "").strip() if value is not None else ""
+    if not text:
+        return f"(id {cid})"
+    if cid is None:
+        return text
+    return f"{text} (id {cid})"
 
 
 def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> dict[str, str]:
-    """Map each distinct raw customer value to a masked display (best-effort).
+    """Map each distinct raw customer value to a full display (best-effort).
 
     Mirrors ``_owner_display_names``: integer-like ids resolve via the cached
     ``resolve_user``; automation logins come back as-is for the caller to
     flag (dropped pre/post-rank, never rendered). Every other value maps to
-    the masked display — real customer names and full emails are never
-    emitted (external PII on an anonymous embed). Unresolvable ids fall back
-    to ``(id N)`` so one bad customer never fails the whole ranking.
+    the full display — demo mode (#4944) shows real customer names and full
+    emails with the id appended. Unresolvable ids fall back to the raw
+    value with the id so one bad customer never fails the whole ranking.
     """
     names: dict[str, str] = {}
     for row in rows:
@@ -291,7 +293,7 @@ def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) ->
                 if is_automation_login(text):
                     names[text] = text
                 else:
-                    names[text] = _mask_customer(text, cid if cid is not None else "?")
+                    names[text] = _display_customer(text, cid if cid is not None else "?")
                 continue
             try:
                 resolved = client.resolve_user(uid)
@@ -300,7 +302,7 @@ def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) ->
             if is_automation_login(resolved):
                 names[text] = resolved
             else:
-                names[text] = _mask_customer(resolved, uid)
+                names[text] = _display_customer(resolved, uid)
     return names
 
 
@@ -318,7 +320,7 @@ def aggregate_tickets(
     state named "open"). Window: created_at within since_days (one call,
     limit=500). Owner logins are UUIDs — names are resolved automatically;
     automation accounts are excluded and footnoted. Customer rankings show
-    masked emails with ids only (never real names or full emails).
+    full names/emails with ids (demo mode, #4944 — no masking).
     Drill-down: feed a resulting ``customer_id:<N>`` into the
     customer-history tools (latest-ticket search + full-thread get_ticket
     flow) to read that customer's conversation.

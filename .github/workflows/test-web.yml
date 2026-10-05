@@ -197,3 +197,31 @@ jobs:
 
       - name: Test digichat-cloudflare
         run: npm run test --workspace digithings-digichat-cloudflare
+
+      # digitrace-langfuse (#4930 Phase 1): CF Containers Worker for self-hosted
+      # Langfuse Web+Worker. Same install-input / web-lane cover as digichat.
+      - name: Typecheck digitrace-langfuse
+        run: npm run typecheck --workspace digitrace-langfuse
+
+      - name: Test digitrace-langfuse
+        run: npm run test --workspace digitrace-langfuse
+
+      # dashboard-api (#4651) is the central read-only dashboard Worker. Until now
+      # its path was in ci.yml's `ruff_and_scripts` filter and nowhere else, so it
+      # declared `test`/`typecheck` with no lane invoking either: its vitest suite
+      # (236 tests in 20 files on develop) and its tsc program could regress green
+      # and no PR would notice (#358). That filter entry's own comment claimed "an
+      # edit here must redden a lane that runs"; none did.
+      #
+      # Typecheck before the suite, matching the sibling workers above. Without
+      # this step `tsc --noEmit` never ran on this package at all, and its tsconfig
+      # pins `types: ["@cloudflare/workers-types"]` — a workspace-local devDependency,
+      # so a reused node_modules missing it fails as TS2688 "cannot find type
+      # definition file", which reads as "the code is broken" when the code is fine
+      # (reported on DIG-193). The root `npm ci` above installs it from the
+      # lockfile, so a failure here means a real type error.
+      - name: Typecheck dashboard-api
+        run: npm run typecheck --workspace dashboard-api
+
+      - name: Test dashboard-api
+        run: npm run test --workspace dashboard-api

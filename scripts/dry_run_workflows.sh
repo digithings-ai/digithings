@@ -62,7 +62,7 @@ python3 scripts/validate_model_routing.py --routing
 echo "== REM-128: stack smoke (requires Docker) =="
 if command -v docker >/dev/null 2>&1; then
   cp -n .env.example .env 2>/dev/null || cp .env.example .env
-  docker compose up -d --wait digikey digigraph digiquant digisearch digismith
+  docker compose up -d --wait digikey digigraph digiquant digisearch digitrace
   for port in 8005 8000 8001 8002 8003; do
     curl -sf "http://127.0.0.1:${port}/healthz" >/dev/null && echo "  OK :${port}/healthz"
   done

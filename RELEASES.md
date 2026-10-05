@@ -1,6 +1,6 @@
 # Releases
 
-Monorepo components ship as **independent Python packages** (`digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`). Use **git tags** or Docker image digests in production.
+Monorepo components ship as **independent Python packages** (`digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`). Use **git tags** or Docker image digests in production.
 
 ## Release process
 
@@ -16,13 +16,8 @@ Monorepo components ship as **independent Python packages** (`digibase`, `digigr
 
    This is a required step, not bookkeeping: the branch is how that version is patched once `main` has moved on. See [Patching a released version](#patching-a-released-version) and BRANCHING.md § [Cutting a release](BRANCHING.md#cutting-a-release).
 4. **Docker images:**
-   - digichat → [`.github/workflows/publish-digichat-image.yml`](.github/workflows/publish-digichat-image.yml)  
-     Published when release-please cuts the `digichat-vX.Y.Z` tag on `develop` (the release workflow dispatches it at the tag), and re-checked on a push to `main` touching `apps/digichat/**`.  
-     Tags: `:v<package.json version>` and `:latest` (skips if that version tag already exists).
-   - Python HTTP services → [`.github/workflows/publish-service-images.yml`](.github/workflows/publish-service-images.yml) — a push to `main` only, **not** a tag.  
-     Images: `ghcr.io/digithings-ai/{digikey,digigraph,digiquant,digisearch,digismith,digivault,digiclaw}`  
-     Tags: `:sha-<12-char-sha>`, `:latest`, and `:v<pyproject-version>`.  
-     Manual: Actions → “Publish: service images” → `workflow_dispatch` (all or one service).
+   - digichat → the former `publish-digichat-image.yml` workflow was removed in the strict-essentials cut; see [the self-hosted release notes](docs/architecture/digichat-self-hosted-release.md) for the artifact path.
+   - Python HTTP services → the former `publish-service-images.yml` workflow was removed in the strict-essentials cut. Until a replacement is added, use local builds (`docker compose build` / `make up`).
 5. **Tagging:** the `digichat-vX.Y.Z` tag is cut in step 1 by release-please (if you bump by hand, cut it yourself on `develop` in the same change). Per-component `digichat-vX.Y.Z` or repo-wide `vX.Y.Z` — pick one and stay consistent. The tag is the release identity pinned clients cite, and it is what publishes the digichat image.
 6. Append a changelog entry under "Unreleased" below, then move it under a new dated heading.
 
@@ -106,7 +101,7 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 
 ## Install order (local / CI)
 
-`pip install -e ./digibase` first, then editable installs of dependents (`digigraph`, `digiquant`, `digisearch`, `digismith`). Dockerfiles use a **repo-root build context** so `digibase` is copied and installed before each service package.
+`pip install -e ./digibase` first, then editable installs of dependents (`digigraph`, `digiquant`, `digisearch`, `digitrace`). Dockerfiles use a **repo-root build context** so `digibase` is copied and installed before each service package.
 
 ## Changelog (high level)
 
@@ -122,5 +117,5 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 - **digigraph:** depends on `digibase`; standardized errors; policy module; optional tool entry points `digigraph.tools`; `quant_artifact_uri` in workflow state.
 - **digiquant:** `POST /v1/jobs/backtest`, `GET /v1/jobs/{id}/status`; `digibase` errors and OTel.
 - **digisearch:** `workspace_id` on query; `digisearch-worker` CLI stub; `embeddings.config`; `digibase` integration.
-- **digismith:** `digibase` errors and OTel; correlation middleware.
+- **digitrace:** `digibase` errors and OTel; correlation middleware.
 - **digiclaw:** optional `AUDIT_SINK_URL` for NDJSON POST mirror.

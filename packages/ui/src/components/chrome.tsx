@@ -187,7 +187,14 @@ export function Footer({
  *  reference/components/footer-reference.tsx). A duplicate overlay span
  *  carries the gradient clipped to its glyphs; reduced motion (and no-JS)
  *  park the band off-screen so no glow travels. Requires a MotionProvider
- *  in the consuming app. */
+ *  in the consuming app.
+ *
+ *  The rise/fill only works because `.colophon` clips with `overflow-x: clip`
+ *  rather than `overflow: hidden` (site.css): `hidden` made the colophon its
+ *  own child's nearest scrollport, so `.colo-word`'s `view()` timeline
+ *  resolved against a box that never scrolls, saturated, and the whole
+ *  scroll-scrub silently no-opped (the mark sat fully risen at every scroll
+ *  position). Do not "simplify" that back to `overflow: hidden`. */
 export function Colophon({
   name,
   suffix,
