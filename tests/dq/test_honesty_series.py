@@ -323,6 +323,8 @@ def test_returns_dict_is_no_longer_read_as_its_timestamps() -> None:
     pyo3 = _pyo3()
     usd = pyo3.Currency.from_str("USD")
     analyzer = pyo3.PortfolioAnalyzer()
+    if not hasattr(analyzer, "add_position_return"):
+        pytest.skip("add_position_return is absent in the installed nautilus_trader")
     analyzer.add_position_return(1_700_000_000_000_000_000, pyo3.Money(0.03, usd))
     analyzer.add_position_return(1_700_086_400_000_000_000, pyo3.Money(-0.01, usd))
 
