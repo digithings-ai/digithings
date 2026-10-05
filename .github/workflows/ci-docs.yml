@@ -58,7 +58,7 @@ jobs:
         run: uv run --frozen --no-sync python scripts/agents_init.py --check
 
       - name: Check production code for hardcoded model names
-        # #5029 phase 3. The model names this stack routes on live in config/,
+        # #5029 phase 3. The model names this stack routes on belong in config/,
         # not in code. #5046 moved them and verified it by hand once; this is
         # what keeps it true. It reads the whole production tree, so it runs
         # here rather than under a path filter — a filtered check does not post

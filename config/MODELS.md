@@ -102,11 +102,12 @@ Where names legitimately still appear in code, and why:
 
 | Place | Why it is allowed |
 |-------|-------------------|
-| `packages/ui/src/components/chat/skins/**` | `@digithings/ui` is published and built on its own, so it cannot import repo-root `config/` at build time — and a chat skin *is* a provider binding, existing to present one provider's model. |
-| `apps/digichat/src/lib/model-catalog.generated.ts` | Generated output. |
-| `apps/digichat/reference/**` | Vendored third-party templates (excluded from `tsconfig.json`, provenance in `reference/SOURCE.md`). |
+| `packages/ui/src/components/chat/skins/**` | `@digithings/ui` is a workspace package consumed as TypeScript source, so it is not *technically* prevented from reaching root `config/` — a relative import would resolve. This is a recorded judgement, not a technical wall: a chat skin *is* a provider binding, existing to present one provider's model, and it ships to consumers who never see this repo's `config/`. |
+| `apps/digichat/src/lib/model-catalog.generated.ts` | Generated output — and the file must say so on its first line, so a hand-written file cannot claim the exemption by filename alone. |
+| `apps/digichat/reference/**` | Vendored third-party templates (excluded from `tsconfig.json`, provenance in `reference/assistant-ui-templates/SOURCE.md`). |
+| `scripts/check_model_name_literals.py` | This file. It holds `MODEL_ID_PATTERN`, which necessarily spells out the families it looks for. |
 | Test fixtures | A test that names a model is testing that the name works. |
-| `KNOWN_REMAINING` in the script | The phase-2 backlog, one file per entry with the literal count it holds. |
+| `KNOWN_REMAINING` in the script | The phase-2 backlog. Entries are meant to be **deleted**, not added — each records a file and how many literals it holds, and a mismatch in either the count or the number of distinct names is reported as stale. |
 
 That last row is the one to read twice. The allowlist records **counts**, and a
 file whose count has changed is reported as stale rather than tidied away — so

@@ -32,6 +32,15 @@ Test fixtures are exempt by decision (#5029): a test that names a model is
 testing that the name works, and moving those to config would make the tests
 test the config instead of the behaviour.
 
+One known gap, inherent to matching names by shape: a name assembled from
+pieces evades the pattern. ``"gpt-" + "4o-mini"`` and `` `gpt-${x}-mini` `` are
+not literals the matcher can see. That is a deliberate trade rather than an
+oversight — the alternatives are a constant-folding build step or a data-flow
+analysis, and both cost far more than the hole is worth in a guard whose job
+is to catch the copy-paste of a real id. Python's *implicit* concatenation
+(``"gpt-" "4o-mini"``) is caught, because the parser folds it into one constant
+before the matcher sees it.
+
 Run from the repo root:  python scripts/check_model_name_literals.py
 """
 
@@ -43,26 +52,41 @@ import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: Anything shaped like a model id. Deliberately broad on the family and narrow
 #: on the version, so a new release of a known family trips it but prose about
 #: "gpt" alone does not.
+#:
+#: Two rules this pattern learned the hard way. A family must be followed by a
+#: version digit or an explicit pin, or prose trips it — an earlier revision
+#: matched bare `kimi-` and bare `nemotron`, so the string `"nemotron adapter"`
+#: in error copy counted as a model name. And `qwen`/`glm`/`kimi` are matched
+#: case-insensitively, because this repo's own catalog contains `zai-org/GLM-
+#: 5.3-Flash` and `moonshotai/Kimi-K3`, and a case-sensitive pattern waved them
+#: through while flagging the lowercase spelling.
 MODEL_ID_PATTERN = re.compile(
     r"gpt-[0-9]"
-    r"|claude-(?:sonnet|haiku|opus|fable)"
+    r"|claude-(?:sonnet|haiku|opus|fable|[34])"
     r"|gemini-[0-9]"
     r"|grok-[0-9]"
     r"|llama-[0-9]"
-    r"|deepseek-(?:chat|reasoner|v[34])"
+    r"|deepseek-(?:chat|reasoner|r1|v[34])"
     r"|qwen[0-9]"
     r"|glm-[0-9]"
-    r"|kimi-"
-    r"|nemotron"
+    r"|kimi-[a-z0-9]"
+    r"|nemotron-[0-9]"
     r"|phi-[0-9]"
-    r"|gemma-[0-9]"
+    r"|gemma-[0-9]",
+    re.IGNORECASE,
 )
+#: OpenAI's reasoning line carries no family word at all — `o3`, `o4-mini` — so
+#: it needs its own rule. The trailing group requires a version digit, an
+#: optional `-suffix`, or end-of-token, so `o1` matches in `"o1"` and
+#: `"o4-mini"` but not inside `o123` or a word that merely starts `o1`.
+REASONING_ID_PATTERN = re.compile(r"\bo[134](?![0-9a-z])")
 
 #: Source extensions worth reading. Config, docs and lockfiles are not code.
 SOURCE_SUFFIXES = frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".mjs"})
@@ -87,22 +111,37 @@ SKIP_DIR_PARTS = frozenset(
 
 #: Generated files. Their whole content is the output of a generator, so a name
 #: in one is the generator's business, not this check's.
+#:
+#: The filename is only a hint — a hand-written `foo.generated.ts` would wave
+#: away every literal in it (the real one waives 405, seven times the whole
+#: allowlist) on nothing but its own name. So the waiver is two-part: the name
+#: marks it a candidate, and a generator banner on the first line confirms it.
 GENERATED_MARKERS = (".generated.",)
+
+#: A first line containing this is the claim "a generator wrote me", and it is
+#: the only thing that backs a `GENERATED_MARKERS` match.
+GENERATED_BANNER = "GENERATED FILE"
 
 #: Whole paths exempt from the check, each with the reason it is exempt rather
 #: than a file that happened to trip the guard once.
 EXEMPT_PREFIXES: dict[str, str] = {
-    # `@digithings/ui` is a published package with an `exports` map, built on
-    # its own. It cannot import repo-root `config/` at build time, and a chat
-    # skin is *a provider binding* — the skin exists to present one provider's
-    # model, so naming one is its job, not a violation. Exempting the directory
-    # rather than the two files first seen in it (grok, perplexity) because the
-    # base skin names models for the same reason and listing files here would
-    # just be a list that rots.
-    "packages/ui/src/components/chat/skins/": "published package; a skin is a provider binding",
+    # `@digithings/ui` is a workspace package consumed as TypeScript source —
+    # `"private": true`, an `exports` map, and `scripts` of `test`/`typecheck`
+    # with no build step — and a chat skin is *a provider binding*: the skin
+    # exists to present one provider's model, so naming one is its job, not a
+    # violation. Exempting the directory rather than the two files first seen
+    # in it (grok, perplexity) because the base skin names models for the same
+    # reason and listing files here would just be a list that rots.
+    #
+    # Note what this is NOT: the package cannot be *technically* prevented from
+    # reaching root `config/` (a relative import would resolve fine). It is a
+    # judgement that a shipped skin owns its provider vocabulary, and it is
+    # recorded as a judgement so a later reader can disagree with it.
+    "packages/ui/src/components/chat/skins/": "workspace source package; a skin is a provider binding",
     # Vendored third-party reference material (assistant-ui templates), listed
     # in apps/digichat/tsconfig.json's `exclude` alongside `node_modules` and
-    # `cli`, with provenance in reference/SOURCE.md. Not our code to configure.
+    # `cli`, with provenance in
+    # reference/assistant-ui-templates/SOURCE.md. Not our code to configure.
     "apps/digichat/reference/": "vendored third-party reference, excluded from tsconfig",
     # This file. The pattern has to be written down somewhere, and matching it
     # against itself would make the guard fail on every run. Named explicitly so
@@ -128,6 +167,9 @@ TEST_DIR_PARTS = frozenset({"tests", "test", "__tests__", "fixtures", "e2e"})
 TEST_FILE_STEMS = re.compile(r"^test_|_test$|\.test$|\.spec$")
 
 
+ROUTE_FILENAMES = ("route.ts", "route.tsx", "route.js", "route.jsx")
+
+
 def _is_test_path(path: Path) -> bool:
     """True for a file the guard must not read.
 
@@ -135,10 +177,24 @@ def _is_test_path(path: Path) -> bool:
     whose name follows a test convention. The file case is the narrow one and
     the comment on `TEST_FILE_STEMS` says why: a bare `test.ts` is a route, not
     a fixture.
+
+    The directory case has the same trap, one level up. This repo carries the
+    same BYOK probe twice: `apps/digithings-web/functions/api/byok/test.ts` (a
+    Pages Function, whose name comes from its route) and
+    `apps/digichat/src/app/api/byok/test/route.ts` (the same endpoint as a
+    Next.js route handler, so `test` is a *route segment*). Exempting any dir
+    named `test` hid 5 literals in that second file -- the exact false negative
+    `TEST_FILE_STEMS` exists to prevent, reached through the directory instead.
+    So a `TEST_DIR_PARTS` match is overridden when that directory holds a route
+    file, which is what makes a path segment a segment.
     """
     rel = path.relative_to(REPO_ROOT)
-    if any(part in TEST_DIR_PARTS for part in rel.parts[:-1]):
-        return True
+    for index, part in enumerate(rel.parts[:-1]):
+        if part not in TEST_DIR_PARTS:
+            continue
+        segment = REPO_ROOT.joinpath(*rel.parts[: index + 1])
+        if not any((segment / name).is_file() for name in ROUTE_FILENAMES):
+            return True
     return bool(TEST_FILE_STEMS.search(rel.stem))
 
 
@@ -147,7 +203,16 @@ def _is_exempt(path: Path) -> bool:
     rel = path.relative_to(REPO_ROOT).as_posix()
     if any(rel.startswith(prefix) for prefix in EXEMPT_PREFIXES):
         return True
-    return any(marker in rel for marker in GENERATED_MARKERS)
+    if not any(marker in rel for marker in GENERATED_MARKERS):
+        return False
+    # A generated-looking name alone is a claim anyone can make by renaming.
+    # Read the banner: `scripts/refresh_model_catalog.py` writes it, and a
+    # hand-written file with a `.generated.` name and no banner is scanned.
+    try:
+        first = path.read_text(encoding="utf-8").split("\n", 1)[0]
+    except (OSError, UnicodeDecodeError):
+        return False
+    return GENERATED_BANNER in first
 
 
 def iter_source_files() -> Iterator[Path]:
@@ -174,7 +239,28 @@ def iter_source_files() -> Iterator[Path]:
         yield path
 
 
-def _python_hits(path: Path) -> list[tuple[int, str]]:
+def names_a_model(value: str, markers: frozenset[str]) -> bool:
+    """True when *value* carries a model name by shape *or* by configuration.
+
+    Substring, not equality, for the configured half: `"gpt-4o-mini"` contains
+    the `"gpt-4o"` marker, so an equality check would miss the exact literal
+    this guard is about. That is the rule #5046's digigraph guard used, and it
+    is why a marker set of *prefixes* can enforce anything at all.
+
+    Both halves matter and they catch different things. Shape catches a model
+    nobody has put in config yet — the literal arrives first, the config entry
+    later if ever. Configured catches an id this stack routes on even when its
+    shape does not look like a model id, which is eight of the sixteen markers
+    in `config/model-policy.json` (`o1-`, `o3-`, `o4-`, `claude-3-opus`,
+    `claude-3-5-sonnet`, `claude-4`): they are prefixes of ids, not id-shaped
+    text, so the shape pattern alone would wave them through.
+    """
+    if MODEL_ID_PATTERN.search(value) or REASONING_ID_PATTERN.search(value):
+        return True
+    return any(marker in value for marker in markers)
+
+
+def _python_hits(path: Path, markers: frozenset[str]) -> list[tuple[int, str]]:
     """`(line, literal)` for every string constant in a Python file that is not
     a docstring.
 
@@ -202,7 +288,7 @@ def _python_hits(path: Path) -> list[tuple[int, str]]:
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
             and node.value not in docstrings
-            and MODEL_ID_PATTERN.search(node.value)
+            and names_a_model(node.value, markers)
         ):
             hits.append((node.lineno, node.value))
     return hits
@@ -220,6 +306,15 @@ def _mask_js_comments(source: str) -> str:
     `https://…` as a comment and blank out real code, and it would blank out
     strings, which is the one thing that must survive. Template literals nest,
     so `${` re-enters code and the matching `}` returns to the template.
+
+    Regex literals are a fourth state, and getting them wrong is a *false
+    negative with a very innocent face*: `/^https?:\\/\\//` opens with `//` inside
+    a regex, and a scanner that does not know that will treat everything from
+    the second slash to end of line as a comment. In `const u = /^https?:\\/\\//,
+    m = "gpt-4o-mini";` that swallows a real literal on the same line and the
+    guard reports nothing. The tell is what precedes the `/`: a `/` after an
+    identifier, number, `)`, `]` or `}` is division, and anything else opens a
+    regex. Inside a regex, `//` and `/*` are ordinary characters.
     """
     out = list(source)
     i = 0
@@ -233,9 +328,30 @@ def _mask_js_comments(source: str) -> str:
             if out[k] != "\n":
                 out[k] = " "
 
+    def _opens_regex(at: int) -> bool:
+        """True when the `/` at *at* starts a regex literal, not division.
+
+        Looked up from the previous non-space character, which is the only
+        signal available without a full parser. After a value-ending token a
+        `/` is division; anywhere else (start of line, `=`, `(`, `,`, `:`, `;`,
+        `return`, …) it opens a regex.
+        """
+        k = at - 1
+        while k >= 0 and source[k] in " \t":
+            k -= 1
+        if k < 0:
+            return True
+        prev = source[k]
+        return not (prev.isalnum() or prev in "_$)]}")
+
     while i < n:
         ch = source[i]
         if state is None:
+            # Comment tests come first, and they have to: a `/` at the start of
+            # a line, or after `=`, is far more often a comment than a regex,
+            # and `//` cannot open a regex anyway (`//` is an empty regex,
+            # which JavaScript treats as a comment). Testing the regex case
+            # first would make every line comment a regex run.
             if source.startswith("//", i):
                 end = source.find("\n", i)
                 end = n if end == -1 else end
@@ -247,6 +363,25 @@ def _mask_js_comments(source: str) -> str:
                 end = n if end == -1 else end + 2
                 blank(i, end)
                 i = end
+                continue
+            if ch == "/" and _opens_regex(i):
+                # Regex literal: scan to its unescaped closing slash on this
+                # line, passing its contents through untouched so a model id
+                # written inside a pattern is still visible.
+                j = i + 1
+                while j < n and source[j] != "\n":
+                    if source[j] == "\\":
+                        j += 2
+                        continue
+                    if source[j] == "/":
+                        break
+                    if source[j] == "[":
+                        # Character class: `//` inside one is literal too.
+                        j += 1
+                        while j < n and source[j] != "]" and source[j] != "\n":
+                            j += 2 if source[j] == "\\" else 1
+                    j += 1
+                i = min(j + 1, n)
                 continue
             if ch in "'\"`":
                 state = ch
@@ -278,6 +413,15 @@ def _mask_js_comments(source: str) -> str:
 _QUOTE_CHARS = "'\"`"
 
 
+class _Span(NamedTuple):
+    """A start/end pair, so a configured-marker hit can reuse `.search()`'s
+    interface. `re.Match` already provides one; a marker hit has no match object,
+    and wrapping the indices is cheaper than branching at every call site."""
+
+    start: int
+    end: int
+
+
 def _enclosing_literal(line: str, start: int, end: int) -> str:
     """The quoted literal in *line* containing the span `[start, end)`.
 
@@ -301,20 +445,47 @@ def _enclosing_literal(line: str, start: int, end: int) -> str:
     return line[open_at + 1 : close_at]
 
 
-def _script_hits(path: Path) -> list[tuple[int, str]]:
+def _script_hits(path: Path, markers: frozenset[str]) -> list[tuple[int, str]]:
     """`(line, literal)` for every comment-free source line naming a model."""
     masked = _mask_js_comments(path.read_text(encoding="utf-8"))
     hits = []
     for lineno, line in enumerate(masked.splitlines(), start=1):
-        match = MODEL_ID_PATTERN.search(line)
-        if match:
-            hits.append((lineno, _enclosing_literal(line, match.start(), match.end())))
+        # Checked in this order so a shape match wins the span: its offsets are
+        # tighter, so _enclosing_literal quotes the smallest sensible literal.
+        # The configured fallback exists because a marker can sit inside a
+        # string with no id-shaped text anywhere in it (a bare "o3" pin), and
+        # skipping it would reintroduce the exact hole this guard was written
+        # to close.
+        match = MODEL_ID_PATTERN.search(line) or REASONING_ID_PATTERN.search(line)
+        # Both branches end up as a _Span so the two never get read through the
+        # wrong interface. A re.Match has .start()/.end() *methods*; a _Span
+        # has start/end *fields*. Calling match.start() on the configured
+        # fallback raised 'int' object is not callable — and because every
+        # marker in the shipped policy is also shape-matched, that branch
+        # never ran on the real tree, so the guard stayed green over a crash.
+        span = _Span(*match.span()) if match is not None else None
+        if span is None:
+            for marker in markers:
+                index = line.find(marker)
+                if index >= 0:
+                    span = _Span(index, index + len(marker))
+                    break
+        if span is not None:
+            hits.append((lineno, _enclosing_literal(line, span.start, span.end)))
     return hits
 
 
-def scan(path: Path) -> list[tuple[int, str]]:
-    """Every model-name literal in one production file."""
-    return _python_hits(path) if path.suffix == ".py" else _script_hits(path)
+def scan(path: Path, markers: frozenset[str] = frozenset()) -> list[tuple[int, str]]:
+    """Every model-name literal in one production file.
+
+    *markers* is the configured id set. It defaults to empty so a caller that
+    only wants the shape sweep can omit it, but `main()` always passes the real
+    set — an empty default is what let the configured half of this guard exist
+    in documentation without existing in the matcher.
+    """
+    if path.suffix == ".py":
+        return _python_hits(path, markers)
+    return _script_hits(path, markers)
 
 
 def configured_markers() -> set[str]:
@@ -344,20 +515,59 @@ def configured_markers() -> set[str]:
 #: to hold on this branch. #5029 phase 2 (generate) shrinks this list toward
 #: empty; a file that drops a literal without its entry being updated here is
 #: reported, so the list cannot rot into a permanent exemption.
-KNOWN_REMAINING: dict[str, int] = {
+class _Allowance(NamedTuple):
+    """What `KNOWN_REMAINING` expects a file to contain, and why.
+
+    Both counts are pinned because one is not enough. An occurrence count alone
+    cannot see a swap between two repeats of the same name, so `o3` written
+    twice and later replaced by two different models would still match; the
+    distinct count catches that.
+
+    The *names* are deliberately not pinned. Enumerating them shows why: many
+    are `_enclosing_literal` span artifacts rather than names at all --
+    `'o3: "OpenAI API",'`, `'o3: { inPerM: ... },'` -- and pinning those would
+    encode an accident of the matcher's line-column arithmetic. Pinning real
+    message text (`'Model is required for ${provider} (e.g. grok-4.3).'`) would
+    make an unrelated copy edit a CI failure, and a guard that cries wolf gets
+    switched off, which is worse than the gap it leaves. The residual gap is
+    therefore named rather than hidden: swapping one allowlisted literal for a
+    different one of the same distinct count is not detected.
+    """
+
+    occurrences: int
+    distinct: int
+
+
+#: Production files that still name models, with the literal counts they carry.
+#: #5029 phase 2 generates these away; each removal here is that work landing.
+KNOWN_REMAINING: dict[str, _Allowance] = {
     # Phase-2 targets. `digillm/client.py` must be *generated*, not read at
     # runtime: digillm/AGENTS.md forbids runtime file reads in an installable
     # library. `functions/api/byok/test.ts` is a Cloudflare Pages Function
-    # serving POST /api/byok/test — production code whose name comes from its
+    # serving POST /api/byok/test -- production code whose name comes from its
     # route, which is why it is here and not treated as a fixture.
-    "apps/digichat/src/hooks/use-byok-key.ts": 17,
-    "apps/digithings-web/functions/api/byok/test.ts": 10,
-    "apps/digithings-web/lib/providerSettings.ts": 14,
-    "digillm/src/digillm/client.py": 17,
+    "apps/digichat/src/hooks/use-byok-key.ts": _Allowance(17, 12),
+    # The Next.js half of that same endpoint. `test` is a route segment here,
+    # not a test directory, which is why this file is scanned at all.
+    "apps/digichat/src/app/api/byok/test/route.ts": _Allowance(5, 5),
+    "apps/digithings-web/functions/api/byok/test.ts": _Allowance(10, 10),
+    "apps/digithings-web/lib/providerSettings.ts": _Allowance(15, 15),
+    # New under the widened pattern: `GPT-5.6 Sol`, `GPT-5.6 Luna`, `o3`, and a
+    # pricing-provenance URL carrying three model names and their prices.
+    "apps/digithings-web/lib/ragCost.ts": _Allowance(4, 4),
+    # Also new. Four of the seven distinct values are `o3:`-prefixed span
+    # fragments (see `_Allowance`), the concrete reason names are not pinned.
+    "apps/digithings-web/lib/stackCatalog.ts": _Allowance(8, 7),
+    # One of the two is prose in marketing copy naming o3 as a price reference.
+    # Allowlisted rather than silently dropped: a literal that names a model
+    # belongs in config even in copy, and phase 2 decides which entries are a
+    # routing table and which are a description.
+    "apps/digithings-web/lib/appPresets.ts": _Allowance(2, 2),
+    "digillm/src/digillm/client.py": _Allowance(17, 17),
     # One refusal message naming the fallback model. A message is as much a
-    # literal as a routing table — the same reasoning #5046 applied when it
+    # literal as a routing table -- the same reasoning #5046 applied when it
     # replaced digigraph's per-provider refusal examples.
-    "scripts/validate_model_routing.py": 1,
+    "scripts/validate_model_routing.py": _Allowance(1, 1),
 }
 
 
@@ -369,24 +579,26 @@ def main() -> int:
 
     found: dict[str, list[tuple[int, str]]] = {}
     for path in all_files:
-        hits = scan(path)
+        hits = scan(path, frozenset(markers))
         if hits:
             found[path.relative_to(REPO_ROOT).as_posix()] = hits
 
     unexpected = {name: hits for name, hits in found.items() if name not in KNOWN_REMAINING}
     stale = {
-        name: (expected, len(found.get(name, [])))
-        for name, expected in KNOWN_REMAINING.items()
-        if len(found.get(name, [])) != expected
+        name: (allowance, len(found.get(name, [])), len({text for _, text in found.get(name, [])}))
+        for name, allowance in KNOWN_REMAINING.items()
+        if len(found.get(name, [])) != allowance.occurrences
+        or len({text for _, text in found.get(name, [])}) != allowance.distinct
     }
 
     for name, hits in sorted(unexpected.items()):
         detail = ", ".join(f"{line}: {text!r}" for line, text in hits[:5])
         more = f" (+{len(hits) - 5} more)" if len(hits) > 5 else ""
         print(f"FAIL {name}: {len(hits)} model name literal(s) — {detail}{more}", file=sys.stderr)
-    for name, (expected, actual) in sorted(stale.items()):
+    for name, (allowance, occurrences, distinct) in sorted(stale.items()):
         print(
-            f"FAIL {name}: allowlist expects {expected} literal(s), found {actual}. "
+            f"FAIL {name}: allowlist expects {allowance.occurrences} literal(s) "
+            f"({allowance.distinct} distinct), found {occurrences} ({distinct} distinct). "
             "Update KNOWN_REMAINING in scripts/check_model_name_literals.py "
             "(#5029 phase 2 shrinks this list toward empty).",
             file=sys.stderr,

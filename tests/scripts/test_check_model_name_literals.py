@@ -51,7 +51,10 @@ def _fake_root(tmp_path: Path, *, markers: dict[str, object] | None = None) -> P
         # The one that matters: a Pages Function named after its route. Exempting
         # a bare `test` stem would have hidden this file, which ships.
         ("apps/digithings-web/functions/api/byok/test.ts", False),
-        ("apps/digichat/src/app/api/byok/test/route.ts", True),
+        # Same probe, Next.js spelling: `test` is a *route segment* here, and a
+        # directory holding a route file is a route, not a fixture. Exempting
+        # every directory named `test` hid five literals here.
+        ("apps/digichat/src/app/api/byok/test/route.ts", False),
         # Real tests, three conventions.
         ("tests/dg/test_model_config.py", True),
         ("apps/digichat/src/lib/deploy-config/deploy-models.test.ts", True),
@@ -72,7 +75,13 @@ def test_path_classification(tmp_path: Path, rel: str, exempt: bool) -> None:
     root = _fake_root(tmp_path)
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("", encoding="utf-8")
+    # A `.generated.` filename alone does not buy an exemption — the file has to
+    # actually say so on line 1, or a hand-written file could claim to be
+    # generated and wave away whatever it likes. So the fixture writes the
+    # banner for those paths, and `test_generated_file_without_a_banner_is_not_exempt`
+    # covers the other half of that rule.
+    body = f"{guard.GENERATED_BANNER}\n" if ".generated." in rel else ""
+    path.write_text(body, encoding="utf-8")
     monkey = pytest.MonkeyPatch()
     monkey.setattr(guard, "REPO_ROOT", root)
     try:
@@ -174,7 +183,7 @@ class TestGuardOutcomes:
         (root / "app" / "m.py").write_text('A = "gpt-4o-mini"\nB = "gpt-4o"\n', encoding="utf-8")
         monkey = pytest.MonkeyPatch()
         monkey.setattr(guard, "REPO_ROOT", root)
-        monkey.setattr(guard, "KNOWN_REMAINING", {"app/m.py": 2})
+        monkey.setattr(guard, "KNOWN_REMAINING", {"app/m.py": guard._Allowance(2, 2)})
         try:
             assert guard.main() == 0
         finally:
@@ -193,7 +202,7 @@ class TestGuardOutcomes:
         (root / "app" / "m.py").write_text('A = "gpt-4o-mini"\n', encoding="utf-8")
         monkey = pytest.MonkeyPatch()
         monkey.setattr(guard, "REPO_ROOT", root)
-        monkey.setattr(guard, "KNOWN_REMAINING", {"app/m.py": 3})
+        monkey.setattr(guard, "KNOWN_REMAINING", {"app/m.py": guard._Allowance(3, 3)})
         try:
             assert guard.main() == 1
         finally:
@@ -208,7 +217,7 @@ class TestGuardOutcomes:
         (root / "app" / "m.py").write_text("X = 1\n", encoding="utf-8")
         monkey = pytest.MonkeyPatch()
         monkey.setattr(guard, "REPO_ROOT", root)
-        monkey.setattr(guard, "KNOWN_REMAINING", {"app/gone.py": 4})
+        monkey.setattr(guard, "KNOWN_REMAINING", {"app/gone.py": guard._Allowance(4, 4)})
         try:
             assert guard.main() == 1
         finally:
@@ -288,7 +297,28 @@ class TestAgainstThisRepo:
     """
 
     def test_repo_passes_clean(self) -> None:
+        # Asserting main() == 0 on its own is what CI already does, byte for
+        # byte, and it stays green if main() is stubbed to return 0 before it
+        # looks at anything. So assert the three things CI cannot see: that the
+        # tree actually yields sources, that the scan is non-empty, and that
+        # each allowance equals what a fresh scan observes right now.
         assert guard.main() == 0
+
+        markers = frozenset(guard.configured_markers())
+        sources = list(guard.iter_source_files())
+        assert sources, "the real repo produced no production sources to scan"
+        scanned = [guard.scan(p, markers) for p in sources]
+        assert any(scanned), "a scan of the real repo found nothing at all"
+
+        for rel, allowance in guard.KNOWN_REMAINING.items():
+            observed = guard.scan(guard.REPO_ROOT / rel, markers)
+            assert len(observed) == allowance.occurrences, (
+                f"{rel}: allowlist says {allowance.occurrences}, scan finds {len(observed)}"
+            )
+            assert len({lit for _, lit in observed}) == allowance.distinct, (
+                f"{rel}: allowlist says {allowance.distinct} distinct, scan finds "
+                f"{len({lit for _, lit in observed})}"
+            )
 
     def test_no_allowlist_entry_points_at_a_test_fixture(self) -> None:
         for name in guard.KNOWN_REMAINING:
@@ -318,3 +348,138 @@ class TestAgainstThisRepo:
             assert guard.MODEL_ID_PATTERN.search(name), f"{name} should match"
         for name in ("gpt", "openai", "x-ai", "anthropic", "a model id", "TOOLCHAIN"):
             assert not guard.MODEL_ID_PATTERN.search(name), f"{name} should not match"
+
+
+@pytest.mark.unit
+class TestRegressionsFromReview:
+    """One test per finding the in-session review raised.
+
+    Each of these failed against the code as first written. They are here so the
+    fix cannot be quietly undone by a later "simplification" that looks harmless:
+    every one of them is a case where the guard reported success over a literal
+    it should have found.
+    """
+
+    def test_configured_marker_is_caught_even_when_the_pattern_misses_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The review found the "configured id" half of the guard documented but
+        # never wired into any matcher, so a name added to model-policy.json
+        # was not actually enforceable. This pins the wiring, not the data:
+        # after the pattern widening, every marker currently in the policy file
+        # happens to be shape-matched too, so a test using one of those would
+        # pass even with the configured path deleted again. So inject a marker
+        # the shape pattern provably cannot see and require it to be caught.
+        marker = "qwen-2.5-72b-instruct"  # real repo id; `qwen[0-9]` wants no dash
+        assert not guard.MODEL_ID_PATTERN.search(marker)
+        assert not guard.REASONING_ID_PATTERN.search(marker)
+        root = _fake_root(tmp_path)
+        path = root / "app/mod.ts"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'const m = "{marker}";\n', encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        monkeypatch.setattr(guard, "KNOWN_REMAINING", {})
+        # Shape alone would wave this through...
+        assert guard.scan(path, frozenset()) == []
+        # ...so this failure is proof the configured half is wired in.
+        monkeypatch.setattr(guard, "configured_markers", lambda: frozenset({marker}))
+        assert guard.main() == 1
+
+    def test_every_configured_marker_is_matched_by_shape(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The flip side, recorded so the overlap above is not mistaken for
+        # redundancy. The two paths happen to agree on today's policy file; the
+        # configured one is forward defence for the next marker added. If a
+        # future widening drops this, the previous test is the one that
+        # matters, and this is the canary saying the overlap has gone.
+        root = _fake_root(tmp_path)
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        for marker in guard.configured_markers():
+            assert guard.MODEL_ID_PATTERN.search(marker) or (
+                guard.REASONING_ID_PATTERN.search(marker)
+            ), f"{marker} is no longer shape-matched, so the configured path is load-bearing"
+
+    def test_nextjs_route_segment_named_test_is_scanned(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A `test` directory is a route segment, not a fixture. The same BYOK
+        # probe ships under two spellings, and exempting the directory form
+        # hid all five literals in the Next.js one.
+        root = _fake_root(tmp_path)
+        path = root / "apps/digichat/src/app/api/byok/test/route.ts"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('const m = "gpt-4o-mini";\n', encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        monkeypatch.setattr(guard, "KNOWN_REMAINING", {})
+        assert not guard._is_test_path(path)
+        assert guard.main() == 1
+
+    def test_regex_literal_does_not_swallow_the_rest_of_the_line(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = _fake_root(tmp_path)
+
+        def hits(body: str) -> int:
+            path = root / "app/mod.ts"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+            return len(guard.scan(path))
+
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        # `//` inside a regex is two literal characters, not the start of a
+        # comment, so the string after it must still be scanned.
+        assert hits('const u = /^https?:\\/\\//, m = "gpt-4o-mini";\n') == 1
+        assert hits("const s = /gpt-4/.test(v);\n") == 1
+        # Division, not a regex: no false positive.
+        assert hits("const x = a / b / c;\n") == 0
+        assert hits("const y = (a + b) / 2;\n") == 0
+        assert hits("const z = arr[0] / 2;\n") == 0
+        assert hits('const p = "a/b"; const q = 6 / 3;\n') == 0
+        # Comments still win over the regex branch.
+        assert hits("// gpt-4o-mini in a comment\n") == 0
+        assert hits("/* gpt-4o-mini */\n") == 0
+
+    def test_generated_file_without_a_banner_is_not_exempt(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `.generated.` in a filename is a claim anyone can make. The waiver
+        # covers 405 literals in the real catalog file, so it must require the
+        # generator's own banner on line 1 as well.
+        root = _fake_root(tmp_path)
+        lying = root / "app/handwritten.generated.ts"
+        lying.parent.mkdir(parents=True, exist_ok=True)
+        lying.write_text('const m = "gpt-4o-mini";\n', encoding="utf-8")
+        real = root / "app/real.generated.ts"
+        real.write_text(f"{guard.GENERATED_BANNER} -- do not edit\n", encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        assert guard._is_exempt(real)
+        assert not guard._is_exempt(lying)
+        monkeypatch.setattr(guard, "KNOWN_REMAINING", {})
+        assert guard.main() == 1
+
+    def test_distinct_count_staleness_is_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        # An occurrence count alone cannot see one name swapped for another.
+        # Recording the distinct count as well is the cheap half of closing
+        # that; this pins that the guard really compares the second number.
+        root = _fake_root(tmp_path)
+        path = root / "app/m.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('A = "gpt-4o-mini"\nB = "grok-4.3"\n', encoding="utf-8")
+        monkeypatch.setattr(guard, "REPO_ROOT", root)
+        # Two occurrences, but claiming one distinct literal.
+        monkeypatch.setattr(guard, "KNOWN_REMAINING", {"app/m.py": guard._Allowance(2, 1)})
+        assert guard.main() == 1
+        assert "allowlist expects 2 literal(s) (1 distinct)" in capsys.readouterr().err
+
+    def test_uppercase_o1_is_not_a_reasoning_model_id(self) -> None:
+        # `O1` is a SEC suspension-reasoning code in digiquant's Gloomberb
+        # table, next to H4/H9/IPO1/IPOE. Making the reasoning pattern
+        # case-insensitive to catch `GLM-5.3-Flash` would have swept it in.
+        assert not guard.REASONING_ID_PATTERN.search('"O1": "Operations halt"')
+        assert guard.REASONING_ID_PATTERN.search("o3")
+        assert guard.REASONING_ID_PATTERN.search("o4-mini")
+        assert guard.MODEL_ID_PATTERN.search("GPT-5.6 Luna")
+        assert guard.MODEL_ID_PATTERN.search("zai-org/GLM-5.3-Flash")
