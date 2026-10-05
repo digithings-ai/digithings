@@ -38,8 +38,9 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 ``download_ohlcv_batch``; the real adapter is ``fetch_batch`` in
 ``digiquant.data.prices.fetchers`` — used here.)
 
-Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
-SystemExit message on missing credentials/URIs (fail closed, like backfill).
+Exit codes: 0 fresh, 1 stale (gate refused, or any ticker hard-failed, or any
+slow-cadence macro series ``history-only``), SystemExit message on missing
+credentials/URIs (fail closed, like backfill).
 
 Staleness is evaluated per series *and* per leg. A monthly/quarterly macro
 series that published nothing is exempt (#4621). That exemption is per-series
@@ -48,9 +49,16 @@ comes back ``history-only`` at once, every outcome is individually exempt,
 ``failed`` is empty and the run exits 0 claiming fresh while the panel stays
 frozen at the last good seal. The exemption is therefore suspended only when
 *every* exempt macro series is ``history-only`` at once
-(:func:`_macro_leg_dead`), and the run then exits 1. A partial leg stays
-exempt, and so does a manifest with a single exempt series; both limits are
-recorded in ``digiquant/ARCHITECTURE.md``.
+(:func:`_macro_leg_dead`), and the run then exits 1.
+
+Scope of that guard, precisely: it closes the ``history-only`` shape only, and
+only over series the manifest actually declared. Two neighbouring whole-leg
+freezes are *not* covered and still exit 0 — a panel that keeps serving rows
+inside its live window (``up-to-date``, so not a soft fail at all), and an
+unreadable manifest (``_resolve_macro_specs`` returns ``[]``, leaving the guard
+no exempt id to reason about). Partial legs and single-series manifests are
+also out of reach, by design. All four are recorded in
+``digiquant/ARCHITECTURE.md``; the first two predate this guard.
 
 No vendor API key is needed on this path: the macro panel is sealed from
 anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches

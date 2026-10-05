@@ -596,13 +596,27 @@ publication window, or a per-series vendor refusal — and `_fetch_macro` builds
 client per series, so a rate-limit blip silences an arbitrary subset. A partial leg is
 indistinguishable from that blip, and firing the gate on a healthy panel is how operators
 learn to ignore it. `main` emits exactly one outcome per macro spec, so the exempt ids and
-their outcomes always line up. Two known limits follow from the floor and the unanimity,
-both accepted rather than half-solved by a magic constant: a manifest with a single exempt
-series cannot trip the guard, and a partial leg stays exempt exactly as it did before this
-guard existed. Suspending the exemption only ever *adds* names to `failed` — it never turns
-a stale run fresh. A daily or `error` outcome is never exempt at any cadence. Staleness
-flag only — no money, rate or weight arithmetic. Contract tests:
+their outcomes always line up. Suspending the exemption only ever *adds* names to `failed`
+— it never turns a stale run fresh. A daily or `error` outcome is never exempt at any
+cadence. Staleness flag only — no money, rate or weight arithmetic. Contract tests:
 `tests/scripts/test_macro_death_is_not_silent.py`.
+
+**What the guard does not cover.** It closes the `history-only` shape only, and only over
+series the manifest actually declared. Four whole-leg freezes still exit 0:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip; a subset is not evidence | accepted, by design |
+| Single-series manifest | the `> 1` floor; there is no leg to judge | accepted, by design |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **open, pre-dates this guard** |
+| Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
+
+The last two are the same class of defect this guard closed — a macro panel frozen while
+the run reports fresh — reached by a sibling route. They need their own fixes: the first by
+comparing each macro outcome's `as_of` against the run date rather than trusting `mode`, the
+second by making an unreadable manifest a loud outcome instead of an empty spec list. The
+monthly `window_limit` of 8 rows means the third has a ~120-day fuse before a healthy panel
+trips it, which is why it has not surfaced.
 
 #### Market-data R2 read path (#3780 Task 10)
 
