@@ -79,6 +79,14 @@ Beyond root `AGENTS.md`:
 - **Keep site-specific logic out.** Selectors, URLs, login/auth flows,
   pagination policy, HTML/DOM parsing, domain models, and PDF text extraction
   belong to the consumer. The engine owns *lifecycle + transport* only.
+- **No vendor access, no vendor authorisation — ever, in code or docs.** This
+  package ships generic transport seams and nothing else. Do not name a
+  third-party site in a docstring, example, table, or comment here; do not
+  spell out a worked example against a real vendor's endpoints or request
+  shapes. Describe seams generically. If code here will touch a third party's
+  data or endpoint, that vendor's terms must be checked and recorded first —
+  see [`docs/VENDOR_CONTENT_BOUNDARY.md`](../docs/VENDOR_CONTENT_BOUNDARY.md)
+  and the hold in [`docs/plans/adr-0030/HOLD-Primarket.md`](../docs/plans/adr-0030/HOLD-Primarket.md).
 - **Injectable time.** `sleep`, `clock`, and `rand` are constructor/parameter
   injections so tests are deterministic and instant.
 - **Typed results.** Public surfaces return Pydantic models / dataclasses; the
