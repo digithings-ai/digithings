@@ -491,6 +491,17 @@ export function standardPartsToSpans(
             : "started";
       const span: ActivitySpan = { operation: "execute_tool", status, label, toolName: name };
       if (query) span.query = query;
+      // A generic tool payload, under the same envelope key `writeToolOutput`
+      // puts it on (`output.result`). Carrying it means a completed tool that
+      // came back with something is visible as such, so the trailing pass can
+      // tell "returned nothing" from "returned something we cannot read" even
+      // when the output was projected straight off a settled message. Without
+      // it a tenant tool whose name collides with one of ours fabricates "no
+      // hits" over a payload that is sitting right there.
+      if (output && "result" in output) {
+        const payload = toolResult(output.result);
+        if (payload !== undefined) span.toolResult = payload;
+      }
       spans.push(span);
       continue;
     }
@@ -605,9 +616,12 @@ export function toDigiChatActivity(
   // retrieve arriving afterwards overwrites the row before the trailing pass
   // ever runs, and the pass only looks at rows still shaped like a tool_call.
   const failedTools = new Set<string>();
-  // Tool keys whose completion carried a `toolResult` we can read but not count.
-  // A payload is the opposite of "found nothing", whatever shape it is in, so a
-  // search that returned one must never be rewritten as a zero-hit row.
+  // Tool keys whose completion carried a payload we can read but not count. It is
+  // not that the payload proves a retrieval ran — it is that the tool demonstrably
+  // came back with something, which is the opposite of "found nothing" whatever
+  // shape it is in, so such a tool must never be rewritten as a zero-hit row.
+  // Keyed by (name, query) with the rows themselves, so one call's payload can
+  // never decide another call's row.
   const payloadTools = new Set<string>();
   // Row index of the still-open ("started", not yet resolved by a matching
   // completed/failed/retrieve span) call for each tool name — regardless of
@@ -833,12 +847,16 @@ export function toDigiChatActivity(
     }
     // `count: 0` is the only lever for "searched and found nothing", and the UI
     // renders it as the literal string `no hits` — an authoritative negative. It
-    // requires evidence that a retrieval ran, and there are exactly two kinds
-    // here: the tool is one of ours that searches (an empty answer from it is a
-    // real answer, so the honest zero stands), or it came back with a payload we
-    // could read. A tool that is neither is a result this projector was never
-    // taught to interpret; rewriting it as empty invents the negative the
-    // "no hits" string asserts.
+    // requires positive evidence that a retrieval ran, and here that evidence is
+    // the tool being one of ours that searches: an empty answer from a tool we
+    // know retrieves is a real answer, so the honest zero stands.
+    //
+    // Two things veto it. A payload came back we could read but not count,
+    // whatever shape it is in — something existing is the opposite of "found
+    // nothing", and reading it as empty would contradict it. Or the tool is not
+    // ours, which means this projector was never taught to read its result, so
+    // its silence is an unknown rather than an empty. Both say what is true and
+    // claim nothing about the result.
     if (!settle) continue;
     if (payloadTools.has(key) || !SEARCH_TOOL_NAMES.has(row.name)) {
       rows[idx] = {

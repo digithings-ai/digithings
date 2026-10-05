@@ -695,6 +695,70 @@ describe("toDigiChatActivity — a negative claim requires a retrieval", () => {
     ]);
   });
 
+  it("does not claim no hits when a recognised tool's payload arrived on the parts path", () => {
+    // A tenant MCP tool whose name collides with one of ours, on the path the
+    // embed uses. The name alone would license the zero, but a payload came
+    // back — "no hits" there contradicts it. Keyed per (name, query): the
+    // unrecognised second query below still claims its own honest zero.
+    const rows = toDigiChatActivity(
+      standardPartsToSpans([
+        {
+          type: "dynamic-tool",
+          toolCallId: "t1",
+          toolName: "digisearch",
+          state: "output-available",
+          input: { query: "auth" },
+          output: { result: { chunks: [{ text: "a real hit" }] } },
+        },
+        {
+          type: "dynamic-tool",
+          toolCallId: "t2",
+          toolName: "digisearch",
+          state: "output-available",
+          input: { query: "billing" },
+          output: { label: 'Searched for: "billing"' },
+        },
+      ] as unknown as UIMessage["parts"])
+    );
+
+    expect(zeroHitRows(rows)).toEqual([{ kind: "tool_result", name: "digisearch", query: "billing", hits: [], count: 0 }]);
+    const status = rows.find((r) => r.kind === "status");
+    expect(status).toMatchObject({
+      outcome: { name: "digisearch", query: "auth", state: "unreadable" },
+    });
+    // The transcript renders `status` on `message` alone until 2b teaches it to
+    // read `outcome`, so two unreadable searches for one tool must not read
+    // identically. Pin the query and the tool into the sentence itself.
+    expect(status && status.message).toContain("auth");
+    expect(status && status.message).toContain("digisearch");
+    expect(status && status.message.toLowerCase()).not.toContain("no result");
+    expect(status && status.message.toLowerCase()).not.toContain("failed");
+  });
+
+  it("leaves a results-withheld note with no outcome key on it at all", () => {
+    // The exact-shape assertion above passes even if the withheld branch sets
+    // `outcome: undefined`, because toEqual ignores undefined properties — so
+    // "there is a test that fails if anything is added there" needs a property
+    // check to be true. Absent must mean absent, not present-and-empty: 2b
+    // will branch on the key, and a key that exists with no value is a fourth
+    // reading of a quiet note.
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      {
+        operation: "retrieve",
+        toolName: "file_search",
+        query: "auth",
+        status: "completed",
+        label: "Sources",
+        documentsWithheld: true,
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(Object.hasOwn(rows[0], "outcome")).toBe(false);
+  });
+
   it("still claims no hits when a search completed and produced no retrieve span", () => {
     // The one legitimate zero: the search provably ran (started + completed)
     // and no retrieve span followed. This must keep working — a real empty
