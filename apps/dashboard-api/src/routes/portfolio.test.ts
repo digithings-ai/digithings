@@ -66,11 +66,37 @@ describe("phase 1 portfolio routes", () => {
     expect(data.theses[0].vehicles).toEqual(["GLD"]);
   });
 
-  it("signals keeps only needs_resolution rows", async () => {
-    mockFetch((url) => (url.includes("/theses?") ? [{ id: "a", needs_resolution: true, name: "A", date: "2026-09-28" }, { id: "b", needs_resolution: false, name: "B", date: "2026-09-28" }] : []));
-    const res = await body("/theses/signals", { ...ENV, DASHBOARD_DEV_CALLER: "brief" });
-    const data = res.data as { theses: { id: string }[] };
-    expect(data.theses.map((t) => t.id)).toEqual(["a"]);
+  // DIG-442: `needs_resolution` is not a column of core `theses`, so no real row
+  // can satisfy the signal predicate. The old fixture here supplied the column by
+  // hand and asserted that one row survived — it proved a shape core cannot
+  // produce, which is exactly why the dead filter stayed green. This feeds real
+  // row shapes and pins what actually happens, until the board decides what a
+  // signal is.
+  //
+  // Against a mocked read this can stage the causation, not prove it: repointing
+  // the filter at another predicate that is also false for both rows leaves it
+  // green. What it does pin is the empty shape and the tip date, and the
+  // unfiltered control is what stops it passing for the wrong reason.
+  it("signals is empty while the filter reads a column core theses lacks", async () => {
+    mockFetch((url) => (url.includes("/theses?")
+      ? [
+        { id: "fd49f84b-114b-4e73-ab87-f16939664f97", thesis_id: "gold-bid", name: "Gold", status: "ACTIVE", confidence: 0.85, date: "2026-09-28" },
+        { id: "0a2b1c6e-5f7d-4c8a-9b3d-0c1e2f3a4b5c", thesis_id: "eur-usd", name: "Front-end easing", status: "CHALLENGED", confidence: 0.25, date: "2026-09-28" },
+      ]
+      : []));
+    const full = await body("/theses") as { status: number; data: { theses: { id: string }[] }; as_of: string | null };
+    const signals = await body("/theses/signals", { ...ENV, DASHBOARD_DEV_CALLER: "brief" }) as { status: number; data: { theses: unknown[] }; as_of: string | null };
+    expect(full.status).toBe(200);
+    expect(signals.status).toBe(200);
+    // The read is healthy: both rows come back on the unfiltered route.
+    expect(full.data.theses.map((t) => t.id)).toEqual([
+      "fd49f84b-114b-4e73-ab87-f16939664f97",
+      "0a2b1c6e-5f7d-4c8a-9b3d-0c1e2f3a4b5c",
+    ]);
+    expect(full.as_of).toBe("2026-09-28");
+    // The filter is what empties it, and an empty book has no tip date to age by.
+    expect(signals.data.theses).toEqual([]);
+    expect(signals.as_of).toBeNull();
   });
 
   // DIG-401: `theses` keeps one row per thesis per business `date`, so an

@@ -468,6 +468,13 @@ Portfolio: `GET /allocations/enriched`, `/attribution`, `/theses`,
 `/theses/signals` (brief), `/ledger/cash`, `/performance/drawdown`,
 `/brief/decision`, `/brief/risks`, `/dossier/{ticker}`.
 
+`/theses/signals` is catalogued and reachable but currently returns an
+empty book: its filter reads `needs_resolution`, which is not a column of
+core `theses` and which no writer populates. Consumers must render it as
+"no signals", not as "no theses". What a signal *is* is an open decision
+([DIG-442](/DIG/issues/DIG-442)) — until it lands, do not drop the filter:
+that would return the whole thesis book under the signals heading.
+
 Pipeline: `GET /pipeline/runs/latest/health` (optional `date=YYYY-MM-DD`),
 `/graph`, `/narrative`, `/trace`, `/artifacts`,
 `/nodes/selected/document` (optional `node=`). Cost and token fields on
