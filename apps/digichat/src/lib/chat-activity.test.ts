@@ -297,7 +297,13 @@ describe("toDigiChatActivity", () => {
         ],
         { settle: false },
       ),
-    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+    ).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "file_search", query: "auth", state: "failed" },
+      },
+    ]);
   });
 
   it("keeps two different queries as separate rows", () => {
@@ -396,13 +402,21 @@ describe("toDigiChatActivity", () => {
         started("file_search"),
         { ...finished("file_search", "auth"), status: "failed" },
       ])
-    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+    ).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "file_search", query: "auth", state: "failed" },
+      },
+    ]);
   });
 
   it("renders a failed search with no known query using a generic message", () => {
     expect(
       toDigiChatActivity([{ operation: "execute_tool", toolName: "file_search", status: "failed", label: "x" }])
-    ).toEqual([{ kind: "status", message: "Search failed." }]);
+    ).toEqual([
+      { kind: "status", message: "Search failed.", outcome: { name: "file_search", state: "failed" } },
+    ]);
   });
 
   // Regression (#2330): a failed retrieve with hitCount set (error count
@@ -419,7 +433,13 @@ describe("toDigiChatActivity", () => {
           hitCount: 2,
         },
       ]),
-    ).toEqual([{ kind: "status", message: 'Search for "batch" failed.' }]);
+    ).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "batch" failed.',
+        outcome: { name: "digivault_search_notes", query: "batch", state: "failed" },
+      },
+    ]);
   });
 
   it("still uses positive hitCount on a completed retrieve when documents mapped empty", () => {
@@ -589,7 +609,61 @@ describe("toDigiChatActivity — a negative claim requires a retrieval", () => {
       { ...finished("file_search", "auth"), status: "failed" },
     ]);
     expect(zeroHitRows(rows)).toEqual([]);
-    expect(rows).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+    expect(rows).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "file_search", query: "auth", state: "failed" },
+      },
+    ]);
+  });
+
+  it("says an uncounted result is unreadable rather than empty, and names the tool", () => {
+    // The honest unknown. `outcome` is the contract with leaf 2b: it is what
+    // lets the transcript render this as a first-class row that claims no
+    // count, instead of the renderer having to parse the message prose. The
+    // row still carries no `count` anywhere — a count of zero here is the lie.
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap_search",
+        state: "output-available",
+        input: { query: "acme" },
+        output: { result: { rows: 3 } },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    const rows = toDigiChatActivity(spans);
+    const status = rows.find((r) => r.kind === "status");
+    expect(status).toBeDefined();
+    expect(status).toMatchObject({
+      outcome: { name: "datatap_search", query: "acme", state: "unreadable" },
+    });
+    // Never the words a reader would take as an empty or a failed search.
+    expect(status && status.message.toLowerCase()).not.toContain("no results");
+    expect(rows.some((r) => "count" in r)).toBe(false);
+  });
+
+  it("leaves a results-withheld note carrying no outcome, so it stays a quiet aside", () => {
+    // GUARD, and the one the CTO named. "Found results for …" means results
+    // EXIST and this tenant's detail level withholds them — the opposite of a
+    // negative. If it grew an `outcome`, leaf 2b would promote it into a result
+    // row and turn it into "found 0 results", which is the exact misrender the
+    // guard exists to remove. A quiet note carries no outcome.
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      {
+        operation: "retrieve",
+        toolName: "file_search",
+        query: "auth",
+        status: "completed",
+        label: "Sources",
+        documentsWithheld: true,
+      },
+    ]);
+    expect(rows).toEqual([{ kind: "status", message: 'Found results for "auth".' }]);
   });
 
   it("does not produce a zero-hit row while the turn is still open", () => {
