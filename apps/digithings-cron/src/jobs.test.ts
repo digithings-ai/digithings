@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
+import { REQUIRED_TRIGGERS, contractGaps } from "./triggers";
 
 const RESUMED_PIPELINE_IDS = [
   "prices-at-open-13",
@@ -43,19 +44,29 @@ const PATH_A_ENABLED_IDS = [
   "smoke-site",
 ] as const;
 
-const TWELVE_X_ENABLED_IDS = [
-  "twelve-x-asia",
-  "twelve-x-london",
-  "twelve-x-new-york",
+/**
+ * The twelve-x rows the trigger contract does not cover. The five required FX
+ * triggers are NOT listed here: they come from `REQUIRED_TRIGGERS`, so the
+ * contract in src/triggers.ts is the assertion of record for them (DIG-732).
+ *
+ * This list used to name `twelve-x-session-catchup` by hand. That was the only
+ * thing that noticed the catch-up row going missing, and it is a unit test, so
+ * nothing noticed between 31 Aug and 4 Oct — DIG-553 Finding 1, 543 runs, zero
+ * catch-up runs in the whole of 1-30 August 2026.
+ */
+const TWELVE_X_OTHER_ENABLED_IDS = [
   "twelve-x-market-context-intraday",
   "twelve-x-market-context-daily",
   "twelve-x-market-context-weekly",
   "twelve-x-performance-eval",
-  "twelve-x-primemarket-heartbeat",
-  "twelve-x-session-catchup",
   "twelve-x-archive-maintenance",
   "twelve-x-digisearch-parity",
 ] as const;
+
+const TWELVE_X_ENABLED_IDS: readonly string[] = [
+  ...REQUIRED_TRIGGERS.map((trigger) => trigger.job),
+  ...TWELVE_X_OTHER_ENABLED_IDS,
+];
 
 const ENABLED_CRONS = [
   "40 13 * * MON-FRI",
@@ -317,6 +328,17 @@ describe("jobsForCron", () => {
       expect(job?.kind).toBe("workflow_dispatch");
       expect(job?.repo).toBe("digithings-ai/twelve-x");
     }
+    // The loop above now covers the five required FX triggers, because
+    // TWELVE_X_ENABLED_IDS derives them from the contract. Assert the contract
+    // resolves to real rows here too, so this file cannot pass on an empty
+    // derivation. See src/triggers.ts and the acceptance tests in
+    // src/triggers.test.ts (DIG-732).
+    expect(contractGaps()).toEqual([]);
+    expect(
+      REQUIRED_TRIGGERS.every((trigger) =>
+        JOBS.some((row) => row.id === trigger.job && row.cron === trigger.cron && row.enabled),
+      ),
+    ).toBe(true);
   });
 
   it("dispatches weekly twelve-x digisearch parity near Monday 09:00 UTC", () => {

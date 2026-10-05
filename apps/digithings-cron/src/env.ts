@@ -15,6 +15,13 @@ export interface Env {
    * Default empty. Non-empty burns Actions minutes.
    */
   GITHUB_OVERRIDE_JOBS?: string;
+  /**
+   * Issue the twelve-x alarms post to, as "owner/repo". Used by the
+   * required-trigger contract alarm (DIG-732). Not a secret.
+   */
+  ALERT_ISSUE_REPO?: string;
+  /** Issue number the required-trigger contract alarm comments on. Not a secret. */
+  ALERT_ISSUE_NUMBER?: string;
 }
 
 declare namespace Cloudflare {
@@ -25,5 +32,7 @@ declare namespace Cloudflare {
     RUNNER?: Fetcher;
     RUNNER_AUTH_TOKEN?: string;
     GITHUB_OVERRIDE_JOBS?: string;
+    ALERT_ISSUE_REPO?: string;
+    ALERT_ISSUE_NUMBER?: string;
   }
 }
