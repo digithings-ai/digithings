@@ -6,7 +6,12 @@
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */
-import { dispatch, MISSING_REQUIRED_ARG, type DispatchResult } from "./dispatch";
+import {
+  dispatch,
+  KICK_ARG_NOT_ALLOWED,
+  MISSING_REQUIRED_ARG,
+  type DispatchResult,
+} from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
@@ -231,12 +236,18 @@ export default {
           includeDisabled: true,
         });
       } catch (err) {
-        // A row that refuses the request (see requiredKickArgs) must read as a
-        // deliberate refusal, not an opaque 500 an operator retries blind. Every
-        // other dispatch failure keeps its existing shape.
+        // A row that refuses the request must read as a deliberate refusal, not
+        // an opaque 500 an operator retries blind. Two sentinels are refusals:
+        // MISSING_REQUIRED_ARG (DIG-369, "no date bound") and
+        // KICK_ARG_NOT_ALLOWED (DIG-469, "that row does not take that key").
+        // Both name the offending detail. Every other dispatch failure keeps its
+        // existing shape and keeps propagating.
         const detail = err instanceof Error ? err.message : String(err);
-        if (detail.startsWith(MISSING_REQUIRED_ARG)) {
-          return Response.json({ error: MISSING_REQUIRED_ARG, detail }, { status: 400 });
+        const refusal = [MISSING_REQUIRED_ARG, KICK_ARG_NOT_ALLOWED].find((prefix) =>
+          detail.startsWith(prefix),
+        );
+        if (refusal) {
+          return Response.json({ error: refusal, detail }, { status: 400 });
         }
         throw err;
       }

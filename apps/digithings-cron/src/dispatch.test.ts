@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   dispatch,
+  KICK_ARG_NOT_ALLOWED,
   MISSING_REQUIRED_ARG,
   repositoryDispatchUrl,
   workflowDispatchUrl,
@@ -442,20 +443,40 @@ describe("per-request dispatch args", () => {
   });
 
   it("keeps existing per-job inputs when args are supplied (DIG-69 regression)", async () => {
+    // DIG-469 changed what a caller may send, so this test splits by row. Rows
+    // that still accept a per-request key are kicked with one, and the original
+    // assertion is unchanged: every static input the row declared is on the wire.
+    // Rows that accept nothing can no longer reach the merge through /kick at
+    // all — that is the allowlist working, not a regression — so they are
+    // asserted as refusals below. The args-win merge contract itself stays
+    // pinned by the two synthetic-job tests directly above, which use baseJob
+    // (no kickArgs => unbounded) and are therefore untouched by DIG-469.
+    const accepted: Record<string, string> = {
+      "agent-pr-finalizer": "start_key",
+      "twelve-x-archive-maintenance": "task",
+    };
+    for (const [id, key] of Object.entries(accepted)) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job, `missing ${id}`).toBeDefined();
+      const body = await sentBody(job!, { [key]: "2026-06-02" });
+      // Every static input the row already declared is still on the wire.
+      for (const [inputKey, value] of Object.entries(job!.inputs ?? {})) {
+        expect(body.inputs, `${id} lost ${inputKey}`).toMatchObject({ [inputKey]: value });
+      }
+    }
+    // market_context_ingest declares no per-request input, so its rows accept
+    // none. The static `bucket` is the row's identity and is never caller-set.
     for (const id of [
       "twelve-x-market-context-intraday",
       "twelve-x-market-context-daily",
       "twelve-x-market-context-weekly",
-      "twelve-x-archive-maintenance",
-      "agent-pr-finalizer",
     ]) {
       const job = JOBS.find((row) => row.id === id);
       expect(job, `missing ${id}`).toBeDefined();
-      const body = await sentBody(job!, { dates: "2026-06-02" });
-      // Every static input the row already declared is still on the wire.
-      for (const [key, value] of Object.entries(job!.inputs ?? {})) {
-        expect(body.inputs, `${id} lost ${key}`).toMatchObject({ [key]: value });
-      }
+      expect(job!.kickArgs).toEqual([]);
+      await expect(sentBody(job!, { dates: "2026-06-02" })).rejects.toThrow(
+        /kick_arg_not_allowed/,
+      );
     }
   });
 
@@ -769,5 +790,181 @@ describe("requiredKickArgs guard (DIG-369)", () => {
     // index.ts matches on this exact string; changing one without the other
     // silently turns a legible refusal back into an opaque 500.
     expect(MISSING_REQUIRED_ARG).toBe("missing_required_arg");
+  });
+});
+
+/**
+ * DIG-469. `dispatchGithub` merges per-request `/kick` args over the row's own
+ * static inputs with args-win. That precedence stays: it is the contract
+ * DIG-69/DIG-73 recorded, where `start_key` must be able to ADD a key the row
+ * does not declare statically. The side effect was that the merge reached EVERY
+ * workflow_dispatch row, so a holder of CRON_KICK_SECRET could rewrite a row's
+ * own inputs — flip `dry_run` on agent-pr-finalizer, repoint `bucket` on a
+ * market-context row. `kickArgs` is each row's own statement of which keys a
+ * caller may supply, and it is checked before any fetch.
+ */
+describe("kickArgs allowlist (DIG-469)", () => {
+  const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+
+  function stubGitHub(): ReturnType<typeof vi.fn> {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  function row(id: string): Job {
+    const found = JOBS.find((job) => job.id === id);
+    if (!found) throw new Error(`missing ${id}`);
+    return found;
+  }
+
+  async function sentBody(
+    id: string,
+    args?: Record<string, string>,
+  ): Promise<{ ref: string; inputs: Record<string, string> }> {
+    const fetchMock = stubGitHub();
+    const job = row(id);
+    await dispatch(env, job, job.cron, 0, args ? { args } : {});
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    return JSON.parse(String(init.body)) as { ref: string; inputs: Record<string, string> };
+  }
+
+  // Every row's own static inputs, and the key that must never become
+  // caller-settable. These are the exact exposures the issue named.
+  it.each([
+    ["agent-pr-finalizer", "dry_run", "true"],
+    ["twelve-x-market-context-intraday", "bucket", "weekly"],
+    ["twelve-x-market-context-daily", "bucket", "weekly"],
+    ["twelve-x-market-context-weekly", "bucket", "intraday"],
+    ["twelve-x-archive-maintenance", "dry_run", "true"],
+    ["twelve-x-archive-maintenance", "dump_before_prune", "false"],
+    // twelve-x-snapshot-backfill is NOT in this table: a bare
+    // `{backfill_snapshots}` kick carries no date bound, so requiredKickArgs
+    // answers first. Its allowlist refusal is pinned below, with a valid bound
+    // travelling alongside.
+  ])("refuses %s being overridden via %s, and never calls api.github.com", async (id, key, value) => {
+    const fetchMock = stubGitHub();
+    const job = row(id);
+    await expect(
+      dispatch(env, job, job.cron, 0, { args: { [key]: value } }),
+    ).rejects.toThrow(/kick_arg_not_allowed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still admits every key the row's workflow declares, and keeps the static input", async () => {
+    // An allowlist must not become a place that silently drops a declared input.
+    // Each of these workflows declares the key, and the row's own input rides
+    // alongside it untouched.
+    const admitted: [string, string, string][] = [
+      ["agent-pr-finalizer", "start_key", "agent-pr-finalizer:1234"],
+      ["twelve-x-archive-maintenance", "task", "prune"],
+      ["twelve-x-archive-maintenance", "hot_days", "3"],
+      ["twelve-x-performance-eval", "since", "2026-10-01"],
+      ["twelve-x-digisearch-parity", "days", "30"],
+      ["secret-staleness", "max_age_days", "60"],
+    ];
+    for (const [id, key, value] of admitted) {
+      const body = await sentBody(id, { [key]: value });
+      expect(body.inputs, `${id} refused its own declared key ${key}`).toMatchObject({
+        [key]: value,
+      });
+      // The row's static config is never lost to the merge (DIG-69 regression).
+      for (const [staticKey, staticValue] of Object.entries(row(id).inputs ?? {})) {
+        expect(body.inputs, `${id} lost ${staticKey}`).toMatchObject({
+          [staticKey]: staticValue,
+        });
+      }
+    }
+  });
+
+  it("keeps the DIG-69/DIG-73 contract: args still ADD a key the row never declared", async () => {
+    // Args-win is the point. `start_key` is absent from agent-pr-finalizer's
+    // static inputs and the allowlist does not make it static — it lets the
+    // caller supply it, which is how digithings-cron will dedupe runs.
+    const job = row("agent-pr-finalizer");
+    expect(job.inputs).not.toHaveProperty("start_key");
+    const body = await sentBody("agent-pr-finalizer", { start_key: "agent-pr-finalizer:1234" });
+    expect(body.inputs).toEqual({ dry_run: "false", start_key: "agent-pr-finalizer:1234" });
+  });
+
+  it("treats an empty allowlist as accepting nothing, while a bare kick still dispatches", async () => {
+    const job = row("twelve-x-asia");
+    expect(job.kickArgs).toEqual([]);
+    const fetchMock = stubGitHub();
+    await dispatch(env, job, job.cron, 0, {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // ...and any arg at all is refused.
+    await expect(dispatch(env, job, job.cron, 0, { args: { any: "thing" } })).rejects.toThrow(
+      /kick_arg_not_allowed/,
+    );
+  });
+
+  it("leaves an unbounded row unbounded, so a row with no opinion is not broken", async () => {
+    // `undefined` is the documented escape hatch. No real row uses it — the
+    // jobs.test.ts invariant forbids it — so this pins the default on a
+    // synthetic row, which is also how the merge contract stays testable.
+    const unbounded: Job = { ...baseJob, kickArgs: undefined };
+    const fetchMock = stubGitHub();
+    await dispatch(env, unbounded, unbounded.cron, 0, { args: { anything: "goes" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not a dry-run-only guard: DRY_RUN=1 refuses too, so the preview is faithful", async () => {
+    const fetchMock = stubGitHub();
+    await expect(
+      dispatch({ DRY_RUN: "1" }, row("agent-pr-finalizer"), row("agent-pr-finalizer").cron, 0, {
+        args: { dry_run: "true" },
+      }),
+    ).rejects.toThrow(/kick_arg_not_allowed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("names the refused key and the accepted set, so the fix is obvious from the 400", async () => {
+    const fetchMock = stubGitHub();
+    await expect(
+      dispatch(env, row("twelve-x-archive-maintenance"), row("twelve-x-archive-maintenance").cron, 0, {
+        args: { dump_before_prune: "false", nope: "x" },
+      }),
+    ).rejects.toThrow(/refused dump_before_prune, nope.*accepts only task, hot_days/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("lets requiredKickArgs answer first, so DIG-369's refusal stays authoritative", async () => {
+    // Order matters on the one row that carries both controls. A bare kick must
+    // still read as missing_required_arg (it would sweep every run_date), not as
+    // a vague allowlist complaint. A bounded-but-disallowed kick reads as the
+    // allowlist. DIG-369 pins the first; DIG-469 pins the second.
+    const job = row("twelve-x-snapshot-backfill");
+    const bare = stubGitHub();
+    await expect(dispatch(env, job, job.cron, 0, {})).rejects.toThrow(/missing_required_arg/);
+    expect(bare).not.toHaveBeenCalled();
+
+    const bounded = stubGitHub();
+    await expect(
+      dispatch(env, job, job.cron, 0, { args: { since: "2026-06-02", backfill_snapshots: "false" } }),
+    ).rejects.toThrow(/kick_arg_not_allowed/);
+    expect(bounded).not.toHaveBeenCalled();
+  });
+
+  it("does not touch repository_dispatch, which carries no inputs at all", async () => {
+    const rd: Job = {
+      ...baseJob,
+      id: "rd-row",
+      kind: "repository_dispatch",
+      workflow: undefined,
+      event_type: "something",
+      kickArgs: [],
+    };
+    const fetchMock = stubGitHub();
+    await dispatch(env, rd, rd.cron, 0, { args: { ignored: "yes" } });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(repositoryDispatchUrl("digithings-ai/digithings"));
+    expect(JSON.parse(String(init.body))).toEqual({ event_type: "something", client_payload: {} });
+  });
+
+  it("exports the stable prefix POST /kick maps to a 400", () => {
+    // index.ts matches on this exact string; changing one without the other
+    // silently turns a legible refusal back into an opaque 500.
+    expect(KICK_ARG_NOT_ALLOWED).toBe("kick_arg_not_allowed");
   });
 });

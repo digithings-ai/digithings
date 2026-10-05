@@ -72,6 +72,28 @@ market_context_ingest (keep bucket input), performance_eval, primemarket_session
 session_catchup, digisearch_parity_check; keep workflow_dispatch; add header pointing at
 digithings-cron.
 
+## /kick args
+
+`POST /kick` accepts `args` (string values only; anything else is 400
+`invalid_args`). They are merged over the row's static inputs with args-win, so
+a kick can ADD a key the row does not declare statically — that is how
+digithings-cron passes `start_key` for run dedupe.
+
+Each `wd()` row declares `kickArgs`, the keys it accepts. A key that is not on
+that list is refused with 400 `kick_arg_not_allowed` and nothing reaches
+api.github.com. A row's own static inputs are never on its list: `dry_run`,
+`bucket` and `dump_before_prune` are the row's decision, not the caller's. Rows
+are never left unbounded, so `kickArgs: []` on a row whose workflow declares no
+per-request input is a statement, not a lockout.
+
+To widen a row, add the key to its `kickArgs` in src/jobs.ts. It must be a key
+the workflow declares under `on.workflow_dispatch.inputs`; `jobs.test.ts` fails
+otherwise, because an undeclared key can only 422. A key the workflow declares
+but the row does not own statically may be supplied at any time.
+
+The DIG-55 backfill row also answers 400 `missing_required_arg` on a kick with
+no date bound (DIG-369), and that check runs first.
+
 ## Jobs
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs

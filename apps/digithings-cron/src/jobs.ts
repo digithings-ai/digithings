@@ -18,6 +18,24 @@ export type Job = {
    * dry-run or real, so a refusal never reaches api.github.com.
    */
   requiredKickArgs?: readonly string[];
+  /**
+   * The only `/kick` arg keys this row accepts (DIG-469). Args are merged over
+   * the row's static inputs with args-win — the precedence DIG-69/DIG-73
+   * recorded so `start_key` can ADD a key — so without this field any caller
+   * holding CRON_KICK_SECRET could rewrite the row's own inputs.
+   *
+   * `undefined` means unbounded, which is what rows without an opinion keep.
+   * `[]` means the row accepts no per-request arg. A row's OWN static input
+   * keys are never listed here: the row decides those, the caller may not.
+   *
+   * Only `wd()` populates it. Container rows pass their args to
+   * digiquant-runner on the normal path, and in GITHUB_OVERRIDE_JOBS mode the
+   * privileged force/preview keys (force, refresh_scope, run_date, dry_run)
+   * travel the same channel, so bounding them is a different change.
+   *
+   * Enforced in dispatchGithub before any dispatch, dry-run or real.
+   */
+  kickArgs?: readonly string[];
   event_type?: string;
   ref?: "develop" | "main";
   etOpenGate?: boolean;
@@ -45,6 +63,7 @@ function wd(
   opts: {
     inputs?: Record<string, string>;
     requiredKickArgs?: readonly string[];
+    kickArgs?: readonly string[];
     etOpenGate?: boolean;
     enabled?: boolean;
   } = {},
@@ -57,6 +76,7 @@ function wd(
     workflow,
     inputs: opts.inputs,
     requiredKickArgs: opts.requiredKickArgs,
+    kickArgs: opts.kickArgs,
     ref: DEVELOP,
     etOpenGate: opts.etOpenGate,
     enabled: opts.enabled ?? true,
@@ -265,9 +285,21 @@ export const JOBS: readonly Job[] = [
     "execution-cron-check",
     600,
   ),
-  wd("continuous-improvement", "8 22 * * SUN", DIGITHINGS, "pipeline-continuous-improvement.yml"),
-  wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml"),
-  wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
+  // kickArgs notes for the digithings rows below, applied once (DIG-469):
+  // `start_key` is the only declared input on these workflows besides
+  // agent-pr-finalizer's `dry_run`, and it must stay callable because the
+  // DIG-69/DIG-73 contract is that digithings-cron itself supplies it per
+  // dispatch. `dry_run` is the row's own live/dry decision, so it is NOT in the
+  // allowlist: a caller must not be able to flip the clock to live.
+  wd("continuous-improvement", "8 22 * * SUN", DIGITHINGS, "pipeline-continuous-improvement.yml", {
+    kickArgs: ["start_key"],
+  }),
+  wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml", {
+    kickArgs: ["start_key"],
+  }),
+  wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml", {
+    kickArgs: ["start_key"],
+  }),
 
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
   // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
@@ -275,27 +307,42 @@ export const JOBS: readonly Job[] = [
   // to dry_run=true and only forced live on the old GHA schedule event.
   wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
+    kickArgs: ["start_key"],
   }),
-  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml"),
-  wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml"),
-  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml"),
-  wd(
-    "project-enforce-assignment",
-    "23 9 * * *",
-    DIGITHINGS,
-    "project-enforce-assignment.yml",
-  ),
+  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml", {
+    kickArgs: ["start_key"],
+  }),
+  wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml", {
+    kickArgs: ["start_key"],
+  }),
+  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml", {
+    kickArgs: ["start_key"],
+  }),
+  wd("project-enforce-assignment", "23 9 * * *", DIGITHINGS, "project-enforce-assignment.yml", {
+    kickArgs: ["start_key"],
+  }),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
-  wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
-  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
+  wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml", {
+    kickArgs: ["start_key"],
+  }),
+  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml", {
+    kickArgs: ["start_key"],
+  }),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
-  wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
+  wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml", {
+    kickArgs: ["start_key"],
+  }),
   // Monthly names-only ageing sweep for the 90-day rotation window (#248). The
   // clock lives here and not on the workflow: develop carries no on.schedule, and
   // the workflow is workflow_dispatch only. Off :00 and off the smoke-site minute
   // so nothing lands on a shared runner's worst moment.
-  wd("secret-staleness", "17 6 1 * *", DIGITHINGS, "secret-staleness-check.yml"),
+  // max_age_days is the only declared input, and it is a genuine per-request
+  // knob (the monthly sweep default vs an operator forcing a shorter window),
+  // so it stays callable. The row declares no static inputs to protect.
+  wd("secret-staleness", "17 6 1 * *", DIGITHINGS, "secret-staleness-check.yml", {
+    kickArgs: ["max_age_days"],
+  }),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
@@ -303,38 +350,56 @@ export const JOBS: readonly Job[] = [
   // Add a CLOCK-DRIVEN twelve-x wd() row only with a known cron from that
   // repo. A manual-only row (shipped switched off, addressed by cron string
   // through POST /kick) is the one exception; see twelve-x-snapshot-backfill.
-  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml"),
-  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
+  //
+  // kickArgs on the twelve-x rows is read off each workflow's declared
+  // `on.workflow_dispatch.inputs` on twelve-x main, MINUS the row's own static
+  // inputs. daily_run_asia/london/new_york, primemarket_session_heartbeat and
+  // session_catchup declare no inputs at all, so their rows accept nothing —
+  // that is the declaration, not a restriction layered on top of it.
+  wd("twelve-x-asia", "7 0 * * MON-FRI", TWELVE_X, "daily_run_asia.yml", { kickArgs: [] }),
+  wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml", { kickArgs: [] }),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
-  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
+  wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml", {
+    kickArgs: [],
+  }),
+  // `bucket` is the row's identity — three rows, three buckets — so it is not
+  // caller-settable: a kick cannot turn the weekly bucket into an intraday one.
   wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
+    kickArgs: [],
   }),
   wd("twelve-x-market-context-daily", "30 5 * * *", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "daily" },
+    kickArgs: [],
   }),
   wd("twelve-x-market-context-weekly", "8 7 * * SAT", TWELVE_X, "market_context_ingest.yml", {
     inputs: { bucket: "weekly" },
+    kickArgs: [],
   }),
-  wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml"),
-  wd(
-    "twelve-x-primemarket-heartbeat",
-    "3 6,18 * * *",
-    TWELVE_X,
-    "primemarket_session_heartbeat.yml",
-  ),
-  wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml"),
+  // `since` is a per-request lookback window, so it stays callable.
+  wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml", {
+    kickArgs: ["since"],
+  }),
+  wd("twelve-x-primemarket-heartbeat", "3 6,18 * * *", TWELVE_X, "primemarket_session_heartbeat.yml", {
+    kickArgs: [],
+  }),
+  wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml", {
+    kickArgs: [],
+  }),
   // dry_run must be false: workflow defaults dispatch to dry_run=true and only
   // forced live on the old GHA schedule event. Pre-prune R2 dump stays on so the
   // transient market-context tables are always recoverable.
   wd("twelve-x-archive-maintenance", "30 2 * * *", TWELVE_X, "archive_maintenance.yml", {
     inputs: { dry_run: "false", dump_before_prune: "true" },
+    kickArgs: ["task", "hot_days"],
   }),
   // Prior GHA was `0 9 * * 1` (Mon 09:00 UTC). Minute :08 is the house off-grid
   // offset (same as twelve-x-market-context-weekly) and does not collide with
   // house-run-09 at 09:17 (`17 9 * * MON`) or project-enforce-assignment at 09:23.
   // days input omitted — workflow default 14.
-  wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml"),
+  wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml", {
+    kickArgs: ["days"],
+  }),
   /**
    * Manual-only sanctioned trigger for dated snapshot backfills.
    *
@@ -417,15 +482,18 @@ export const JOBS: readonly Job[] = [
    * (`test_trade_ideas_snapshot_is_never_written_or_pruned`) and lands with
    * twelve-x#237 (DIG-52); it is NOT in `test_snapshot_publish.py`.
    *
-   * Blast radius of per-request `/kick` args — known and accepted. The same
-   * `dispatchGithub` merge applies to EVERY workflow_dispatch row, so a `/kick`
-   * carrying `args` can also override a row's own static inputs (`dry_run` on
-   * agent-pr-finalizer, `bucket` on the market-context rows). Precedence is
-   * `{ ...(job.inputs ?? {}), ...args }` — args win — because that is the
-   * contract recorded for DIG-69/DIG-73 (`start_key` must be able to add a key
-   * to a row). Bounds: `/kick` requires `CRON_KICK_SECRET`, and every
-   * `inputs.*` in the workflows is bound through `env:`, never interpolated
-   * into a `run:` line, so this is a surface widening rather than injection.
+   * Blast radius of per-request `/kick` args — now bounded (DIG-469). The same
+   * `dispatchGithub` merge applies to EVERY workflow_dispatch row, so before
+   * DIG-469 a `/kick` carrying `args` could also override a row's own static
+   * inputs (`dry_run` on agent-pr-finalizer, `bucket` on the market-context
+   * rows). Precedence stays `{ ...(job.inputs ?? {}), ...args }` — args win —
+   * because that is the contract recorded for DIG-69/DIG-73 (`start_key` must
+   * be able to add a key to a row). What a caller may change is bounded
+   * separately: every `wd()` row now declares `kickArgs`, the keys it accepts,
+   * and a key that is not on the list is refused before any dispatch. Bounds
+   * that remain: `/kick` requires `CRON_KICK_SECRET`, and every `inputs.*` in
+   * the workflows is bound through `env:`, never interpolated into a `run:`
+   * line, so this was a surface widening rather than injection.
    */
   wd(
     "twelve-x-snapshot-backfill",
@@ -440,6 +508,15 @@ export const JOBS: readonly Job[] = [
       // merging; today only `since` is a declared input and the other two would
       // 422 at GitHub anyway, so naming them cannot loosen the guard.
       requiredKickArgs: ["since", "dates", "until"],
+      // DIG-469: the same three keys are the only ones this row accepts. It
+      // refuses `backfill_snapshots` from a caller, so a kick can no longer
+      // carry a valid date bound and switch the backfill off in the same
+      // request. `since` is declared on twelve-x today; `dates` and `until`
+      // arrive with twelve-x#237 (DIG-52) — naming them now matches
+      // requiredKickArgs above, so #237 needs no third edit here. A key the
+      // workflow does not declare would 422 at GitHub either way, so listing
+      // them cannot loosen the guard.
+      kickArgs: ["since", "dates", "until"],
     },
   ),
 ];

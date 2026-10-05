@@ -405,3 +405,166 @@ describe("manual-only rows (DIG-55)", () => {
     }
   });
 });
+
+/**
+ * DIG-469. Every workflow_dispatch row now states which `/kick` args it accepts.
+ * These invariants are what make that table safe to keep maintained: they are
+ * what stop a new row, or a new input added to an existing workflow, from
+ * quietly reopening the surface DIG-469 closed.
+ */
+describe("kickArgs allowlist table (DIG-469)", () => {
+  /**
+   * Each workflow's declared `on.workflow_dispatch.inputs`, read off the branch
+   * named per group. Hand-maintained on purpose, exactly like
+   * DECLARED_ON_TWELVE_X_DEVELOP in dispatch.test.ts: when a workflow gains an
+   * input, editing this is the conscious step that decides whether the row may
+   * be handed that key. Nothing is inferred, so nothing is waved through.
+   *
+   * `kickArgs` must always be a SUBSET of these. An allowlist naming an
+   * undeclared key could only ever produce a GitHub 422.
+   */
+  const DECLARED: Record<string, readonly string[]> = {
+    // digithings @ a0a6ad39 (feat/cron-snapshot-backfill-trigger)
+    "pipeline-continuous-improvement.yml": ["start_key"],
+    "pipeline-maintenance.yml": ["start_key"],
+    "pipeline-provider-review.yml": ["start_key"],
+    "agent-pr-finalizer.yml": ["dry_run", "start_key"],
+    "agent-backlog-snapshot.yml": ["start_key"],
+    "ci-pr-hygiene.yml": ["start_key"],
+    "refresh-repo-activity.yml": ["start_key"],
+    "project-enforce-assignment.yml": ["start_key"],
+    "security-pip-audit.yml": ["start_key"],
+    "security-npm-audit.yml": ["start_key"],
+    "token-canary.yml": ["start_key"],
+    "secret-staleness-check.yml": ["max_age_days"],
+    // twelve-x main. `until` and `dates` on maintenance.yml arrive with
+    // twelve-x#237 (DIG-52); the backfill row already names them for the same
+    // reason it names them in requiredKickArgs.
+    "daily_run_asia.yml": [],
+    "daily_run_london.yml": [],
+    "daily_run_new_york.yml": [],
+    "market_context_ingest.yml": ["bucket"],
+    "performance_eval.yml": ["since"],
+    "primemarket_session_heartbeat.yml": [],
+    "session_catchup.yml": [],
+    "archive_maintenance.yml": ["task", "dry_run", "hot_days", "dump_before_prune"],
+    "digisearch_parity_check.yml": ["days"],
+    "maintenance.yml": ["backfill_snapshots", "since", "until", "dates"],
+  };
+
+  const EXPECTED: Record<string, readonly string[]> = {
+    "continuous-improvement": ["start_key"],
+    "maintenance": ["start_key"],
+    "provider-review": ["start_key"],
+    "agent-pr-finalizer": ["start_key"],
+    "agent-backlog-snapshot": ["start_key"],
+    "ci-pr-hygiene": ["start_key"],
+    "refresh-repo-activity": ["start_key"],
+    "project-enforce-assignment": ["start_key"],
+    "security-pip-audit": ["start_key"],
+    "security-npm-audit": ["start_key"],
+    "token-canary": ["start_key"],
+    "secret-staleness": ["max_age_days"],
+    "twelve-x-asia": [],
+    "twelve-x-london": [],
+    "twelve-x-new-york": [],
+    "twelve-x-market-context-intraday": [],
+    "twelve-x-market-context-daily": [],
+    "twelve-x-market-context-weekly": [],
+    "twelve-x-performance-eval": ["since"],
+    "twelve-x-primemarket-heartbeat": [],
+    "twelve-x-session-catchup": [],
+    "twelve-x-archive-maintenance": ["task", "hot_days"],
+    "twelve-x-digisearch-parity": ["days"],
+    "twelve-x-snapshot-backfill": ["since", "dates", "until"],
+  };
+
+  const wdRows = JOBS.filter((job) => job.kind === "workflow_dispatch");
+
+  it("covers every workflow_dispatch row — none is left unbounded by omission", () => {
+    expect(wdRows.length).toBe(Object.keys(EXPECTED).length);
+    for (const job of wdRows) {
+      // `undefined` means unbounded. A row that simply forgot the option would
+      // reopen the whole blast radius, so the default is asserted, not assumed.
+      expect(job.kickArgs, `${job.id} has no kickArgs, so /kick args are unbounded`).toBeDefined();
+    }
+    expect(Object.fromEntries(wdRows.map((job) => [job.id, job.kickArgs]))).toEqual(EXPECTED);
+  });
+
+  it("never lets a row's own static inputs be caller-settable", () => {
+    // This is the invariant that actually closes DIG-469. The row decides its
+    // own inputs — `dry_run: false`, `bucket`, `dump_before_prune` — and a
+    // caller may only add keys, never rewrite them.
+    for (const job of wdRows) {
+      for (const key of Object.keys(job.inputs ?? {})) {
+        expect(job.kickArgs ?? [], `${job.id} would let a caller rewrite ${key}`).not.toContain(key);
+      }
+    }
+  });
+
+  it("only ever allows keys the row's workflow actually declares", () => {
+    for (const job of wdRows) {
+      const declared = DECLARED[job.workflow!];
+      expect(declared, `${job.workflow} is missing from DECLARED — add it deliberately`).toBeDefined();
+      for (const key of job.kickArgs ?? []) {
+        expect(declared, `${job.id} allows ${key}, which ${job.workflow} does not declare — it would 422`).toContain(key);
+      }
+    }
+  });
+
+  it("locks a row no harder than its own workflow declares", () => {
+    // A row may decline a declared input, but it may never refuse ALL of them:
+    // that would mean the allowlist had quietly become the place where a
+    // declared input gets dropped.
+    for (const job of wdRows) {
+      const declared = DECLARED[job.workflow!];
+      const rowOwns = new Set(Object.keys(job.inputs ?? {}));
+      const callerMay = (DECLARED[job.workflow!] ?? []).filter((key) => !rowOwns.has(key));
+      if (callerMay.length > 0) {
+        expect(
+          job.kickArgs ?? [],
+          `${job.id} refuses every key its workflow declares but does not own statically`,
+        ).not.toEqual([]);
+      }
+    }
+  });
+
+  it("keeps start_key callable on every row whose workflow declares it", () => {
+    // The DIG-69/DIG-73 contract, pinned as an invariant: digithings-cron is
+    // going to supply `start_key` itself on dispatch, so the row must accept
+    // it. A future row must not be created without it.
+    for (const job of wdRows) {
+      const declared = DECLARED[job.workflow!] ?? [];
+      if (declared.includes("start_key")) {
+        expect(job.kickArgs ?? [], `${job.id} would lock out start_key`).toContain("start_key");
+      }
+    }
+    const expectedStartKeyRows = JOBS.filter(
+      (job) => job.kind === "workflow_dispatch" && (DECLARED[job.workflow!] ?? []).includes("start_key"),
+    );
+    expect(expectedStartKeyRows.length).toBe(11);
+  });
+
+  it("gives the DIG-55 backfill row the same date-bound set it already required", () => {
+    // The two controls touch the same merge site. Keeping them identical means
+    // a kick cannot carry a valid bound and switch the backfill off in the same
+    // request, and twelve-x#237 needs no third edit when `dates`/`until` land.
+    const row = JOBS.find((job) => job.id === "twelve-x-snapshot-backfill");
+    expect(row?.requiredKickArgs).toEqual(["since", "dates", "until"]);
+    expect(row?.kickArgs).toEqual(row?.requiredKickArgs);
+    // And the row's own switch stays off the caller's reach.
+    expect(row?.kickArgs ?? []).not.toContain("backfill_snapshots");
+  });
+
+  it("does not put kickArgs on container or probe rows, which share the override path", () => {
+    // Container rows pass args to digiquant-runner on the normal path, and in
+    // GITHUB_OVERRIDE_JOBS mode the privileged force/preview keys travel the
+    // same channel. Bounding them is a different change; the Job field doc
+    // says so. This test fails loudly if a row starts claiming otherwise.
+    for (const job of JOBS) {
+      if (job.kind === "container" || job.kind === "probe") {
+        expect(job.kickArgs, `${job.id} must not carry kickArgs`).toBeUndefined();
+      }
+    }
+  });
+});

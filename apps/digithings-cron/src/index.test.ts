@@ -419,3 +419,69 @@ describe("POST /kick refuses an unbounded backfill (DIG-369)", () => {
     });
   });
 });
+
+/**
+ * DIG-469. A `/kick` that names a key its row does not accept must read as a
+ * deliberate refusal. An opaque 500 is what an operator retries blind, and on
+ * this row the retry is the expensive one: `dry_run` on agent-pr-finalizer is
+ * live dispatch, not a rehearsal.
+ */
+describe("POST /kick refuses a non-allowlisted arg (DIG-469)", () => {
+  const FINALIZER = "11 7 * * *";
+
+  function envFor(): Env {
+    return {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "github-token",
+      GITHUB_OVERRIDE_JOBS: "",
+    } as Env;
+  }
+
+  it("answers 400 kick_arg_not_allowed and never dispatches", async () => {
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const res = await worker.fetch(
+      kick({ cron: FINALIZER, args: { dry_run: "true" } }),
+      envFor(),
+      executionContext([]),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; detail: string };
+    expect(body.error).toBe("kick_arg_not_allowed");
+    // The detail names the key, so the operator does not have to guess.
+    expect(body.detail).toContain("dry_run");
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+
+  it("still lets start_key through, and still sends dry_run: false", async () => {
+    // The normal path is untouched: a kick with no args, and a kick carrying the
+    // one key this row accepts, both dispatch with the row's own config intact.
+    const githubFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", githubFetch);
+    const res = await worker.fetch(
+      kick({ cron: FINALIZER, args: { start_key: "agent-pr-finalizer:1234" } }),
+      envFor(),
+      executionContext([]),
+    );
+    expect(res.status).toBe(200);
+    const [, init] = githubFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { inputs: Record<string, string> };
+    expect(body.inputs).toEqual({ dry_run: "false", start_key: "agent-pr-finalizer:1234" });
+  });
+
+  it("keeps DIG-369's missing_required_arg answer on the row that carries both controls", async () => {
+    // Cross-check from the HTTP side: requiredKickArgs still answers first, so
+    // the DIG-369 test contract holds through the real request path.
+    const githubFetch = vi.fn();
+    vi.stubGlobal("fetch", githubFetch);
+    const res = await worker.fetch(
+      kick({ cron: "0 0 30 2 *" }),
+      envFor(),
+      executionContext([]),
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("missing_required_arg");
+    expect(githubFetch).not.toHaveBeenCalled();
+  });
+});

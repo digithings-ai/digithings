@@ -32,6 +32,13 @@ export type DispatchResult = {
  */
 export const MISSING_REQUIRED_ARG = "missing_required_arg";
 
+/**
+ * Stable prefix on the per-row `/kick` arg allowlist refusal, so POST /kick
+ * answers a legible 400 kick_arg_not_allowed instead of a bare 500. Keep in
+ * sync with the throw in dispatchGithub.
+ */
+export const KICK_ARG_NOT_ALLOWED = "kick_arg_not_allowed";
+
 export function workflowDispatchUrl(repo: string, workflow: string): string {
   return `${GH_API}/repos/${repo}/actions/workflows/${workflow}/dispatches`;
 }
@@ -278,8 +285,10 @@ async function dispatchGithub(
     url = workflowDispatchUrl(job.repo, job.workflow);
     // Per-request args are merged over the row's static inputs, not substituted
     // for them: a kick that passes only `dates` must still carry the row's
-    // `backfill_snapshots`. Keys the job never declared still reach the
-    // workflow, so callers own key correctness (GitHub answers 422 otherwise).
+    // `backfill_snapshots`. Precedence stays args-win because that is the
+    // contract DIG-69/DIG-73 recorded — `start_key` must be able to ADD a key
+    // the row does not declare statically. What a caller may change is bounded
+    // separately, by `kickArgs` below; the merge itself is unchanged.
     const inputs = { ...(job.inputs ?? {}), ...args };
     // A row may demand a date bound (or any other key) per request. Checked on
     // the MERGED inputs, so a bound in the row's static config also satisfies
@@ -296,6 +305,40 @@ async function dispatchGithub(
           `${required.join(", ")} to carry a non-empty value. With none, the ` +
           `workflow receives no date bound and re-projects every stored run_date.`,
       );
+    }
+    // Per-row allowlist (DIG-469). Args-win above means a caller with
+    // CRON_KICK_SECRET could otherwise rewrite ANY of this row's static
+    // inputs — flip `dry_run` on agent-pr-finalizer, repoint `bucket` on a
+    // market-context row, turn `dump_before_prune` off. `kickArgs` is the
+    // row's own statement of which keys a caller may supply; `undefined`
+    // means unbounded (today's behaviour, kept so a row that has no opinion
+    // is not broken by this control). The row's OWN static inputs are never
+    // listed there: the row decides those, not the caller. An empty list
+    // accepts no per-request arg at all.
+    //
+    // Reads `args`, not the merged `inputs`, so it polices only what the
+    // request supplied and can never refuse a row's own configuration. Order
+    // matters: `requiredKickArgs` runs first so its more specific refusal —
+    // "this kick is unbounded and would sweep every run_date" — stays
+    // authoritative for the DIG-55 row (DIG-369 pins that response), and the
+    // allowlist answers second. Both run before the dry-run branch, so
+    // DRY_RUN=1 previews the refusal faithfully and nothing reaches
+    // api.github.com.
+    const allowed = job.kickArgs;
+    if (allowed !== undefined) {
+      const refused = Object.keys(args)
+        .filter((key) => !allowed.includes(key))
+        .sort();
+      if (refused.length > 0) {
+        throw new Error(
+          `${KICK_ARG_NOT_ALLOWED}: job ${job.id}: /kick refused ` +
+            `${refused.join(", ")}. This row accepts only ` +
+            `${allowed.length > 0 ? allowed.join(", ") : "no per-request args"}` +
+            `${", and the row's own static inputs are never caller-settable"}. ` +
+            `Drop the arg, or add the key to the row's kickArgs in ` +
+            `apps/digithings-cron/src/jobs.ts.`,
+        );
+      }
     }
     body = { ref: job.ref, inputs };
   } else {
