@@ -107,6 +107,29 @@ ISSUE_LABELS = ("security:finding",)
 #: declare that environment, which after #248 is the CI read set.
 SCOPE_ORDER = {"org": 0, "repo": 1, "cron": 2}
 
+#: What `--gates-only` reports instead of an ageing verdict. Paperclip DIG-477,
+#: option D (Chris, 2026-10-05): keep the drift check, drop the ageing from
+#: automation. A monthly tracker that can never name a secret is noise wearing a
+#: tracker's clothes, and giving CI a token that could read the listings means
+#: standing up the exact category of repo-scoped credential #248 exists to
+#: shrink. Rotation stays a human decision recorded in
+#: `docs/ops/SECRETS_INVENTORY.md`, which already lists the 16 names measured
+#: past the window on 2026-10-04.
+#:
+#: The wording is load-bearing. `ageing_verdict()`'s "nothing was read" branch is
+#: *true* in gates-only mode and reads as a failure, which would put a
+#: red-sounding sentence in a green run every month and train readers to ignore
+#: it. Nothing is broken here, so nothing should read as though it were. Same
+#: defect as #5078, opposite direction.
+GATES_ONLY_NOTE = (
+    "It is out of automation by decision (DIG-477, option D): the secret listings "
+    "need a token carrying the `repo` scope, which no workflow grant can supply, so "
+    "this half could only ever come back unread. Rotation is a human decision, "
+    "recorded in `docs/ops/SECRETS_INVENTORY.md`. Run `make secrets-staleness` from "
+    "a shell whose `gh auth` already has `repo` and `admin:org` to age the names by "
+    "hand."
+)
+
 
 @dataclass(frozen=True)
 class Secret:
@@ -599,9 +622,29 @@ def markdown(
     report: Report,
     max_age_days: int,
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+    gates_only: bool = False,
 ) -> str:
     """The issue body. Names and ages only — no value ever reaches this string."""
     overdue = report.overdue(max_age_days)
+    if gates_only:
+        # DIG-477 option D. The ageing section is replaced rather than reported as
+        # an empty failure: an empty `report` here means "not attempted", which is a
+        # decision, not a failed read, and the two must not look alike on the run
+        # page. `gates_markdown` still runs below, so the drift table is unchanged.
+        return "\n".join(
+            [
+                ISSUE_MARKER,
+                "",
+                "Environment-gate drift check only — `scripts/secret_staleness_check.py"
+                " --gates-only` (#248, DIG-477).",
+                "",
+                "## Secret ageing",
+                "",
+                f"**Secret ageing was NOT RUN.** {GATES_ONLY_NOTE}",
+                "",
+            ]
+            + gate_markdown(gates)
+        ) + "\n"
     lines = [
         ISSUE_MARKER,
         "",
@@ -682,22 +725,30 @@ def render(
     report: Report,
     max_age_days: int,
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+    gates_only: bool = False,
 ) -> str:
     """Human-readable stdout, grouped by scope and oldest first."""
-    grouped = report.by_scope()
     out: list[str] = []
-    for scope in ordered_scopes(report):
-        secrets = sorted(grouped.get(scope, []), key=lambda s: -s.age_days)
-        out.append(f"{scope}: {len(secrets)} name(s)")
-        for secret in secrets:
-            marker = "OVERDUE" if secret.age_days > max_age_days else "ok"
-            out.append(
-                f"  {marker:>7} {secret.age_days:>5}d  {secret.updated_at.date()}  {secret.name}"
-            )
-    for scope, reason in sorted(report.unavailable.items()):
-        out.append(f"{scope}: NOT CHECKED — {reason}")
-    out.append("")
-    out.append(ageing_verdict(report, max_age_days, "above"))
+    if gates_only:
+        # DIG-477 option D. Nothing was attempted here, so the per-scope listing and
+        # the ageing verdict are both skipped rather than reported as an empty
+        # result — see `markdown()` for why the two must not look alike.
+        out.append("secret ageing: NOT RUN (--gates-only)")
+        out.append(GATES_ONLY_NOTE)
+    else:
+        grouped = report.by_scope()
+        for scope in ordered_scopes(report):
+            secrets = sorted(grouped.get(scope, []), key=lambda s: -s.age_days)
+            out.append(f"{scope}: {len(secrets)} name(s)")
+            for secret in secrets:
+                marker = "OVERDUE" if secret.age_days > max_age_days else "ok"
+                out.append(
+                    f"  {marker:>7} {secret.age_days:>5}d  {secret.updated_at.date()}  {secret.name}"
+                )
+        for scope, reason in sorted(report.unavailable.items()):
+            out.append(f"{scope}: NOT CHECKED — {reason}")
+        out.append("")
+        out.append(ageing_verdict(report, max_age_days, "above"))
     if gates is not None:
         rows, unavailable = gates
         out.append("")
@@ -926,12 +977,34 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not compare `.github/environments.json` to the live protection rules",
     )
+    parser.add_argument(
+        "--gates-only",
+        action="store_true",
+        help=(
+            "only run the environment-gate drift check; never read the secret listings "
+            "and never touch a tracker (DIG-477 option D, what CI runs)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     root = REPO_ROOT
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None
     read_from_file = bool(args.file_names)
-    if args.file_names:
+    if args.gates_only:
+        if args.file_names:
+            parser.error("--gates-only and --file-names are mutually exclusive")
+        # An empty report with `readable` left at 0, which now means "not attempted"
+        # rather than "attempted and found nothing" — the distinction `readable`
+        # exists to carry. `collect()` is skipped entirely rather than called and
+        # allowed to fail, so a gates-only run spends no doomed API calls.
+        report = Report()
+        slug = repo_slug(root)
+        if slug is None:
+            print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
+            return 2
+        if not args.skip_environment_gates:
+            gates = environment_gate_status(root, f"{slug[0]}/{slug[1]}")
+    elif args.file_names:
         try:
             report = Report(secrets=parse_tsv(args.file_names.read_text(encoding="utf-8")))
         except (OSError, ValueError) as exc:
@@ -950,14 +1023,17 @@ def main(argv: list[str] | None = None) -> int:
         if not args.skip_environment_gates:
             gates = environment_gate_status(root, f"{owner}/{name}")
 
-    body = markdown(report, args.max_age_days, gates)
-    print(render(report, args.max_age_days, gates))
+    body = markdown(report, args.max_age_days, gates, gates_only=args.gates_only)
+    print(render(report, args.max_age_days, gates, gates_only=args.gates_only))
 
     if args.summary:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
         args.summary.write_text(body, encoding="utf-8")
 
-    if args.open_issue and not args.file_names:
+    # Gated on `not args.gates_only` as well as on `--open-issue`: a gates-only run has
+    # no ageing result to publish, and the tracker it would open could only ever say
+    # "I read nothing". DIG-477 option D is precisely to stop opening that.
+    if args.open_issue and not args.file_names and not args.gates_only:
         slug = repo_slug(root)
         if slug is None:
             print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
