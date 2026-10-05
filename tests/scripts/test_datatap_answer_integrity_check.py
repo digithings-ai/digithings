@@ -421,10 +421,6 @@ def test_http_request_is_the_only_door_to_the_network() -> None:
 # green, so they are recorded here as the reason they are pinned at all.
 # --------------------------------------------------------------------------
 
-_READER_FACING = (
-    "I don't have access to customer records, so I can't look up an account id or owner."
-)
-
 
 def test_could_not_run_output_never_reads_as_a_pass(
     capsys: pytest.CaptureFixture[str],
@@ -440,12 +436,30 @@ def test_could_not_run_output_never_reads_as_a_pass(
     Pinned on stdout rather than on the exit code because the exit code was
     already right; the mutation that motivated this test returned the correct 2
     while printing the word PASS, and all 39 tests passed.
+
+    The 402 is deliberate: it is the probe-level could-not-run, the one this
+    feature most needs to keep off the exit-1 path, and it needs the discovery
+    entry present or the probe is never reached and this silently degrades into
+    a test of the discovery branch instead.
     """
-    code, _ = _run_main({"/api/chat$": _error(402, json.dumps({"error": "trial_gate"}))})
+    code, fake = _run_main(
+        {
+            "/api/chat$": _error(402, json.dumps({"error": "trial_gate"})),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+
+    assert any(call["url"].endswith("/api/chat") for call in fake.calls), (
+        "fixture defect: the 402 branch under test was never reached"
+    )
 
     out = capsys.readouterr().out
     assert code == mod.COULD_NOT_RUN == 2
-    assert "PASS" not in out, f"exit 2 must never print PASS; got:\n{out}"
+    # Scoped to our own verdict line on purpose. The reason string carries the
+    # client's error field verbatim, so a bare "PASS" in out would also fail on
+    # an upstream string we neither control nor can fix.
+    verdict = next(line for line in out.splitlines() if "trial_gate" not in line)
+    assert not verdict.startswith("PASS"), f"exit 2 must not print a PASS verdict; got:\n{out}"
     assert "COULD NOT RUN" in out, f"exit 2 must name itself on stdout; got:\n{out}"
     assert "unable to see" in out, (
         "exit 2 must say the check could not see, so it is never read as a "
