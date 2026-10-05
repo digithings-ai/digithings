@@ -621,7 +621,25 @@ def render(
         out.append(f"{scope}: NOT CHECKED — {reason}")
     overdue = report.overdue(max_age_days)
     out.append("")
-    out.append(f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed.")
+    if not report.secrets and report.unavailable:
+        # "0 of 0" is a claim about an empty set, and it was the exact shape this
+        # report printed on stdout while every listing 403'd. `markdown()` already
+        # refuses to print it for the same reason; the two renderers must agree, or
+        # the log still reads as a clean bill of health.
+        out.append(
+            f"No secrets could be aged: {len(report.unavailable)} level(s) could not "
+            f"be read, so no count is possible. The per-level reason is above."
+        )
+    elif report.secrets and report.unavailable:
+        out.append(
+            f"{len(overdue)} name(s) past {max_age_days} days among the "
+            f"{len(report.secrets)} that could be read; {len(report.unavailable)} "
+            f"level(s) could not be read. That is not a clean bill of health."
+        )
+    else:
+        out.append(
+            f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed."
+        )
     if gates is not None:
         rows, unavailable = gates
         out.append("")

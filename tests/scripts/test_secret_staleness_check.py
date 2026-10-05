@@ -982,3 +982,41 @@ def test_the_summary_still_reassures_when_everything_was_read(
 
     assert "No action needed" in body
     assert "of **1** listed secrets" in body
+
+
+@pytest.mark.unit
+def test_stdout_does_not_count_zero_of_zero_as_a_clean_result(checker: object) -> None:
+    """`render()` printed `0 name(s) past 90 days of 0 listed` while every level 403'd.
+
+    The summary half of this was already fixed; the console half was not, so the run
+    log still ended on a zero count. Both renderers have to agree.
+    """
+    report = checker.Report(unavailable={"cron": "HTTP 403", "org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "of 0 listed" not in out
+    assert "0 name(s) past 90 days of 0" not in out
+    assert "No secrets could be aged" in out
+    # The per-level reasons still print, so the reader learns *why* nothing aged.
+    assert "NOT CHECKED" in out
+
+
+@pytest.mark.unit
+def test_stdout_count_is_qualified_when_only_some_levels_read(checker: object) -> None:
+    """A partial read must not print a bare count either: 4 read of 6 is not a verdict."""
+    report = checker.Report(secrets=[_age(checker, 200)], unavailable={"org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "1 name(s) past 90 days of 1 listed" not in out
+    assert "among the 1 that could be read" in out
+    assert "not a clean bill of health" in out
+
+
+@pytest.mark.unit
+def test_stdout_still_counts_when_every_level_read(checker: object) -> None:
+    """The fix must not cost the ordinary case its count line."""
+    report = checker.Report(secrets=[_age(checker, 200)])
+    out = checker.render(report, 90)
+
+    assert "1 name(s) past 90 days of 1 listed" in out
+    assert "No secrets could be aged" not in out
