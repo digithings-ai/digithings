@@ -36,11 +36,6 @@ paths = [
   # No production secrets live in test files (mirrors the ^tests/ Python policy).
   '''\.test\.(ts|tsx|js|jsx)$''',
 
-  # Confidential research vaults (Obsidian markdown briefs under projects/*/vault/):
-  # research prose that occasionally matches the aws-access-token regex. Not
-  # deployable code; never pushed to public remotes (see CLAUDE.md).
-  '''^projects/[^/]+/vault/''',
-
   # History-only path: the pre-migration research example template lived here
   # (file absent at HEAD, present in history). It carries the same three real
   # free-tier data-API keys (FRED / CoinGecko / Alpha Vantage) as the live path
@@ -136,4 +131,21 @@ commits = [
   # with no --log-opts, so this commit stays in scope until the refs are gone.
   # No rotation needed (see SECURITY.md "Secrets scanning").
   "0f193360d21305ca8a65d33c47a7502a7ad5ec60",
+
+  # 2026-10-06: stash-archive snapshot 1a657079c, reachable only from the local
+  # refs/tags/stash-archive/28 and /29 and present on no remote. It adds six
+  # 20-char aws-access-token-shaped strings inside third-party broker research
+  # briefs under projects/twelve_x/vault/briefs/2026-06-05/ (SEB and ING notes).
+  # Measured: matchLen 20, secretLen 20, entropy 3.52, AWS key-ID prefix true.
+  # So they are genuinely key-ID shaped, NOT prose, and the blanket
+  # "research prose" justification that used to mute the entire
+  # projects/*/vault/ path was wrong. Measured impact of removing that path
+  # mute: it was hiding these six findings and nothing else on remote-visible
+  # history (0 findings under projects/ on --branches before or after).
+  # No rotation needed and none possible: digithings holds no AWS credentials
+  # at all (docs/ops/SECRETS_INVENTORY.md lists zero AWS entries), so these
+  # cannot be ours and there is nothing at any provider to rotate. The
+  # exemption is now scoped to this single commit rather than to the whole
+  # vault path, so any NEW file under projects/*/vault/ is scanned normally.
+  "1a657079c54ecd34ab07a881c87c2b2c19543d23",
 ]

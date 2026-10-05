@@ -8,9 +8,9 @@ additionally require a Pro plan). The client owns endpoint constants, error
 mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill switch;
 ``digifetch`` stays the generic transport engine.
 
-The kill switch is ``GLOOMBERB_ENABLED`` (default ON): tools are default-ON per
-the author decision, and setting the flag to ``0``/``false``/``no``/``off``
-disables the whole family. The session cookie is read from
+The kill switch is ``GLOOMBERB_ENABLED`` (default OFF): tools are default-OFF in
+deployed environments, and an explicit opt-in (``1``/``true``/``yes``/``on``)
+re-enables the family. The session cookie is read from
 ``GLOOMBERB_SESSION_COOKIE`` - never logged, never part of tool input.
 
 No environment variables are read at import time; the flags are resolved in
@@ -1224,14 +1224,14 @@ def _env_flag(name: str, *, default: bool) -> bool:
 
 
 def gloomberb_enabled() -> bool:
-    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default ON).
+    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default OFF).
 
     The same predicate ``GloomberbClient`` resolves at construction. Exposed so
     the in-process agent surface can stop *advertising* a disabled family rather
     than registering schemas whose every call returns the typed disabled
     envelope (#4146 review F1).
     """
-    return _env_flag(GLOOMBERB_ENABLED_ENV, default=True)
+    return _env_flag(GLOOMBERB_ENABLED_ENV, default=False)
 
 
 def _parse_retry_after(value: str | None) -> float | None:
