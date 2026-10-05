@@ -19,13 +19,39 @@
 
 import type { Env } from "./env";
 
-export type RemediationState = "in_flight" | "done";
+/**
+ * Three states, not two, because "GitHub accepted the run" and "GitHub declined
+ * to start one" are different facts and only the first one is remediation:
+ *
+ * - `in_flight` — claimed by a request that has not settled yet.
+ * - `done` — GitHub answered 204/200, so a run was started for these dates.
+ * - `dispatch_suppressed` — GitHub answered a benign 422 (workflow disabled,
+ *   already queued, already running). Nothing ran, so this is NOT `done`, and it
+ *   must stay dispatchable: recording it as `done` would answer every later
+ *   retry with "already remediated" and the date would never be backfilled.
+ */
+export type RemediationState = "in_flight" | "done" | "dispatch_suppressed";
 
 export interface RemediationRecord {
   state: RemediationState;
   claimed_at: string;
   completed_at?: string;
+  suppressed_at?: string;
+  github_status?: number;
 }
+
+/**
+ * How long an `in_flight` claim may stand before `claim` treats it as abandoned.
+ *
+ * A dispatch settles in seconds. `postGithub`'s own retry budget (3 attempts,
+ * `Retry-After` honoured up to 30s each) can hold a claim a little over a
+ * minute. Half an hour is far above any honest in-flight window and far below
+ * "the operator never retries" — which is where an unbounded claim ends up:
+ * a request killed between `claim` and `markDone`/`release` (isolate eviction,
+ * client abort) would otherwise lock the date out permanently while every later
+ * POST claims it is already remediated.
+ */
+export const IN_FLIGHT_TTL_MS = 30 * 60 * 1000;
 
 export type LedgerSplit = {
   /** Dates this caller owns and must dispatch. */
@@ -38,6 +64,17 @@ const KEY_PREFIX = "backfill:";
 
 export function ledgerKey(date: string): string {
   return `${KEY_PREFIX}${date}`;
+}
+
+/**
+ * A claim older than `IN_FLIGHT_TTL_MS` belongs to a request that is no longer
+ * running. An unparseable `claimed_at` is not evidence of a live request either,
+ * so it is treated as abandoned rather than as a permanent lockout.
+ */
+export function isStaleClaim(record: RemediationRecord, nowMs: number): boolean {
+  const claimedMs = Date.parse(record.claimed_at);
+  const age = Number.isNaN(claimedMs) ? Number.POSITIVE_INFINITY : nowMs - claimedMs;
+  return age > IN_FLIGHT_TTL_MS;
 }
 
 export class BackfillLedger {
@@ -62,20 +99,29 @@ export class BackfillLedger {
    * Partition `dates` into the ones this caller may dispatch and the ones it
    * must skip, marking the former in flight in the same transaction.
    *
-   * `force` re-dispatches dates already marked `done` — the deliberate
-   * remediation path. It never steals a date that is currently `in_flight`,
-   * because that claim belongs to a request that has not learned its dispatch
-   * failed yet; taking it would let two runs write the same date.
+   * A date is claimable when it has never been claimed, when its previous
+   * dispatch was suppressed, when its claim has aged out (`isStaleClaim`), or
+   * when `force` is set and it is already `done`. `force` is the explicit,
+   * audited override for a date GitHub already accepted: re-running a date that
+   * succeeded is the remediation path, not something a plain retry may do.
    */
   async claim(dates: string[], now: string, force: boolean): Promise<LedgerSplit> {
     const toDispatch: string[] = [];
     const skipped: string[] = [];
+    const nowMs = Date.parse(now);
 
     await this.state.storage.transaction(async (txn) => {
       for (const date of dates) {
         const existing = await txn.get<RemediationRecord>(ledgerKey(date));
+        const staleClaim = existing?.state === "in_flight" && isStaleClaim(existing, nowMs);
+        // A suppressed dispatch started no run, so this date is still owed a
+        // backfill and stays claimable for any later request. That is what turns
+        // "workflow was disabled" into a retry instead of a silent no-op.
         const claimable =
-          existing === undefined || (force && existing.state === "done");
+          existing === undefined ||
+          existing.state === "dispatch_suppressed" ||
+          staleClaim === true ||
+          (force && existing.state === "done");
         if (!claimable) {
           skipped.push(date);
           continue;
@@ -106,8 +152,30 @@ export class BackfillLedger {
   }
 
   /**
+   * Record that GitHub declined to start a run for these dates (benign 422).
+   *
+   * Deliberately not `done`: `markDone` means "a run exists for these dates",
+   * and a suppressed dispatch means none does. The date stays dispatchable, so
+   * the next POST retries it once the workflow is dispatchable again.
+   */
+  async markSuppressed(dates: string[], now: string, githubStatus: number): Promise<void> {
+    for (const date of dates) {
+      const key = ledgerKey(date);
+      const record = await this.state.storage.get<RemediationRecord>(key);
+      if (!record) continue;
+      await this.state.storage.put<RemediationRecord>(key, {
+        ...record,
+        state: "dispatch_suppressed",
+        suppressed_at: now,
+        github_status: githubStatus,
+      });
+    }
+  }
+
+  /**
    * Drop in-flight claims after a failed dispatch so the next request can retry
-   * the same date. Records already marked `done` are left alone.
+   * the same date. Settled records — `done` or `dispatch_suppressed` — are left
+   * alone; neither is a claim anybody may release.
    */
   async release(dates: string[]): Promise<void> {
     for (const date of dates) {

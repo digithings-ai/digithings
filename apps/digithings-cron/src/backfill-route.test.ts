@@ -1,36 +1,83 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import type { Env } from "./env";
-import type { BackfillLedger, LedgerSplit } from "./backfill-do";
+import type {
+  BackfillLedger,
+  LedgerSplit,
+  RemediationRecord,
+  RemediationState,
+} from "./backfill-do";
+import { isStaleClaim } from "./backfill-do";
 
-/** In-memory stand-in for the Durable Object, addressed by binding. */
+/**
+ * In-memory stand-in for the Durable Object, addressed by binding. It mirrors the
+ * real claim rules (three states, in-flight age-out, force only over `done`) so a
+ * route test cannot pass against ledger semantics the worker does not have. Name
+ * a write in `failOnce` to make it reject, which is how the ledger-error paths
+ * are reached at all.
+ */
 class FakeLedger {
-  records = new Map<string, "in_flight" | "done">();
+  records = new Map<string, RemediationRecord>();
+  failOnce = new Set<"markDone" | "markSuppressed" | "release">();
 
-  async claim(dates: string[], _now: string, force: boolean): Promise<LedgerSplit> {
+  private fault(op: "markDone" | "markSuppressed" | "release"): void {
+    if (this.failOnce.delete(op)) throw new Error(`ledger ${op} failed`);
+  }
+
+  async status(dates: string[]): Promise<Record<string, RemediationState | "unknown">> {
+    const out: Record<string, RemediationState | "unknown"> = {};
+    for (const date of dates) out[date] = this.records.get(date)?.state ?? "unknown";
+    return out;
+  }
+
+  async claim(dates: string[], now: string, force: boolean): Promise<LedgerSplit> {
     const toDispatch: string[] = [];
     const skipped: string[] = [];
+    const nowMs = Date.parse(now);
     for (const date of dates) {
-      const state = this.records.get(date);
-      if (state === undefined || (force && state === "done")) {
-        this.records.set(date, "in_flight");
-        toDispatch.push(date);
-      } else {
+      const existing = this.records.get(date);
+      const claimable =
+        existing === undefined ||
+        existing.state === "dispatch_suppressed" ||
+        (existing.state === "in_flight" && isStaleClaim(existing, nowMs)) ||
+        (force && existing.state === "done");
+      if (!claimable) {
         skipped.push(date);
+        continue;
       }
+      this.records.set(date, { state: "in_flight", claimed_at: now });
+      toDispatch.push(date);
     }
     return { toDispatch, skipped };
   }
 
-  async markDone(dates: string[], _now: string): Promise<void> {
+  async markDone(dates: string[], now: string): Promise<void> {
+    this.fault("markDone");
     for (const date of dates) {
-      if (this.records.get(date) !== undefined) this.records.set(date, "done");
+      const record = this.records.get(date);
+      if (record) this.records.set(date, { ...record, state: "done", completed_at: now });
+    }
+  }
+
+  async markSuppressed(dates: string[], now: string, githubStatus: number): Promise<void> {
+    this.fault("markSuppressed");
+    for (const date of dates) {
+      const record = this.records.get(date);
+      if (record) {
+        this.records.set(date, {
+          ...record,
+          state: "dispatch_suppressed",
+          suppressed_at: now,
+          github_status: githubStatus,
+        });
+      }
     }
   }
 
   async release(dates: string[]): Promise<void> {
+    this.fault("release");
     for (const date of dates) {
-      if (this.records.get(date) === "in_flight") this.records.delete(date);
+      if (this.records.get(date)?.state === "in_flight") this.records.delete(date);
     }
   }
 }
@@ -82,6 +129,29 @@ function spyFetch() {
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
+}
+
+/** Answer every api.github.com dispatch with one status/body, counting the calls. */
+function githubAnswers(status: number, body = "") {
+  const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = typeof input === "string" ? input : String(input);
+    if (url.includes("api.github.com")) {
+      // 204 forbids a body, so pass null rather than "".
+      return new Response(body || null, { status });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+  return spy;
+}
+
+/** A claim stranded by a request that never settled, aged past the in-flight window. */
+function strandedLedger(e: Env, date: string) {
+  const { env, ledger } = withLedger(e);
+  ledger.records.set(date, {
+    state: "in_flight",
+    claimed_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+  });
+  return { env, ledger };
 }
 
 afterEach(() => {
@@ -221,7 +291,7 @@ describe("POST /backfill — dispatch", () => {
       dispatched: ["2026-06-03"],
       skipped: ["2026-06-02"],
     });
-    expect(ledger.records.get("2026-06-02")).toBe("done");
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
   });
 });
 
@@ -243,7 +313,7 @@ describe("POST /backfill — idempotence per date", () => {
     });
     // The whole point: the second dispatch made no upstream request at all.
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(ledger.records.get("2026-06-02")).toBe("done");
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
   });
 
   it("re-dispatches a remediated date when force_dates is true", async () => {
@@ -287,22 +357,120 @@ describe("POST /backfill — failure handling", () => {
     const res = await postBackfill({ dates: "2026-06-02" }, e);
 
     expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ error: "dispatch_failed" });
+    expect(await res.json()).toMatchObject({ error: "dispatch_failed", release_failed: false });
     // Claim released, so the same date is retryable rather than stuck in flight.
     expect(ledger.records.has("2026-06-02")).toBe(false);
     fetchSpy.mockRestore();
   });
 
-  it("treats an already-queued 422 as success and records the date", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response("Workflow is already running", { status: 422 }));
+  it("still 502s, and says so, when the release of a failed dispatch also fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("boom", { status: 404 }));
+    const { env: e, ledger } = withLedger(env());
+    ledger.failOnce.add("release");
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
+    // A throwing release used to replace the 502 with an unhandled 500. The
+    // claim strands as in_flight and ages out via IN_FLIGHT_TTL_MS; the caller
+    // is told the ledger is behind rather than handed a bare failure.
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: "dispatch_failed", release_failed: true });
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "in_flight" });
+  });
+
+  it("409s a benign 422 and does not call the date remediated", async () => {
+    const fetchSpy = githubAnswers(422, "Workflow is already running");
     const { env: e, ledger } = withLedger(env());
     const res = await postBackfill({ dates: "2026-06-02" }, e);
 
+    // GitHub started no run, so this is not remediation and must not be reported
+    // as one: 200 here is what let a later retry answer "already remediated" for
+    // a date that was never backfilled.
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: "dispatch_suppressed",
+      github_status: 422,
+      dispatched: [],
+      states: { "2026-06-02": "dispatch_suppressed" },
+    });
+    expect(ledger.records.get("2026-06-02")).toMatchObject({
+      state: "dispatch_suppressed",
+      github_status: 422,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("backfills a suppressed date once the workflow is dispatchable again", async () => {
+    githubAnswers(422, "Workflow is already running");
+    const { env: e, ledger } = withLedger(env());
+    expect((await postBackfill({ dates: "2026-06-02" }, e)).status).toBe(409);
+
+    // DIG-757 re-enables maintenance.yml: the retry is a real dispatch, not a
+    // no-op claiming the date was already handled.
+    const live = githubAnswers(204);
+    live.mockClear(); // the same global spy, now answering 204 only
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
     expect(res.status).toBe(200);
-    expect(ledger.records.get("2026-06-02")).toBe("done");
-    fetchSpy.mockRestore();
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      dispatched: ["2026-06-02"],
+      states: { "2026-06-02": "done" },
+    });
+    expect(live).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the claim when markDone fails after GitHub already accepted", async () => {
+    const fetchSpy = spyFetch();
+    const { env: e, ledger } = withLedger(env());
+    ledger.failOnce.add("markDone");
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
+    // A run exists upstream, so this is terminal: reporting 502 would make the
+    // operator retry dates that already ran — the DIG-48 surplus — and releasing
+    // the claim is what turns one ledger failure into that surplus.
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      dispatched: ["2026-06-02"],
+      github_status: 204,
+      ledger_write_failed: true,
+    });
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "in_flight" });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the per-date state so a stranded claim is visible, not called remediated", async () => {
+    const fetchSpy = spyFetch();
+    const { env: e } = strandedLedger(env(), "2026-06-02");
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
+    // Aged out by IN_FLIGHT_TTL_MS, so the date is dispatched again rather than
+    // answered "already remediated" with zero upstream calls.
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      dispatched: ["2026-06-02"],
+      states: { "2026-06-02": "done" },
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not claim already_remediated while a live request holds the date", async () => {
+    const fetchSpy = spyFetch();
+    const { env: e, ledger } = withLedger(env());
+    ledger.records.set("2026-06-02", { state: "in_flight", claimed_at: new Date().toISOString() });
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
+    // `dispatched: []` with `already_remediated: true` was the false report: an
+    // in-flight date has not been remediated, it is merely someone else's turn.
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      dispatched: [],
+      already_remediated: false,
+      states: { "2026-06-02": "in_flight" },
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

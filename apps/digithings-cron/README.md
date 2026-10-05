@@ -105,6 +105,28 @@ read-modify-write — two overlapping kicks could both read "absent" and both di
 This is the property that makes the endpoint safe to leave armed: a re-fire of a date set
 cannot rebuild the surplus that a second backfill of the same date created once already.
 
+### Three ledger states, not two
+
+A date is `done` only when GitHub **started a run**. A dispatch GitHub declined is a third
+state, `dispatch_suppressed`, and it is the one that keeps the endpoint honest:
+
+- **A benign 422 is not remediation.** `maintenance.yml` being disabled, or a run for the ref
+  already being queued, makes GitHub answer `422` with "workflow is already running". No run
+  exists for those dates. The endpoint answers `409 dispatch_suppressed`, records
+  `dispatch_suppressed` with the GitHub status, and leaves the date **claimable** — so the
+  next POST retries it. Recording `done` here instead is what would make every later retry
+  answer `200 {"dispatched": [], "already_remediated": true}` with zero upstream calls, for a
+  date that was never backfilled.
+- **A claim ages out.** `IN_FLIGHT_TTL_MS` (30 min) is the window a claim may stand. A request
+  killed between `claim` and settle — isolate eviction, client abort — otherwise locks its
+  dates out forever, and every later POST reports them as remediated. Past the TTL an
+  `in_flight` date is claimable again; an unparseable `claimed_at` counts as abandoned.
+- **`already_remediated` means every date is `done`.** A date held by a live request answers
+  `dispatched: []` with `already_remediated: false`, because in-flight is not remediated.
+
+Every response carries `states`, the ledger's per-date view of the request, so "nothing to do"
+is distinguishable from "stranded" without reading storage.
+
 ### Guard ladder
 
 Every rung runs before the first request leaves the Worker:
@@ -124,9 +146,24 @@ Every rung runs before the first request leaves the Worker:
 | More than 32 dates | 400 `too_many_dates` |
 | `BACKFILL_LEDGER` binding absent | 503 `backfill_unconfigured` |
 | GitHub dispatch failed | 502 `dispatch_failed` (claims released) |
+| GitHub declined with a benign 422 | 409 `dispatch_suppressed` (dates stay dispatchable) |
 
 Success dispatches `maintenance.yml` on `digithings-ai/twelve-x` at `ref: develop` with
 inputs `{backfill_snapshots: "true", dates: "<csv>"}` only.
+
+### Response body
+
+Every answer carries `states` (`done` / `dispatch_suppressed` / `in_flight` / `unknown` per
+requested date). Two further flags are `false` on every healthy response and turn true only
+when the ledger itself misbehaved, so they are the signal to alarm on:
+
+- `ledger_write_failed` — GitHub accepted the dispatch, so a run exists, but the ledger write
+  did not land. The claim stays `in_flight` and ages out via `IN_FLIGHT_TTL_MS`; the endpoint
+  does **not** release it, because releasing would re-dispatch dates that already ran (the
+  DIG-48 surplus) and reporting `502` would call a GitHub success a failure.
+- `release_failed` — a dispatch failed *and* releasing its claim failed. The date strands as
+  `in_flight` until the TTL retires it. The status stays `502` rather than becoming an
+  unhandled `500`.
 
 ```
 curl -X POST https://digithings-cron.<account>.workers.dev/backfill \
@@ -146,8 +183,10 @@ enabled by default: `BACKFILL_ENABLED = "0"` in `wrangler.toml`, and turning it 
 separate, explicit act.
 
 **Prerequisite:** twelve-x `maintenance.yml` is currently `disabled_manually`, and GitHub
-refuses to dispatch a disabled workflow. Until it is re-enabled, `POST /backfill` will
-record claims and get a benign 422 — treat that as *not yet live*, not as success.
+refuses to dispatch a disabled workflow. Until it is re-enabled, every `POST /backfill` gets a
+benign 422 and answers **`409 dispatch_suppressed`** — not yet live, not success. Nothing is
+recorded as remediated, so re-enabling the workflow (DIG-757) and POSTing again is all it
+takes; no date is lost to the attempt.
 
 ## Local
 

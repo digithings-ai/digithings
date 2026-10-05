@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "./env";
-import { BackfillLedger, ledgerKey } from "./backfill-do";
+import { BackfillLedger, IN_FLIGHT_TTL_MS, ledgerKey } from "./backfill-do";
+
+const T0 = "2026-10-05T00:00:00Z";
+/** One minute either side of the in-flight window, so a TTL change cannot silently pass. */
+const INSIDE_TTL = new Date(Date.parse(T0) + IN_FLIGHT_TTL_MS - 60_000).toISOString();
+const PAST_TTL = new Date(Date.parse(T0) + IN_FLIGHT_TTL_MS + 60_000).toISOString();
 
 /**
  * Fake DurableObjectState. `transaction` really serialises: callers are chained
@@ -97,6 +102,67 @@ describe("BackfillLedger", () => {
     });
   });
 
+  it("keeps a suppressed dispatch claimable, so the next request retries it", async () => {
+    const { l } = ledger();
+    await l.claim(["2026-06-02"], "2026-10-05T00:00:00Z", false);
+    // GitHub answered 422: no run started, so this date is still owed a backfill.
+    await l.markSuppressed(["2026-06-02"], "2026-10-05T00:01:00Z", 422);
+    expect(await l.status(["2026-06-02"])).toEqual({ "2026-06-02": "dispatch_suppressed" });
+
+    // The retry path: the workflow being re-enabled turns into a dispatch.
+    expect(await l.claim(["2026-06-02"], "2026-10-05T00:04:00Z", false)).toEqual({
+      toDispatch: ["2026-06-02"],
+      skipped: [],
+    });
+    await l.markDone(["2026-06-02"], "2026-10-05T00:05:00Z");
+    expect(await l.status(["2026-06-02"])).toEqual({ "2026-06-02": "done" });
+  });
+
+  it("keeps the suppressed GitHub status for diagnosis", async () => {
+    const { l, store } = ledger();
+    await l.claim(["2026-06-02"], "2026-10-05T00:00:00Z", false);
+    await l.markSuppressed(["2026-06-02"], "2026-10-05T00:01:00Z", 422);
+    expect(store.get(ledgerKey("2026-06-02"))).toMatchObject({
+      state: "dispatch_suppressed",
+      suppressed_at: "2026-10-05T00:01:00Z",
+      github_status: 422,
+    });
+  });
+
+  it("ages out a claim left behind by a request that never settled", async () => {
+    const { l } = ledger();
+    await l.claim(["2026-06-02"], "2026-10-05T00:00:00Z", false);
+    // Killed between claim and settle: no release, no markDone, and no operator
+    // retry. Without an age-out this date is locked out forever and every later
+    // POST reports it as remediated.
+    expect(await l.claim(["2026-06-02"], INSIDE_TTL, false)).toEqual({
+      toDispatch: [],
+      skipped: ["2026-06-02"],
+    });
+    expect(await l.claim(["2026-06-02"], PAST_TTL, false)).toEqual({
+      toDispatch: ["2026-06-02"],
+      skipped: [],
+    });
+  });
+
+  it("lets a forced request reclaim a stale claim", async () => {
+    const { l } = ledger();
+    await l.claim(["2026-06-02"], T0, false);
+    expect(await l.claim(["2026-06-02"], PAST_TTL, true)).toEqual({
+      toDispatch: ["2026-06-02"],
+      skipped: [],
+    });
+  });
+
+  it("treats an unparseable claimed_at as abandoned rather than a lockout", async () => {
+    const { l, store } = ledger();
+    store.set(ledgerKey("2026-06-02"), { state: "in_flight", claimed_at: "not-a-date" });
+    expect(await l.claim(["2026-06-02"], "2026-10-05T00:00:00Z", false)).toEqual({
+      toDispatch: ["2026-06-02"],
+      skipped: [],
+    });
+  });
+
   it("partitions a mixed list so one stale date does not block the rest", async () => {
     const { l } = ledger();
     await l.claim(["2026-06-02"], "2026-10-05T00:00:00Z", false);
@@ -126,6 +192,14 @@ describe("BackfillLedger", () => {
     await l.markDone(["2026-06-02"], "2026-10-05T00:02:00Z");
     await l.release(["2026-06-02"]);
     expect(await l.status(["2026-06-02"])).toEqual({ "2026-06-02": "done" });
+  });
+
+  it("does not release a suppressed date, which is still owed a backfill", async () => {
+    const { l } = ledger();
+    await l.claim(["2026-06-02"], "2026-10-05T00:00:00Z", false);
+    await l.markSuppressed(["2026-06-02"], "2026-10-05T00:01:00Z", 422);
+    await l.release(["2026-06-02"]);
+    expect(await l.status(["2026-06-02"])).toEqual({ "2026-06-02": "dispatch_suppressed" });
   });
 
   it("lets exactly one of two overlapping claims win the same date", async () => {

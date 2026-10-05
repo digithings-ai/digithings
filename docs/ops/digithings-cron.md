@@ -47,6 +47,14 @@ not idempotent per date). A `BackfillLedger` Durable Object makes a repeat POST
 for an already-remediated date a no-op with zero upstream requests, and a bare
 kick with no `dates` is refused before any request leaves the Worker.
 
+A date is only remediated when GitHub actually starts a run. A dispatch GitHub
+declines — `maintenance.yml` is `disabled_manually`, or a run is already queued —
+answers `409 dispatch_suppressed`, records nothing as remediated, and leaves the
+date dispatchable, so the next POST retries it instead of reporting a backfill
+that never happened. Every response carries a per-date `states` map, and an
+in-flight claim ages out after `IN_FLIGHT_TTL_MS` rather than locking its date
+out forever.
+
 Off by default (`BACKFILL_ENABLED = "0"`) and gated behind `CRON_KICK_SECRET`.
 Full contract, guard ladder and the `disabled_manually` prerequisite are in
 [`apps/digithings-cron/README.md`](../../apps/digithings-cron/README.md#snapshot-backfill-post-backfill).
