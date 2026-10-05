@@ -4,6 +4,20 @@
 
 **Goal:** Ship the operator runbook `docs/ops/gloomberb-session-cookie.md` (free account, cookie extraction, per-deployment placement, privacy, absent-cookie failure mode) with a repo-level test pinning every load-bearing fact to the shipped code.
 
+## Redactions (2026-10-05, DIG-1194)
+
+Two steps in this plan that described **how to take a session credential out of a logged-in
+browser** were removed. Gloom's Terms of Service were read for the first time on 2026-10-05 and
+classified **Unclear** — §11 restricts automated access to "the interfaces and within the limits we
+offer for that purpose" — and publishing an acquisition recipe in a public repo is the same
+exposure Counsel raised for the other vendor in DIG-461/DIG-503. The design, the rationale, the
+tool inventory and the provenance of this plan are unchanged; only the acquisition micro-steps are
+gone. Terms, artefact, sha256 and reasoning:
+`docs/vendor-terms/gloomber/INDEX.md`. This plan is a historical snapshot (it says 11 gated tools
+and a 33-tool family; the shipped runbook says 42 gated and 89), which is why its other
+`client.py:` citations are historical claims and were not re-verified — the two corrected here
+were, because they were wrong.
+
 **Architecture:** Documentation-only deliverable plus one `tests/scripts/` assertion test (same pattern as `tests/scripts/test_mcp_container.py`), a pointer edit in `digiquant/ARCHITECTURE.md`, a commented `.env.example` placeholder, and one tracked follow-up issue for the hosted-container forwarding gap. No runtime code changes.
 
 **Tech Stack:** Markdown under `docs/ops/` (link-checked by `scripts/check_doc_links.py`), pytest (unit-marked) reading the doc and importing `digiquant.data.gloomberb.client` / `.entitlements` to derive the facts it pins.
@@ -97,7 +111,15 @@ Open `https://term.gloom.sh/`, create a free account, complete email verificatio
 
 - [ ] **Step 2: Extract the session cookie**
 
-In the browser, open devtools → Application/Storage → Cookies for `term.gloom.sh`, and copy the value of `__Secure-gloomberb.session_token` (the fallback name is `gloomberb.session_token`; names per `client.py:180-183`). Do not paste the value into chat, an issue, or a commit.
+~~The acquisition steps were removed from this plan on 2026-10-05 (DIG-1194).~~ This step is
+retained as a record that the dry-run covered it; the devtools navigation and the cookie name to
+copy are no longer published here, for the reason in
+`docs/vendor-terms/gloomber/POSITION-2026-10-05-session-cookie.md` — a step-by-step recipe for
+taking a credential out of a logged-in browser is session acquisition for a vendor whose terms
+restrict automated access, and the shipped runbook no longer carries it either. The two upstream
+session-cookie names are `__Secure-gloomberb.session_token` (preferred) and
+`gloomberb.session_token`, pinned at `client.py:403-407`. Do not paste any value into chat, an
+issue, or a commit.
 
 - [ ] **Step 3: Place it in the local `.env`**
 
@@ -253,7 +275,7 @@ Create `docs/ops/gloomberb-session-cookie.md`. Required sections and content (fa
 2. `## What happens without the cookie` — must state: gated tools return the typed `auth_required` error **without making an HTTP request** (`client.py:2248-2254`); Pro-only tools return `pro_required` for a valid free session (`client.py:307-322`); the family kill switch `GLOOMBERB_ENABLED` is default-ON and a typo disables it, returning a typed `upstream_error` with no request (`client.py:248-272`); absent cookie is a supported state — the 22 free tools keep working.
 3. `## Which tools need it` — the table from the spec §2.2 (11 names, each `session` / `preview` / `pro`), plus: family total 33 tools, 22 free, as of 2026-09-16 (`entitlements.py:58-96`); one line that this is enrichment data (free tier delayed up to 15 minutes), never a pipeline primary.
 4. `## Get a free account` — the verbatim dry-run steps from Task 2 (numbered, naming the visible control labels), anchored on `https://term.gloom.sh/`. If Task 2 found no self-serve signup, state that finding verbatim and link the tracking issue.
-5. `## Extract the session cookie` — browser devtools → Application/Storage → Cookies → `term.gloom.sh`; copy `__Secure-gloomberb.session_token` (fallback `gloomberb.session_token`; `client.py:180-183`). Accepted forms: `name=value` or a bare token (`client.py:437-439, 2143-2154`). Show only `GLOOMBERB_SESSION_COOKIE=__Secure-gloomberb.session_token=<cookie-value>` as the example.
+5. `## Extract the session cookie` — **[section removed 2026-10-05 by DIG-1194; see §"Redactions" above]**. Originally specified as: browser devtools → Application/Storage → Cookies → `term.gloom.sh`; copy `__Secure-gloomberb.session_token` (fallback `gloomberb.session_token`; `client.py:403-407`, corrected from the `client.py:180-183` this plan originally cited, which is envelope imports). Accepted forms: `name=value` or a bare token (`client.py:437-439, 2143-2154`). Show only `GLOOMBERB_SESSION_COOKIE=__Secure-gloomberb.session_token=<cookie-value>` as the example.
 6. `## Place it per deployment` — three subsections:
    - **Local runs:** add the line to the repo-root `.env` (gitignored); `.env.example` now carries a commented placeholder.
    - **Hosted MCP container:** NOT forwarded today — `DigiQuantMcpContainer.envVars` (`apps/digithings-stack-cloudflare/src/index.ts:177-185`) carries only scope/backend/FRED/R2, pinned by `tests/scripts/test_mcp_container.py:35-42`; the `mcp.digithings.ai` route is commented out (`wrangler.toml:63-73`, human gate). The tracked wiring (follow-up issue `#<FWD>`) is exactly: add `GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""` to `envVars`; run `printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE`; add the name to `MCP_SCOPED_VARS` in `tests/scripts/test_mcp_container.py` and to `test_wrangler_documents_mcp_secrets`; add it to the `wrangler.toml` secrets comment (lines 135–164).

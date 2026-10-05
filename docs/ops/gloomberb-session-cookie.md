@@ -5,15 +5,29 @@ need a session cookie: 41 take `GLOOMBERB_SESSION_COOKIE` (37 `session` + 1
 `preview` + 3 `pro`) and `digifetch_substack` takes its own
 `SUBSTACK_SESSION_COOKIE` (`venue_session`); the other 47 are anonymous and
 keep working with no cookie at all. This runbook covers the
-free-account signup, the cookie extraction, where the cookie is placed per
+free-account signup, where a credential is placed per
 deployment, the privacy rules, and exactly what an operator sees when the cookie
-is absent. It is a follow-up to #4069 (the family landed in PR #4085) and was
+is absent. **It no longer covers how to take a credential out of a browser
+session — Security removed those steps on 2026-10-05, see
+[`vendor-terms/gloomber/`](../vendor-terms/gloomber/INDEX.md).**
+It is a follow-up to #4069 (the family landed in PR #4085) and was
 last widened by #4837 (130-function coverage: 15 probe-backed Cloud reads and
 13 inert workspace/broker tools joined the gated set).
 
 > **Credential ownership**: See `docs/ops/credential-ownership.md` for the single-owner rule.
 > Canonical store = GitHub Actions `cron` environment secret `GLOOMBERB_SESSION_COOKIE`.
 > Local `.env` is developer convenience only. Refresh path = manual `gh secret set`.
+
+> **Terms status: UNCLER — Counsel sign-off pending (DIG-1194, 2026-10-05).** Gloom's
+> Terms of Service (effective 2026-09-26) were read for the first time on
+> 2026-10-05 and classified **Unclear**, not permitted. §11 restricts scraping and
+> automated access to "the interfaces and within the limits we offer for that
+> purpose"; §14 grants organisational internal use **only under a team plan**,
+> which we do not have. No new Gloomber access work merges to a public repository
+> until Counsel signs off in writing. Terms, archived artefact, sha256 and the
+> full reasoning: [`vendor-terms/gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md).
+> Note that §11 also names "data delays" as an access control, so **the account's
+> plan must be confirmed before any production-volume read.**
 
 ## What happens without the cookie
 
@@ -109,23 +123,41 @@ If your environment cannot reach a browser or the signup flow is unavailable,
 stop here: the 47 free tools work without an account, and gated calls will
 simply answer `auth_required`.
 
-## Extract the session cookie
+## Placing a session credential
 
-1. Signed in at <https://term.gloom.sh/>, open the browser devtools.
-2. Go to **Application** / **Storage** → **Cookies** → `term.gloom.sh`.
-3. Copy the value of `__Secure-gloomberb.session_token`. If that name is not
-   present, use the fallback `gloomberb.session_token` (the two upstream session
-   cookie names are pinned at `client.py:180-183`).
+**The acquisition steps are no longer published here.** Security removed them
+from this public repository on 2026-10-05 (DIG-1194). A step-by-step recipe for
+taking a credential out of a logged-in browser is the session-acquisition half of
+a pattern whose terms-compliance status is **Unclear**, and publishing it in a
+public repo under our own name is the same exposure Counsel raised for the other
+vendor in DIG-461/DIG-503 — where the equivalent sentence was cut from
+`docs/ops/SECRETS_INVENTORY.md` in the same change.
+
+The pattern is not forbidden by the code, and an operator who already holds a
+credential needs nothing else from this file. What follows is the contract, not
+the acquisition.
 
 The client accepts either a **`name=value`** pair (preferred — it sends exactly
 that cookie) or a **bare token** (sent under both upstream session-cookie names,
-the same fallback the TypeScript client uses). Only ever paste the value into a
-secret store, never into chat, an issue, a PR, or a commit. The example value
-below is a placeholder:
+the same fallback the TypeScript client uses). The two upstream names are pinned
+at `client.py:403-407`:
+
+```
+__Secure-gloomberb.session_token
+gloomberb.session_token
+```
+
+Only ever paste a value into a secret store, never into chat, an issue, a PR, or
+a commit. The example below is a placeholder:
 
 ```
 GLOOMBERB_SESSION_COOKIE=__Secure-gloomberb.session_token=<cookie-value>
 ```
+
+> The citation in this runbook used to read `client.py:180-183` for the cookie
+> names. That is wrong — those lines are Pydantic envelope imports. Corrected to
+> `client.py:403-407` and verified against `github/develop` on 2026-10-05. The
+> wrong citation is the one that propagated into DIG-1194 as `client.py:180-184`.
 
 ## Place it per deployment
 
