@@ -81,7 +81,16 @@ def test_factory_resolves_multilingual_pipeline(
     assert isinstance(unwrap_embedding_provider(pipeline), MultilingualEmbedder)
 
 
-def test_build_ticket_chunks_full_metadata_no_masking() -> None:
+def test_build_ticket_chunks_masks_identity_and_drops_internal() -> None:
+    """DIG-1210: the shipped corpus is masked, not #4756's full metadata.
+
+    The metadata *shape* #4756 pinned still holds — one chunk per article, stable
+    ``zammad-<id>-<index>`` ids, the filterable ``customer_id``, the snapshot
+    marker and the ``internal`` flag. What changed is that customer identity no
+    longer reaches the index and internal staff notes are not indexed at all.
+    The demo override that restores the #4756 output is pinned in
+    ``tests/scripts/test_index_occ_tickets_privacy.py``.
+    """
     ticket = {
         "id": 231,
         "number": "28312",
@@ -117,21 +126,25 @@ def test_build_ticket_chunks_full_metadata_no_masking() -> None:
         },
     ]
     chunks = build_ticket_chunks(ticket, articles, customer_name="Jane Doe")
-    assert len(chunks) == 2
-    first, second = chunks
+    assert len(chunks) == 1
+    first = chunks[0]
     assert first.id == "zammad-231-1"
     assert first.doc_id == "zammad-ticket-231"
-    # Full customer identity, filterable id, snapshot marker.
-    assert first.metadata["customer"] == "jane.doe@example.test"
+    # Pseudonym everywhere identity used to sit; the drill-down key survives.
+    assert first.metadata["customer"] == "customer #7"
+    assert first.metadata["customer_name"] == "customer #7"
     assert first.metadata["customer_id"] == 7
-    assert first.metadata["customer_name"] == "Jane Doe"
     assert first.metadata["snapshot_date"] == SNAPSHOT_DATE
     assert first.metadata["internal"] is False
-    assert "***" not in first.content
-    # Internal articles are indexed too (tagged, not omitted).
-    assert second.metadata["internal"] is True
-    assert "[internal]" in second.content
-    assert "internal-only note body" in second.content
+    # No customer identity survives in the indexed text or the metadata.
+    for secret in ("jane.doe@example.test", "Jane Doe"):
+        assert secret not in first.content
+        assert secret not in str(first.metadata)
+    assert "From:" not in first.content
+    # The internal article is not indexed at all, and the gap is stated.
+    assert "internal-only note body" not in first.content
+    assert "[internal]" not in first.content
+    assert "1 internal note(s) withheld" in first.content
 
 
 def test_embed_onnx_mean_pools_masked_tokens_and_normalizes(

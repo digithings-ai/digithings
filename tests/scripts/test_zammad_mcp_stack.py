@@ -111,11 +111,13 @@ def test_occ_research_prompt_states_the_masked_contract():
 
     assert "customer #<id>" in prompt
     assert "customer_id:<id>" in prompt
-    assert "index is NOT masked" in prompt
+    assert "index is masked by the same policy" in prompt
+    assert "internal note(s) withheld" in prompt
     for stale in (
         "shown in full (demo mode)",
         "full customer names/emails",
         "internal ticket notes are included and tagged [internal]",
+        "index is NOT masked",
     ):
         assert stale not in prompt, f"deployed OCC prompt still says {stale!r}"
 

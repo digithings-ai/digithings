@@ -273,10 +273,14 @@ def test_real_blobs_occ_prompt_states_the_masked_contract(ccm: Any) -> None:
         prompt = blob["occ"]["researchSystemPrompt"]
         assert "customer #<id>" in prompt, f"{name}: pseudonym rule missing from the prompt"
         assert "customer_id:<id>" in prompt, f"{name}: customer_id drill-down missing"
-        assert "index is NOT masked" in prompt, f"{name}: occ_tickets not flagged as unmasked"
+        assert "index is masked by the same policy" in prompt, (
+            f"{name}: occ_tickets not flagged as masked"
+        )
+        assert "internal note(s) withheld" in prompt, f"{name}: withheld-note marker missing"
         for stale in (
             "shown in full (demo mode)",
             "full customer names/emails",
             "internal ticket notes are included and tagged [internal]",
+            "index is NOT masked",
         ):
             assert stale not in prompt, f"{name}: deployed prompt still says {stale!r}"

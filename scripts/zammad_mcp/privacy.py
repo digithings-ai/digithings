@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from typing import Any, Mapping
 
 MASKED = "masked"
@@ -41,7 +42,16 @@ DISCLOSURE_ENV = "ZAMMAD_MCP_CUSTOMER_DISCLOSURE"
 APPROVER_ENV = "ZAMMAD_MCP_UNMASK_APPROVER"
 
 PSEUDONYM_PREFIX = "customer #"
+#: Stand-in for an email address found in free text (DIG-1210). Same vocabulary
+#: as the customer pseudonym so the prompt has one rule to describe.
+ADDRESS_PREFIX = "email#"
 _DIGEST_CHARS = 8
+
+#: Deliberately conservative: an address is an address, and the corpus is a mix
+#: of customer, staff and third-party contacts. Splitting on ``@`` with an
+#: optional trailing dot keeps a trailing sentence period out of the match
+#: without depending on a full RFC 5322 grammar.
+_ADDRESS_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\.?")
 
 #: Tells the model *why* it is reading `customer #7` and no internal notes, so
 #: it does not treat the redaction as missing data or invent the real value.
@@ -204,3 +214,46 @@ def author_label(author: str, *, env: Mapping[str, str] | None = None) -> str:
     if disclosure_mode(env) == UNMASKED:
         return author
     return ""
+
+
+def _address_placeholder(match: re.Match[str]) -> str:
+    """One address becomes one stable pseudonym; trailing punctuation survives.
+
+    A match can end on a sentence full stop — ``write to jane@acme.test.`` — and
+    dropping it would silently run sentences together in the indexed text. The
+    address is digested without it; the punctuation is put back.
+    """
+    raw = match.group(0)
+    address = raw.rstrip(".")
+    return ADDRESS_PREFIX + _digest(address.lower()) + raw[len(address) :]
+
+
+def redact_addresses(text: str, *, env: Mapping[str, str] | None = None) -> str:
+    """Replace every email address in free text with a stable pseudonym.
+
+    Added for DIG-1210, where the corpus is *indexed* rather than rendered. The
+    structured-field mask could not carry that surface: measured against the
+    committed ``occ_tickets`` snapshot, dropping internal articles and masking
+    the metadata still left 1 146 address occurrences in article bodies across
+    250 distinct addresses, 183 of them the ticket customer's own address echoed
+    from a mail signature. 503 of the 547 surviving chunks still quoted one.
+
+    Why this is mechanical rather than a product trade-off: an address has an
+    unambiguous shape, and for a B2B helpdesk the domain *is* the customer
+    company, so there is no partial mask worth keeping. Removing just the
+    address string leaves the surrounding sentence readable, which is why the
+    cost is small enough to take without a product decision.
+
+    What this does **not** do, and needs a separate decision: it cannot find a
+    *name* in free text ("Hallo, hier ist Hans Müller"). 375 of those 547 chunks
+    still carry a full customer display name. Closing that needs name
+    detection over German and Spanish prose, which is a product trade-off, and
+    it is recorded in ``docs/adr/0031`` rather than guessed at here.
+
+    Idempotent: the pseudonym contains no ``@``, so a second pass is a no-op.
+    """
+    if not text:
+        return text
+    if disclosure_mode(env) == UNMASKED:
+        return text
+    return _ADDRESS_RE.sub(_address_placeholder, text)
