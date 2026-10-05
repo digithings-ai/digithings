@@ -42,6 +42,14 @@ function parseYmd(value: string | null | undefined): number | null {
   return ms;
 }
 
+/**
+ * Weekdays only. This is right for the equity and FX venues the app shows today
+ * (every market block defaults to `MK_DEFAULT_SYMBOL`, an equity), but ADR 0013
+ * also lists a `CRYPTO` venue that trades 24/7 — a Saturday there is a session,
+ * not a rest day, and a Friday crypto run would read "current session" a day
+ * late. Thread the payload's `venue` through here once that table exists rather
+ * than widening this function with a guess.
+ */
 const isWeekday = (ms: number) => {
   const weekday = new Date(ms).getUTCDay();
   return weekday !== 0 && weekday !== 6;
