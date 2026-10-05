@@ -349,6 +349,17 @@ secrets-scan:
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
 
+# Refuse a payload carrying an unmasked customer email address. No-argument form
+# scans the working tree, which is the one to run before committing a new seed
+# payload; `make pii-scan-all` is the whole-tree form (use after containment).
+# Mirrors the PR step in .github/workflows/security-gitleaks.yml.
+.PHONY: pii-scan pii-scan-all
+pii-scan:
+	python3 scripts/check_pii_seed_payloads.py
+
+pii-scan-all:
+	python3 scripts/check_pii_seed_payloads.py --all
+
 # Match every `secrets.*` read under .github/ against each level (repo secret, repo
 # variable, org secret, environment secret) and report `dead`, `not repo-level`,
 # `unresolved`, `repo-over-org` and `env-over-repo`. `--strict` exits 1 on a dead repo

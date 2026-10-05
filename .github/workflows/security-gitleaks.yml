@@ -162,3 +162,25 @@ jobs:
           path: ${{ runner.temp }}/gitleaks-report.json
           if-no-files-found: warn
           retention-days: 30
+
+# --- seed payload PII gate (DIG-1210) ---
+# A tracked data payload is copied verbatim into a running vector store, so an
+# address inside one reaches whoever the tenant talks to. gitleaks looks for
+# credentials; nothing looked for personal data. On 2026-10-02 (#4987) a
+# 1.5 MB payload carrying 791 rows with customer email addresses and 372
+# `[internal]` staff notes landed on main in this public repository, and CI was
+# green.
+#
+# Scoped to the PR diff, so introducing the gate cannot fail on the payload that
+# is already committed — the same reasoning as BASELINE_SHA in
+# scripts/check_review_coverage.py. It is NOT a required status check yet;
+# wiring it as one waits on the containment in DIG-1230, because a required
+# check that is red from day one gets suppressed rather than fixed.
+#
+# Counts and locations only: the guard never prints an address, because a CI log
+# in a public repo is a second disclosure channel.
+      - name: Seed payloads carry no unmasked address
+        if: github.event_name == 'pull_request'
+        run: |
+          set -uo pipefail
+          python3 scripts/check_pii_seed_payloads.py --base "origin/${GITHUB_BASE_REF}" --head HEAD
