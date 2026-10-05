@@ -141,8 +141,9 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 This section is deliberately **not** one row per key in the table above. It is the
 twelve-x repo's local `.env` — a storage surface no row above covers, because the
-inventory above is built from `digithings` readers. Fourteen pairs live there with
-no recorded owner, and the two PrimeMarket session keys have no writer at all.
+inventory above is built from `digithings` readers. **Seventeen names** live there
+with no recorded owner: the two PrimeMarket session keys (one of which has no
+writer at all), the two desk-login keys, and thirteen more.
 Named on 2026-10-05 by reading **key names only** from
 `/Users/chrisstefan/Code/twelve-x/.env` (mode `-rw-------`, gitignored at
 twelve-x `.gitignore:1`); **no value was read, printed, or copied.**
@@ -158,20 +159,33 @@ nothing at all about this copy. It is a **second live copy**, not a scratch file
 
 | Name | Where the second copy is | Read by | Readback? | **Owner** | Recorded refresh path |
 |---|---|---|---|---|---|
-| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `config.py`; `nodes/scrape.py:662,686`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
-| `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:151` — the only refresh history that exists for it, and the same doc's 2026-09-15 correction notes the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:160-162`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
+| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
+| `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:161` — the only refresh history that exists for it — and the same doc's 2026-09-17 follow-up records that the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:171-172`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
 
 Consequence to state plainly: **a `primemarket-session-expired` alert tells you
-about the Actions secret only.** The `.env` copy has no alert, no probe, and — for
-the cookie — no writer. Both alert bodies in twelve-x now say which copy they
-cover, and both name this file as the uncovered one.
+about the Actions secret only.** The `.env` copy has no alert and no probe, and for
+the cookie it has no writer either. As of `github/develop` `4f308ef` the single
+twelve-x alert body
+(`.github/workflows/primemarket_session_heartbeat.yml:62-75`) names neither copy —
+it says only that the interim desk session is no longer valid. Closing that gap is
+the open half of DIG-526 in twelve-x, tracked on twelve-x PR **#258** (open,
+against `develop`; it also adds the "did not run" and "probe blocked" alert classes
+that the 2026-08-01→08-15 checkout failures and the 96-hour no-run window of
+2026-09-28T06:03:54Z→2026-10-02T06:03:23Z went unreported). Until it merges, this
+row and the alert are inconsistent with each other, and the alert is the weaker of
+the two.
 
 ### (g2) the desk login pair — a vendor login, not an application credential
 
 | Name | Where | Read by | **Owner** | Status |
 |---|---|---|---|---|
-| `PRIMEMARKET_USERNAME` | this `.env` only | `config.py:27` `get_primemarket_credentials()` | **Security** | **Vendor login for `https://desk.prime-terminal.com`.** Not an API key, not a service account — a human's desk credentials. Login is captcha-gated since ~2026-07-29, so no code path can authenticate with it |
-| `PRIMEMARKET_PASSWORD` | this `.env` only | `config.py:28` | **Security** | Same |
+| `PRIMEMARKET_USERNAME` | this `.env`, **and** the repo secret on `digithings-ai/twelve-x` (passed at `.github/workflows/daily_run_reusable.yml:115` and `market_context_ingest.yml:72`; marked a "dormant credential-login route (DIG-249) … may legitimately be empty") | `config.py:27` `get_primemarket_credentials()` | **Security** | **Vendor login for `https://desk.prime-terminal.com`.** Not an API key, not a service account — a human's desk credentials. Login is captcha-gated since ~2026-07-29, so no code path can authenticate with it |
+| `PRIMEMARKET_PASSWORD` | same — this `.env` and the repo secret (`daily_run_reusable.yml:116`, `market_context_ingest.yml:73`) | `config.py:28` | **Security** | Same |
+
+So this pair lives in **three** places, not one: this `.env`, the repo secret, and
+the code path. The repo-secret copies are the ones CI would use, and whether they
+are populated is unverified — GitHub secrets are write-only, so I cannot read them
+back, only confirm the names exist. That is a gap, not a clean bill of health.
 
 This pair is still **live code**: `config.py:27-32` raises unless both are set, and
 `nodes/scrape.py:692` calls it as the last-resort login fallback after both supplied
@@ -185,37 +199,43 @@ pipeline — and they are also the most damaging pair on this laptop, because th
 authenticate as a person, not as a job.
 
 DIG-249 (`8368932`) was recorded as dropping "the dead desk login pair", and the
-twelve-x `README.md` says the pair is not required. What actually landed is that
-**CI stopped passing it**, while the code and this `.env` still carry it. Two
-consequences, both for Security to resolve and neither blocking:
+twelve-x `README.md` says the pair is not required. What actually landed is
+narrower: the pair came out of the **required-secrets preflight**
+(`daily_run_reusable.yml:55-58`) and is still *passed* to the steps
+(`:115-116`, `market_context_ingest.yml:72-73`), while the code and this `.env`
+still carry it. Two consequences, both for Security to resolve and neither blocking:
 
 1. If the PrimeMarket path is switched off (the open A/B question on DIG-478, card
-   `295f3d75`), delete both keys here — they are the highest-value item on the
-   laptop and the only ones that are a human's account.
+   `295f3d75`), delete the pair in all three places — this `.env`, the
+   `digithings-ai/twelve-x` repo secret, and the two workflow env blocks. It is the
+   highest-value item on the laptop and the only one that is a human's account, and
+   the repo secret is the copy nobody would remember to delete.
 2. While the path is live, this pair is a standing credential with no rotation
    date and no alert. It is captcha-gated in practice, so treat it as
    password-manager material rather than an env var: **move it to Bitwarden
    (DIG-95) or delete it**, and do not leave it as the fallback of last resort.
 
-### (g3) the other twelve pairs — one owner each
+### (g3) the remaining thirteen names — one owner each
 
-All twelve are read by twelve-x `config.py` or its scripts, all live only in this
-`.env` (CI gets the repo-secret copy named in each row's "CI copy" column), and all
-now have a named owner rather than an implied one.
+Thirteen names in twelve rows (`TWELVEX_R2_*` shares a row). All thirteen live in
+this `.env`; each row names the CI copy where one exists. Eleven are read by twelve-x
+code — `config.py`, `nodes/llm.py`, or `nodes/scrape.py` — and two, marked
+**no reader** below, are read by nothing on `github/develop`. Every one now has a
+named owner rather than an implied one.
 
 | Name | Read by | CI copy | **Owner** | Note |
 |---|---|---|---|---|
-| `SUPABASE_SERVICE_KEY` | `config.py:38` — **legacy** fallback | `TWELVEX_SUPABASE_SERVICE_KEY` is canonical | **Security** | Renamed to `TWELVEX_SUPABASE_SERVICE_KEY` in `7658a22` (2026-06-25, #57). The legacy name is a transition fallback kept so existing local envs keep working. `config.py:42` then raises demanding the canonical name — so **this local copy cannot satisfy the local reader**, and a laptop run needing twelve-x's own Supabase is broken today. Delete here after the workflows confirm `TWELVEX_SUPABASE_SERVICE_KEY` |
+| `SUPABASE_SERVICE_KEY` | `config.py:38` — **legacy** fallback | `TWELVEX_SUPABASE_SERVICE_KEY` is canonical | **Security** | Renamed to `TWELVEX_SUPABASE_SERVICE_KEY` in `7658a22` (2026-06-25, #57). `config.py:38` is an `or` chain — canonical first, legacy second — so this local copy **does** satisfy `get_supabase_key()`, and the raise at `config.py:42` fires only when both names are empty. What is wrong here is the **error text**: `:42` names only the canonical var, so a run with both empty reports a missing `TWELVEX_SUPABASE_SERVICE_KEY` when the operator did supply a service key under the old name. Working today, misleading when it breaks. Rename here to the canonical name and delete the alias |
 | `CORE_SUPABASE_SERVICE_KEY` | `config.py:67` | repo secret (canonical per the 2026-10-04 decision) | **Security** | Service-role = full DB read/write. See the multi-service row in (c) and `docs/ops/SECRETS_ROTATION.md` |
 | `CORE_SUPABASE_URL` | `config.py:107` (has a hardcoded default) | repo secret | **Security** | Public project-ref, not a secret — belongs in the (f) family |
 | `TWELVEX_R2_ACCESS_KEY_ID` · `TWELVEX_R2_SECRET_ACCESS_KEY` · `TWELVEX_R2_ACCOUNT_ID` | `config.py:386-388` | repo secrets `R2_*` | **Security** | twelve-x archive bucket. Distinct from the digithings `R2_*` pair in (c) — different bucket, same account |
 | `TWELVEX_R2_BUCKET` | `config.py:391` (defaults `twelve-x-archive`) | repo secret `R2_BUCKET` | **Security** | A bucket **name**, not a credential — belongs in the (f) family |
 | `OPENROUTER_API_KEY` | `nodes/llm.py:73` notes the CI/`.env` key mismatch | org secret | **Security** | Same org-level key as the (b) row; this is its local copy. Triplicated per R4 |
-| `CHEAPERINFERENCE_API_KEY` | `nodes/llm.py:114` refuses without it | repo secret | **Security** | House gateway key. Local copy is a dev convenience; CI has the real one |
-| `CHEAPERINFERENCE_API_BASE` | **nothing** — no reader on `github/develop` | none | **Security** | **Dead name.** The house base is `OPENAI_API_BASE` (`config.py:193`); `git grep CHEAPERINFERENCE_API_BASE github/develop` returns no hit outside this doc. Delete |
+| `CHEAPERINFERENCE_API_KEY` | **no reader** — twelve-x never reads this name; CI maps it *into* `OPENAI_API_KEY` (`daily_run_reusable.yml:61,109`) | repo secret | **Security** | House gateway key, but in twelve-x it is a **CI-side alias only**, not a runtime env name. The runtime name is `OPENAI_API_KEY` (read `nodes/llm.py:102-104`; `validate_llm_credentials` raises `MissingLLMCredentialsError` at `:113-116` if it is empty or a placeholder — the `CHEAPERINFERENCE_API_KEY` mention at `:114` is inside that error *message*). A local copy under this name is dead weight; set `OPENAI_API_KEY` locally |
+| `CHEAPERINFERENCE_API_BASE` | **no reader** — `git grep CHEAPERINFERENCE_API_BASE github/develop` is empty in twelve-x | none **in twelve-x** (it *is* a live digithings repo variable — see [Storage surfaces](#storage-surfaces) and row (f)) | **Security** | **Dead name in twelve-x.** The house base is `OPENAI_API_BASE` (`config.py:193`, read `nodes/llm.py:86`). The repo qualifier matters: grepping this name in `digithings` finds live workflow reads, so "no reader" is true of twelve-x only |
 | `OPENAI_API_KEY` | `nodes/llm.py:102-104` | mapped from `CHEAPERINFERENCE_API_KEY` in CI | **Security** | See the `unresolved` note on the (b) row — this `.env` copy is the only place it exists |
 | `OPENAI_API_BASE` | `nodes/llm.py:86` | none (literal in workflows) | **Security** | Base URL, not a secret |
-| `NOTION_API_TOKEN` | **nothing** — no reader on `github/develop` | none | **Security** | **Dead name.** No Python, shell, or workflow file reads it. Rotate at Notion, then delete here |
+| `NOTION_API_TOKEN` | **no reader** — `git grep NOTION github/develop` in twelve-x is empty | none | **Security** | **Dead name.** No Python, shell, or workflow file in twelve-x reads it, so nothing here can tell you whether the value is still live at Notion — only Notion can. Delete here, and revoke at Notion if a twelve-x-integrated page ever existed |
 
 ### (g4) the surface-level fix, and why it is not this section
 
@@ -225,16 +245,37 @@ surface stop being anyone's problem:
 1. **Move the laptop's session keys out of `.env`** into Bitwarden Secrets Manager
    (DIG-95), same as `GH_DISPATCH_TOKEN` per R14. Then there is one copy, it has a
    writer, and the refresh script's `gh secret set` becomes the only path.
-2. **Delete the three dead names** — `NOTION_API_TOKEN`,
-   `CHEAPERINFERENCE_API_BASE`, and `SUPABASE_SERVICE_KEY` once
-   `TWELVEX_SUPABASE_SERVICE_KEY` is present. Verified dead or uncanonical against
-   `github/develop`, not inferred.
-3. **Give the desk login pair a decision** — Bitwarden or delete. It is a human's
-   account credential; the `.env` is the wrong home for it either way.
+2. **Delete the three names nothing reads** — `NOTION_API_TOKEN`,
+   `CHEAPERINFERENCE_API_BASE`, and `PRIMEMARKET_SESSION_COOKIE`; and rename
+   `SUPABASE_SERVICE_KEY` → `TWELVEX_SUPABASE_SERVICE_KEY` plus
+   `CHEAPERINFERENCE_API_KEY` → `OPENAI_API_KEY` so the local copies stop shadowing
+   what CI supplies. Verified dead or uncanonical against `github/develop`, not
+   inferred.
+3. **Give the desk login pair a decision** — Bitwarden or delete, in all three
+   places it lives. It is a human's account credential; the `.env` is the wrong home
+   for it, and the repo secret is the copy nobody remembers.
+4. **Check whether the repo-secret copies of the desk login pair are even set.**
+   Unanswerable from here — GitHub secrets are write-only — so it is a human step.
 
 None of these are done here. This section records the owner and the refresh path so
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
+
+## Review coverage for this section
+
+Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
+forced the correction of five substantive errors in the first draft: a claim that
+the `SUPABASE_SERVICE_KEY` copy could not satisfy its reader (it does — `config.py:38`
+is an `or` chain; only the raise *message* is misleading), a claim that both
+twelve-x alert bodies were already copy-aware (there is one, and it names neither
+copy), and three citations whose line numbers did not contain the cited facts
+(`PRIMEMARKET_DESK_API.md:151` → `:161`, `:160-162` → `:171-172`, and
+`PRIMEMARKET_SESSION_TOKEN` is not read by `config.py` at all). It also corrected
+"this `.env` only" for the desk login pair — those two names are in the repo secret
+too and still passed by two workflows — and split "dead" from "uncanonical" for
+the Supabase name. The takeaway for the next writer: **verify a line citation by
+reading the line on `github/develop`, not the working tree, and check the other
+repo before calling a shared name dead.**
 
 ## Risk register
 
