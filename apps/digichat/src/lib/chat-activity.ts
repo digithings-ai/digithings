@@ -530,6 +530,46 @@ export function standardPartsToSpans(
   return spans;
 }
 
+/**
+ * The digichat tools whose result is a retrieval, i.e. the ones for which an
+ * empty answer is a real answer. Membership here is what licenses the trailing
+ * pass to claim zero hits: we asked a search, it came back, and it brought
+ * nothing. Everything else — an MCP tool, a connector, anything whose output
+ * this projector was never taught to read — is not evidence of a retrieval, and
+ * its silence is an unknown, not an empty result.
+ *
+ * This is a list of our own tools, deliberately, not a list of output shapes. A
+ * shape list cannot be finished: the first MCP tool to answer in an unlisted
+ * shape would be misreported as "no hits" again. A tool list is closed by
+ * construction — anything not ours is unrecognised until someone adds it here
+ * on purpose (DIG-509 leaf 2a, same class as DIG-189).
+ */
+const SEARCH_TOOL_NAMES = new Set([
+  "azure_ai_search",
+  "digisearch",
+  "digivault",
+  "digivault_search_notes",
+  "file_search",
+  "rag_sources",
+  "web_search",
+]);
+
+/**
+ * The discriminator the transcript renders a status row from, so no renderer has
+ * to read the message prose back to learn what happened — `no results`,
+ * `failed` and `could not read` are three meanings, and matching English to tell
+ * them apart is guesswork (see the note above `activityMeta` in activity-view).
+ * `query` is left off when the turn never carried one; it is a known-unknown,
+ * never `""`.
+ */
+function statusOutcome(
+  name: string,
+  query: string,
+  state: NonNullable<Extract<DigiChatActivity, { kind: "status" }>["outcome"]>["state"],
+) {
+  return query ? { name, query, state } : { name, state };
+}
+
 export type ToDigiChatActivityOptions = {
   /**
    * When true (default), a completed search with no retrieve yet becomes a
@@ -565,6 +605,10 @@ export function toDigiChatActivity(
   // retrieve arriving afterwards overwrites the row before the trailing pass
   // ever runs, and the pass only looks at rows still shaped like a tool_call.
   const failedTools = new Set<string>();
+  // Tool keys whose completion carried a `toolResult` we can read but not count.
+  // A payload is the opposite of "found nothing", whatever shape it is in, so a
+  // search that returned one must never be rewritten as a zero-hit row.
+  const payloadTools = new Set<string>();
   // Row index of the still-open ("started", not yet resolved by a matching
   // completed/failed/retrieve span) call for each tool name — regardless of
   // whether the started span itself carried a query. Cleared the instant a
@@ -622,6 +666,7 @@ export function toDigiChatActivity(
       const key = toolKey(name, span.query ?? "");
       completedTools.add(key);
       if (span.status === "failed") failedTools.add(key);
+      if (span.toolResult !== undefined) payloadTools.add(key);
       const idx = pendingRow.get(name);
       pendingRow.delete(name);
 
@@ -655,6 +700,7 @@ export function toDigiChatActivity(
         const failResult: DigiChatActivity = {
           kind: "status",
           message: query ? `Search for "${query}" failed.` : "Search failed.",
+          outcome: statusOutcome(name, query, "failed"),
         };
         const failIdx = toolRows.get(key);
         const pending = pendingRow.get(name);
@@ -768,7 +814,8 @@ export function toDigiChatActivity(
   }
 
   // A search that completed and never produced citations is a "no hits" answer,
-  // not a perpetually-pending tool call — but only once the turn has settled.
+  // not a perpetually-pending tool call — but only once the turn has settled,
+  // and only for a tool we know searches (see SEARCH_TOOL_NAMES).
   // Mid-stream the call `.done` often arrives a few events before the output
   // `.done`; converting early flashes "no hits" then rewrites to real hits.
   // A search that errored is terminal either way — never leave it spinning,
@@ -780,12 +827,30 @@ export function toDigiChatActivity(
       rows[idx] = {
         kind: "status",
         message: row.query ? `Search for "${row.query}" failed.` : "Search failed.",
+        outcome: statusOutcome(row.name, row.query, "failed"),
       };
       continue;
     }
-    if (settle) {
-      rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
+    // `count: 0` is the only lever for "searched and found nothing", and the UI
+    // renders it as the literal string `no hits` — an authoritative negative. It
+    // requires evidence that a retrieval ran, and there are exactly two kinds
+    // here: the tool is one of ours that searches (an empty answer from it is a
+    // real answer, so the honest zero stands), or it came back with a payload we
+    // could read. A tool that is neither is a result this projector was never
+    // taught to interpret; rewriting it as empty invents the negative the
+    // "no hits" string asserts.
+    if (!settle) continue;
+    if (payloadTools.has(key) || !SEARCH_TOOL_NAMES.has(row.name)) {
+      rows[idx] = {
+        kind: "status",
+        message: row.query
+          ? `Could not read the result of "${row.name}" for "${row.query}".`
+          : `Could not read the result of "${row.name}".`,
+        outcome: statusOutcome(row.name, row.query, "unreadable"),
+      };
+      continue;
     }
+    rows[idx] = { kind: "tool_result", name: row.name, query: row.query, hits: [], count: 0 };
   }
 
   flushReasoning();
