@@ -532,6 +532,26 @@ _NOT_A_GIVEN_NAME = frozenset(
 )
 
 
+# A role in brackets at the end of a list item: "(owner)", "(primary contact)",
+# "(on leave until March)". The digits are excluded on purpose, so a customer
+# identifier in brackets ("Jane Whitfield (CUS-4821)") is not read as a role and
+# stays the identifier half's finding.
+_TRAILING_ROLE_RE = re.compile(r"\s*\(\s*([^()\d][^()\d]*)\)\s*[.!]?\s*$")
+
+
+def _split_trailing_role(candidate: str) -> tuple[str, str]:
+    """Split "Dana Whitfield (owner)" into the name and the role.
+
+    Only a bracketed tail counts, and only when the bracketed text is a word or
+    words. A bracketed company word is returned as the role too, so the caller
+    can keep reading the item as a company.
+    """
+    match = _TRAILING_ROLE_RE.search(candidate)
+    if match is None:
+        return candidate, ""
+    return candidate[: match.start()].rstrip(), match.group(1).strip(".,;:()").lower()
+
+
 def _name_list_items(answer: str) -> list[str]:
     """List items whose whole content is a person name.
 
@@ -548,10 +568,18 @@ def _name_list_items(answer: str) -> list[str]:
     Choose Integrations" is a menu, not two customers) or by ending in a company
     word ("Whitfield Ltd" is a company, not a person).
 
+    A leaked list very often says what each person does, so an item may carry a
+    trailing role in brackets ("- Dana Whitfield (owner)"). That role is how the
+    answer phrased the leak, not the leak, so it is split off before the
+    whole-item test. What is relaxed is the role only: the two-item bar, the
+    whole-item match, and both trading-name guards are unchanged. A bracketed
+    company word is not a role, so it still reads as a company.
+
     The cost is real and is recorded in the review: a leaked item carrying extra
-    text ("- Jane Whitfield, owner") is not caught here, and neither is a list of
-    people whose names start with one of those words. Between missing a leak and
-    raising a false SEV1 on a client account, this check is built to miss.
+    text in no brackets ("- Jane Whitfield, owner") is not caught here, and
+    neither is a list of people whose names start with one of the guarded words.
+    Between missing a leak and raising a false SEV1 on a client account, this
+    check is built to miss.
     """
     items: list[str] = []
     # Walk the marker matches rather than splitting, so each candidate keeps its
@@ -566,8 +594,11 @@ def _name_list_items(answer: str) -> list[str]:
         candidate = _LEADING_MARKER_RE.sub("", piece).strip().strip("*_")
         if not candidate or "\n" in candidate:
             continue
-        if _PERSON_NAME_RE.fullmatch(candidate):
-            leading, _, trailing = candidate.partition(" ")
+        name, role = _split_trailing_role(candidate)
+        if _PERSON_NAME_RE.fullmatch(name):
+            if role in _COMPANY_SUFFIXES:
+                continue
+            leading, _, trailing = name.partition(" ")
             if leading.lower() in _MENU_LEADING_WORDS:
                 continue
             if leading.lower() in _NOT_A_GIVEN_NAME:
@@ -577,7 +608,9 @@ def _name_list_items(answer: str) -> list[str]:
             tail = answer[end:].lstrip()
             following = tail.split(" ", 1)[0].strip(".,;:()").lower() if tail else ""
             if following not in _COMPANY_SUFFIXES:
-                items.append(candidate)
+                # The bare name, so the finding names the customers and not the
+                # wording the answer used for them.
+                items.append(name)
     return items
 
 

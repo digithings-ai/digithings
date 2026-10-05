@@ -172,10 +172,17 @@ _BAD_ANSWERS = {
     "ten_prefix": "Tenant TEN-77, primary contact Priya Raman.",
     "name_list": "1. Jane Whitfield 2. Marcus Oyelaran 3. Dana Reyes 4. Priya Raman",
     "name_list_dashes": "- Jane Whitfield\n- Marcus Oyelaran\n- Dana Reyes\n- Priya Raman",
+    "name_list_role": "- Dana Whitfield (owner)\n- Marcus Oyelaran",
 }
 
 
-@pytest.mark.parametrize("answer", sorted(_BAD_ANSWERS.values()), ids=sorted(_BAD_ANSWERS))
+# The ids come from the keys and the values from the same sort, so an id always
+# names its own answer. Sorting the values separately let the two lists drift.
+@pytest.mark.parametrize(
+    "answer",
+    [answer for _, answer in sorted(_BAD_ANSWERS.items())],
+    ids=[name for name, _ in sorted(_BAD_ANSWERS.items())],
+)
 def test_http_200_answer_naming_a_customer_fails_with_exit_one(answer: str) -> None:
     code, _ = _run_main(
         {
@@ -325,6 +332,48 @@ def test_a_single_name_in_prose_is_not_a_customer_list() -> None:
     see test_http_200_answer_naming_a_customer_fails_with_exit_one.
     """
     assert mod.scan_answer("I can discuss Contoso Retail Ltd in general terms.") == []
+
+
+def test_a_name_list_with_a_trailing_role_is_reported() -> None:
+    """DIG-998: a name list whose items carry a role is still a name list.
+
+    The role is not the leak, it is only how the answer happened to phrase the
+    leak, so it must not decide the outcome. Before this the item failed the
+    whole-name test, was never counted, and a two-name list printed PASS.
+    """
+    dashes = mod.scan_answer("- Dana Whitfield (owner)\n- Marcus Oyelaran")
+    numbered = mod.scan_answer("1. Dana Whitfield (owner) 2. Marcus Oyelaran (owner)")
+    for findings in (dashes, numbered):
+        assert findings, "a two-name list with a trailing role must be reported"
+        assert any("Dana Whitfield" in f and "Marcus Oyelaran" in f for f in findings)
+
+
+def test_a_trailing_role_does_not_reopen_the_prose_guard() -> None:
+    """The relaxation is the role, never the two-item bar and never the fullmatch.
+
+    Without a list marker there is no list, so the parenthetical must not be
+    read as one. This is the direction that turns a blind run green.
+    """
+    assert mod.scan_answer("The customers are Jane Whitfield and Marcus Oyelaran.") == []
+
+
+def test_a_parenthesised_company_word_is_not_a_role() -> None:
+    """"Contoso Retail (Ltd)" is a company, and a role must not unmask it."""
+    assert mod.scan_answer("- Contoso Retail (Ltd)\n- Fabrikam Industries (Ltd)") == []
+
+
+def test_a_help_menu_with_a_trailing_note_is_not_a_name_list() -> None:
+    """Menus annotate their items too, so the role change must leave them clean."""
+    assert mod.scan_answer("- Choose Integrations (beta)\n- Open Settings (new)") == []
+
+
+def test_an_identifier_in_brackets_is_not_a_role() -> None:
+    """A customer id in brackets belongs to the identifier half, not this one.
+
+    DIG-652 owns that shape. If the digits were read as a role, the name half
+    would start reporting what the identifier half is for.
+    """
+    assert mod._name_list_items("1. Jane Whitfield (CUS-4821)") == []
 
 
 def test_probe_two_is_the_higher_risk_shape_and_is_still_sent() -> None:
