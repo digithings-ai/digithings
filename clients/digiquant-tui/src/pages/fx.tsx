@@ -460,7 +460,17 @@ function ageLabel(sessions: number): string {
   return sessions === 1 ? "1 trading day old" : `${sessions} trading days old`;
 }
 
-/** Pane footer: the as-of date, how far behind it is, and stale when it is too far. */
+/** The state word a footer names, or "" when the pane is not aged past `ok`.
+ *  The footer renders in MUTE, so this word is the only part of it that carries
+ *  severity without relying on body ink. An aged pane therefore names its state;
+ *  an `ok` pane does not, because "current session" already carries the claim. */
+function ageStateWord(sessions: number): string {
+  if (sessions >= SESSION_STALE) return "stale";
+  if (sessions >= SESSION_WARN) return "warn";
+  return "";
+}
+
+/** Pane footer: the as-of date, how far behind it is, and which state that is. */
 export function fxPaneStatus(
   result: ReadResult | null,
   data: unknown,
@@ -477,7 +487,8 @@ export function fxPaneStatus(
   // Both ends are normalised YYYY-MM-DD, so the string compare is the date compare.
   const today = calendarDay(now);
   if (today !== null && runDate > today) return `as of ${runDate}`;
-  return `as of ${runDate} · ${ageLabel(sessions)}${sessions >= SESSION_STALE ? " · stale" : ""}`;
+  const state = ageStateWord(sessions);
+  return `as of ${runDate} · ${ageLabel(sessions)}${state ? ` · ${state}` : ""}`;
 }
 
 type Loaded = { result: ReadResult; data: unknown };
