@@ -38,7 +38,7 @@ export const edges: { a: string; b: string }[] = [
   { a: "digigraph", b: "digisearch" },
   { a: "digigraph", b: "digichat" },
   { a: "digigraph", b: "digikey" },
-  { a: "digigraph", b: "digismith" },
+  { a: "digigraph", b: "digitrace" },
   { a: "digigraph", b: "digiclaw" },
   { a: "digigraph", b: "digivault" },
   { a: "digiquant", b: "digistore" },
@@ -48,7 +48,7 @@ export const edges: { a: string; b: string }[] = [
   { a: "digichat", b: "digikey" },
   { a: "digichat", b: "digisearch" },
   { a: "digiclaw", b: "digiquant" },
-  { a: "digismith", b: "digichat" },
+  { a: "digitrace", b: "digichat" },
 ];
 
 export const modules: ModuleNode[] = [
@@ -128,10 +128,10 @@ export const modules: ModuleNode[] = [
     graph: { x: 620, y: 175, r: 26 },
     emblem: "digisearch",
     role: "Vector retrieval · multi-backend",
-    tagline: "Production RAG without a stack rewrite when you switch vector DB.",
+    tagline: "RAG without a stack rewrite when you switch vector DB.",
     summary: [
       "One client over Cloudflare Vectorize, Azure AI Search, or Chroma, with backend-neutral entities so you swap engines without touching business code.",
-      "Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup and pdfplumber handle ingest, Polars throughout.",
+      "Dense, sparse and hybrid retrieval all ship; BeautifulSoup and pdfplumber handle ingest, Polars throughout.",
     ],
     stack: [
       { name: "Cloudflare Vectorize", icon: null, mono: "CF" },
@@ -160,7 +160,7 @@ export const modules: ModuleNode[] = [
     graph: { x: 460, y: 440, r: 26 },
     emblem: "digichat",
     role: "Chat surface · Next.js BFF · BYOK",
-    tagline: "Talk to your stack with your keys, your models, your audit log.",
+    tagline: "Talk to your stack with your keys, models and audit log.",
     summary: [
       "A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key forwarded per request — never stored, never logged.",
       "NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.",
@@ -213,19 +213,19 @@ export const modules: ModuleNode[] = [
     },
     api: [{ label: "Issuer config", code: "DIGIKEY_ISSUER=https://…" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
-    related: ["digichat", "digigraph", "digismith"],
+    related: ["digichat", "digigraph", "digitrace"],
   },
   {
-    id: "digismith",
-    name: "digismith",
+    id: "digitrace",
+    name: "digitrace",
     tier: "support",
     graphOrder: 5,
     graph: { x: 95, y: 300, r: 20 },
-    emblem: "digismith",
+    emblem: "digitrace",
     role: "Observability · spans · correlation IDs",
     tagline: "Correlation IDs across every hop — and prompts logged by length, never by text.",
     summary: [
-      "Structured logging, Prometheus metrics, and OpenTelemetry spans thread through every request so a multi-hop run is traceable end to end.",
+      "Structured logging, Prometheus metrics and OpenTelemetry spans thread through every request, so a multi-hop run is traceable.",
       "Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Optional LangSmith export runs a regex PII redactor on the way out.",
     ],
     stack: [
@@ -234,7 +234,7 @@ export const modules: ModuleNode[] = [
       { name: "Prometheus", icon: "prometheus" },
       { name: "FastAPI", icon: "fastapi" },
     ],
-    dockerCmd: "docker compose up -d digismith",
+    dockerCmd: "docker compose up -d digitrace",
     initSnippet: {
       lang: "python",
       code: "from digibase.http import install_request_id_middleware\ninstall_request_id_middleware(app)",
@@ -264,7 +264,7 @@ export const modules: ModuleNode[] = [
     initSnippet: { lang: "bash", code: "python -m digiclaw   # runs on an interval" },
     api: [{ label: "Run the daemon", code: "python -m digiclaw" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
-    related: ["digiquant", "digismith"],
+    related: ["digiquant", "digitrace"],
   },
   {
     id: "digibase",
@@ -292,7 +292,7 @@ export const modules: ModuleNode[] = [
     },
     api: [{ label: "Import", code: "from digibase.audit import redact_mapping" }],
     links: [{ label: "Source", href: "https://github.com/digithings-ai" }],
-    related: ["digismith", "digisearch"],
+    related: ["digitrace", "digisearch"],
   },
   {
     id: "digivault",

@@ -39,6 +39,7 @@ from digiquant.dashboard.accounting.models import (
     PeriodStatus,
     QualityReason,
 )
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
@@ -223,6 +224,32 @@ def test_incomplete_marks_remain_non_final() -> None:
     persist_period(client=client, period=period, effective_at=EFFECTIVE)
     assert period_head(client=client, period_date=PERIOD)["status"] == "incomplete"
     assert select_final_period(client=client, period_date=PERIOD) is None
+
+
+def test_period_head_ignores_overlay_on_the_same_date() -> None:
+    house = str(house_workspace_id())
+    overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    client = FakeSupabaseClient(
+        canned_reads={
+            PERIODS: [
+                {
+                    "id": "house-period",
+                    "period_date": PERIOD.isoformat(),
+                    "workspace_id": house,
+                    "status": "final",
+                },
+                {
+                    "id": "overlay-period",
+                    "period_date": PERIOD.isoformat(),
+                    "workspace_id": overlay,
+                    "status": "final",
+                },
+            ]
+        }
+    )
+    head = period_head(client=client, period_date=PERIOD)
+    assert head is not None
+    assert head["id"] == "house-period"
 
 
 def test_provisional_commit_nav_cannot_be_selected_as_final() -> None:

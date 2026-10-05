@@ -25,7 +25,7 @@ export DIGIVAULT_URL="${DIGIVAULT_URL:-http://127.0.0.1:8004}"
 export DIGISEARCH_URL="${DIGISEARCH_URL:-http://127.0.0.1:8002}"
 # Chat-only: never default digiquant URL (would trigger backtest_node / DATA_DIR errors).
 export DIGIQUANT_URL="${DIGIQUANT_URL:-}"
-export DIGISMITH_URL="${DIGISMITH_URL:-}"
+export DIGITRACE_URL="${DIGITRACE_URL:-}"
 export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 # House default: merge Cheaper Inference overlay when key present (unless forced OR).
@@ -130,7 +130,7 @@ export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"
-export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digismith/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="/app/digikey/src:/app/digigraph/src:/app/digisearch/src:/app/digivault/src:/app/digibase/src:/app/digillm/src:/app/digitrace/src${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="/usr/local/bin:$PATH"
 
 # Container envVars may mangle multiline PEMs — accept base64-wrapped secret,

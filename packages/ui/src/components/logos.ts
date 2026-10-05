@@ -2,16 +2,16 @@
  * Static registry of the vendor logos referenced by the module/subsystem
  * manifests. Named imports (not `import * as`) keep this tree-shakeable so only
  * these ~18 icons ship — not the whole simple-icons set. Any slug NOT in this
- * map falls back to a monogram chip in StackLogo (e.g. coingecko, and the
- * no-mark names like NautilusTrader, LiteLLM, LangSmith, Cheaper Inference,
+ * map falls back to a monogram chip in StackLogo (the no-mark names like
+ * NautilusTrader, LiteLLM, LangSmith, Cheaper Inference,
  * Assistant UI — those publish no single-path monochrome SVG, which is what
  * StackLogo needs).
  */
 import {
   siDocker, siDrizzle, siFastapi, siLangchain, siLanggraph,
   siModelcontextprotocol, siNextdotjs, siOpenai, siOpentelemetry, siOptuna,
-  siPolars, siPostgresql, siPrometheus, siPydantic, siReact, siRedis,
-  siSqlite, siSupabase, siVercel,
+  siPolars, siPostgresql, siPrometheus, siPydantic, siReact, siRedis, siSqlite,
+  siSupabase, siVercel,
 } from "simple-icons";
 
 export interface SimpleIcon { hex: string; path: string }

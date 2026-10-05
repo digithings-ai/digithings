@@ -1,7 +1,8 @@
 /**
  * digithings-cron — org-wide Cloudflare Worker production clocks (#3579, #4761).
- * Cron Triggers fire workflow_dispatch / repository_dispatch, or POST the
- * private digiquant-runner when the job kind is "container".
+ * Cron Triggers fire workflow_dispatch / repository_dispatch, POST the
+ * private digiquant-runner when the job kind is "container", or fetch public
+ * probe URLs when the job kind is "probe".
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */
@@ -17,13 +18,43 @@ export type StartedRun = {
 };
 
 type RunOptions = {
-  /** Skip etOpenGate for this kick only. Cron triggers never set this. */
+  /** Skip etOpenGate and preserve privileged house args for this kick only. */
   force?: boolean;
   /** Optional kick args (for example run_writers=true). Cron sends none. */
   args?: Record<string, string>;
   /** POST /kick awaits so the response can include run ids. */
   awaitDispatch?: boolean;
+  /** Manual /kick may start paused jobs; scheduled() never sets this. */
+  includeDisabled?: boolean;
 };
+
+export function houseArgs(
+  force: boolean,
+  bodyArgs: Record<string, string>,
+  now: number,
+): Record<string, string> {
+  const runDate = new Date(now).toISOString().slice(0, 10);
+  if (!force) {
+    return { refresh_scope: "none", run_date: runDate };
+  }
+  return {
+    ...bodyArgs,
+    refresh_scope: bodyArgs.refresh_scope ?? "none",
+    run_date: bodyArgs.run_date ?? runDate,
+    force: "true",
+  };
+}
+
+/** Ordinary ticks and unforced kicks send {}. Only force may keep dry_run "true". */
+export function checkpointArgs(
+  force: boolean,
+  bodyArgs: Record<string, string>,
+): Record<string, string> {
+  if (force && bodyArgs.dry_run === "true") {
+    return { dry_run: "true" };
+  }
+  return {};
+}
 
 function startedRun(job: Job, result: DispatchResult): StartedRun {
   const run: StartedRun = {
@@ -41,7 +72,7 @@ async function runJobsForCron(
   ctx: ExecutionContext,
   opts: RunOptions = {},
 ): Promise<{ started: string[]; skipped: string[]; runs: StartedRun[] }> {
-  const jobs = jobsForCron(cron);
+  const jobs = jobsForCron(cron, { includeDisabled: opts.includeDisabled });
   const started: string[] = [];
   const skipped: string[] = [];
   const pending: Promise<StartedRun>[] = [];
@@ -65,8 +96,14 @@ async function runJobsForCron(
       continue;
     }
     started.push(job.id);
+    let args = opts.args;
+    if (job.command === "house-run") {
+      args = houseArgs(opts.force === true, opts.args ?? {}, scheduledTime);
+    } else if (job.command === "checkpoint-archive") {
+      args = checkpointArgs(opts.force === true, opts.args ?? {});
+    }
     pending.push(
-      dispatch(env, job, cron, scheduledTime, { args: opts.args }).then((result) =>
+      dispatch(env, job, cron, scheduledTime, { args }).then((result) =>
         startedRun(job, result),
       ).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -189,6 +226,7 @@ export default {
         force,
         args,
         awaitDispatch: true,
+        includeDisabled: true,
       });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }

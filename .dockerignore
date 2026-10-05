@@ -1,13 +1,18 @@
 # Root build context is shared by every service compose builds with `context: .`
-# (digikey, digigraph, digiquant, digismith, digiclaw, digichat). Their
+# (digikey, digigraph, digiquant, digitrace, digiclaw, digichat). Their
 # Dockerfiles COPY the service source dirs, so exclude only what no image needs.
 .git
 .github
+# digiquant-runner house-run reads only these two files. The rest of .github stays out.
+!.github/digiquant-pipeline.yml
+!.github/workflows/pipeline-digiquant-allocation-shadow.yml
 .worktrees
 .claude
 .playwright-mcp
 node_modules
 **/node_modules
+# Host virtualenvs are not the image. uv sync builds /app/.venv.
+**/.venv
 **/.next
 **/out
 dist
@@ -26,9 +31,14 @@ scripts
 !scripts/backfill_market_data_r2.py
 # execution-cron-check probe wrapper (Phase 2, #4761).
 !scripts/execution_cron_check.py
+# checkpoint-archive (Phase 4, #4761).
+!scripts/digiquant_archive_checkpoints.py
+!scripts/digiquant_checkpoint_size_gate.py
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp
+# Boot-time occ_tickets backfill, run by [program:seed_occ_tickets].
+!scripts/index_occ_tickets.py
 agents
 apps/digithings-web
 apps/digiquant-web

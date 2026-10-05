@@ -243,21 +243,37 @@ class TestWorkflowDailyCadence:
         assert "run_type=monthly" not in text
         assert '--run-type "monthly"' not in text
 
-    def test_dashboard_workflow_schedule_is_daily(self) -> None:
-        """Production clock is digithings-cron (#3579); house-run jobs keep the daily cadence."""
+    def test_house_run_schedule_matches_cost_lock(self) -> None:
+        """Production clock is digithings-cron (#3579); house-run is Monday-only since #4958.
+
+        #4958 moved ``house-run-09`` to a single weekly Monday morning clock (cost lock
+        2026-10-01). The 10/11/12 retry slots keep their daily cron strings so a future
+        re-enable is a one-line flip, but they must stay disabled until then.
+        """
         import re
 
         jobs_src = (
             Path(__file__).resolve().parents[3] / "apps" / "digithings-cron" / "src" / "jobs.ts"
         )
+        source = jobs_src.read_text(encoding="utf-8")
         pairs = dict(
             re.findall(
                 r'(?:wd|rd|cj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
-                jobs_src.read_text(encoding="utf-8"),
+                source,
                 flags=re.DOTALL,
             )
         )
-        for hour in (9, 10, 11, 12):
+        assert pairs.get("house-run-09") == "17 9 * * MON"
+        for hour in (10, 11, 12):
             assert pairs.get(f"house-run-{hour:02d}") == f"17 {hour} * * *"
         assert "house-run-sun" not in pairs
         assert "0 12 * * *" not in pairs.values()
+
+        # Only the Monday clock may run; the retry slots stay parked but re-enableable.
+        blocks = {
+            m.group(1): m.group(0)
+            for m in re.finditer(r'cj\(\s*"(house-run-\d+)"[\s\S]*?\n  \),', source)
+        }
+        assert "enabled: false" not in blocks["house-run-09"]
+        for job_id in ("house-run-10", "house-run-11", "house-run-12"):
+            assert "enabled: false" in blocks[job_id], f"{job_id} must stay disabled"

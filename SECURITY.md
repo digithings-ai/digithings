@@ -27,7 +27,7 @@ STRIDE categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation
 | External unauthenticated attacker | digichat BFF / leaked service endpoint | S — forge identity, replay tokens | RS256 JWTs with JWKS rotation; digichat session binding; CORS allowlist (no `*`) via `digibase.cors`. | JWKS cached 300 s — revocation propagation delayed; no WAF / bot-management layer. |
 | External unauthenticated attacker | Auth paths (`/v1/oauth/token`, `/v1/admin/keys`) | D — brute-force / credential stuffing against bcrypt verify | Per-IP token-bucket limiter in `digikey.ratelimit` (10 rpm, burst 20); `/healthz` / JWKS exempt so probes stay live under load. | Pure in-process bucket — no cross-instance sharing; no global DDoS protection beyond per-IP. |
 | External unauthenticated attacker | All FastAPI services | T/I — malformed payloads, parser abuse, unbounded bodies | Pydantic v2 models with `extra="forbid"` at every HTTP handler; bounded `httpx` timeouts via `digibase.http_client`; loopback binding keeps the attack surface off the public Internet by default. | No explicit request body-size cap at the ASGI layer; relies on upstream gateway for byte limits. |
-| External unauthenticated attacker | `/healthz`, `/.well-known/jwks.json` | I — fingerprint service versions | Endpoints are deliberately minimal and secret-free; `/v1/status` on digismith is audited for secret leakage. | Version / stack fingerprinting is possible from response shape; acceptable given public-by-design contract. |
+| External unauthenticated attacker | `/healthz`, `/.well-known/jwks.json` | I — fingerprint service versions | Endpoints are deliberately minimal and secret-free; `/v1/status` on digitrace is audited for secret leakage. | Version / stack fingerprinting is possible from response shape; acceptable given public-by-design contract. |
 | Compromised digikey API key holder | Tenant data in digisearch / digiquant | E — widen blast radius beyond issued scopes | Scoped API keys with per-route scope enforcement (`service_middleware`); tenant scope bound at the key layer. | Storage-layer tenant isolation is a roadmap item — today, isolation is key-scope-only (see `digibase/ARCHITECTURE.md`). |
 | Compromised digikey API key holder | Live-trading paths (IB/Alpaca/QuantConnect adapters) | E — submit real orders | Broker adapters raise `NotImplementedError`; any code change touching them requires a `Human-Approved-By:` commit trailer enforced by `scripts/hooks/pre-push.sh`; the live-trading human gate lives in `docs/agents/CODE_REVIEW_POLICY.md`. | No runtime circuit-breaker yet — the gate is source-tree + commit-trailer, not a runtime interlock. |
 | Compromised digikey API key holder | Audit trail | R — deny actions taken | Immutable JSONL audit via `digibase.audit.redact_mapping`; spans carry `workflow_id`, `request_id`, `session_id`. | Audit log is local per-host; no append-only remote sink or signed chain. |
@@ -59,8 +59,8 @@ These are enforced in code and reviewed on every PR:
 3. **Human gates before any live trade.** Broker adapters (IB, Alpaca, QuantConnect) currently raise `NotImplementedError`. Any change to those paths requires explicit human approval per `docs/agents/CODE_REVIEW_POLICY.md`.
 4. **Debug and thread endpoints are off by default.** `DIGI_ENABLE_DEBUG_ENDPOINTS` and `DIGI_ENABLE_THREAD_API` default to `0`; `/v1/debug/*`, `/test_llm`, and `/threads/*` are not exposed unless explicitly enabled.
 5. **LiteLLM proxy is not unauthenticated in non-dev deployments.** With no `LITELLM_MASTER_KEY`, the proxy may accept requests without a Bearer — acceptable only on loopback/trusted networks. Beyond local dev, set `LITELLM_MASTER_KEY` (and `LITELLM_PROXY_API_KEY` on digigraph to match, or issue virtual keys via digikey).
-6. **Audit events must be redacted before persistence.** Every `audit.jsonl` writer must go through `digibase.audit.redact_mapping` (or equivalent). API keys, JWTs, prompts, and document bodies must not appear in audit events. The `/v1/status` endpoint on digismith is public — keep it secret-free.
-7. **Observability spans do not carry secrets.** digismith spans must include `workflow_id`, `request_id`, `session_id` but never raw prompts, API keys, or full document bodies.
+6. **Audit events must be redacted before persistence.** Every `audit.jsonl` writer must go through `digibase.audit.redact_mapping` (or equivalent). API keys, JWTs, prompts, and document bodies must not appear in audit events. The `/v1/status` endpoint on digitrace is public — keep it secret-free.
+7. **Observability spans do not carry secrets.** digitrace spans must include `workflow_id`, `request_id`, `session_id` but never raw prompts, API keys, or full document bodies.
 8. **Bounded outbound HTTP timeouts.** Every service-to-service `httpx` call site constructs its client through `digibase.http_client.async_client` / `sync_client`, which apply a default `httpx.Timeout(connect=5, read=30, write=10, pool=5)` envelope. Bare `httpx.AsyncClient()` / `httpx.Client()` — which default to *no* read timeout and will hang indefinitely against a slow upstream LLM or broker — are forbidden in production code. Call sites that legitimately need longer budgets (e.g. 600 s backtest submission) pass an explicit `timeout=` override; the helpers preserve it verbatim. This bounds worst-case request latency under upstream degradation and prevents resource exhaustion on stalled connections.
 
 ## Data protection
@@ -136,7 +136,7 @@ verify path.
 
 ## CORS policy
 
-Every FastAPI service (digigraph, digiquant, digisearch, digismith, digikey)
+Every FastAPI service (digigraph, digiquant, digisearch, digitrace, digikey)
 installs CORS middleware via the shared helper
 [`digibase.cors.install_cors`](digibase/src/digibase/cors.py). The helper reads
 an **explicit allowlist** from the environment — there is no wildcard
@@ -146,7 +146,7 @@ an **explicit allowlist** from the environment — there is no wildcard
 
 1. `<SERVICE>_CORS_ORIGINS` — per-service override
    (`DIGIGRAPH_CORS_ORIGINS`, `DIGIQUANT_CORS_ORIGINS`,
-   `DIGISEARCH_CORS_ORIGINS`, `DIGISMITH_CORS_ORIGINS`,
+   `DIGISEARCH_CORS_ORIGINS`, `DIGITRACE_CORS_ORIGINS`,
    `DIGIKEY_CORS_ORIGINS`).
 2. `DIGI_CORS_ORIGINS` — global allowlist shared by every service.
 3. `DIGI_ALLOWED_ORIGINS` — legacy global allowlist (back-compat; deprecated,
@@ -196,7 +196,7 @@ Every Python component is scanned on every PR, every push to `main`/`develop`, a
 
 - **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
-- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digismith`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
+- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
 
 The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
 

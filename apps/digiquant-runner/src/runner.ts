@@ -46,6 +46,7 @@ export class DigiQuantRunnerContainer extends Container<Env> {
     return new RunnerSession({
       kv: kvFromStorage(this.ctx.storage),
       port: portFromContainer(this),
+      archive: this.env.ARCHIVE,
       scheduleAlarm: (delayMs: number) => {
         const seconds = Math.max(1, Math.round(delayMs / 1000));
         // Must await: void-schedule can drop the DO alarm registration when the

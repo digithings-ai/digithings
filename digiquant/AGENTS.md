@@ -559,6 +559,14 @@ stays a generic transport engine (no URLs, no env reads).
   (`data/prices/gloomberb_macro.py`). Delay on econ prints is publisher lag
   (a monthly CPI print), not the 15-minute equity delay — do not stamp
   "delayed up to 15 minutes" on these parquet rows.
+  **twelve-x exception (owner lock 2026-10-04, DIG-20):** the twelve-x FX pipeline — and only that
+  pipeline — uses Gloomberb as its price source of record: spot fixes, daily price history and
+  technicals. The 15-minute free-tier delay, rate limits, §5.2 resolution/range caps and the
+  measured 24–101 bps same-date disagreement against the core fix are accepted as known and
+  documented. On any Gloomberb failure the run fails loudly and publishes no board; core
+  substitution is permitted only as an explicit, default-off opt-in with feed attribution on every
+  artefact and a report to the board. `GLOOMBERB_ENABLED=0` on this path means refused-or-declared,
+  never silent. The enrichment-only rule stands for every other pipeline.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
   either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
   `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the

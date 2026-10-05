@@ -1,3 +1,8 @@
+// Workers tsconfig types are @cloudflare/workers-types only. This file reads
+// wrangler.toml the same way apps/digichat-cloudflare/src/embed-flag.test.ts does.
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import commandsJson from "../commands.json";
 import {
@@ -45,7 +50,7 @@ describe("phase 1 commands", () => {
   });
 
   it("rejects an unknown command", () => {
-    expect(() => assertKnownCommand("house-run", raw)).toThrow(/unknown command/);
+    expect(() => assertKnownCommand("not-a-command", raw)).toThrow(/unknown command/);
   });
 
   it("does not declare GitHub failure issues", () => {
@@ -160,5 +165,95 @@ describe("phase 2 commands", () => {
     expect(lines[3]).toContain("--push-supabase");
     expect(lines[3]).toContain("--signal-delay-days 3");
     expect(lines[3]).toContain("--cache-dir digiquant/data/price-history");
+  });
+});
+
+describe("phase 3 house-run", () => {
+  it("house-run matches the workflow caps and does not file issues", () => {
+    const spec = assertKnownCommand("house-run", raw);
+    expect(spec.timeout_seconds).toBe(14400);
+    expect(spec.concurrency).toBe("digiquant-pipeline");
+    expect(spec.extra_env?.DIGILLM_MAX_CONCURRENT_CALLS).toBe("8");
+    expect(spec.extra_env?.DIGIQUANT_SHADOW_ARTIFACT_MODE).toBe("export");
+    const flat = JSON.stringify(spec.steps);
+    expect(flat).toContain("fetch-macro");
+    expect(flat).toContain("fedprob");
+    expect(flat).toContain("validate-providers.py");
+    expect(flat).toContain("house_chain_step.py");
+    expect(spec).not.toHaveProperty("failure_issue");
+  });
+
+  it("keeps one standard-2 container class", () => {
+    const toml = readFileSync(join(__dirname, "../wrangler.toml"), "utf8");
+    const containers = toml.match(/^\[\[containers\]\]/gm) ?? [];
+    expect(containers).toHaveLength(1);
+    expect(toml).toContain('class_name = "DigiQuantRunnerContainer"');
+    expect(toml).toContain('instance_type = "standard-2"');
+    expect(toml).toContain("max_instances = 1");
+    expect(toml).not.toContain("standard-3");
+    expect(toml).not.toContain("standard-4");
+    expect(toml).not.toContain("DigiQuantHouseContainer");
+  });
+
+  it("allocation-shadow allowlist is empty and the checker is first", () => {
+    const spec = assertKnownCommand("allocation-shadow", raw);
+    expect(spec.env).toEqual([]);
+    expect(spec.alias_supabase).toBeFalsy();
+    const first = spec.steps[0];
+    const argv = Array.isArray(first) ? first : first.argv;
+    expect(argv.join(" ")).toContain("check_allocation_shadow_isolation.py");
+    expect(JSON.stringify(spec)).not.toContain("OPENROUTER");
+    expect(JSON.stringify(spec)).not.toContain("CORE_SUPABASE");
+    expect(JSON.stringify(spec)).not.toContain("LANGFUSE");
+    expect(JSON.stringify(spec)).not.toContain("DIGI_OTEL");
+  });
+});
+
+describe("phase 4 checkpoint-archive", () => {
+  it("checkpoint-archive matches the workflow and publishes optionally", () => {
+    const spec = assertKnownCommand("checkpoint-archive", raw);
+    expect(spec.timeout_seconds).toBe(3600);
+    expect(spec.concurrency).toBe("checkpoint-archive");
+    expect(spec.code_ref).toBe("main");
+    expect(spec.alias_supabase).toBe(true);
+    expect(spec.env).toEqual([
+      "CORE_SUPABASE_URL",
+      "CORE_SUPABASE_SERVICE_KEY",
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CORE_POSTGRES_URI",
+    ]);
+    const flat = JSON.stringify(spec.steps);
+    expect(flat).toContain("digiquant_checkpoint_size_gate.py");
+    expect(flat).toContain("--snapshot-out");
+    expect(flat).toContain("digiquant_archive_checkpoints.py");
+    expect(flat).toContain("--retain-days");
+    expect(flat).toContain("--manifest-out");
+    expect(spec.steps).toHaveLength(3);
+    const size = spec.steps[0];
+    const dry = spec.steps[1];
+    const live = spec.steps[2];
+    if (isArgvStep(size) || isArgvStep(dry) || isArgvStep(live)) {
+      throw new Error("checkpoint-archive steps must be gated objects");
+    }
+    expect(size.continue_on_error).toBe(true);
+    expect(size.argv).toContain("/tmp/checkpoint-size-pre.json");
+    expect(dry.when_arg).toBe("dry_run");
+    expect(dry.equals).toBe("true");
+    expect(dry.argv).toContain("--dry-run");
+    expect(live.when_arg_empty).toBe("dry_run");
+    expect(live.argv).not.toContain("--dry-run");
+    expect(spec.publish_if_present).toEqual([
+      "/tmp/checkpoint-archive-manifests.json",
+      "/tmp/checkpoint-size-pre.json",
+    ]);
+    expect(spec).not.toHaveProperty("publish");
+    expect(spec).not.toHaveProperty("failure_issue");
+    expect(JSON.stringify(spec)).not.toContain("GH_ISSUE_TOKEN");
+    expect(JSON.stringify(spec)).not.toContain("FRED_API_KEY");
+    expect(JSON.stringify(spec)).not.toContain("OPENROUTER_API_KEY");
+    expect(JSON.stringify(spec)).not.toContain("LANGSMITH_API_KEY");
   });
 });

@@ -58,6 +58,18 @@ export function isoDay(stamp: string | null | undefined): string {
   return stamp ? stamp.slice(0, 10) : "";
 }
 
+/**
+ * A module's size in lines of code, or null when the snapshot has no entry.
+ *
+ * The mosaic sizes its tiles by this, so the figure and the tile's size come
+ * from the same number and cannot disagree. Null is meaningful and not zero: the
+ * two roadmap modules have no directory yet, so they have no lines to count, and
+ * showing them a `0` would read as "built and empty" rather than "not built".
+ */
+export function moduleLines(id: string): number | null {
+  return repoActivity.modules[id]?.lines ?? null;
+}
+
 /** Thousands-separated, for counts that have grown past four digits. */
 export function grouped(n: number): string {
   return n.toLocaleString("en-US");

@@ -22,6 +22,8 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
 

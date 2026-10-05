@@ -55,6 +55,7 @@ class CaptureResult(BaseModel):
     tool: str
     seconds: int
     argv: list[str] = Field(default_factory=list)
+    stopped_early: bool = False
 
 
 class Transcript(BaseModel):
@@ -69,3 +70,23 @@ class PasteResult(BaseModel):
     attempted: bool
     pasted: bool
     detail: str
+
+
+class SpeakResult(BaseModel):
+    text: str
+    voice_path: str
+    wav_path: str
+    player: str
+    argv_piper: list[str] = Field(default_factory=list)
+    argv_play: list[str] = Field(default_factory=list)
+
+
+class RewriteResult(BaseModel):
+    """Post-STT local rewrite outcome. `applied` is False when disabled or failed soft."""
+
+    text: str
+    applied: bool
+    preset: str
+    detail: str
+    runner: str | None = None
+    app_name: str | None = None

@@ -113,7 +113,7 @@ export const guides: Guide[] = [
       {
         kind: "list",
         items: [
-          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digismith, digivault, digiclaw (pin `sha-<12>` in production).",
+          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw (pin `sha-<12>` in production).",
           "`DIGICHAT_IMAGE_TAG` — digichat only; prefer `vX.Y.Z` from release-please.",
         ],
       },
@@ -166,7 +166,7 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          "Does not start digiquant / digisearch / digismith / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.",
+          "Does not start digiquant / digisearch / digitrace / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.",
       },
     ],
   },
@@ -186,7 +186,7 @@ export const guides: Guide[] = [
           "`digigraph` `:8000` — workflows, OpenAI-compatible chat, federated tools",
           "`digiquant` `:8001` — NautilusTrader backtest / optimize",
           "`digisearch` `:8002` — RAG ingest + query",
-          "`digismith` `:8003` — observability helpers + status",
+          "`digitrace` `:8003` — observability helpers + status",
           "`digivault` `:8004` — vault (opt-in compose profile)",
           "`digikey` `:8005` — API keys + JWT exchange + JWKS",
           "`digichat` `:3005` — Next.js BFF + chat UI (profile `digichat`)",
@@ -279,7 +279,7 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          '`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (digigraph, digismith) is a richer operator diagnostic; never use it for health checks.',
+          '`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (digigraph, digitrace) is a richer operator diagnostic; never use it for health checks.',
       },
       { kind: "h", text: "Error envelope" },
       { kind: "p", text: "Every service returns the same error shape:" },

@@ -21,6 +21,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+from lib.roots import RESEARCH_CONFIG  # noqa: E402
 
 # Load .env if present (repo root carries the R2 credentials this read needs).
 try:
@@ -78,7 +82,7 @@ def main():
     )
     args = parser.parse_args()
 
-    portfolio_path = ROOT / "config" / "portfolio.json"
+    portfolio_path = RESEARCH_CONFIG / "portfolio.json"
     if not portfolio_path.exists():
         print(f"❌ Not found: {portfolio_path}", file=sys.stderr)
         sys.exit(1)

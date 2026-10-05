@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any, MutableMapping
+from urllib.parse import unquote
 
 logger = logging.getLogger(__name__)
 
 # Prefer the digithings alias; fall back to the OpenTelemetry standard env var.
 _ENDPOINT_ENVS = ("DIGI_OTEL_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+_HEADERS_ENVS = ("DIGI_OTEL_HEADERS", "OTEL_EXPORTER_OTLP_HEADERS")
 
 
 def resolve_otel_endpoint() -> str:
@@ -19,6 +21,35 @@ def resolve_otel_endpoint() -> str:
         if value:
             return value
     return ""
+
+
+def resolve_otel_headers() -> dict[str, str]:
+    """Return OTLP headers from ``DIGI_OTEL_HEADERS`` or ``OTEL_EXPORTER_OTLP_HEADERS``.
+
+    Parses the OTel standard comma-separated ``key=value`` format, URL-decoding
+    values (e.g. ``Authorization=Basic%20abc``). Empty / unset → ``{}``.
+    Malformed pairs are skipped without raising.
+    """
+    raw = ""
+    for key in _HEADERS_ENVS:
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            raw = value
+            break
+    if not raw:
+        return {}
+    headers: dict[str, str] = {}
+    for segment in raw.split(","):
+        segment = segment.strip()
+        if not segment or "=" not in segment:
+            continue
+        name, _, val = segment.partition("=")
+        name = name.strip()
+        val = val.strip()
+        if not name or not val:
+            continue
+        headers[name] = unquote(val)
+    return headers
 
 
 def inject_trace_context(headers: MutableMapping[str, str]) -> None:
@@ -81,7 +112,11 @@ def setup_otel_fastapi(
 
     resource = Resource.create(resource_attrs)
     provider = TracerProvider(resource=resource)
-    exporter = OTLPSpanExporter(endpoint=endpoint)
+    headers = resolve_otel_headers()
+    if headers:
+        exporter = OTLPSpanExporter(endpoint=endpoint, headers=headers)
+    else:
+        exporter = OTLPSpanExporter(endpoint=endpoint)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app)
@@ -107,5 +142,6 @@ def setup_otel_fastapi(
 __all__ = [
     "inject_trace_context",
     "resolve_otel_endpoint",
+    "resolve_otel_headers",
     "setup_otel_fastapi",
 ]

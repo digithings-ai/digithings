@@ -121,7 +121,7 @@ composer. No back-end call needed; parsing is client-side.
 
 **Ecosystem health badges** (`src/components/connections-sheet.tsx`): Side sheet that
 calls `GET /api/ecosystem/config` and `GET /api/health`, then renders color-coded
-badges (emerald = ok, amber = not ok) for digraph / digiquant / digismith / digisearch
+badges (emerald = ok, amber = not ok) for digraph / digiquant / digitrace / digisearch
 / database. Endpoint overrides are stored in an httpOnly cookie
 (`digichat-endpoints`, 180-day `maxAge`).
 
@@ -231,7 +231,7 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/tenant.ts` | OIDC subject → tenant slug lookup |
 | `src/lib/api-key.ts` | Machine key validation (env bootstrap + bcrypt Postgres) |
 | `src/lib/migrate.ts` | Programmatic Drizzle migration runner |
-| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
+| `src/instrumentation.ts` | Next.js instrumentation hook: production `DIGICHAT_DEV_AUTH` assertion + `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
 | `src/app/healthz/route.ts` | Auth-exempt liveness probe (`GET /healthz`) |
 | `src/lib/license/state.ts` | Customer-license verify + revoke latch (`globalThis`, fail-open) |
 | `src/lib/license/heartbeat.ts` | 24h license heartbeat sender (Bearer raw JWT, fail-open backoff) |
@@ -262,6 +262,7 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn, any 4xx response denies it, and 5xx, timeout, or transport failures allow it so a quota-provider outage does not disable chat. The token is never logged or forwarded to a chat backend.
+- **Internal monitor identity (DIG-613):** an internal monitor can be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Monitor-Token`, matched against a comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`, constant-time, entries under 32 chars ignored). This exists because the hourly DataTap answer-integrity check had no sanctioned path past the per-IP cap: it burned the 3-turn budget in its first hour and then returned `402 trial_gate` on every run, which reads as a client-side closed trial rather than our own gate. The compared value is a server-side secret and is deliberately **not** `X-Embed-Token`, which is a Stripe-style publishable key rendered into the embedding page on purpose (DIG-619) — a bypass keyed on it would be a public bypass. **Scope:** the free-turn cap only. It does not authenticate the caller or reach any other check (the `requiredPlanTier` proof check runs earlier and is unaffected); the caller must still resolve a tenant context and pass the rate-limit layers. **Fails open:** when the allowlist is unset the gate behaves exactly as before, so a missing deploy secret never becomes a reason to stop serving visitors. The gate itself remains best-effort anti-abuse, not an authorization boundary.
 - **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` only when **no** `DIGICHAT_EMBED_TENANTS` are configured and `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`, or a valid legacy `X-Embed-Token` matching `DIGICHAT_EMBED_TOKEN`). Registered tenants resolve via `DIGICHAT_EMBED_TENANTS` (their own token, or a first-party host **with a first-party browser-attested origin**). A configured tenant registry turns the legacy flag off and refuses unregistered hosts. Otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
 ### Conversations
@@ -676,14 +677,53 @@ opens BYOK mode):
    `byokRequiresModel` instead would reintroduce the exact bug #2347 fixed —
    the two must stay independent.
 
-For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
-(no key required) as soon as `openrouter` becomes the selected provider, usually
-before the model step even renders. Once that catalog lands, the model step
-replaces the flat preset list with tier tabs (free / opensource / flagship /
-all / a user-starred "custom" set held only in component state) plus a
-per-entry star toggle. Any fetch failure or non-OpenRouter provider falls back
-to the original flat preset list unchanged — the tiered UI is strictly additive
-and never blocks the flow on network.
+For every BYOK provider, `byok-cli-flow.tsx` prefetches
+`GET /api/byok/models?provider=<id>` (no key required) as soon as that provider
+becomes the selected one, usually before the model step even renders. The route
+has **two sources** (#4994):
+
+- **openrouter — live.** Unchanged from before: a proxied
+  `GET {OPENROUTER_API_BASE}/models`, `MAX_RESPONSE_BYTES` guards, and the
+  in-process 10-minute bucket cache. OpenRouter stays live because its buckets
+  derive from today's blended per-infra prices and its `:free` roster rotates.
+- **every other provider — the vendored catalog.** `openai`, `anthropic`,
+  `gemini`, and `xai` are served from `config/model-catalog.json`, normalized
+  from models.dev by `scripts/refresh_model_catalog.py` and generated into
+  `src/lib/model-catalog.generated.ts`. That branch performs **no fetch, no
+  URL, no timeout, and no cache** — it is a module import, so the route cannot
+  degrade into a fetch proxy for a provider it has no upstream for. The
+  response gains `provider`, `source` (`"catalog" | "live"`), and — on the
+  catalog branch only — `fetchedAt`; the live branch omits `fetchedAt` because
+  its freshness is already bounded by the cache TTL.
+
+The response body itself is unchanged (`ok`, `free`, `opensource`, `flagship`,
+`all`), so existing callers keep working. `provider` is still a closed
+allowlist of the five `BYOK_PROVIDER_LIST` ids — 400 `unsupported_provider`
+otherwise. That guard is now doubly defensive: the catalog branch has no
+upstream to proxy, and the one branch that fetches has its endpoint hardcoded,
+so no attacker-chosen base URL can reach an outgoing request from here.
+
+Once buckets land, the model step replaces the flat preset list with tier tabs
+(free / opensource / flagship / all / a user-starred "custom" set held only in
+component state) plus a per-entry star toggle. Precedence is explicit, highest
+first: **(1)** the live OpenRouter buckets, **(2)** the key-scoped
+`POST /api/byok/test` `models` array, **(3)** the catalog buckets, **(4)**
+`byokModelPresets(provider)`. Membership in the catalog is *not* evidence that
+a given key can reach a model, so a key-scoped list always outranks the
+catalog; the catalog only fills the gap where no key-scoped list exists. Every
+tiered branch also requires its selected tier to be non-empty, so picking an
+empty tier falls through to presets instead of collapsing the list to just
+"custom…". Any fetch failure, malformed catalog payload, or provider with
+neither list falls back to the flat preset list unchanged — the tiered UI is
+strictly additive and never blocks the flow.
+
+The catalog is generated data, never hand-edited: `make model-catalog` refreshes
+it from models.dev, `make model-catalog-check` is the network-free CI drift
+guard, and `docs/MODEL_CATALOG.md` documents what it is **not** authoritative
+for. `config/byok-providers.json`'s `fallbackModels` are validated against the
+catalog by `tests/config/test_model_catalog.py` (strict) but are never generated
+from it, so `byokModelPresets` stays the hand-mirrored last resort it has
+always been.
 
 For OpenAI, Anthropic, and Gemini, `byok-cli-flow.tsx` fires
 `pingByokKey(key, provider, "", { requireModel: false })` as soon as the
@@ -701,8 +741,10 @@ empty list. When the visitor then picks a model, `runValidateAndActivate`
 reuses `keyPing` directly instead of issuing a second
 `POST /api/byok/test` — exactly one validation call happens across the
 whole flow for these three providers, same as it always was for the
-other providers, just moved earlier. OpenRouter's own prefetch and x.ai's
-fallback-preset-only behavior are unchanged.
+other providers, just moved earlier. OpenRouter's prefetch stays on the live
+path, and x.ai — which has neither a key-step ping nor a live list — now fills
+its picker from the catalog, falling back to the flat presets if that fetch
+does not resolve.
 
 The BFF forwards BYOK headers to digigraph for the request lifetime and never
 logs or returns the raw key. `byokActivationGate` + Vitest cover the
@@ -742,7 +784,14 @@ plus its own `byokModelPresets`) and its sibling
 catalog fails a test instead of drifting silently. `fallbackModels` has no
 counterpart in `byok-providers.ts`, which carries no model list; its in-app copy is
 `use-byok-key.ts`'s `byokModelPresets`, pinned by the first of those two files. That
-is what keeps digigraph's refusal naming a model this UI actually offers. **One
+is what keeps digigraph's refusal naming a model this UI actually offers. Since
+#4994 the list also has a *second*, independent pin: every `fallbackModels`
+entry must exist in the generated `config/model-catalog.json`
+(`tests/config/test_model_catalog.py`), so a pin retired upstream fails a test
+instead of sitting in the picker. That test is what surfaced the six retired
+ids documented in `docs/MODEL_CATALOG.md`; each needs a LiteLLM route rename
+before it can be replaced, which is why they are recorded as exemptions rather
+than silently swapped. **One
 surface of that drift class is still unguarded:** the same file's
 `byokModelPlaceholder` is a second hardcoded switch that reproduces every
 provider's `fallbackModels[0]` and renders it in its own `(e.g. …)` sentence
@@ -1166,10 +1215,22 @@ protection alone is considered insufficient.
 The dev credentials provider checks `process.env.DIGICHAT_DEV_AUTH !== "1"` at module
 initialization time, not at request time. If `DIGICHAT_DEV_AUTH=1` is set in a
 production container (e.g., accidentally committed to a `.env` file or an
-orchestrator secret), password login with the default password `"dev"` is fully
-functional. The `DIGICHAT.md` explicitly forbids this but there is no runtime guard.
-**Recommendation:** add a startup assertion that throws when `NODE_ENV=production` and
-`DIGICHAT_DEV_AUTH=1`.
+orchestrator secret), password login with the default password `"dev"` would be
+fully functional, because the provider falls back to that literal when
+`DIGICHAT_DEV_PASSWORD` is unset.
+
+**Now guarded at startup.** `src/lib/startup-env-guards.ts` exports
+`assertDevAuthDisabledInProduction()`, which throws when `NODE_ENV=production` and
+`DIGICHAT_DEV_AUTH=1`, naming both variables in the message. It runs from two
+places: `src/instrumentation.ts` `register()`, ahead of the config, license and
+migration initializers, and `devProvider()` in `src/auth.ts`, so the provider
+cannot be registered in production even if instrumentation is bypassed.
+
+The refusal is a hard throw rather than the silent `return null` used by
+`localBootstrapProvider`: a deployment mistake should be a loud boot failure, not a
+login that mysteriously never succeeds. `DIGICHAT_DEV_AUTH=1` without
+`NODE_ENV=production` is unaffected — local development works exactly as before.
+`src/lib/startup-env-guards.test.ts` pins both the throw and the two call sites.
 
 ### DIGICHAT_LOCAL_AUTH_KEY
 
@@ -1391,7 +1452,7 @@ only when no standard activity parts exist.
 
 Session correlation: `X-Session-Id` (conversation UUID), `X-Request-ID` (per-request
 UUID), `X-digichat-Tenant`, `X-Digi-Caller: digichat` are forwarded to digigraph and
-flow through to digismith tracing spans.
+flow through to digitrace tracing spans.
 
 ### digikey (token exchange)
 
@@ -1409,7 +1470,7 @@ digigraph calls digisearch internally during workflow execution. The health badg
 in the Ecosystem sheet reflects connectivity only.
 
 digigraph and digiquant get the same `DIGICHAT_ENABLED_SERVICES` treatment (#1346):
-unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digismithUrl` in
+unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digitraceUrl` in
 `EcosystemEndpoints` always have a default value (`ecosystem.ts`'s `DEFAULTS`), so
 the health route checks `isServiceCapabilityEnabled(...)` directly rather than URL
 presence — a deployment serving only `external-relay` embed tenants (no digigraph
@@ -1426,10 +1487,10 @@ message stream. The quant strip parses these client-side. With Postgres enabled,
 the client can persist runs by calling `POST /api/conversations/[id]/quant-runs`
 using the extracted `run_id` and metrics.
 
-### digismith status endpoint
+### digitrace status endpoint
 
-`GET /api/health` probes `{DIGISMITH_INTERNAL_URL}/health` when `digismith` is in
-`DIGICHAT_ENABLED_SERVICES`. digismith is not called from the chat flow; tracing is
+`GET /api/health` probes `{DIGITRACE_INTERNAL_URL}/health` when `digitrace` is in
+`DIGICHAT_ENABLED_SERVICES`. digitrace is not called from the chat flow; tracing is
 handled by digigraph emitting `span` trace events in the SSE stream. The health
 badge confirms the tracing service is reachable.
 
@@ -1604,7 +1665,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `AUTH_OIDC_ISSUER` | OIDC provider issuer URL | If using OIDC |
 | `AUTH_OIDC_CLIENT_ID` | OIDC client ID | If using OIDC |
 | `AUTH_OIDC_CLIENT_SECRET` | OIDC client secret | If using OIDC |
-| `DIGICHAT_DEV_AUTH` | Enable dev password login (`1` = on) | Dev only |
+| `DIGICHAT_DEV_AUTH` | Enable dev password login (`1` = on). Refuses to start when combined with `NODE_ENV=production` | Dev only |
 | `DIGICHAT_DEV_PASSWORD` | Dev password (default: `dev`) | Dev only |
 | `DIGICHAT_LOCAL_AUTH_KEY` | Dev auto-sign-in key (non-production only) | Dev only |
 | `DIGICHAT_CONFIG_PATH` | Path to digichat deployment YAML (default `/app/config/digichat.yaml`). Zod-validated at startup; fail closed on invalid content. | Optional |
@@ -1620,9 +1681,9 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGIKEY_PUBLIC_KEY_PEM` | One or more concatenated SPKI PEMs for offline license verify (rotation list) | Licensed deploys |
 | `DIGIKEY_ISSUER` | Expected license `iss` (default `http://127.0.0.1:8005`) | Licensed deploys |
 | `DIGIQUANT_INTERNAL_URL` | digiquant base URL (health probe) | Recommended |
-| `DIGISMITH_INTERNAL_URL` | digismith base URL (health probe) | Recommended |
+| `DIGITRACE_INTERNAL_URL` | digitrace base URL (health probe) | Recommended |
 | `DIGISEARCH_INTERNAL_URL` | digisearch base URL (health probe) | Optional |
-| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs; unset defaults to all four (`digigraph,digisearch,digiquant,digismith`), explicitly set to `""` to enable none | Optional |
+| `DIGICHAT_ENABLED_SERVICES` | Comma-separated active service IDs; unset defaults to all four (`digigraph,digisearch,digiquant,digitrace`), explicitly set to `""` to enable none | Optional |
 | `DIGICHAT_DATABASE_URL` | PostgreSQL connection URL | For server persistence |
 | `DIGICHAT_AUTO_MIGRATE` | Run Drizzle migrations on startup (`1` = on) | Docker recommended |
 | `DIGICHAT_BOOTSTRAP_API_KEY` | Static machine API key (env bootstrap) | For machine clients |
@@ -1659,7 +1720,10 @@ dependencies. Image size is significantly smaller than a non-standalone build.
 ### Auto-migration
 
 `src/instrumentation.ts` is a Next.js instrumentation module. When `NEXT_RUNTIME=nodejs`
-(Node.js runtime, not edge) it runs, in order: `initDigichatConfigAtStartup()`,
+(Node.js runtime, not edge) it runs, in order: `assertDevAuthDisabledInProduction()`
+(`src/lib/startup-env-guards.ts` — throws when `NODE_ENV=production` and
+`DIGICHAT_DEV_AUTH=1`; see "DIGICHAT_DEV_AUTH=1 risk in production"),
+`initDigichatConfigAtStartup()`,
 `initLicenseStateAtStartup()` (pure local RS256 license verification — never touches
 the network, never throws, fail-open), and `startLicenseHeartbeat()` (24h sender plus
 one immediate fire-and-forget attempt; unlicensed containers never start a timer).
@@ -1777,8 +1841,8 @@ the response headers (`X-Request-Id`). The browser-side `ChatPanel` should read 
 response header and attach it to subsequent `PUT /api/conversations/[id]` calls so
 that the stored conversation has a trace of every `X-Request-ID` that produced each
 assistant turn. This would enable linking a stored conversation message to a specific
-digismith trace span for post-hoc debugging.
+digitrace trace span for post-hoc debugging.
 
 Additionally, the BFF should log `X-Request-ID` at the start of every Route Handler
 invocation (a one-line addition to each route file) so that structured server logs can
-be correlated with digismith spans without relying on the client to preserve the ID.
+be correlated with digitrace spans without relying on the client to preserve the ID.

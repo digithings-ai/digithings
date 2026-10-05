@@ -29,7 +29,7 @@ record for agent dispatch (labels are the contract — untouched by this move).
 | 4 | digisearch | ~30 | module board |
 | 5 | digichat | ~83 | module board |
 | 6 | digikey | ~12 | module board |
-| 7 | digismith | ~5 | module board |
+| 7 | digitrace | ~5 | module board |
 | 8 | digiclaw | ~6 | module board |
 | 9 | digibase | ~3 | module board |
 | 11 | maintenance | ~198 | housekeeping rollup |
@@ -42,7 +42,7 @@ the same field set (spot-checked #2).
 ## 3. Target structure
 
 - One Linear team per repo module (digibase, digichat, digiclaw, digigraph,
-  digikey, digiquant, digisearch, digismith, digivault, root, website —
+  digikey, digiquant, digisearch, digitrace, digivault, root, website —
   verify exact component list at execution against the 28-label set),
   plus a `housekeeping` team for the maintenance board and an org-level
   `digithings` team for epics/cross-cutting.

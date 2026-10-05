@@ -86,5 +86,5 @@ DIGICHAT_REQUIRE_ROOT_AUTH = "0"
 DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io"
 # Profile A: digisearch/digivault are loopback inside digithings-stack; digichat
 # only talks to digigraph (+ digikey for bff_session). Do not probe digisearch
-# / digiquant / digismith from /api/health (defaults would be unreachable).
+# / digiquant / digitrace from /api/health (defaults would be unreachable).
 DIGICHAT_ENABLED_SERVICES = "digigraph"

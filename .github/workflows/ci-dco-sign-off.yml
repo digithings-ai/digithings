@@ -1,0 +1,74 @@
+name: "CI: DCO sign-off"
+
+# Rejects a PR whose commits lack a Signed-off-by line (DCO 1.1).
+# See CONTRIBUTING.md — "Contributor terms — DCO 1.1".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco-sign-off:
+    name: All commits signed off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check every commit for Signed-off-by
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Determine the commit range for this PR.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            # workflow_dispatch: check the last 20 commits on the ref.
+            BASE_SHA="HEAD~20"
+            HEAD_SHA="HEAD"
+          fi
+
+          echo "Checking commits in range ${BASE_SHA}..${HEAD_SHA}"
+
+          # Get all commits in the range.
+          COMMITS=$(git rev-list "${BASE_SHA}..${HEAD_SHA}")
+
+          if [ -z "$COMMITS" ]; then
+            echo "No commits to check."
+            exit 0
+          fi
+
+          MISSING=0
+          for SHA in $COMMITS; do
+            if ! git log -1 --format='%B' "$SHA" | grep -q '^Signed-off-by: '; then
+              echo "ERROR: Commit $SHA is missing a Signed-off-by line."
+              echo "  Commit message:"
+              git log -1 --format='    %s' "$SHA"
+              echo "  Fix: git commit --amend -s && git push --force-with-lease"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+
+          if [ "$MISSING" -gt 0 ]; then
+            echo ""
+            echo "$MISSING commit(s) missing Signed-off-by."
+            echo "All contributions to digithings require a DCO 1.1 sign-off."
+            echo "See CONTRIBUTING.md for details."
+            exit 1
+          fi
+
+          echo "All commits are signed off."

@@ -1,10 +1,10 @@
 /**
  * Which verticals the BFF treats as active (health probes, optional URLs).
- * Env: DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digismith
+ * Env: DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digitrace
  */
 export function getEnabledServiceIds(): string[] {
   const envVar = process.env.DIGICHAT_ENABLED_SERVICES;
-  const fallback = "digigraph,digisearch,digiquant,digismith";
+  const fallback = "digigraph,digisearch,digiquant,digitrace";
   const s = envVar === undefined ? fallback : envVar;
   return [...new Set(s.split(",").map((x) => x.trim()).filter(Boolean))];
 }
