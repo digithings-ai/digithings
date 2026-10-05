@@ -61,6 +61,8 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    # Don't set enabled=True by default; let the client read from GLOOMBERB_ENABLED
+    # unless the test explicitly passes enabled=True/False.
     gloomberb = GloomberbClient(fetcher=fetcher, **kwargs)
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: gloomberb)
 
@@ -77,7 +79,7 @@ def _fail_handler(request: httpx.Request) -> httpx.Response:
 def test_digifetch_quote_returns_the_attributed_envelope(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_client(monkeypatch, _quote_handler)
+    _patch_client(monkeypatch, _quote_handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
@@ -115,7 +117,7 @@ def test_gated_tool_without_cookie_is_typed_auth_required(
 ) -> None:
     # Both session- and pro-gated names answer the typed envelope (the cookie
     # gate runs first), never a 400 and never a wire request.
-    _patch_client(monkeypatch, _fail_handler)
+    _patch_client(monkeypatch, _fail_handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": tool, "arguments": arguments},
@@ -133,7 +135,7 @@ def test_pro_tool_with_free_session_is_typed_pro_required(
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="Pro plan required")
 
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test", enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
@@ -177,7 +179,7 @@ def test_price_history_date_window_dispatches_through_the_endpoint(
             },
         )
 
-    _patch_client(monkeypatch, handler)
+    _patch_client(monkeypatch, handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={

@@ -191,7 +191,7 @@ def build_digifetch_quote_tool() -> dict[str, Any]:
             "description": (
                 "Latest quote for one listing via Gloomberb Cloud (anonymous; "
                 "enrichment only — free-tier data is delayed up to 15 minutes). "
-                "Default-ON behind the GLOOMBERB_ENABLED kill switch. Payload "
+                "Default-OFF behind the GLOOMBERB_ENABLED kill switch; an explicit opt-in re-enables the family. Payload "
                 "carries 'Sourced from Gloomberb' attribution and a term.gloom.sh "
                 "deep link. Refs #4069."
             ),

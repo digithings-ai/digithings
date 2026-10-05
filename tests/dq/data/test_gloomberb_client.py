@@ -71,6 +71,11 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
+    """Create a test client with the family enabled by default.
+
+    Tests that need to exercise the kill switch via env var should pass
+    ``enabled=None`` to force reading from ``GLOOMBERB_ENABLED``.
+    """
     allowed_hosts = kwargs.pop("allowed_hosts", ["api.gloom.sh"])
     fetcher = HttpFetcher(
         transport=httpx.MockTransport(handler),
@@ -78,6 +83,7 @@ def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     return GloomberbClient(fetcher=fetcher, **kwargs)
 
 
@@ -287,12 +293,12 @@ def test_kill_switch_reads_the_env_flag_at_construction(
         return envelope(AAPL_QUOTE)
 
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
-    disabled = make_client(handler)
+    disabled = make_client(handler, enabled=None)
     assert disabled.enabled is False
     assert disabled.quote({"symbol": "AAPL"}).data.code == "upstream_error"  # type: ignore[union-attr]
 
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
-    enabled = make_client(handler)
+    enabled = make_client(handler, enabled=None)
     assert enabled.enabled is True
     assert isinstance(enabled.quote({"symbol": "AAPL"}).data, QuoteResult)
     assert len(calls) == 1
@@ -865,7 +871,7 @@ def test_kill_switch_env_allowlist_fails_closed(
         return envelope(AAPL_QUOTE)
 
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, value)
-    client = make_client(handler)
+    client = make_client(handler, enabled=None)
     assert client.enabled is expected
     if not expected:
         result = client.quote({"symbol": "AAPL"})
