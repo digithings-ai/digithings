@@ -46,6 +46,13 @@ tracking issue, but it files nothing at all when not one level could be read,
 because a monthly issue reading "I could not do my job" is noise wearing a
 tracker's clothes.
 
+Reading nothing from an operator shell does not close a tracker either, and
+exits 2 rather than 0. CLOSE_NOTE explains the unreadable run as CI's missing
+token scope, which is true of a CI run and false of a hand run whose `gh auth`
+has gone stale; since option D the two are not the same event, because CI runs
+`--gates-only` and never reaches this path. `--close-unmeasurable-tracker`
+restores the close when an operator means it.
+
 Offline switch: `--file-names` reads `SCOPE\\tNAME\\tUPDATED` lines so the
 ageing logic can be tested without `gh`, and `--strict-offline` refuses to
 report success when the input came from a file rather than the live API.
@@ -65,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -831,6 +839,19 @@ Give the ageing half a credential and the next run files a fresh tracker with re
 names in it."""
 
 
+def _in_ci() -> bool:
+    """Whether this process is a GitHub Actions job.
+
+    Read from the environment rather than inferred from whether the listings worked.
+    That inference is what option D invalidated: it used to be true that only CI ran
+    this and could read nothing, and now the reverse holds — CI runs `--gates-only`
+    and the only caller that ages anything is a person. `GITHUB_ACTIONS` is set to
+    the literal string `"true"` by the runner, so this is a presence test on a name
+    the workflow platform guarantees, not a heuristic about the host.
+    """
+    return bool(os.environ.get("GITHUB_ACTIONS"))
+
+
 def close_unmeasurable_tracker(root: Path, repo: str) -> str:
     """Close an open tracker when nothing could be aged, recording why.
 
@@ -996,6 +1017,16 @@ def main(argv: list[str] | None = None) -> int:
             "and never touch a tracker (DIG-477 option D, what CI runs)"
         ),
     )
+    parser.add_argument(
+        "--close-unmeasurable-tracker",
+        action="store_true",
+        help=(
+            "retire an open tracker deliberately when this run read nothing. Without "
+            "it, only a CI run closes one: CLOSE_NOTE blames CI, so closing it from an "
+            "operator shell records a false cause and discards real names. Ignored when "
+            "the listings were read, since the tracker is then refreshed normally."
+        ),
+    )
     args = parser.parse_args(argv)
 
     root = REPO_ROOT
@@ -1050,18 +1081,56 @@ def main(argv: list[str] | None = None) -> int:
             print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
             return 2
         if not report.read_any:
-            # A tracker whose whole body is "I read nothing" is a monthly false alarm: it
-            # looks like the rotation control is running when it is not, and it trains
-            # readers to ignore the one issue that would carry real names. Every level
-            # being unreadable is the normal case from CI, where the listings need a token
-            # the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE. So a run that aged nothing
-            # opens nothing, and clears up any tracker an earlier run already left open.
             # Keyed on `read_any`, not `secrets`: a run where the listings were served and
             # came back empty did measure something, and closing its tracker on the note
             # below — which asserts every level 403'd — would put a false claim on the
             # permanent record next to a stdout that says the opposite.
+            #
+            # Closing is refused unless this run is *in CI*, because CLOSE_NOTE asserts a
+            # CI cause and CI is the only context in which that assertion is true. Before
+            # option D this was safe by accident: the one caller that could not read
+            # anything was the CI job, so "read nothing" implied "run from CI". Option D
+            # inverted that. CI now runs `--gates-only` and never reaches this branch at
+            # all, which leaves `make secrets-staleness` — a person on the Mac — as the
+            # only caller, and a person whose token has lost `repo` scope reads nothing
+            # for a reason that has nothing to do with CI.
+            #
+            # That combination was destructive, and reachable: this repo is public, so
+            # `repo_slug()` still resolves it without `repo`, and the run proceeds to
+            # close a tracker carrying real names while printing a note saying CI did it.
+            # Exit 0 makes it worse — DIG-668's monthly run would report success having
+            # deleted the record it exists to refresh. The repo is public so this needs
+            # no credential to exploit; the read simply needs a token without `repo`.
+            #
+            # So an operator run that read nothing reports why and exits non-zero,
+            # leaving the tracker and its last real contents standing. An operator who
+            # means to retire a stale tracker says so explicitly, and then the close
+            # happens whatever the context — the flag is the consent, not the setting.
+            if not _in_ci() and not args.close_unmeasurable_tracker:
+                print(
+                    "secret_staleness_check: nothing could be aged, so no tracker was "
+                    "opened, updated or closed. Leaving any open tracker as it is: this "
+                    "was a run from an operator shell, so the CI explanation in "
+                    "CLOSE_NOTE would be false, and a tracker holding real names must not "
+                    "be closed by a run that could not read them. Check that `gh auth` "
+                    "still carries `repo` and `admin:org` (see `gh auth status`), then "
+                    "re-run. To retire a stale tracker deliberately, pass "
+                    "--close-unmeasurable-tracker.",
+                    file=sys.stderr,
+                )
+                return 2
+            # Every level being unreadable is the normal case from CI, where the
+            # listings need a token the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE.
+            # So a run that aged nothing opens nothing, and clears up any tracker an
+            # earlier run already left open.
             print(close_unmeasurable_tracker(root, f"{slug[0]}/{slug[1]}"))
         else:
+            if args.close_unmeasurable_tracker:
+                print(
+                    "secret_staleness_check: --close-unmeasurable-tracker was passed but "
+                    "this run read the listings, so the tracker is refreshed, not closed",
+                    file=sys.stderr,
+                )
             print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
     if gates is not None and any(row["drift"] for row in gates[0]):

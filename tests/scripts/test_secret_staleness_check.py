@@ -58,6 +58,18 @@ def _gh_on_path(
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
 
 
+def _in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mark this test as running inside a GitHub Actions job.
+
+    The runner sets `GITHUB_ACTIONS=true`, which is the signal `_in_ci()` reads. It
+    has to be set explicitly rather than inherited: the suite runs on a Mac and on a
+    Linux CI box alike, and the tracker-closing tests below are only true in CI. Left
+    implicit they would pin different behaviour on different machines, which is how a
+    test ends up asserting something nobody running it asked for.
+    """
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+
+
 def _load() -> object:
     # `sys.modules` first: a `@dataclass` resolves its own module through it, and
     # Python 3.14 raises `AttributeError: 'NoneType' object has no attribute
@@ -705,6 +717,11 @@ def test_a_run_that_aged_nothing_opens_no_tracker(
     The assertion is on the call, not on stdout. Asserting the issue title was
     absent from stdout passed even when filing was unconditional, because the
     fake `gh` never prints the title it was sent.
+
+    Marked as CI on purpose. "Read nothing" is only this story when the run came
+    from CI, where it is expected; from an operator shell it means a token problem
+    and the tracker must be left alone. See
+    `test_an_operator_run_that_read_nothing_closes_no_tracker`.
     """
     _gh_on_path(
         monkeypatch,
@@ -713,6 +730,7 @@ def test_a_run_that_aged_nothing_opens_no_tracker(
         returncode=1,
         stderr="gh: Resource not accessible by integration (HTTP 403)",
     )
+    _in_ci(monkeypatch)
     monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
     opened: list[str] = []
     monkeypatch.setattr(
@@ -746,7 +764,11 @@ def test_an_unmeasurable_tracker_is_annotated_and_closed_not_left_open(
     read. A guard that only stops *new* empty trackers leaves that one sitting
     forever while the docs claim the clock files none. Silence here is
     indistinguishable from "still running".
+
+    This is the CI case, and the only one in which the note's claim is true: the
+    note says CI could not read the listings, so an operator run must not use it.
     """
+    _in_ci(monkeypatch)
     monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
     posted: list[tuple[str, str]] = []
 
@@ -801,6 +823,7 @@ def test_an_unmeasurable_tracker_is_left_open_when_the_note_cannot_be_written(
         returncode=1,
         stderr="gh: Resource not accessible by integration (HTTP 403)",
     )
+    _in_ci(monkeypatch)
     monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
     seen: list[str] = []
     monkeypatch.setattr(
@@ -1132,10 +1155,11 @@ def test_a_served_but_empty_run_files_a_tracker_instead_of_closing_one(
 def test_a_run_that_read_nothing_still_closes_the_tracker(
     checker: object, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The guard the test above pins: the unreadable case must keep closing."""
+    """The guard the test above pins: in CI, the unreadable case must keep closing."""
     unreadable = checker.Report(unavailable={"cron": "403", "org": "403", "repo": "403"})
     acted: list[str] = []
 
+    _in_ci(monkeypatch)
     monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
     monkeypatch.setattr(checker, "collect", lambda *a, **k: unreadable)
     monkeypatch.setattr(checker, "environment_gate_status", lambda *a, **k: None)
@@ -1149,6 +1173,116 @@ def test_a_run_that_read_nothing_still_closes_the_tracker(
     checker.main(["--open-issue", "--skip-environment-gates"])
 
     assert acted == ["close"]
+
+
+@pytest.mark.unit
+def test_an_operator_run_that_read_nothing_closes_no_tracker(
+    checker: object,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The bug option D introduced, found by running it rather than by reading it.
+
+    `CLOSE_NOTE` asserts a CI cause, and closing a tracker on it discards real
+    names. That was safe while the only caller that could read nothing was the CI
+    job. Option D made CI run `--gates-only` instead, which left
+    `make secrets-staleness` — a person on the Mac — as the only caller that ages
+    anything, and a person whose token has lost `repo` scope reads nothing for a
+    reason that has nothing to do with CI.
+
+    Reachable, not theoretical: this repo is **public**, so `repo_slug()` still
+    resolves without `repo` and the run walks straight into the close branch. It
+    did, in the run that found it — `recorded why on #42 and closed it`, exit 0.
+    Exit 0 is the worst part, because DIG-668's monthly job would then report
+    success having deleted the record it exists to refresh.
+
+    So: nothing is closed, nothing is opened, and the exit code says the run
+    failed. Asserted on the calls rather than on the wording of the stderr, since
+    a message that changes cannot break the behaviour it describes.
+    """
+    unreadable = checker.Report(unavailable={"cron": "403", "org": "403", "repo": "403"})
+    acted: list[str] = []
+
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(checker, "collect", lambda *a, **k: unreadable)
+    monkeypatch.setattr(checker, "environment_gate_status", lambda *a, **k: None)
+    monkeypatch.setattr(
+        checker, "close_unmeasurable_tracker", lambda root, repo: acted.append("close") or ""
+    )
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, repo, body: acted.append("file") or ""
+    )
+
+    code = checker.main(["--open-issue", "--skip-environment-gates"])
+
+    assert acted == [], "an operator run that read nothing must not touch a tracker"
+    assert code == 2, "and must not report success"
+    err = capsys.readouterr().err
+    assert "repo` and `admin:org" in err, "the operator needs to know what to fix"
+
+
+@pytest.mark.unit
+def test_an_operator_can_still_retire_a_tracker_on_purpose(
+    checker: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The escape hatch, so the guard above is not read as 'this can never close one'.
+
+    Refusing by default is only defensible if the thing remains possible when it is
+    genuinely wanted. It is wanted when a tracker has been left holding names that
+    are no longer true and no run can refresh it.
+    """
+    unreadable = checker.Report(unavailable={"cron": "403", "org": "403", "repo": "403"})
+    acted: list[str] = []
+
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(checker, "collect", lambda *a, **k: unreadable)
+    monkeypatch.setattr(checker, "environment_gate_status", lambda *a, **k: None)
+    monkeypatch.setattr(
+        checker, "close_unmeasurable_tracker", lambda root, repo: acted.append("close") or ""
+    )
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, repo, body: acted.append("file") or ""
+    )
+
+    checker.main(["--open-issue", "--skip-environment-gates", "--close-unmeasurable-tracker"])
+
+    assert acted == ["close"]
+
+
+@pytest.mark.unit
+def test_the_opt_in_flag_never_closes_a_tracker_a_good_read_would_refresh(
+    checker: object,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The flag must not become a way to lose real names.
+
+    A run that read the listings has the newest truth in hand, so the tracker is
+    refreshed and the flag is reported as having had no effect. Otherwise
+    `--close-unmeasurable-tracker` would quietly delete the record on exactly the
+    run that could have replaced it.
+    """
+    fresh = _age(checker, 10)
+    read = checker.Report(secrets=[fresh], readable=3)
+    acted: list[str] = []
+
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(checker, "collect", lambda *a, **k: read)
+    monkeypatch.setattr(checker, "environment_gate_status", lambda *a, **k: None)
+    monkeypatch.setattr(
+        checker, "close_unmeasurable_tracker", lambda root, repo: acted.append("close") or ""
+    )
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, repo, body: acted.append("file") or ""
+    )
+
+    checker.main(["--open-issue", "--skip-environment-gates", "--close-unmeasurable-tracker"])
+
+    assert acted == ["file"], "a run that read the listings must refresh, never close"
+    assert "refreshed" in capsys.readouterr().err
 
 
 @pytest.mark.unit
