@@ -73,7 +73,7 @@ run_hook() {
   set +e
   (
     cd "$cwd"
-    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH "$@" \
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
       bash "$HOOK" origin "$url"
   ) >/dev/null 2>&1
   local rc=$?
@@ -95,6 +95,55 @@ assert_exit() {
     pass=$((pass + 1))
   else
     echo "FAIL [exit $want] $desc  (got $rc)"
+    fail=$((fail + 1))
+  fi
+}
+
+# Build a REAL tip that touches no live-trading path, on an in-taxonomy branch
+# forked from develop. Real shas matter here: a synthetic sha makes the hook fail
+# closed in the diff-base scan, which would make a develop-guard test exit 1 for
+# the wrong reason and pass before any guard exists.
+make_clean_tip() {
+  local branch="task/530-guard-fixture"
+  cd "$FIXTURE"
+  git checkout -q -B "$branch" develop
+  mkdir -p docs/ops
+  echo "guard-fixture-$(date +%s%N)-$RANDOM" > docs/ops/guard-fixture.md
+  git add -A
+  git commit -q -m "530 fixture: clean tip touching no live-trading path"
+  local tip
+  tip="$(git rev-parse HEAD)"
+  cd "$REPO_ROOT"
+  printf '%s' "$tip"
+}
+
+# Assert the hook's refusal text carries a specific substring. The wording is
+# load-bearing: an unexplained refusal is the fastest thing an agent under
+# pressure "solves" with --no-verify, which is worse than the accident.
+run_hook_out() {
+  local cwd="$1"
+  local url="$2"
+  local stdin_line="$3"
+  shift 3
+  (
+    cd "$cwd"
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH -u ALLOW_DEVELOP_PUSH "$@" \
+      bash "$HOOK" origin "$url"
+  ) 2>&1 || true
+}
+
+assert_refusal_mentions() {
+  local desc="$1"
+  local needle="$2"
+  local line="$3"
+  shift 3
+  local out
+  out="$(run_hook_out "$FIXTURE" "$ORIGIN_URL" "$line" "$@")"
+  if [[ "$out" == *"$needle"* ]]; then
+    echo "PASS [wording] $desc"
+    pass=$((pass + 1))
+  else
+    echo "FAIL [wording] $desc  (refusal text lacks: $needle)"
     fail=$((fail + 1))
   fi
 }
@@ -164,6 +213,45 @@ assert_exit 0 "delete main with ALLOW_MAIN_PUSH=1" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/main $ZERO40 refs/heads/main $OLD_SHA" \
   ALLOW_MAIN_PUSH=1
+
+# ── develop guard (DIG-530) ─────────────────────────────────────────────────
+# develop carries required_pull_request_reviews: null (BRANCHING.md:51), so there
+# is no server-side PR gate on it and this hook is the only guard. bffce04d9
+# reached develop with no PR and no review because develop is inside branch_regex
+# and the per-ref opt-in existed only for main.
+DEVELOP_SHA="$(git -C "$FIXTURE" rev-parse develop)"
+CLEAN_TIP="$(make_clean_tip)"
+DEVELOP_PUSH_LINE="refs/heads/task/530-guard-fixture $CLEAN_TIP refs/heads/develop $DEVELOP_SHA"
+
+assert_exit 1 "push develop without ALLOW_DEVELOP_PUSH" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "$DEVELOP_PUSH_LINE"
+
+assert_exit 0 "push develop with ALLOW_DEVELOP_PUSH=1" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "$DEVELOP_PUSH_LINE" \
+  ALLOW_DEVELOP_PUSH=1
+
+# Deletions mirror the existing main coverage exactly.
+assert_exit 1 "delete develop without ALLOW_DEVELOP_PUSH" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/develop $ZERO40 refs/heads/develop $OLD_SHA"
+
+assert_exit 0 "delete develop with ALLOW_DEVELOP_PUSH=1" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/develop $ZERO40 refs/heads/develop $OLD_SHA" \
+  ALLOW_DEVELOP_PUSH=1
+
+# The refusal must name the cause and hand over the corrective command. A bare
+# "refusing to push to develop" reads as an unexplained failure, and the fastest
+# way an agent under pressure resolves one is --no-verify.
+assert_refusal_mentions "develop refusal names the corrective command" \
+  "set-upstream-to" \
+  "$DEVELOP_PUSH_LINE"
+
+assert_refusal_mentions "develop refusal names the opt-in" \
+  "ALLOW_DEVELOP_PUSH" \
+  "$DEVELOP_PUSH_LINE"
 
 # ── creation / update still enforce taxonomy (fake SHA — fails before scan) ─
 assert_exit 1 "push new out-of-taxonomy branch" \
@@ -381,6 +469,38 @@ else
   else
     echo "FAIL [structure] live-trading path grep not found"
   fi
+  fail=$((fail + 1))
+fi
+
+# ── DIG-530 structural pins ─────────────────────────────────────────────────
+# develop must STAY inside branch_regex. The fix is the per-ref opt-in, not
+# deleting develop from the taxonomy: a taxonomy failure refuses for the wrong
+# reason and offers no ALLOW_DEVELOP_PUSH escape hatch.
+if grep -E '^branch_regex=' "$HOOK" | grep -q 'develop'; then
+  echo "PASS [structure] develop stays in branch_regex (per-ref opt-in, not taxonomy)"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] develop must remain in branch_regex; refuse via ALLOW_DEVELOP_PUSH instead"
+  fail=$((fail + 1))
+fi
+
+# The hook's own header comment is the first thing anyone reads when the guard
+# surprises them. An undocumented ALLOW_DEVELOP_PUSH is an unusable escape hatch.
+if sed -n '1,20p' "$HOOK" | grep -q 'ALLOW_DEVELOP_PUSH'; then
+  echo "PASS [structure] hook header documents ALLOW_DEVELOP_PUSH"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] hook header comment must document ALLOW_DEVELOP_PUSH"
+  fail=$((fail + 1))
+fi
+
+# Docs pin, not a hook assertion: BRANCHING.md's ALLOW_MAIN_PUSH prose (lines 55
+# and 219) goes stale the moment this guard exists, and nothing else notices.
+if grep -q 'ALLOW_DEVELOP_PUSH' "$REPO_ROOT/BRANCHING.md"; then
+  echo "PASS [docs] BRANCHING.md documents ALLOW_DEVELOP_PUSH"
+  pass=$((pass + 1))
+else
+  echo "FAIL [docs] BRANCHING.md ALLOW_MAIN_PUSH prose must gain ALLOW_DEVELOP_PUSH"
   fail=$((fail + 1))
 fi
 
