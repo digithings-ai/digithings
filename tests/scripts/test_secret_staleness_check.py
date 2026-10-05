@@ -661,7 +661,11 @@ def test_the_workflow_does_not_claim_a_permission_that_cannot_read_secrets(check
 
     assert "actions" not in permissions
     assert permissions.get("contents") == "read"
-    assert permissions.get("issues") == "write"
+    # `issues: write` was asserted here while the ageing half still filed a tracker.
+    # DIG-477 option D removed the ageing, so nothing in the job writes an issue and
+    # the grant is gone — `test_the_workflow_runs_the_gates_only_mode_and_needs_no_issues_scope`
+    # pins that it stays gone.
+    assert "issues" not in permissions
 
 
 @pytest.mark.unit
@@ -675,8 +679,13 @@ def test_the_workflow_says_the_secret_listings_cannot_be_read_here(checker: obje
     text = (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
 
     assert "37235973852" in text
-    assert "CANNOT be read from this workflow" in text
+    assert "CANNOT be read from a workflow" in text
     assert "needs no credential" not in text
+    # Option D kept this header honest by inverting its purpose: the ageing half is
+    # gone from CI by decision, so the header has to say which half runs and why
+    # the other cannot, not merely that something failed.
+    assert "DIG-477" in text
+    assert "One thing" in text
 
 
 @pytest.mark.unit
@@ -1194,3 +1203,140 @@ def test_stdout_still_counts_when_every_level_read(checker: object) -> None:
 
     assert "1 name(s) past 90 days of 1 listed" in out
     assert "No secrets could be aged" not in out
+
+
+# ---------------------------------------------------------------------------
+# DIG-477 option D: the ageing half is out of automation by decision.
+#
+# Chris, 2026-10-05, chose D: keep the drift check, drop the ageing. So the CI
+# path must not attempt the three secret listings at all. Every test below fails
+# against the pre-D behaviour, because pre-D the workflow *did* call them and
+# printed three NOT CHECKED lines every run.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_gates_only_never_collects_or_opens_a_tracker(
+    checker: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    def explode_collect(*args, **kwargs):  # pragma: no cover - the assertion is the point
+        raise AssertionError("--gates-only must not call collect()")
+
+    def explode_issue(*args, **kwargs):  # pragma: no cover - the assertion is the point
+        raise AssertionError("--gates-only must not touch a tracker")
+
+    monkeypatch.setattr(checker, "collect", explode_collect)
+    monkeypatch.setattr(checker, "file_or_update_issue", explode_issue)
+    monkeypatch.setattr(checker, "close_unmeasurable_tracker", explode_issue)
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(
+        checker,
+        "environment_gate_status",
+        lambda root, slug: ([{"name": "cron", "actual": {}, "can_wait": False, "drift": []}], {}),
+    )
+
+    assert checker.main(["--gates-only"]) == 0
+
+    out = capsys.readouterr().out
+    assert "environment gates: 1 checked" in out
+    assert "NOT RUN" in out
+
+    # `--open-issue` alongside `--gates-only` must still touch nothing. The workflow
+    # does not pass it, but the two flags are independent on the command line and a
+    # gates-only run has read no secret to file a tracker about.
+    assert checker.main(["--gates-only", "--open-issue"]) == 0
+    assert "environment gates: 1 checked" in capsys.readouterr().out
+
+    # Combining it with `--file-names` is a contradiction, not a precedence: a
+    # hand-made name list is a manual ageing input, and gates-only ages nothing.
+    with pytest.raises(SystemExit) as excinfo:
+        checker.main(["--gates-only", "--file-names", str(tmp_path / "nope.tsv")])
+    assert excinfo.value.code == 2
+
+    # End to end through `main()`, because the per-function tests call `markdown()`
+    # directly and would not notice if `main()` stopped threading `gates_only` into
+    # it. That regression is the exact false green this change exists to remove: the
+    # step summary would go back to reading "No secrets could be aged" on a run that
+    # never attempted the read. Assert on the file `main()` actually writes.
+    summary = tmp_path / "step-summary.md"
+    assert checker.main(["--gates-only", "--summary", str(summary)]) == 0
+    written = summary.read_text(encoding="utf-8")
+    assert "Secret ageing was NOT RUN." in written
+    assert "No secrets could be aged" not in written
+    assert "## Levels not checked" not in written
+    assert "NOT CHECKED —" not in written
+    # The drift half is still there, and still the only thing that ran.
+    assert "cron" in written
+
+
+@pytest.mark.unit
+def test_gates_only_still_fails_on_gate_drift(
+    checker: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropping the ageing must not soften the half that works.
+
+    DIG-248 depends on this drift check, and it is the reason the workflow
+    exists. A drifted gate silently stops every pipeline gated on it, so it
+    exits 1 unconditionally.
+    """
+    monkeypatch.setattr(checker, "collect", lambda *a, **k: checker.Report())
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(
+        checker,
+        "environment_gate_status",
+        lambda root, slug: (
+            [{"name": "cron", "actual": {}, "can_wait": True, "drift": ["reviewer armed"]}],
+            {},
+        ),
+    )
+
+    assert checker.main(["--gates-only"]) == 1
+
+
+@pytest.mark.unit
+def test_gates_only_does_not_sound_like_a_failure(checker: object) -> None:
+    """A monthly green run must not read as a red one.
+
+    `ageing_verdict`'s "nothing was read" branch is true in gates-only mode and
+    reads as a failure, which would put a red-sounding sentence on the run page
+    every month and train readers to ignore it. Same defect as #5078, opposite
+    direction.
+    """
+    report = checker.Report()
+    gates = ([{"name": "cron", "actual": {}, "can_wait": False, "drift": []}], {})
+    body = checker.markdown(report, 90, gates, gates_only=True)
+
+    assert "NOT RUN" in body
+    assert "No secrets could be aged" not in body
+    # No level may be *reported* as unchecked. The phrase `NOT CHECKED` appears in
+    # the note that explains why nothing was attempted, so assert on the per-level
+    # reporting form the renderers actually emit, not on the bare phrase.
+    assert "## Levels not checked" not in body
+    assert "NOT CHECKED —" not in body
+    assert "docs/ops/SECRETS_INVENTORY.md" in body
+
+
+@pytest.mark.unit
+def test_the_workflow_runs_the_gates_only_mode_and_needs_no_issues_scope(
+    checker: object,
+) -> None:
+    """The workflow is the thing that has to change for D to be true.
+
+    Pre-D it passed `--open-issue` and `issues: write`, which bought a job
+    token permission to write an issue that can only ever say "I read nothing".
+    With the ageing gone, nothing in the job writes an issue, so the grant is
+    dead weight on the same token that #5063 proved cannot read secrets.
+    """
+    workflow = yaml.safe_load(
+        (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
+    )
+    text = (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
+
+    run_steps = " ".join(str(step.get("run", "")) for step in workflow["jobs"]["check"]["steps"])
+
+    assert "--gates-only" in run_steps
+    assert "--open-issue" not in run_steps
+    assert "issues" not in workflow["permissions"]
+    # The ageing input is meaningless once nothing is aged.
+    assert "max_age_days" not in text
+    assert "DIG-477" in text
