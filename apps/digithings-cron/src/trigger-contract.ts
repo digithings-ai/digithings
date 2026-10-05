@@ -12,8 +12,12 @@
  *   missing_required_cron — a cron the FX pipeline requires is not in the list
  *                           under test, or the job row that owns it is gone,
  *                           disabled, or pointing somewhere else. Data is lost.
- *   unrecognised_cron     — a cron in the list under test maps to no enabled
- *                           job. It fires and does nothing. Drift, not loss.
+ *   unrecognised_cron     — a cron in the list under test is claimed by no job
+ *                           row at all, not even a disabled one. It fires and
+ *                           does nothing. Drift, not loss. A cron whose only
+ *                           owner is a disabled job is a known configuration and
+ *                           is recognised, not unrecognised, so this check agrees
+ *                           with the tick in `src/index.ts` on that point.
  *
  * A deployed cron that is both is reported once, as missing: deleting the job
  * row and forgetting the cron line is one defect and must not raise two alarms.
@@ -83,9 +87,16 @@ export function checkTriggerContract(
     const normalised = normaliseCron(cron);
     if (normalised.length > 0) deployed.add(normalised);
   }
-  const mapped = new Set<string>();
+  // A cron whose only owner is a deliberately disabled job (`house-run-10/11/12`
+  // keep their cron lines as retry slots) is a known configuration, not drift:
+  // `src/index.ts` deliberately stays quiet for it at the tick, and this check
+  // has to agree. Requiring an *enabled* owner here would red the deploy and
+  // open an issue for a slot the tick path treats as correct. A required cron
+  // is unaffected — it is checked above, and `missingReason` is what notices
+  // that its job row is disabled or points elsewhere.
+  const claimed = new Set<string>();
   for (const job of jobs) {
-    if (job.enabled) mapped.add(normaliseCron(job.cron));
+    claimed.add(normaliseCron(job.cron));
   }
   const requiredCrons = new Set(required.map((trigger) => normaliseCron(trigger.cron)));
 
@@ -110,7 +121,7 @@ export function checkTriggerContract(
 
   const unrecognised: TriggerViolation[] = [];
   for (const cron of deployed) {
-    if (mapped.has(cron)) continue;
+    if (claimed.has(cron)) continue;
     // A required cron nobody claims is already reported as missing. Reporting it
     // again as unrecognised would turn one deletion into two alarms.
     if (requiredCrons.has(cron)) continue;
@@ -118,7 +129,7 @@ export function checkTriggerContract(
       class: UNRECOGNISED_CRON,
       cron,
       job: null,
-      reason: `"${cron}" is in the trigger list under test and maps to no enabled job in src/jobs.ts, so it fires and starts nothing`,
+      reason: `"${cron}" is in the trigger list under test and no job row in src/jobs.ts claims it, not even a disabled one, so it fires and starts nothing`,
       lost: "whatever that trigger used to run, at whatever rate it used to run",
       evidence: "DIG-732",
     });
@@ -139,7 +150,7 @@ export function unrecognisedCronViolation(cron: string): TriggerViolation {
     class: UNRECOGNISED_CRON,
     cron,
     job: null,
-    reason: `"${cron}" fired and maps to no enabled job in src/jobs.ts, so the tick did nothing`,
+    reason: `"${cron}" fired and no job row in src/jobs.ts claims it, not even a disabled one, so it started nothing`,
     lost: "whatever that trigger used to run, at whatever rate it used to run",
     evidence: "DIG-732",
   };
@@ -147,7 +158,10 @@ export function unrecognisedCronViolation(cron: string): TriggerViolation {
 
 /** Human-readable one line per violation. Used by scripts and test failures. */
 export function describeVerdict(verdict: TriggerContractVerdict, source: string): string[] {
-  if (verdict.ok) return [`trigger contract satisfied against ${source} (${verdict.present} crons)`];
+  if (verdict.ok) {
+    const count = verdict.present;
+    return [`trigger contract satisfied against ${source} (${count} ${count === 1 ? "cron" : "crons"})`];
+  }
   return verdict.violations.map(
     (violation) =>
       `${violation.class}: ${violation.cron}${violation.job ? ` (${violation.job})` : ""} — ${violation.reason}`,

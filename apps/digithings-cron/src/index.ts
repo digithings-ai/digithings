@@ -6,11 +6,12 @@
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  *
- * A cron that fires with no enabled job behind it raises an alarm on the
+ * A cron that fires with no job row behind it raises an alarm on the
  * twelve-x issues path (DIG-732): unrecognised_cron, which is a different class
  * from a required cron being absent. The required set itself is
  * `src/required-triggers.ts` and is checked against the deployed trigger list,
- * not only against wrangler.toml.
+ * not only against wrangler.toml. A cron whose only owner is a deliberately
+ * disabled job is a known retry slot, not drift, so it stays silent.
  */
 import { dispatch, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";

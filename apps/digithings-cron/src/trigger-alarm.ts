@@ -12,6 +12,20 @@
  * One issue per occurrence, never a comment on an open issue. The old comment
  * behaviour grew twelve-x #117 to 322 comments, which is not an alarm.
  *
+ * "Occurrence" is an *occurrence of drift*, not a tick. An unmapped trigger is
+ * re-detected on every tick it fires, and the deployed-contract check re-runs on
+ * every deploy, so creating an issue per observation would file one every time
+ * an every-two-hours trigger fired — about six a day, ~1500 a year. That is the
+ * 322-comment flood by a different mechanism. So before opening an issue,
+ * `findOpenOccurrence` looks for an open issue with this class's label and this
+ * drift's title; if one is already open the drift is already reported and the
+ * call returns that issue instead of filing another. It never comments, so the
+ * 322-comment incident cannot recur through this path. Close the issue when the
+ * drift is resolved and the next occurrence opens a fresh one.
+ *
+ * An unreadable issue search never suppresses an alarm: a duplicate is better
+ * than a silent miss, and the search failure is logged.
+ *
  * The two classes carry different labels, different colours and different
  * titles, so a reader can tell "the backstop is gone" from "a trigger is doing
  * nothing" without opening anything:
@@ -57,7 +71,7 @@ export const ALARM_CLASSES: Record<
     label: "cron-unrecognised-trigger",
     color: "fbca04",
     description:
-      "A digithings-cron trigger maps to no enabled job, so it fires and starts nothing (DIG-732).",
+      "A digithings-cron trigger is claimed by no job row, not even a disabled one, so it fires and starts nothing (DIG-732).",
     title: "Unrecognised cron trigger",
   },
 };
@@ -77,8 +91,13 @@ export type AlarmResult = {
   label: string;
   /** True only when the issue exists. */
   raised: boolean;
-  /** GitHub issue url, when raised. */
+  /** GitHub issue url, when raised, or when an open issue already carries this drift. */
   issue?: string;
+  /**
+   * True when an open issue for this same drift was left as it is. This is the
+   * flood-stop, not a failure: the drift is reported and stays visible.
+   */
+  duplicate?: boolean;
   /** Why nothing was raised. Absence is reported, never swallowed. */
   error?: string;
 };
@@ -177,6 +196,68 @@ async function ensureLabel(
 }
 
 /**
+ * The open issue that already reports this exact drift, if there is one.
+ *
+ * Matched on the class label plus the rendered title, because the title is
+ * `alarmTitle(alarm)` — a deterministic function of the class and the violated
+ * triggers — so the same drift always produces the same key and a *changed*
+ * drift (a second cron joins the violations) still gets its own issue.
+ *
+ * Never throws, and never reports a match it did not read: an unreadable or
+ * unexpected search response returns null so the caller opens an issue, because
+ * a duplicate issue is recoverable and a silently suppressed alarm is not.
+ *
+ * Budget: one extra GET per alarm, only when there is drift to raise. A tick
+ * with no drift makes none of these calls; a worst-case tick (both classes, both
+ * unknown labels) is 3 requests per class, 6 in total, against the Workers free
+ * tier's 50 subrequests per request.
+ */
+async function findOpenOccurrence(
+  env: Env,
+  alarm: TriggerAlarm,
+  fetcher: typeof fetch,
+): Promise<string | null> {
+  const label = ALARM_CLASSES[alarm.class].label;
+  const title = alarmTitle(alarm);
+  const query = new URLSearchParams({
+    state: "open",
+    labels: label,
+    per_page: "100",
+  });
+  const res = await fetcher(
+    `${GH_API}/repos/${ALERT_REPO}/issues?${query.toString()}`,
+    { headers: ghHeaders(env, false) },
+  );
+  if (res.status !== 200) {
+    console.error(
+      JSON.stringify({
+        alarm_class: alarm.class,
+        cron: alarm.subject,
+        error: `open-issue search failed: HTTP ${res.status}`,
+        searched: label,
+      }),
+    );
+    return null;
+  }
+  const payload = (await res.json().catch(() => null)) as unknown;
+  if (!Array.isArray(payload)) {
+    console.error(
+      JSON.stringify({
+        alarm_class: alarm.class,
+        cron: alarm.subject,
+        error: "open-issue search returned a shape that is not a list; raising anyway",
+        searched: label,
+      }),
+    );
+    return null;
+  }
+  for (const row of payload as { title?: unknown; html_url?: unknown }[]) {
+    if (row?.title === title && typeof row.html_url === "string") return row.html_url;
+  }
+  return null;
+}
+
+/**
  * Open one issue for one occurrence. Never throws: a failed alarm is returned
  * with `raised: false` and logged, so the caller keeps its own failure as the
  * thing that fails.
@@ -196,6 +277,25 @@ export async function raiseTriggerAlarm(
       return result;
     }
     await ensureLabel(env, spec, fetcher);
+    const open = await findOpenOccurrence(env, alarm, fetcher);
+    if (open) {
+      // The drift is already on the board. Say so, and do not file a second
+      // issue: a re-detected trigger is one occurrence, not six.
+      result.duplicate = true;
+      result.issue = open;
+      console.log(
+        JSON.stringify({
+          alarm_class: alarm.class,
+          alarm_label: spec.label,
+          alarm_raised: false,
+          alarm_already_open: true,
+          crons: alarm.violations.map((violation) => violation.cron),
+          source: alarm.source,
+          issue: open,
+        }),
+      );
+      return result;
+    }
     const res = await fetcher(`${GH_API}/repos/${ALERT_REPO}/issues`, {
       method: "POST",
       headers: ghHeaders(env, true),

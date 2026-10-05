@@ -48,20 +48,16 @@ export function cronsFromWranglerToml(text: string): string[] {
   if (start < 0) throw new Error("wrangler.toml has no [triggers] table");
   const out: string[] = [];
   let inList = false;
-  let closed = false;
   for (const line of lines.slice(start + 1)) {
     const trimmed = line.trim();
-    if (closed) break;
     if (!inList) {
       // Any other table ends the section; anything else is a key we do not read.
       if (trimmed.startsWith("[")) break;
       if (/^crons\s*=/.test(trimmed)) inList = true;
       continue;
     }
-    if (trimmed.startsWith("]")) {
-      closed = true;
-      break;
-    }
+    // Reading stops at the closing bracket, so a later table cannot contribute.
+    if (trimmed.startsWith("]")) break;
     const match = /"([^"]*)"/.exec(trimmed);
     if (match) out.push(match[1]);
   }

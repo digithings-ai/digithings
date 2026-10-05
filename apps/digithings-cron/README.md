@@ -73,14 +73,25 @@ Two distinct alarm classes, one issue per occurrence, the label is the class
 - `missing_required_cron` — a required cron is absent from the trigger list under
   test, or its job row is gone, disabled, or points at a different cron. Label
   `cron-missing-required-trigger`.
-- `unrecognised_cron` — a cron fires and maps to no enabled job, so it starts
-  nothing. Label `cron-unrecognised-trigger`. This is not the same failure as a
-  missing required cron and must not read as one. Raised from the cron tick in
-  `src/index.ts` (scheduled only; a human typing a cron on POST /kick is not drift).
+- `unrecognised_cron` — a cron fires and no job row claims it, not even a
+  disabled one, so it starts nothing. Label `cron-unrecognised-trigger`. This is
+  not the same failure as a missing required cron and must not read as one.
+  Raised from the cron tick in `src/index.ts` (scheduled only; a human typing a
+  cron on POST /kick is not drift).
 
 A broken contract opens an issue in `digithings-ai/twelve-x` through
 `GH_DISPATCH_TOKEN` and never throws. Absence is loud by default: an unmet
 contract fails the deploy and alarms.
+
+"Occurrence" means an occurrence of drift, not an observation of it. A tick
+re-detects the same unmapped trigger every time it fires and the deployed check
+re-runs on every deploy, so `src/trigger-alarm.ts` first looks for an open issue
+with the same class label and the same title, and returns that issue instead of
+filing another. It never comments on the open issue, so an unresolved drift
+stays one visible open issue instead of six a day. Close it when the drift is
+resolved and the next occurrence opens a fresh one. An unreadable search always
+raises rather than suppressing: a duplicate issue is recoverable, a silent
+miss is not.
 
 ## Local
 
@@ -109,10 +120,15 @@ deployment is Finding 1 wearing a passing test:
 2. After Deploy, "Verify the deployed trigger contract" runs
    `npm run check:deployed-triggers --workspace digithings-cron`, which reads the
    live schedule via `GET /accounts/{account_id}/workers/scripts/{script}/schedules`
-   and asserts the contract against it, retrying while schedules propagate. It
-   needs `REQUIRE_DEPLOYED_CONTRACT=1` to be mandatory (it is, in CI), plus
-   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and GH_DISPATCH_TOKEN for the alarm.
-   Without a token on a laptop it prints `[deployed contract] NOT VERIFIED` and skips.
+   and asserts the contract against it. It retries up to three times (10s apart)
+   for both reasons a read can look wrong: the schedules have not propagated yet,
+   and the API answered 5xx, timed out, or returned something unexpected. A list
+   that never reads at all is reported as `missing_required_cron` with the read
+   error as its reason, never as a pass — an unreadable list cannot prove
+   anything either way. It needs `REQUIRE_DEPLOYED_CONTRACT=1` to be mandatory
+   (it is, in CI), plus CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and
+   GH_DISPATCH_TOKEN for the alarm. Without a token on a laptop it prints
+   `[deployed contract] NOT VERIFIED` and skips.
 
 ## Migration
 

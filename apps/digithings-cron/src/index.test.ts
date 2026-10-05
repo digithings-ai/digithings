@@ -105,6 +105,9 @@ describe("scheduled", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         calls.push({ url, init });
+        // The alarm searches open issues for this class first, so the stub
+        // answers that search honestly: nothing open yet.
+        if (String(url).includes("/issues?")) return Response.json([], { status: 200 });
         const status = String(url).includes("/labels/") ? 200 : 201;
         return new Response(JSON.stringify({ html_url: "https://example.test/1" }), {
           status,
@@ -135,6 +138,47 @@ describe("scheduled", () => {
     expect(body.body).toContain("13 4 * * *");
     // Only the issue write: an unmapped tick dispatches nothing.
     expect(calls.filter((call) => call.url.includes("/dispatches"))).toHaveLength(0);
+  });
+
+  it("opens one issue for six ticks of the same unmapped trigger, not six issues", async () => {
+    // The flood this stops: an unmapped `13 4 * * *` (or any high-rate
+    // trigger) is re-detected on every tick it fires. One open issue for the
+    // drift is an alarm; six is the twelve-x #322 incident by another route.
+    // This drives the real scheduled() path, not raiseViolationAlarms directly,
+    // because the flood is a property of the tick, not of the alarm function.
+    const created: string[] = [];
+    let openIssues: { title: string; html_url: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (String(url).includes("/issues?")) return Response.json(openIssues, { status: 200 });
+        if (String(url).includes("/labels/")) return new Response("{}", { status: 200 });
+        if (String(url).endsWith("/issues")) {
+          const body = JSON.parse(String(init?.body ?? "{}")) as { title: string };
+          const html_url = `https://github.com/digithings-ai/twelve-x/issues/${7000 + created.length}`;
+          created.push(body.title);
+          openIssues = [...openIssues, { title: body.title, html_url }];
+          return Response.json({ html_url }, { status: 201 });
+        }
+        return new Response("unexpected", { status: 500 });
+      }),
+    );
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "github-token" };
+
+    for (let tick = 0; tick < 6; tick += 1) {
+      const pending: Promise<unknown>[] = [];
+      await worker.scheduled(
+        {
+          cron: "*/10 * * * *",
+          scheduledTime: Date.UTC(2026, 8, 5, 4, 0, tick * 10),
+        } as ScheduledController,
+        env,
+        executionContext(pending),
+      );
+      await Promise.all(pending);
+    }
+
+    expect(created).toEqual(["Unrecognised cron trigger — */10 * * * *"]);
   });
 
   it("dispatches checkpoint-archive to digiquant-runner", async () => {

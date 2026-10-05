@@ -31,7 +31,11 @@ const WRANGLER_TOML = readFileSync(resolve(process.cwd(), "wrangler.toml"), "utf
 
 const CRON_TOKEN = process.env.CLOUDFLARE_API_TOKEN ?? "";
 const REQUIRED = process.env.REQUIRE_DEPLOYED_CONTRACT === "1";
-const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? accountIdFromWranglerToml(WRANGLER_TOML);
+// `||`, not `??`: Actions renders an unset secret as an empty string, and
+// `"" ?? fallback` is still `""`, so the fallback would never run and the request
+// would go to `/accounts//workers/...`. That fails closed either way, but the
+// resulting error names an empty account id instead of the real one.
+const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || accountIdFromWranglerToml(WRANGLER_TOML);
 const SCRIPT_NAME = workerNameFromWranglerToml(WRANGLER_TOML);
 
 // A one-row contract, taken from the real one. The retry cases below are about
@@ -142,13 +146,103 @@ describe("reading the deployed trigger list", () => {
     expect(calls).toHaveLength(3);
     expect(outcome.verdict.missing.map((row) => row.cron)).toContain(RETRY_REQUIRED[0].cron);
   });
+
+  // The retry is for reads that fail, not only for reads that disagree. Before
+  // this, a single Cloudflare 5xx on the first read failed the gate on attempt
+  // one and raised nothing, because the throw escaped the loop and the caller
+  // only alarms on a verdict.
+  it("retries a read that errors instead of failing on the first attempt", async () => {
+    const asiaCron = RETRY_REQUIRED[0].cron;
+    const calls: string[] = [];
+    let index = 0;
+    const answers = [
+      () => new Response("upstream boom", { status: 500 }),
+      () => Response.json({
+        success: true,
+        result: { schedules: [{ cron: asiaCron, created_on: "x", modified_on: "x" }] },
+      }),
+    ];
+    const fetcher = vi.fn(async (url: string) => {
+      calls.push(String(url));
+      const answer = answers[Math.min(index, answers.length - 1)];
+      index += 1;
+      return answer();
+    }) as unknown as typeof fetch;
+
+    const outcome = await checkDeployedContract({
+      accountId: ACCOUNT_ID,
+      scriptName: SCRIPT_NAME,
+      token: "t",
+      fetcher,
+      attempts: 3,
+      delayMs: 0,
+      required: RETRY_REQUIRED,
+    });
+    expect(outcome.verdict.ok).toBe(true);
+    expect(outcome.attempts).toBe(2);
+    expect(calls).toHaveLength(2);
+    // The gate passed, but only after a retry, and that is on the record.
+    expect(outcome.readErrors).toHaveLength(0);
+  });
+
+  it("reports an unreadable list as unmet, in the missing-required-cron class", async () => {
+    const fetcher = vi.fn(async () => new Response("still 500", { status: 503 })) as unknown as typeof fetch;
+    const outcome = await checkDeployedContract({
+      accountId: ACCOUNT_ID,
+      scriptName: SCRIPT_NAME,
+      token: "t",
+      fetcher,
+      attempts: 2,
+      delayMs: 0,
+      required: RETRY_REQUIRED,
+    });
+    // Not green, and not a throw: the gate and the alarm have to be the same
+    // event, so an unreadable list reads as a lost backstop.
+    expect(outcome.verdict.ok).toBe(false);
+    expect(outcome.verdict.unrecognised).toEqual([]);
+    expect(outcome.verdict.missing).toHaveLength(RETRY_REQUIRED.length);
+    expect(outcome.verdict.missing[0].class).toBe("missing_required_cron");
+    expect(outcome.verdict.missing[0].reason).toContain("could not be read");
+    expect(outcome.readErrors).toHaveLength(2);
+    expect(outcome.readErrors[0]).toContain("503");
+  });
+
+  it("keeps a successful read's own verdict even if a later read errors", async () => {
+    // The answer sequence here disagrees first and then fails outright. The
+    // disagreeing verdict is the real finding, so it must survive the error.
+    const asiaCron = RETRY_REQUIRED[0].cron;
+    let index = 0;
+    const answers = [
+      () => Response.json({ success: true, result: { schedules: [] } }),
+      () => new Response("boom", { status: 500 }),
+    ];
+    const fetcher = vi.fn(async () => {
+      const answer = answers[Math.min(index, answers.length - 1)];
+      index += 1;
+      return answer();
+    }) as unknown as typeof fetch;
+
+    const outcome = await checkDeployedContract({
+      accountId: ACCOUNT_ID,
+      scriptName: SCRIPT_NAME,
+      token: "t",
+      fetcher,
+      attempts: 2,
+      delayMs: 0,
+      required: RETRY_REQUIRED,
+    });
+    expect(outcome.verdict.ok).toBe(false);
+    expect(outcome.verdict.missing.map((row) => row.cron)).toEqual([asiaCron]);
+    expect(outcome.readErrors).toHaveLength(1);
+  });
 });
 
 describe("the deployed Worker, checked against the required-trigger contract", () => {
   it(
     "every required cron is present in the deployed trigger list",
-    // Vitest 4 takes options as the second argument; three retries of a
-    // propagating deploy read are slower than the default 5s timeout.
+    // Options as the second argument, which vitest 4 supports alongside the
+    // older `(name, fn, timeout)` form. Three retries of a propagating deploy
+    // read are slower than the default 5s timeout.
     { timeout: 120_000 },
     async () => {
       if (CRON_TOKEN === "") {
@@ -170,17 +264,27 @@ describe("the deployed Worker, checked against the required-trigger contract", (
       if (!outcome.verdict.ok) {
         // The alarm belongs on the twelve-x path, and it fires once the
         // retries are exhausted, so a propagation delay never raises an issue.
+        // `readErrors` rides along so a run that only passed after a retry, or
+        // that never read the list at all, says so in the log next to the alarm.
         const results = await raiseVerdictAlarms(
           { GH_DISPATCH_TOKEN: process.env.GH_DISPATCH_TOKEN },
           outcome.verdict,
           source,
         );
         for (const result of results) {
-          console.error(JSON.stringify({ ...result, source, raised: result.raised }));
+          console.error(
+            JSON.stringify({ ...result, source, raised: result.raised, readErrors: outcome.readErrors }),
+          );
         }
       }
+      // Assert the verdict itself, not a sentence built from `crons.length`.
+      // `describeVerdict` counts distinct expressions (`verdict.present`), so a
+      // duplicated cron in the API response made this read "(2 crons)" against a
+      // rendered "(1 crons)" and failed a deployment that was in fact correct.
+      expect(outcome.verdict.violations).toEqual([]);
+      expect(outcome.verdict.ok).toBe(true);
       expect(describeVerdict(outcome.verdict, source)).toEqual([
-        `trigger contract satisfied against ${source} (${outcome.crons.length} crons)`,
+        `trigger contract satisfied against ${source} (${outcome.verdict.present} crons)`,
       ]);
     },
   );
