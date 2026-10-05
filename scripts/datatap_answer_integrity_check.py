@@ -35,7 +35,10 @@ embed gate. That gate is our code on our host — ``apps/digichat/src/app/api/ch
 past ``EMBED_FREE_TURN_LIMIT`` per client IP — and both probes share one IP, so
 without the identity the check was blind for most of every 24h window. The value is
 never logged, never printed, and never written anywhere; it is read in
-``build_headers`` and put straight onto the wire. Unset means no header is sent. digichat
+``build_headers`` and put straight onto the wire. Unset means no header is sent. It
+is sent only to the embed host this run resolved, never to a third party: redirects
+are refused outright (``_RefuseRedirects``), because urllib would otherwise copy
+this header onto whatever host a ``Location`` named. digichat
 ignores an allowlist entry shorter than 32 characters, so a value below that is sent and
 then refused; the same secret has to be in both places.
 
@@ -80,9 +83,33 @@ from urllib.error import HTTPError
 # literal substring used to spell the stdlib file-opening builtin in call
 # position, which any call to the URL opener would trip. The alias satisfies that
 # over-broad substring check without weakening the proof it stands for: this
-# still reads and writes no local file at all.
-from urllib.request import Request
-from urllib.request import urlopen as _fetch
+# still reads and writes no local file at all. The opener is ours, not the
+# module-level default, because we must not follow a redirect (see below).
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+class _RefuseRedirects(HTTPRedirectHandler):
+    """Turn any 3xx into the error it should be, forwarding no header.
+
+    urllib's default redirect handler copies every request header except
+    content-length and content-type onto whatever host the ``Location`` header
+    names. That is a fine default for a browser following a link, and the wrong
+    behaviour for a check holding a secret: one 3xx from the client platform
+    would hand our monitor token to a host nobody here audited. Returning None
+    makes the opener raise ``HTTPError`` for the 3xx instead, which is already
+    handled below as a status to report.
+
+    A redirect is also not an answer. The contract this check is built on is
+    that only a clean 200 from the URL we asked for is evidence, and everything
+    else is "we cannot see" (exit 2). Following the redirect would mean scoring
+    a response from an unvetted host as though it were DataTap's.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_fetch = build_opener(_RefuseRedirects).open
 
 OK = 0
 FAIL = 1
@@ -817,14 +844,15 @@ def _status_reason(name: str, response: HttpResponse) -> str:
         # Our own gate, not the client's. apps/digichat/src/app/api/chat/route.ts
         # answers 402 {"error": "trial_gate"} past EMBED_FREE_TURN_LIMIT (3) turns
         # per client IP in a 24h window, and both probes share one IP — so the
-        # first run spends two turns and the rest of the window sees this. That
-        # body also comes back from a tenant's configured consume-quota, which a
-        # monitor token does not bypass, so the message names both possibilities
-        # rather than asserting the one it cannot distinguish. No retry: the
+        # first run spends two turns and the rest of the window sees this. For
+        # this caller the monitor not being recognised is the *cause*, not a
+        # second possibility: the tenant's consume-quota arm answers the same
+        # body but is guarded on an x-embed-chat-token header this check never
+        # sends, so it cannot be the branch that reached us. No retry: the
         # counter resets on its own after 24 hours.
         return (
             f"probe {name!r} came back HTTP 402{detail}: our own digichat embed gate "
-            "(EMBED_FREE_TURN_LIMIT per client IP) is closed, or the check is not "
+            "(EMBED_FREE_TURN_LIMIT per client IP) is closed because the check was not "
             "recognised as the internal monitor, so we cannot see the answer path — "
             f"set {MONITOR_TOKEN_ENV_VAR} for the check and DIGICHAT_MONITOR_TOKENS "
             "on digichat"
