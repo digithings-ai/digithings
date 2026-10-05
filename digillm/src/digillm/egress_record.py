@@ -197,7 +197,8 @@ class EgressRecord(BaseModel):
 class EgressObserver(Protocol):
     """A sink for egress records. Implementations may raise; digillm swallows it."""
 
-    def __call__(self, record: EgressRecord) -> None: ...
+    def __call__(self, record: EgressRecord) -> None:
+        raise NotImplementedError
 
 
 _egress_observer: EgressObserver | None = None
