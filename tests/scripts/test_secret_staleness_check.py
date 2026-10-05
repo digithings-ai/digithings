@@ -48,9 +48,13 @@ def _fake_gh(tmp_path: Path, stdout: str, returncode: int = 0, stderr: str = "")
 
 
 def _gh_on_path(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stdout: str, returncode: int = 0
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stdout: str,
+    returncode: int = 0,
+    stderr: str = "",
 ) -> None:
-    bindir = _fake_gh(tmp_path, stdout, returncode)
+    bindir = _fake_gh(tmp_path, stdout, returncode, stderr)
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
 
 
@@ -630,16 +634,241 @@ def test_markdown_never_calls_an_unread_level_clean(checker: object) -> None:
 
 
 @pytest.mark.unit
-def test_the_workflow_grants_the_read_permission_the_listings_need(checker: object) -> None:
-    """Without `actions: read` all three listings 403, every level reads as empty, and
-    the job still succeeds. Nothing else in the repo would notice."""
+def test_the_workflow_does_not_claim_a_permission_that_cannot_read_secrets(checker: object) -> None:
+    """`actions: read` was granted in #5063 and proved useless by run 37235973852.
+
+    The Actions secrets endpoints need a token carrying the `repo` scope.
+    GITHUB_TOKEN is a GitHub App installation token and the `permissions:`
+    vocabulary has no key for secrets, so `Actions: read` appeared in the job
+    banner and every listing still answered 403. Asserting it is absent keeps a
+    future run from re-adding a permission that widens the token and buys
+    nothing, and keeps the comment beside it honest.
+    """
     workflow = yaml.safe_load(
         (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
     )
     permissions = workflow["permissions"]
 
-    assert permissions.get("actions") == "read"
+    assert "actions" not in permissions
+    assert permissions.get("contents") == "read"
     assert permissions.get("issues") == "write"
+
+
+@pytest.mark.unit
+def test_the_workflow_says_the_secret_listings_cannot_be_read_here(checker: object) -> None:
+    """The header is the only place a reader learns why the ageing half is absent.
+
+    Before 2026-10-04 it claimed the job "needs no credential beyond the
+    automatic GITHUB_TOKEN", which is what sent #5063 looking for a permission
+    that does not exist. The proof is the run id, so the claim is pinned to it.
+    """
+    text = (_REPO_ROOT / ".github" / "workflows" / "secret-staleness-check.yml").read_text()
+
+    assert "37235973852" in text
+    assert "CANNOT be read from this workflow" in text
+    assert "needs no credential" not in text
+
+
+@pytest.mark.unit
+def test_a_run_that_aged_nothing_opens_no_tracker(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every level unread is the normal case from CI.
+
+    Filing a tracker whose body is "I read nothing" reads like a working
+    rotation control and is not one. A monthly issue that only ever says it
+    could not do its job also trains readers to ignore the one issue that would
+    carry real names.
+
+    The assertion is on the call, not on stdout. Asserting the issue title was
+    absent from stdout passed even when filing was unconditional, because the
+    fake `gh` never prints the title it was sent.
+    """
+    _gh_on_path(
+        monkeypatch,
+        tmp_path,
+        stdout="",
+        returncode=1,
+        stderr="gh: Resource not accessible by integration (HTTP 403)",
+    )
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    opened: list[str] = []
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, slug, body: opened.append(slug) or "opened"
+    )
+    cleared: list[str] = []
+    monkeypatch.setattr(
+        checker,
+        "close_unmeasurable_tracker",
+        lambda root, slug: cleared.append(slug) or "no tracker is open",
+    )
+
+    code = checker.main(["--skip-environment-gates", "--open-issue"])
+
+    assert code == 0
+    assert opened == []
+    assert cleared == ["o/r"]
+
+
+@pytest.mark.unit
+def test_an_unmeasurable_tracker_is_annotated_and_closed_not_left_open(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Skipping the write was not enough on its own.
+
+    The tracker opened by run 37235973852 was already open and empty when this
+    was written, carrying `security:finding` and a body saying nothing had been
+    read. A guard that only stops *new* empty trackers leaves that one sitting
+    forever while the docs claim the clock files none. Silence here is
+    indistinguishable from "still running".
+    """
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    posted: list[tuple[str, str]] = []
+
+    def fake_gh_json(cmd, root, stdin=None):
+        # Every secret listing is a plain `--paginate` read with no `--method`, and
+        # an unreadable one has to answer None. Only the writes are recorded.
+        if "--method" not in cmd:
+            return None
+        verb = cmd[cmd.index("--method") + 1]
+        target = next(a for a in cmd if a.startswith("repos/") and "/issues" in a)
+        if verb == "POST" and target.endswith("/comments"):
+            posted.append(("comment", json.loads(stdin)["body"]))
+            return {"id": 1}
+        if verb == "PATCH":
+            posted.append(("close", target))
+            return {"number": 5065}
+        return None
+
+    monkeypatch.setattr(checker, "_gh_json", fake_gh_json)
+    monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: "5065")
+
+    code = checker.main(["--skip-environment-gates", "--open-issue"])
+
+    assert code == 0
+    kinds = [kind for kind, _ in posted]
+    assert kinds == ["comment", "close"], posted
+    note = posted[0][1]
+    assert "security:finding" in note
+    assert "SECRETS_INVENTORY.md" in note
+    assert "repo` scope" in note
+    assert "closed" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+def test_an_unmeasurable_tracker_is_left_open_when_the_note_cannot_be_written(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Closing without the explanation would be worse than staying open.
+
+    The comment lands before the close on purpose. If it cannot be written, the
+    issue keeps counting as an open finding and the operator can see that
+    something is still wrong, rather than finding a closed issue that never
+    says why.
+    """
+    _gh_on_path(
+        monkeypatch,
+        tmp_path,
+        stdout="",
+        returncode=1,
+        stderr="gh: Resource not accessible by integration (HTTP 403)",
+    )
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    seen: list[str] = []
+    monkeypatch.setattr(
+        checker,
+        "_gh_json",
+        lambda cmd, root, stdin=None: (seen.append(cmd[3]), None)[1],
+    )
+    monkeypatch.setattr(checker, "_issue_exists", lambda root, repo: "5065")
+
+    checker.main(["--skip-environment-gates", "--open-issue"])
+
+    assert "PATCH" not in seen, "must not close when the note did not land"
+    out = capsys.readouterr().out
+    assert "FAILED" in out
+    assert "left open" in out
+
+
+@pytest.mark.unit
+def test_a_run_that_aged_something_does_file_the_tracker(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The converse, so the guard above cannot be satisfied by never filing.
+
+    This is the path the operator shell on the Mac takes, and it is the only one
+    that has ever produced a useful tracker. It is NOT the Keymaster weekly key
+    report: that report is built from Bitwarden and never reads this API.
+    """
+    _gh_on_path(monkeypatch, tmp_path, stdout=json.dumps([{"secrets": [_SECRETS]}]))
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    filed: list[str] = []
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, slug, body: filed.append(slug) or "opened"
+    )
+
+    code = checker.main(["--skip-environment-gates", "--open-issue"])
+
+    assert code == 0
+    assert filed == ["o/r"]
+    assert "filed nothing" not in capsys.readouterr().out
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("call", "args", "scope", "cites_run"),
+    [
+        ("repo_secrets", ("o/r",), "`repo` scope", True),
+        ("org_secrets", ("o",), "admin:org", False),
+        ("environment_secrets", ("o/r", "cron"), "`repo` scope", True),
+    ],
+)
+def test_an_unreadable_level_says_which_scope_would_fix_it(
+    checker: object,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    call: str,
+    args: tuple[str, ...],
+    scope: str,
+    cites_run: bool,
+) -> None:
+    """`repo secret list unavailable for o/r` is true and actionable for nobody.
+
+    The Actions secrets endpoints need the `repo` scope. A reader seeing the old
+    reason has no way to know that no `permissions:` grant can supply it, which is
+    what sent #5063 hunting for a permission that does not exist.
+
+    All three levels are pinned. Pinning only `repo` left the `org` and `cron`
+    reasons free to rot back to their bare form with the suite still green.
+    """
+    _gh_on_path(
+        monkeypatch,
+        tmp_path,
+        stdout="",
+        returncode=1,
+        stderr="gh: Resource not accessible by integration (HTTP 403)",
+    )
+
+    secrets, reason = getattr(checker, call)(checker.REPO_ROOT, *args)
+
+    assert secrets == []
+    assert reason is not None
+    # Each level names the scope that level actually needs: the org listing is
+    # gated on `admin:org`, not on `repo`, so it does not cite the run either.
+    assert scope in reason
+    assert ("37235973852" in reason) is cites_run
 
 
 @pytest.mark.unit

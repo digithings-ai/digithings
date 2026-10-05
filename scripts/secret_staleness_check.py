@@ -2,10 +2,10 @@
 """Names-only ageing check for GitHub Actions secrets (#248).
 
 `gh secret list` and `gh api .../actions/secrets` return a name and a
-last-written date and never a value, so this whole check runs without reading a
-single credential. That is the point: the 90-day rotation rule in
+last-written date and never a value, so this check never reads a single
+credential. That part is the point: the 90-day rotation rule in
 `docs/ops/SECRETS_INVENTORY.md` was a memory exercise, and this turns it into a
-control that fires on its own.
+control instead of an intention.
 
     python3 scripts/secret_staleness_check.py                     # report, no issue
     python3 scripts/secret_staleness_check.py --file-names a.txt   # offline, no `gh`
@@ -14,14 +14,29 @@ control that fires on its own.
 
 Three levels are aged, because each has its own rotation blast radius:
 
-    repo       a secret any workflow on any branch could read
-    org        inherited by every repo in the org (`gh` needs `admin:org`)
+    repo       a secret any workflow on any branch could read   (needs `repo` scope)
+    org        inherited by every repo in the org              (needs `admin:org`)
     cron       the environment scope the CI reads moved to in #248
+
+Every one of those endpoints needs a token with the `repo` or `admin:org` scope.
+**A workflow's GITHUB_TOKEN has neither**: it is a GitHub App installation token,
+and GitHub's `permissions:` vocabulary has no key for secrets at all, so no grant
+in a workflow file can make these three listings readable. This was measured, not
+assumed — run 37235973852 on `develop` had `actions: read` visibly granted and all
+three listings still answered `Resource not accessible by integration (HTTP 403)`.
+So run this from a shell that holds a token with those scopes — `gh auth` on
+Chris's Mac already carries `repo` and `admin:org` — or pass `--file-names`. It
+does NOT run from the Keymaster weekly key report, which is built from Bitwarden
+and never reads this API. From CI every level is reported as NOT
+CHECKED and the reason is printed; see `--strict-offline` for turning that into a
+non-zero exit when a report must not be trusted.
 
 Not a hard gate. `--fail-overdue` exits 1 when anything is overdue, which CI
 does *not* use: a stale credential is a decision for a human (rotate now, or
-record why not), and a red build is not that decision. The monthly workflow
-files or updates one tracking issue instead.
+record why not), and a red build is not that decision. Where a token does allow
+it, the monthly run files or updates one tracking issue instead — but it files
+nothing at all when not one level could be read, because a monthly issue reading
+"I could not do my job" is noise wearing a tracker's clothes.
 
 Offline switch: `--file-names` reads `SCOPE\\tNAME\\tUPDATED` lines so the
 ageing logic can be tested without `gh`, and `--strict-offline` refuses to
@@ -58,6 +73,20 @@ DEFAULT_MAX_AGE_DAYS = 90
 #: App installation token and never has it, so the org level is best-effort from
 #: CI and authoritative only from an operator's shell.
 ORG_SCOPE_REQUIRES_ADMIN = "admin:org"
+
+#: Why a level reads as unavailable, in the words a human needs at 06:17 on the 1st.
+#: `GET .../actions/secrets` documents that it needs the `repo` scope, and
+#: GITHUB_TOKEN is an installation token whose `permissions:` vocabulary has no key
+#: for secrets at all — so from CI this is a certainty, not a suspicion. Run
+#: 37235973852 measured it with `actions: read` visibly granted and all three
+#: listings still 403. Naming the scope matters: the raw reason used to read
+#: `repo secret list unavailable for digithings-ai/digithings`, which is true and
+#: tells a reader nothing about what to do next.
+SCOPE_NEEDS_TOKEN_SCOPE = (
+    "needs a token with the `repo` scope, which a workflow's GITHUB_TOKEN never has "
+    "(run 37235973852 measured this with `actions: read` granted); read it from an "
+    "operator shell, where `gh auth` already has `repo` and `admin:org`"
+)
 
 SCOPES = ("repo", "org", "cron")
 
@@ -241,16 +270,19 @@ def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
     payload = _gh_json(["gh", "api", "--paginate", f"repos/{repo}/actions/secrets"], root)
     entries = _secret_entries(payload)
     if entries is None:
-        return [], f"repo secret list unavailable for {repo}"
+        return [], f"repo secret list unavailable for {repo}: {SCOPE_NEEDS_TOKEN_SCOPE}"
     return _aged(entries, "repo")
 
 
 def org_secrets(root: Path, org: str) -> tuple[list[Secret], str | None]:
-    """Org-scope secrets. Needs `admin:org`; a GITHUB_TOKEN will fail here."""
+    """Org-scope secrets. Needs `admin:org`, so it never works from CI."""
     payload = _gh_json(["gh", "api", "--paginate", f"orgs/{org}/actions/secrets"], root)
     entries = _secret_entries(payload)
     if entries is None:
-        return [], f"org secret list unavailable (needs {ORG_SCOPE_REQUIRES_ADMIN})"
+        return [], (
+            f"org secret list unavailable: needs {ORG_SCOPE_REQUIRES_ADMIN}, "
+            f"which a workflow's GITHUB_TOKEN never has"
+        )
     return _aged(entries, "org")
 
 
@@ -271,7 +303,9 @@ def environment_secrets(root: Path, repo: str, environment: str) -> tuple[list[S
     )
     entries = _secret_entries(payload)
     if entries is None:
-        return [], f"environment {environment!r} secret list unavailable"
+        return [], (
+            f"environment {environment!r} secret list unavailable: {SCOPE_NEEDS_TOKEN_SCOPE}"
+        )
     return _aged(entries, environment)
 
 
@@ -636,6 +670,82 @@ def _issue_exists(root: Path, repo: str) -> str | None:
     return None
 
 
+CLOSE_NOTE = f"""{ISSUE_MARKER}
+This tracker cannot be refreshed from CI, so it is being closed rather than left
+open and wrong.
+
+The ageing half of `secret-staleness-check` reads the GitHub Actions secret
+listings, and those endpoints need a token with the `repo` scope. A workflow's
+`GITHUB_TOKEN` is a GitHub App installation token and GitHub's `permissions:`
+vocabulary has no key for secrets, so no grant in a workflow file can supply it.
+Every level comes back `403 Resource not accessible by integration`.
+
+Leaving this open would be the worst of both: a `security:finding` that claims to
+be watching a rotation window it cannot see. The environment-gate half of the same
+job needs only `contents: read` and does work — it compares
+`.github/environments.json` against live protection rules on every run.
+
+The real rotation state is recorded by hand in `docs/ops/SECRETS_INVENTORY.md`.
+As of 2026-10-04, 16 of 33 secret names were past the 90-day window; the oldest
+were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.
+
+Give the ageing half a credential and the next run files a fresh tracker with real
+names in it."""
+
+
+def close_unmeasurable_tracker(root: Path, repo: str) -> str:
+    """Close an open tracker when nothing could be aged, recording why.
+
+    Skipping the write was not enough on its own. The tracker opened by run
+    37235973852 was already open and empty when this was written, carrying
+    `security:finding` and a body saying nothing had been read. A guard that only
+    prevents *new* empty trackers leaves that one sitting forever, and the docs
+    claim the clock files no tracker while a tracker is open. Silence here is
+    indistinguishable from "still running".
+
+    The comment lands before the close, so the reason is on the record before the
+    issue stops counting as an open finding. If the comment cannot be written the
+    issue is left open, because closing it without the explanation would be worse.
+    """
+    try:
+        existing = _issue_exists(root, repo)
+    except TrackerUnreadable as exc:
+        return f"filed nothing: {exc}"
+    if existing is None:
+        return "filed nothing: no tracker is open"
+    noted = _gh_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{repo}/issues/{existing}/comments",
+            "--input",
+            "-",
+        ],
+        root,
+        stdin=json.dumps({"body": CLOSE_NOTE}),
+    )
+    if noted is None:
+        return f"FAILED to record why on #{existing}; left open (see stderr)"
+    closed = _gh_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{repo}/issues/{existing}",
+            "--input",
+            "-",
+        ],
+        root,
+        stdin=json.dumps({"state": "closed"}),
+    )
+    if closed is None:
+        return f"recorded why on #{existing} but FAILED to close it (see stderr)"
+    return f"recorded why on #{existing} and closed it"
+
+
 def file_or_update_issue(root: Path, repo: str, body: str) -> str:
     """Open the tracker, or update the one already open. Never files a duplicate.
 
@@ -772,7 +882,16 @@ def main(argv: list[str] | None = None) -> int:
         if slug is None:
             print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
             return 2
-        print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
+        if not report.secrets:
+            # A tracker whose whole body is "I read nothing" is a monthly false alarm: it
+            # looks like the rotation control is running when it is not, and it trains
+            # readers to ignore the one issue that would carry real names. Every level
+            # being unreadable is the normal case from CI, where the listings need a token
+            # the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE. So a run that aged nothing
+            # opens nothing, and clears up any tracker an earlier run already left open.
+            print(close_unmeasurable_tracker(root, f"{slug[0]}/{slug[1]}"))
+        else:
+            print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
     if gates is not None and any(row["drift"] for row in gates[0]):
         # Deliberately unconditional, unlike `--fail-overdue`. A drifted gate does not
