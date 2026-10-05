@@ -166,6 +166,10 @@ def test_block_inherits_every_honest_rate_field_and_adds_only_its_own() -> None:
     parent = set(HonestRate.model_fields)
     block = set(HonestRateBlock.model_fields)
     assert parent <= block  # n=40
+    # `model_fields` is keyed by name, so it cannot show a re-declared field.
+    # `__annotations__` can: a name the parent already declares and the block
+    # declares again is the duplication this case exists to forbid.
+    assert not parent & set(HonestRateBlock.__annotations__)  # n=40
     assert parent == {"k", "n", "estimate", "ci_lo", "ci_hi", "low_sample", "refused"}  # n=40
     assert block - parent == set(
         "schema basis n_unit warn_floor refuse_floor stability disclaimer".split()
@@ -244,3 +248,17 @@ def test_block_carries_its_own_floors_and_applies_them() -> None:
     assert GuardResult.model_fields["refuse_floor"].default == REFUSE_FLOOR  # n=40
     lax = HonestRateBlock(k=5, n=12, warn_floor=5, refuse_floor=5)  # n=12
     assert lax.refused is False and lax.low_sample is False  # n=12
+
+
+def test_empty_sample_is_refused_even_when_the_floors_allow_it() -> None:
+    """Review B1: no interval means no rate, so a relaxed floor cannot un-refuse it."""
+    b = HonestRateBlock(k=0, n=0, refuse_floor=0)  # n=0
+    assert b.refused is True  # n=0
+    assert b.estimate is None and b.ci_lo is None and b.ci_hi is None  # n=0
+
+
+def test_negative_counts_are_rejected() -> None:
+    """Review B1 follow-on: `wilson()` returns early for n <= 0 and never sees k < 0."""
+    for bad in ({"k": -5, "n": 0}, {"k": -1, "n": -1}, {"k": -5, "n": -5}):  # n=3
+        with pytest.raises(ValueError):  # pydantic wraps it in ValidationError
+            HonestRateBlock(**bad)  # type: ignore[arg-type]

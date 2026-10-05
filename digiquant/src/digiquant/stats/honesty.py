@@ -99,13 +99,23 @@ class HonestRateBlock(HonestRate):
 
     @model_validator(mode="after")
     def _guard(self) -> HonestRateBlock:
-        """Re-derive the guards and the interval; a caller cannot pin a rate."""
+        """Re-derive the guards and the interval; a caller cannot pin a rate.
+
+        An empty sample is refused whatever the floors say. ``wilson()`` has no
+        interval for ``n == 0``, and a block carrying no number must not report
+        itself unguarded — otherwise a caller who relaxes ``refuse_floor`` gets
+        ``refused=False`` beside three ``None`` fields. A negative count is
+        rejected here because ``wilson()`` returns early for ``n <= 0`` and
+        would never see it.
+        """
+        if self.k < 0 or self.n < 0:
+            raise ValueError(f"negative counts: k={self.k} n={self.n}")
         if self.k > self.n:
             raise ValueError(f"impossible counts: k={self.k} n={self.n}")
         self.low_sample = self.n < self.warn_floor
-        self.refused = self.n < self.refuse_floor
         w = wilson(self.k, self.n)
-        if self.refused or w is None:
+        self.refused = w is None or self.n < self.refuse_floor
+        if self.refused:
             self.estimate = self.ci_lo = self.ci_hi = None
         else:
             self.estimate, self.ci_lo, self.ci_hi = w.estimate, w.lo, w.hi
