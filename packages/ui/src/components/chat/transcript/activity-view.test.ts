@@ -400,28 +400,84 @@ describe("citationHits", () => {
 
 // The DIG-100 no-invent guard, UI half (leaf 2b).
 //
-// A search that genuinely found nothing is a result. It has a tool name, a
-// query and an outcome count, and it should read in the transcript as a first
-// class row among the other tool rows — because that is how the reader tells
-// "this search ran and found nothing" apart from "something went wrong" and
-// from "the assistant never looked".
+// A search outcome is a result. It has a tool name, a query and an outcome,
+// and it should read in the transcript as a first class row among the other
+// tool rows — because that is how the reader tells "this search ran and came
+// back empty" apart from "this search broke" and from "the assistant never
+// looked".
 //
 // Today the honest negative arrives as a `status` activity, which maps to a
 // canon `aside` — a de-emphasised system note floating below the tool rows,
-// carrying no name and no count. A reader scanning the transcript sees an
-// unlabelled aside and cannot tell it apart from any other status note. That
-// is the shape G4' calls out: the negative surface must be authoritative.
+// carrying no name and no count. The module's own docstring explains why:
+// the structure was dissolved into prose upstream, and rebuilding tool rows
+// from prose "would be guesswork". The guesswork is what this guard removes,
+// so leaf 2a carries the structure across the wire and this leaf renders it.
+//
+// The discriminator is `status.outcome`. Absent means a quiet note — that is
+// the documentsWithheld case, which means results EXIST and tenant detail
+// withholds them, and which must stay a quiet aside. Present means the emitter
+// had a real tool outcome in hand, and it says which one.
 describe("toCanonRows — the honest negative is a result row", () => {
-  it("renders a search outcome status as a first class row, not an aside", () => {
+  it("renders a failed search as a first class failure, not an aside", () => {
+    const row = onlyRow([
+      {
+        kind: "status",
+        message: 'Search for "jwt" failed.',
+        outcome: { name: "digisearch", query: "jwt", state: "failed" },
+      },
+    ]);
+    expect(row).toMatchObject({
+      kind: "tool",
+      name: "Search the knowledge base",
+      args: "jwt",
+      status: "error",
+    });
+  });
+
+  it("renders an unreadable result as a first class row that claims no count", () => {
+    // The tool ran and returned; the BFF cannot read the payload. That is an
+    // honest unknown. It must not read as an empty search.
+    const row = onlyRow([
+      {
+        kind: "status",
+        message: 'Search for "jwt" returned a result this transcript cannot read.',
+        outcome: { name: "digisearch", query: "jwt", state: "unreadable" },
+      },
+    ]);
+    expect(row).toMatchObject({
+      kind: "tool",
+      name: "Search the knowledge base",
+      args: "jwt",
+      status: "ok",
+    });
+  });
+
+  it("never shows an unreadable result as 'no hits'", () => {
+    // The specific lie this leaf exists to remove. `meta` is where the count
+    // is folded into the row, and a missing count must stay missing rather
+    // than defaulting to the zero string.
+    const row = onlyRow([
+      {
+        kind: "status",
+        message: "unreadable",
+        outcome: { name: "digisearch", query: "jwt", state: "unreadable" },
+      },
+    ]);
+    expect(row).not.toHaveProperty("meta");
+  });
+
+  it("keeps a results-withheld note a quiet aside", () => {
+    // GUARD. Results exist and the tenant's detail level withholds them. That
+    // is the opposite of a negative, and promoting it into a result row is the
+    // exact misrender this leaf must not ship.
     const row = onlyRow([{ kind: "status", message: 'Found results for "jwt".' }]);
-    expect(row.kind).toBe("tool");
-    expect(row).not.toHaveProperty("message");
+    expect(row).toEqual({ kind: "aside", key: "status-0", message: 'Found results for "jwt".' });
   });
 
   it("keeps a zero-hit tool_result a first class row with its outcome count", () => {
-    // The shape the projector emits when a search provably ran and came back
-    // empty. It must stay a named row that reads "no hits" — that string is
-    // the whole point of it, and it is not an aside today either.
+    // GUARD. The shape the projector emits when a search provably ran and came
+    // back empty. It stays a named row that reads "no hits" — that string is
+    // the whole point of it.
     const row = onlyRow([
       { kind: "tool_result", name: "digisearch", query: "jwt", hits: [], count: 0 },
     ]);
@@ -435,6 +491,7 @@ describe("toCanonRows — the honest negative is a result row", () => {
   });
 
   it("leaves a real hit unchanged", () => {
+    // GUARD.
     const row = onlyRow([
       {
         kind: "tool_result",
@@ -448,18 +505,35 @@ describe("toCanonRows — the honest negative is a result row", () => {
     expect(row).toHaveProperty("sources");
   });
 
-  it("does not put a settled search back in the waiting caret", () => {
-    // The negative surface becoming a row must not change what the caret reads
-    // while a search is genuinely still running.
-    expect(liveActivityLabel([{ kind: "tool_call", name: "digisearch", query: "jwt" }])).toBe(
-      'Searching for "jwt"',
-    );
+  it("settles the waiting caret for the tool it actually names", () => {
+    // A promoted status settles exactly one tool call, keyed by name — the
+    // same key liveActivityLabel already uses for tool_result.
     expect(
       liveActivityLabel([
         { kind: "tool_call", name: "digisearch", query: "jwt" },
-        { kind: "status", message: 'Found results for "jwt".' },
+        {
+          kind: "status",
+          message: "unreadable",
+          outcome: { name: "digisearch", query: "jwt", state: "unreadable" },
+        },
       ]),
     ).toBeUndefined();
+  });
+
+  it("does not let one tool's outcome silence another tool that is still running", () => {
+    // GUARD, and the reason the outcome carries a name. Without one, the only
+    // way to settle a pending call is to settle ALL of them, which would let a
+    // finished search hide an unrelated search still in flight.
+    expect(
+      liveActivityLabel([
+        { kind: "tool_call", name: "digisearch", query: "jwt" },
+        {
+          kind: "status",
+          message: "unreadable",
+          outcome: { name: "digivault", query: "auth", state: "unreadable" },
+        },
+      ]),
+    ).toBe('Searching for "jwt"');
   });
 });
 
