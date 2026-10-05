@@ -887,6 +887,49 @@ def _live_window_days(cadence: str | None) -> int:
         ) from None
 
 
+def _macro_as_of_stale(
+    outcomes: list[dict[str, Any]],
+    macro_specs: list[tuple[str, str, str | None]],
+    run: str,
+) -> list[str]:
+    """Return tickers whose macro outcome as_of is older than the series' cadence window.
+
+    A series is stale when: (run_date - as_of).days > _CADENCE_WINDOW_DAYS[cadence]
+    - cadence from macro_specs (default: daily = 45 days via _live_window_days)
+    - Only checks success modes: MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL
+    - MODE_HISTORY_ONLY and MODE_ERROR are handled by existing guards
+    """
+    stale_tickers: list[str] = []
+    run_date = datetime.fromisoformat(run).date()
+
+    # Build cadence lookup from macro_specs
+    cadence_by_ticker = {
+        f"{source}__{series}": cadence
+        for source, series, cadence in macro_specs
+    }
+
+    for o in outcomes:
+        ticker = o["ticker"]
+        if ticker not in cadence_by_ticker:
+            continue  # not a macro series
+        mode = o["mode"]
+        if mode not in {MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL}:
+            continue  # only success modes carry a meaningful as_of
+        as_of = o.get("as_of", "")
+        if not as_of:
+            continue
+        as_of_date = datetime.fromisoformat(as_of[:10]).date()
+        age_days = (run_date - as_of_date).days
+
+        cadence = cadence_by_ticker[ticker]
+        window = _live_window_days(cadence)  # 45/120/240 calendar days
+
+        if age_days > window:
+            stale_tickers.append(ticker)
+
+    return stale_tickers
+
+
 def refresh_macro_series(
     source: str,
     series: str,
@@ -1499,6 +1542,10 @@ def main(argv: list[str] | None = None) -> int:
             and not _macro_leg_dead(outcomes, exempt)
         )
     ]
+    # DIG-1137: per-series as_of age guard — catches frozen panel where
+    # up-to-date returns as_of=seal but nothing newer than seal in window
+    as_of_stale = _macro_as_of_stale(outcomes, macro_specs, run)
+    failed.extend([o for o in outcomes if o["ticker"] in as_of_stale])
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)

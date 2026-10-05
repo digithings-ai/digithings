@@ -218,6 +218,7 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     client = GloomberbClient(fetcher=fetcher, **kwargs)
     monkeypatch.setattr(mcp_server, "_build_gloomberb_client", lambda: client)
     return client
@@ -1364,17 +1365,22 @@ def test_news_with_ticker_carries_deep_link(monkeypatch: pytest.MonkeyPatch) -> 
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
 
-def test_env_seam_builder_caches_per_env_pair_and_defaults_on(
+def test_env_seam_builder_caches_per_env_pair_and_defaults_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = mcp_server._build_gloomberb_client()
-    assert first.enabled is True
+    assert first.enabled is False
     assert mcp_server._build_gloomberb_client() is first
 
     monkeypatch.setenv("GLOOMBERB_SESSION_COOKIE", "token-value")
     second = mcp_server._build_gloomberb_client()
     assert second is not first
-    assert second.enabled is True
+    assert second.enabled is False
+
+    monkeypatch.setenv("GLOOMBERB_ENABLED", "1")
+    third = mcp_server._build_gloomberb_client()
+    assert third is not second
+    assert third.enabled is True
 
 
 TOOL_CALLS: dict[str, tuple[Any, ...]] = {

@@ -378,7 +378,7 @@ flag for the equity/sector (`EQUITY_TOOLS`) and macro (`MACRO_TOOLS`) phases, an
 #2908; its evidence path is the bundle + amendment flow) and the legacy Phase 7D
 path is unwired.
 
-Gating: the family is default-ON behind `GLOOMBERB_ENABLED`;
+Gating: the family is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it;
 `available_digifetch_tools` applies that kill switch **and** the session-cookie
 gate to the advertised list, so a pipeline LLM is never handed a digifetch tool
 whose only answer is a typed disabled/`auth_required`/`pro_required` error. The
@@ -603,6 +603,15 @@ guard existed. Suspending the exemption only ever *adds* names to `failed` — i
 a stale run fresh. A daily or `error` outcome is never exempt at any cadence. Staleness
 flag only — no money, rate or weight arithmetic. Contract tests:
 `tests/scripts/test_macro_death_is_not_silent.py`.
+
+**Panel serving stale rows in-window** — A macro outcome can return `up-to-date` with
+`as_of=seal` when the live window contains the seal but nothing newer (line 1113).
+`_macro_leg_dead` only catches `history-only`; `up-to-date` is not a soft-fail mode.
+New guard `_macro_as_of_stale` compares each outcome's `as_of` against the run date
+using the series' cadence window (45/120/240 calendar days; default 45). Per-outcome:
+one frozen monthly series fires. Composes with `_macro_leg_dead` orthogonally — leg
+death = all slow series silent; staleness = any series' as_of outside its window.
+Limits: (1) undeclared cadence defaults to 45d; (2) calendar days, not trading days.
 
 #### Market-data R2 read path (#3780 Task 10)
 
@@ -1377,7 +1386,7 @@ the payload itself (e.g. a quote's `data.stale`, spec §3.2) — maps to
 `"Free-tier data delayed up to 15 minutes"` with `stale=false`. Both signals
 stay distinct.
 
-**Pacing and safety.** The client is default-ON behind `GLOOMBERB_ENABLED`; only
+**Pacing and safety.** The client is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it; only
 `1`/`true`/`yes`/`on` enable it, and any other value (a typo included) fails
 closed to disabled (see Environment Variables). A 900s TTL cache matches the R2
 market-data-cache convention; expired entries are evicted on access and the
