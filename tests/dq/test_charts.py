@@ -485,3 +485,60 @@ def test_to_pandas_series_is_never_routed_through_to_pandas() -> None:
     series = _NoPyarrow([1.0, -2.0, 3.0, float("nan")])
     assert len(_extract_frame(series)) == 3
     assert count_winning_trades(series) == 2
+
+
+# --- DIG-937: the same locks, on input the engine actually emits ----------------
+#
+# The locks above compare the chart path against normalize_series on fabricated
+# series. Both functions being blind to a shape cannot fail a lock between them,
+# so these two run on a real pyo3 analyzer's own ``realized_pnls()`` output and on
+# the 1.230.0 record rows. Constructing an analyzer is not running a backtest
+# (#42 does not apply).
+
+
+def _analyzer_record_series():
+    """A real ``realized_pnls()`` return value, or skip when nautilus is absent."""
+    pyo3 = pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
+    usd = pyo3.Currency.from_str("USD")
+    analyzer = pyo3.PortfolioAnalyzer()
+    # No NaN trade here: the engine refuses a non-finite amount outright
+    # ("invalid f64 for 'amount', was NaN"), so a non-finite *row* is only
+    # reachable as a literal — which is where the dropping rule is pinned.
+    for pid, pnl in (("P-1", 10.0), ("P-2", -4.0), ("P-3", 0.0)):
+        analyzer.add_trade(pyo3.PositionId(pid), pyo3.Money(float(pnl), usd))
+    return analyzer.realized_pnls(usd)
+
+
+#: The 1.230.0 shape, written out because the installed 1.228 build cannot emit it.
+_ANALYZER_ROWS_1230 = [
+    ("P-1", 1_700_000_000_000_000_000, 10.0),
+    ("P-2", 1_700_086_400_000_000_000, -4.0),
+    ("P-3", 1_700_172_800_000_000_000, 0.0),
+]
+
+
+@pytest.mark.unit
+def test_anti_drift_lock_holds_for_analyzer_built_records() -> None:
+    """The chart path and the model path must agree on the engine's own output."""
+    from digiquant.charts.common import _extract_frame
+    from digiquant.charts.trades import count_winning_trades
+
+    series = _analyzer_record_series()
+    model = _model_values(series)
+
+    assert model, "an analyzer holding trades must not normalize to an empty series"
+    assert count_winning_trades(series) == sum(1 for v in model if v > 0)
+    assert len(_extract_frame(series)) == len(model)
+
+
+@pytest.mark.unit
+def test_anti_drift_lock_holds_for_1230_record_rows() -> None:
+    """Same two locks on the record shape, including a breakeven close."""
+    from digiquant.charts.common import _extract_frame
+    from digiquant.charts.trades import count_winning_trades
+
+    model = _model_values(_ANALYZER_ROWS_1230)
+
+    assert len(model) == 3
+    assert count_winning_trades(_ANALYZER_ROWS_1230) == sum(1 for v in model if v > 0) == 1
+    assert len(_extract_frame(_ANALYZER_ROWS_1230)) == len(model)
