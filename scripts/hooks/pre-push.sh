@@ -31,10 +31,20 @@ origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 # Allowed branch name taxonomy. Keep in sync with BRANCHING.md and the
 # GitHub branch-naming ruleset on origin.
 #
+# `DIG-<n>-<title-slug>` is the branch Paperclip checks out an execution
+# workspace on. It matched no arm here, which made every commit made in such a
+# workspace unpushable by construction — the hook tests the branch name, so a
+# refspec pointing the same commits elsewhere is refused identically, and there
+# is no exemption for a branch the remote already holds. Admitting the shape is
+# the whole fix; the digit is required so this cannot widen into a prefix match
+# on `DIG`, and the slug is required so `DIG-47-` is not a branch name. Such a
+# branch accumulates commits from unrelated issues and must not be blanket
+# pushed — see the execution-workspace rule in BRANCHING.md.
+#
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -106,6 +116,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {feat,fix,docs,chore}/<slug>" >&2
       echo "           bot/<slug>  (pushed by project-stub-fields.yml," >&2
       echo "                        agent-backlog-snapshot.yml, pipeline-provider-review.yml)" >&2
+      echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
+      echo "                        per-issue, never blanket — BRANCHING.md)" >&2
       failed=1
       continue
     fi
