@@ -90,6 +90,10 @@ button, input { font-family: var(--mono); letter-spacing: 0; border-radius: 0; }
   font: 10.5px/1 var(--mono); letter-spacing: 0.04em; color: var(--ink-mute);
 }
 .win-bar .ey { color: var(--ink-soft); }
+/* Age state word in a bar. The word already says the state; ink only reinforces
+   it, matching the tokens the FX hub uses for the same two bands. */
+.win-age.warn { color: var(--warn); }
+.win-age.stale { color: var(--down); }
 .win-bar { white-space: nowrap; }
 .win-bar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .win-bar > span:last-child { flex: 0 1 auto; }
