@@ -446,13 +446,17 @@ def test_exa_import_does_not_require_digifetch_at_module_level():
 
 
 def test_exa_fetch_that_digifetch_refuses_is_refused_here(monkeypatch):
-    """A blocked target never reaches the wire: the seam's SSRF guard refuses it.
+    """The seam's SSRF guard refuses a blocked target before it is dialled.
 
-    ``EXA_API_BASE`` is attacker-influenceable in the webhook flows this leaf is
-    hardening. ``digifetch.ssrf`` refuses a loopback / link-local / metadata
-    address, and that refusal must surface as ``ExaError`` *before* any socket
-    is opened — not as a silent success and not as a raw ``SsrfBlockedError``
-    escaping the ``except ExaError`` handlers in server.py / mcp_server.py.
+    ``EXA_API_BASE`` is a module constant, so the base URL is not the attack
+    surface this leaf closes. The guard is still worth pinning directly: if
+    ``digifetch.ssrf`` ever stopped refusing a loopback / link-local / metadata
+    address, this test must fail. The refusal has to surface as ``ExaError``
+    *before* any socket is opened — not as a silent success, and not as a raw
+    ``SsrfBlockedError`` escaping the ``except ExaError`` handlers in
+    server.py / mcp_server.py. The production-reachable path, a redirect hop
+    onto a blocked address, is covered by
+    ``test_real_seam_refuses_a_redirect_hop_onto_a_metadata_address``.
     """
     monkeypatch.setenv("EXA_API_KEY", "test-key")
     dialled: list[str] = []
@@ -543,3 +547,83 @@ def test_exa_non_dict_body_is_mapped_to_exa_error(monkeypatch):
     monkeypatch.setattr(digifetch.HttpFetcher, "fetch", fake_fetch)
     with pytest.raises(web_exa.ExaError, match="unexpected shape"):
         web_exa.exa_search("q")
+
+
+def _real_seam_transport(monkeypatch, dialled, *, status_for):
+    """Drive the *real* ``digifetch.HttpFetcher.fetch``, stubbing only the socket.
+
+    Every other test in this file replaces ``HttpFetcher.fetch`` wholesale, which
+    means ``raise_for_status()`` and the per-hop ``validate_fetch_url`` are
+    test-local assumptions: if the seam stopped raising on 4xx, or stopped
+    re-validating a redirect hop, none of them could fail. This patches
+    ``httpx.Client.request`` to hand back genuine ``httpx.Response`` objects, so
+    the seam's own status handling and SSRF guard execute for real. The only
+    thing faked is the network.
+
+    *status_for* maps a URL to a status code; any URL absent from it that gets
+    dialled is a bug and raises loudly.
+    """
+
+    def fake_request(self, method, url, **kwargs):
+        url = str(url)
+        dialled.append(url)
+        if url not in status_for:
+            raise AssertionError(f"dialled an unexpected URL: {url}")
+        status = status_for[url]
+        request = httpx.Request(method, url)
+        headers = {}
+        if status in (301, 302, 303, 307, 308):
+            headers["location"] = "http://169.254.169.254/latest/meta-data/"
+        return httpx.Response(
+            status,
+            text=_json.dumps({"results": [{"title": "ghost"}]}),
+            headers=headers,
+            request=request,
+        )
+
+    monkeypatch.setattr(httpx.Client, "request", fake_request)
+
+
+def test_real_seam_refuses_a_403_that_carries_a_success_shaped_body(monkeypatch):
+    """A 403 must not be parsed as search results, proved against the real seam.
+
+    The status-mapping tests fake ``HttpFetcher.fetch``, so they encode
+    "the seam raises on 4xx" as an assumption. This drives the real seam: if it
+    ever returned a ``FetchResult`` for a 403 instead of raising, ``_post`` would
+    happily ``json.loads`` the error body and hand callers a successful search
+    containing ``{'title': 'ghost'}``. The body is deliberately shaped like a
+    valid response so a regression fails loudly instead of silently.
+    """
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    api = f"{web_exa.EXA_API_BASE}/search"
+    dialled: list[str] = []
+    _real_seam_transport(monkeypatch, dialled, status_for={api: 403})
+
+    with pytest.raises(web_exa.ExaError) as excinfo:
+        web_exa.exa_search("q")
+
+    assert excinfo.value.status_code == 403
+    assert "ghost" not in str(excinfo.value), "the 403 body must not be parsed as results"
+    assert dialled == [api], "the seam must dial EXA once and refuse on the response"
+
+
+def test_real_seam_refuses_a_redirect_hop_onto_a_metadata_address(monkeypatch):
+    """A 302 onto cloud metadata must be refused on the hop, before a socket opens.
+
+    The SSRF test elsewhere in this file only proves the guard works via
+    ``EXA_API_BASE``, an entry point production cannot reach. The reachable
+    surface is the redirect hop, which this exercises for real: EXA answers 302
+    pointing at ``169.254.169.254`` and the seam must re-validate that second
+    URL and refuse it. Only the first hop may reach the wire.
+    """
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    api = f"{web_exa.EXA_API_BASE}/search"
+    dialled: list[str] = []
+    _real_seam_transport(monkeypatch, dialled, status_for={api: 302})
+
+    with pytest.raises(web_exa.ExaError, match="digifetch SSRF guard"):
+        web_exa.exa_search("q")
+
+    assert dialled == [api], (
+        "the metadata hop must never be dialled; the guard runs before the socket"
+    )

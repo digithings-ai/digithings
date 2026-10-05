@@ -13,11 +13,12 @@ Design constraints (see ``digisearch/AGENTS.md``):
   (``HttpFetcher``; ``httpx`` underneath, already in base install). No ``exa-py``
   import; the REST shapes are built locally. Routing EXA through ``digifetch``
   (DIG-912 §5.3) is what puts the shared controls on this path — chiefly the
-  SSRF guard in :mod:`digifetch.ssrf`, so a webhook that carries an
-  attacker-chosen base URL is refused instead of dialled. ``digifetch`` is
-  imported lazily inside :func:`_post` (the same shape
-  ``pipeline/url_ingest.py`` uses), so importing this module never requires the
-  ``[web-search]`` extra.
+  SSRF guard in :mod:`digifetch.ssrf`, so a redirect hop that lands on a
+  loopback / link-local / RFC1918 / metadata address is refused instead of
+  dialled. The base URL itself is a module constant, not a runtime input; the
+  reachable surface is that redirect hop. ``digifetch`` is imported lazily inside
+  :func:`_post` (the same shape ``pipeline/url_ingest.py`` uses), so importing
+  this module never requires the ``[web-search]`` extra.
 - No env reads at import time: ``is_exa_configured()`` / ``_api_key()`` read
   ``EXA_API_KEY`` at call time so tests and key-less installs stay side-effect
   free. Without a key every entry point fails closed with
