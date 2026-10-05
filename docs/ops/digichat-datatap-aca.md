@@ -83,11 +83,45 @@ python3 scripts/check_digichat_image_binding.py --facts facts.json
 
 **Caller pitfall, verified against the live repo:** `package.json` must be read from **the tag's tree**, not the checkout. `develop` reads `2.4.0`, the `digichat-v2.3.2` tree reads `2.3.2`; auditing the running 2.3.2 image against the checkout reports a version mismatch that is true of the checkout and false of the image.
 
+### Collecting the facts
+
+The checker reads seven keys. Git supplies four of them; the image supplies three. Note the digest key is **`image_digest`**, not `digest`.
+
 ```bash
-TAG=digichat-v2.3.2
+# --- from git: the tag's identity ---
+TAG=digichat-v2.3.2                       # must exist; see the note below
 COMMIT=$(git rev-list -n1 "$TAG")
 PKG=$(git show "$TAG":apps/digichat/package.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])')
+
+# --- from the image: its own claim about what it is ---
+IMG=datatapchatregistry.azurecr.io/digichat:v2.3.2
+az acr login --name datatapchatregistry --expose-token >/dev/null   # or docker login
+REV=$(docker pull -q "$IMG" | xargs docker inspect \
+        --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
+VER=$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMG")
+DIG=$(docker inspect --format '{{ index .RepoDigests 0 }}' "$IMG")  # registry@sha256:…
+
+# --- compose and pipe; each command writes JSON, so `jq -n` assembles the object ---
+jq -n \
+  --arg version      "${VER:-$(git show "$TAG":apps/digichat/package.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])')}" \
+  --arg package_version "$PKG" \
+  --arg tag          "$TAG" \
+  --arg tag_commit   "$COMMIT" \
+  --arg image_ref    "$IMG" \
+  --arg image_revision "$REV" \
+  --arg image_digest  "$DIG" \
+  '{version:$version, package_version:$package_version, tag:$tag,
+    tag_commit:$tag_commit, image_ref:$image_ref,
+    image_revision:$image_revision, image_digest:$image_digest}' \
+  | python3 scripts/check_digichat_image_binding.py --facts -
 ```
+
+Two traps in that recipe, both hit while writing it:
+
+- **`docker inspect` emits a JSON array**, so `docker inspect … | checker` fails with *"facts must be a JSON object"*. Always assemble with `jq -n`, or pass `--format` so each invocation prints a bare scalar.
+- **`cmd1; cmd2 | checker` pipes only `cmd2`.** Use `&&` or collect into variables first, or the checker silently validates the wrong thing.
+
+> **The tag must exist.** `git tag -l 'digichat-v*'` currently stops at `digichat-v2.3.2` — there is **no `digichat-v2.4.0` tag**, even though `develop` already reads `2.4.0`. Binding a 2.4.0 image therefore requires cutting `digichat-v2.4.0` first (release-please does this on develop, per [`RELEASES.md`](../../RELEASES.md)); until then `git rev-list -n1` returns empty and the check fails on a missing tag commit — correctly, since there is nothing to bind against.
 
 ---
 
@@ -121,7 +155,7 @@ This matters for the promotion below: **`/healthz` only becomes a valid probe pa
 | Initializer | Behaviour | Risk to this deploy |
 |---|---|---|
 | `assertDevAuthDisabledInProduction` | throws if `NODE_ENV=production` **and** `DIGICHAT_DEV_AUTH=1` | **none** — `DIGICHAT_DEV_AUTH` is unset on both ACAs |
-| `initDigichatConfigAtStartup` | **fails closed** — throws if there is no config file *and* no `DIGICHAT_EMBED_TENANTS` | **none** — `embed-tenants` is set via `secretRef` |
+| `initDigichatConfigAtStartup` | **fails closed** — throws if there is no config file *and* no `DIGICHAT_EMBED_TENANTS` | **none** — `DIGICHAT_EMBED_TENANTS` is set on the container, sourced from the `embed-tenants` secret |
 | `initLicenseStateAtStartup` | fail-open; `unlicensed` still serves | **none** — no license credential on the ACA, so state is `unlicensed` and serving continues |
 | `startLicenseHeartbeat` | 24h timer to digikey `/v1/licenses/heartbeat` | **none** — `unlicensed` containers never start a timer |
 
@@ -135,7 +169,7 @@ This matters for the promotion below: **`/healthz` only becomes a valid probe pa
 
 ### The `--secrets` footgun — read this first
 
-Both ACAs declare exactly two secrets, `auth-secret` and `embed-tenants`, and **both are inline-valued** (`secretRef: null`). `az` redacts inline values on read, so they **cannot be round-tripped**: `az containerapp show` returns no usable value, only `hasValue:false`.
+Both ACAs declare exactly two secrets, `auth-secret` and `embed-tenants`, and **both hold inline values** rather than pointing at a Key Vault secret (`secretRef: null` on the secret entry itself). The container still references them by name via `secretRef` — that is how `AUTH_SECRET` and `DIGICHAT_EMBED_TENANTS` resolve to them. `az` redacts inline values on read, so the values **cannot be round-tripped**: `az containerapp show` returns nothing usable, and `az containerapp secret show` reports only `hasValue:false`.
 
 Consequence: **never pass `--secrets` to a promote.** Re-declaring the secret list requires the original values, which are not recoverable from Azure. A promote that re-declares them with empty or placeholder values destroys working auth and embed configuration, and the app boots into a login nobody can explain. The image update does not need them — `az containerapp update --image` patches the template and leaves the rest alone.
 
@@ -168,7 +202,7 @@ Record the current revision name and image digest. That is the rollback target.
 
 Requires the 2.4.0 image in the ACR. **There is none** — nothing has been pushed since `v2.3.3` (2026-09-21), so the rehearsal is blocked on §1 Option A shipping a build lane, or on one deliberate hand-build whose digest is then recorded here.
 
-> **Rehearsal gate: do not start until an image exists in the ACR whose `org.opencontainers.image.revision` is the 2.4.0 release commit.** A rehearsal on an unlabelled image validates the mechanism, not the artifact.
+> **Rehearsal gate: do not start until an image exists in the ACR whose `org.opencontainers.image.revision` names the 2.4.0 release commit** — and that commit must be tagged `digichat-v2.4.0` first. **No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`), even though `develop` already reads `2.4.0`. Cutting it is the release decision, and the binding check needs it. A rehearsal on an unlabelled image validates the mechanism, not the artifact.
 
 ```bash
 DIGEST=sha256:<full digest from the ACR ledger>   # pin, never the tag
@@ -197,8 +231,10 @@ Rollback on dev: same command with `v2.3.3`'s digest (`sha256:fc06e0a57902…`).
 **Prerequisites, all of them:**
 
 - [ ] dev rehearsal completed, `/api/health` reported `version=2.4.0`, and the outcome recorded on the issue;
-- [ ] binding check passes for the exact digest being promoted:
-      `python3 scripts/check_digichat_image_binding.py --facts facts.json` → exit 0;
+- [ ] binding check passes for the exact image being promoted, digest supplied:
+      `python3 scripts/check_digichat_image_binding.py --facts facts.json` → exit 0.
+      (Supply `image_digest`; without it the check still exits 0 but only proves the
+      *binding*, leaving the tag mutable under you. The recipe in §2 sets it.)
 - [ ] the prod `digichat@<digest>` pull is authorised (system identity has ACR pull; the image must be in `datatapchatregistry`);
 - [ ] **probes are a known-accepted risk.** With `Single` mode and no probes there is no automatic rollback. Either accept that explicitly, or land the probe change first (child issue);
 - [ ] Chris has approved this specific digest, in the issue, in writing;
@@ -231,7 +267,7 @@ az containerapp update -n digichat -g datatap-rg --subscription "$SUB" \
   -o none   # digichat:v2.3.2
 ```
 
-This mints a further revision (`digichat--0000009`) rather than reactivating `--0000007`. The old revision keeps consuming quota until it is deactivated, so prune after a successful rollback.
+This mints a **further** revision rather than reactivating `--0000007` — read the actual name back from `az containerapp revision list` rather than predicting it, because Step 2 has already moved the counter on. The old revision keeps consuming quota until it is deactivated, so prune after a successful rollback.
 
 **Rollback is slower and blunter than a traffic shift.** That is the concrete cost of `Single` mode plus no probes, and the reason the probe change is a prerequisite rather than a follow-up.
 
@@ -266,9 +302,30 @@ Each has a child issue on DIG-1242 rather than being folded in here.
 
 ## 7. Corrections to existing docs
 
-Two documents assert a GHCR artifact that does not exist. Both were written when `publish-digichat-image.yml` was live and left behind when the strict-essentials cut removed it (`f54af7052`, 2026-10-01):
+The false claim — that `ghcr.io/digithings-ai/digichat` is published — was **not** confined to two files. A fresh-context review of this PR found roughly thirteen more sites, written when `publish-digichat-image.yml` was live and left behind when the strict-essentials cut removed it (`f54af7052`, 2026-10-01).
 
-- `apps/digichat/OPERATIONS.md` § Release artifacts — "Install digichat from GHCR".
-- `docs/architecture/digichat-self-hosted-release.md` §1 — the GHCR row and the "GHCR→ACR mirror" DataTap path.
+**Corrected in this PR** — the sites that cause a failed command or a wrong belief about whether a lane exists:
 
-Corrected in this PR to point here. The GHCR rows are the intended target state of the restored lane, not the current one.
+| Site | Was |
+|---|---|
+| `apps/digichat/OPERATIONS.md` § Release artifacts | "Install digichat from GHCR" |
+| `docs/architecture/digichat-self-hosted-release.md` §1 | GHCR row "Exists"; "no GHCR→ACR mirror step exists" |
+| `docs/agents/CI_CONVENTIONS.md` | `publish-digichat-image.yml` and `release-please-digichat.yml` listed **Working** — both deleted. This one mattered most: it is the doc whose job is to say which workflows exist. |
+| `docs/digichat/INSTALL.md` | `docker pull ghcr.io/…` as the primary install unit |
+| `docs/digichat/RELEASE-SMOKE.md` | a smoke checklist whose steps cannot run |
+| `apps/digithings-web/lib/sharedDocs.ts`, `apiDocs.ts` | **public site copy** asserting digichat "is already on GHCR" |
+
+**Still false — enumerated, not yet swept** (child issue). Listed so the next person does not rediscover them:
+
+- **Runnable code**: `infra/digichat-release/compose.digichat-release.yml`, `compose.profile-a.yml`, `compose.profile-a-bundle.yml`, `compose.profile-b.yml`, `infra/self-host/compose.ghcr.yml` — all set `image: ghcr.io/digithings-ai/digichat:…`. `make up-ghcr-digichat` therefore fails at pull.
+- **Docs**: `docs/vision/api/guide-digichat-install.md`, `guide-self-host.md`, `docs/vision/api/digichat-api.md`, `infra/digichat-release/README.md`, `docs/digichat/ONBOARDING.html`, `docs/architecture/digichat-self-host-picks-fit.md`.
+- **Historical, needs judgement not correction**: `RELEASES.md:80,82` and `BRANCHING.md:189` tell you not to delete `ghcr.io/digithings-ai/digichat:v0.9.3` because clients consume it. The package is gone from GHCR, so that advice can no longer be verified from this repo — but whether DataTap still depends on it is a DataTap question, not ours.
+- **`openwiki/digichat/operations.md:246`** repeats the claim. `openwiki/` is generated; per `AGENTS.md` it regenerates from source, so fix the source and let the weekly run pick it up rather than hand-editing.
+
+To find the current set at any time:
+
+```bash
+git grep -n 'ghcr.io/digithings-ai/digichat' -- . ':!docs/superpowers/plans/**'
+```
+
+`docs/superpowers/plans/**` is excluded deliberately: those are dated plan records of what was intended at the time, not current-state claims.

@@ -20,11 +20,28 @@ version and the image's version must equal ``apps/digichat/package.json``.
 Design note -- why this takes facts on stdin
 --------------------------------------------
 The checker is pure. It does not shell out to git, ``az`` or ``docker``, and it
-does not read a registry. A caller collects the facts (there is a documented
-recipe in ``docs/ops/digichat-datatap-aca.md``) and pipes them in. That keeps
-every branch here testable offline, and it keeps a network outage from reading
-as a binding failure -- a missing fact is a *verdict* (``UNKNOWN``), never a
-silent pass.
+does not read a registry. A caller collects the facts and pipes them in. That
+keeps every branch here testable offline, and it keeps a network outage from
+reading as a binding failure -- a missing fact is a *verdict* (``UNKNOWN``), never
+a silent pass.
+
+Facts (``facts.json`` or stdin)
+-------------------------------
+===========================  ===============================================
+``version``                 the image's ``org.opencontainers.image.version``
+``package_version``         ``apps/digichat/package.json`` version **at the tag**
+``tag``                     the release tag, e.g. ``digichat-v2.3.2``
+``tag_commit``              the commit that tag resolves to (full sha)
+``image_ref``               what was deployed, e.g. ``registry/digichat:v2.3.2``
+``image_revision``          the image's ``org.opencontainers.image.revision``
+``image_digest``            ``registry/digichat@sha256:...`` (optional; absence
+                            is a note, not a failure)
+===========================  ===============================================
+
+Two caller traps this deliberately does not paper over: ``docker inspect``
+without ``--format`` emits a JSON *array* and is rejected as bad input, and
+``a; b | checker`` pipes only ``b``. The full working recipe, with both traps
+explained, is in ``docs/ops/digichat-datatap-aca.md`` §2.
 
 Fail closed on missing facts
 ----------------------------
@@ -41,7 +58,7 @@ Usage
     python3 scripts/check_digichat_image_binding.py --facts facts.json
 
     # from the real world (recipe in docs/ops/digichat-datatap-aca.md)
-    az acr repository show-tags ... ; docker inspect ... \
+    jq -n --arg tag "$TAG" ... '{...}' \
       | python3 scripts/check_digichat_image_binding.py --facts -
 
 Exit codes: ``0`` bound, ``1`` not bound (a real finding), ``2`` bad input.

@@ -116,6 +116,9 @@ def test_empty_revision_annotation_fails(mod: Any) -> None:
     """The Dockerfile default is "" -- an empty label is not a binding."""
     result = mod.check(_facts(image_revision=""))
     assert result.ok is False
+    # assert the *reason*, not just the verdict: "" must be normalised to a
+    # missing fact, otherwise this test would still pass via some other branch
+    assert any("no org.opencontainers.image.revision" in p for p in result.problems)
 
 
 def test_revision_mismatch_fails(mod: Any) -> None:
@@ -148,6 +151,46 @@ def test_tag_version_mismatch_fails(mod: Any) -> None:
 def test_malformed_revision_fails(mod: Any) -> None:
     result = mod.check(_facts(image_revision="not-a-sha"))
     assert result.ok is False
+    # pin the branch: a malformed sha must be rejected as malformed, not
+    # merely fail to equal the tag commit (which would also be False)
+    assert any("not a commit sha" in p for p in result.problems)
+
+
+# --- every required fact is individually load-bearing --------------------
+
+
+@pytest.mark.parametrize("name", ["version", "package_version", "tag", "image_ref"])
+def test_each_required_fact_is_required(mod: Any, name: str) -> None:
+    """Dropping any one required fact must fail.
+
+    Parametrised over the names rather than hard-coded one at a time, so adding
+    a fact to REQUIRED_FACTS without a matching assertion fails this test
+    instead of silently going untested.
+    """
+    facts = _facts()
+    del facts[name]
+    result = mod.check(facts)
+    assert result.ok is False
+    assert any(name in p for p in result.problems), result.problems
+
+
+def test_required_facts_constant_matches_the_keys_we_assert(mod: Any) -> None:
+    """The parametrised test above is only as good as this constant."""
+    assert set(mod.REQUIRED_FACTS) == {"version", "package_version", "tag", "image_ref"}
+
+
+def test_malformed_tag_is_rejected(mod: Any) -> None:
+    """A tag that does not match the release ladder names no version."""
+    result = mod.check(_facts(tag_ref="digichat-latest"))
+    assert result.ok is False
+    assert any("digichat-v" in p for p in result.problems), result.problems
+
+
+def test_tag_commit_that_is_not_a_sha_fails(mod: Any) -> None:
+    """An unresolvable tag is not a soft note -- there is nothing to bind to."""
+    result = mod.check(_facts(tag_commit="HEAD"))
+    assert result.ok is False
+    assert any("tag_commit" in p and "not a commit sha" in p for p in result.problems)
 
 
 # --- the caller must read package.json from the tag's tree ---------------
@@ -224,6 +267,41 @@ def test_dockerfile_declares_the_revision_label() -> None:
     text = _DOCKERFILE.read_text()
     assert "org.opencontainers.image.revision" in text
     assert "ARG DIGICHAT_REVISION" in text
+
+
+def test_dockerfile_revision_label_lands_on_the_final_stage() -> None:
+    """The label must be in the stage that becomes the image.
+
+    A plain substring check passes even if the whole block is moved up into the
+    `builder` stage, where the label would be discarded and every image would
+    build while carrying no annotation -- exactly the silent failure this gate
+    exists to catch. So assert placement, not just presence.
+    """
+    text = _DOCKERFILE.read_text()
+    label_at = text.index("org.opencontainers.image.revision")
+    final_stage_at = text.rindex("\nFROM ")  # the last FROM is the shipped stage
+    cmd_at = text.rindex("CMD ")
+
+    assert label_at > final_stage_at, "revision label is not in the final image stage"
+    assert label_at < cmd_at, "revision label appears after the image CMD"
+    # the ARG must be declared in the same stage, or it expands to empty
+    assert "ARG DIGICHAT_REVISION" in text[final_stage_at:]
+
+
+def test_dockerfile_revision_label_is_an_active_instruction(mod: Any) -> None:
+    """A commented-out LABEL still contains the string, so placement passes.
+
+    That is the shape this guard has to survive: someone disables the label
+    rather than deleting it, images keep building, and every one of them ships
+    with no annotation -- the exact silent gap the checker exists to close.
+    """
+    active = [
+        line
+        for line in _DOCKERFILE.read_text().splitlines()
+        if "org.opencontainers.image.revision" in line and not line.lstrip().startswith("#")
+    ]
+    assert active, "the revision LABEL is commented out or absent"
+    assert any(line.lstrip().startswith("LABEL") for line in active)
 
 
 def test_dockerfile_does_not_bake_embed_tenants() -> None:
