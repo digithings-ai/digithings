@@ -282,8 +282,13 @@ export const JOBS: readonly Job[] = [
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
-  // Monthly names-only ageing sweep for the 90-day rotation window (#248). The
-  // clock lives here and not on the workflow: develop carries no on.schedule, and
+  // Monthly environment-gate drift check (#248). NOT an ageing sweep: DIG-477
+  // option D (Chris, 2026-10-05) took the secret ageing out of this job, because the
+  // Actions secrets endpoints need a token with the `repo` scope that a workflow's
+  // GITHUB_TOKEN never has. Do not call this an ageing sweep in a comment; that
+  // exact claim is what DIG-477 retracted. Ageing runs by hand via
+  // `make secrets-staleness`, tracked monthly as Paperclip DIG-668.
+  // The clock lives here and not on the workflow: develop carries no on.schedule, and
   // the workflow is workflow_dispatch only. Off :00 and off the smoke-site minute
   // so nothing lands on a shared runner's worst moment.
   wd("secret-staleness", "17 6 1 * *", DIGITHINGS, "secret-staleness-check.yml"),

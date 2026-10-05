@@ -11,6 +11,7 @@ control instead of an intention.
     python3 scripts/secret_staleness_check.py --file-names a.txt   # offline, no `gh`
     python3 scripts/secret_staleness_check.py --open-issue         # file the tracker
     python3 scripts/secret_staleness_check.py --max-age-days 60
+    python3 scripts/secret_staleness_check.py --gates-only         # gates only, no `gh`
 
 Three levels are aged, because each has its own rotation blast radius:
 
@@ -27,16 +28,30 @@ three listings still answered `Resource not accessible by integration (HTTP 403)
 So run this from a shell that holds a token with those scopes — `gh auth` on
 Chris's Mac already carries `repo` and `admin:org` — or pass `--file-names`. It
 does NOT run from the Keymaster weekly key report, which is built from Bitwarden
-and never reads this API. From CI every level is reported as NOT
-CHECKED and the reason is printed; see `--strict-offline` for turning that into a
-non-zero exit when a report must not be trusted.
+and never reads this API.
+
+Run from CI, it reads nothing. By decision (Paperclip DIG-477, option D, 2026-10-05)
+the ageing half is not automated at all, so `secret-staleness-check.yml` invokes
+this script with `--gates-only`, which skips the three listings entirely and does
+only the environment-gate comparison described below. If it is nevertheless run in
+full from CI, every level is reported as NOT CHECKED with the reason printed; see
+`--strict-offline` for turning that into a non-zero exit when a report must not be
+trusted.
 
 Not a hard gate. `--fail-overdue` exits 1 when anything is overdue, which CI
 does *not* use: a stale credential is a decision for a human (rotate now, or
 record why not), and a red build is not that decision. Where a token does allow
-it, the monthly run files or updates one tracking issue instead — but it files
-nothing at all when not one level could be read, because a monthly issue reading
-"I could not do my job" is noise wearing a tracker's clothes.
+the read — the manual `make secrets-staleness` run — it files or updates one
+tracking issue, but it files nothing at all when not one level could be read,
+because a monthly issue reading "I could not do my job" is noise wearing a
+tracker's clothes.
+
+Reading nothing from an operator shell does not close a tracker either, and
+exits 2 rather than 0. CLOSE_NOTE explains the unreadable run as CI's missing
+token scope, which is true of a CI run and false of a hand run whose `gh auth`
+has gone stale; since option D the two are not the same event, because CI runs
+`--gates-only` and never reaches this path. `--close-unmeasurable-tracker`
+restores the close when an operator means it.
 
 Offline switch: `--file-names` reads `SCOPE\\tNAME\\tUPDATED` lines so the
 ageing logic can be tested without `gh`, and `--strict-offline` refuses to
@@ -57,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -106,6 +122,29 @@ ISSUE_LABELS = ("security:finding",)
 #: any branch of this repo; an environment secret is reachable only by jobs that
 #: declare that environment, which after #248 is the CI read set.
 SCOPE_ORDER = {"org": 0, "repo": 1, "cron": 2}
+
+#: What `--gates-only` reports instead of an ageing verdict. Paperclip DIG-477,
+#: option D (Chris, 2026-10-05): keep the drift check, drop the ageing from
+#: automation. A monthly tracker that can never name a secret is noise wearing a
+#: tracker's clothes, and giving CI a token that could read the listings means
+#: standing up the exact category of repo-scoped credential #248 exists to
+#: shrink. Rotation stays a human decision recorded in
+#: `docs/ops/SECRETS_INVENTORY.md`, which already lists the 16 names measured
+#: past the window on 2026-10-04.
+#:
+#: The wording is load-bearing. `ageing_verdict()`'s "nothing was read" branch is
+#: *true* in gates-only mode and reads as a failure, which would put a
+#: red-sounding sentence in a green run every month and train readers to ignore
+#: it. Nothing is broken here, so nothing should read as though it were. Same
+#: defect as #5078, opposite direction.
+GATES_ONLY_NOTE = (
+    "It is out of automation by decision (DIG-477, option D): the secret listings "
+    "need a token carrying the `repo` scope, which no workflow grant can supply, so "
+    "this half could only ever come back unread. Rotation is a human decision, "
+    "recorded in `docs/ops/SECRETS_INVENTORY.md`. Run `make secrets-staleness` from "
+    "a shell whose `gh auth` already has `repo` and `admin:org` to age the names by "
+    "hand."
+)
 
 
 @dataclass(frozen=True)
@@ -599,9 +638,32 @@ def markdown(
     report: Report,
     max_age_days: int,
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+    gates_only: bool = False,
 ) -> str:
     """The issue body. Names and ages only — no value ever reaches this string."""
     overdue = report.overdue(max_age_days)
+    if gates_only:
+        # DIG-477 option D. The ageing section is replaced rather than reported as
+        # an empty failure: an empty `report` here means "not attempted", which is a
+        # decision, not a failed read, and the two must not look alike on the run
+        # page. `gates_markdown` still runs below, so the drift table is unchanged.
+        return (
+            "\n".join(
+                [
+                    ISSUE_MARKER,
+                    "",
+                    "Environment-gate drift check only — `scripts/secret_staleness_check.py"
+                    " --gates-only` (#248, DIG-477).",
+                    "",
+                    "## Secret ageing",
+                    "",
+                    f"**Secret ageing was NOT RUN.** {GATES_ONLY_NOTE}",
+                    "",
+                ]
+                + gate_markdown(gates)
+            )
+            + "\n"
+        )
     lines = [
         ISSUE_MARKER,
         "",
@@ -682,22 +744,30 @@ def render(
     report: Report,
     max_age_days: int,
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+    gates_only: bool = False,
 ) -> str:
     """Human-readable stdout, grouped by scope and oldest first."""
-    grouped = report.by_scope()
     out: list[str] = []
-    for scope in ordered_scopes(report):
-        secrets = sorted(grouped.get(scope, []), key=lambda s: -s.age_days)
-        out.append(f"{scope}: {len(secrets)} name(s)")
-        for secret in secrets:
-            marker = "OVERDUE" if secret.age_days > max_age_days else "ok"
-            out.append(
-                f"  {marker:>7} {secret.age_days:>5}d  {secret.updated_at.date()}  {secret.name}"
-            )
-    for scope, reason in sorted(report.unavailable.items()):
-        out.append(f"{scope}: NOT CHECKED — {reason}")
-    out.append("")
-    out.append(ageing_verdict(report, max_age_days, "above"))
+    if gates_only:
+        # DIG-477 option D. Nothing was attempted here, so the per-scope listing and
+        # the ageing verdict are both skipped rather than reported as an empty
+        # result — see `markdown()` for why the two must not look alike.
+        out.append("secret ageing: NOT RUN (--gates-only)")
+        out.append(GATES_ONLY_NOTE)
+    else:
+        grouped = report.by_scope()
+        for scope in ordered_scopes(report):
+            secrets = sorted(grouped.get(scope, []), key=lambda s: -s.age_days)
+            out.append(f"{scope}: {len(secrets)} name(s)")
+            for secret in secrets:
+                marker = "OVERDUE" if secret.age_days > max_age_days else "ok"
+                out.append(
+                    f"  {marker:>7} {secret.age_days:>5}d  {secret.updated_at.date()}  {secret.name}"
+                )
+        for scope, reason in sorted(report.unavailable.items()):
+            out.append(f"{scope}: NOT CHECKED — {reason}")
+        out.append("")
+        out.append(ageing_verdict(report, max_age_days, "above"))
     if gates is not None:
         rows, unavailable = gates
         out.append("")
@@ -767,6 +837,19 @@ were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.
 
 Give the ageing half a credential and the next run files a fresh tracker with real
 names in it."""
+
+
+def _in_ci() -> bool:
+    """Whether this process is a GitHub Actions job.
+
+    Read from the environment rather than inferred from whether the listings worked.
+    That inference is what option D invalidated: it used to be true that only CI ran
+    this and could read nothing, and now the reverse holds — CI runs `--gates-only`
+    and the only caller that ages anything is a person. `GITHUB_ACTIONS` is set to
+    the literal string `"true"` by the runner, so this is a presence test on a name
+    the workflow platform guarantees, not a heuristic about the host.
+    """
+    return bool(os.environ.get("GITHUB_ACTIONS"))
 
 
 def close_unmeasurable_tracker(root: Path, repo: str) -> str:
@@ -926,12 +1009,44 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not compare `.github/environments.json` to the live protection rules",
     )
+    parser.add_argument(
+        "--gates-only",
+        action="store_true",
+        help=(
+            "only run the environment-gate drift check; never read the secret listings "
+            "and never touch a tracker (DIG-477 option D, what CI runs)"
+        ),
+    )
+    parser.add_argument(
+        "--close-unmeasurable-tracker",
+        action="store_true",
+        help=(
+            "retire an open tracker deliberately when this run read nothing. Without "
+            "it, only a CI run closes one: CLOSE_NOTE blames CI, so closing it from an "
+            "operator shell records a false cause and discards real names. Ignored when "
+            "the listings were read, since the tracker is then refreshed normally."
+        ),
+    )
     args = parser.parse_args(argv)
 
     root = REPO_ROOT
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None
     read_from_file = bool(args.file_names)
-    if args.file_names:
+    if args.gates_only:
+        if args.file_names:
+            parser.error("--gates-only and --file-names are mutually exclusive")
+        # An empty report with `readable` left at 0, which now means "not attempted"
+        # rather than "attempted and found nothing" — the distinction `readable`
+        # exists to carry. `collect()` is skipped entirely rather than called and
+        # allowed to fail, so a gates-only run spends no doomed API calls.
+        report = Report()
+        slug = repo_slug(root)
+        if slug is None:
+            print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
+            return 2
+        if not args.skip_environment_gates:
+            gates = environment_gate_status(root, f"{slug[0]}/{slug[1]}")
+    elif args.file_names:
         try:
             report = Report(secrets=parse_tsv(args.file_names.read_text(encoding="utf-8")))
         except (OSError, ValueError) as exc:
@@ -950,31 +1065,72 @@ def main(argv: list[str] | None = None) -> int:
         if not args.skip_environment_gates:
             gates = environment_gate_status(root, f"{owner}/{name}")
 
-    body = markdown(report, args.max_age_days, gates)
-    print(render(report, args.max_age_days, gates))
+    body = markdown(report, args.max_age_days, gates, gates_only=args.gates_only)
+    print(render(report, args.max_age_days, gates, gates_only=args.gates_only))
 
     if args.summary:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
         args.summary.write_text(body, encoding="utf-8")
 
-    if args.open_issue and not args.file_names:
+    # Gated on `not args.gates_only` as well as on `--open-issue`: a gates-only run has
+    # no ageing result to publish, and the tracker it would open could only ever say
+    # "I read nothing". DIG-477 option D is precisely to stop opening that.
+    if args.open_issue and not args.file_names and not args.gates_only:
         slug = repo_slug(root)
         if slug is None:
             print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
             return 2
         if not report.read_any:
-            # A tracker whose whole body is "I read nothing" is a monthly false alarm: it
-            # looks like the rotation control is running when it is not, and it trains
-            # readers to ignore the one issue that would carry real names. Every level
-            # being unreadable is the normal case from CI, where the listings need a token
-            # the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE. So a run that aged nothing
-            # opens nothing, and clears up any tracker an earlier run already left open.
             # Keyed on `read_any`, not `secrets`: a run where the listings were served and
             # came back empty did measure something, and closing its tracker on the note
             # below — which asserts every level 403'd — would put a false claim on the
             # permanent record next to a stdout that says the opposite.
+            #
+            # Closing is refused unless this run is *in CI*, because CLOSE_NOTE asserts a
+            # CI cause and CI is the only context in which that assertion is true. Before
+            # option D this was safe by accident: the one caller that could not read
+            # anything was the CI job, so "read nothing" implied "run from CI". Option D
+            # inverted that. CI now runs `--gates-only` and never reaches this branch at
+            # all, which leaves `make secrets-staleness` — a person on the Mac — as the
+            # only caller, and a person whose token has lost `repo` scope reads nothing
+            # for a reason that has nothing to do with CI.
+            #
+            # That combination was destructive, and reachable: this repo is public, so
+            # `repo_slug()` still resolves it without `repo`, and the run proceeds to
+            # close a tracker carrying real names while printing a note saying CI did it.
+            # Exit 0 makes it worse — DIG-668's monthly run would report success having
+            # deleted the record it exists to refresh. The repo is public so this needs
+            # no credential to exploit; the read simply needs a token without `repo`.
+            #
+            # So an operator run that read nothing reports why and exits non-zero,
+            # leaving the tracker and its last real contents standing. An operator who
+            # means to retire a stale tracker says so explicitly, and then the close
+            # happens whatever the context — the flag is the consent, not the setting.
+            if not _in_ci() and not args.close_unmeasurable_tracker:
+                print(
+                    "secret_staleness_check: nothing could be aged, so no tracker was "
+                    "opened, updated or closed. Leaving any open tracker as it is: this "
+                    "was a run from an operator shell, so the CI explanation in "
+                    "CLOSE_NOTE would be false, and a tracker holding real names must not "
+                    "be closed by a run that could not read them. Check that `gh auth` "
+                    "still carries `repo` and `admin:org` (see `gh auth status`), then "
+                    "re-run. To retire a stale tracker deliberately, pass "
+                    "--close-unmeasurable-tracker.",
+                    file=sys.stderr,
+                )
+                return 2
+            # Every level being unreadable is the normal case from CI, where the
+            # listings need a token the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE.
+            # So a run that aged nothing opens nothing, and clears up any tracker an
+            # earlier run already left open.
             print(close_unmeasurable_tracker(root, f"{slug[0]}/{slug[1]}"))
         else:
+            if args.close_unmeasurable_tracker:
+                print(
+                    "secret_staleness_check: --close-unmeasurable-tracker was passed but "
+                    "this run read the listings, so the tracker is refreshed, not closed",
+                    file=sys.stderr,
+                )
             print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
     if gates is not None and any(row["drift"] for row in gates[0]):
