@@ -686,3 +686,72 @@ def test_the_policy_file_is_validated_not_assumed(tmp_path: Path) -> None:
     bad.write_text(json.dumps({"schema": 2}), encoding="utf-8")
     with pytest.raises(mq.QueueError, match="unsupported schema"):
         mq.load_policy(bad)
+
+
+# ── AGENTS.md vs this roster (DIG-690) ────────────────────────────────────────
+#
+# AGENTS.md is the file every adapter loads as canonical rules, and its
+# Merge-when-ready section said "when a task PR is merge-ready, merge it" while
+# this queue refuses every role that is not cto or em. That is a contradiction an
+# agent resolves by picking the sentence it read most recently, and both wrong
+# answers fail silently: one merges behind a control, the other stalls on a green
+# PR. The prose now names the roster. These tests pin it to *this* policy file, so
+# a later roster edit that forgets to update AGENTS.md fails CI instead of shipping
+# the same contradiction under a new name.
+
+AGENTS_MD = REPO_ROOT / "AGENTS.md"
+MERGE_QUEUE_DOC = REPO_ROOT / "docs" / "MERGE_QUEUE.md"
+AGENTS_YML = REPO_ROOT / "agents.yml"
+
+
+def _agents_merge_when_ready() -> str:
+    """The Merge-when-ready section of AGENTS.md, up to the next H2."""
+    text = AGENTS_MD.read_text(encoding="utf-8")
+    start = text.index("## Merge-when-ready")
+    rest = text[start + 1 :]
+    end = rest.find("\n## ")
+    return rest if end == -1 else rest[:end]
+
+
+def test_agents_md_names_every_role_that_can_merge() -> None:
+    section = _agents_merge_when_ready()
+    for authority in mq.load_policy().merge_authorities:
+        assert f"`{authority.role}`" in section, (
+            f"AGENTS.md § Merge-when-ready does not name merge authority "
+            f"{authority.role!r}; an agent reading only AGENTS.md would not know "
+            f"the roster"
+        )
+
+
+def test_agents_md_sends_develop_merges_through_the_queue() -> None:
+    section = _agents_merge_when_ready()
+    assert "scripts/merge_queue.py" in section
+    assert "scripts/merge_queue_policy.json" in section
+    # The carve-out has to be scoped to develop and say the stacked path is
+    # unaffected, or it reads as "agents no longer merge anything".
+    assert "develop" in section and "module/" in section
+
+
+def test_the_roster_is_stated_once_and_the_two_docs_link_each_other() -> None:
+    agents = _agents_merge_when_ready()
+    queue = MERGE_QUEUE_DOC.read_text(encoding="utf-8")
+    anchor = "develop-merges-go-through-the-merge-queue"
+    assert f"../AGENTS.md#{anchor}" in queue
+    assert "MERGE_QUEUE.md" in agents
+
+
+def test_the_generated_rule_adapters_carry_the_roster() -> None:
+    """agents.yml feeds .cursor/rules and .github/copilot-instructions.md.
+
+    Those two are what Cursor and Copilot actually read, so a rule that lives only
+    in AGENTS.md does not reach half the fleet.
+    """
+    import yaml  # local: agents_init.py requires it too, so CI has it
+
+    rules = yaml.safe_load(AGENTS_YML.read_text(encoding="utf-8"))["rules"]
+    merge_rules = [r for r in rules if "Merge-when-ready" in r]
+    assert len(merge_rules) == 1, "expected exactly one merge rule in agents.yml"
+    rule = merge_rules[0]
+    assert "scripts/merge_queue.py" in rule
+    for authority in mq.load_policy().merge_authorities:
+        assert f"`{authority.role}`" in rule

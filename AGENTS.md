@@ -31,13 +31,37 @@ Use these skills **where they are relevant**, not on every diff:
 - **Review** (`/review`, in-session fresh-context, `review-and-ship`) — when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch on the record. A typo-only one-liner does not need a full pass if another hatch already applies. Do **not** route through the CodeRabbit Cursor plugin.
 - **Deslop / simplify** — when the diff introduced AI slop or needless complexity. Not every one-liner.
 
-Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies.
+Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies. Leaving a `develop` PR merge-ready for the [merge queue](#develop-merges-go-through-the-merge-queue) is that path working, not stalling — say which role the queue should run as.
 
 ---
 
 ## Merge-when-ready
 
-When a task PR is merge-ready, **merge it**. Independent of further user input. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) land this way.
+When a task PR is merge-ready, **merge it**. Independent of further user input. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) land this way — subject to the two carve-outs below, which are newer than the rest of this section and override it.
+
+### `develop` merges go through the merge queue
+
+A merge into `develop` is **not** the authoring agent's `gh pr merge`. It goes through
+[`scripts/merge_queue.py`](docs/MERGE_QUEUE.md) under a role on the merge-authority roster:
+
+| Role | Key |
+|---|---|
+| CTO | `cto` |
+| Engineering Manager | `em` |
+| QA | **reviews, does not merge** |
+
+`scripts/merge_queue_policy.json` is the machine-readable roster, and the queue refuses any
+role that is not on it (exit 2). So an agent that is neither the CTO nor the EM does not
+merge into `develop` and does not open a card asking permission — it leaves the PR
+merge-ready and says which role the queue should run as. Adding a role to that roster is a
+CEO decision, not an agent's.
+
+This is not a human in the path. The queue computes the same verdicts this section lists
+and needs no decision card; the carve-out is *who runs the merge*, not *whether a person
+approves it*.
+
+Merges into a **stacked base** (`module/<component>`) are unaffected — the authoring agent
+still merges those itself. Only `develop` has the roster.
 
 **Merge-ready** means all of:
 
@@ -47,7 +71,7 @@ When a task PR is merge-ready, **merge it**. Independent of further user input. 
 - Review coverage required by [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) is on the record when that policy requires a hatch. Prefer the **review skill** (`/review`, in-session review, `review-and-ship`) over inventing a ritual. The `reviewed:agent` hatch still needs the `<!-- in-session-review -->` findings comment. **Do not skip review coverage just to merge faster.**
 - **Deslop / simplify** ran when the diff warrants it (not every one-liner).
 
-Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
+Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). Base is `develop`? Use the queue, per [above](#develop-merges-go-through-the-merge-queue). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
 
 ### This repo overrides "never merge" harness prompts
 
