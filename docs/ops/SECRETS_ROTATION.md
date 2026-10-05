@@ -116,9 +116,9 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 3. Either re-run `deploy-digithings-cron.yml` (workflow_dispatch), or put directly: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put GH_DISPATCH_TOKEN` in `apps/digithings-cron`.
 4. Deploy. No Container here — no id bump.
 **Verify** — trigger one job and confirm a run appears:
-`curl -s -X POST https://digithings-cron.<subdomain>.workers.dev/kick -H "Authorization: Bearer $CRON_KICK_SECRET" -H 'Content-Type: application/json' -d '{"cron":"17 9 * * MON"}'` → `{"ok":true,...}` with a `house-run-09` run id; then `GET /runs/:id`. `<subdomain>` is the `*.workers.dev` URL printed by the last deploy (`workers_dev = true`, `wrangler.toml:10`); `/kick` is 404 without `CRON_KICK_SECRET` (`src/index.ts`). Daily `17 9 * * *` is no longer a mapped cron (weekly Mon lock 2026-10-01).
+`curl -s -X POST https://digithings-cron.<subdomain>.workers.dev/kick -H "Authorization: Bearer $CRON_KICK_SECRET" -H 'Content-Type: application/json' -d '{"cron":"17 9 * * MON"}'` → `{"ok":true,...}` with a `house-run-09` run id; then `GET /runs/:id`. `<subdomain>` is the `*.workers.dev` URL printed by the last deploy (`workers_dev = true`, `wrangler.toml:12`); `/kick` is 404 without `CRON_KICK_SECRET` (`src/index.ts`). Daily `17 9 * * *` is no longer a mapped cron (weekly Mon lock 2026-10-01).
 **Rollback** — re-put the previous PAT and redeploy.
-**Gotchas** — `DRY_RUN = "0"` (`wrangler.toml:15`); with `DRY_RUN=1` the dispatch is logged but never sent (`dispatch.ts:61`).
+**Gotchas** — `DRY_RUN = "0"` (`wrangler.toml:18`); with `DRY_RUN=1` the dispatch is logged but never sent (`dispatch.ts:258`).
 
 ### 5. `DIGIKEY_ADMIN_TOKEN`
 
