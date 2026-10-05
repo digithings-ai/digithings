@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type ComponentType } from 'react';
 import { dqGet, pct, px, signed, type Attribution, type Book, type BookRow, type CashLedger, type Envelope, type NavSeries, type Theses } from '@/lib/dq-api';
-import { Block } from './Block';
+import { blockAgeFooter } from '@/lib/block-age';
+import { AgeLine, Block } from './Block';
 import { KpiGrid, tone } from './atoms';
 import { AreaChart } from './charts-time';
 import { DataTable, type Col } from './DataTable';
@@ -56,8 +57,11 @@ function DossierDrawer({ ticker, onClose }: { ticker: string | null; onClose: ()
     return () => { cancel = true; };
   }, [ticker]);
   const d = env?.data;
+  const dossierAge = blockAgeFooter({ runDate: env?.as_of, route: `dossier/${ticker ?? ''}` });
   return (
-    <Drawer open={ticker !== null} onClose={onClose} no="09" label={ticker ? `Dossier · ${ticker}` : 'Dossier'} right={env?.as_of ? `as of ${env.as_of}` : undefined}>
+    // The drawer bar is a window bar too, so it states an age on the same terms
+    // as Block: the envelope's own stamp, aged by trading session.
+    <Drawer open={ticker !== null} onClose={onClose} no="09" label={ticker ? `Dossier · ${ticker}` : 'Dossier'} right={env?.as_of ? <AgeLine footer={dossierAge} /> : undefined}>
       {err ? <StateBlock kind="error" title="Withheld." why={err} />
         : !d ? <p className="note mute">loading…</p>
         : (
@@ -312,7 +316,11 @@ export function AttributionBlock() {
 /** GET /performance/drawdown — underwater series and recovered episodes. */
 export function DrawdownBlock() {
   return (
-    <Block<Drawdown> no="17" label="Drawdown" route="/performance/drawdown" asOf={(d) => d.trough_date}>
+    // No `asOf`: `trough_date` is when the worst drawdown bottomed, not when this
+    // read was produced. Ageing it would claim "stale" forever on a block whose
+    // data is current. The envelope's own `as_of` is the honest stamp, and the
+    // peak → trough episode is already in the KPI note below.
+    <Block<Drawdown> no="17" label="Drawdown" route="/performance/drawdown">
       {(d) => (
         <>
           <KpiGrid items={[
