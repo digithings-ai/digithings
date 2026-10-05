@@ -619,9 +619,10 @@ def _name_list_items(answer: str) -> list[str]:
             # versions of words already there. Dropping the leading-word half for
             # multi-word phrases turned "- Account Settings / - Profile Settings"
             # into exit 1 — thirteen clean help menus, on a live client account.
-            # Both halves, so M3 (multi-word entries) and M8 (leading words) each
-            # keep the suppression the base already had. This can only suppress an
-            # item the base suppressed: it never widens exit 1.
+            # Both halves, so M3 (multi-word entries) and the base's own
+            # leading-word guard each keep the suppression the base already had.
+            # This can only suppress an item the base suppressed: it never widens
+            # exit 1.
             if head.lower() in _NOT_A_GIVEN_NAME:
                 continue
             if tail.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
