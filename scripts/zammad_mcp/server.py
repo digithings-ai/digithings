@@ -24,6 +24,7 @@ from scripts.zammad_mcp.aggregate import (
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 from scripts.zammad_mcp.formatting import (
     REPORT_GROUP_BYS,
+    UNMASKED_PII_ENV,
     demo_unmasked_pii,
     format_aggregate,
     format_search_results,
@@ -380,6 +381,14 @@ def run_mcp(
     """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8770."""
     if not _client().configured:
         logger.warning("ZAMMAD_API_TOKEN is not set — tools will fail closed")
+    if demo_unmasked_pii():
+        # DIG-1063 accepted risk, owner CTO. Logged at startup so the running
+        # container shows whether masking is off, not just the source.
+        logger.warning(
+            "%s is set — customer names, emails and internal notes are "
+            "returned in full by the OCC help tools (accepted risk)",
+            UNMASKED_PII_ENV,
+        )
     bind = host or os.environ.get("ZAMMAD_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
     mcp.settings.port = port

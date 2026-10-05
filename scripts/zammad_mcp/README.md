@@ -180,11 +180,13 @@ interchangeable with multilingual ones).
 
 Masked by default (DIG-1063). The OCC embed is anonymous and ungated, so
 a customer's full name, email address and our internal support notes are
-Art. 4(1) personal data and Art. 5(1)(c) over-collection there — none of it
-is necessary to answer an OCC help question:
+Art. 4(1) personal data and Art. 5(1)(c) over-collection there. The
+structured identity and note fields below are masked:
 
 - internal articles (`internal: true`) are **omitted**, with a
   `... N internal note(s) omitted` line
+- the internal-only `ticket.note` field is **omitted** entirely; Zammad never
+  renders it to the customer frontend either
 - customer emails render as `j***@example.test` (`Customer:` lines,
   aggregate rankings as `j***@example.test (id N)`)
 - a customer value that is not an email is a name and renders as
@@ -197,21 +199,52 @@ is necessary to answer an OCC help question:
   or a person's name passes through unchanged — staff identity is not the
   customer data here, but a customer writing in from their own address is
 
+#### Known limits of this mask
+
+Three gaps are deliberate, not oversights. Masking them would gut the demo
+rather than reduce it, so they are recorded here instead:
+
+1. **Article bodies, subjects and ticket titles are not masked.** They are the
+   useful part of a help answer, and free text carries the customer's name and
+   address in the signature of a mail ("Hallo, hier ist Hans Müller aus der
+   Müller GmbH, meine Adresse ist jane.doe@example.test"). The mask covers
+   structured fields only. `group_by=title` rankings rank raw titles.
+2. **`sender`/`from` is masked by shape, not by role.** Nothing in the Zammad
+   payload distinguishes staff from customer, so the rule keys on "looks like
+   an email". Zammad's `from` is often a *display name* — a customer name can
+   therefore still pass through there while being withheld in `customer`.
+   Closing this needs a customer/staff discriminator the API does not give us.
+3. **`scripts/index_occ_tickets.py` is untouched.** The `occ_tickets` corpus
+   carries full customer names, emails and internal article bodies, and the OCC
+   tenant fans out to it on every question. That is the sibling path, out of
+   scope for DIG-1063, and *not* covered by the override below.
+
 ### Demo override (accepted risk)
 
 `ZAMMAD_DEMO_UNMASKED_PII=1` restores the #4944 behaviour: every article
 including internal notes, and identities in full. It is **off by default**
 and any value other than `1`/`true`/`yes`/`on` fails closed to masking.
 
+Where to set it:
+
+- **Cloudflare stack** — `wrangler` var of the same name on
+  `digithings-stack-cloudflare`. It is forwarded into the container through
+  the Worker's `envVars` (pinned by `src/env-vars-pin.test.js`).
+- **Compose** — `ZAMMAD_DEMO_UNMASKED_PII=1` in `.env`; the service forwards
+  it with a default of `0`.
+
+Supervisord needs no entry: the `zammad-mcp` program inherits the container
+environment, exactly as it already inherits `ZAMMAD_API_TOKEN`.
+
+Auditing it: with masking off the server logs one startup warning naming
+`ZAMMAD_DEMO_UNMASKED_PII`, so the running container shows which mode it is
+in (`/var/log/supervisor/zammad-mcp.log`).
+
 Accepted risk — owner: **CTO**. Demo convenience is a legitimate reason to
 unmask; the reasoning that made Counsel refuse political-opinion fields
 applies to a name one category down, with no statutory complication. The
 pre-#4944 mask is deliberately *stricter* than the one it replaced: it also
 withheld bare full names, which the old `_mask_customer` passed through.
-
-Note the sibling path: `scripts/index_occ_tickets.py` also writes full,
-non-anonymized ticket metadata and article bodies into the `occ_tickets`
-index. This override does not cover that corpus.
 
 The MCP transport itself carries no auth of its own: `tokenEnv` / `authHeader`
 carry the Zammad token outbound to Zammad, they are not an auth boundary for the

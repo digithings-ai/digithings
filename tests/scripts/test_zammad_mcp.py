@@ -1021,6 +1021,41 @@ def test_article_sender_email_is_masked_but_agent_name_is_not():
     assert "Agent/note" in out
 
 
+def test_mask_customer_keeps_the_id_when_the_server_withheld_the_name():
+    """server._customer_display emits a bare "(id N)" for a withheld name.
+
+    format_aggregate re-masks it; the id must survive or the ranking loses
+    the customer-history drill-down key.
+    """
+    assert formatting._mask_customer("(id 9)") == "(id 9)"
+    row = {"value": "9", "count": 2, "name": "(id 9)"}
+    out = formatting.format_aggregate([row], "customer", "count", 3)
+    assert "1. (id 9) — 2" in out
+
+
+def test_mask_customer_keeps_unknown_enrichment_markers():
+    # "?" is the enrichment miss marker; "-" is normalised to "" by _field.
+    assert formatting._mask_customer("?") == "?"
+    assert formatting._mask_customer("-") == ""
+
+
+def test_mask_contact_strips_an_id_suffix_before_matching():
+    assert formatting._mask_contact("jane.doe@example.test (id 7)") == "j***@example.test (id 7)"
+
+
+def test_ticket_note_internal_field_is_gated():
+    """Zammad's ticket.note is internal-only and never shown to the frontend."""
+    out = formatting.format_ticket_detail(dict(TICKET, note="internal staff scratchpad"), [])
+    assert "internal staff scratchpad" not in out
+    assert "Note:" not in out
+
+
+def test_ticket_note_internal_field_shown_under_the_override(monkeypatch):
+    monkeypatch.setenv(formatting.UNMASKED_PII_ENV, "1")
+    out = formatting.format_ticket_detail(dict(TICKET, note="internal staff scratchpad"), [])
+    assert "Note: internal staff scratchpad" in out
+
+
 def test_mask_customer_demo_override_is_opt_in(monkeypatch):
     monkeypatch.setenv(formatting.UNMASKED_PII_ENV, "1")
     assert formatting.demo_unmasked_pii() is True
@@ -1488,8 +1523,19 @@ def test_format_aggregate_customer_demo_override_renders_full_display(monkeypatc
 class CustomerAggregateTransport:
     """Serve search rows plus per-user payloads for the customer ranking tool."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        user_9: dict[str, Any] | None = None,
+        customer_9: str = "jirasync@sitaas.de",
+    ) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.customer_9 = customer_9
+        self.user_9 = user_9 or {
+            "id": 9,
+            "firstname": "",
+            "lastname": "",
+            "login": "jirasync@sitaas.de",
+        }
 
     def __call__(self, url, params=None, headers=None, timeout=None):
         self.calls.append({"url": url, "params": params})
@@ -1497,7 +1543,7 @@ class CustomerAggregateTransport:
             return [
                 dict(TICKET, id=1, customer_id=7, customer="jane.doe@example.test", state="open"),
                 dict(TICKET, id=2, customer_id=7, customer="jane.doe@example.test", state="open"),
-                dict(TICKET, id=3, customer_id=9, customer="jirasync@sitaas.de", state="open"),
+                dict(TICKET, id=3, customer_id=9, customer=self.customer_9, state="open"),
             ]
         if url.endswith("/api/v1/ticket_states"):
             return [
@@ -1507,26 +1553,50 @@ class CustomerAggregateTransport:
         if url.endswith("/api/v1/users/7"):
             return {"id": 7, "firstname": "", "lastname": "", "login": "jane.doe@example.test"}
         if url.endswith("/api/v1/users/9"):
-            return {"id": 9, "firstname": "", "lastname": "", "login": "jirasync@sitaas.de"}
+            return self.user_9
         raise AssertionError(f"unexpected url {url}")
 
 
-def test_server_aggregate_customer_masks_names_and_bounds_user_lookups(monkeypatch):
+def _rank_customers(transport) -> str:
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
-    monkeypatch.setattr(client_module, "_state_types_cache", None)
-    transport = CustomerAggregateTransport()
-    monkeypatch.setattr(
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(client_module, "_state_types_cache", None)
+    monkey.setattr(
         server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     )
-    out = server.aggregate_tickets(group_by="customer", metric="count", top_n=5)
+    try:
+        return server.aggregate_tickets(group_by="customer", metric="count", top_n=5)
+    finally:
+        monkey.undo()
+
+
+def test_server_aggregate_customer_masks_names_and_bounds_user_lookups(monkeypatch):
+    transport = CustomerAggregateTransport()
+    out = _rank_customers(transport)
     assert "1. j***@example.test (id 7) — 2" in out
     assert "jane.doe@example.test" not in out
     assert " (id 9)" not in out
     assert "excluded from customer rankings" in out
     user_calls = [call for call in transport.calls if "/api/v1/users/" in call["url"]]
     assert sorted(call["url"].rsplit("/", 1)[-1] for call in user_calls) == ["7", "9"]
+
+
+def test_server_aggregate_customer_withholds_a_resolved_name_but_keeps_its_id():
+    """resolve_user returns a display name rather than a login.
+
+    The name must not reach the model, and the ranking must keep the id so the
+    customer-history drill-down still works.
+    """
+    transport = CustomerAggregateTransport(
+        user_9={"id": 9, "firstname": "Hans", "lastname": "Müller", "login": "hmueller"},
+        customer_9="9",
+    )
+    out = _rank_customers(transport)
+    assert "Hans" not in out
+    assert "Müller" not in out
+    assert "(id 9)" in out
 
 
 def test_aggregate_tickets_docstring_chains_to_customer_history():

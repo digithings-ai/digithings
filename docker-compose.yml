@@ -462,6 +462,9 @@ services:
       # digigraph dials `http://zammad-mcp:8770/mcp`; FastMCP's DNS-rebinding
       # guard rejects the non-localhost Host header unless it is allowlisted.
       - ZAMMAD_MCP_ALLOWED_HOSTS=zammad-mcp
+      # DIG-1063 accepted risk: 0 keeps customer PII masked. Only set 1 for a
+      # demo where the full names and emails must show.
+      - ZAMMAD_DEMO_UNMASKED_PII=${ZAMMAD_DEMO_UNMASKED_PII:-0}
 
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:

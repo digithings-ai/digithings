@@ -106,7 +106,7 @@ def _labeled(label: str, value: Any) -> str:
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_ENRICHED_ID_RE = re.compile(r"\s\(id [^)]+\)$")
+_ENRICHED_ID_RE = re.compile(r"\s*\(id [^)]+\)$")
 REDACTED_CUSTOMER = "[customer name withheld]"
 
 # The demo override. Default OFF: masking is the safe position and turning it
@@ -137,10 +137,17 @@ def _mask_contact(value: Any) -> str:
     local-part character.
     """
     text = _field(value)
-    if not text or demo_unmasked_pii() or not _EMAIL_RE.match(text):
+    if not text or demo_unmasked_pii():
         return text
-    local, _, domain = text.partition("@")
-    return f"{local[0]}***@{domain}"
+    # Strip an "(id N)" suffix before matching, or an enriched address would
+    # fail the email test and pass through raw.
+    match = _ENRICHED_ID_RE.search(text)
+    suffix = match.group(0) if match else ""
+    head = text[: len(text) - len(suffix)].strip()
+    if not _EMAIL_RE.match(head):
+        return text
+    local, _, domain = head.partition("@")
+    return f"{local[0]}***@{domain}{suffix}"
 
 
 def _mask_customer(value: Any) -> str:
@@ -160,11 +167,14 @@ def _mask_customer(value: Any) -> str:
         return text
     # An enriched ranking display carries a trailing "(id N)". Mask the head
     # and keep the id: an enriched *name* must still be withheld, so the
-    # suffix cannot be what makes a value pass.
+    # suffix cannot be what makes a value pass. The server emits a bare
+    # "(id N)" for a name it already withheld, which has no head to mask and
+    # must survive intact or the ranking loses its drill-down key.
     match = _ENRICHED_ID_RE.search(text)
     suffix = match.group(0) if match else ""
-    head = text[: len(text) - len(suffix)]
-    if head.isdigit():  # a lookup key, not personal data
+    head = text[: len(text) - len(suffix)].strip()
+    if not head or head.isdigit() or head in ("?", "-"):
+        # a lookup key or an "unknown enrichment" marker, not personal data
         return text
     if _EMAIL_RE.match(head):
         local, _, domain = head.partition("@")
@@ -350,8 +360,11 @@ def format_ticket_detail(
     extras = _extras_line(ticket)
     if extras:
         lines.append(f"Extras: {extras}")
+    # ``ticket.note`` is Zammad's internal-only field on GET /tickets/:id — it
+    # is never rendered to the customer frontend, so it is an internal note and
+    # belongs behind the same gate as internal articles.
     note = _field(ticket.get("note"))
-    if note:
+    if note and demo_unmasked_pii():
         lines.append(f"Note: {note}")
     lines.append("")
     lines.append(f"Articles ({len(shown)}):")
