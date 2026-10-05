@@ -47,6 +47,13 @@ def _record_date(key: Any, ts_event: Any) -> str | None:
     ``(position_id, ts_event)`` row, and reading a row index as an epoch stamp
     fabricates ``1970-01-01`` — a wrong date on the chart axis, where the honest
     answer is a position label.
+
+    The conversion is integer floor division, not ``/``. A nanosecond stamp is
+    above 2^53, so ``/`` converts it to a float first, at a resolution of roughly
+    256 ns there; a stamp a nanosecond below midnight rounds *up* to the next
+    whole second and the date jumps to the next day. Measured over five years of
+    day boundaries, ``/`` mislabels 1826 of 1826 stamps one nanosecond before
+    midnight. Flooring is also the correct truncation before 1970.
     """
     stamp = _ns_stamp(ts_event)
     if stamp is None:
@@ -54,7 +61,7 @@ def _record_date(key: Any, ts_event: Any) -> str | None:
     if stamp is None:
         return None
     try:
-        moment = datetime.fromtimestamp(stamp / _NS_PER_SECOND, tz=timezone.utc)
+        moment = datetime.fromtimestamp(stamp // _NS_PER_SECOND, tz=timezone.utc)
     except (OverflowError, OSError, ValueError):
         return None
     return moment.strftime("%Y-%m-%d")

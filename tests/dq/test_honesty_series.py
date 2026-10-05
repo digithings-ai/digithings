@@ -375,22 +375,29 @@ def test_a_row_of_another_width_is_dropped_rather_than_truncated() -> None:
     assert normalize_series([("P-1", 10.0), 5.0]) == (["1"], [5.0])
 
 
-def test_exact_midnight_utc_stamps_round_trip_to_the_same_day() -> None:
+def test_day_boundaries_round_trip_at_the_nanosecond_edges() -> None:
     """Pins the ns->date boundary, which two comment threads got wrong by hand.
 
-    Every exact-midnight-UTC stamp over five years is checked, because the defect
-    that was reported and then retracted was a boundary claim nobody had measured.
+    Three stamps per day boundary, not one: the nanosecond *before* midnight is
+    the case that matters, and it is the one a single exact-midnight fixture
+    cannot see. ``/`` floats a stamp above 2^53 first, so that stamp rounds up to
+    the next whole second and lands on the following day — wrong on 1826 of 1826
+    boundaries, while every exact-midnight stamp was correct.
+
+    The oracle is integer floor division, not the implementation's arithmetic:
+    a stamp belongs to the second that contains it.
     """
     day_ns = 86_400_000_000_000
     epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
     wrong = []
-    for offset in range(1_826):  # every exact-midnight-UTC stamp for five years
-        moment = epoch + timedelta(days=19_723 + offset)  # 2024-01-01 onward
-        stamp = (moment - epoch).days * day_ns  # integer ns, no float anywhere
-        labelled = normalize_series([("P-1", stamp, 1.0)])[0][0]
-        if labelled != moment.strftime("%Y-%m-%d"):
-            wrong.append((stamp, labelled))
-    assert wrong == [], f"{len(wrong)} midnights mislabelled, first {wrong[:3]}"
+    for offset in range(1_826):  # every day boundary for five years
+        midnight = (19_723 + offset) * day_ns
+        for stamp in (midnight - 1, midnight, midnight + 1):
+            truth = (epoch + timedelta(seconds=stamp // 1_000_000_000)).strftime("%Y-%m-%d")
+            labelled = normalize_series([("P-1", stamp, 1.0)])[0][0]
+            if labelled != truth:
+                wrong.append((stamp, truth, labelled))
+    assert wrong == [], f"{len(wrong)} of {1_826 * 3} stamps mislabelled, first {wrong[:3]}"
 
 
 def test_returns_dict_is_no_longer_read_as_its_timestamps() -> None:
