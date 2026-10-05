@@ -80,6 +80,40 @@ grounding pre-pass. There are no synthesis-model pins and no fallback: a
 requested search must succeed or raise. Monitor tool error rates alongside
 per-engine 403/CAPTCHA rates to see the cost win.
 
+## Keeping model names out of code (#5029)
+
+A model name the stack routes on belongs in a file in this directory, not in a
+string literal in Python or TypeScript. `scripts/check_model_name_literals.py`
+enforces that and runs in CI (`ci-docs.yml`, on every PR — it reads the whole
+production tree, so it is deliberately not behind a path filter).
+
+```
+python scripts/check_model_name_literals.py
+```
+
+It catches a name two ways: by **shape** (`gpt-4o-mini`, `claude-sonnet-4-6`,
+`grok-4.3`, … — so a name that has *not* reached config yet still trips it) and
+by **configured id** (read from `model-policy.json`, so promoting a name into
+config and then hardcoding it fails). Python is matched through `ast`, so only
+real string constants count; TypeScript is matched after comments are masked, so
+a commented-out example never trips it but a string literal always does.
+
+Where names legitimately still appear in code, and why:
+
+| Place | Why it is allowed |
+|-------|-------------------|
+| `packages/ui/src/components/chat/skins/**` | `@digithings/ui` is published and built on its own, so it cannot import repo-root `config/` at build time — and a chat skin *is* a provider binding, existing to present one provider's model. |
+| `apps/digichat/src/lib/model-catalog.generated.ts` | Generated output. |
+| `apps/digichat/reference/**` | Vendored third-party templates (excluded from `tsconfig.json`, provenance in `reference/SOURCE.md`). |
+| Test fixtures | A test that names a model is testing that the name works. |
+| `KNOWN_REMAINING` in the script | The phase-2 backlog, one file per entry with the literal count it holds. |
+
+That last row is the one to read twice. The allowlist records **counts**, and a
+file whose count has changed is reported as stale rather than tidied away — so
+the list shrinks as phase 2 lands instead of becoming a permanent exemption
+wearing a comment. Adding an entry to silence a failure is how this check would
+stop meaning anything; the entries are meant to be deleted.
+
 ## Future: router (Claw-style)
 
 Goal: route by task (e.g. simple extraction → test, coding → medium, deep reasoning → best) to reduce token usage. The lists in `model_modes.yaml` under `test` / `medium` / `best` are intended for that router; the current implementation uses only the default model per mode.
