@@ -389,3 +389,523 @@ A role worded outside `_ROLE_WORDS` stays a miss, so `Dana Whitfield (owner sinc
 2019)` still returns `[]`. That is the direction this check fails in by design, and
 the docstring now says so rather than the commit implying a general identifier
 guarantee.
+
+---
+---
+
+# Review round 2 — `3ee2939c0` (the fix)
+
+| | |
+|---|---|
+| Subject | `3ee2939c0` — DIG-998: gate the trailing role on a closed role-word set (re-review of `9e47e0301`) |
+| Base | `origin/feat/dig-306-datatap-answer-check` (`66aa58ced`) |
+| Commits | `9e47e0301` (original), `3ee2939c0` (fix) |
+| Reviewer | fresh-context subagent (round 2) |
+| Method | differential probe of base / orig / head via `importlib` (`sys.modules[spec.name]` registered before `exec_module`), 200k-item fuzz, 14-mutation matrix on in-memory copies |
+
+## Verdict
+
+**approve** — both blocking findings from round 1 are fixed at the code level, not
+just claimed. No blocking finding survives this round.
+
+| Severity | Count |
+|---|---|
+| Blocking | **0** |
+| Non-blocking | **5** |
+| Unverified | **0** |
+
+The one thing I set out to break, I could not break: over 200,000 fuzzed single
+list items and 60,000 fuzzed whole answers, **the role gate opens zero new
+false-positive classes and misses zero leaks that fired at base.** Every false
+positive the gate makes reachable was already reachable at base the moment the
+parenthetical is deleted, which is the pre-existing Title-Case-noun-phrase hole the
+module concedes at `:410-412`.
+
+## The two round-1 blocking findings: verified fixed
+
+### Finding 1 — "any digitless bracketed tail" → now "every word is in `_ROLE_WORDS`"
+
+**Verified fixed at the mechanism, not just the intent.** The split is gated by
+`all(word in _ROLE_WORDS for word in words)` at `scripts/datatap_answer_integrity_check.py:603`.
+
+All 7 corpus answers from the round-1 table that newly fired at `9e47e0301` are
+clean at `3ee2939c0`:
+
+```
+changelog/privacy-reliability  base=[]  orig=['customer name list: Added Session Cookies, Improved Usage Alerts']  head=[]
+changelog/compliance-correctness base=[] orig=[...]  head=[]
+not-enabled                     base=[]  orig=[...]  head=[]
+plan-differences/included       base=[]  orig=[...]  head=[]
+get-started/admin-finance       base=[]  orig=[...]  head=[]
+two-options/default-beta        base=[]  orig=[...]  head=[]
+not-in-product/unsupported      base=[]  orig=[...]  head=[]
+```
+
+Reproduction:
+
+```
+cd /Users/chrisstefan/Code/digithings/.paperclip/worktrees/DIG-998-name-list-trailing-role
+git show 66aa58ced:scripts/datatap_answer_integrity_check.py > /tmp/dig998/base_mod.py
+git show 9e47e0301:scripts/datatap_answer_integrity_check.py > /tmp/dig998/orig_mod.py
+cp scripts/datatap_answer_integrity_check.py /tmp/dig998/head_mod.py
+python3 /tmp/dig998/c1_fixes.py
+```
+
+### Finding 2 — the false bracketed-company claim → structurally impossible
+
+**Verified fixed, and by a stronger argument than the author gave.** The author
+says "no company word is in `_ROLE_WORDS`". Checked as a set intersection:
+
+```
+_COMPANY_SUFFIXES & _ROLE_WORDS = []        # 17 x 32, empty
+```
+
+That is a *structural* guarantee, not a per-string one — the round-1 defect was
+`role in _COMPANY_SUFFIXES` doing exact membership on the whole captured string, so
+it failed for `(Ltd, Inc.)`. With the company branch deleted entirely and no
+company word in the gate, `(Ltd)`, `(Ltd.)`, `(GmbH)`, `(Group Holdings)`,
+`(Ltd, Inc.)`, `(public company)`, `(US subsidiary)`, `(group company)`,
+`(holding company)` and `(regional office)` are all clean at head. Five of those
+ten fired at `9e47e0301`; all ten were clean at base.
+
+The author's related claim also holds: `cus`, `cust`, `acc`, `ten` are all absent
+from `_ROLE_WORDS`, so the round-1 non-blocking `(CUS)` observation is closed by
+construction.
+
+## The judgement constraint: a name list is still required
+
+Verified against every mutation that would relax it. The two-item bar and the
+whole-item `fullmatch` are both load-bearing down the role path:
+
+| Mutation | Tests that fail |
+|---|---|
+| `len(names) >= 2` → `>= 1` | `test_one_name_with_a_role_is_still_not_a_list` |
+| `fullmatch(name)` → `match(name)` | 3 (`…company_word…`, `…annotated_list…`, `…identifier_in_brackets…`) |
+
+The round-1 gap here is closed. The author's replacement test really does reach the
+role split:
+
+```
+'- Dana Whitfield (owner)'                        items=['Dana Whitfield']                  scan=[]
+'- Marcus Oyelaran (technical)'                   items=['Marcus Oyelaran']                 scan=[]
+'1. Dana Whitfield (owner) 2. Choose Integrations (beta)'  items=['Dana Whitfield']          scan=[]
+'- Dana Whitfield (owner)\n- Marcus Oyelaran'     items=['Dana Whitfield','Marcus Oyelaran'] scan=[finding]
+```
+
+The round-1 complaint that the prose test was vacuous was **correct** and is worth
+restating as fact rather than opinion: `test_a_trailing_role_does_not_reopen_the_prose_guard`'s
+input `"The customers are Jane Whitfield and Marcus Oyelaran."` contains no
+parenthetical at all, so `_strip_trailing_role` is never called. The author kept it
+as an honestly-relabelled prose-only pin, which is the right call, and
+`test_one_name_with_a_role_is_still_not_a_list` carries the load instead.
+
+## Mutation matrix — which tests are load-bearing
+
+14 mutations applied to in-memory copies in `/tmp/dig998/mut*`. No repo file was
+modified; `git status --porcelain` is empty at the end of this review.
+
+| Mutation | Failed | Verdict |
+|---|---|---|
+| M0 unmutated head (control) | 0 / 49 passed | — |
+| M1 two-item bar → 1 | **1** | pinned |
+| M2 drop `_ROLE_WORDS` membership | **3** | pinned |
+| M3 `all()` → `any()` | 0 | see NB-1 |
+| M4 widen regex to `(.+)` | 0 | see NB-2 |
+| M5 drop the split (revert to base) | **2** | pinned |
+| M6 `_strip_trailing_role` always keeps | **2** | pinned |
+| M7 `items.append(candidate)` | 0 | see NB-3 |
+| M8 widen `_ROLE_WORDS` with changelog words | **1** | pinned |
+| M9 drop `_MENU_LEADING_WORDS` | 0 | **pre-existing gap** |
+| M10 drop `_NOT_A_GIVEN_NAME` | 0 | **pre-existing gap** |
+| M11 drop trailing `_COMPANY_SUFFIXES` | 0 | **pre-existing gap** |
+| M12 drop the `following` guard | 0 | **pre-existing gap** |
+| M13 `fullmatch` → `match` | **3** | pinned (**newly closed by this PR**) |
+
+M9–M12 survive on the **base** test file too, so they predate DIG-998 and are out
+of scope. M13 is the interesting one: base's suite did not pin the whole-item match
+and this PR's suite now does, which is a side benefit worth crediting.
+
+Cross-check — the head suite run against older sources:
+
+```
+head tests vs 9e47e0301 (orig)  -> failed=3   (the three role-gate tests)
+head tests vs 66aa58ced (base)  -> failed=2   (the two DIG-998 tests)
+```
+
+So the suite is genuinely load-bearing against a partial revert in both directions.
+
+## `items.append(name)` — no pre-existing finding string changes
+
+Confirmed byte-identical on both the finding list and the raw `items` list, for
+every answer literal in the base test file:
+
+```
+13 pre-existing answer literals
+  scan_answer findings:  13/13 byte-identical base vs head  (0 differing)
+  _name_list_items:       13/13 byte-identical base vs head  (0 differing)
+```
+
+The structural reason is that `_strip_trailing_role` returns the candidate
+unchanged whenever there is no bracketed tail, so `name == candidate` for every
+item that fired at base. Verified directly.
+
+## Non-blocking findings
+
+### NB-1 — `all()` is load-bearing but unpinned (M3 survived)
+
+**Mechanism.** Replacing `all(...)` with `any(...)` fails zero tests. The two are
+indistinguishable on any input whose bracket holds one word, which is every input
+in the suite. They differ only on a **mixed** bracket, and there the widening is
+real:
+
+```
+'Plan notes:\n- Field Mapping (user data)\n- Batch Limits (owner only)'
+   head(all) = []
+   any()     = ['customer name list: Field Mapping, Batch Limits']
+```
+
+**Grade: non-blocking.** `all()` is the correct choice and it is shipped. The gap
+is coverage: a future edit that relaxes `all` → `any` would silently reopen exactly
+the class round 1 blocked. One line closes it:
+
+```python
+assert mod.scan_answer("- Field Mapping (user data)\n- Batch Limits (owner only)") == []
+assert mod.scan_answer("- Field Mapping (owner admin)\n- Batch Limits (owner admin)")
+```
+
+Reproduction: `/tmp/dig998/c10_gaps.py` (section "M3 SURVIVED").
+
+### NB-2 — the regex content test is unpinned (M4 survived)
+
+**Mechanism.** Widening `([^()]+)` to `(.+)` fails zero tests. `[^()]` is what keeps
+the pattern from spanning two bracket groups; with `(.+)` the captured text can
+contain parens and `all()` then rejects it, so the *current* behaviour happens to
+be safe — but nothing tests the exclusion.
+
+Verified the anchoring that makes it safe today, on head:
+
+```
+'Jane Whitfield (owner) Marcus Oyelaran (owner)'  -> items=[]   (lands on the LAST group)
+'Jane Whitfield (beta) Marcus Oyelaran (owner)'   -> items=[]
+'Jane Whitfield (owner) is the primary contact'   -> items=[]   (not at the end -> no split)
+'Jane Whitfield ((owner))'                        -> regex match=None  (nested -> no split)
+'(owner) Jane Whitfield'                           -> items=[]   (not at the end -> no split)
+```
+
+**Grade: non-blocking.** `_TRAILING_BRACKET_RE` is correctly anchored, `$` is
+end-of-string (no `re.MULTILINE`, and candidates are already `\n`-free at `:650`),
+and `[^()]` cannot span two groups. A one-line test pinning
+`mod._strip_trailing_role("Jane Whitfield (beta) (owner)") == "Jane Whitfield (beta) (owner)"`
+would make the exclusion load-bearing. Reproduction: `/tmp/dig998/c13_edge.py` §A/§5.
+
+### NB-3 — `items.append(name)` is unpinned (M7 survived)
+
+**Mechanism.** Reverting to `items.append(candidate)` fails zero tests. Round 1
+called this change "an improvement, verified not to regress" — that verification is
+mine and not the suite's, so a revert would restore `(owner)` into every finding
+string with nothing to catch it.
+
+**Grade: non-blocking.** Cosmetic; the finding still names the right people. Worth
+one assertion in `test_a_name_list_with_a_trailing_role_is_reported`:
+
+```python
+assert findings == ["customer name list: Dana Whitfield, Marcus Oyelaran"]
+```
+
+That assertion also upgrades that test from `any(... in f ...)` to exact.
+
+### NB-4 — a bare function word splits, which the comment says it should not
+
+**Mechanism, and this is a documentation-honesty finding.** `_ROLE_WORDS`
+(`:551-586`) contains five function words the comment explicitly justifies as
+*not* roles:
+
+> The small function words are here because they sit inside role phrases
+> ("on leave", "billing contact") and **not because they are roles.**
+
+But `all(word in _ROLE_WORDS ...)` over a one-word bracket makes each of them
+independently sufficient, so they split alone:
+
+```
+'(as)'    items=['Dana Whitfield']
+'(on)'    items=['Dana Whitfield']
+'(since)' items=['Dana Whitfield']
+'(until)' items=['Dana Whitfield']
+'(leave)' items=['Dana Whitfield']
+```
+
+And they compose into fragments that are not role phrases at all:
+
+```
+'(owner since)'     fires=True    '(owner on)'   fires=True
+'(owner as)'        fires=True    '(owner until)' fires=True
+'(on leave until)'  fires=True    '(since until)' fires=True
+```
+
+So the code contradicts the stated rationale. **I could not turn this into a false
+SEV1**: a dedicated sweep of 17,920 `(Title Case noun phrase) x (bare function
+word)` pairs found **0 new-class hits** — every hit was a pair that already fires at
+base with the parenthetical deleted. And the shapes that do split are guarded
+correctly where the guards apply:
+
+```
+'- Data Retention (owner since)\n- Security Notice (owner since)'  -> []
+'- Data Retention (as)\n- Security Notice (as)'                    -> []
+```
+
+**Grade: non-blocking** on behaviour, because the measured risk is zero. But it is
+the same *kind* of finding as round-1 blocking finding 2 (a comment claiming a
+guarantee the code does not deliver), and the honest fix is one of: tighten the
+comment to say these are in the set as whole-phrase members and note that a bare
+`(on)` will therefore split, or split `_ROLE_WORDS` into roles and connectives and
+require ≥1 role. Reproduction: `/tmp/dig998/c14_funcsweep.py`,
+`/tmp/dig998/c10_gaps.py`.
+
+### NB-5 — `ruff format --check` fails on the test file (introduced by this PR)
+
+```
+$ ruff check scripts/datatap_answer_integrity_check.py tests/scripts/test_datatap_answer_integrity_check.py
+All checks passed!
+
+$ ruff format --check scripts/datatap_answer_integrity_check.py tests/scripts/test_datatap_answer_integrity_check.py
+Would reformat: tests/scripts/test_datatap_answer_integrity_check.py
+1 file would be reformatted, 1 file already formatted
+exit=1
+```
+
+The offender is the implicit string concatenation in the new
+`test_an_annotated_list_of_things_is_not_a_name_list` (`:378-382`), which ruff would
+join onto one line. Base was clean on both files, so this is introduced here.
+
+**Grade: non-blocking — CI will not catch it.** `.github/workflows/ci.yml:429-431`
+runs `ruff check … tests` but not `ruff format --check`, and there is no
+`.pre-commit-config.yaml` and no Makefile `ruff format` target. AGENTS.md lists
+`ruff check . && ruff format .` as a core command, so a maintainer running it gets
+a diff on this branch. One `ruff format` on the file fixes it.
+
+## Documentation honesty audit — the accepted miss
+
+You asked whether `(owner since 2019)` / `(on leave until March)` is documented
+honestly. It is, and I checked it in both directions.
+
+**The claim holds for the examples given:**
+
+```
+'(owner since 2019)'       fires=False   (docstring :547, :635, author response)
+'(on leave until March)'   fires=False   (same)
+'(owner, since 2019)'      fires=False
+'(level 3)'                fires=False
+'(2FA admin)'              fires=False
+'(top 5 by balance)'       fires=False
+'(owner from 2019)'        fires=False
+'(owner since inception)'  fires=False
+'(as of 2019)'             fires=False
+```
+
+The mechanism is honest too: the comment names the *reason* — `2019` and `March`
+are not members, so `all()` rejects — rather than claiming a general identifier
+guarantee. Round 1 flagged that the first commit's *"so DIG-652 keeps its shape"*
+read as a general guarantee; the amended text does not, and
+`test_an_identifier_in_brackets_is_not_a_role` now pins `CUS-4821` and `CUS`
+explicitly.
+
+**The one asymmetry worth knowing** (not a defect, but not documented either):
+adding a digit or a non-member *anywhere* in the phrase flips the whole item.
+`(owner since)` fires and `(owner since 2019)` does not; `(on leave)` fires and
+`(on leave until March)` does not. A leak annotated `(account owner)` is caught and
+the same leak annotated `(account owner, 2019)` is not. This is the build-to-miss
+bias working as documented, and it errs in the safe direction — but the cliff is
+sharper than the docstring's "a role worded outside `_ROLE_WORDS`" implies, since
+`(owner since)` *is* inside `_ROLE_WORDS`. See NB-4.
+
+## Misses the gate introduces (accepted, direction is correct)
+
+Punctuation inside a role phrase rejects the whole bracket:
+
+```
+'(owner)'        fires=True     '(owner, admin)'  fires=False
+'(owner admin)'  fires=True     '(owner/admin)'   fires=False
+'(owner.)'       fires=True     '(owner & admin)' fires=False
+'(owner,)'       fires=True     '(owner - admin)' fires=False
+'(on leave)'     fires=True     '(owner; admin)'  fires=False
+```
+
+`words = match.group(1).strip(".,;:()").lower().split()` strips only the *outer*
+punctuation, so `(owner, admin)` yields `['owner,', 'admin']` and `owner,` is not a
+member. Same for `(signing authority)`, `(signing officer)` — real roles outside
+the vocabulary. Every one of these is a **missed leak**, i.e. the direction the
+module documents at `:634-637` and that D19 says to keep wide. Not graded as a
+finding; recorded so the next author who reads `(owner, admin)` in a real answer
+knows why it printed PASS.
+
+## What I verified
+
+**Tests** — 49 passed, 0 failed, from the worktree root:
+
+```
+$ python3 -m pytest tests/scripts/test_datatap_answer_integrity_check.py -q
+collected 49 items
+tests/scripts/test_datatap_answer_integrity_check.py ................... [ 38%]
+..............................                                           [100%]
+============================== 49 passed in 0.08s ==============================
+```
+
+33 test functions at head vs 26 at base; 7 added, none removed (round 1 saw 5).
+
+**Lint** — `ruff check` clean on both in-scope files; `ruff format --check` fails
+on the test file (NB-5). Markers: `platform darwin -- Python 3.14.5, pytest-9.0.3`.
+
+**Guards byte-identical to base** — the relaxation touches nothing else:
+
+```
+_COMPANY_SUFFIXES    base=17 head=17 identical=True
+_MENU_LEADING_WORDS  base=38 head=38 identical=True
+_NOT_A_GIVEN_NAME    base=115 head=115 identical=True
+_NAME_PART _CAPS_SURNAME _PERSON_NAME_RE _LIST_ITEM_SPLIT_RE
+_LEADING_MARKER_RE _UUID_RE _PREFIXED_ID_RE   identical=True
+```
+
+**Fuzz — 200,000 single items and 60,000 whole answers.** Baseline is the same
+answer with the bracketed tail deleted, scored by base, so "new class" means a
+false positive the parenthetical *itself* created:
+
+```
+single items (item granularity — the exact decision _name_list_items makes)
+  A) NEW CLASS  (head item fires, base-on-plain clean): 0
+  B) NEWLY MISSED (base fires on the annotated item, head does not): 0
+
+whole answers (name-list half only)
+  NEW CLASS: 0
+  NEWLY MISSED: 0
+```
+
+B is the load-bearing result for D19: **no leak that fired at base is missed at
+head.** Not one case in 260,000.
+
+**Leak shapes that must now fire** — all fire, all were `[]` at base:
+
+```
+'- Dana Whitfield (owner)\n- Marcus Oyelaran'
+'1. Dana Whitfield (owner) 2. Marcus Oyelaran (owner)'
+'- Jane Whitfield (account owner)\n- Priya Raman (primary contact)'
+'1. Jane Whitfield (billing) 2. Marcus Oyelaran (technical)'
+'- Dana Whitfield (admin)\n- Marcus Oyelaran (admin)'
+'- Jane Whitfield (technical contact)\n- Priya Raman (backup contact)'
+'- Jane Whitfield (account owner).\n- Priya Raman (primary contact).'
+```
+
+**The author's residual is real, correctly labelled, and does require an input the
+reviewer's corpus did not contain.** The author says "1 of 12 newly fires". On the
+reviewer's actual 12-answer corpus, **0 of 12** newly fire — that corpus annotates
+the plan table `(included)`, not `(owner)`. The residual the author describes is a
+*different* input:
+
+```
+'Plan differences:\n- Priority Support (owner)\n- Dedicated Manager (owner)'
+   head      = ['customer name list: Priority Support, Dedicated Manager']
+   base      = []
+   base-plain= ['customer name list: Priority Support, Dedicated Manager']
+```
+
+So the honest statement is "0 of the reviewer's 12; 1 of a 13th the author added",
+and the author's characterisation of it — *"a pre-existing miss made reachable,
+not a new class"* — is exactly right, verified by `base-plain`. I reproduced ten
+further instances of the same shape across a realistic corpus (role-word-annotated
+plan tables, changelogs, doc navs, FAQs); all ten are clean at base and all ten fire
+at base once the parenthetical is deleted. None is a new class. Whether this residual
+is acceptable is the author's documented call and I think it is defensible: it
+requires an answer that annotates *every* item with a role word and whose items are
+unguarded Title Case pairs.
+
+**Nothing was modified.** No repo file, no commit, no push, no GitHub comment. All
+mutations ran against copies under `/tmp/dig998/`; `git status --porcelain` is empty.
+
+**Reproduction index** (all under `/tmp/dig998/`, all read-only w.r.t. the repo):
+
+| Script | What it shows |
+|---|---|
+| `probe.py` / `harness.py` | the importlib loader and base/orig/head driver |
+| `c1_fixes.py` | round-1 findings 1 and 2 fixed |
+| `c2_hunt.py`, `c5_items.py`, `c7_funcwords.py`, `c11_final.py`, `c14_funcsweep.py` | new-class sweeps — all 0 |
+| `c3_fuzz.py`, `c4_fuzz2.py` | whole-answer fuzz |
+| `c6_residual.py` | role-word-as-category analysis, punctuation inconsistency |
+| `c8_identity.py` | byte-identity of every pre-existing finding |
+| `c9_mutate.py`, `c15_gaps.py`, `c16_m13.py` | the 14-mutation matrix |
+| `c10_gaps.py` | NB-1, NB-4 |
+| `c13_edge.py` | regex anchoring, nested brackets, NB-2 |
+| `c12_final2.py`, `c17_degen.py` | claim audits, degenerate candidates |
+
+---
+
+# Author response to round 2 (Backend 2, DIG-998)
+
+Approved with five non-blocking findings. All five are fixed; none was a
+behaviour defect in the shipped code.
+
+## NB-1 — `all()` was load-bearing but unpinned
+
+**Taken.** The mixed-bracket case is the only place `all()` and `any()` differ,
+so nothing in the suite could see the difference. `Plan notes:\n- Field Mapping
+(user data)\n- Batch Limits (owner only)` is now in the annotated-list test, and
+`Limits:\n- Field Mapping (beta)\n- Batch Limits (owner)` beside it. Relaxing
+`all` to `any` now fails the suite.
+
+## NB-2 — the regex content test was unpinned
+
+**Taken, with the expectation corrected.** I wrote the pin expecting
+`_strip_trailing_role("Jane Whitfield (beta) (owner)")` to return the input
+unchanged. It returns `"Jane Whitfield (beta)"` — the pattern cannot span two
+groups, so it takes the last pair and the earlier pair stays in the item, which is
+why the item still fails the whole-item name test and stays out of the finding.
+The reviewer measured the same anchoring in the surrounding section, so the
+mechanism is confirmed; only my expectation of which side of the split the first
+group landed on was wrong. The pin asserts the real behaviour and a comment says
+why the item is still clean.
+
+## NB-3 — `items.append(name)` was unpinned
+
+**Taken.** `test_a_name_list_with_a_trailing_role_is_reported` asserted with
+`any(... in f ...)`, so reverting to `items.append(candidate)` would have put
+`(owner)` back into every finding string with nothing to catch it. Both shapes are
+now asserted exactly.
+
+## NB-4 — a bare function word splits, which the comment said it should not
+
+**Taken as a comment fix, not a code fix.** The reviewer is right that the old
+wording claimed a guarantee the code did not deliver, and that this is the same
+kind of finding as round 1. The measured risk is zero (17,920 pairs, no answer
+that fires here and stays clean at base), and the second option the reviewer
+offered — splitting the set into roles and connectives and requiring at least one
+role — would reject `(on leave)`-style brackets whose phrasing varies, which
+widens exit 1 for no measured gain. The comment now says what the code does: a
+bracket holding one function word splits, the sweep is named, and the widening is
+zero.
+
+## NB-5 — `ruff format --check` failed on the test file
+
+**Taken, and the reviewer's "base was clean" premise was wrong.** Base fails on
+both files:
+
+```
+$ git show origin/feat/dig-306-datatap-answer-check:tests/scripts/test_datatap_answer_integrity_check.py > /tmp/fmtchk/test_base.py
+$ git show origin/feat/dig-306-datatap-answer-check:scripts/datatap_answer_integrity_check.py > /tmp/fmtchk/check_base.py
+$ ruff format --check /tmp/fmtchk/test_base.py /tmp/fmtchk/check_base.py
+Would reformat: check_base.py
+Would reformat: test_base.py
+2 files would be reformatted
+```
+
+So the pre-existing failure is real and my branch does not introduce it. The
+implicit string concatenation in `test_an_annotated_list_of_things_is_not_a_name_list`
+was a second offender, and that one was mine, so it is joined onto one line. Both
+files are now clean:
+
+```
+$ ruff format --check scripts/datatap_answer_integrity_check.py tests/scripts/test_datatap_answer_integrity_check.py
+2 files already formatted
+$ ruff check … → All checks passed!
+$ python3 -m pytest tests/scripts/test_datatap_answer_integrity_check.py -q → 49 passed
+```
+
+Formatting the whole file at base stays a separate leaf. It would rewrite lines
+this PR does not touch, and the scope gate would hold it to the script's file.

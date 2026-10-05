@@ -546,8 +546,13 @@ _TRAILING_BRACKET_RE = re.compile(r"\s*\(([^()]+)\)\s*[.!]?\s*$")
 # alone. A role the answer words differently ("owner since 2019", "on leave
 # until March") stays a miss, which is the direction this check fails in.
 #
-# The small function words are here because they sit inside role phrases
-# ("on leave", "billing contact") and not because they are roles.
+# The small function words are here because they sit inside role phrases ("on
+# leave", "billing contact") and not because they are roles. That means a bracket
+# holding one of them on its own splits, because every word in the bracket is a
+# member. A sweep of noun phrases against each of them found no answer that fires
+# here and stays clean at base, so the widening is measured at zero; the direction
+# is still the safe one, since the surrounding noun phrases are already caught when
+# the parentheses are missing.
 _ROLE_WORDS = frozenset(
     {
         "account",
