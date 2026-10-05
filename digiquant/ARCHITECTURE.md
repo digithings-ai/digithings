@@ -582,6 +582,28 @@ inside the window and takes the `_restated` path (a full-history re-pull) where 
 used to be invisible; that is the intended sealing behaviour, at the cost of an
 occasional extra re-pull.
 
+The cadence exemption is per-series, so it also needs a whole-leg guard. `history-only`
+on a slow-cadence series is exempt on its own (one series sitting out its release cycle
+is not an outage), but a *total* macro-feed death made every outcome exempt at once:
+`failed` came back empty, `staleness_gate` is only a date-gap check over the max
+`as_of` that a whole-leg freeze does not move, and the run exited 0 claiming fresh with
+the macro panel frozen at the last good seal (DIG-694 / DIG-981).
+`_macro_leg_dead(outcomes, exempt)` suspends the exemption when **every** exempt
+series is `history-only` at once (with a `> 1` floor, so a single-series manifest cannot
+trip it), so the operator sees the `fred__*` ids in `artifact["failed"]`. Unanimity, not a
+majority: `history-only` on a slow series has two causes — an exhausted 120/240-day
+publication window, or a per-series vendor refusal — and `_fetch_macro` builds a fresh
+client per series, so a rate-limit blip silences an arbitrary subset. A partial leg is
+indistinguishable from that blip, and firing the gate on a healthy panel is how operators
+learn to ignore it. `main` emits exactly one outcome per macro spec, so the exempt ids and
+their outcomes always line up. Two known limits follow from the floor and the unanimity,
+both accepted rather than half-solved by a magic constant: a manifest with a single exempt
+series cannot trip the guard, and a partial leg stays exempt exactly as it did before this
+guard existed. Suspending the exemption only ever *adds* names to `failed` — it never turns
+a stale run fresh. A daily or `error` outcome is never exempt at any cadence. Staleness
+flag only — no money, rate or weight arithmetic. Contract tests:
+`tests/scripts/test_macro_death_is_not_silent.py`.
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
