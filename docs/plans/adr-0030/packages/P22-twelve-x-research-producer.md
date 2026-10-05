@@ -4,6 +4,8 @@
 
 **Parent:** #4762.
 
+⚠️ **HOLD — PrimeMarket (PMT) access recipe** — This package is frozen. The vendor's Terms of Use (§11–12) prohibit the access method. Publication awaits a decision on DIG-478. See [../HOLD-Primarket.md](../HOLD-Primarket.md).
+
 ## Goal
 
 The twelve-x producer still publishes `fx_daily_digest`, `fx_research_history`, `fx_relevance_ledger`, `fx_events_snapshot`, and `fx_consensus_snapshot` with the columns the hub reads. A producer-side test locks those column names. Recommendation policy (relevance weights, what gets ingested, strategist text) does not change.
