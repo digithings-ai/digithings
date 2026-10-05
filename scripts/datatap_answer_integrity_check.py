@@ -561,10 +561,13 @@ def _name_list_items(answer: str) -> list[str]:
     name — its items *are* names, with nothing else on the line. So each item has
     to match a person name end to end, and two of them have to.
 
-    Two guards keep the ordinary English false positive out. The item must not be
-    a trading name, either by opening with a help-menu word ("1. Open Settings 2.
-    Choose Integrations" is a menu, not two customers) or by ending in a company
-    word ("Whitfield Ltd" is a company, not a person).
+    Four guards keep the ordinary English false positive out. The item must not be
+    a trading name: not opening with a help-menu word ("1. Open Settings 2. Choose
+    Integrations" is a menu, not two customers), not ending in a company word
+    ("Whitfield Ltd" is a company, not a person), and not being in the
+    not-a-given-name list either whole or by its leading word. The last two are
+    both load-bearing: keeping only the whole-item half loses "- Desktop App", and
+    keeping only the leading-word half loses "- Total Accounts".
 
     The cost is real and is recorded in the review: a leaked item carrying extra
     text ("- Jane Whitfield, owner") is not caught here, and neither is a list of
@@ -578,9 +581,11 @@ def _name_list_items(answer: str) -> list[str]:
     # decide the company guard for the list item that repeats it.
     markers = list(_LIST_ITEM_SPLIT_RE.finditer(answer))
     for index, marker in enumerate(markers):
-        piece = answer[marker.end():] if index == len(markers) - 1 else answer[
-            marker.end(): markers[index + 1].start()
-        ]
+        piece = (
+            answer[marker.end() :]
+            if index == len(markers) - 1
+            else answer[marker.end() : markers[index + 1].start()]
+        )
         candidate = _LEADING_MARKER_RE.sub("", piece).strip().strip("*_")
         if not candidate:
             continue
@@ -604,6 +609,20 @@ def _name_list_items(answer: str) -> list[str]:
             # "audit log", ...), which is how "- Desktop App / - Mobile App" reached
             # exit 1. A two-word menu phrase is not two customers.
             if candidate.lower() in _NOT_A_GIVEN_NAME:
+                continue
+            # …and keep the leading word too. The whole-item check alone lets any
+            # two-word Title-Case phrase whose FIRST word is blocklisted through as
+            # two customers, and the list already says those words are not given
+            # names in any phrase: "account", "audit", "billing", "user", "support",
+            # "data", "system" and "service" are single-word entries, and the
+            # multi-word entries ("total accounts", "primary contact") are longer
+            # versions of words already there. Dropping the leading-word half for
+            # multi-word phrases turned "- Account Settings / - Profile Settings"
+            # into exit 1 — thirteen clean help menus, on a live client account.
+            # Both halves, so M3 (multi-word entries) and M8 (leading words) each
+            # keep the suppression the base already had. This can only suppress an
+            # item the base suppressed: it never widens exit 1.
+            if head.lower() in _NOT_A_GIVEN_NAME:
                 continue
             if tail.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
                 continue
@@ -677,8 +696,10 @@ def parse_sse_answer(body: str) -> str:
             # the one direction this check must not fail silently in, so it is
             # exit 2 instead: we could not see the whole answer.
             stripped = line.strip()
-            if stripped and not line.startswith(":") and not stripped.startswith(
-                ("event:", "id:", "retry:")
+            if (
+                stripped
+                and not line.startswith(":")
+                and not stripped.startswith(("event:", "id:", "retry:"))
             ):
                 raise ProbeError(f"unexpected line in the event stream: {stripped[:60]!r}")
             continue

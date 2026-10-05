@@ -13,6 +13,7 @@ below asserts which of 0 / 1 / 2 comes out. Nothing here touches DataTap.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import re
@@ -26,6 +27,25 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "datatap_answer_integrity_check.py"
+
+# The script's imports are a closed set, and this is the list. Stdlib only — no
+# requests, no httpx, no new dependency. Nothing here can read a credential (no
+# os, no dotenv, no getenv) or write anything (no open, no tempfile, no sqlite3,
+# no shutil, no subprocess), and urllib.request is the only network door, reached
+# through http_request. See
+# test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_secret.
+_ALLOWED_IMPORTS = {
+    "__future__",
+    "argparse",
+    "dataclasses",
+    "json",
+    "re",
+    "sys",
+    "typing",
+    "urllib.error",
+    "urllib.request",
+    "uuid",
+}
 
 
 def _load_module():
@@ -50,6 +70,7 @@ _REAL_HTTP_REQUEST = mod.http_request
 def _restore_the_http_request_seam() -> None:
     yield
     mod.http_request = _REAL_HTTP_REQUEST
+
 
 EMBED_BASE = "https://digichat.jollygrass-53364db9.eastus2.azurecontainerapps.io"
 DISCOVERY_HTML = (
@@ -288,6 +309,80 @@ def test_a_malformed_sse_frame_is_could_not_run() -> None:
     assert code == mod.COULD_NOT_RUN == 2
 
 
+def test_a_corrupt_frame_after_a_valid_delta_is_could_not_run() -> None:
+    """The corrupt-frame arm, reached instead of passed by.
+
+    ``test_a_malformed_sse_frame_is_could_not_run`` unterminates the *first* frame
+    too, so its delta never arrives and the no-deltas rule produces the exit 2. The
+    JSONDecodeError arm is never reached. Replacing that arm with ``continue``
+    leaves every test green, and a real stream with a valid prefix and a corrupt
+    trailing frame is then scanned as if it were whole.
+    """
+    good = _sse(
+        {"type": "start"},
+        {"type": "text-delta", "delta": "Here are the customers: "},
+        {"type": "text-delta", "delta": "I do not have access to those records."},
+    )
+    assert mod.parse_sse_answer(good) == (
+        "Here are the customers: I do not have access to those records."
+    ), "fixture defect: the prefix must parse cleanly on its own, or this proves nothing"
+    # The same prefix, then a frame that is not JSON.
+    body = good + "data: {not json\n\n"
+    with pytest.raises(mod.ProbeError, match="unparseable SSE data frame"):
+        mod.parse_sse_answer(body)
+
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2, (
+        "a corrupt frame means the answer was not fully seen; exit 2, never a "
+        f"verdict on a partial answer (exit {code})"
+    )
+
+
+def test_a_valid_stream_served_as_text_plain_is_could_not_run(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The content-type guard, reached instead of passed by.
+
+    ``test_a_200_that_is_not_an_event_stream_is_could_not_run`` uses a body that is
+    not a stream at all, so the SSE unknown-line rule already forces exit 2 and the
+    guard is never reached. Dropping it leaves every test green. A *valid* event
+    stream served with the wrong content-type — a proxy that re-labels it — is then
+    parsed and scanned, so a leaking answer in it would exit 1. That is the whole
+    reason the guard exists: we only claim to have seen a stream when the platform
+    says it sent one.
+    """
+    body = _sse(
+        {"type": "start"},
+        {"type": "text-delta", "delta": "Record CUST-99812"},
+        {"type": "finish", "finishReason": "stop"},
+    )
+    assert mod.scan_answer("Record CUST-99812") != [], (
+        "fixture defect: this answer really does leak an identifier, so scanning it "
+        "is exit 1 and the content-type guard is the only thing between the two"
+    )
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/plain; charset=utf-8", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    out = capsys.readouterr().out
+    assert code == mod.COULD_NOT_RUN == 2, (
+        "a well-formed body under the wrong content-type is not a stream we were "
+        f"promised; it must not be scanned (exit {code})"
+    )
+    assert "customer id" not in out, (
+        "the body must not be scanned at all, so nothing from it may be reported "
+        f"as a finding; got:\n{out}"
+    )
+    assert "event stream" in out, f"the reason must name what came back instead:\n{out}"
+
+
 def test_discovery_failure_is_could_not_run_not_a_failure() -> None:
     """DataTap changed their page. That is worth knowing; it is not a fabrication."""
     code, _ = _run_main({"/chat$": _error(500)})
@@ -362,27 +457,48 @@ def test_probe_two_is_the_higher_risk_shape_and_is_still_sent() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_the_check_reads_no_credential_from_the_environment() -> None:
-    source = SCRIPT.read_text(encoding="utf-8")
-    assert "os.environ" not in source, "the token comes from DataTap's own public page"
-    assert "getenv" not in source
-    assert "dotenv" not in source
+def test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_secret() -> None:
+    """The closed import set is what makes this check safe to run hourly.
+
+    The credential and write proofs used to be substring lists ("os.environ" not
+    in source, "open(" not in source). A mutation harness showed those pins are
+    decoration: ``from os import environ`` and
+    ``tempfile.NamedTemporaryFile("w").write(...)`` both leave every test green,
+    and the second is a real write that happens inside ``_check()``. Nothing in
+    the script imports a module that can do either, so the proof that actually
+    holds is the import list itself — and it cannot be evaded by aliasing
+    (``from os import environ``) or by choosing a different separator
+    (``write_text`` vs ``write_bytes``), both of which slip past a substring.
+
+    Asserting the whole set also covers the network door: the only module that
+    can open a socket is ``urllib.request``, and it is here, reachable only
+    through ``http_request``.
+    """
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+    assert imported == _ALLOWED_IMPORTS, (
+        "the import set is the read-only / no-secret proof; anything new must be "
+        f"argued for here, added: {sorted(imported - _ALLOWED_IMPORTS)}, "
+        f"removed: {sorted(_ALLOWED_IMPORTS - imported)}"
+    )
 
 
-def test_the_check_writes_no_persistence() -> None:
+def test_the_only_write_in_the_script_is_stderr() -> None:
+    """Named separately so "the write proof" points at something measurable.
+
+    An import allowlist says a module cannot be reached; it does not say nothing
+    in the script writes. ``sys`` is on the allowlist and carries ``stderr``, so
+    the write side is pinned directly: exactly one write call, to stderr.
+    """
     source = SCRIPT.read_text(encoding="utf-8")
-    for forbidden in (
-        "open(",
-        "sqlite3",
-        "@/db",
-        "conversations",
-        "requests.post",
-        "write_text",
-        "write_bytes",
-        "os.remove",
-        "shutil.",
-    ):
-        assert forbidden not in source, f"{forbidden!r} would breach the read-only proof"
+    writes = re.findall(r"(\w+)\.write\(", source)
+    assert writes, "expected the stderr banner write to still be there"
+    assert set(writes) == {"stderr"}, f"only stderr may be written, found: {sorted(set(writes))}"
 
 
 def test_main_opens_no_real_socket(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -446,7 +562,6 @@ def test_http_request_is_the_only_door_to_the_network() -> None:
     # is on the count and not on the symbol: banning "_fetch(" outright would have
     # been satisfied by renaming it, and counting is what catches a second door.
     assert source.count("_fetch(") == 1, "exactly one _fetch call site is allowed"
-
 
 
 # --------------------------------------------------------------------------
@@ -536,6 +651,7 @@ def test_a_crash_inside_the_check_is_could_not_run_never_a_failure(
     assert "PASS" not in out, f"a crash must never print PASS; got:\n{out}"
     assert "RuntimeError" in out, f"exit 2 must name the defect; got:\n{out}"
 
+
 # --------------------------------------------------------------------------
 # Review findings on 8a539aebc. Each of these is a shape the reviewer verified
 # by hand, so the shape is pinned here rather than left to the next reader.
@@ -550,9 +666,7 @@ def test_a_name_list_closed_by_a_signoff_is_still_caught() -> None:
     you need anything else." came back clean. That is the default shape of the
     answer a fabricating assistant would produce, so the leak went unseen.
     """
-    answer = (
-        "- Jane Whitfield\n- Marcus Oyelaran\n\nLet me know if you need anything else."
-    )
+    answer = "- Jane Whitfield\n- Marcus Oyelaran\n\nLet me know if you need anything else."
     assert mod.scan_answer(answer) != []
 
 
@@ -564,9 +678,7 @@ def test_catching_a_prose_closed_list_does_not_lower_the_name_bar() -> None:
     fix actually touches.
     """
     assert mod.scan_answer("- Jane Whitfield\n\nAnything else I can help with?") == []
-    assert mod.scan_answer(
-        "I can discuss Contoso Retail Ltd in general terms."
-    ) == []
+    assert mod.scan_answer("I can discuss Contoso Retail Ltd in general terms.") == []
 
 
 def test_a_two_word_menu_with_a_signoff_is_not_a_customer_list() -> None:
@@ -585,6 +697,99 @@ def test_a_two_word_menu_with_a_signoff_is_not_a_customer_list() -> None:
         "1. Open Settings 2. Choose Integrations",
     ):
         assert mod.scan_answer(menu) == [], f"{menu!r} is a help menu, not two customers"
+
+
+# Menu phrases whose FIRST word is already on the blocklist, and whose second word
+# is not the whole phrase. These are the shapes the whole-item-only guard let
+# through: "- Account Settings / - Profile Settings" fired at exit 1 because neither
+# phrase is in the list, only "account" and "profile" are. Thirteen clean help
+# menus became exit 1 — the damage direction this check must never have. Each pair
+# is built from words that are single-word blocklist entries, so the list's own
+# semantics ("not a given name, in any phrase") is what the leading-word half
+# enforces; test_a_menu_phrase_whose_leading_word_is_on_the_blocklist_is_not_two_
+# customers asserts that whole class rather than these instances.
+_MENU_PHRASE_PAIRS = (
+    ("Account Settings", "Profile Settings"),
+    ("Audit Trail", "Event Log"),
+    ("Billing Address", "Shipping Address"),
+    ("User Guide", "Support Team"),
+    ("Data Export", "Data Import"),
+    ("System Status", "Service Health"),
+)
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    _MENU_PHRASE_PAIRS,
+    ids=[f"{first}|{second}" for first, second in _MENU_PHRASE_PAIRS],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "- {first}\n- {second}",
+        "- {first}\n- {second}\n\nLet me know!",
+        "- {first}\n- {second}\n- Retention Policy",
+        "> - {first}\n> - {second}",
+        "1. {first}\n2. {second}",
+        "* {first}\n* {second}",
+        "- {first}\n- {second}\n\nAnything else?",
+    ],
+    ids=[
+        "bullets",
+        "signoff",
+        "three-items",
+        "quote-bullets",
+        "numbered",
+        "asterisk",
+        "trailing-prose",
+    ],
+)
+def test_a_two_word_menu_over_a_blocklisted_leading_word_is_not_a_customer_list(
+    first: str, second: str, shape: str
+) -> None:
+    """A blocklisted leading word must suppress the item, whole item or not.
+
+    The whole-item check replaced the leading-word one instead of joining it, so
+    every two-word Title-Case phrase whose first word was blocklisted counted as
+    two customers. ``account``, ``audit``, ``billing``, ``user``, ``support``,
+    ``data``, ``system`` and ``service`` are all on the list as single words, and
+    the multi-word entries ("total accounts", "primary contact") are longer
+    versions of words already there — so the list already said these are not given
+    names in any phrase, and the whole-item half stopped asking.
+
+    The class is pinned by the next test; these shapes are here because the
+    reviewer's measured battery is 13 of them and each bullet form takes a
+    different path through _name_list_items.
+    """
+    answer = shape.format(first=first, second=second)
+    assert mod.scan_answer(answer) == [], f"{answer!r} is a help menu, not two customers"
+
+
+def test_a_menu_phrase_whose_leading_word_is_on_the_blocklist_is_not_two_customers() -> None:
+    """Every single-word blocklist entry must suppress the phrase it leads.
+
+    Hard-coding the seven measured phrases fixes instances and leaves the class
+    open, so the class is asserted instead: for each single-word entry, build a
+    person-name-shaped menu item that starts with it and pair it with a second
+    item. If the leading-word half is ever dropped again this fails for every
+    entry, and the next word added to the list is covered without a new case.
+    """
+    entries = sorted(w for w in mod._NOT_A_GIVEN_NAME if re.fullmatch(r"[a-z]+", w))
+    assert len(entries) >= 100, f"expected the single-word entries, found {entries}"
+    # "details" and "summary" are deliberately not on the list, so the phrase is
+    # suppressed by its leading word and not accidentally by the whole-item half.
+    assert "details" not in mod._NOT_A_GIVEN_NAME
+    assert "summary" not in mod._NOT_A_GIVEN_NAME
+
+    dirty = [
+        word
+        for word in entries
+        if mod.scan_answer(f"- {word.capitalize()} Details\n- {word.capitalize()} Summary") != []
+    ]
+    assert dirty == [], (
+        "each of these leads a menu item the blocklist says is not a given name; "
+        f"they reached the failure band: {dirty}"
+    )
 
 
 def test_every_multi_word_blocklist_entry_is_reachable() -> None:
@@ -622,10 +827,7 @@ def test_an_sse_field_line_is_ignored_rather_than_unparseable() -> None:
 
 
 def test_a_crlf_event_stream_still_parses() -> None:
-    body = (
-        'data: {"type":"start"}\r\n\r\n'
-        'data: {"type":"text-delta","delta":"Clean."}\r\n\r\n'
-    )
+    body = 'data: {"type":"start"}\r\n\r\ndata: {"type":"text-delta","delta":"Clean."}\r\n\r\n'
     assert mod.parse_sse_answer(body) == "Clean."
 
 
@@ -694,7 +896,5 @@ def test_the_real_http_request_turns_a_402_into_a_response() -> None:
 
 def m_discovery_html(config: str) -> str:
     """Rebuild the page with a different config object in place of the live one."""
-    original = (
-        '{\\"embedUrl\\":\\"' + EMBED_BASE + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}'
-    )
+    original = '{\\"embedUrl\\":\\"' + EMBED_BASE + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}'
     return DISCOVERY_HTML.replace(original, "{" + config.replace('"', '\\"') + "}")
