@@ -226,6 +226,45 @@ def test_case_3_engine_repeated_position_id_is_one_row_too() -> None:
     assert len(result[1]) == 2
 
 
+def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> None:
+    """The premise of this leaf, pinned against the engine that provides it.
+
+    Every other case here proves the normalizer *handles* ``(pid, ts_event, pnl)``.
+    This one proves the engine *produces* it, so a future nautilus that changes
+    the row width is caught here rather than silently losing the whole denominator
+    in ``nautilus_runner.py``.
+
+    Measured on 1.230.0, the build that returns rows: a ``list`` of ``(str, int,
+    float)`` triples whose second column is the ``ts_event`` the trade was
+    stamped with. On 1.223.0/1.228.0 the same call returns ``{pid: pnl}`` — no
+    rows to pin, and the dict path in ``normalize_series`` handles the value — so
+    this skips there rather than asserting a shape that build does not have.
+    """
+    pyo3 = _pyo3()
+    usd = pyo3.Currency.from_str("USD")
+    analyzer = pyo3.PortfolioAnalyzer()
+    ts = 1_700_000_000_000_000_000
+    _add_trade(analyzer, pyo3, usd, "P-1", 10.0, ts)
+
+    raw = analyzer.realized_pnls(usd)
+
+    if isinstance(raw, dict):
+        pytest.skip(f"this build returns a dict, not record rows: {type(raw).__name__}")
+
+    assert isinstance(raw, list) and len(raw) == 1, f"expected one row, got {raw!r}"
+    row = raw[0]
+    assert isinstance(row, tuple) and len(row) == 3, f"expected (pid, ts, pnl), got {row!r}"
+    position_id, ts_event, pnl = row
+    assert position_id == "P-1", "the position id is the key"
+    assert ts_event == ts, "the timestamp is the ts_event the trade was stamped with"
+    assert pnl == 10.0, "the value is the realized pnl, not the timestamp"
+
+    # ...and the normalizer reads that timestamp as the date rather than the row index.
+    dates, values = normalize_series(raw)
+    assert dates == ["2023-11-14"], "the ts_event column, not the row index"
+    assert values == [10.0]
+
+
 def test_case_4_recorded_trade_replaces_the_added_one_for_one_round_trip() -> None:
     """Required case 4: ``add_trade`` + ``record_trade`` on one ``(pid, ts)`` -> n = 1.
 
