@@ -483,7 +483,7 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+Per-component secrets (`wrangler secret put`, never committed):
 `GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
 R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
@@ -503,7 +503,6 @@ Owner applies the six secrets from `apps/digithings-stack-cloudflare/`
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
@@ -583,6 +582,44 @@ inside the window and takes the `_restated` path (a full-history re-pull) where 
 used to be invisible; that is the intended sealing behaviour, at the cost of an
 occasional extra re-pull.
 
+The cadence exemption is per-series, so it also needs a whole-leg guard. `history-only`
+on a slow-cadence series is exempt on its own (one series sitting out its release cycle
+is not an outage), but a *total* macro-feed death made every outcome exempt at once:
+`failed` came back empty, `staleness_gate` is only a date-gap check over the max
+`as_of` that a whole-leg freeze does not move, and the run exited 0 claiming fresh with
+the macro panel frozen at the last good seal (DIG-694 / DIG-981).
+`_macro_leg_dead(outcomes, exempt)` suspends the exemption when **every** exempt
+series is `history-only` at once (with a `> 1` floor, so a single-series manifest cannot
+trip it), so the operator sees the `fred__*` ids in `artifact["failed"]`. Unanimity, not a
+majority: `history-only` on a slow series has two causes — an exhausted 120/240-day
+publication window, or a per-series vendor refusal — and `_fetch_macro` builds a fresh
+client per series, so a rate-limit blip silences an arbitrary subset. A partial leg is
+indistinguishable from that blip, and firing the gate on a healthy panel is how operators
+learn to ignore it. `main` emits exactly one outcome per macro spec, so the exempt ids and
+their outcomes always line up. Suspending the exemption only ever *adds* names to `failed`
+— it never turns a stale run fresh. A daily or `error` outcome is never exempt at any
+cadence. Staleness flag only — no money, rate or weight arithmetic. Contract tests:
+`tests/scripts/test_macro_death_is_not_silent.py`.
+
+**What the guard does not cover.** It closes the `history-only` shape only, and only over
+series the manifest actually declared. Four whole-leg freezes still exit 0:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip; a subset is not evidence | accepted, by design |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | accepted, by design |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **open, pre-dates this guard** |
+| Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
+
+The last two are the same class of defect this guard closed — a macro panel frozen while
+the run reports fresh — reached by a sibling route. They need their own fixes: the
+frozen-but-serving panel by comparing each macro outcome's `as_of` against the run date
+rather than trusting `mode`, the unreadable manifest by making it a loud outcome instead of
+an empty spec list. A monthly series only reaches `up-to-date` once its 120-day
+`_CADENCE_WINDOW_DAYS["monthly"]` window is exhausted while rows still land inside it, so
+that shape carries a ~120-day fuse before a healthy panel trips it — which is why it has
+not surfaced.
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
@@ -655,9 +692,9 @@ cleared per sample, no network): Task 1 Supabase technicals p50 1413.2ms
 
 Prod gate (human): Worker-edge digikey JWT enforcement (scope
 `digiquant:backtest`) must land before production MCP use — not
-implemented here. Owner actions: `FRED_API_KEY` + `CORE_POSTGRES_URI`
-are MISSING from GitHub secrets (refresh cron + backfill need them); live
-refresh runs stay supervised with the operator.
+implemented here. Owner actions: `CORE_POSTGRES_URI` is MISSING from GitHub
+secrets (refresh cron + backfill need it); live refresh runs stay supervised
+with the operator.
 
 ### CLI (`python -m digiquant` / `digiquant`)
 

@@ -151,3 +151,29 @@ Do **not** disable branch protection entirely — adjust it or fix the failing c
 If a check is renamed or replaced, re-run the script after updating the `contexts` array in
 `scripts/set-branch-protection.sh`. The `gh api PUT` call is idempotent — it replaces the
 full protection config each time.
+
+## Scope: this applies to `digithings`, not to `twelve-x`
+
+Everything above is about `digithings-ai/digithings`, and only that repo has the protection
+described here. `digithings-ai` is on the GitHub Free plan, and **protected branches on a
+private repository require GitHub Pro**. `twelve-x` and `digithings-ops` are private, so
+branch protection, rulesets and the native merge queue are all refused on them with:
+
+```
+Upgrade to GitHub Pro or make this repository public to enable this feature.
+```
+
+This is a plan limit, not a misconfiguration — the identical API call succeeds on the
+public `digithings` and is refused on private `twelve-x` in the same org, with the same
+token and the same admin permission.
+
+`scripts/enable_branch_protection.py status` reports the gate for any repo:
+
+```bash
+python3 scripts/enable_branch_protection.py status --repo digithings-ai/twelve-x --branch develop
+```
+
+Until the plan changes, the merge path for `twelve-x` is
+[the merge queue](MERGE_QUEUE.md), which governs merges but — say this plainly — **cannot
+stop a direct push to the branch.** Only branch protection can do that. The full repo
+survey is in [MERGE_QUEUE.md § Repo survey](MERGE_QUEUE.md#repo-survey).
