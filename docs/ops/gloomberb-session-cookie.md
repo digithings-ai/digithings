@@ -18,16 +18,27 @@ last widened by #4837 (130-function coverage: 15 probe-backed Cloud reads and
 > Canonical store = GitHub Actions `cron` environment secret `GLOOMBERB_SESSION_COOKIE`.
 > Local `.env` is developer convenience only. Refresh path = manual `gh secret set`.
 
-> **Terms status: UNCLER — Counsel sign-off pending (DIG-1194, 2026-10-05).** Gloom's
-> Terms of Service (effective 2026-09-26) were read for the first time on
-> 2026-10-05 and classified **Unclear**, not permitted. §11 restricts scraping and
-> automated access to "the interfaces and within the limits we offer for that
-> purpose"; §14 grants organisational internal use **only under a team plan**,
-> which we do not have. No new Gloomber access work merges to a public repository
-> until Counsel signs off in writing. Terms, archived artefact, sha256 and the
-> full reasoning: [`vendor-terms/gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md).
-> Note that §11 also names "data delays" as an access control, so **the account's
-> plan must be confirmed before any production-volume read.**
+> **Terms status: PROHIBITED for this access method (Counsel, 2026-10-05,
+> DIG-1206).** Gloom's Terms of Service (effective 2026-09-26) were read on
+> 2026-10-05. Counsel's position, superseding Security's **Unclear**:
+>
+> - **Replaying a browser session cookie (these 42 gated tools): PROHIBITED.**
+>   §11 permits automated access only "through the interfaces **and within the
+>   limits we offer for that purpose**"; §12 offers keys, and a session cookie
+>   cannot be scoped, rate-limited or revoked per integration.
+> - **Any access method, including a scoped API key: PROHIBITED today**, because
+>   §14 grants organisational internal use **only under a team plan**, and §5 is a
+>   cap on redistribution, not a grant of access. This is the load-bearing
+>   finding: an API key does not cure it. A **team plan** or a **written
+>   agreement** (which prevails under §21) does.
+> - **The 47 anonymous tools are a separate question**, not part of this status.
+>
+> Terms, archived artefact, sha256 and the full reasoning:
+> [`vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md`](../vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md).
+> Counsel's sign-off covers PR #5157 and approves **no new Gloomber access work**.
+> §11 names "data delays" as an access control, but Counsel reads it as
+> prohibiting *interference* with a delay, which a free plan does not involve —
+> the open question is the account's billing state, not the legal classification.
 
 ## What happens without the cookie
 
