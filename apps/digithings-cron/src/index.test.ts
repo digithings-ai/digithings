@@ -287,6 +287,112 @@ describe("POST /kick", () => {
     expect(body.args).toEqual({});
   });
 
+  // --- DIG-47.10 contract. Committed by the planner; these are the failing
+  // tests the brief names. Do not edit them — make them pass.
+
+  it("A.4 two kicks with the same startKey create one run", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "s3cret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const kickExplicit = () =>
+      worker.fetch(
+        kick({ cron: "17 9 * * MON", startKey: "house-run-09:fixed" }, "s3cret"),
+        env,
+        executionContext([]),
+      );
+
+    const first = await kickExplicit();
+    expect(first.status).toBe(200);
+    expect(((await first.json()) as { started: string[] }).started).toEqual(["house-run-09"]);
+
+    const second = await kickExplicit();
+    expect(second.status).toBe(200);
+    // The second kick resolves to the same start key, so it is a duplicate and
+    // must not reach the runner.
+    expect(runnerFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("a keyless kick still works, because four runbooks call it that way", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-house", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "s3cret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(
+      kick({ cron: "17 9 * * MON" }, "s3cret"),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true });
+  });
+
+  it("a non-numeric scheduledTime is rejected, never coerced to NaN", async () => {
+    const env: Env = { DRY_RUN: "0", CRON_KICK_SECRET: "s3cret" };
+
+    const res = await worker.fetch(
+      kick({ cron: "17 9 * * MON", scheduledTime: "soon" }, "s3cret"),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("invalid_args");
+  });
+
+  it("A.5 a keyless kick sends a minute-aligned scheduled time", async () => {
+    // The 56_789 ms offset is deliberate and load-bearing. Every other clock in
+    // this file is minute-aligned, so the floor under test is the identity on
+    // all of them. Do not tidy this offset to match its neighbours: the guard
+    // below turns that into a loud failure instead of a silent no-op.
+    const requestedAt = Date.UTC(2026, 8, 30, 10, 37, 56, 789);
+    expect(requestedAt % 60_000).not.toBe(0);
+    // Also guard the hour: minute 37 is what distinguishes this floor from a
+    // floor-to-the-hour, which would land on the same minute-aligned instant
+    // and pass every assertion below.
+    expect(Math.floor(requestedAt / 3_600_000) * 3_600_000).not.toBe(
+      Math.floor(requestedAt / 60_000) * 60_000,
+    );
+    vi.spyOn(Date, "now").mockReturnValue(requestedAt);
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-kick", status: "accepted" }, { status: 202 }),
+    );
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const res = await worker.fetch(kick({ cron: "17 9 * * MON" }), env, executionContext([]));
+
+    expect(res.status).toBe(200);
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as { scheduled_time: number };
+    // A.5 — a keyless kick derives its start from the request time floored to
+    // the wall-clock minute, so a repeat inside the same minute collides on
+    // purpose. A kick is a deliberately distinct namespace from the cron
+    // path: it does not resolve to the cron's firing slot. See DIG-47 spec
+    // section 9, decision D3.
+    expect(body.scheduled_time % 60_000).toBe(0);
+    expect(body.scheduled_time).toBe(Math.floor(requestedAt / 60_000) * 60_000);
+  });
+
   it("kick with force keeps dry_run true", async () => {
     const runnerFetch = vi.fn(
       async () =>
