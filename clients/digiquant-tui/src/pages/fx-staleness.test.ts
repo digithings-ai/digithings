@@ -128,7 +128,7 @@ describe("fxPaneStatus names the age", () => {
 
   test("warned and fresh panes read differently", () => {
     expect(fxPaneStatus(read("2026-09-17"), null, "/fx/summary", "2026-09-21")).toBe(
-      "as of 2026-09-17 · 2 trading days old",
+      "as of 2026-09-17 · 2 trading days old · warn",
     );
     expect(fxPaneStatus(read("2026-09-17"), null, "/fx/summary", "2026-09-18")).toBe(
       "as of 2026-09-17 · 1 trading day old",
@@ -136,10 +136,26 @@ describe("fxPaneStatus names the age", () => {
     expect(fxPaneStatus(read("2026-09-17"), null, "/fx/summary", "2026-09-17")).toBe(
       "as of 2026-09-17 · current session",
     );
-    // A stale pane names the age and the state; a warned one names only the age.
     expect(fxPaneStatus(read("2026-09-17"), null, "/fx/summary", "2026-09-22")).toBe(
       "as of 2026-09-17 · 3 trading days old · stale",
     );
+  });
+
+  test("every aged pane names its state, so the footer never relies on colour", () => {
+    // The footer renders in MUTE, so its words are the only channel that reaches
+    // the reader without relying on body ink. That makes "stale named, warn not
+    // named" an asymmetry worth removing: a warned pane must not be the one
+    // aged state whose severity is only visible as a colour.
+    const stateWord = (now: string) => {
+      const parts = fxPaneStatus(read("2026-09-17"), null, "/fx/summary", now).split(" · ");
+      return parts[parts.length - 1];
+    };
+    // ok stays quiet: "current session" is already the claim, and a `· ok` on a
+    // healthy pane is noise the reader must learn to skip past.
+    expect(stateWord("2026-09-17")).toBe("current session");
+    expect(stateWord("2026-09-18")).toBe("1 trading day old");
+    expect(stateWord("2026-09-21")).toBe("warn");
+    expect(stateWord("2026-09-22")).toBe("stale");
   });
 
   test("falls back to the route when there is no date", () => {
