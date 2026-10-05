@@ -532,24 +532,77 @@ _NOT_A_GIVEN_NAME = frozenset(
 )
 
 
-# A role in brackets at the end of a list item: "(owner)", "(primary contact)",
-# "(on leave until March)". The digits are excluded on purpose, so a customer
-# identifier in brackets ("Jane Whitfield (CUS-4821)") is not read as a role and
-# stays the identifier half's finding.
-_TRAILING_ROLE_RE = re.compile(r"\s*\(\s*([^()\d][^()\d]*)\)\s*[.!]?\s*$")
+# A trailing bracket at the end of a list item.
+_TRAILING_BRACKET_RE = re.compile(r"\s*\(([^()]+)\)\s*[.!]?\s*$")
+
+# What may sit in those brackets and still be read as a role somebody holds, as
+# opposed to a note the answer attached to something that is not a person. The
+# set has to be closed. Any bracketed tail would split, and a bracketed tail is
+# also how a changelog, a plan table and a feature list annotate their items, so
+# "Added Session Cookies (privacy)" and "Manual Approval (default)" would both
+# become name lists. Those are noun phrases the two trading-name guards do not
+# cover, and this check is built to miss rather than to raise a false SEV1 on a
+# client account, so the roles it knows are listed and everything else is left
+# alone. A role the answer words differently ("owner since 2019", "on leave
+# until March") stays a miss, which is the direction this check fails in.
+#
+# The small function words are here because they sit inside role phrases
+# ("on leave", "billing contact") and not because they are roles.
+_ROLE_WORDS = frozenset(
+    {
+        "account",
+        "admin",
+        "administrator",
+        "approver",
+        "as",
+        "backup",
+        "billing",
+        "buyer",
+        "chair",
+        "contact",
+        "delegate",
+        "editor",
+        "employee",
+        "guest",
+        "lead",
+        "leave",
+        "manager",
+        "member",
+        "on",
+        "owner",
+        "primary",
+        "requester",
+        "reviewer",
+        "secondary",
+        "since",
+        "signatory",
+        "signer",
+        "supervisor",
+        "technical",
+        "treasurer",
+        "until",
+        "user",
+    }
+)
 
 
-def _split_trailing_role(candidate: str) -> tuple[str, str]:
-    """Split "Dana Whitfield (owner)" into the name and the role.
+def _strip_trailing_role(candidate: str) -> str:
+    """Drop the trailing role, so "Dana Whitfield (owner)" is tested as a name.
 
-    Only a bracketed tail counts, and only when the bracketed text is a word or
-    words. A bracketed company word is returned as the role too, so the caller
-    can keep reading the item as a company.
+    Every word in the brackets has to be a word that names a role. A customer
+    identifier in brackets ("Jane Whitfield (CUS-4821)") is not made of role
+    words, so it stays whole and stays the identifier half's finding, and so does
+    a company word ("Contoso Retail (Ltd)") or an annotation on something that is
+    not a person ("Manual Approval (beta)"). Those keep their brackets, fail the
+    whole-item name test, and stay out of the finding.
     """
-    match = _TRAILING_ROLE_RE.search(candidate)
+    match = _TRAILING_BRACKET_RE.search(candidate)
     if match is None:
-        return candidate, ""
-    return candidate[: match.start()].rstrip(), match.group(1).strip(".,;:()").lower()
+        return candidate
+    words = match.group(1).strip(".,;:()").lower().split()
+    if not words or not all(word in _ROLE_WORDS for word in words):
+        return candidate
+    return candidate[: match.start()].rstrip()
 
 
 def _name_list_items(answer: str) -> list[str]:
@@ -573,13 +626,15 @@ def _name_list_items(answer: str) -> list[str]:
     answer phrased the leak, not the leak, so it is split off before the
     whole-item test. What is relaxed is the role only: the two-item bar, the
     whole-item match, and both trading-name guards are unchanged. A bracketed
-    company word is not a role, so it still reads as a company.
+    company word, a bracketed customer id and a bracketed note on a non-person
+    ("Manual Approval (beta)") are not roles, so none of them splits.
 
     The cost is real and is recorded in the review: a leaked item carrying extra
-    text in no brackets ("- Jane Whitfield, owner") is not caught here, and
-    neither is a list of people whose names start with one of the guarded words.
-    Between missing a leak and raising a false SEV1 on a client account, this
-    check is built to miss.
+    text in no brackets ("- Jane Whitfield, owner") is not caught here, neither is
+    a role worded outside `_ROLE_WORDS` ("owner since 2019"), and neither is a
+    list of people whose names start with one of the guarded words. Between
+    missing a leak and raising a false SEV1 on a client account, this check is
+    built to miss.
     """
     items: list[str] = []
     # Walk the marker matches rather than splitting, so each candidate keeps its
@@ -594,10 +649,8 @@ def _name_list_items(answer: str) -> list[str]:
         candidate = _LEADING_MARKER_RE.sub("", piece).strip().strip("*_")
         if not candidate or "\n" in candidate:
             continue
-        name, role = _split_trailing_role(candidate)
+        name = _strip_trailing_role(candidate)
         if _PERSON_NAME_RE.fullmatch(name):
-            if role in _COMPANY_SUFFIXES:
-                continue
             leading, _, trailing = name.partition(" ")
             if leading.lower() in _MENU_LEADING_WORDS:
                 continue
