@@ -34,11 +34,29 @@ CRED_VALUE_PATTERNS = [
     # anchor lets that comment hide the key. And a body class must be the
     # alphabet the vendor really uses, because a value carrying a comment never
     # reaches the entropy score below - the prose exclusion runs first - so this
-    # loop is the only gate that can catch it. `sk-` is URL-safe base64, and its
-    # two common families (`sk-proj-`, `sk-ant-api03-`) put a `-` inside the
-    # first 20 characters.
-    r'^sk-[A-Za-z0-9_-]{20,}',
+    # loop is the only gate that can catch it.
+    #
+    # `sk-` is URL-safe base64, and its two common families (`sk-proj-`,
+    # `sk-ant-api03-`) put a `-` inside the first 20 characters, so `-` stays.
+    # `+` and `/` join it because some `sk-` bodies are standard base64 instead,
+    # and the class stopped matching three characters in on those - reported as
+    # clean as soon as a `# comment` followed. They are confined to this entry on
+    # purpose: applied across every prefix they would sit in prose on any value
+    # that reached the loop, which is the generic shape DIG-50 removed.
+    r'^sk-[A-Za-z0-9_+/-]{20,}',
     r'^ghp_', r'^gho_', r'^glpat-',
+    # The four entries below carry a body class rather than standing alone. A bare
+    # `^hf_` or `^AKIA` catches the same real keys and also reports four commented
+    # placeholder bodies that live `.example` files do use:
+    # `hf_replace_me_with_token`, `AKIA_REPLACE_ME_NOT_A_KEY`, `AIza_REPLACE_ME`
+    # and `sk_live_replace_me`. Each class is the alphabet its vendor uses, at a
+    # length the shortest real key reaches - a Stripe secret key is base62, a
+    # Google API key is 35 characters of `[A-Za-z0-9_-]`, an AWS access key id is
+    # 16 uppercase alphanumerics, a HuggingFace token is 34 base62 characters.
+    r'^sk_live_[A-Za-z0-9]{20,}',
+    r'^AIza[A-Za-z0-9_-]{20,}',
+    r'^AKIA[A-Z0-9]{16}',
+    r'^hf_[A-Za-z0-9]{20,}',
 ]
 #: Bits per character at or above which a value counts as a credential. Set
 #: below the weakest probe (3.565) on purpose: the floor also has to cover the
