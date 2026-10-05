@@ -207,7 +207,8 @@ def test_format_search_results_lists_tickets():
     assert "#28312" in out
     assert "[open]" in out
     assert "group: Sitaas" in out
-    assert "customer: jane.doe@example.test" in out
+    assert "customer: j***@example.test" in out
+    assert "jane.doe@example.test" not in out
 
 
 def test_format_ticket_line_resolves_dict_relations_and_dashes():
@@ -235,7 +236,7 @@ def test_format_ticket_detail_includes_articles():
     assert "Resolution steps" in out
 
 
-def test_format_ticket_detail_includes_internal_notes():
+def test_format_ticket_detail_omits_internal_notes_by_default():
     articles = [
         {
             "id": 1,
@@ -254,17 +255,41 @@ def test_format_ticket_detail_includes_internal_notes():
     ]
     out = formatting.format_ticket_detail(TICKET, articles)
     assert "customer-visible reply" in out
-    assert "internal-only note body" in out
+    assert "internal-only note body" not in out
+    assert "[internal]" not in out
+    assert "Articles (1)" in out
+    assert "... 1 internal note(s) omitted" in out
+    assert "jane.doe@example.test" not in out
+    assert "j***@example.test" in out
+
+
+def test_format_ticket_detail_demo_override_shows_internal_notes_and_full_customer(
+    monkeypatch,
+):
+    monkeypatch.setenv(formatting.UNMASKED_PII_ENV, "1")
+    articles = [
+        {"id": 1, "sender": "Agent", "type": "note", "internal": True, "body": "<p>secret</p>"},
+        {"id": 2, "sender": "Customer", "type": "web", "internal": False, "body": "<p>hi</p>"},
+    ]
+    out = formatting.format_ticket_detail(TICKET, articles)
+    assert "secret" in out
     assert "[internal]" in out
     assert "Articles (2)" in out
     assert "internal note(s) omitted" not in out
-    assert "***" not in out
     assert "jane.doe@example.test" in out
 
 
-def test_format_ticket_line_shows_customer_email_in_full():
+def test_format_ticket_line_masks_customer_email_by_default():
     line = formatting.format_ticket_line({"id": 1, "customer": "jane.doe@example.test"})
-    assert "jane.doe@example.test" in line
+    assert "customer: j***@example.test" in line
+    assert "jane.doe" not in line
+
+
+def test_format_ticket_line_redacts_a_bare_customer_name():
+    """A customer field holding a name is not an email — it must not pass through."""
+    line = formatting.format_ticket_line({"id": 1, "customer": "Ada Lovelace"})
+    assert "Ada Lovelace" not in line
+    assert formatting.REDACTED_CUSTOMER in line
 
 
 def test_format_ticket_detail_truncates_long_bodies():
@@ -957,11 +982,44 @@ def test_aggregate_empty_rows():
     assert aggregate([], group_by="customer") == []
 
 
-def test_format_aggregate_renders_ranked_lines_with_full_customers():
+def test_mask_customer_masks_email_redacts_name_passes_through_ids():
+    assert formatting._mask_customer("jane.doe@example.test") == "j***@example.test"
+    assert formatting._mask_customer({"email": "jane.doe@example.test"}) == "j***@example.test"
+    # A bare full name is personal data too — the pre-#4944 mask leaked it.
+    assert formatting._mask_customer("Ada Lovelace") == formatting.REDACTED_CUSTOMER
+    # An already-enriched server display must survive the second mask pass.
+    assert formatting._mask_customer("j***@example.test (id 7)") == "j***@example.test (id 7)"
+    # A bare customer id is the drill-down key, not personal data.
+    assert formatting._mask_customer("7") == "7"
+    assert formatting._mask_customer(None) == ""
+
+
+def test_mask_customer_demo_override_is_opt_in(monkeypatch):
+    monkeypatch.setenv(formatting.UNMASKED_PII_ENV, "1")
+    assert formatting.demo_unmasked_pii() is True
+    assert formatting._mask_customer("jane.doe@example.test") == "jane.doe@example.test"
+    assert formatting._mask_customer("Ada Lovelace") == "Ada Lovelace"
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "maybe"])
+def test_demo_override_fails_closed_on_a_non_truthy_value(monkeypatch, value):
+    monkeypatch.setenv(formatting.UNMASKED_PII_ENV, value)
+    assert formatting.demo_unmasked_pii() is False
+    assert "Ada Lovelace" not in formatting._mask_customer("Ada Lovelace")
+
+
+def test_demo_override_is_off_when_unset(monkeypatch):
+    monkeypatch.delenv(formatting.UNMASKED_PII_ENV, raising=False)
+    assert formatting.demo_unmasked_pii() is False
+
+
+def test_format_aggregate_renders_ranked_lines_with_masked_customers():
     rows = [{"value": "jane.doe@example.test", "count": 3}, {"value": "7", "count": 1}]
     out = formatting.format_aggregate(rows, "customer", "count", 4, since_days=7)
     assert "Top customer by count (created in the last 7 day(s); 4 ticket(s) scanned):" in out
-    assert "1. jane.doe@example.test — 3" in out
+    assert "1. j***@example.test — 3" in out
+    assert "jane.doe@example.test" not in out
+    # The id drill-down key survives so a ranking stays actionable.
     assert "2. 7 — 1" in out
 
 
@@ -1302,18 +1360,29 @@ def test_is_automation_login_flags_service_accounts():
     assert is_automation_login("") is False
 
 
-def test_display_customer_format_and_fallback():
+def test_server_customer_display_masks_email_and_never_emits_a_name():
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
-    assert server._display_customer("max@example.test", 98) == "max@example.test (id 98)"
-    assert server._display_customer("jane.doe@example.test", 7) == "jane.doe@example.test (id 7)"
-    assert server._display_customer(None, 7) == "(id 7)"
-    assert server._display_customer("", 7) == "(id 7)"
-    assert server._display_customer("Ada Lovelace", 5) == "Ada Lovelace (id 5)"
-    assert server._display_customer("not-an-email", 5) == "not-an-email (id 5)"
-    assert server._display_customer("jane.doe@example.test", "?") == "jane.doe@example.test (id ?)"
-    assert server._display_customer("jane.doe@example.test", None) == "jane.doe@example.test"
+    assert server._customer_display("max@example.test", 98) == "m***@example.test (id 98)"
+    assert server._customer_display("jane.doe@example.test", 7) == "j***@example.test (id 7)"
+    assert server._customer_display(None, 7) == "(id 7)"
+    assert server._customer_display("", 7) == "(id 7)"
+    # A bare name is not an email: the id is kept, the name is not.
+    assert server._customer_display("Ada Lovelace", 5) == "(id 5)"
+    assert server._customer_display("not-an-email", 5) == "(id 5)"
+    assert server._customer_display("jane.doe@example.test", "?") == "j***@example.test (id ?)"
+    assert server._customer_display("jane.doe@example.test", None) == "j***@example.test (id None)"
+
+
+def test_server_customer_display_demo_override(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    monkeypatch.setenv(formatting.UNMASKED_PII_ENV, "1")
+    assert server._customer_display("jane.doe@example.test", 7) == "jane.doe@example.test (id 7)"
+    assert server._customer_display("Ada Lovelace", 5) == "Ada Lovelace (id 5)"
+    assert server._customer_display(None, 7) == "(id 7)"
 
 
 def test_aggregate_customer_branch_drops_automation_pre_and_post_rank():
@@ -1351,15 +1420,42 @@ def test_aggregate_customer_post_rank_drops_resolved_automation():
     assert out == [{"value": "7", "count": 1, "name": "jane.doe@example.test (id 7)"}]
 
 
-def test_format_aggregate_customer_renders_full_id_display():
+def test_format_aggregate_customer_renders_masked_id_display():
     ranked = [
-        {"value": "7", "count": 2, "name": "jane.doe@example.test (id 7)"},
-        {"value": "9", "count": 1, "name": "Hans Müller (id 9)"},
+        {"value": "7", "count": 2, "name": "j***@example.test (id 7)"},
+        {"value": "9", "count": 1, "name": "h***@example.test (id 9)"},
     ]
     out = formatting.format_aggregate(ranked, "customer", "count", 3)
-    assert "1. jane.doe@example.test (id 7) — 2" in out
-    assert "2. Hans Müller (id 9) — 1" in out
+    assert "1. j***@example.test (id 7) — 2" in out
+    assert "2. h***@example.test (id 9) — 1" in out
     assert "excluded from customer rankings" in out
+
+
+def test_format_aggregate_customer_withholds_a_name_that_reached_the_ranking():
+    """A name must not survive even when it arrives already id-suffixed."""
+    ranked = [{"value": "9", "count": 1, "name": "Hans Müller (id 9)"}]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "Hans" not in out
+    assert "Müller" not in out
+    assert "2. [customer name withheld] (id 9) — 1" not in out
+    assert "1. [customer name withheld] (id 9) — 1" in out
+
+
+def test_format_aggregate_customer_redacts_an_unmasked_server_name(monkeypatch):
+    """A full name in a ranking must not reach the model, even if enriched upstream."""
+    monkeypatch.delenv(formatting.UNMASKED_PII_ENV, raising=False)
+    ranked = [{"value": "9", "count": 1, "name": "Hans Müller (id 9)"}]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "Hans" not in out
+    assert "Müller" not in out
+    assert "(id 9)" in out
+
+
+def test_format_aggregate_customer_demo_override_renders_full_display(monkeypatch):
+    monkeypatch.setenv(formatting.UNMASKED_PII_ENV, "1")
+    ranked = [{"value": "9", "count": 1, "name": "Hans Müller (id 9)"}]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "1. Hans Müller (id 9) — 1" in out
 
 
 class CustomerAggregateTransport:
@@ -1388,7 +1484,7 @@ class CustomerAggregateTransport:
         raise AssertionError(f"unexpected url {url}")
 
 
-def test_server_aggregate_customer_shows_full_names_and_bounds_user_lookups(monkeypatch):
+def test_server_aggregate_customer_masks_names_and_bounds_user_lookups(monkeypatch):
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
@@ -1398,7 +1494,8 @@ def test_server_aggregate_customer_shows_full_names_and_bounds_user_lookups(monk
         server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
     )
     out = server.aggregate_tickets(group_by="customer", metric="count", top_n=5)
-    assert "1. jane.doe@example.test (id 7) — 2" in out
+    assert "1. j***@example.test (id 7) — 2" in out
+    assert "jane.doe@example.test" not in out
     assert " (id 9)" not in out
     assert "excluded from customer rankings" in out
     user_calls = [call for call in transport.calls if "/api/v1/users/" in call["url"]]

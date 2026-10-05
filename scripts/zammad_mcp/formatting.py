@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -104,13 +105,59 @@ def _labeled(label: str, value: Any) -> str:
     return f"{label}: {text}" if text else ""
 
 
-def _display_customer(value: Any) -> str:
-    """Full customer display for the OCC demo: no masking.
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+ENRICHED_ID_RE = re.compile(r"\s\(id [^)]+\)$")
+REDACTED_CUSTOMER = "[customer name withheld]"
 
-    Returns the raw name/email as-is (``_field`` handles dict payloads).
+# The demo override. Default OFF: masking is the safe position and turning it
+# off is a deliberate, greppable act (DIG-1063).
+UNMASKED_PII_ENV = "ZAMMAD_DEMO_UNMASKED_PII"
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def demo_unmasked_pii() -> bool:
+    """True when the operator opted the OCC demo out of masking.
+
+    Accepted risk, owner: CTO. The OCC embed is an anonymous customer-facing
+    surface, so a customer's full name, email address and internal support
+    notes are Art. 5(1)(c) over-collection there. Set
+    ``ZAMMAD_DEMO_UNMASKED_PII=1`` to restore the #4944 demo rendering.
     """
+    return os.environ.get(UNMASKED_PII_ENV, "").strip().lower() in _TRUTHY
 
-    return _field(value.get("email") if isinstance(value, dict) else value)
+
+def _mask_customer(value: Any) -> str:
+    """Customer display, masked by default (Art. 4(1) / 5(1)(c)).
+
+    Keeps the first local-part character so a support conversation still
+    reads as a real thread, and keeps the domain because it is the routing
+    signal. A value that is not an email is a person's name: it is withheld
+    entirely, which the pre-#4944 mask failed to do. An id-only value or an
+    already-enriched ``... (id N)`` display is a lookup key, not personal
+    data, so it passes through.
+    """
+    text = _field(value.get("email") if isinstance(value, dict) else value)
+    if not text:
+        return ""
+    if demo_unmasked_pii():
+        return text
+    # An enriched ranking display carries a trailing "(id N)". Mask the head
+    # and keep the id: an enriched *name* must still be withheld, so the
+    # suffix cannot be what makes a value pass.
+    match = ENRICHED_ID_RE.search(text)
+    suffix = match.group(0) if match else ""
+    head = text[: len(text) - len(suffix)]
+    if head.isdigit():  # a lookup key, not personal data
+        return text
+    if EMAIL_RE.match(head):
+        local, _, domain = head.partition("@")
+        return f"{local[0]}***@{domain}{suffix}"
+    return REDACTED_CUSTOMER + suffix
+
+
+def _customer(value: Any) -> str:
+    """Customer display for the ticket surfaces."""
+    return _mask_customer(value)
 
 
 def format_ticket_line(ticket: dict[str, Any]) -> str:
@@ -128,7 +175,7 @@ def format_ticket_line(ticket: dict[str, Any]) -> str:
         for part in (
             _labeled("group", ticket.get("group")),
             _labeled("priority", ticket.get("priority")),
-            _labeled("customer", _display_customer(ticket.get("customer"))),
+            _labeled("customer", _customer(ticket.get("customer"))),
             _labeled("owner", ticket.get("owner")),
             _labeled("updated", ticket.get("updated_at")),
         )
@@ -233,8 +280,11 @@ def format_ticket_detail(
 ) -> str:
     """Render one ticket with its articles for the model.
 
-    Demo mode (#4944): all articles are shown, including internal notes
-    (tagged ``[internal]``), and customer names/emails render in full.
+    Internal notes are omitted and customer identities are masked by default
+    (Art. 5(1)(c): a customer's name, email and our internal notes are not
+    necessary to answer an OCC help question, and this embed is anonymous).
+    ``ZAMMAD_DEMO_UNMASKED_PII=1`` restores the #4944 demo rendering — every
+    article tagged ``[internal]`` and identities in full.
     ``owner_name`` is the ``resolve_user`` display name for the raw owner
     value; ``category`` is the open|closed|pending state category.
     """
@@ -245,7 +295,12 @@ def format_ticket_detail(
     if number:
         head += f" #{number}"
     lines = [f"{head}: {title}"]
-    shown = list(articles)
+    hidden = 0
+    if demo_unmasked_pii():
+        shown = list(articles)
+    else:
+        shown = [article for article in articles if not article.get("internal")]
+        hidden = len(articles) - len(shown)
     identity = " | ".join(
         part
         for part in (
@@ -262,7 +317,7 @@ def format_ticket_detail(
     people = " | ".join(
         part
         for part in (
-            _labeled("Customer", _display_customer(ticket.get("customer"))),
+            _labeled("Customer", _customer(ticket.get("customer"))),
             _labeled("Organization", ticket.get("organization")),
             _labeled("Owner", owner_name or ticket.get("owner")),
         )
@@ -293,6 +348,8 @@ def format_ticket_detail(
     remaining = len(shown) - MAX_ARTICLES_SHOWN
     if remaining > 0:
         lines.append(f"... {remaining} more article(s) omitted")
+    if hidden > 0:
+        lines.append(f"... {hidden} internal note(s) omitted")
     return "\n".join(lines)
 
 
@@ -392,9 +449,9 @@ def format_aggregate(
 ) -> str:
     """Render a windowed ranking for the model.
 
-    Customer entries prefer the server-enriched full-name/email + id
-    ``name`` (raw values pass through in full, never masked); owner
-    entries prefer the resolved ``name`` enrichment.
+    Customer entries prefer the server-enriched masked-email + id ``name``
+    (raw values mask here, never raw); owner entries prefer the resolved
+    ``name`` enrichment.
     """
     scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
     if not ranked:
@@ -402,6 +459,10 @@ def format_aggregate(
     lines = [f"Top {group_by} by {metric} ({scope}; {total} ticket(s) scanned):"]
     for index, entry in enumerate(ranked, start=1):
         name = entry.get("name") or entry.get("value", "?")
+        if group_by == "customer":
+            # Server-enriched names already carry the masked-email + id
+            # display and pass through unchanged; raw values mask here.
+            name = _customer(name)
         lines.append(f"{index}. {name} — {entry.get('count', 0)}")
     if group_by in ("owner", "customer"):
         owners = ", ".join(sorted(AUTOMATION_OWNERS))

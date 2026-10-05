@@ -12,7 +12,7 @@ search, retrieval, and a status report. No writes, by design.
 | `get_ticket(ticket_id)` | One ticket with its articles; takes the internal id (`231`) or the displayed ticket number (`#28312`), and resolves a number through search when the id lookup 404s. Relation names resolved via `expand=true`. Adds best-effort `Owner:` (id resolved to display name via `resolve_user`) and `Category:` (`open`\|`closed`\|`pending` from state types); raw values shown / line omitted when resolution fails |
 | `list_tickets(page=1, per_page=50)` | Browse the visible tickets page by page, newest updated first (the Zammad list API is id-ordered; this tool re-sorts by `updated_at`). Use it when keyword search misses: tickets mix German and English and search is a literal substring match, so read titles in their original language and pull threads with `get_ticket`; covers the 500 most recently updated visible tickets |
 | `ticket_report(since_days=None, group_by=None)` | Status report over the visible scan (up to 500 tickets): unresolved vs closed, by state/group/priority, updated in the last 7 days by default. `since_days` keeps only tickets updated in the window (client-side filter); `group_by` (`state`\|`group`\|`priority`) appends a top-values section. "Closed" here is the cheap name heuristic (states *named* `closed`/`merged`); for type-derived open/closed counts use `aggregate_tickets` |
-| `aggregate_tickets(group_by="customer", metric="count", since_days=None, top_n=5)` | Windowed ranking for analytics questions. `group_by`: `customer`\|`owner`\|`state`\|`group`\|`priority`\|`title`. `metric`: `count`\|`open_count`\|`closed_count`, where open/closed derives from the cached state-type ids (custom open-type states such as `gelöst von Dev` count as open — never the state *named* `open`). Window is `created_at` within `since_days`, fetched in one call (limit 500). Counting/delegation reuses the generic `digisearch.core.tables` ops (`group_count`, `enrich_rows`). Owner logins are UUIDs — names resolve automatically; automation accounts (`jirasync@sitaas.de`, `-`, `auto`) are excluded from owner rankings and footnoted. Customers render in full (name/email + id, see Privacy) |
+| `aggregate_tickets(group_by="customer", metric="count", since_days=None, top_n=5)` | Windowed ranking for analytics questions. `group_by`: `customer`\|`owner`\|`state`\|`group`\|`priority`\|`title`. `metric`: `count`\|`open_count`\|`closed_count`, where open/closed derives from the cached state-type ids (custom open-type states such as `gelöst von Dev` count as open — never the state *named* `open`). Window is `created_at` within `since_days`, fetched in one call (limit 500). Counting/delegation reuses the generic `digisearch.core.tables` ops (`group_count`, `enrich_rows`). Owner logins are UUIDs — names resolve automatically; automation accounts (`jirasync@sitaas.de`, `-`, `auto`) are excluded from owner rankings and footnoted. Customers render masked (first local-part char + domain, plus id, see Privacy) |
 
 ## Analytics workflows (per question class)
 
@@ -39,7 +39,7 @@ Each row is the tool sequence the model should run; field syntax is concrete.
 - **`owner_id` handling:** integer owner ids resolve to `firstname lastname` (fallback: login) via the cached `resolve_user`; non-integer lookups fail closed. In aggregate output, owner UUIDs resolve automatically and unresolvable values fall back to the raw string — one bad owner never fails the ranking.
 - **Category semantics:** `state_category` and `Category:` derive from `get_state_types()` (`{lower_name: state_type_id}`, cached, merged over a known-state table when the states endpoint is unreachable). Closed-type = Zammad closed/merged type names; pending = type ids 3/4; everything else is open. Instance custom states classify by type: `gelöst von Dev` is open-type, `warten auf Kunden` / `warten auf Dev` are pending-type. `ticket_report`'s closed count is the cheaper *name* heuristic instead (`closed`/`merged` names only).
 - **Automation accounts:** `jirasync@sitaas.de`, `-`, `auto` are excluded from `owner` rankings (pre-filter on raw values, post-filter on resolved names) and listed in the output footnote.
-- **Privacy (demo mode, #4944):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output), no masking; no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
+- **Privacy (masked by default):** internal notes are omitted and customer identities are masked — an email keeps its first local-part character and domain (`j***@example.test`), a value that is not an email is a person's name and is withheld as `[customer name withheld]`, and a bare id or an already-enriched `... (id N)` display passes through so rankings stay actionable. `ZAMMAD_DEMO_UNMASKED_PII=1` restores the #4944 demo rendering (all articles tagged `[internal]`, identities in full) — an accepted risk owned by the CTO, not a default. No article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
 - **Caps:** window fetch and report scan cover at most 500 tickets each; keyword fallback uses at most `MAX_KEYWORD_TERMS=10` terms (German + English stopwords dropped).
 
 Every request is a GET. The token only ever leaves this process as the
@@ -53,6 +53,7 @@ Every request is a GET. The token only ever leaves this process as the
 | `ZAMMAD_API_TOKEN` | — | Zammad API token — raw value or the full `Token token=<x>` header value; server-side only, never commit or send to a browser |
 | `ZAMMAD_MCP_HOST` | `127.0.0.1` | Bind host for streamable HTTP |
 | `ZAMMAD_MCP_ALLOWED_HOSTS` | — | Comma-separated Host patterns allowed past FastMCP's DNS-rebinding guard (e.g. `zammad-mcp` for cross-container access; enforced only when the mcp build exposes transport_security — older mcp versions do not) |
+| `ZAMMAD_DEMO_UNMASKED_PII` | `0` (masked) | `1`/`true`/`yes`/`on` restores the #4944 demo rendering — internal notes included, customer identities in full. **Accepted risk, owner: CTO.** Any other value masks. See Privacy & exposure |
 
 ```bash
 ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --port 8770
@@ -177,12 +178,36 @@ interchangeable with multilingual ones).
 
 ## Privacy & exposure
 
-Demo mode (#4944): the OCC embed shows full customer names/emails and all
-articles, so the formatters are explicit:
+Masked by default (DIG-1063). The OCC embed is anonymous and ungated, so
+a customer's full name, email address and our internal support notes are
+Art. 4(1) personal data and Art. 5(1)(c) over-collection there — none of it
+is necessary to answer an OCC help question:
 
-- internal articles (`internal: true`) are returned, tagged `[internal]`
-- customer names/emails are shown in full (`Customer:` lines, aggregate
-  rankings as `name/email (id N)`)
+- internal articles (`internal: true`) are **omitted**, with a
+  `... N internal note(s) omitted` line
+- customer emails render as `j***@example.test` (`Customer:` lines,
+  aggregate rankings as `j***@example.test (id N)`)
+- a customer value that is not an email is a name and renders as
+  `[customer name withheld]` — including when it arrives already
+  id-suffixed, so an enriched ranking cannot leak it
+- bare ids (`7`) and enriched `... (id N)` displays pass through: they are
+  the drill-down key, not personal data
+
+### Demo override (accepted risk)
+
+`ZAMMAD_DEMO_UNMASKED_PII=1` restores the #4944 behaviour: every article
+including internal notes, and identities in full. It is **off by default**
+and any value other than `1`/`true`/`yes`/`on` fails closed to masking.
+
+Accepted risk — owner: **CTO**. Demo convenience is a legitimate reason to
+unmask; the reasoning that made Counsel refuse political-opinion fields
+applies to a name one category down, with no statutory complication. The
+pre-#4944 mask is deliberately *stricter* than the one it replaced: it also
+withheld bare full names, which the old `_mask_customer` passed through.
+
+Note the sibling path: `scripts/index_occ_tickets.py` also writes full,
+non-anonymized ticket metadata and article bodies into the `occ_tickets`
+index. This override does not cover that corpus.
 
 The MCP transport itself carries no auth of its own: `tokenEnv` / `authHeader`
 carry the Zammad token outbound to Zammad, they are not an auth boundary for the
