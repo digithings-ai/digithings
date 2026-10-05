@@ -9,7 +9,7 @@ Route status: **exists** (CONTRACT §6) · **extend** (add fields to an existing
 | primitive | covers (mock class) | status |
 |---|---|---|
 | `Window` | `.sec` + eyebrow bar (`NN / label`, right slot, hairline frame, body scrolls). The right slot is the **age footer** — `as of 2026-09-17 · 12 trading days old · stale` — built by `lib/block-age.ts` off the block's `asOf` stamp; an undated block keeps the route. A state word, not a colour, carries the severity. | done |
-| `asOf` | **Must be a freshness stamp** — when this read was produced (`d.run_date`, `d.book_as_of`, `env.as_of`). Never an event date, a window bound, or an id: those age forever and read `stale` on data that is current. A value that is not a bare date already degrades safely (passed through, no age claimed). | done |
+| `asOf` | **Must be a freshness stamp** — when this read was produced (`d.run_date`, `d.book_as_of`, `env.as_of`). Do not pass an event date: `trough_date` aged forever and read `stale` on current data (#5096). Two sites knowingly pass a non-date — the P&L window range and a run `id` — and both are safe only because the value fails to parse as a bare date and is printed verbatim with no age claimed. | done |
 | `DataTable` | `.tw` — sticky th, `.num`, row variants `sel/total/grp`, inline weight bar, wrap/clamp for long text | partial |
 | `KpiGrid` | `.kpis/.kpi` (label / value / sub, tones) | done |
 | `Badge` / `Chip` | `.badge` ok/wip/gap/unavailable/live/kind(OPEN·ADD·TRIM·EXIT)/state(active·watch·exited), `.chip` paper | todo |

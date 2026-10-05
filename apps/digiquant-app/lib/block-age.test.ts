@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { blockAge, blockAgeFooter, blockAgeText, SESSION_STALE, SESSION_WARN } from '@/lib/block-age';
 import { calendarDay, todayYmd, tradingSessionsSince } from '@/lib/trading-calendar';
+import { AgeLine } from '@/components/Block';
 
 /**
  * Window-bar age, pinned at the boundaries that decide a word.
@@ -76,11 +79,39 @@ describe('calendarDay', () => {
     expect(calendarDay('')).toBeNull();
     expect(calendarDay('2026-13-01')).toBeNull();
     expect(calendarDay('2026-02-30')).toBeNull();
+    // 29 Feb is the one day the length guard cannot catch on its own — it only
+    // exists in a leap year — so the round trip is the sole thing rejecting it.
+    expect(calendarDay('2026-02-29')).toBeNull();
+    expect(calendarDay('2100-02-29')).toBeNull(); // divisible by 100, not 400
+    expect(calendarDay('2024-02-29')).toBe('2024-02-29');
+    expect(calendarDay('2000-02-29')).toBe('2000-02-29'); // divisible by 400
+    expect(calendarDay('2024-02-30')).toBeNull();
   });
 });
 
 describe('todayYmd', () => {
-  it('is a local calendar day, not a UTC one', () => {
+  const realTz = process.env.TZ;
+  afterEach(() => { if (realTz === undefined) delete process.env.TZ; else process.env.TZ = realTz; });
+
+  // Shape assertions cannot tell a local clock from a UTC one — both match
+  // /^\d{4}-\d{2}-\d{2}$/ — so this pins a known instant where the two disagree.
+  // 20:00Z on 2026-09-20 is already the 21st in Kiritimati (UTC+14). An
+  // implementation reading getUTC* would answer 2026-09-20 and fail here.
+  it('is the reader\'s local calendar day, not the UTC one', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-20T20:00:00Z'));
+      process.env.TZ = 'Pacific/Kiritimati';
+      expect(todayYmd()).toBe('2026-09-21');
+      // The other direction, so a hardcoded offset cannot pass either.
+      process.env.TZ = 'Pacific/Midway';
+      expect(todayYmd()).toBe('2026-09-20');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is shaped like a date it can hand back through calendarDay', () => {
     expect(todayYmd()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(todayYmd()).toBe(calendarDay(todayYmd()));
   });
@@ -147,22 +178,26 @@ describe('blockAgeFooter', () => {
     expect(text(`${RUN}T14:02:00Z`, MON)).toBe(`as of ${RUN} · 2 trading days old · warn`);
   });
 
-  it('renders the same characters Block renders, in every band', () => {
-    // `Block` composes `{age.lead}<span>{' '}{age.state}</span>` — the space sits
-    // outside the inked span, so `lead` must not also carry it. Verified here
-    // against the exact composition the component uses, so the two cannot drift.
-    const asBlockRenders = (f: ReturnType<typeof blockAgeFooter>) =>
-      f.state === null ? f.lead : `${f.lead} ${f.state}`;
+  it('renders the same characters AgeLine renders, in every band', () => {
+    // Rendering the real component, not a copy of its composition. An earlier
+    // version of this test compared blockAgeText against an inline re-write of
+    // its own body, which agreed with itself by construction and stayed green
+    // when the component's markup drifted. This one fails if Block.tsx changes.
+    const asRendered = (f: ReturnType<typeof blockAgeFooter>) => {
+      const html = renderToStaticMarkup(createElement(AgeLine, { footer: f }));
+      return html.replace(/<[^>]*>/g, '').replace(/&middot;/g, '·').replace(/&amp;/g, '&');
+    };
 
     for (const now of [MON, TUE, OUTAGE_READ]) {
       const f = blockAgeFooter({ runDate: RUN, route: 'desk/fx', now });
-      expect(blockAgeText(f)).toBe(asBlockRenders(f));
-      expect(blockAgeText(f)).not.toMatch(/· {2}|·\s{2}| {2}/);
+      expect(asRendered(f)).toBe(blockAgeText(f));
+      expect(asRendered(f)).not.toMatch(/ {2}/);
     }
     // ...and with no state word there is no trailing separator left behind.
     const fresh = blockAgeFooter({ runDate: MON, route: 'desk/fx', now: MON });
     expect(blockAgeText(fresh)).toBe(`as of ${MON} · current session`);
-    expect(blockAgeText(fresh)).not.toMatch(/·\s*$/);
+    expect(asRendered(fresh)).not.toMatch(/·\s*$/);
+    expect(asRendered(fresh)).not.toMatch(/win-age /);
   });
 
   it('never lets an aged footer read like a fresh one', () => {
