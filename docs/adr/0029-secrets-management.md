@@ -7,7 +7,7 @@ recommendation and the plan, not an adopted one. Until accepted, nothing here
 authorises deleting a live secret or creating a vendor account.
 
 **Deciders:** repo owner (vendor + spend). **Evidence base:** [secrets
-inventory](../ops/SECRETS_INVENTORY.md) (names, locations, R1–R13) and [secrets
+inventory](../ops/SECRETS_INVENTORY.md) (names, locations, R1–R15) and [secrets
 rotation runbook](../ops/SECRETS_ROTATION.md) (what rotation costs today).
 
 ## Context
