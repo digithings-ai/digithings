@@ -156,16 +156,20 @@ def test_markdown_lists_only_names_and_ages(checker: object) -> None:
 
 
 @pytest.mark.unit
-def test_a_level_that_read_empty_still_prints(checker: object) -> None:
-    # An empty `cron` environment is the signal that #248's migration has not
-    # landed, so silence would read as "nothing to see".
-    report = checker.Report(secrets=[_age(checker, 10, "repo", "A")])
+def test_a_level_that_was_never_collected_does_not_print(checker: object) -> None:
+    # A level absent from `secrets` is one that was never collected, so nothing is
+    # claimed about it either way. The name used to be `..._still_prints` with a
+    # comment saying silence would read as "nothing to see", which asserted the
+    # opposite of what the line below checks: an uncollected `cron` is silent.
+    # Whether a served-but-empty level should print is not answerable from `Report`
+    # without `readable`, and `ageing_verdict` is what covers that case now.
+    report = checker.Report(secrets=[_age(checker, 10, "repo", "A")], readable=1)
     out = checker.render(report, 90)
     assert "repo: 1 name(s)" in out
     assert "cron:" not in out  # never collected, so nothing is claimed about it
 
     migrated = checker.Report(
-        secrets=[_age(checker, 10, "repo", "A"), _age(checker, 10, "cron", "B")]
+        secrets=[_age(checker, 10, "repo", "A"), _age(checker, 10, "cron", "B")], readable=2
     )
     assert "cron: 1 name(s)" in checker.render(migrated, 90)
 
@@ -321,8 +325,14 @@ def test_strict_offline_flags_an_unreadable_level(
     names = tmp_path / "names.tsv"
     names.write_text("repo\tFRESH\t2026-01-01T00:00:00Z\n", encoding="utf-8")
 
-    # Every `gh` read comes back None, so no level resolves.
-    assert checker.main(["--file-names", str(names), "--strict-offline"]) == 0
+    # Every `gh` read comes back None, so no level resolves. `--file-names` still
+    # means the live API was never consulted, so `--strict-offline` refuses it
+    # rather than reporting success off a hand-made file.
+    assert checker.main(["--file-names", str(names), "--strict-offline"]) == 1
+    # Without the flag the file is just a list to age, which is what the flag is for.
+    assert checker.main(["--file-names", str(names), "--strict-offline"]) != checker.main(
+        ["--file-names", str(names)]
+    )
 
 
 # --- environment gates -------------------------------------------------------
@@ -982,3 +992,205 @@ def test_the_summary_still_reassures_when_everything_was_read(
 
     assert "No action needed" in body
     assert "of **1** listed secrets" in body
+
+
+@pytest.mark.unit
+def test_stdout_does_not_count_zero_of_zero_as_a_clean_result(checker: object) -> None:
+    """`render()` printed `0 name(s) past 90 days of 0 listed` while every level 403'd.
+
+    The summary half of this was already fixed; the console half was not, so the run
+    log still ended on a zero count. Both renderers have to agree.
+    """
+    report = checker.Report(unavailable={"cron": "HTTP 403", "org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "of 0 listed" not in out
+    assert "0 name(s) past 90 days of 0" not in out
+    assert "No secrets could be aged" in out
+    # The per-level reasons still print, so the reader learns *why* nothing aged.
+    assert "NOT CHECKED" in out
+
+
+@pytest.mark.unit
+def test_stdout_count_is_qualified_when_only_some_levels_read(checker: object) -> None:
+    """A partial read must not print a bare count either: 1 read of 2 levels is not a verdict."""
+    report = checker.Report(secrets=[_age(checker, 200)], unavailable={"org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "1 name(s) past 90 days of 1 listed" not in out
+    assert "among the 1 that could be read" in out
+    assert "not a clean bill of health" in out
+
+
+@pytest.mark.unit
+def test_stdout_qualifies_a_partial_read_when_nothing_is_overdue(checker: object) -> None:
+    """The zero-overdue partial read is the shape closest to the original bug.
+
+    Nothing is overdue, so the count reads `0`, and a bare `0 name(s) past 90
+    days` line is exactly what a skimming reader parses as a clean result.
+    """
+    report = checker.Report(secrets=[_age(checker, 10)], unavailable={"org": "needs admin:org"})
+    out = checker.render(report, 90)
+
+    assert "0 name(s) past 90 days of 1 listed" not in out
+    assert "among the 1 that could be read" in out
+    assert "not a clean bill of health" in out
+
+
+@pytest.mark.unit
+def test_a_partial_read_with_something_overdue_is_qualified_in_the_summary(checker: object) -> None:
+    """An overdue name plus an unread level must not lead with a bare `1 of 1`.
+
+    The partial-read qualifier used to sit behind `if overdue:`, so it was
+    unreachable in precisely this case and the summary — the artefact a human
+    reads first — disclosed the missing level only in the trailing section.
+    """
+    report = checker.Report(secrets=[_age(checker, 200)], unavailable={"org": "needs admin:org"})
+    body = checker.markdown(report, 90)
+
+    assert "not a clean bill of health" in body
+    assert "of the levels that could be read" in body
+
+
+@pytest.mark.unit
+def test_an_empty_but_readable_repo_is_not_reported_as_a_failed_read(checker: object) -> None:
+    """Every level readable, none holding a secret: a real answer, not a 0-of-0.
+
+    `collect()` returns `([], None)` for a level that reads but is empty, so this
+    lands in neither `secrets` nor `unavailable` and is reachable. The old code
+    printed `0 name(s) past 90 days of 0 listed` on stdout and claimed on the
+    summary that nothing had been read — both false.
+    """
+    report = checker.Report(readable=3)
+
+    out = checker.render(report, 90)
+    assert "of 0 listed" not in out
+    assert "Every level was readable" in out
+
+    body = checker.markdown(report, 90)
+    assert "No secrets could be aged" not in body
+    assert "because nothing was read" not in body
+    assert "Every level was readable" in body
+
+
+@pytest.mark.unit
+def test_an_offline_report_never_claims_a_level_was_read(checker: object) -> None:
+    """`--file-names` reads a hand-made list, not the API. That is not a served level.
+
+    With no `readable` count and nothing in `unavailable`, an earlier version
+    printed "Every level was readable and none of them holds a secret" over a
+    zero-byte file and exited 0 — a clean bill of health for a measurement that
+    never happened, which is the exact class of bug this change exists to remove.
+    """
+    report = checker.Report(readable=0)
+
+    assert not report.read_any
+    assert "readable" not in checker.render(report, 90)
+    assert "readable" not in checker.markdown(report, 90)
+    assert "No secrets could be aged" in checker.render(report, 90)
+
+
+@pytest.mark.unit
+def test_a_served_but_empty_run_files_a_tracker_instead_of_closing_one(
+    checker: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that measured something must not close the tracker on the "read nothing" note.
+
+    `CLOSE_NOTE` asserts, permanently and in the repo's voice, that every level came
+    back 403. A run where the listings were served and came back empty prints
+    "Every level was readable" on stdout — so closing it on that note would put two
+    mutually exclusive claims in the same run, one of them permanent.
+    """
+    served_but_empty = checker.Report(readable=3)
+    acted: list[str] = []
+
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(checker, "collect", lambda *a, **k: served_but_empty)
+    monkeypatch.setattr(checker, "environment_gate_status", lambda *a, **k: None)
+    monkeypatch.setattr(
+        checker, "close_unmeasurable_tracker", lambda root, repo: acted.append("close") or ""
+    )
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, repo, body: acted.append("file") or ""
+    )
+
+    checker.main(["--open-issue", "--skip-environment-gates"])
+
+    assert acted == ["file"]
+
+
+@pytest.mark.unit
+def test_a_run_that_read_nothing_still_closes_the_tracker(
+    checker: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard the test above pins: the unreadable case must keep closing."""
+    unreadable = checker.Report(unavailable={"cron": "403", "org": "403", "repo": "403"})
+    acted: list[str] = []
+
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(checker, "collect", lambda *a, **k: unreadable)
+    monkeypatch.setattr(checker, "environment_gate_status", lambda *a, **k: None)
+    monkeypatch.setattr(
+        checker, "close_unmeasurable_tracker", lambda root, repo: acted.append("close") or ""
+    )
+    monkeypatch.setattr(
+        checker, "file_or_update_issue", lambda root, repo, body: acted.append("file") or ""
+    )
+
+    checker.main(["--open-issue", "--skip-environment-gates"])
+
+    assert acted == ["close"]
+
+
+@pytest.mark.unit
+def test_the_two_renderers_never_disagree_about_the_verdict(checker: object) -> None:
+    """The invariant both renderers must satisfy, over every reachable shape.
+
+    They were two hand-maintained copies of one judgement and they drifted, so the
+    agreement is pinned here rather than asserted in a comment. Each renderer is
+    given the position word its own layout needs, because one shared sentence
+    cannot be true in both orderings.
+    """
+    old, fresh = _age(checker, 200), _age(checker, 10)
+    unread = {"cron": "403", "org": "403", "repo": "403"}
+    shapes = {
+        "nothing readable": checker.Report(unavailable=unread),
+        "offline file, empty": checker.Report(readable=0),
+        "partial, nothing overdue": checker.Report(
+            secrets=[fresh], unavailable={"org": "403"}, readable=2
+        ),
+        "partial, overdue": checker.Report(secrets=[old], unavailable={"org": "403"}, readable=2),
+        "full read, nothing overdue": checker.Report(secrets=[fresh], readable=3),
+        "full read, overdue": checker.Report(secrets=[old], readable=3),
+        "full read, empty": checker.Report(readable=3),
+    }
+
+    for label, report in shapes.items():
+        on_stdout = checker.ageing_verdict(report, 90, "above")
+        in_summary = checker.ageing_verdict(report, 90, "below")
+
+        assert on_stdout in checker.render(report, 90), label
+        assert in_summary in checker.markdown(report, 90), label
+
+        # The "per-level reason is above/below" clause only exists when the reasons
+        # are listed at all, i.e. when nothing could be read. Where some level did
+        # read, the partial-read sentence carries the disclosure instead.
+        # The position word is only carried in the "nothing could be aged at all" shape,
+        # the one that names per-level reasons. A partial read discloses the gap in its
+        # own sentence, and a fully-read or fully-offline run has no reasons to point at.
+        if report.unavailable and not report.read_any:
+            assert "The per-level reason is above." in checker.render(report, 90), label
+            assert "The per-level reason is below." in checker.markdown(report, 90), label
+
+        if not report.read_any or report.unavailable:
+            assert "No action needed" not in checker.markdown(report, 90), label
+
+
+@pytest.mark.unit
+def test_stdout_still_counts_when_every_level_read(checker: object) -> None:
+    """The fix must not cost the ordinary case its count line."""
+    report = checker.Report(secrets=[_age(checker, 200)])
+    out = checker.render(report, 90)
+
+    assert "1 name(s) past 90 days of 1 listed" in out
+    assert "No secrets could be aged" not in out
