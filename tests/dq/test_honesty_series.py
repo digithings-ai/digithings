@@ -249,19 +249,30 @@ def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> No
     rows but renamed ``ts_event`` to ``event_ts`` — or dropped
     ``__text_signature__``, which makes ``inspect.signature`` fail differently on
     3.12 and 3.13 — would skip on exactly the builds that prove rows exist.
-    Asking the engine whether it accepts a timestamp has no such failure mode.
+
+    ``TypeError`` alone is not proof of arity, though: pyo3 raises it for
+    argument *type conversion* too, measured on the live builds — a ``float``
+    where ``Money`` belongs gives ``'float' object is not an instance of
+    'Money'``, a ``datetime`` where ``int`` belongs gives ``'datetime.datetime'
+    object cannot be interpreted as an integer``. So a rejected 3-arg call only
+    counts as "this build cannot carry a timestamp" if the 2-arg form it does
+    accept still works; if both are refused the error is something else and is
+    re-raised rather than skipped.
     """
     pyo3 = _pyo3()
     usd = pyo3.Currency.from_str("USD")
     analyzer = pyo3.PortfolioAnalyzer()
     ts = 1_700_000_000_000_000_000
-    # Built outside the probe: only ``add_trade``'s arity is under test, so a
+    # Built outside the probe: only ``add_trade`` is under test, so a
     # TypeError from constructing these must fail loudly rather than skip.
     position_id = pyo3.PositionId("P-1")
     money = pyo3.Money(10.0, usd)
     try:
         analyzer.add_trade(position_id, ts, money)
     except TypeError:
+        # Arity, or a type conversion? Only the 2-arg form this build does
+        # accept can tell the two apart; if it is refused too, re-raise.
+        analyzer.add_trade(position_id, money)
         pytest.skip("add_trade rejects a ts_event, so this build cannot emit record rows")
 
     raw = analyzer.realized_pnls(usd)
@@ -269,9 +280,12 @@ def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> No
     assert isinstance(raw, list) and len(raw) == 1, f"expected one row, got {raw!r}"
     row = raw[0]
     assert isinstance(row, tuple) and len(row) == 3, f"expected (pid, ts, pnl), got {row!r}"
-    position_id, ts_event, pnl = row
-    assert position_id == "P-1", "the position id is the key"
+    key, ts_event, pnl = row
+    assert key == "P-1", "the position id is the key"
     assert ts_event == ts, "the timestamp is the ts_event the trade was stamped with"
+    # isinstance, not just ==: `10 == 10.0`, so equality alone would let an
+    # int through and leave the docstring's `float` unbacked.
+    assert isinstance(pnl, float), f"the realized pnl is a float, got {type(pnl).__name__}"
     assert pnl == 10.0, "the value is the realized pnl, not the timestamp"
 
     # ...and the normalizer reads that timestamp as the date rather than the row index.

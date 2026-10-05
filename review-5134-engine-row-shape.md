@@ -227,7 +227,18 @@ claimed numbers looked wrong to me at first: the three-file set I guessed first 
 
 ### N2 (nit) — `test_the_engine_really_emits_three_column_rows_with_a_real_timestamp` is long
 
-`:229` — **83** characters of test name. Not the longest in the file: `test_two_column_rows_fail_closed_rather_than_guessing_the_value_column` is 85 (`:354`) and `test_case_4_recorded_trade_replaces_the_added_one_for_one_round_trip` ties it at 83 (`:279`), so this is the third-longest of 29. Suggested: `test_the_engine_emits_three_column_rows_with_a_real_timestamp`. Purely cosmetic.
+`:229` — the **name** is 68 characters (`def ` + name + `() -> None:` is 83, which is
+how the 83 in an earlier correction of this paragraph came about — the whole line was
+measured, not the name). Ranked by name length across the file's 29 tests:
+
+| name length | test | line |
+|---|---|---|
+| 70 | `test_two_column_rows_fail_closed_rather_than_guessing_the_value_column` | `:343` |
+| 68 | `test_case_4_recorded_trade_replaces_the_added_one_for_one_round_trip` | `:268` |
+| 68 | `test_the_engine_really_emits_three_column_rows_with_a_real_timestamp` | `:229` |
+
+So it ties for second-longest name, not longest. Suggested:
+`test_the_engine_emits_three_column_rows_with_a_real_timestamp`. Purely cosmetic.
 
 ---
 
