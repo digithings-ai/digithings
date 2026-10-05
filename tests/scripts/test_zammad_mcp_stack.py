@@ -79,6 +79,47 @@ def test_stack_container_env_passes_the_zammad_token():
     assert "ZAMMAD_API_TOKEN?: string;" in source
 
 
+def test_stack_container_env_defaults_customer_disclosure_to_masked():
+    """A code default must never unmask production (DIG-1063).
+
+    Both bindings fall back to the safe value, so an unset Worker var cannot leak
+    the corpus and a future edit that flips one of them fails here.
+    """
+    source = STACK_INDEX.read_text()
+    assert (
+        'ZAMMAD_MCP_CUSTOMER_DISCLOSURE: env.ZAMMAD_MCP_CUSTOMER_DISCLOSURE ?? "masked"' in source
+    )
+    assert 'ZAMMAD_MCP_UNMASK_APPROVER: env.ZAMMAD_MCP_UNMASK_APPROVER ?? ""' in source
+    # env-vars-pin requires a declaration for every env.* read (tsc + vitest).
+    assert "ZAMMAD_MCP_CUSTOMER_DISCLOSURE?: string;" in source
+    assert "ZAMMAD_MCP_UNMASK_APPROVER?: string;" in source
+
+
+def test_occ_research_prompt_states_the_masked_contract():
+    """The deployed prompt must describe masking, not the old demo mode.
+
+    Three corpus-map blobs carry this prompt and a parity test keeps them equal, but
+    parity alone would happily pin three copies of a stale demo-mode prompt.
+    """
+    import json
+
+    from scripts.check_tenant_corpus_map import _FALLBACK_RE, decode_ts_string_literal
+
+    match = _FALLBACK_RE.search(STACK_INDEX.read_text())
+    assert match, "DIGI_TENANT_CORPUS_MAP fallback literal not found"
+    prompt = json.loads(decode_ts_string_literal(match.group(1)))["occ"]["researchSystemPrompt"]
+
+    assert "customer #<id>" in prompt
+    assert "customer_id:<id>" in prompt
+    assert "index is NOT masked" in prompt
+    for stale in (
+        "shown in full (demo mode)",
+        "full customer names/emails",
+        "internal ticket notes are included and tagged [internal]",
+    ):
+        assert stale not in prompt, f"deployed OCC prompt still says {stale!r}"
+
+
 def test_wrangler_documents_the_zammad_secret():
     assert "ZAMMAD_API_TOKEN" in WRANGLER.read_text()
 

@@ -255,3 +255,28 @@ def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
         entry = blob["digithings"]
         assert "researchSystemPrompt" not in entry, f"{name}[digithings] carries a prompt"
         assert "research_system_prompt" not in entry, f"{name}[digithings] carries a prompt"
+
+
+# --- DIG-1063: parity alone would happily pin three copies of a stale prompt ---
+
+
+def test_real_blobs_occ_prompt_states_the_masked_contract(ccm: Any) -> None:
+    """Every deployed blob describes masking, not the pre-DIG-1063 demo mode.
+
+    ``wrangler.toml`` supplies the value in production and overrides the
+    ``index.ts`` code default, so a stale blob would keep the live OCC assistant
+    telling the model that names are shown in full and internal notes are
+    included — the opposite of what the masking change does.
+    """
+    raw = _load_raw_corpus_maps(ccm)
+    for name, blob in raw.items():
+        prompt = blob["occ"]["researchSystemPrompt"]
+        assert "customer #<id>" in prompt, f"{name}: pseudonym rule missing from the prompt"
+        assert "customer_id:<id>" in prompt, f"{name}: customer_id drill-down missing"
+        assert "index is NOT masked" in prompt, f"{name}: occ_tickets not flagged as unmasked"
+        for stale in (
+            "shown in full (demo mode)",
+            "full customer names/emails",
+            "internal ticket notes are included and tagged [internal]",
+        ):
+            assert stale not in prompt, f"{name}: deployed prompt still says {stale!r}"

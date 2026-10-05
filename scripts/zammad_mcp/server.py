@@ -14,6 +14,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from scripts.zammad_mcp import privacy
 from scripts.zammad_mcp.aggregate import (
     VALID_GROUP_BYS,
     VALID_METRICS,
@@ -93,9 +94,11 @@ def search_tickets(
 
     Workflows (compose these read-only tools; no extra endpoint needed):
 
-    - Customer history: ``customer.email:<addr>`` with
-      ``sort_by=created_at&order_by=desc&limit=1`` finds the latest ticket,
-      then ``get_ticket`` reads the customer and its articles.
+    - Customer history: ``customer_id:<id>`` uses the ``customer #<id>`` from an
+      ``aggregate_tickets`` ranking, which is the only customer handle available
+      while masking is on. ``customer.email:<addr>`` works for an address the user
+      typed. In both cases ``sort_by=created_at&order_by=desc&limit=1`` finds the
+      latest ticket, then ``get_ticket`` reads the customer and its articles.
     - Resolution search: tokenize the question, run one
       ``title:<term>`` / ``article.body:<term>`` search per term restricted
       to resolved states (``state_category="closed"``).
@@ -148,7 +151,10 @@ def list_tickets(page: int = 1, per_page: int = 50) -> str:
 
 @mcp.tool()
 def get_ticket(ticket_id: int | str) -> str:
-    """Fetch one Zammad ticket with all of its articles (read-only).
+    """Fetch one Zammad ticket with its customer-visible articles (read-only).
+
+    Internal notes are excluded (masked by default, DIG-1063) and the ticket
+    states how many were hidden.
 
     Accepts the internal id (``231``) or the ticket number shown as
     ``#28312``; a number is resolved to its internal id automatically.
@@ -250,31 +256,30 @@ def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> di
 
 
 def _display_customer(value: Any, cid: Any) -> str:
-    """Full customer display for rankings: ``jane.doe@example.test (id 7)``.
+    """Customer label for a ranking row — policy in ``privacy``.
 
-    Demo mode (#4944): real customer names and full emails are shown,
-    with the customer id appended when known so rankings still link to
-    the customer-history drill-down. Missing input falls back to
-    ``(id N)``; known text without a usable id renders as-is.
+    Masked by default (DIG-1063): ``customer #7``, with the id kept so a ranking
+    still links to the customer-history drill-down. Unmasked mode needs a named
+    approver and restores the #4944 ``jane.doe@example.test (id 7)`` display.
     """
-    text = str(value or "").strip() if value is not None else ""
-    if not text:
-        return f"(id {cid})"
-    if cid is None:
-        return text
-    return f"{text} (id {cid})"
+
+    return privacy.customer_label(value, cid)
 
 
 def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> dict[str, str]:
-    """Map each distinct raw customer value to a full display (best-effort).
+    """Map each distinct raw customer value to its display (best-effort).
 
     Mirrors ``_owner_display_names``: integer-like ids resolve via the cached
     ``resolve_user``; automation logins come back as-is for the caller to
     flag (dropped pre/post-rank, never rendered). Every other value maps to
-    the full display — demo mode (#4944) shows real customer names and full
-    emails with the id appended. Unresolvable ids fall back to the raw
-    value with the id so one bad customer never fails the whole ranking.
+    ``_display_customer``. Unresolvable ids fall back to the raw value with
+    the id so one bad customer never fails the whole ranking.
+
+    Masked by default (DIG-1063): the resolved name is dropped rather than
+    shown, and ``resolve_user`` is skipped entirely so a customer's email is
+    not even fetched into the container process for a display nobody sees.
     """
+    masked = privacy.is_masked()
     names: dict[str, str] = {}
     for row in rows:
         cid = row.get("customer_id")
@@ -293,7 +298,11 @@ def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) ->
                 if is_automation_login(text):
                     names[text] = text
                 else:
-                    names[text] = _display_customer(text, cid if cid is not None else "?")
+                    names[text] = _display_customer(text, cid)
+                continue
+            if masked:
+                # The id is the whole label; never resolve the email to show it.
+                names[text] = _display_customer(None, uid)
                 continue
             try:
                 resolved = client.resolve_user(uid)
@@ -320,7 +329,8 @@ def aggregate_tickets(
     state named "open"). Window: created_at within since_days (one call,
     limit=500). Owner logins are UUIDs — names are resolved automatically;
     automation accounts are excluded and footnoted. Customer rankings show
-    full names/emails with ids (demo mode, #4944 — no masking).
+    pseudonyms with ids (masked by default, DIG-1063 — names, emails and
+    organizations are hidden unless the documented unmask override is set).
     Drill-down: feed a resulting ``customer_id:<N>`` into the
     customer-history tools (latest-ticket search + full-thread get_ticket
     flow) to read that customer's conversation.
@@ -370,6 +380,20 @@ def run_mcp(
     """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8770."""
     if not _client().configured:
         logger.warning("ZAMMAD_API_TOKEN is not set — tools will fail closed")
+    # Log the customer-data decision once at startup, with the reason. A refused
+    # unmask override has to leave a trace: silently serving masked data after
+    # someone asked for real names is the failure mode DIG-1063 exists to prevent.
+    blocker = privacy.unmask_blocker()
+    if blocker is None:
+        approver = (os.environ.get(privacy.APPROVER_ENV) or "").strip()
+        logger.warning(
+            "zammad-mcp customer data is UNMASKED by %s — real names, emails, "
+            "organizations and internal notes reach the model (see "
+            "docs/ops/ZAMMAD_MCP_CUSTOMER_DISCLOSURE.md)",
+            approver,
+        )
+    else:
+        logger.info("zammad-mcp customer data is masked: %s", blocker)
     bind = host or os.environ.get("ZAMMAD_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
     mcp.settings.port = port

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Any
 
+from scripts.zammad_mcp import privacy
 from scripts.zammad_mcp.aggregate import AUTOMATION_OWNERS
 from scripts.zammad_mcp.client import PAGE_SIZE
 
@@ -104,13 +105,16 @@ def _labeled(label: str, value: Any) -> str:
     return f"{label}: {text}" if text else ""
 
 
-def _display_customer(value: Any) -> str:
-    """Full customer display for the OCC demo: no masking.
+def _display_customer(value: Any, cid: Any = None) -> str:
+    """Customer label for any output line — policy in ``privacy``.
 
-    Returns the raw name/email as-is (``_field`` handles dict payloads).
+    Masked by default (DIG-1063): a stable pseudonym carries the id so grouping
+    and the customer-history drill-down keep working, with no name, email or
+    email domain attached. ``ZAMMAD_MCP_CUSTOMER_DISCLOSURE=unmasked`` plus a
+    named approver restores the #4944 full display.
     """
 
-    return _field(value.get("email") if isinstance(value, dict) else value)
+    return privacy.customer_label(value, cid)
 
 
 def format_ticket_line(ticket: dict[str, Any]) -> str:
@@ -210,7 +214,7 @@ def _format_article(index: int, article: dict[str, Any]) -> list[str]:
     header_bits.append(f"{sender}/{kind}")
     if article.get("internal"):
         header_bits.append("[internal]")
-    author = _field(article.get("from"))
+    author = privacy.author_label(_field(article.get("from")))
     if author:
         header_bits.append(f"from {author}")
     lines = [" ".join(header_bits)]
@@ -233,10 +237,11 @@ def format_ticket_detail(
 ) -> str:
     """Render one ticket with its articles for the model.
 
-    Demo mode (#4944): all articles are shown, including internal notes
-    (tagged ``[internal]``), and customer names/emails render in full.
-    ``owner_name`` is the ``resolve_user`` display name for the raw owner
-    value; ``category`` is the open|closed|pending state category.
+    Masked by default (DIG-1063): the customer and organization render as a
+    stable pseudonym, internal notes are excluded, and the hidden-note count is
+    stated so the model does not read the gap as missing data. ``owner_name`` is
+    the ``resolve_user`` display name for the raw owner value; ``category`` is
+    the open|closed|pending state category.
     """
     ticket_id = _field(ticket.get("id")) or "?"
     number = _field(ticket.get("number"))
@@ -245,7 +250,10 @@ def format_ticket_detail(
     if number:
         head += f" #{number}"
     lines = [f"{head}: {title}"]
-    shown = list(articles)
+    masked = privacy.is_masked()
+    if masked:
+        lines.append(privacy.MASKED_NOTICE)
+    shown, hidden = privacy.visible_articles(articles)
     identity = " | ".join(
         part
         for part in (
@@ -263,7 +271,7 @@ def format_ticket_detail(
         part
         for part in (
             _labeled("Customer", _display_customer(ticket.get("customer"))),
-            _labeled("Organization", ticket.get("organization")),
+            _labeled("Organization", privacy.organization_label(ticket.get("organization"))),
             _labeled("Owner", owner_name or ticket.get("owner")),
         )
         if part
@@ -293,6 +301,8 @@ def format_ticket_detail(
     remaining = len(shown) - MAX_ARTICLES_SHOWN
     if remaining > 0:
         lines.append(f"... {remaining} more article(s) omitted")
+    if hidden:
+        lines.append(f"... {hidden} internal note(s) omitted")
     return "\n".join(lines)
 
 
@@ -379,6 +389,14 @@ def format_ticket_report(
     ]
     if group_by is not None:
         ranked: Counter[str] = Counter(_field(ticket.get(group_by)) or "unknown" for ticket in rows)
+        if group_by == "customer" and privacy.is_masked():
+            # A raw customer cell here is a name or an email, so the whole section
+            # is re-labelled. `ticket_report` does not accept group_by="customer"
+            # (REPORT_GROUP_BYS), but this formatter is the privacy boundary and
+            # must hold even for a caller that passes it.
+            ranked = Counter(
+                {privacy.customer_label(cell): count for cell, count in ranked.items()}
+            )
         lines.append(_counts_line(f"Top {group_by}", ranked))
     return "\n".join(lines)
 
@@ -392,16 +410,27 @@ def format_aggregate(
 ) -> str:
     """Render a windowed ranking for the model.
 
-    Customer entries prefer the server-enriched full-name/email + id
-    ``name`` (raw values pass through in full, never masked); owner
-    entries prefer the resolved ``name`` enrichment.
+    Customer entries prefer the server-enriched ``name``; owner entries prefer
+    the resolved ``name`` enrichment. Masked by default (DIG-1063), so a
+    customer row is re-checked here and re-labelled with the stable pseudonym:
+    the ranking is the one place a raw value could reach the model through
+    ``value`` even when the enrichment missed it.
     """
     scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
     if not ranked:
         return f"No tickets to rank by {group_by} ({metric}, {scope}; {total} ticket(s) scanned)."
+    masked_customer = group_by == "customer" and privacy.is_masked()
     lines = [f"Top {group_by} by {metric} ({scope}; {total} ticket(s) scanned):"]
     for index, entry in enumerate(ranked, start=1):
         name = entry.get("name") or entry.get("value", "?")
+        if masked_customer and not privacy.is_pseudonym(str(name)):
+            # `value` is the customer id for a customer grouping (GROUP_KEYS), so it
+            # is the id to keep when the name enrichment missed this row. Falling
+            # back to it stops two different customers collapsing onto one digest.
+            cid = entry.get("customer_id")
+            if cid is None and str(entry.get("value", "")).isdigit():
+                cid = entry.get("value")
+            name = privacy.customer_label(name, cid)
         lines.append(f"{index}. {name} — {entry.get('count', 0)}")
     if group_by in ("owner", "customer"):
         owners = ", ".join(sorted(AUTOMATION_OWNERS))

@@ -12,7 +12,7 @@ search, retrieval, and a status report. No writes, by design.
 | `get_ticket(ticket_id)` | One ticket with its articles; takes the internal id (`231`) or the displayed ticket number (`#28312`), and resolves a number through search when the id lookup 404s. Relation names resolved via `expand=true`. Adds best-effort `Owner:` (id resolved to display name via `resolve_user`) and `Category:` (`open`\|`closed`\|`pending` from state types); raw values shown / line omitted when resolution fails |
 | `list_tickets(page=1, per_page=50)` | Browse the visible tickets page by page, newest updated first (the Zammad list API is id-ordered; this tool re-sorts by `updated_at`). Use it when keyword search misses: tickets mix German and English and search is a literal substring match, so read titles in their original language and pull threads with `get_ticket`; covers the 500 most recently updated visible tickets |
 | `ticket_report(since_days=None, group_by=None)` | Status report over the visible scan (up to 500 tickets): unresolved vs closed, by state/group/priority, updated in the last 7 days by default. `since_days` keeps only tickets updated in the window (client-side filter); `group_by` (`state`\|`group`\|`priority`) appends a top-values section. "Closed" here is the cheap name heuristic (states *named* `closed`/`merged`); for type-derived open/closed counts use `aggregate_tickets` |
-| `aggregate_tickets(group_by="customer", metric="count", since_days=None, top_n=5)` | Windowed ranking for analytics questions. `group_by`: `customer`\|`owner`\|`state`\|`group`\|`priority`\|`title`. `metric`: `count`\|`open_count`\|`closed_count`, where open/closed derives from the cached state-type ids (custom open-type states such as `gelöst von Dev` count as open — never the state *named* `open`). Window is `created_at` within `since_days`, fetched in one call (limit 500). Counting/delegation reuses the generic `digisearch.core.tables` ops (`group_count`, `enrich_rows`). Owner logins are UUIDs — names resolve automatically; automation accounts (`jirasync@sitaas.de`, `-`, `auto`) are excluded from owner rankings and footnoted. Customers render in full (name/email + id, see Privacy) |
+| `aggregate_tickets(group_by="customer", metric="count", since_days=None, top_n=5)` | Windowed ranking for analytics questions. `group_by`: `customer`\|`owner`\|`state`\|`group`\|`priority`\|`title`. `metric`: `count`\|`open_count`\|`closed_count`, where open/closed derives from the cached state-type ids (custom open-type states such as `gelöst von Dev` count as open — never the state *named* `open`). Window is `created_at` within `since_days`, fetched in one call (limit 500). Counting/delegation reuses the generic `digisearch.core.tables` ops (`group_count`, `enrich_rows`). Owner logins are UUIDs — names resolve automatically; automation accounts (`jirasync@sitaas.de`, `-`, `auto`) are excluded from owner rankings and footnoted. Customers render as pseudonyms (`customer #<id>`, see Privacy) |
 
 ## Analytics workflows (per question class)
 
@@ -24,7 +24,7 @@ Each row is the tool sequence the model should run; field syntax is concrete.
 | A1 | "Which tickets mention <topic>?" | `search_tickets(query="<keywords>")` → keyword fallback if empty → `get_ticket` on the top hits |
 | A2 | "What came in about <topic> this week, grouped?" | `search_tickets(query="<keywords>", since_days=7)` → `aggregate_tickets(group_by="title", since_days=7)` title-grouping baseline over the window rows; the model clusters the window rows for the final grouping |
 | A3 | "Who reports the most tickets?" | `aggregate_tickets(group_by="customer", metric="count", since_days=30, top_n=5)` |
-| A4 | "What did customer <addr> report before?" | `search_tickets(query="customer.email:<addr>")` → latest hit first (client sorts `created_at` desc, `limit=1`) → `get_ticket(<id>)` → read customer + articles |
+| A4 | "What did customer <handle> report before?" | `search_tickets(query="customer_id:<id>")` using the `customer #<id>` from an `aggregate_tickets(group_by="customer")` ranking — the only handle available while masking is on. `customer.email:<addr>` only for an address the user typed. Then → latest hit first (client sorts `created_at` desc, `limit=1`) → `get_ticket(<id>)` → read customer + articles |
 | A5 | "What happened in ticket #<number>?" | `get_ticket("#<number>")` (or the internal id) → `Owner:` / `Category:` + articles |
 | B1 | "How was <problem> fixed?" | Tokenize the question → one `title:<term>` / `article.body:<term>` search per term with `state_category="closed"` (resolved-first) → score each hit with `coverage_score(title + " " + snippet, terms)` → rank by (coverage desc, `updated_at` desc) → `get_ticket` on the top 3–5 → cross-check the `occ_help` docs before answering |
 | B2 | "Is <problem> resolved / who solved it?" | Same resolved-first recipe as B1; `Owner:` / `Category:` on the `get_ticket` reads name the solver and confirm the category |
@@ -39,7 +39,7 @@ Each row is the tool sequence the model should run; field syntax is concrete.
 - **`owner_id` handling:** integer owner ids resolve to `firstname lastname` (fallback: login) via the cached `resolve_user`; non-integer lookups fail closed. In aggregate output, owner UUIDs resolve automatically and unresolvable values fall back to the raw string — one bad owner never fails the ranking.
 - **Category semantics:** `state_category` and `Category:` derive from `get_state_types()` (`{lower_name: state_type_id}`, cached, merged over a known-state table when the states endpoint is unreachable). Closed-type = Zammad closed/merged type names; pending = type ids 3/4; everything else is open. Instance custom states classify by type: `gelöst von Dev` is open-type, `warten auf Kunden` / `warten auf Dev` are pending-type. `ticket_report`'s closed count is the cheaper *name* heuristic instead (`closed`/`merged` names only).
 - **Automation accounts:** `jirasync@sitaas.de`, `-`, `auto` are excluded from `owner` rankings (pre-filter on raw values, post-filter on resolved names) and listed in the output footnote.
-- **Privacy (demo mode, #4944):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output), no masking; no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
+- **Privacy (masked by default, DIG-1063):** customers render as a stable pseudonym (`customer #<id>`) with no name, email or email domain; organizations are omitted; internal notes are excluded and the hidden count is stated. Unmasking is a documented override that needs a named approver — see [Privacy & exposure](#privacy--exposure). No article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
 - **Caps:** window fetch and report scan cover at most 500 tickets each; keyword fallback uses at most `MAX_KEYWORD_TERMS=10` terms (German + English stopwords dropped).
 
 Every request is a GET. The token only ever leaves this process as the
@@ -53,6 +53,8 @@ Every request is a GET. The token only ever leaves this process as the
 | `ZAMMAD_API_TOKEN` | — | Zammad API token — raw value or the full `Token token=<x>` header value; server-side only, never commit or send to a browser |
 | `ZAMMAD_MCP_HOST` | `127.0.0.1` | Bind host for streamable HTTP |
 | `ZAMMAD_MCP_ALLOWED_HOSTS` | — | Comma-separated Host patterns allowed past FastMCP's DNS-rebinding guard (e.g. `zammad-mcp` for cross-container access; enforced only when the mcp build exposes transport_security — older mcp versions do not) |
+| `ZAMMAD_MCP_CUSTOMER_DISCLOSURE` | `masked` | `masked` or `unmasked`. Anything else, including unset, resolves to `masked` |
+| `ZAMMAD_MCP_UNMASK_APPROVER` | — | Required when disclosure is `unmasked`: the name of the human who accepted the risk. Blank keeps the server masked |
 
 ```bash
 ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --port 8770
@@ -177,12 +179,68 @@ interchangeable with multilingual ones).
 
 ## Privacy & exposure
 
-Demo mode (#4944): the OCC embed shows full customer names/emails and all
-articles, so the formatters are explicit:
+**Masked by default (DIG-1063).** One module owns the decision —
+`scripts/zammad_mcp/privacy.py`. Every render path asks it, so no formatter
+carries its own opinion:
 
-- internal articles (`internal: true`) are returned, tagged `[internal]`
-- customer names/emails are shown in full (`Customer:` lines, aggregate
-  rankings as `name/email (id N)`)
+- customer lines, article authors and aggregate rankings render as a stable
+  pseudonym, `customer #<id>` — the id keeps grouping, rankings and the
+  customer-history drill-down working, with no name, email or email domain
+  attached. A pseudonym rather than the old `j***@example.test` partial mask,
+  because for a B2B helpdesk the email domain *is* the customer's company.
+- `Organization:` is dropped. It is the customer's company name.
+- article `from` is dropped (a customer-authored article carries the
+  customer's own address there). The Zammad `sender` role
+  (`customer`/`agent`/`system`) still prints, so a thread is still readable.
+- internal notes (`internal: true`) are not returned; the omitted count is
+  stated so the model does not read the gap as missing data.
+
+The boundary is the **subject** of the corpus: the customer, and the people who
+wrote in the customer's tickets. The ticket `Owner:` line is deliberately **not**
+masked — an owner is digithings staff rather than customer data, and the model
+needs it to answer "who handles this". Free text (titles, subjects, bodies,
+`Note:`, `jira_assignee`) is **not** covered by this section; see *Still unmasked*
+below.
+
+`get_ticket` also prints a short notice when masked, so the model does not
+invent or reconstruct a name it cannot see.
+
+### The unmask override (accepted risk, named holder)
+
+```bash
+ZAMMAD_MCP_CUSTOMER_DISCLOSURE=unmasked \
+ZAMMAD_MCP_UNMASK_APPROVER="<the human who accepted the risk>" \
+ZAMMAD_API_TOKEN=... python -m scripts.zammad_mcp.server --port 8770
+```
+
+Unmasking is refused unless `ZAMMAD_MCP_UNMASK_APPROVER` names the human
+accepting it, so the override cannot be set by accident or left unowned. An
+unknown mode value, a blank approver, or no variable at all all resolve to
+`masked` — a deploy typo cannot leak the corpus. `run_mcp` logs the resulting
+mode and the reason for every refusal at startup, and logs a warning naming the
+approver when unmasking *is* active, so a refused override never degrades
+silently. The accepted-risk record, with its holder and its re-open conditions,
+is
+[`docs/ops/ZAMMAD_MCP_CUSTOMER_DISCLOSURE.md`](../../docs/ops/ZAMMAD_MCP_CUSTOMER_DISCLOSURE.md).
+
+In the stack container both variables are passed through by
+`apps/digithings-stack-cloudflare/src/index.ts`; production runs masked.
+
+### Still unmasked (out of scope for this issue)
+
+- **Free text.** Ticket titles, subjects, bodies and the ticket-level `Note:`
+  line are not scrubbed — a name or address written into a message body still
+  reaches the model. Masking here covers **structured fields only**. Free-text
+  scrubbing is deliberately not duplicated here and needs an owner of its own:
+  DIG-959 is scoped to the Art. 9(1) special categories and **will not** cover
+  this corpus, so it is not a substitute. Tracked as a follow-up.
+- **`jira_assignee`** is passed through on `search_tickets` hits unscrubbed.
+  Tracked with the same follow-up.
+- **The `occ_tickets` digisearch index** carries the same corpus with full
+  names and emails and is searched with every question, outside the MCP
+  entirely. Owned by the indexing path, not this server; tracked as a
+  follow-up.
+- **`digillm`** sends the same corpus to model providers on a separate path.
 
 The MCP transport itself carries no auth of its own: `tokenEnv` / `authHeader`
 carry the Zammad token outbound to Zammad, they are not an auth boundary for the
@@ -194,6 +252,7 @@ the compose network.
 ## Tests
 
 ```bash
-pytest tests/scripts/test_zammad_mcp.py tests/scripts/test_zammad_mcp_stack.py -v
+pytest tests/scripts/test_zammad_mcp.py tests/scripts/test_zammad_mcp_privacy.py \
+  tests/scripts/test_zammad_mcp_stack.py tests/scripts/test_check_tenant_corpus_map.py -v
 ruff check scripts/zammad_mcp/
 ```

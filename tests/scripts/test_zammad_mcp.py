@@ -207,7 +207,10 @@ def test_format_search_results_lists_tickets():
     assert "#28312" in out
     assert "[open]" in out
     assert "group: Sitaas" in out
-    assert "customer: jane.doe@example.test" in out
+    # DIG-1063: masked by default. TICKET carries a bare email string with no id,
+    # so the pseudonym falls back to a stable digest.
+    assert "customer: customer #" in out
+    assert "jane.doe@example.test" not in out
 
 
 def test_format_ticket_line_resolves_dict_relations_and_dashes():
@@ -235,7 +238,7 @@ def test_format_ticket_detail_includes_articles():
     assert "Resolution steps" in out
 
 
-def test_format_ticket_detail_includes_internal_notes():
+def test_format_ticket_detail_excludes_internal_notes():
     articles = [
         {
             "id": 1,
@@ -254,17 +257,53 @@ def test_format_ticket_detail_includes_internal_notes():
     ]
     out = formatting.format_ticket_detail(TICKET, articles)
     assert "customer-visible reply" in out
-    assert "internal-only note body" in out
-    assert "[internal]" in out
-    assert "Articles (2)" in out
-    assert "internal note(s) omitted" not in out
-    assert "***" not in out
-    assert "jane.doe@example.test" in out
+    # DIG-1063: internal notes are not returned, and the count is stated so the
+    # model does not read the gap as missing data.
+    assert "internal-only note body" not in out
+    assert "[internal]" not in out
+    assert "Articles (1)" in out
+    assert "... 1 internal note(s) omitted" in out
+    assert "jane.doe@example.test" not in out
+    assert "Customer: customer #" in out
 
 
-def test_format_ticket_line_shows_customer_email_in_full():
+def test_format_ticket_detail_hides_organization_and_article_author():
+    ticket = dict(TICKET, organization="Example GmbH")
+    article = {
+        "id": 2,
+        "sender": "Customer",
+        "type": "web",
+        "internal": False,
+        "from": "jane.doe@example.test",
+        "body": "<p>customer-visible reply</p>",
+    }
+    out = formatting.format_ticket_detail(ticket, [article])
+    # The customer's own address on an article is the leak that a masked
+    # "Customer:" header alone would miss.
+    assert "Example GmbH" not in out
+    assert "Organization" not in out
+    assert "from jane.doe@example.test" not in out
+    assert "Customer/web" in out
+
+
+def test_format_ticket_detail_states_the_masked_contract():
+    out = formatting.format_ticket_detail(TICKET, [])
+    assert "Customer names, email addresses and organizations are hidden" in out
+    assert "Never guess or reconstruct a name" in out
+
+
+def test_format_ticket_line_hides_customer_email():
     line = formatting.format_ticket_line({"id": 1, "customer": "jane.doe@example.test"})
-    assert "jane.doe@example.test" in line
+    assert "customer: customer #" in line
+    assert "jane.doe@example.test" not in line
+
+
+def test_format_ticket_line_uses_the_customer_id_when_known():
+    line = formatting.format_ticket_line(
+        {"id": 1, "customer": {"id": 7, "email": "jane.doe@example.test"}}
+    )
+    assert "customer: customer #7" in line
+    assert "jane.doe@example.test" not in line
 
 
 def test_format_ticket_detail_truncates_long_bodies():
@@ -957,12 +996,14 @@ def test_aggregate_empty_rows():
     assert aggregate([], group_by="customer") == []
 
 
-def test_format_aggregate_renders_ranked_lines_with_full_customers():
+def test_format_aggregate_renders_ranked_lines_with_pseudonyms():
     rows = [{"value": "jane.doe@example.test", "count": 3}, {"value": "7", "count": 1}]
     out = formatting.format_aggregate(rows, "customer", "count", 4, since_days=7)
     assert "Top customer by count (created in the last 7 day(s); 4 ticket(s) scanned):" in out
-    assert "1. jane.doe@example.test — 3" in out
-    assert "2. 7 — 1" in out
+    assert "jane.doe@example.test" not in out
+    assert "1. customer #" in out
+    # A bare id still renders as an id, so a ranking stays actionable.
+    assert "2. customer #7 — 1" in out
 
 
 def test_format_aggregate_empty_and_owner_footnote():
@@ -1302,16 +1343,38 @@ def test_is_automation_login_flags_service_accounts():
     assert is_automation_login("") is False
 
 
-def test_display_customer_format_and_fallback():
+def test_display_customer_is_masked_by_default():
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
-    assert server._display_customer("max@example.test", 98) == "max@example.test (id 98)"
+    assert server._display_customer("max@example.test", 98) == "customer #98"
+    assert server._display_customer("jane.doe@example.test", 7) == "customer #7"
+    assert server._display_customer(None, 7) == "customer #7"
+    assert server._display_customer("", 7) == "customer #7"
+    assert server._display_customer("Ada Lovelace", 5) == "customer #5"
+    assert server._display_customer("not-an-email", 5) == "customer #5"
+    assert server._display_customer("jane.doe@example.test", "?").startswith("customer #")
+    assert server._display_customer("jane.doe@example.test", None).startswith("customer #")
+    # No customer at all renders nothing, so the line is dropped rather than
+    # showing a placeholder the model could mistake for an identity.
+    assert server._display_customer("-", None) == ""
+    assert server._display_customer(None, None) == ""
+
+
+def test_display_customer_unmasked_needs_a_named_approver(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    monkeypatch.delenv("ZAMMAD_MCP_CUSTOMER_DISCLOSURE", raising=False)
+    monkeypatch.delenv("ZAMMAD_MCP_UNMASK_APPROVER", raising=False)
+    # Unmasking with no approver stays masked — the override cannot be set by
+    # accident or left unowned.
+    monkeypatch.setenv("ZAMMAD_MCP_CUSTOMER_DISCLOSURE", "unmasked")
+    assert server._display_customer("jane.doe@example.test", 7) == "customer #7"
+    monkeypatch.setenv("ZAMMAD_MCP_UNMASK_APPROVER", "CTO (demo session, accepted 2026-10-05)")
     assert server._display_customer("jane.doe@example.test", 7) == "jane.doe@example.test (id 7)"
     assert server._display_customer(None, 7) == "(id 7)"
-    assert server._display_customer("", 7) == "(id 7)"
     assert server._display_customer("Ada Lovelace", 5) == "Ada Lovelace (id 5)"
-    assert server._display_customer("not-an-email", 5) == "not-an-email (id 5)"
     assert server._display_customer("jane.doe@example.test", "?") == "jane.doe@example.test (id ?)"
     assert server._display_customer("jane.doe@example.test", None) == "jane.doe@example.test"
 
@@ -1351,15 +1414,114 @@ def test_aggregate_customer_post_rank_drops_resolved_automation():
     assert out == [{"value": "7", "count": 1, "name": "jane.doe@example.test (id 7)"}]
 
 
-def test_format_aggregate_customer_renders_full_id_display():
+def test_format_aggregate_customer_relabels_an_unenriched_name():
+    # A name that slipped past the server enrichment is re-labelled here: the
+    # ranking is the one path where a raw value could reach the model through
+    # `value`/`name`.
     ranked = [
         {"value": "7", "count": 2, "name": "jane.doe@example.test (id 7)"},
         {"value": "9", "count": 1, "name": "Hans Müller (id 9)"},
     ]
     out = formatting.format_aggregate(ranked, "customer", "count", 3)
-    assert "1. jane.doe@example.test (id 7) — 2" in out
-    assert "2. Hans Müller (id 9) — 1" in out
+    assert "jane.doe@example.test" not in out
+    assert "Hans Müller" not in out
+    assert "1. customer #" in out
+    assert "2. customer #" in out
     assert "excluded from customer rankings" in out
+
+
+def test_format_aggregate_customer_keeps_an_existing_pseudonym():
+    # Already-masked names are passed through, not re-digested — otherwise the
+    # server's id label would degrade to a hash of its own label.
+    ranked = [{"value": "7", "count": 2, "name": "customer #7"}]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "1. customer #7 — 2" in out
+
+
+def test_format_aggregate_customer_keeps_the_id_when_the_name_is_missing():
+    # aggregate.enrich_rows uses missing="?", so an unmatched row reaches the
+    # formatter as name="?". The customer id is still in `value`; without that
+    # fallback the row is digested from "?" and every unmatched customer
+    # collapses onto the same pseudonym.
+    ranked = [{"value": "7", "count": 2, "name": "?"}]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "1. customer #7 — 2" in out
+    assert "?" not in out.splitlines()[1]
+
+
+def test_format_aggregate_customer_keeps_two_unmatched_customers_distinct():
+    ranked = [
+        {"value": "7", "count": 1, "name": "?"},
+        {"value": "9", "count": 2, "name": "?"},
+    ]
+    out = formatting.format_aggregate(ranked, "customer", "count", 3)
+    assert "1. customer #7 — 1" in out
+    assert "2. customer #9 — 2" in out
+
+
+def test_format_ticket_report_masks_a_customer_grouping():
+    # ticket_report does not accept group_by="customer" (REPORT_GROUP_BYS), but the
+    # formatter is the privacy boundary and must hold for any caller.
+    rows = [dict(TICKET, customer="jane.doe@example.test")]
+    out = formatting.format_ticket_report(rows, group_by="customer")
+    assert "jane.doe@example.test" not in out
+    assert "Top customer: customer #" in out
+
+
+def test_format_ticket_report_keeps_non_customer_groupings_readable():
+    rows = [dict(TICKET, state="open", group="Sitaas", priority="2 normal")]
+    out = formatting.format_ticket_report(rows, group_by="state")
+    assert "Top state: open" in out
+
+
+def _run_mcp_with_stubbed_transport(monkeypatch):
+    """Call run_mcp without binding a port or hitting Zammad."""
+    from scripts.zammad_mcp import server
+
+    monkeypatch.setattr(
+        server,
+        "_client",
+        lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=FakeTransport({})),
+    )
+    monkeypatch.setattr(server.mcp, "run", lambda **_kw: None)
+    return server.run_mcp
+
+
+def test_run_mcp_logs_why_masking_is_in_force(caplog, monkeypatch):
+    # A refused unmask override has to leave a trace; silently serving masked data
+    # after someone asked for real names is the failure mode DIG-1063 prevents.
+    from scripts.zammad_mcp import privacy
+
+    monkeypatch.setenv(privacy.DISCLOSURE_ENV, "unmasked")
+    monkeypatch.delenv(privacy.APPROVER_ENV, raising=False)
+    with caplog.at_level("INFO"):
+        _run_mcp_with_stubbed_transport(monkeypatch)()
+    messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "masked" in messages
+    assert privacy.APPROVER_ENV in messages
+    assert privacy.DISCLOSURE_ENV in messages
+
+
+def test_run_mcp_warns_loudly_when_unmasked_with_an_approver(caplog, monkeypatch):
+    from scripts.zammad_mcp import privacy
+
+    monkeypatch.setenv(privacy.DISCLOSURE_ENV, "unmasked")
+    monkeypatch.setenv(privacy.APPROVER_ENV, "CTO (demo session)")
+    with caplog.at_level("INFO"):
+        _run_mcp_with_stubbed_transport(monkeypatch)()
+    messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "UNMASKED" in messages
+    assert "CTO (demo session)" in messages
+
+
+def test_run_mcp_stays_quiet_about_masking_on_a_normal_start(monkeypatch, caplog):
+    from scripts.zammad_mcp import privacy
+
+    monkeypatch.delenv(privacy.DISCLOSURE_ENV, raising=False)
+    monkeypatch.delenv(privacy.APPROVER_ENV, raising=False)
+    with caplog.at_level("INFO"):
+        _run_mcp_with_stubbed_transport(monkeypatch)()
+    assert "UNMASKED" not in " ".join(r.getMessage() for r in caplog.records)
 
 
 class CustomerAggregateTransport:
@@ -1388,10 +1550,33 @@ class CustomerAggregateTransport:
         raise AssertionError(f"unexpected url {url}")
 
 
-def test_server_aggregate_customer_shows_full_names_and_bounds_user_lookups(monkeypatch):
+def test_server_aggregate_customer_masks_and_never_fetches_the_email(monkeypatch):
     pytest.importorskip("mcp.server.fastmcp")
     from scripts.zammad_mcp import server
 
+    monkeypatch.delenv("ZAMMAD_MCP_CUSTOMER_DISCLOSURE", raising=False)
+    monkeypatch.delenv("ZAMMAD_MCP_UNMASK_APPROVER", raising=False)
+    monkeypatch.setattr(client_module, "_state_types_cache", None)
+    transport = CustomerAggregateTransport()
+    monkeypatch.setattr(
+        server, "_client", lambda: ZammadClient(base_url=BASE, token=TOKEN, get_json=transport)
+    )
+    out = server.aggregate_tickets(group_by="customer", metric="count", top_n=5)
+    assert "1. customer #7 — 2" in out
+    assert "jane.doe@example.test" not in out
+    assert "excluded from customer rankings" in out
+    # Masked mode must not even resolve the user: the address is not fetched
+    # into the container for a display nobody sees.
+    user_calls = [call for call in transport.calls if "/api/v1/users/" in call["url"]]
+    assert user_calls == []
+
+
+def test_server_aggregate_customer_resolves_names_when_unmasked(monkeypatch):
+    pytest.importorskip("mcp.server.fastmcp")
+    from scripts.zammad_mcp import server
+
+    monkeypatch.setenv("ZAMMAD_MCP_CUSTOMER_DISCLOSURE", "unmasked")
+    monkeypatch.setenv("ZAMMAD_MCP_UNMASK_APPROVER", "CTO (demo session, accepted 2026-10-05)")
     monkeypatch.setattr(client_module, "_state_types_cache", None)
     transport = CustomerAggregateTransport()
     monkeypatch.setattr(
