@@ -112,13 +112,15 @@ commits belonging to other issues, merges of other people's PRs, and copies of
 changes that already landed on `develop` by another route.
 
 So `git push` on such a branch is not a save operation — it publishes the whole
-accumulation. Concretely, on the DIG-47 workspace: it sat 12 commits ahead of its
-own epic branch and 29 behind `develop`, and one of those 12 (`6d3789d9a`, a
-DIG-361 docs change) had already reached `develop` through PR #5094. The local
-copy *deleted* the DIG-258 inventory row and the entire DIG-526 section that
-`develop` had gained since. A blanket push would have been a clean fast-forward
-that regressed `docs/ops/SECRETS_INVENTORY.md` by ~185 lines, with no conflict
-to warn you.
+accumulation. Concretely, on the DIG-47 workspace (snapshot taken 2026-10-04,
+DIG-1122): one of its commits, `6d3789d9a` (a DIG-361 docs change), was a *stale
+duplicate* — the same change had reached `develop` by another route, squash-merged
+as `6c0de7e89` through PR #5094, so the two copies do not share a sha or a
+patch-id. The stale copy *deleted* the DIG-258 inventory row and the entire
+DIG-526 section that `develop` had gained since. Measured against `develop` at
+that point, the workspace branch deleted 166 lines and added 19 to
+`docs/ops/SECRETS_INVENTORY.md` — 185 changed lines carrying nothing but the loss
+of what `develop` already had.
 
 Two safe shapes:
 

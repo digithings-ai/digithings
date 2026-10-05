@@ -32,14 +32,13 @@ origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 # GitHub branch-naming ruleset on origin.
 #
 # `DIG-<n>-<title-slug>` is the branch Paperclip checks out an execution
-# workspace on. It matched no arm here, which made every commit made in such a
-# workspace unpushable by construction — the hook tests the branch name, so a
-# refspec pointing the same commits elsewhere is refused identically, and there
-# is no exemption for a branch the remote already holds. Admitting the shape is
-# the whole fix; the digit is required so this cannot widen into a prefix match
-# on `DIG`, and the slug is required so `DIG-47-` is not a branch name. Such a
-# branch accumulates commits from unrelated issues and must not be blanket
-# pushed — see the execution-workspace rule in BRANCHING.md.
+# workspace on. It matched no arm here, so a bare `git push` from such a
+# workspace was refused outright — the hook validates the destination
+# `remote_ref`, and there is no exemption for a branch the remote already holds.
+# Admitting the shape is the whole fix; the digit is required so this cannot
+# widen into a prefix match on `DIG`, and the slug is required so `DIG-47-` is
+# not a branch name. Such a branch accumulates commits from unrelated issues and
+# must not be blanket pushed — see the execution-workspace rule in BRANCHING.md.
 #
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.

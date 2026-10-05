@@ -378,7 +378,13 @@ fi
 # DIG-1122: the execution-workspace arm, with its digit required, plus a help
 # line that names it. A refusal message that omits the shape the harness
 # actually produces is what made this look like a config error, not a policy gap.
-if grep -qF 'DIG-[0-9]+-[a-z0-9-]+' "$HOOK"; then
+# Comments may quote the pattern (the rationale above the regex does), so only
+# non-comment lines count — same lesson as the Co-Authored-By guard below.
+if awk '
+  /^[[:space:]]*#/ { next }
+  /branch_regex=/ && /DIG-\[0-9\]\+/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
   echo "PASS [structure] DIG-<n>-<slug> present in branch_regex"
   pass=$((pass + 1))
 else
@@ -386,7 +392,11 @@ else
   fail=$((fail + 1))
 fi
 
-if grep -qF 'DIG-<n>-<slug>' "$HOOK"; then
+if awk '
+  /^[[:space:]]*#/ { next }
+  /echo .*DIG-<n>-<slug>/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
   echo "PASS [structure] help text lists DIG-<n>-<slug>"
   pass=$((pass + 1))
 else
@@ -395,9 +405,10 @@ else
 fi
 
 # BRANCHING.md carries the no-blanket-push rule; the regex without it is the
-# destructive half of this change.
+# destructive half of this change. Match the rule heading, not the word
+# "blanket" anywhere in the file.
 if grep -qF 'DIG-<n>-<slug>' "$REPO_ROOT/BRANCHING.md" \
-  && grep -qiF 'blanket' "$REPO_ROOT/BRANCHING.md"; then
+  && grep -qF 'never blanket-push' "$REPO_ROOT/BRANCHING.md"; then
   echo "PASS [structure] BRANCHING.md documents the execution-workspace branch"
   pass=$((pass + 1))
 else
