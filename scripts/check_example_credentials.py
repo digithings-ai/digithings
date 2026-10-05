@@ -67,9 +67,12 @@ CRED_VALUE_PATTERNS = [
     # the class has to hold `-`; a 20-character floor clears the first group
     # plus the separator without reaching the whole token.
     r'^xoxb-[A-Za-z0-9-]{20,}',
-    # SendGrid. The `.` is a literal in the key, hence the escape. The body is
-    # far longer than the prefix - 22 characters, an `_`, then 43 - and carries
-    # both `-` and `_`, so a bare-alphabet class would stop early on a real key.
+    # SendGrid. The `.` is a literal in the key, hence the escape. A key is a
+    # fixed 69 characters - `SG.`, a 22-character id, a separator, then a
+    # 43-character secret - so the first run of the body is well past this
+    # floor. The class only has to cover that first run, because nothing here
+    # is end-anchored and the separator is not part of the alphabet being
+    # matched.
     r'^SG\.[A-Za-z0-9_-]{20,}',
 ]
 #: Bits per character at or above which a value counts as a credential. Set
