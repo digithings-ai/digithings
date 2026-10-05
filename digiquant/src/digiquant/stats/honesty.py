@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Z_95 = 1.959963984540054
 WARN_FLOOR = 30
@@ -73,6 +73,41 @@ class HonestRate(BaseModel):
     ci_hi: float | None = None
     low_sample: bool = False
     refused: bool = False
+
+
+class HonestRateBlock(HonestRate):
+    """``HonestRate`` plus what a surface needs to label it honestly.
+
+    ``k`` counts closed round trips with realized PnL > 0; a breakeven close
+    (``pnl == 0``) is a loss — counted in ``n`` but not in ``k``. The floors
+    are re-applied from ``n`` here, so a renderer can never be handed an
+    unguarded rate; a refused sample keeps no estimate and no interval.
+    """
+
+    schema: str = "1.0"
+    basis: str = "closed round trips (Nautilus realized PnL, one per closed position)"
+    n_unit: str = "closed round trips"
+    warn_floor: int = WARN_FLOOR
+    refuse_floor: int = REFUSE_FLOOR
+    stability: StabilitySplit | None = None
+    disclaimer: str = DISCLAIMER
+
+    @model_validator(mode="after")
+    def _guard(self) -> HonestRateBlock:
+        """Re-derive the guard flags from n; fill in or strip the interval."""
+        if self.k > self.n:
+            raise ValueError(f"impossible counts: k={self.k} n={self.n}")
+        self.low_sample = self.n < self.warn_floor
+        self.refused = self.n < self.refuse_floor
+        if self.refused:
+            self.estimate = None
+            self.ci_lo = None
+            self.ci_hi = None
+        elif self.estimate is None:
+            w = wilson(self.k, self.n)
+            if w is not None:
+                self.estimate, self.ci_lo, self.ci_hi = w.estimate, w.lo, w.hi
+        return self
 
 
 def wilson(k: int, n: int, z: float = Z_95) -> Wilson | None:
