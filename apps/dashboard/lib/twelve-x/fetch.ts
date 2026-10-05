@@ -20,6 +20,7 @@ import {
   type SmartBiasJoinRow,
 } from './divergence';
 import { netCarriedIdeas } from './trade-history';
+import { keepNewestGenerationPerSeriesKey } from './snapshot-generation';
 import {
   composeFixSeries,
   normalizeFixPair,
@@ -162,6 +163,12 @@ export function normalizeKeyThemes(raw: FxDailyDigestRow['key_themes']): string[
  * All weighted (live, relevance-weighted) consensus rows across every run_date,
  * ordered oldest→newest by date then currency — ready for per-currency time
  * series. Returns `[]` when twelve-x is unconfigured.
+ *
+ * The table holds more than one generation per run: a rerun of a run_date
+ * publishes a second `as_of` stamp beside the first. This read has no limit, so
+ * the extra generations come back whole and the guard resolves them here, in the
+ * client, from the one round trip — at most one row per (run_date, currency),
+ * newest generation wins.
  */
 export async function getConsensusTimeSeries(
   timeframe: Timeframe = 'medium'
@@ -178,7 +185,7 @@ export async function getConsensusTimeSeries(
       .order('run_date', { ascending: true })
       .order('currency', { ascending: true })
   );
-  return rows ?? [];
+  return keepNewestGenerationPerSeriesKey(rows ?? []);
 }
 
 /**
@@ -187,16 +194,24 @@ export async function getConsensusTimeSeries(
  * Takes the two newest distinct run_dates; per currency in the newest run it
  * derives the score/confidence deltas and a direction-flip flag, then ranks the
  * biggest absolute score shifts as the top-6 movers.
+ *
+ * Resolves one generation per (run_date, currency) before reading, so a caller
+ * that hands over raw rows still scores every delta against the newest
+ * generation and never lists one currency twice among the movers.
  */
 export function computeConsensusDeltaSet(series: FxConsensusSnapshotRow[]): ConsensusDeltaSet {
   if (series.length === 0) {
     return { runDate: null, prevRunDate: null, byCurrency: {}, movers: [] };
   }
 
+  // The read already resolves one generation per series key. This function is
+  // exported and pure, so it cannot lean on that and resolves its own input.
+  const resolved = keepNewestGenerationPerSeriesKey(series);
+
   // Distinct run_dates present, newest-first (series is oldest→newest).
   const dates: string[] = [];
-  for (let i = series.length - 1; i >= 0; i--) {
-    const d = series[i].run_date;
+  for (let i = resolved.length - 1; i >= 0; i--) {
+    const d = resolved[i].run_date;
     if (!dates.includes(d)) {
       dates.push(d);
       if (dates.length >= 2) break;
@@ -205,10 +220,10 @@ export function computeConsensusDeltaSet(series: FxConsensusSnapshotRow[]): Cons
   const runDate = dates[0] ?? null;
   const prevRunDate = dates[1] ?? null;
 
-  const nowRows = series.filter((r) => r.run_date === runDate);
+  const nowRows = resolved.filter((r) => r.run_date === runDate);
   const prevByCcy = new Map<string, FxConsensusSnapshotRow>();
   if (prevRunDate) {
-    for (const r of series) {
+    for (const r of resolved) {
       if (r.run_date === prevRunDate) prevByCcy.set(r.currency, r);
     }
   }
