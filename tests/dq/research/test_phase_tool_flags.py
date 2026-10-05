@@ -23,9 +23,11 @@ def test_macro_uses_data_tools_and_fallback_search():
 
 @pytest.mark.unit
 def test_alt_phases_grounding_modes():
-    # Two alt-data segments are deterministically grounded (no soft search): options reads the
-    # Supabase data tools (#708); onchain reads the Hyperdash divergence preflight injects into
-    # market_context (#801). Every other alt-data segment grounds on web/x search.
+    # Three alt-data segments do not fire a web_search pre-pass: options reads the
+    # Supabase data tools (#708); onchain reads the Hyperdash divergence preflight injects
+    # into market_context (#801); politician-signals is contained per Counsel's DIG-1251
+    # ruling (DIG-1252) — the feed is refused, so the nightly harvest must not go out to
+    # capitoltrades.com / quiverquant.com. Every other alt-data segment grounds on web/x search.
     by_slug = {s.segment_slug: s for s in ALT_SPECS}
     opts = by_slug["alt-options-derivatives"]
     assert opts.use_data_tools is True
@@ -33,8 +35,18 @@ def test_alt_phases_grounding_modes():
     onchain = by_slug["alt-onchain-positioning"]
     assert onchain.use_data_tools is False  # reads injected market_context, not data tools
     assert onchain.live_search is False and onchain.ai_portfolios is False
+    # DIG-1252 containment: the segment stays in the fan-out, its skill and its published
+    # history stay in tree, but it must never fire the nightly web_search pre-pass — that
+    # pre-pass is what reached capitoltrades.com / quiverquant.com.
+    politician = by_slug["alt-politician-signals"]
+    assert politician.use_data_tools is False
+    assert politician.live_search is False and politician.ai_portfolios is False
     # Every remaining alt-data segment grounds on soft signals (web/x search), never data tools.
-    _deterministic = {"alt-options-derivatives", "alt-onchain-positioning"}
+    _deterministic = {
+        "alt-options-derivatives",
+        "alt-onchain-positioning",
+        "alt-politician-signals",
+    }
     for spec in ALT_SPECS:
         if spec.segment_slug in _deterministic:
             continue
@@ -45,6 +57,40 @@ def test_alt_phases_grounding_modes():
     assert by_slug["alt-ai-portfolios"].ai_portfolios is True
     assert by_slug["alt-ai-portfolios"].live_search is False
     assert by_slug["alt-sentiment-news"].live_search is True
+
+
+@pytest.mark.unit
+def test_politician_signals_makes_no_paid_search(monkeypatch):
+    # DIG-1252 done-test: with live_search=False the segment must never reach the
+    # web_grounding pre-pass, so no outbound request can go to its grounding domains
+    # (capitoltrades.com / quiverquant.com per search_domains.yaml). Model the options
+    # segment's guard: a call here is the bug.
+    monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.setattr(_node_factory, "_research_data_client", object)
+
+    def _fail(**_k):  # a paid web_search call here would be the bug
+        raise AssertionError("alt-politician-signals must not call fetch_web_grounding")
+
+    monkeypatch.setattr("digiquant.research.data.web_grounding.fetch_web_grounding", _fail)
+    spec = next(s for s in ALT_SPECS if s.segment_slug == "alt-politician-signals")
+    _tools, _execute, grounding = _node_factory.build_grounding(
+        use_data_tools=spec.use_data_tools,
+        live_search=spec.live_search,
+        live_search_is_fallback=spec.live_search_is_fallback,
+        run_date=date(2026, 10, 6),
+        model="openrouter/openrouter/auto",
+        segment=spec.segment_slug,
+        ai_portfolios=spec.ai_portfolios,
+    )
+    assert grounding is None
+    # The domain allowlist stays in tree (Counsel may order a narrower or removed
+    # segment); the flag is what keeps it unreached. Pin both halves.
+    import yaml
+    from digiquant.research.graph import _research_config_root
+
+    cfg = yaml.safe_load((_research_config_root() / "search_domains.yaml").read_text())
+    domains = cfg["per_segment"]["alt-politician-signals"]
+    assert "capitoltrades.com" in domains and "quiverquant.com" in domains
 
 
 @pytest.mark.unit
