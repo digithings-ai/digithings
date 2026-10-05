@@ -7,7 +7,7 @@ recommendation and the plan, not an adopted one. Until accepted, nothing here
 authorises deleting a live secret or creating a vendor account.
 
 **Deciders:** repo owner (vendor + spend). **Evidence base:** [secrets
-inventory](../ops/SECRETS_INVENTORY.md) (names, locations, R1–R13) and [secrets
+inventory](../ops/SECRETS_INVENTORY.md) (names, locations, R1–R15) and [secrets
 rotation runbook](../ops/SECRETS_ROTATION.md) (what rotation costs today).
 
 ## Context
@@ -145,7 +145,7 @@ new tooling.
    it is not enumerable, `SECRETS_INVENTORY.md:162`), and the mcp example keys
    after an owner confirm-dead or rotate (R3).
 2. Reconcile the stack secret checklist against the live set (R9): documented
-   `OPENAI_API_KEY` / `FRED_API_KEY` / `R2_*` (`wrangler.toml:179-190`) are
+   `OPENAI_API_KEY` / `R2_*` (`wrangler.toml:179-190`) are
    absent live; `LITELLM_MASTER_KEY` is live but undocumented.
 3. Collapse alias families to one live name each: the Cloudflare token family
    (`CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN`, R7) and the

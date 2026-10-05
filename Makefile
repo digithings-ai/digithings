@@ -358,10 +358,16 @@ secrets-scan:
 secrets-audit:
 	python3 scripts/secrets_audit.py --strict
 
-# Age every GitHub secret name (repo, org and the `cron` environment) and list the
-# ones past the rotation window. Names and last-written dates only — GitHub never
-# returns a value here, so this needs no credential beyond `gh`. Runs monthly in
-# `secret-staleness-check.yml`, which also files the tracking issue.
+# Age every GitHub secret name (repo, org and the `cron` environment), list the ones
+# past the rotation window, and open or update one tracking issue.
+#
+# Run this by hand, from a shell whose `gh auth` token carries `repo` (and
+# `admin:org`, for the org level). It is deliberately NOT automated: the Actions
+# secrets endpoints need a token with the `repo` scope, which a workflow's
+# GITHUB_TOKEN never has, so from CI this script would read nothing. The monthly
+# `secret-staleness-check.yml` run therefore does the environment-gate drift half
+# only, via `--gates-only` (Paperclip DIG-477, option D). Reads names and
+# last-written dates only — GitHub never returns a value here.
 .PHONY: secrets-staleness
 secrets-staleness:
-	python3 scripts/secret_staleness_check.py
+	python3 scripts/secret_staleness_check.py --open-issue
