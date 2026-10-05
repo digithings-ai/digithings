@@ -604,6 +604,15 @@ a stale run fresh. A daily or `error` outcome is never exempt at any cadence. St
 flag only — no money, rate or weight arithmetic. Contract tests:
 `tests/scripts/test_macro_death_is_not_silent.py`.
 
+**Panel serving stale rows in-window** — A macro outcome can return `up-to-date` with
+`as_of=seal` when the live window contains the seal but nothing newer (line 1113).
+`_macro_leg_dead` only catches `history-only`; `up-to-date` is not a soft-fail mode.
+New guard `_macro_as_of_stale` compares each outcome's `as_of` against the run date
+using the series' cadence window (45/120/240 calendar days; default 45). Per-outcome:
+one frozen monthly series fires. Composes with `_macro_leg_dead` orthogonally — leg
+death = all slow series silent; staleness = any series' as_of outside its window.
+Limits: (1) undeclared cadence defaults to 45d; (2) calendar days, not trading days.
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
