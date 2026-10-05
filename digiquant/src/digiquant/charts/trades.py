@@ -12,27 +12,22 @@ from digiquant.charts.common import (
     _apply_layout,
     _extract_frame,
 )
+from digiquant.stats import normalize_series
 from digiquant.stats.honesty import honest_rate
 
 
 def count_winning_trades(realized_pnls_series: Any) -> int | None:
     """Count winning (PnL > 0) trades; None when the series is missing/empty.
-
-    Goes through :func:`_extract_frame` (duck-typed ``.values`` / ``.to_list``
-    / ``.tolist`` / iterable — no imports) and counts ``> 0`` over the value
-    column. Never ``.to_pandas()``: that bridge needs pyarrow, which is not
-    installed, so it raised ``ModuleNotFoundError`` and — called unguarded
-    from ``tearsheet.py`` — crashed whole-tearsheet generation.
+    Delegates to :func:`digiquant.stats.normalize_series` — the same honest denominator
+    the model path uses, so chart and model counts cannot drift apart. Never
+    ``.to_pandas()``: that bridge needs pyarrow, which is not installed, so it raised
+    ``ModuleNotFoundError`` and — called unguarded from ``tearsheet.py`` — crashed
+    whole-tearsheet generation.
     """
-    if realized_pnls_series is None:
+    normalized = normalize_series(realized_pnls_series)
+    if normalized is None:
         return None
-    df = _extract_frame(realized_pnls_series)
-    if df is None or len(df) == 0:
-        return None
-    try:
-        return int((df["value"] > 0).sum())
-    except Exception:
-        return None
+    return sum(1 for value in normalized[1] if value > 0)
 
 
 def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
