@@ -2,7 +2,7 @@
 
 For the operator rotating a live credential. This is the *procedure* companion to
 [SECRETS_INVENTORY.md](SECRETS_INVENTORY.md) (the evidence base: names, locations,
-risk ids R1–R13). No value is ever printed here; every literal below is masked `***`.
+risk ids R1–R15). No value is ever printed here; every literal below is masked `***`.
 
 **Preconditions for every procedure.**
 
@@ -270,6 +270,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 | `OPENROUTER_API_KEY` / `CHEAPERINFERENCE_API_KEY` / `GROQ_API_KEY` | 6 months | provider breach notice; spend anomaly | LLM platform owner |
 | `ZAMMAD_API_TOKEN` | 12 months | helpdesk incident; offboarding | OCC / support owner |
 | Supabase service-role pair | 12 months | Supabase advisory; role audit | data platform |
+| `NEXT_PUBLIC_*_SUPABASE_ANON_KEY` (twelve-x publishable key) | 12 months — but rotation only takes effect on the next production build | bundle-scraped key notice; Supabase deprecation of `anon` by end of 2026 | digiquant / dashboard owner. **Never rotate the core `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a twelve-x fix** — the fallback in `apps/dashboard/lib/twelve-x/supabase.ts:23-26` makes that a platform-wide action |
 | `DIGIQUANT_VAULT_MASTER_KEY` | **do not rotate** until a re-seal job exists (§8) | only on confirmed compromise | digiquant / security owner |
 | Any secret | immediately | incident, public exposure, offboarding | the owning role above |
 
@@ -277,14 +278,74 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 
 These docs must never claim the following — the evidence is not available in this repo:
 
-- **Pages `digithings-web` env vars.** `wrangler secret list` does not list Pages; the live Pages env is unknown, and its documented `OPENROUTER_API_KEY` is dead (`apps/digithings-web/wrangler.toml:24`). A Pages surface needs `pages secret list --project-name digithings-web`.
+- **Pages env var *values*.** No value is readable on a Pages surface, ever, not even for the operator — a Pages secret is write-only exactly like a Worker `secret_text`. Names *are* discoverable, but only partly: `wrangler pages secret list --project-name <name>` prints **`secret_text` vars only**, each as the fixed string `NAME: Value Encrypted`, and silently drops `plain_text` vars — `digiquant-io` production has 6 env vars but shows 4 that way. For a complete, typed view use the raw API, `GET /accounts/<account-id>/pages/projects/<name>` → `deployment_configs.<production|preview>.env_vars`. To confirm what a page actually *serves*, scrape the deployed `_next/static` chunks. (The `digithings-web` Pages env remains unmapped, and its documented `OPENROUTER_API_KEY` is dead — `apps/digithings-web/wrangler.toml:23`.)
+- **Whether a rebuilt bundle carries a rotated `NEXT_PUBLIC_*` value.** Putting the var and building are separate steps, so between them the old value is still the live one. Confirm by scanning the deployed chunks, not by trusting the `put`.
 - **A Container's runtime env.** Only the Worker `envVars` whitelist in source is visible; nothing reports the container process env at runtime (inventory Gaps).
 - **Liveness of keys committed in history.** Whether the gitleaks-allowlisted `mcp.secrets.env.example` values or `local-dev-unused-first-party` are still live cannot be proven without the values, and the "owner-confirmed dead" note is not reproducible (R3).
 - **Alias equality.** The two `DIGIKEY_BFF_TOKEN` copies, `MCP_EDGE_KEY` vs the tenant literal, and legacy `VECTORIZE_*`/`D1_*` presence are inferred from config, never diffed against live state.
 - **The actual GitHub secret/var set.** Only workflow *references* are mapped; whether `CORE_SUPABASE_*` exist or workflows silently fall back is unverified.
+
+## Rotating a `NEXT_PUBLIC_*` Supabase client key (Pages build-time inlining)
+
+**A `NEXT_PUBLIC_*` Pages var is inlined into the bundle at build time. Re-`put`ting it changes nothing that is
+already live** — the old value keeps shipping from `_next/static` until the next production build. This is the
+same class of trap as the Container boot-env above, with a different lever: there is no "secret id" to bump, only a
+rebuild. So the verification order for one of these is always **put → rebuild → then prove the new value is live**,
+never put → probe.
+
+**The rebuild has no trigger you can push on — for a git-integrated Pages project, the rebuild is the merge.**
+`digiquant-io` deploys from Cloudflare Pages' Git integration on `main` (`production_branch: main`,
+`build_command: bash scripts/build-digiquant.sh`, `destination_dir: dist`), so every merge to `main` rebuilds and
+re-inlines the var. Two consequences: (a) a var set today stops shipping only once `main` is merged *after* this
+date — not the moment you `put`; (b) `.github/workflows/deploy-digiquant-cloudflare.yml` is a **PR build check, not
+the deploy**, so "wait for the workflow" is the wrong instinct and that file is an inviting wrong turn. If you need
+the new value live without merging, the lever is the Cloudflare Pages dashboard's retry-redeploy, and there is no
+sanctioned CLI for it in this runbook — get a Decision rather than improvising one.
+
+**Look up the Pages env before you touch anything.** `wrangler secret list` does not cover Pages, and
+`wrangler pages secret list --project-name <name>` is a *partial* view — it lists `secret_text` vars only, as
+`NAME: Value Encrypted`, and hides `plain_text` vars (see [Cannot verify from here](#cannot-verify-from-here)).
+For the real list, with every name and its type, read
+`GET /accounts/<account-id>/pages/projects/<name>` → `deployment_configs.<production|preview>.env_vars`.
+Check **both** environments: the `preview` env on a project is often missing a var that production has, and the
+app's own fallback chain can then quietly substitute a different key.
+
+**Proving which key a bundle actually ships takes the base path, and getting it wrong fakes an all-clear.**
+`digiquant.io` mounts the dashboard app under a base path, so its assets are `/dashboard/_next/static/…`, **not**
+`/_next/static/…`. Requesting the un-prefixed form returns **HTTP 404 with a ~32 KB HTML body**, which a scraper that
+only counts successful reads will silently treat as "no key found in the bundle" — the exact opposite of the truth,
+and the worst possible failure mode for the one check that tells you whether the rotation landed. Take the asset
+prefix from the `<script src=…>` values in the served HTML, not from the `href` values of the preload links, which
+carry the un-prefixed form. Crawl transitively (each chunk names further chunks) and use the **HTTP status** of every
+fetch, not the byte count, to decide what was scanned. Record findings as a **non-reversible fingerprint** — length
+plus the first 8 hex of the SHA-256 — never the value: a client key is a public identifier, and a digest is enough to
+prove presence or absence and safe to write in this file. Scanned 2026-10-05: 25 chunks, 3,055,146 bytes.
+
+**Verify a publishable key is a safe drop-in for a legacy `anon` JWT, do not assume it.** A Supabase *publishable*
+key (`sb_publishable_…`) is accepted by PostgREST and GoTrue in place of the legacy `anon` JWT, but the two are not
+interchangeable everywhere — measured on twelve-x project `lfghjucjrsabiqwxerxv`, `GET /auth/v1/user` returns
+`403 {"error_code":"bad_jwt","msg":"invalid claim: missing sub claim"}` for the legacy `anon` and
+`401 {"error_code":"no_authorization",…}` for the publishable key. Neither impersonates a user, and PostgREST
+behaviour was identical, but the status codes differ. Probe the specific endpoints the surface actually calls before
+pointing prod at it.
+
+**Legacy `anon` / `service_role` JWTs cannot be rotated in place.** The Management API `POST /v1/projects/{ref}/api-keys`
+accepts only `type: publishable | secret`; there is no regenerate for a legacy JWT key. And
+`PUT /v1/projects/{ref}/api-keys/legacy` takes no body and returns a single `{"enabled": bool}` — it is **one flag over
+both `anon` and `service_role`**, so disabling it kills the service role too. The only supported sequence is
+create-publishable → repoint every consumer → rebuild → *then* disable legacy (reversible in the dashboard), and the
+last step is a separate, riskier change. Supabase is deprecating `anon`/`service_role` by end of 2026.
+
+**Two anon keys in one bundle is a trap.** `apps/dashboard/lib/twelve-x/supabase.ts:23-26` falls back to
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` — the **core** digithings key — when the twelve-x var is unset, and both projects'
+keys sit side by side as live Pages secrets on `digiquant-io`. Rotating the *twelve-x* key is scoped and safe;
+rotating the *core* key as a twelve-x fix is a platform-wide action that breaks every other surface. **Confirm which
+of the two you are rotating before you click**, and note that the fallback fires on any build where the twelve-x var
+is missing (preview builds included, where no such secret is set).
 
 ## Rotation log
 
 | Date (UTC) | Secret | Actor | Ticket | Verification evidence |
 |---|---|---|---|---|
 | 2026-09-29 | MCP_EDGE_KEY + DIGICHAT_EMBED_TENANTS (occ zammad entry) | agent (user-authorized rotation) | occ zammad `Unknown tool` | edge GET no-key→401 / with-key→406 (gate passes; 406=MCP GET negotiation); occ tenant-config now lists zammad server (was []); JSON-RPC tools/list via edge returns 5 tools; digichat Worker e6901a69 live, container shared-v9 |
+| 2026-10-05 | `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` — Pages `digiquant-io` **production**; legacy `anon` JWT → Supabase **publishable** key `fx_hub_dashboard` on twelve-x project `lfghjucjrsabiqwxerxv` (id `591e8ceb-1e46-498a-af0b-8447f3f77018`). Core `NEXT_PUBLIC_SUPABASE_ANON_KEY` **not touched** | agent (keymaster) | DIG-258 (split from DIG-147) | Pre-mutation: `pages secret list` showed 4 digiquant-io vars as `Value Encrypted`, and the raw API shows **6** env vars in total (the fifth `secret_text`, `NEXT_PUBLIC_MARKET_DATA_URL`, plus `plain_text` `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` were outside what that command printed) — treat the API as the authority, not the command; substring scan of the live digiquant.io JS chunks confirmed the twelve-x legacy anon JWT was the shipped `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` (and the core anon JWT separately). Compat probe before pointing prod at it: publishable key returns identical results to legacy anon on all 20 RLS-locked FX tables (**401 on 20/20, 0 readable**) and on `POST /rest/v1/rpc/fx_hub_has_access` (**401**) — the lock-down holds for both key types. Post-mutation: `pages secret put` → `✨ Success! Uploaded secret`; value identity confirmed **against the provider** (`GET /api-keys/591e8ceb-…` → 200, len 46 == local len 46, `identical=True`, `sha256=bd1ffc63…`) because the Pages secret is write-only. **Pending:** production rebuild and the separate legacy-disable step — so "old key rejected" is **not** yet true; see [Rotating a `NEXT_PUBLIC_*` Supabase client key](#rotating-a-next_public_-supabase-client-key-pages-build-time-inlining) and inventory R15. **Re-scanned the live bundle 2026-10-05T05:05Z** (25 chunks, 3,055,146 bytes, `/dashboard/_next/static/…`): the twelve-x legacy `anon` JWT `sha256=43ed8e14` is **still shipped**, the core `anon` JWT `sha256=fac4879c` is shipped alongside it, and `sha256=bd1ffc63` (the new publishable key) is **absent** — i.e. the `put` has not reached users. Both hosts appear in the same build: `lfghjucjrsabiqwxerxv.supabase.co` and `rwagjbkvxkdwqmouagad.supabase.co`. Last production deploy was `main` at `2026-10-02T17:12:10Z`, before this rotation. The live FX Hub route to re-check after the rebuild is **`/dashboard/twelve-x/`** (`/fx-hub` and `/twelve-x` both 404). Post-rebuild re-scan is the acceptance check, and it must assert **absence** of `43ed8e14`, not just presence of `bd1ffc63` |
