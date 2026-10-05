@@ -6,7 +6,9 @@
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */
-import { dispatch, type DispatchResult } from "./dispatch";
+import { buildPlan } from "./backfill";
+import type { BackfillLedger } from "./backfill-do";
+import { dispatch, dispatchWorkflow, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
@@ -146,6 +148,103 @@ function parseStringArgs(value: unknown): Record<string, string> | null {
   return out;
 }
 
+/** Upstream twelve-x workflow this dispatches. Not a daily_run.yml `run_date`. */
+const BACKFILL_REPO = "digithings-ai/twelve-x";
+const BACKFILL_WORKFLOW = "maintenance.yml";
+const BACKFILL_REF = "develop";
+const BACKFILL_LEDGER_NAME = "backfill-ledger";
+
+/**
+ * POST /backfill — the Cloudflare-native dispatch surface for dated snapshot
+ * backfills (DIG-55 rework, DIG-753).
+ *
+ * Deliberately not a JOBS row and therefore not a clock: there is no cron, no
+ * `enabled` flag on a row, and nothing in wrangler.toml's [triggers] lists it.
+ * The only way a backfill starts is a request that names its dates.
+ *
+ * Ladder, all before the first outbound request: secret unset -> 404, bad
+ * bearer -> 401, BACKFILL_ENABLED != "1" -> 404, then buildPlan() refusals, then
+ * the ledger partition. A dispatch whose dates are all already remediated makes
+ * zero upstream requests and answers 200.
+ */
+async function handleBackfill(request: Request, env: Env): Promise<Response> {
+  if (!env.CRON_KICK_SECRET) {
+    return new Response("Not Found", { status: 404 });
+  }
+  if (!authorized(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  if (env.BACKFILL_ENABLED !== "1") {
+    return Response.json(
+      { error: "backfill_disabled", detail: "set BACKFILL_ENABLED=1 to enable" },
+      { status: 404 },
+    );
+  }
+
+  const plan = buildPlan(await request.text());
+  if (!plan.ok) {
+    return Response.json({ error: plan.code, detail: plan.detail }, { status: 400 });
+  }
+
+  if (!env.BACKFILL_LEDGER) {
+    return Response.json({ error: "backfill_unconfigured" }, { status: 503 });
+  }
+
+  const stub = env.BACKFILL_LEDGER.get(
+    env.BACKFILL_LEDGER.idFromName(BACKFILL_LEDGER_NAME),
+  ) as unknown as BackfillLedger;
+  const now = new Date().toISOString();
+
+  const split = await stub.claim(plan.dates, now, plan.force_dates);
+  if (split.toDispatch.length === 0) {
+    // Every date is already claimed or remediated. This is the idempotence
+    // guarantee: a repeat dispatch is a no-op, not a second write.
+    return Response.json(
+      { ok: true, dispatched: [], skipped: split.skipped, already_remediated: true },
+      { status: 200 },
+    );
+  }
+
+  try {
+    const result = await dispatchWorkflow(env, {
+      cron: "backfill",
+      label: BACKFILL_LEDGER_NAME,
+      repo: BACKFILL_REPO,
+      workflow: BACKFILL_WORKFLOW,
+      ref: BACKFILL_REF,
+      inputs: {
+        backfill_snapshots: "true",
+        dates: split.toDispatch.join(","),
+      },
+    });
+
+    if (result.dry_run) {
+      // Nothing ran upstream, so nothing may be recorded as remediated.
+      await stub.release(split.toDispatch);
+      return Response.json(
+        { ok: true, dry_run: true, dispatched: [], skipped: split.skipped, would_dispatch: split.toDispatch },
+        { status: 200 },
+      );
+    }
+
+    await stub.markDone(split.toDispatch, now);
+    return Response.json(
+      {
+        ok: true,
+        dispatched: split.toDispatch,
+        skipped: split.skipped,
+        github_status: result.status,
+      },
+      { status: 200 },
+    );
+  } catch (err) {
+    // Release the claim so the same dates can be retried by the next request.
+    await stub.release(split.toDispatch);
+    const detail = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: "dispatch_failed", detail }, { status: 502 });
+  }
+}
+
 export default {
   async scheduled(
     controller: ScheduledController,
@@ -229,6 +328,10 @@ export default {
         includeDisabled: true,
       });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
+    }
+
+    if (request.method === "POST" && path === "/backfill") {
+      return handleBackfill(request, env);
     }
 
     return new Response("Not Found", { status: 404 });
