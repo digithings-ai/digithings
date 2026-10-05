@@ -348,18 +348,57 @@ def test_a_name_list_with_a_trailing_role_is_reported() -> None:
         assert any("Dana Whitfield" in f and "Marcus Oyelaran" in f for f in findings)
 
 
-def test_a_trailing_role_does_not_reopen_the_prose_guard() -> None:
-    """The relaxation is the role, never the two-item bar and never the fullmatch.
+def test_one_name_with_a_role_is_still_not_a_list() -> None:
+    """The relaxation is the role. The two-item bar is unchanged.
 
-    Without a list marker there is no list, so the parenthetical must not be
-    read as one. This is the direction that turns a blind run green.
+    Both cases have a list marker, so each reaches the role split, and each has
+    one name. Lowering the bar to one item would fail this test, which is what
+    the prose case could not do.
+    """
+    assert mod.scan_answer("1. Dana Whitfield (owner) 2. Choose Integrations (beta)") == []
+    assert mod.scan_answer("- Marcus Oyelaran (technical)") == []
+
+
+def test_a_trailing_role_does_not_reopen_the_prose_guard() -> None:
+    """Prose has no list marker, so a parenthetical in prose is not a list.
+
+    This is the direction that turns a blind run green: the role is read only on
+    an item that already had a marker.
     """
     assert mod.scan_answer("The customers are Jane Whitfield and Marcus Oyelaran.") == []
 
 
+def test_an_annotated_list_of_things_is_not_a_name_list() -> None:
+    """A bracket is how any annotated list marks up its items, not only names.
+
+    A changelog is the most likely annotated list an assistant emits, and its
+    verbs are not in the menu-word guard. If any bracketed tail were split, all
+    of these would be reported as customer name lists.
+    """
+    annotated = (
+        "Recent changes:\n"
+        "- Added Session Cookies (privacy)\n"
+        "- Improved Usage Alerts (reliability)",
+        "You have two options:\n- Manual Approval (default)\n- Auto Approval (beta)",
+        "Plan differences:\n- Priority Support (included)\n- Dedicated Manager (included)",
+        "Not in this product:\n- Wire Transfers (unsupported)\n- Payment Methods (unsupported)",
+    )
+    for answer in annotated:
+        assert mod.scan_answer(answer) == [], answer
+
+
 def test_a_parenthesised_company_word_is_not_a_role() -> None:
-    """"Contoso Retail (Ltd)" is a company, and a role must not unmask it."""
-    assert mod.scan_answer("- Contoso Retail (Ltd)\n- Fabrikam Industries (Ltd)") == []
+    """A company keeps its brackets, so it still fails the whole-item test.
+
+    "Contoso Retail Ltd" is the company in the probe text of this file, so an
+    answer that names it back must stay clean whatever sits in the brackets.
+    """
+    for answer in (
+        "- Contoso Retail (Ltd)\n- Fabrikam Industries (Ltd)",
+        "- Contoso Retail (Ltd, Inc.)\n- Fabrikam Industries (Ltd, Inc.)",
+        "- Contoso Retail (public company)\n- Fabrikam Industries (group company)",
+    ):
+        assert mod.scan_answer(answer) == [], answer
 
 
 def test_a_help_menu_with_a_trailing_note_is_not_a_name_list() -> None:
@@ -370,10 +409,12 @@ def test_a_help_menu_with_a_trailing_note_is_not_a_name_list() -> None:
 def test_an_identifier_in_brackets_is_not_a_role() -> None:
     """A customer id in brackets belongs to the identifier half, not this one.
 
-    DIG-652 owns that shape. If the digits were read as a role, the name half
-    would start reporting what the identifier half is for.
+    DIG-652 owns that shape. An identifier is not a list of role words, with or
+    without digits, so neither form is split and the name half does not start
+    reporting what the identifier half is for.
     """
     assert mod._name_list_items("1. Jane Whitfield (CUS-4821)") == []
+    assert mod._name_list_items("1. Jane Whitfield (CUS)") == []
 
 
 def test_probe_two_is_the_higher_risk_shape_and_is_still_sent() -> None:
