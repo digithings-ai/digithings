@@ -25,7 +25,6 @@ from digisearch.search._stub import _stub_index
 from digisearch.trackers_ingest import (
     TRACKERS_INDEX_NAME,
     StaleDatasetError,
-    ingest_congress_trades,
 )
 from digisearch.trackers_wave2_ingest import (
     TRACKER_DATASET_ORDER,
@@ -481,35 +480,11 @@ def test_all_five_datasets_share_one_index_without_key_collision() -> None:
     assert len(set(keys)) == len(keys) >= total
 
 
-@pytest.mark.unit
-def test_congress_bulk_scans_stub_index_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """#4849 perf pin: congress bulk ingest builds the key set once (O(n))."""
-    import digisearch.trackers_ingest as congress
-
-    calls = 0
-    original = congress._natural_keys_in_index
-
-    def _counting(index_name: str) -> set[str]:
-        nonlocal calls
-        calls += 1
-        return original(index_name)
-
-    monkeypatch.setattr(congress, "_natural_keys_in_index", _counting)
-    rows = [{"chamber": "senate", "docId": f"doc-{i}", "rowIndex": i} for i in range(5)]
-
-    class _Feed:
-        def __init__(self) -> None:
-            self.n = 0
-
-        def fetch(self, url: str) -> _FakeFetchResult:
-            self.n += 1
-            if url.endswith("manifest.json"):
-                return _FakeFetchResult(json.dumps({"datasets": {}}))
-            return _FakeFetchResult(json.dumps(rows))
-
-    result = ingest_congress_trades(_Feed())  # type: ignore[arg-type]
-    assert result.ingested == 5
-    assert calls == 1
+# DIG-1307: `test_congress_bulk_scans_stub_index_once` was removed here.
+# The congress-trades path is now refused before any fetch, so the O(n) bulk
+# key-scan it pinned is unreachable. The same perf pin stays covered by
+# `test_wave2_bulk_scans_stub_index_once` below, which drives the identical
+# `_natural_keys_in_index` memo through a dataset that is still live.
 
 
 @pytest.mark.unit
