@@ -34,11 +34,16 @@ requests as ``x-embed-monitor-token`` so the hourly check is not refused by our 
 embed gate. That gate is our code on our host — ``apps/digichat/src/app/api/chat/route.ts``
 past ``EMBED_FREE_TURN_LIMIT`` per client IP — and both probes share one IP, so
 without the identity the check was blind for most of every 24h window. The value is
-never logged, never printed, and never written anywhere; it is read in
-``build_headers`` and put straight onto the wire. Unset means no header is sent. It
-is sent only to the embed host this run resolved, never to a third party: redirects
-are refused outright (``_RefuseRedirects``), because urllib would otherwise copy
-this header onto whatever host a ``Location`` named. digichat
+never logged, never printed, and never written to disk by this script; it is read in
+``build_headers`` and put straight onto the wire. Unset means no header is sent.
+
+It goes to the embed host DataTap's own page names, and redirects are refused
+outright (``_RefuseRedirects``) so that a 3xx cannot carry it to some other host
+on top of that. The host itself is *not* validated — ``discover_embed_target``
+checks the scheme only, deliberately, because pinning the host would break
+discovery against the live page — so where this header lands is only as
+trustworthy as the page it was read from. Refusing the redirect stops the header
+travelling; it is not a claim that the destination was ever checked. digichat
 ignores an allowlist entry shorter than 32 characters, so a value below that is sent and
 then refused; the same secret has to be in both places.
 
@@ -93,11 +98,15 @@ class _RefuseRedirects(HTTPRedirectHandler):
 
     urllib's default redirect handler copies every request header except
     content-length and content-type onto whatever host the ``Location`` header
-    names. That is a fine default for a browser following a link, and the wrong
-    behaviour for a check holding a secret: one 3xx from the client platform
-    would hand our monitor token to a host nobody here audited. Returning None
-    makes the opener raise ``HTTPError`` for the 3xx instead, which is already
-    handled below as a status to report.
+    names, for the 301, 302 and 303 cases (for 307 and 308 it gives up first and
+    raises on its own). That is a fine default for a browser following a link, and
+    the wrong behaviour for a check holding a secret: one 3xx from the client
+    platform would hand our monitor token to a host nobody here audited.
+    Returning ``None`` stops the redirect, and the opener then falls through to
+    its default error handler, which raises ``HTTPError`` for the 3xx — already
+    handled below as a status to report. That default error handler is
+    load-bearing: without it ``.open()`` would return ``None`` rather than raise,
+    and the ``with`` in ``http_request`` would fail on a non-context-manager.
 
     A redirect is also not an answer. The contract this check is built on is
     that only a clean 200 from the URL we asked for is evidence, and everything
@@ -857,6 +866,16 @@ def _status_reason(name: str, response: HttpResponse) -> str:
             f"set {MONITOR_TOKEN_ENV_VAR} for the check and DIGICHAT_MONITOR_TOKENS "
             "on digichat"
         )
+    if 300 <= response.status < 400:
+        # Our own policy, not their platform, and the message has to say so: the
+        # base followed redirects, so this looks like a new failure where there
+        # was a working one. The Location value is deliberately not repeated — it
+        # is text the client controls, and this run's output is sensitive.
+        return (
+            f"probe {name!r} came back HTTP {response.status}: we refused to follow "
+            "that redirect on purpose, because it points at another host and could "
+            "carry our monitor token with it, so we cannot see the answer path"
+        )
     return f"probe {name!r} came back HTTP {response.status}{detail}: we cannot see the answer path"
 
 
@@ -935,7 +954,14 @@ def _check(argv: list[str] | None = None) -> int:
     try:
         discovery = http_request("GET", DISCOVERY_URL, timeout=DISCOVERY_TIMEOUT_SECONDS)
         if discovery.status != 200:
-            raise ProbeError(f"the public /chat page came back HTTP {discovery.status}")
+            reason = f"the public /chat page came back HTTP {discovery.status}"
+            if 300 <= discovery.status < 400:
+                # Our refusal, not their redirect. The opener that refuses a 3xx
+                # on the probe path also serves this request, and this one carries
+                # no secret at all. Say which it was, or an operator reads a
+                # deliberate policy as a broken client page.
+                reason += ", a redirect we refused to follow on purpose"
+            raise ProbeError(reason)
         target = discover_embed_target(discovery.body)
     except ProbeError as exc:
         return _could_not_run(exc.reason)
