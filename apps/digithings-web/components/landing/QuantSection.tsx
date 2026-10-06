@@ -169,13 +169,25 @@ const FULL_SPAN: [string, string] = [
 function PipelineRail() {
   return (
     <div
-      className="flex min-w-0 gap-[0.5rem] overflow-x-auto pb-[0.2rem]"
+      className="flex min-w-0 snap-x snap-proximity gap-[0.5rem] overflow-x-auto pb-[0.2rem]"
       role="list"
       aria-label="digiquant pipeline phases"
+      /* The rail is far wider than the viewport, so it is the only way through
+         the phases. Focusable, or keyboard readers lose 16 of the 19. Same
+         contract as the kit CardRail track. */
+      tabIndex={0}
     >
       {PIPELINE_ENGINES.map((engine) => (
-        <div key={engine.id} className="flex shrink-0 items-stretch gap-[0.5rem]">
-          <span className="flex items-center font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
+        <div
+          key={engine.id}
+          role="group"
+          aria-label={engine.label}
+          className="flex shrink-0 items-stretch gap-[0.5rem]"
+        >
+          <span
+            aria-hidden="true"
+            className="flex items-center font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
+          >
             {engine.label}
           </span>
           {engine.phases.map((phase) => (
