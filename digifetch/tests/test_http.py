@@ -7,6 +7,8 @@ the real ``httpx.Client`` request/stream machinery against an in-process handler
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -221,3 +223,186 @@ def test_download_redirect_drops_per_call_cookies_on_cross_origin_hop() -> None:
     assert result.content == b"bytes"
     assert seen[0][1] == "session=secret"
     assert seen[1][1] is None
+
+
+# ── redirect header scoping (credential leak) ─────────────────────────────────
+
+
+def test_redirect_drops_per_call_credential_headers_on_cross_origin_hop() -> None:
+    """A credential in a per-call header must not follow a redirect off-origin.
+
+    Regression for DIG-1377: ``headers`` was forwarded to every hop, so an
+    ``x-api-key`` handed to the original origin arrived at the redirect target.
+    """
+    seen: list[tuple[str, str | None, str | None, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            (
+                str(request.url),
+                request.headers.get("x-api-key"),
+                request.headers.get("authorization"),
+                request.headers.get("user-agent"),
+            )
+        )
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/steal"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example", "two.example"]) as f:
+        result = f.fetch(
+            "https://one.example/search",
+            method="POST",
+            json={"query": "q"},
+            headers={
+                "x-api-key": "exa_live_SECRET",
+                "Authorization": "Bearer tok",
+                "User-Agent": "DigiFetchBot/1.0",
+            },
+        )
+
+    assert result.text == "ok"
+    # Hop 1 (the origin the caller named) gets everything it was handed.
+    assert seen[0] == (
+        "https://one.example/search",
+        "exa_live_SECRET",
+        "Bearer tok",
+        "DigiFetchBot/1.0",
+    )
+    # Hop 2 (off-origin) gets neither credential...
+    assert seen[1][0] == "https://two.example/steal"
+    assert seen[1][1] is None, "x-api-key leaked to the cross-origin redirect target"
+    assert seen[1][2] is None, "Authorization leaked to the cross-origin redirect target"
+    # ...but a non-credential header still rides along, so ordinary same-work
+    # cross-origin redirects keep working.
+    assert seen[1][3] == "DigiFetchBot/1.0"
+
+
+def test_redirect_keeps_per_call_headers_on_same_origin_hop() -> None:
+    """Origin scoping must not cost same-origin hops their credentials."""
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("x-api-key")))
+        if request.url.path == "/start":
+            return httpx.Response(302, headers={"location": "https://one.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.fetch("https://one.example/start", headers={"x-api-key": "k_SECRET"})
+
+    assert result.text == "ok"
+    assert seen[1] == ("https://one.example/final", "k_SECRET")
+
+
+def test_download_redirect_drops_per_call_headers_on_cross_origin_hop() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("x-api-key")))
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, content=b"bytes")
+
+    with _fetcher(handler, allowed_hosts=["one.example", "two.example"]) as f:
+        result = f.download("https://one.example/doc", headers={"x-api-key": "k_SECRET"})
+
+    assert result.content == b"bytes"
+    assert seen[0][1] == "k_SECRET"
+    assert seen[1][1] is None
+
+
+def test_constructor_cookies_do_not_leak_on_cross_origin_hop() -> None:
+    """Fetcher-level cookies are origin-scoped too.
+
+    Regression for DIG-1377: constructor ``cookies=`` were baked into the client
+    jar, and httpx sends a host-agnostic jar cookie to *every* host, so they
+    rode along on every redirect hop regardless of origin.
+    """
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("cookie")))
+        if request.url.host == "one.example":
+            return httpx.Response(302, headers={"location": "https://two.example/final"})
+        return httpx.Response(200, text="ok")
+
+    # The production wiring: transport= only, so the fetcher builds the client.
+    with HttpFetcher(
+        cookies={"session": "ctor_secret"},
+        transport=httpx.MockTransport(handler),
+        allowed_hosts=["one.example", "two.example"],
+    ) as f:
+        f.fetch("https://one.example/start")
+
+    assert seen[0][1] == "session=ctor_secret"
+    assert seen[1][1] is None, "constructor cookie leaked to the cross-origin hop"
+
+
+# ── redirect method/body preservation (RFC 9110 §15.4) ───────────────────────
+
+
+@pytest.mark.parametrize("status", [307, 308])
+def test_307_and_308_preserve_post_method_and_body(status: int) -> None:
+    """307/308 must re-send the original method and body (RFC 9110 §15.4).
+
+    Regression for DIG-1377: the downgrade condition fired for *any* redirect
+    status on a body-bearing method, silently turning the retry into a GET with
+    no body.
+    """
+    seen: list[tuple[str, str, bytes]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.method, request.content))
+        if request.url.path == "/submit":
+            return httpx.Response(status, headers={"location": "https://one.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.fetch(
+            "https://one.example/submit",
+            method="POST",
+            json={"query": "secret"},
+            headers={"x-api-key": "k_SECRET"},
+        )
+
+    assert result.text == "ok"
+    assert len(seen) == 2
+    assert seen[1][1] == "POST", f"{status} downgraded the method"
+    assert json.loads(seen[1][2]) == {"query": "secret"}, f"{status} dropped the body"
+
+
+@pytest.mark.parametrize("status", [301, 302, 303])
+def test_301_302_303_still_downgrade_post_to_get(status: int) -> None:
+    """303 always becomes GET; 301/302 downgrade a body-bearing method to GET."""
+    seen: list[tuple[str, str, bytes]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.method, request.content))
+        if request.url.path == "/submit":
+            return httpx.Response(status, headers={"location": "https://one.example/final"})
+        return httpx.Response(200, text="ok")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.fetch("https://one.example/submit", method="POST", json={"query": "q"})
+
+    assert result.text == "ok"
+    assert seen[1][1] == "GET"
+    assert seen[1][2] == b""
+
+
+def test_download_307_preserves_post_method() -> None:
+    """``download`` carries the same redirect rule as ``fetch``."""
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.method))
+        if request.url.path == "/doc":
+            return httpx.Response(307, headers={"location": "https://one.example/final"})
+        return httpx.Response(200, content=b"bytes")
+
+    with _fetcher(handler, allowed_hosts=["one.example"]) as f:
+        result = f.download("https://one.example/doc", method="POST")
+
+    assert result.content == b"bytes"
+    assert seen[1] == ("https://one.example/final", "POST")

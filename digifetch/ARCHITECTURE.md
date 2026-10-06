@@ -159,11 +159,21 @@ variables; a consumer (`digisearch`) sources the allowlist from
 dicts to the `{name: value}` dict an HTTP client sends — the exact hand-off
 twelve-x's `scrape_research` performs inline before its AJAX call.
 
-Per-call `cookies=` are host-agnostic, so redirect handling forwards them only
-while the hop stays on the **original origin**; a hop to another origin drops
-them rather than leaking a session credential across hosts. (A client-level
-cookie jar passed via `cookies=`/Playwright keeps httpx's own domain-scoped
-rules.)
+Per-call `cookies=` **and** per-call `headers=` are host-agnostic, so redirect
+handling forwards both only while the hop stays on the **original origin**; a hop
+to another origin drops them rather than leaking a session credential or an API
+key across hosts. Off-origin only an allow-list of non-credential headers
+(`_CROSS_ORIGIN_SAFE_HEADERS`: `accept*`, `user-agent`, `referer`, `content-type`,
+`range`, `if-*`, `cache-control`) survives — an unknown credential header is
+dropped by default rather than leaked, which is stricter than httpx (it strips
+only `Authorization`). Constructor `cookies=` go through the same gate: they are
+applied per hop, not baked into the client jar, because a jar cookie set without
+a domain is host-agnostic and httpx would replay it to every host. Headers on an
+injected `client=` remain the caller's own.
+
+Redirect methods follow RFC 9110 §15.4: 303 always becomes GET, 301/302 downgrade
+a body-bearing method to GET, and **307/308 preserve method and body** (shared
+`_redirect_method()` helper — `fetch` and `download` cannot drift apart here).
 
 **Injection seams for tests:** pass `transport=httpx.MockTransport(...)` to
 exercise the real client (headers/cookies/timeout wiring) without a socket, or
