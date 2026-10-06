@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 from digiquant.cli import main as digiquant_main
 from digiquant.strategies.sdca.backtest import run_backtest
-from digiquant.strategies.sdca.curve import AccumDistCurve
+from digiquant.strategies.sdca.curve import RISK_NODES, AccumDistCurve
 from digiquant.strategies.sdca.curve_optimize import (
     CONTINUOUS_CROSSING_EPS,
     CURVE_SEARCH_BOUNDS,
@@ -42,7 +42,6 @@ from digiquant.strategies.sdca.curve_optimize import (
     shape_from_bounds_ok,
     sweep_dead_zone_width,
 )
-from digiquant.strategies.sdca.curve import RISK_NODES
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategy_specs import get_param_specs
@@ -542,9 +541,7 @@ class TestSampleContinuousCurveTrials:
         assert len(trials) > 0
         for params in trials:
             shape = SdcaCurveShape(**params)
-            dead_nodes = [
-                r for r in RISK_NODES if shape.buy_knee_risk <= r <= shape.sell_knee_risk
-            ]
+            dead_nodes = [r for r in RISK_NODES if shape.buy_knee_risk <= r <= shape.sell_knee_risk]
             assert len(dead_nodes) <= 1
 
     def test_grid_and_random_are_independent_knobs(self) -> None:
