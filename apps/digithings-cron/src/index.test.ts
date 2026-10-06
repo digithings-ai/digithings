@@ -314,6 +314,36 @@ describe("POST /kick", () => {
     const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
     expect(body.args.dry_run).toBe("true");
   });
+
+  it("answers 400 when GitHub refuses an undeclared workflow input", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message: 'Unexpected inputs provided to workflow: ["bucket"]',
+          }),
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "github-token",
+    };
+
+    // twelve-x-market-context-daily is the only row on this cron. It is a
+    // workflow_dispatch with inputs { bucket: "daily" }, so GitHub refusing
+    // "bucket" is a real shape for this route.
+    const res = await worker.fetch(kick({ cron: "30 5 * * *" }), env, executionContext([]));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; cron: string; detail: string };
+    expect(body.error).toBe("undeclared_workflow_input");
+    expect(body.cron).toBe("30 5 * * *");
+    expect(body.detail).toContain("market_context_ingest.yml");
+    expect(body.detail).toContain("bucket");
+  });
 });
 
 describe("GET /runs", () => {
