@@ -1468,12 +1468,37 @@ three places, so it cannot be reached by any route that matters:
 The refusal is deliberately *registration-level*, not deletion: the Gloomberb
 client method, the normalizer, the Pydantic models and the entitlement entry all
 stay in-tree so a clearance is a one-line removal from the frozenset rather than
-a re-derivation of the endpoint shape. It is a code constant rather than an
-environment flag on purpose — an env var is not a legal gate (anyone with a deploy
-could flip it in production), and the real gate is Counsel's clearance plus an
-owner merge. Tests pin all four properties: absent from both scopes, absent from
-the manifest, typed refusal from the invoke route, and the client `ENDPOINTS`
-entry still present.
+a re-derivation of the endpoint shape. Tests pin all four properties: absent from
+both scopes, absent from the manifest, typed refusal from the invoke route, and
+the client `ENDPOINTS` entry still present.
+
+**The refusal env denylist is additive only (DIG-1251 Q5).** Counsel approved the
+env-deny-only shape on condition that it can never *permit* a refused feed, so the
+effective rule is a union:
+
+```text
+refused = REFUSED_TOOLS ∪ env_denied_tools(DIGIQUANT_REFUSED_TOOLS)
+```
+
+`DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,`, `;` or whitespace) of
+extra tool names, read per call so a deployment change applies on the next
+request. Three properties make condition 1 structural rather than aspirational:
+`REFUSED_TOOLS` membership short-circuits before the variable is consulted; the
+parser has **no allow / negate / un-refuse syntax**, so `-name`, `!name` and
+`allow=name` are unknown tokens rather than permissions; and case-folding can only
+match more names. Missing, empty or whitespace-only contributes no names, leaving
+the code constant in force (fail closed), and a malformed value yields tokens
+rather than raising past the refusal check.
+
+The code constant stays the carrier of `digifetch_congress_trades`: an env var is
+not a legal gate, and the real gate is Counsel's written clearance plus the CTO's
+merge. `tests/dq/test_tool_refusals_env_denylist.py` proves it rather than logging
+it — every `REFUSED_TOOLS` member stays refused under every legal value of the
+variable, *and* the variable demonstrably adds refusals, so an implementation that
+ignored the environment entirely could not pass.
+
+Note for readers: the three `luxalgo_trackers_*` tools are **not** in
+`REFUSED_TOOLS`. Their absence is not a clearance — see DIG-1251.
 
 `pro_required` is distinct from `auth_required` on purpose: `auth_required`
 means no/misconfigured session (fix `GLOOMBERB_SESSION_COOKIE`), while

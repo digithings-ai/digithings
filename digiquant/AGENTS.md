@@ -629,8 +629,23 @@ stays a generic transport engine (no URLs, no env reads).
   `DIGIFETCH_DISPATCH` still carries the name. The refusal is
   registration-level by design: client, normalizer, models and the `free`
   entitlement entry stay in-tree so a Counsel clearance is a one-line removal
-  from the frozenset. It is a code constant, not an env var — an env var is not
-  a legal gate, and the real gate is Counsel's clearance plus an owner merge.
+  from the frozenset.
+- **The refusal env denylist is additive only (DIG-1251 Q5).** The effective rule
+  is `refused = REFUSED_TOOLS | env_denied_tools(DIGIQUANT_REFUSED_TOOLS)`, where
+  `DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,` `;` or whitespace)
+  of extra tool names, read per call. It can only **add** refusals: there is no
+  allow/negate/un-refuse syntax, so `-name`, `!name` and `allow=name` parse as
+  unknown tokens rather than permissions, and no value can lift a
+  `REFUSED_TOOLS` member. Missing, empty or whitespace-only means *no extra
+  names*, which leaves the code constant in force (fail closed); a malformed value
+  yields tokens and never raises past the refusal check. Counsel approved this
+  shape on condition that the code constant stays the carrier of the refusal — an
+  env var is not a legal gate, and the real gate is Counsel's written clearance
+  plus the CTO's merge. Proof is
+  `tests/dq/test_tool_refusals_env_denylist.py`, not a log line: it pins every
+  `REFUSED_TOOLS` member as still refused under every legal value of the variable
+  *and* pins that the variable does add refusals, so a parser that ignored the
+  environment entirely could not pass.
 - **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
   second Pro-only tool and has **two plan-gate shapes** that must map to the
   same non-retryable `pro_required`: the 402 text body
