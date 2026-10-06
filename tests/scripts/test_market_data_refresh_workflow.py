@@ -694,12 +694,19 @@ def _workflow() -> dict[str, Any]:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-def test_workflow_is_manual_dispatch_only() -> None:
-    """The clock is digithings-cron → digiquant-runner (#4761 Phase 1)."""
+def test_workflow_keeps_main_schedule_until_runner_lands() -> None:
+    """main still owns the clock; #4761's migration has not landed here.
+
+    Develop asserts the opposite (``schedule`` absent, runner owns it), which
+    holds only once ``apps/digiquant-runner`` is on main. It is not — that app
+    exists on develop alone. If this workflow loses its schedule before the
+    runner lands, main silently stops refreshing market data with nothing
+    taking over, so pin the two cron entries until the runner is here.
+    """
     spec = _workflow()
     on = spec[True]  # YAML 1.1 parses the `on:` key as boolean True
     assert "workflow_dispatch" in on
-    assert "schedule" not in on
+    assert [entry["cron"] for entry in on["schedule"]] == ["0 13 * * *", "30 21 * * *"]
 
 
 def test_workflow_concurrency_and_timeout() -> None:
