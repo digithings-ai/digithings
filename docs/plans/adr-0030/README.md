@@ -1,5 +1,11 @@
 # ADR-0030 stage modules — implementation plan
 
+> 🛑 **PARTIAL HOLD — 2026-10-05 (DIG-503).** Package **P22** and the
+> `twelve_x/nodes/scrape.py` mapping are held: the vendor's Terms prohibit the
+> access method this plan would publish. Read
+> [`HOLD-Primarket.md`](HOLD-Primarket.md) **before** picking up any package on
+> this page. The other packages are not held.
+
 > **For agentic workers:** Implement one package file under `docs/plans/adr-0030/packages/`. Do not implement a wave from this page alone. This plan is **Proposed** for Chris to skim via One. It does not mark implementation done, and it does not amend ADR-0030's Accepted text.
 
 **Goal:** Name and stub the swappable stage handoffs so digiquant and twelve-x can be composed as one pipeline family, without changing recommendation policy and without enabling execution.
@@ -34,8 +40,8 @@ Producer Python was not opened. Packages that would edit twelve-x (P2.2, P3.2) s
 
 | Source in this repo | Path it names |
 |---------------------|----------------|
-| `digifetch/ARCHITECTURE.md`, `digifetch/AGENTS.md` | `twelve_x/nodes/scrape.py`, `twelve_x/fx_calendar/scraper.py`, twelve-x `config.py` (`PRIMEMARKET_*`, `TE_CALENDAR_URL`) |
-| `apps/digithings-cron/src/jobs.ts` | `daily_run_asia.yml`, `daily_run_london.yml`, `daily_run_new_york.yml`, `market_context_ingest.yml`, `primemarket_session_heartbeat.yml`, `session_catchup.yml`, `performance_eval.yml`, `archive_maintenance.yml` on repo `digithings-ai/twelve-x` |
+| `digifetch/ARCHITECTURE.md`, `digifetch/AGENTS.md` | `twelve_x/nodes/scrape.py`, `twelve_x/fx_calendar/scraper.py`, twelve-x `config.py` (site-specific selectors/URLs) |
+| `apps/digithings-cron/src/jobs.ts` | `daily_run_asia.yml`, `daily_run_london.yml`, `daily_run_new_york.yml`, `market_context_ingest.yml`, `session_catchup.yml`, `performance_eval.yml`, `archive_maintenance.yml` on repo `digithings-ai/twelve-x` |
 | `apps/dashboard/lib/twelve-x/types.ts` | Reader tables and field names (authoritative for adapters) |
 | `apps/dashboard/components/twelve-x/HowItWorksTab.tsx` | Seven-step copy. Not a file-level map of the producer |
 
@@ -55,7 +61,7 @@ Three stages, two compositions, shared handoffs.
 
 | Stage | Job word | digiquant baseline | twelve-x composition |
 |-------|----------|--------------------|----------------------|
-| 1 Research | research | `digiquant.research` `build_research_graph` | Desk briefs + Prime Market + scrapes, published as the FX Hub research tables |
+| 1 Research | research | `digiquant.research` `build_research_graph` | Desk briefs + research-vendor material + scrapes, published as the FX Hub research tables |
 | 2 Investment / trade generation | portfolio, or trade-generation | `digiquant.portfolio` `build_portfolio_graph` | Ranked ideas + levels in `fx_trade_ideas_snapshot`. Stays in the twelve-x repo |
 | 3 Execution | execution | `digiquant.execution.route_pending_orders` when `DIGIQUANT_EXECUTION_ROUTING` is on | None. Hub copy: it never executes trades |
 
@@ -83,7 +89,7 @@ House chain today: `run_research_then_portfolio` in `digiquant/src/digiquant/por
 
 ### What stays shared
 
-Stage payload names, snapshot/ledger persistence style, separate Supabase projects, human gates on live venues, `digithings-cron` as the only scheduler, digikey for digithings service calls, the FX Hub session path in `apps/dashboard/lib/twelve-x/session.ts`, digisearch wake owned by `digiclaw` (not by a stage), secrets staying in the site consumer (Prime Market, Trading Economics). `digifetch` still reads no environment variables. Wiring twelve-x scrapers onto `digifetch` is not part of any package here.
+Stage payload names, snapshot/ledger persistence style, separate Supabase projects, human gates on live venues, `digithings-cron` as the only scheduler, digikey for digithings service calls, the FX Hub session path in `apps/dashboard/lib/twelve-x/session.ts`, digisearch wake owned by `digiclaw` (not by a stage), secrets staying in the site consumer. `digifetch` still reads no environment variables. Wiring twelve-x scrapers onto `digifetch` is not part of any package here.
 
 ### What may not happen in these packages
 

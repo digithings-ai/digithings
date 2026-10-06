@@ -96,7 +96,7 @@ export const guides: Guide[] = [
       },
       {
         kind: "p",
-        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).",
+        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat is not on GHCR yet — the image publish workflow was removed in the strict-essentials cut, so digichat builds from source here.",
       },
       { kind: "h", text: "Profiles" },
       {
@@ -137,15 +137,15 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker pull ghcr.io/digithings-ai/digichat:v2.3.2",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.4.0 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.4.0 .",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v2.3.2`)",
+          "Published image: none today. The digichat image publish workflow was removed in the strict-essentials cut and has not been replaced, so digichat builds from source. Restore tracked in DIG-1242.",
           "Changelog: `apps/digichat/CHANGELOG.md`",
-          "Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.",
+          "Pin by digest once you publish the image yourself — do not rely on `:latest`.",
         ],
       },
       { kind: "h", text: "Profiles" },
