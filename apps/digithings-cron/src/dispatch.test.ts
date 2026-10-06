@@ -95,6 +95,70 @@ describe("dispatch", () => {
     await expect(dispatch(env, baseJob, baseJob.cron)).rejects.toThrow(/403/);
   });
 
+  it("names an undeclared workflow_dispatch input and does not retry", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message: 'Unexpected inputs provided to workflow: ["buckett"]',
+            documentation_url:
+              "https://docs.github.com/rest/actions/workflows#create-a-workflow-dispatch-event",
+          }),
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    // A row with static inputs: that is what GitHub refuses. /kick args are not
+    // merged into this body on develop, so the test must not rely on them.
+    const job: Job = {
+      ...baseJob,
+      id: "twelve-x-market-context-daily",
+      workflow: "market_context_ingest.yml",
+      inputs: { bucket: "intraday" },
+    };
+
+    const thrown: unknown = await dispatch(env, job, job.cron).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    // Anchored on values GitHub could not have produced itself: the prefix, the
+    // workflow, the ref and the misspelled key.
+    expect(message.startsWith("undeclared_workflow_input:")).toBe(true);
+    expect(message).toContain("market_context_ingest.yml");
+    expect(message).toContain("develop");
+    expect(message).toContain("buckett");
+    // Fail closed on the first attempt. A deterministic refusal must not be retried.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { bucket: "intraday" },
+    });
+  });
+
+  it("still names the refusal when the 422 body is not JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('Unexpected inputs provided to workflow: ["buckett"]', { status: 422 }),
+      ),
+    );
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const job: Job = {
+      ...baseJob,
+      workflow: "market_context_ingest.yml",
+      inputs: { bucket: "intraday" },
+    };
+
+    const thrown: unknown = await dispatch(env, job, job.cron).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message.startsWith("undeclared_workflow_input:")).toBe(true);
+    expect((thrown as Error).message).toContain("buckett");
+  });
+
   it("retries rate limits instead of reporting success", async () => {
     const fetchMock = vi
       .fn()
