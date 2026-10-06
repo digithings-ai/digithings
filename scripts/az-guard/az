@@ -1,0 +1,440 @@
+#!/usr/bin/env python3
+"""az guard — refuse any `az` command aimed at a subscription that is not on the register.
+
+Why this file exists
+--------------------
+The DataTap Azure access register (config/datatap_azure_access_register.json, owned by
+Security on DIG-1674) lists zero authorised subscriptions. Until now the rule was enforced
+by nothing but agent memory, and that memory failed once already, on a SEV1. This shim is
+the enforcement point: it sits on PATH ahead of the real `az`, and it refuses.
+
+The rule, in full
+-----------------
+1. The register's `authorized_subscriptions` list is the only authorisation. Any other
+   value in the file is refused, including a key that looks like it opens access.
+2. The target subscription must be on that list. Missing, empty or unreadable register →
+   refuse. The guard never falls through to the real `az` on an error of its own.
+3. If the target subscription cannot be determined, refuse. The default context is
+   production, so "I could not tell which subscription this is" means no, not maybe.
+4. `--subscription <id>` is accepted only when `<id>` is authorised.
+5. Every refusal is logged with a timestamp, the resolved subscription and the command
+   shape, so a refusal is visible in review instead of silent.
+
+Deliberate non-features
+-----------------------
+- **No bypass flag and no bypass environment variable.** A control an agent can switch off
+  is not a control. Adding one would need a second, better control in front of it.
+- **No command allowlist.** The guard judges the target subscription only. It does not
+  know which verbs are read-only, so it does not pretend to.
+
+Known limits (read before trusting it)
+--------------------------------------
+- **Subscriptions are the unit, not resources.** An authorised subscription still lets a
+  command name any resource group inside it, and `az role assignment list --scope <id>`
+  accepts a full resource id that the guard never parses. A non-zero row in this register
+  is a decision about a whole subscription; do not add one for "just one resource group".
+- **`az` resolves long options by unambiguous prefix**, so `--sub <id>` selects the
+  subscription exactly like `--subscription`. The guard therefore treats any long option
+  sharing the "subscription" stem as a subscription selector, plus the short form `-s`.
+- **A subscription name is refused, never resolved.** `--subscription "DataTap WebSite"`
+  exits 78 rather than asking Azure which id that name means.
+- **The default subscription comes from the local profile file only**
+  (`$AZURE_CONFIG_DIR/config`, else `~/.azure/config`, `[defaults] subscription`). The
+  guard runs no `az` command and makes no network call to decide the target. A profile
+  that names an authorised id is trusted to be the target; the file is the same one `az`
+  itself reads.
+- `AZURE_SUBSCRIPTION_ID` is ignored on purpose: the Azure CLI does not read it, so
+  honouring it would authorise a command that actually lands somewhere else.
+- Python 3.9+, standard library only. No dependencies, no install step beyond a symlink.
+
+Limits of the environment this script reads are the machine's, not the repo's: it reads
+the caller's HOME, PATH and Azure profile, and nothing else. It writes exactly one file,
+the refusal log.
+
+Install and rollback: docs/ops/datatap-azure-az-guard.md
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import shlex
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+#: A full subscription UUID. Anything else is not an authorisation.
+UUID_RE = re.compile(r"\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+
+#: The only option stem the guard treats as "which subscription is this aimed at".
+SUBSCRIPTION_OPTION = "subscription"
+
+#: Refusal log: one JSON object per line. Keeps an unbounded argv out of the file.
+MAX_LOGGED_ARGS = 24
+
+#: Option names whose value is redacted before anything is written or printed. The guard
+#: is not a credential store and must not become one by logging a `--password` it passed on.
+SENSITIVE_HINTS = ("password", "secret", "token", "sas", "key", "cert")
+
+#: Exit code for a refusal. 78 is sysexits EX_CONFIG: the command was refused because of
+#: configuration, not because of an Azure error, so it cannot be mistaken for `az`'s own 3.
+EXIT_REFUSED = 78
+
+#: Register, relative to the repo root (this file lives at <repo>/scripts/az-guard/az).
+REGISTER_RELPATH = "config/datatap_azure_access_register.json"
+
+#: Where `az` usually lives when it is not on PATH. Checked last; PATH wins.
+FALLBACK_AZ_PATHS = ("/opt/homebrew/bin/az", "/usr/local/bin/az", "/usr/bin/az")
+
+REFUSAL_REASONS = (
+    "register-missing",  # no register file at all
+    "register-unreadable",  # present but cannot be read (permissions, a directory, bad bytes)
+    "register-malformed",  # not JSON, not an object, or no authorized_subscriptions list
+    "register-empty",  # the list exists and authorises nothing
+    "indeterminate-subscription",  # no --subscription and no default in the profile
+    "subscription-not-an-id",  # a name, or a malformed id: refused, not looked up
+    "ambiguous-subscription",  # two different targets on one command line
+    "subscription-not-authorised",  # resolved fine, not on the register
+    "real-az-not-found",  # authorised, but there is no real az to exec
+    "recursive-invocation",  # the guard re-entered itself; refuse instead of looping
+)
+
+
+# ── where things live ────────────────────────────────────────────────────────────
+def shim_path() -> Path:
+    """This file, with symlinks resolved.
+
+    The installer symlinks this script into the bindir, so ``__file__`` alone would
+    resolve the register against ``~/.local/bin``. ``resolve()`` puts it back in the repo.
+    """
+    return Path(__file__).resolve()
+
+
+def register_path() -> Path:
+    """The register to read. ``AZ_GUARD_REGISTER`` overrides it for tests and for a
+    deliberately separate register; it cannot widen what the file authorises."""
+    override = os.environ.get("AZ_GUARD_REGISTER", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return shim_path().parent.parent.parent / REGISTER_RELPATH
+
+
+def refusal_log_path() -> Path:
+    """Where refusals are appended. ``AZ_GUARD_LOG`` overrides it for tests."""
+    override = os.environ.get("AZ_GUARD_LOG", "").strip()
+    if override:
+        return Path(override).expanduser()
+    try:
+        home = Path.home()
+    except RuntimeError:
+        home = Path(os.environ.get("TMPDIR", "."))
+    return home / ".digithings" / "az-guard-refusals.log"
+
+
+def azure_config_dir() -> Path:
+    """The Azure CLI profile directory, using the same env var the CLI itself reads."""
+    override = os.environ.get("AZURE_CONFIG_DIR", "").strip()
+    if override:
+        return Path(override).expanduser()
+    try:
+        return Path.home() / ".azure"
+    except RuntimeError:
+        return Path(os.environ.get("TMPDIR", ".")) / ".azure"
+
+
+# ── 1. the register ──────────────────────────────────────────────────────────────
+def load_authorised(register: Path) -> tuple[list[str], str | None]:
+    """Return ``(authorised subscription ids, refusal reason)``.
+
+    Never returns an empty list without a reason: "nothing is authorised" and "I could not
+    read the list" are different failures and both of them are refusals.
+    """
+    try:
+        raw = register.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return [], "register-missing"
+    except (OSError, ValueError):
+        # IsADirectoryError, PermissionError and friends are OSError; ValueError catches
+        # the bytes-are-not-UTF-8 case raised by read_text.
+        return [], "register-unreadable"
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return [], "register-malformed"
+    if not isinstance(data, dict):
+        return [], "register-malformed"
+
+    rows = data.get("authorized_subscriptions")
+    if not isinstance(rows, list):
+        # Absent key, a string, an object: all malformed. There is no default-empty here,
+        # because "the key is missing" and "the key is empty" must not read the same way
+        # to whoever has to fix it.
+        return [], "register-malformed"
+
+    # Authorised subscriptions only. A row that is not a full UUID is noise, and noise
+    # does not open a door.
+    ids = [row.strip().lower() for row in rows if isinstance(row, str) and UUID_RE.match(row.strip())]
+    return ids, None
+
+
+# ── 2. the target subscription ───────────────────────────────────────────────────
+def _is_subscription_option(name: str) -> bool:
+    """True for ``--subscription`` and for the prefixes `az` would accept for it.
+
+    ``az`` resolves a long option by unambiguous prefix, so ``--sub`` and ``--subs`` pick
+    the subscription exactly as ``--subscription`` does. A guard that only reads the long
+    spelling is a guard with a bypass in it. ``--subscriptions`` counts too, for the same
+    reason: over-reading a selector is a refusal, under-reading one is a production
+    subscription.
+    """
+    if not name.startswith("--"):
+        return name.lower() == "-s"
+    stem = name[2:].lower()
+    if not stem:
+        return False
+    return SUBSCRIPTION_OPTION.startswith(stem) or stem.startswith(SUBSCRIPTION_OPTION)
+
+
+def selector_values(argv: list[str]) -> list[str]:
+    """Every value on the command line that `az` could read as the subscription."""
+    values: list[str] = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        name, separator, inline = token.partition("=")
+        if _is_subscription_option(name):
+            if separator:
+                values.append(inline.strip())
+            elif index + 1 < len(argv):
+                index += 1
+                values.append(argv[index].strip())
+            else:
+                # A selector flag with no value. `az` would error on the command line;
+                # the guard refuses and records it as indeterminate rather than guessing
+                # what was meant — and does not silently fall back to the profile default,
+                # because an explicit selector that selects nothing is not an absent one.
+                values.append("")
+        index += 1
+    return values
+
+
+def profile_default_subscription() -> str | None:
+    """The subscription a bare `az` command lands on, from the local profile file.
+
+    Local state only: reads ``[defaults] subscription`` out of the CLI's own config and
+    runs no command. That is the same file and the same key `az` uses, so it is the only
+    honest answer to "which subscription is this aimed at" when no flag is given.
+    """
+    try:
+        text = (azure_config_dir() / "config").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    section = ""
+    default: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line[0] in "#;":
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip().lower()
+            continue
+        if section != "defaults":
+            continue
+        key, separator, value = line.partition("=")
+        if separator and key.strip().lower() == SUBSCRIPTION_OPTION:
+            default = value.strip()
+    return default
+
+
+def resolve_target(argv: list[str]) -> tuple[str | None, str | None, str | None]:
+    """Resolve the subscription this command targets.
+
+    Returns ``(subscription, source, refusal_reason)`` — exactly one of the subscription and
+    the reason is set.
+    """
+    values = selector_values(argv)
+    distinct = set(values)
+    if len(distinct) > 1:
+        # `az` takes the last occurrence. Which one "really" wins is not a question worth
+        # guessing at when the answer decides whether production is reachable.
+        return None, None, "ambiguous-subscription"
+
+    if not distinct:
+        target = profile_default_subscription()
+        source = "profile-default"
+        if not target:
+            return None, None, "indeterminate-subscription"
+    else:
+        target = values[0]
+        source = "command-line"
+        if not target:
+            # `--subscription` with nothing after it: the effective subscription cannot be
+            # determined, which is a refusal in its own right.
+            return None, source, "indeterminate-subscription"
+
+    if not UUID_RE.match(target.lower()):
+        # A name is a refusal, not a lookup: resolving it would mean asking Azure which
+        # subscription the operator meant, which is exactly the call the rule forbids.
+        return None, source, "subscription-not-an-id"
+    return target.lower(), source, None
+
+
+# ── 3. the real az ───────────────────────────────────────────────────────────────
+def real_az() -> Path | None:
+    """Find the executable the guard hands an authorised command to.
+
+    ``AZ_GUARD_REAL_AZ``, when set, is the only candidate: an operator who pins the real
+    `az` has said where it is, and a guess from a list of usual locations is worse than a
+    stated one. It cannot authorise anything — the subscription has already been accepted
+    against the register before this function runs — so pinning only chooses which
+    executable receives an authorised command.
+
+    Otherwise: PATH first, then the usual install locations. This file's own realpath is
+    skipped either way, so the guard can never exec itself.
+    """
+    override = os.environ.get("AZ_GUARD_REAL_AZ", "").strip()
+    if override:
+        candidates = [Path(override).expanduser()]
+    else:
+        candidates = [Path(entry) / "az" for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+        candidates.extend(Path(path) for path in FALLBACK_AZ_PATHS)
+
+    me = shim_path()
+    for candidate in candidates:
+        try:
+            if not candidate.is_file() or not os.access(candidate, os.X_OK):
+                continue
+            if candidate.resolve() == me:
+                continue
+        except OSError:
+            continue
+        return candidate
+    return None
+
+
+# ── 4. logging ───────────────────────────────────────────────────────────────────
+def redact(argv: list[str]) -> list[str]:
+    """Replace the value of any password/secret/token/key-looking option with a marker."""
+    redacted: list[str] = []
+    hide_next = False
+    for token in argv:
+        if hide_next:
+            redacted.append("<redacted>")
+            hide_next = False
+            continue
+        name = token.split("=", 1)[0]
+        if name.startswith("-") and any(hint in name.lower() for hint in SENSITIVE_HINTS):
+            if "=" in token:
+                redacted.append(token.split("=", 1)[0] + "=<redacted>")
+            else:
+                redacted.append(token)
+                hide_next = True
+            continue
+        redacted.append(token)
+    return redacted
+
+
+def log_refusal(
+    reason: str,
+    target: str | None,
+    source: str | None,
+    argv: list[str],
+    register: Path,
+    authorised_count: int,
+) -> None:
+    """Append one refusal line.
+
+    A logging failure must never turn a refusal into a pass, so a broken log is reported
+    on stderr and the refusal stands.
+    """
+    entry = {
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "event": "az-guard refusal",
+        "reason": reason,
+        "subscription": target,
+        "subscription_source": source,
+        "register": str(register),
+        "register_authorized_count": authorised_count,
+        "command": redact(argv)[:MAX_LOGGED_ARGS],
+        "cwd": _cwd(),
+        "user": os.environ.get("USER") or os.environ.get("LOGNAME") or "unknown",
+    }
+    path = refusal_log_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    except OSError as exc:
+        print(f"az guard: WARNING: refusal log {path} is unwritable ({exc})", file=sys.stderr)
+
+
+def _cwd() -> str:
+    try:
+        return os.getcwd()
+    except OSError:
+        return "<unavailable>"
+
+
+# ── 5. refusing ──────────────────────────────────────────────────────────────────
+def refuse(
+    reason: str,
+    target: str | None,
+    source: str | None,
+    argv: list[str],
+    register: Path,
+    authorised_count: int,
+) -> int:
+    log_refusal(reason, target, source, argv, register, authorised_count)
+    command = " ".join(shlex.quote(part) for part in redact(argv)[:MAX_LOGGED_ARGS])
+    print(f"az guard: REFUSED ({reason})", file=sys.stderr)
+    print(f"  target subscription : {target or 'unresolved'}", file=sys.stderr)
+    print(
+        f"  register            : {register} ({authorised_count} authorised subscription(s))",
+        file=sys.stderr,
+    )
+    print(f"  command             : az {command}".rstrip(), file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Nothing was executed. This refusal is enforced, not advisory:", file=sys.stderr)
+    print("scripts/az-guard/az has no bypass flag and no bypass environment variable.", file=sys.stderr)
+    print("See docs/ops/datatap-azure-az-guard.md.", file=sys.stderr)
+    return EXIT_REFUSED
+
+
+def main(argv: list[str]) -> int:
+    if os.environ.get("AZ_GUARD_ACTIVE"):
+        # Re-entered. Refuse rather than exec a PATH that may only contain copies of the
+        # guard — an exec loop is the one failure mode here that never returns.
+        register = register_path()
+        return refuse("recursive-invocation", None, None, argv, register, 0)
+
+    register = register_path()
+    authorised, reason = load_authorised(register)
+
+    target: str | None = None
+    source: str | None = None
+    if reason is None:
+        target, source, reason = resolve_target(argv)
+        if reason is None and target not in authorised:
+            reason = "register-empty" if not authorised else "subscription-not-authorised"
+
+    if reason is None:
+        az = real_az()
+        if az is None:
+            reason = "real-az-not-found"
+        else:
+            os.environ["AZ_GUARD_ACTIVE"] = "1"
+            try:
+                os.execv(str(az), [str(az), *argv])
+            except OSError as exc:
+                reason = f"real-az-not-execable ({exc.strerror})"
+
+    if reason:
+        return refuse(reason, target, source, argv, register, len(authorised))
+    return 0  # unreachable: an authorised command either execs or takes a reason above
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
