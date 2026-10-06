@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -101,6 +102,49 @@ def test_failure_mid_iteration_returns_none_without_raising() -> None:
 
 def test_non_numeric_strings_are_treated_as_null() -> None:
     assert normalize_series([1.0, "not-a-number", 2.0]) == (["0", "2"], [1.0, 2.0])
+
+
+def test_unrepresentable_number_drops_one_row_not_the_whole_series() -> None:
+    """A row too large for a float is as null as NaN — it must not blank the series.
+
+    An object-dtype ``.values`` (pandas) or an arbitrary Python scalar can hold an
+    ``int`` no bigger than ``float`` can represent. ``float()`` raises
+    ``OverflowError`` for those, which is not a ``ValueError``, so it used to
+    escape the per-row guard and null the entire series instead of dropping the
+    one bad row. That silently changes N from 2 to 0 — refused, not wrong, but it
+    loses rate that the NaN case already keeps.
+    """
+    result = normalize_series([0.01, 10**400, -0.02])
+
+    assert result is not None
+    dates, values = result
+    assert values == [0.01, -0.02]
+    assert dates == ["0", "2"]
+
+
+def test_unrepresentable_rational_drops_one_row() -> None:
+    assert normalize_series([1.0, Fraction(10**500, 1)]) == (["0"], [1.0])
+
+
+def test_series_of_only_unrepresentable_numbers_is_none() -> None:
+    """Every row nulled is the same refusal as an all-NaN series."""
+    assert normalize_series([10**400]) is None
+
+
+def test_bools_are_kept_as_one_and_zero_in_every_container() -> None:
+    """The chart path keeps bools, so the rate path must keep them too.
+
+    ``charts/common.py::_extract_frame`` casts with ``strict=False`` and polars
+    maps ``Boolean -> Float64`` to 1.0/0.0, so a boolean row is charted. Dropping
+    it here made the rate and the chart disagree about N, which is the one thing
+    this module exists to prevent. Decided by value, so a ``numpy.bool_`` from
+    ``list(arr)`` and a plain ``bool`` from ``.to_list()`` behave identically.
+    """
+    expected = (["0", "1", "2"], [1.0, 0.0, 1.0])
+
+    assert normalize_series([True, False, True]) == expected
+    assert normalize_series(_FakePolars([True, False, True])) == expected
+    assert normalize_series(_FakePandasShape([True, False, True], [0, 1, 2])) == expected
 
 
 def test_no_pandas_or_polars_import_in_stats_package() -> None:
