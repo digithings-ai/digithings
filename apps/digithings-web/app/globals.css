@@ -940,10 +940,15 @@ html {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: clamp(4.5rem, 12vw, 9rem);
+  /* min-height, not height: the mark is an 88:10 SVG, so at the enlarged
+     footer width it outgrows a fixed band and a fixed box would clip its top
+     and bottom glyph rows. The band grows with the mark instead. */
+  min-height: clamp(4.5rem, 12vw, 9rem);
   padding-left: var(--page-pad);
   padding-right: var(--page-pad);
-  overflow: clip;
+  /* x only: the mark deliberately bleeds past the gutters, but it must never
+     be clipped top or bottom. */
+  overflow-x: clip;
 }
 
 .pixel-word.pixel-word-footer {
@@ -951,6 +956,9 @@ html {
   height: auto;
   margin: 0;
   margin-top: 0;
+  /* A flex item shrinks by default, which would fold 118% straight back to the
+     band width and make the enlargement a no-op below the 1600px cap. */
+  flex-shrink: 0;
 }
 
 .pixel-word .c { opacity: var(--f); }

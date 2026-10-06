@@ -27,6 +27,12 @@ describe("shouldStartRestGlide", () => {
     expect(shouldStartRestGlide({ quietMs: 400, liveGlide: REST_COMMIT_GLIDE })).toBe(false);
     expect(shouldStartRestGlide({ quietMs: 400, liveGlide: 0.9 })).toBe(false);
   });
+
+  it("honours a caller-supplied quiet threshold", () => {
+    expect(shouldStartRestGlide({ quietMs: 200, liveGlide: 0.3, quietThreshold: 100 })).toBe(true);
+    expect(shouldStartRestGlide({ quietMs: 100, liveGlide: 0.3, quietThreshold: 100 })).toBe(true);
+    expect(shouldStartRestGlide({ quietMs: 99, liveGlide: 0.3, quietThreshold: 100 })).toBe(false);
+  });
 });
 
 describe("restBlendAmount", () => {
@@ -34,6 +40,10 @@ describe("restBlendAmount", () => {
     expect(restBlendAmount(0, REST_GLIDE_MS)).toBe(0);
     expect(restBlendAmount(REST_GLIDE_MS, REST_GLIDE_MS)).toBe(1);
     expect(restBlendAmount(REST_GLIDE_MS / 2, REST_GLIDE_MS)).toBeCloseTo(0.5, 5);
+    // A quarter of the way in the ramp is still lagging: 0.15625, not the 0.25
+    // a linear ramp would give. This is what makes it a smoothstep.
+    expect(restBlendAmount(REST_GLIDE_MS / 4, REST_GLIDE_MS)).toBeCloseTo(0.15625, 5);
+    expect(restBlendAmount((3 * REST_GLIDE_MS) / 4, REST_GLIDE_MS)).toBeCloseTo(0.84375, 5);
     expect(restBlendAmount(-20, REST_GLIDE_MS)).toBe(0);
     expect(restBlendAmount(REST_GLIDE_MS + 40, REST_GLIDE_MS)).toBe(1);
   });

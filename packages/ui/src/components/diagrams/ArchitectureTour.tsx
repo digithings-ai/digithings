@@ -684,6 +684,14 @@ export function ArchitectureTour({
 
     const beginRest = () => {
       if (resting) return;
+      /* Nothing to glide while the pin is off screen: update() reads
+         getBoundingClientRect twice and writes transforms every frame, and a
+         reader who stopped at the top of the page is nowhere near the tour. */
+      const pinBox = pin.getBoundingClientRect();
+      if (pinBox.bottom < 0 || pinBox.top > window.innerHeight) {
+        setSkipping(false);
+        return;
+      }
       const availNow = Math.max(1, track.offsetHeight - pin.offsetHeight);
       const progress = clamp01((pinOffset(pin) - track.getBoundingClientRect().top) / availNow);
       const live = glideAmount(walkCursor(progress, count).frac);
