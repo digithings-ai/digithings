@@ -3,8 +3,6 @@ import {
   ContactMailto,
   CtaLink,
   DocumentFrame,
-  GlyphList,
-  GlyphRow,
   PageTitle,
   Prose,
   Section,
@@ -13,6 +11,7 @@ import { buttonVariants } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
+import { SecondaryCard, SecondaryGrid } from "@/components/SecondaryCard";
 
 export const metadata: Metadata = {
   title: "services — integrate digithings into your environment",
@@ -83,13 +82,13 @@ export default function ServicesPage() {
             title="What we do"
             lede="Start with the modules you need, connect them to the systems you already run, and leave with code and documentation your team owns."
           >
-            <GlyphList>
-              {WORK.map((r) => (
-                <GlyphRow key={r.label} label={r.label}>
+            <SecondaryGrid>
+              {WORK.map((r, i) => (
+                <SecondaryCard key={r.label} label={r.label} index={i}>
                   {r.body}
-                </GlyphRow>
+                </SecondaryCard>
               ))}
-            </GlyphList>
+            </SecondaryGrid>
           </Section>
 
           <Section
@@ -105,13 +104,13 @@ export default function ServicesPage() {
               </p>
             </Prose>
             <div className="mt-[1.6rem]">
-              <GlyphList>
+              <SecondaryGrid cols="one">
                 {CONTEXT.map((r) => (
-                  <GlyphRow key={r.label} label={r.label}>
+                  <SecondaryCard key={r.label} label={r.label}>
                     {r.body}
-                  </GlyphRow>
+                  </SecondaryCard>
                 ))}
-              </GlyphList>
+              </SecondaryGrid>
             </div>
           </Section>
 
