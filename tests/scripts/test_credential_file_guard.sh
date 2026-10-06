@@ -83,7 +83,7 @@ print(json.dumps({'tool_name': sys.argv[1], 'tool_input': {sys.argv[2]: sys.argv
     HOME="${HOME:-/tmp}" \
     LANG="${LANG:-C.UTF-8}" \
     DIGI_FORCE_GUARD_TEST=1 \
-    DIGIDEV_PROJECT_ROOT="$REPO_FIXTURE" \
+    DIGI_PROJECT_ROOT="$REPO_FIXTURE" \
     "$@" \
     bash "$GUARD_SH" <"$hook_in" 2>/dev/null
   rc=$?
@@ -252,7 +252,144 @@ assert_allowed "git log in the fixture repo" Bash command "git log --oneline -5"
 assert_allowed "an unrelated cat" Bash command "cat $REPO_ROOT/Makefile"
 assert_allowed "a shell test with >" Bash command 'if [ $x -gt 0 ]; then echo ok; fi'
 assert_allowed "a quoted > inside grep" Bash command 'grep ">" Makefile'
-assert_allowed "no command at all" Read file_path ""
+
+# A Read with no readable path was previously asserted ALLOWED. That was the
+# fail-open hole: "I could not read the field" was being scored as "nothing to
+# worry about". It is now denied, and pinned as denied below.
+assert_denied "a Read with no readable path" Read file_path ""
+
+# ── FAIL CLOSED: the guard must never confuse "unreadable" with "safe" ─────────
+#
+# Every case below shipped as exit 0 (allow). _lib.sh treats any exit code other
+# than 0 (allow) and 2 (block) as a NON-BLOCKING error, so the guard has exactly
+# two correct answers — 0 or 2 — and "I could not tell" must resolve to 2.
+#
+# These assert exit code 2 specifically, not merely "non-zero": a crash leaking
+# some other code through is precisely the bug these regressions exist to catch.
+
+# Feed the guard a literal payload, so malformed and schema-drifted shapes can be
+# exercised — run_guard always builds a well-formed one.
+run_guard_raw() {
+  local json="$1"
+  local hook_in rc=0
+  hook_in="$(mktemp)"
+  printf '%s' "$json" >"$hook_in"
+  set +e
+  env -u DIGIDEV_ALLOW_CREDENTIAL_READ \
+    PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
+    HOME="${HOME:-/tmp}" \
+    LANG="${LANG:-C.UTF-8}" \
+    DIGI_FORCE_GUARD_TEST=1 \
+    DIGI_PROJECT_ROOT="$REPO_FIXTURE" \
+    bash "$GUARD_SH" <"$hook_in" 2>/dev/null
+  rc=$?
+  rm -f "$hook_in"
+  set -e
+  return $rc
+}
+
+# assert_blocked <desc> <raw-json>
+#   Requires exit code exactly 2. Anything else — 0, or a leaked 1/7 — fails.
+assert_blocked() {
+  local desc="$1" json="$2"
+  local rc=0
+  run_guard_raw "$json" || rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "PASS [closed]  $desc"
+    pass=$((pass + 1))
+  else
+    echo "FAIL [closed]  $desc  (expected exit 2, got $rc)"
+    fail=$((fail + 1))
+  fi
+}
+
+# The attack these cover: the payload is well-formed JSON of the right shape
+# EXCEPT the field the guard reads has been renamed or dropped. Every one of
+# these returned 0 before the fix.
+assert_blocked "Bash with the command under an unexpected key" \
+  '{"tool_name":"Bash","tool_input":{"cmd":"cat '"$CANARY_DIR"'/default.toml"}}'
+assert_blocked "Read with the path under an unexpected key" \
+  '{"tool_name":"Read","tool_input":{"path":"'"$CANARY_DIR"'/default.toml"}}'
+assert_blocked "Bash with no tool_input.command" \
+  '{"tool_name":"Bash","tool_input":{}}'
+assert_blocked "Read with no tool_input.file_path" \
+  '{"tool_name":"Read","tool_input":{}}'
+assert_blocked "Grep with no tool_input.path" \
+  '{"tool_name":"Grep","tool_input":{}}'
+
+# Degenerate payloads: no tool name can be read, so nothing can be evaluated.
+assert_blocked "empty stdin" ''
+assert_blocked "not json at all" 'not json at all'
+assert_blocked "truncated json" '{"tool_name":"Bash","tool_input":'
+assert_blocked "an empty json object" '{}'
+assert_blocked "a tool_name with no tool_input" '{"tool_name":"Bash"}'
+assert_blocked "a top-level json array" '[]'
+assert_blocked "tool_input of the wrong type" \
+  '{"tool_name":"Read","tool_input":"'"$CANARY_DIR"'/default.toml"}'
+
+# ── FAIL CLOSED: an evaluator that cannot reach a verdict blocks ───────────────
+#
+# The Read and Grep branches used `|| verdict=""`, turning a python crash into an
+# allow. The Bash branch let the evaluator's own exit code reach the harness —
+# a crash exited 7, which _lib.sh classifies as non-blocking, so the command
+# would have run. Replace the evaluator with one that always crashes and require
+# 2 from every branch.
+
+_CRASH_EVAL_DIR="$(mktemp -d)"
+cat >"$_CRASH_EVAL_DIR/credential_paths.py" <<'PY'
+import sys
+
+sys.exit(7)
+PY
+
+_crash_eval() {
+  local desc="$1" json="$2" expect="$3"
+  local rc=0
+  # Shadow the evaluator by putting the crashing stub first on PATH-resolved
+  # location: run_guard invokes "$(dirname "$0")/credential_paths.py", so copy
+  # the guard next to the stub instead.
+  run_guard_with_crash "$json" || rc=$?
+  if [ "$rc" -eq "$expect" ]; then
+    echo "PASS [crash]   $desc"
+    pass=$((pass + 1))
+  else
+    echo "FAIL [crash]   $desc  (expected exit $expect, got $rc)"
+    fail=$((fail + 1))
+  fi
+}
+
+# Runs the real guard script from a directory containing a crashing evaluator.
+run_guard_with_crash() {
+  local json="$1"
+  local hook_in rc=0
+  hook_in="$(mktemp)"
+  printf '%s' "$json" >"$hook_in"
+  set +e
+  env -u DIGIDEV_ALLOW_CREDENTIAL_READ \
+    PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}" \
+    HOME="${HOME:-/tmp}" \
+    LANG="${LANG:-C.UTF-8}" \
+    DIGI_FORCE_GUARD_TEST=1 \
+    DIGI_PROJECT_ROOT="$REPO_FIXTURE" \
+    bash "$_CRASH_EVAL_DIR/credential-file-guard.sh" <"$hook_in" 2>/dev/null
+  rc=$?
+  rm -f "$hook_in"
+  set -e
+  return $rc
+}
+
+cp "$GUARD_SH" "$_CRASH_EVAL_DIR/credential-file-guard.sh"
+# The guard sources _lib.sh from its own directory.
+cp "$(dirname "$GUARD_SH")/_lib.sh" "$_CRASH_EVAL_DIR/_lib.sh" 2>/dev/null || true
+
+_crash_eval "a crashing evaluator blocks a Bash call" \
+  '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' 2
+_crash_eval "a crashing evaluator blocks a Read call" \
+  '{"tool_name":"Read","tool_input":{"file_path":"README.md"}}' 2
+_crash_eval "a crashing evaluator blocks a Grep call" \
+  '{"tool_name":"Grep","tool_input":{"path":"."}}' 2
+
+rm -rf "$_CRASH_EVAL_DIR"
 
 # ── Value-shape audit unit checks ─────────────────────────────────────────────
 

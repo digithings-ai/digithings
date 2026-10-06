@@ -50,25 +50,34 @@ hook_python() {
 HOOK_PY="$(hook_python)"
 
 # Extract a field from the tool_input JSON. Usage: hook_field file_path
+#
+# Never raises and never exits non-zero. A `tool_input` that is a string or list
+# rather than an object used to make the extractor die on `.get`, and under
+# `set -euo pipefail` that aborted the calling hook with a NON-BLOCKING exit —
+# which ran the tool call unevaluated. Anything unreadable resolves to '' here;
+# callers that must not treat "unreadable" as "safe" are responsible for denying.
 hook_field() {
   local key="$1"
   printf '%s' "$_HOOK_INPUT" | "$HOOK_PY" -c "
 import json, sys
 try:
     payload = json.load(sys.stdin)
+    ti = payload.get('tool_input')
+    if not isinstance(ti, dict):
+        ti = {}
+    val = ti.get('$key', '')
+    if isinstance(val, (dict, list)):
+        import json as _j
+        print(_j.dumps(val))
+    else:
+        print(val)
 except Exception:
-    sys.exit(0)
-ti = payload.get('tool_input') or {}
-val = ti.get('$key', '')
-if isinstance(val, (dict, list)):
-    import json as _j
-    print(_j.dumps(val))
-else:
-    print(val)
+    print('')
 "
 }
 
-# Extract the tool name from the hook payload.
+# Extract the tool name from the hook payload. Same never-raise contract as
+# hook_field: an unreadable payload yields '' and exit 0.
 hook_tool() {
   printf '%s' "$_HOOK_INPUT" | "$HOOK_PY" -c "
 import json, sys

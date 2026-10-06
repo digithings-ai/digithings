@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # Resolve project root: env override > git toplevel > script-relative fallback
-PROJECT_ROOT="${DIGIDEV_PROJECT_ROOT:-}"
+PROJECT_ROOT="${DIGI_PROJECT_ROOT:-}"
 if [[ -z "$PROJECT_ROOT" ]]; then
   PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 fi
@@ -17,31 +17,69 @@ if [[ -z "$PROJECT_ROOT" ]]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)"
 fi
 
-# Read stdin once and cache it so multiple python3 calls don't consume it twice.
+# Main repository root behind the current checkout. Linked git worktrees share
+# one common dir, so this is the primary tree's root even when PROJECT_ROOT
+# re-rooted to a worktree via a mid-session `cd`. Equals PROJECT_ROOT for the
+# primary tree; empty when not a git checkout. Lazy (spawns git) — call only
+# when a write target actually needs evaluating, not on every hook invocation.
+main_repo_root() {
+  local common
+  common="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ "$common" == */.git ]]; then
+    printf '%s\n' "${common%/.git}"
+  fi
+  return 0
+}
+
+# Read stdin once and cache it so multiple Python calls don't consume it twice.
 _HOOK_INPUT="$(cat)"
 
+# Prefer setup-python's ``python`` on CI over distro ``python3`` (shlex API parity).
+hook_python() {
+  if [[ -n "${HOOK_PYTHON:-}" ]]; then
+    printf '%s\n' "$HOOK_PYTHON"
+    return
+  fi
+  if command -v python >/dev/null 2>&1; then
+    command -v python
+    return
+  fi
+  command -v python3
+}
+
+HOOK_PY="$(hook_python)"
+
 # Extract a field from the tool_input JSON. Usage: hook_field file_path
+#
+# Never raises and never exits non-zero. A `tool_input` that is a string or list
+# rather than an object used to make the extractor die on `.get`, and under
+# `set -euo pipefail` that aborted the calling hook with a NON-BLOCKING exit —
+# which ran the tool call unevaluated. Anything unreadable resolves to '' here;
+# callers that must not treat "unreadable" as "safe" are responsible for denying.
 hook_field() {
   local key="$1"
-  printf '%s' "$_HOOK_INPUT" | python3 -c "
+  printf '%s' "$_HOOK_INPUT" | "$HOOK_PY" -c "
 import json, sys
 try:
     payload = json.load(sys.stdin)
+    ti = payload.get('tool_input')
+    if not isinstance(ti, dict):
+        ti = {}
+    val = ti.get('$key', '')
+    if isinstance(val, (dict, list)):
+        import json as _j
+        print(_j.dumps(val))
+    else:
+        print(val)
 except Exception:
-    sys.exit(0)
-ti = payload.get('tool_input') or {}
-val = ti.get('$key', '')
-if isinstance(val, (dict, list)):
-    import json as _j
-    print(_j.dumps(val))
-else:
-    print(val)
+    print('')
 "
 }
 
-# Extract the tool name from the hook payload.
+# Extract the tool name from the hook payload. Same never-raise contract as
+# hook_field: an unreadable payload yields '' and exit 0.
 hook_tool() {
-  printf '%s' "$_HOOK_INPUT" | python3 -c "
+  printf '%s' "$_HOOK_INPUT" | "$HOOK_PY" -c "
 import json, sys
 try:
     print(json.load(sys.stdin).get('tool_name', ''))
