@@ -124,17 +124,30 @@ Disposal is the tail end. The front end is where branches stop being created.
    branch taxonomy. Add a non-blocking warning when a branch being pushed is
    older than 10 days, so an agent gets told at push time instead of at deletion
    time.
-4. **One PR per attempt, no restarts.** The digiquant dashboard /
-   web-rebuild family (d8c5) is at least five separate abandoned rebuild
-   attempts: `cursor/dashboard-digiquant-web-d8c5`,
-  `cursor/pipeline-digiquant-web-d8c5`, `cursor/integrations-digiquant-web-d8c5`,
-   `cursor/digiquant-web-finalize-d8c5`,
-  `cursor/digiquant-dashboard-skeleton-mocks-67ef` (a divergent fork, not an
-   ancestor), plus `claude/digiquant-web-rebuild` and
-  `feat/dashboard-shell-rebuild`. Nothing from that family landed on `develop`.
-   Four near-identical siblings three commits apart is a process failure, not a
-   git failure: when work needs a restart, the existing branch is abandoned with a
-   written reason, not forked again.
+4. **One PR per attempt, no restarts, enforced at push time.** The digiquant
+   dashboard family (d8c5) was rebuilt from scratch five times and the cause was
+   not the number of branches. Every one of those branches was cut from
+   `task/4895-dqweb-3910-message` (`9e53df904`), which is 40 commits ahead of
+   `develop` and not in it — PR #4900 carried that base and was closed on
+   2026-10-03 without merging. On 2026-10-03/04 five of the resulting PRs were
+   closed in one action while the branches were kept, which removed the only
+   liveness marker on the work. Each later agent then saw no in-flight attempt and
+   rebuilt the stack. The root cause, the evidence and the per-family tallies are
+   in `docs/ops/2026-10-06-d8c5-restart-root-cause.md`.
+
+   Two corrections to the earlier reading of this family: `dashboard`,
+   `pipeline` and `integrations` are **one leaf split into three parallel bands**,
+   not three restarts (same parent, same committer, same commit timestamp
+   2026-10-02T02:12:22Z, one band file plus one test each), and
+   `cursor/digiquant-dashboard-skeleton-mocks-67ef` is a **docs** fork under
+   `docs/dashboard-mocks/`, not an agent rebuild.
+
+   "Abandon the existing branch with a written reason" below is the rule; the
+   enforcement is a pre-push guard on new branches that refuses a push when 3 or
+   more of the candidate's unmerged patch-ids already exist on another unmerged
+   branch, unless the push carries `RESUME_FROM=<branch>` or `RESTART_REASON`.
+   Implemented by Platform under DIG-1589. A written reason that no tool reads is
+   a reminder, and a reminder does not survive a restart.
 5. **Artifacts do not go on branches.** `chore/rescue-4804-gold-artifacts` carries
    4,149,332 artifact lines across 105 JSON files and almost no code. Generated
    data belongs in object storage or in `develop`, not in a 4-million-line branch
@@ -168,6 +181,8 @@ ones. No exception is open-ended.
 | `delete_branch_on_merge` repo setting | Platform |
 | Branch-age guard in CI, driven from `digithings-cron` | Platform |
 | Pre-push age warning | Platform |
+| Pre-push duplicate-work guard (section 6 clause 4) | Platform, DIG-1589 |
+| Closing a PR without merging while keeping its branch | requester, on the issue |
 | This document | CTO |
 
 ## 10. What this policy does not do
