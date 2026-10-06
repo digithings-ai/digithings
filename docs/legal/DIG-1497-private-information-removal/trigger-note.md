@@ -1,118 +1,124 @@
 # Trigger note — when to file the GitHub request
 
 **Status: standing instruction. Prepared by Counsel 2026-10-06.**
-File alongside [DIG-1484](/DIG/issues/DIG-1484). This is the operational counterpart to
-[trigger-note](.) — read it before the fork-owner requests go out.
+File alongside [DIG-1484](/DIG/issues/DIG-1484). Read it before anything in this folder is sent.
 
-**Purpose.** So that the decision to file with GitHub does not have to be re-made from scratch in
-two weeks, at the exact moment when the people involved are least willing to spend attention on it.
-This note fixes the trigger condition in advance. If the condition is met, the request goes out
-without a fresh discussion — subject only to the preconditions below.
+**Purpose.** So that the decision to file with GitHub does not have to be re-made from scratch later,
+at the exact moment when everyone involved is least willing to spend attention on it. This note fixes
+the trigger in advance. If the condition is met, the request goes out without a fresh discussion —
+subject only to the preconditions below.
+
+---
+
+## ⚠ This note was rewritten. The first version was built on a false premise.
+
+The first version made the trigger *"both fork owners have had fourteen days to respond."* That is
+gone, for three reasons:
+
+1. **The corrected letters ask for nothing.** Both are courtesy notices. They state plainly that the
+   fork owners hold no copy of the data and that there is nothing in their history to remove. The
+   letters carry **no deadline**, so there is no window to run, and nothing to escalate on.
+2. **Waiting on a stranger cannot move the exposure.** The file lives in our repository. Their
+   response changes nothing about whether GitHub's servers still hold the object.
+3. **The real dependency was never the fork owners.** It is the rewrite in [DIG-1496](/DIG/issues/DIG-1496).
+
+Any earlier plan that treated "the fork owners did not reply in fourteen days" as grounds to file
+against them is withdrawn. It would have been both wrong and unfair.
 
 ---
 
 ## The standing instruction
 
-> The GitHub private-information removal request is filed when **both** fork owners have had a
-> fourteen-day window to respond and the file is **still publicly retrievable** in at least one fork
-> at the pinned commit `86cb1ec5d62b2422cf2c312b6d63722c86fb2000`.
+> The GitHub private-information removal request is filed when **the history rewrite in
+> [DIG-1496](/DIG/issues/DIG-1496) has landed on `digithings-ai/digithings`** and the file is **still
+> publicly retrievable** at the pinned commit `86cb1ec5d62b2422cf2c312b6d63722c86fb2000`.
 >
-> The fourteen days runs from the date the **second** of the two fork-owner requests was sent. If
-> both were sent on the same day, from that day. Record the start date on DIG-1484 when the requests
-> go out, so the clock has an unambiguous anchor.
+> The trigger is a technical state, not a date. It fires when our own refs are clean and the object is
+> still live. Record the rewrite completion date on DIG-1484 so the trigger has an unambiguous anchor.
 
-Counsel proposes **fourteen calendar days**. The reason for a number rather than a judgment call:
-"a reasonable interval" invites an argument at the moment it is least useful. Fourteen days is long
-enough to be evidently fair to a stranger who does not know they are holding a copy, and short
-enough that the exposure does not sit unaddressed for a month. It also matches the two-week window
-the fork-owner requests themselves state, so nobody can say the two dates are inconsistent.
+There is no countdown and no waiting period. **A response from a fork owner is neither a precondition
+nor a trigger**, in either direction. Their silence changes nothing about what GitHub is holding.
 
 ---
 
 ## Preconditions — all must hold before filing
 
-The trigger condition is necessary but not sufficient. The request cannot be sent until:
+1. **[DIG-1496](/DIG/issues/DIG-1496) is `done`.** This is the trigger *and* the precondition, because
+   it is both. GitHub's guidance is explicit that garbage collection follows: *"If you have
+   successfully cleaned up all references other than PRs, and no forks have references to the sensitive
+   data, Support will then: Dereference or delete any affected PRs on GitHub. Run a garbage collection
+   on the server to expunge the sensitive data from storage. Remove cached views."* Filing before the
+   rewrite would ask GitHub to act on a repository we have not cleaned ourselves, and wastes the one
+   request we are entitled to make carefully.
+2. **Both placeholders are filled** — the affected-PR count and the First Changed Commit, read from
+   the `git filter-repo` output per GitHub's own instructions.
+3. **The fork count is re-run on the day of sending**, and the date and count in the request match it.
+   *"If at the time that you submitted your notice, you identified all existing forks of that
+   repository, we would process a valid claim against all forks in that network at the time we process
+   the notice."* Enumerate-at-notice-time is the only mechanism that reaches a fork, and the
+   enumeration is only good as of the moment it is stated.
+4. **Chris has read the request body once.** He sends it; he should know what is in it.
 
-1. **[DIG-1496](/DIG/issues/DIG-1496) is `done`** — the history rewrite has landed on
-   `digithings-ai/digithings`. GitHub runs the server-side garbage collection *"if you have
-   successfully cleaned up all references other than PRs"*. Filing before the rewrite wastes the
-   request, and would be asking GitHub to act on a repository we have not cleaned ourselves.
-2. **Both placeholders are filled** — the affected-PR count and the First Changed Commit.
-3. **The fork count is re-run on the day of sending** and the date and count in the request match it.
-   Enumerate-at-notice-time is the only mechanism that reaches a fork, and the enumeration is only
-   good as of the moment it is stated.
-4. **Chris has confirmed the reply address** — `contact@digithings.ai` unless he has decided
-   otherwise. See the open decision in [README.md](./README.md).
-
-If a precondition is not met on the day the trigger fires, the request waits for the precondition.
-The trigger does not expire; it is satisfied and stays satisfied.
-
----
-
-## Early trigger — do not wait out the fourteen days
-
-File sooner, without waiting for the full window, if **any** of these occurs:
-
-- A fork is deleted by its owner. That is the good outcome for that fork, but it changes the
-  enumeration — the request must be updated to reflect the fork set as it stands at the time of
-  notice, not as it stood when the requests went out. Re-run the count immediately.
-- The file is **copied to a new fork or a new repository** by anyone. This is the strongest reason
-  to move fast: a copy spreading is a different problem from a copy existing, and it is the one
-  case where the fourteen-day courtesy period is actively harmful.
-- A fork owner replies saying they will not remove it. Do not wait for the remaining days on a fork
-  that has declined. File immediately, quoting their reply.
-- The file is indexed by a search engine or appears in any dataset. Once it is indexed, the "please
-  remove this" request to a stranger stops being effective.
+If a precondition is not met on the day the trigger fires, the request waits. The trigger does not
+expire; once satisfied it stays satisfied.
 
 ---
 
-## What the fourteen days is not
+## Filing early — the one real exception
 
-Counsel is explicit about the limits of this note so it is not read as authority for more than it is:
+If the file is **copied out of the fork network into a new repository, a gist, a dataset, or a mirror**
+— that is, if the data stops being a GitHub-internal object and starts being replicated somewhere we
+do not control — then waiting is the wrong move, and this becomes a decision for Chris and Counsel
+rather than a mechanical step.
+
+That case is materially different from the exposure we have now. The standing trigger does **not**
+cover it, and Counsel should be brought in the same day.
+
+It has not happened. Both forks were verified on 2026-10-06 to hold no copy of the data at all.
+
+---
+
+## What this note is not
+
+Counsel is explicit about the limits, so it is not read as authority for more than it is:
 
 **It is not authority to send anything.** It fixes *when* the GitHub request is filed. It does not
-authorise the send itself. **Chris sends both the fork-owner requests and the GitHub request.** No
-agent in this company can send outbound mail — the Gmail connection is read-and-draft only — and the
-GitHub integration has no abuse or takedown tool. Counsel drafts. A human sends. This is a hard
-constraint, not a preference.
+authorise the send. **Chris sends the fork-owner notices and the GitHub request.** No agent in this
+company can send outbound mail — the Gmail connection is read-and-draft only — and the GitHub
+integration has no abuse or takedown tool. Counsel drafts. A human sends. That is a hard constraint,
+not a preference.
 
-**It is not authority to escalate.** If the trigger fires and the request is filed, the next step is
-whatever comes back. Counsel advises. Counsel does not decide what happens next, and nothing in this
-note pre-approves a further step.
+**It is not authority to escalate against anyone.** The trigger is a step in cleaning up our own
+mistake. It is not a basis for action against the fork owners, who have done nothing and hold
+nothing. Nothing in this note pre-approves any further step.
 
-**It is not an instruction to file automatically on the day it fires.** It is a standing instruction
-that the question is settled, so that the only remaining work on that day is mechanical: fill two
-fields, re-run one count, send.
+**It is not authority to act automatically on the day it fires.** It is a standing instruction that
+the *question* is settled, so the only remaining work that day is mechanical: fill two fields, re-run
+one count, read it, send.
 
 ---
 
 ## Recording on DIG-1484
 
-Post a comment on DIG-1484 at each of these points. Article 33(1) GDPR requires the notification
-record to show what was done, not what was intended, and the Garante reads that difference closely:
+Post a comment on [DIG-1484](/DIG/issues/DIG-1484) at each of these points. Article 33(1) GDPR requires
+the notification record to show what was done, not what was intended, and the Garante reads that
+difference closely:
 
 | When | What to record |
 | --- | --- |
-| Fork-owner requests sent | Date, time, channel used per owner, address or issue URL used, and which variant (email or issue) went to which owner |
+| Fork-owner notices sent | Date, channel used per owner, address or issue URL used, and the variant that went to which owner |
 | Rewrite completed ([DIG-1496](/DIG/issues/DIG-1496)) | Date, the First Changed Commit, the affected-PR count, the `git filter-repo --version` used |
-| Any fork-owner reply | Date, and the substance: action taken, action refused, or no commitment |
-| A fork removed | Date, which owner, and how |
+| Any fork-owner reply | Date, and the substance — including a reply that only asks a question |
+| A fork deleted by its owner | Date, which owner, and how. Then re-run the fork count |
 | Request filed with GitHub | Date, the case reference, the fork count stated in it |
 | GitHub's outcome | Date, the substance of the reply, and the outcome |
 | Any refusal | Date, and the refusal wording quoted |
+| Article 33(1) notification filed | Date, and the reference. **Independent of everything above** |
 
-Record the outcome honestly, including a refusal. A recorded refusal with a date is evidence that
-the route was attempted and that the exposure persisted after it — which is exactly what the
-notification record is supposed to show. A blank outcome field is the one thing that would look bad.
+Record the outcome honestly, including a refusal. A recorded refusal with a date is evidence that the
+route was attempted and that the exposure persisted after it — which is exactly what the notification
+record is supposed to show. A blank outcome field is the one thing that would look bad.
 
----
-
-## If the window opens and nothing has changed
-
-Fourteen days passes, the file is still in a fork, and the rewrite is done. That is the expected
-case, not a failure. File the request, record the outcome, and proceed to Counsel's advice on the
-supervisory-authority route — which is already open and does not depend on GitHub's answer.
-
-The GitHub request is one of several routes and not the most important one. The authority
-notification obligation under Article 33(1) GDPR runs on its own clock and does not wait for GitHub,
-a fork owner, or anyone else.
+**The Article 33(1) notification is not gated by any of this.** It runs on its own statutory clock —
+due **2026-10-08** per [DIG-1486](/DIG/issues/DIG-1486) — and does not wait for GitHub, for the
+rewrite, or for anyone to reply to anything.

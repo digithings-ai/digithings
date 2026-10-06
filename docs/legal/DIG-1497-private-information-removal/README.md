@@ -8,6 +8,14 @@ Every fact in these drafts was re-derived from the live repository on 2026-10-06
 over from earlier notes. Where an earlier figure was wrong, the corrected figure is used and the
 correction is flagged in the draft.
 
+**Two corrections were made to this pack after first draft.** Both are described where they apply:
+
+1. **The "286 distinct customers" figure was wrong.** The file contains 87 customer records and 248
+   email addresses. See below.
+2. **The premise of the two fork-owner letters was wrong.** The file is **not** in the forks' history
+   at all — both forks predate the commit. See *The first drafts of this pack were wrong* below. This
+   correction changed what those letters actually ask for.
+
 ---
 
 ## The one thing to read first
@@ -49,35 +57,66 @@ values printed, working copy shredded.
 
 | File | What it is | Who sends it |
 | --- | --- | --- |
-| [fork-owner-request-itsnjstyle27.md](./fork-owner-request-itsnjstyle27.md) | Removal request, fork owner 1 | Chris |
-| [fork-owner-request-webclinic017.md](./fork-owner-request-webclinic017.md) | Removal request, fork owner 2 | Chris |
+| [fork-owner-request-itsnjstyle27.md](./fork-owner-request-itsnjstyle27.md) | Courtesy notice, fork owner 1 | Chris |
+| [fork-owner-request-webclinic017.md](./fork-owner-request-webclinic017.md) | Courtesy notice, fork owner 2 | Chris |
 | [github-private-information-request.md](./github-private-information-request.md) | GitHub Support private-information removal request | Chris |
-| [trigger-note.md](./trigger-note.md) | Standing instruction on when non-response triggers filing | — |
+| [trigger-note.md](./trigger-note.md) | Standing instruction on when the GitHub request is filed | — |
 
 Each fork-owner file carries an email body and, because neither owner has a reachable public email
 address, a fallback issue-body variant for use if email cannot be delivered.
 
 ---
 
-## Send order — this is not optional
+## ⚠ The first drafts of this pack were wrong. Read this before sending anything.
 
-**1. DIG-1496 completes.** The history rewrite must land first. Two reasons, both hard:
+On 2026-10-06 Counsel cloned both forks and fetched **every ref in each one** — branches, tags,
+everything. The commit that introduced the file, `86cb1ec5…`, **is not in either fork.** Both forks
+were created *before* the commit was made:
 
-- GitHub Support runs the server-side garbage collection **only if our own refs are already clean**.
-  Their documentation says so directly: *"If you have successfully cleaned up all references other
-  than PRs, and no forks have references to the sensitive data, Support will then… Run a garbage
-  collection on the server to expunge the sensitive data from storage."* Filing before the rewrite
-  wastes the request.
+| | Forked | Commit date |
+| --- | --- | --- |
+| `itsnjstyle27/digithings` | 2026-08-18 | 2026-10-02 |
+| `webclinic017/digithings` | 2026-05-29 | 2026-10-02 |
+
+The file still resolves under both forks' URLs because **GitHub serves objects across a fork network
+from the parent repository**. The parent still holds the commit, so any fork's name will serve it.
+
+Three things follow, and all three change what these documents say:
+
+1. **There is nothing in either fork to rewrite.** The first drafts asked the owners to run
+   `git filter-repo` and included the commands. That was asking for something that cannot help. Those
+   sections are deleted.
+2. **Deleting a fork would not purge anything.** It would remove one of the three URLs and leave the
+   object in our own repository. The first drafts framed fork deletion as the remedy. It is not.
+   Both letters now say explicitly that the owner should not delete their work over our mistake.
+3. **The letters are courtesy notices, not demands.** They tell the truth, ask for nothing, carry no
+   deadline, and make no legal claim. That is the only honest version available.
+
+**The fix is [DIG-1496](/DIG/issues/DIG-1496) alone.** Rewrite the parent, and the object dies in the
+network — including under both fork URLs, which then start returning 404 on their own.
+
+---
+
+## Send order
+
+**The two fork-owner notices can go out at any time, including today.** They do not depend on the
+rewrite, because they no longer claim anything about it. Send them first if Chris has an address —
+GitHub's policy treats contacting the user first as a real step, not a formality: *"Ask Nicely
+First. A great first step before sending us a request to remove data is to try contacting the user
+directly… This is not strictly required, but it is appreciated."*
+
+**The GitHub request waits for the rewrite.** Two hard reasons:
+
+- GitHub Support runs the server-side garbage collection **only if our own refs are already clean**:
+  *"If you have successfully cleaned up all references other than PRs, and no forks have references to
+  the sensitive data, Support will then… Run a garbage collection on the server to expunge the
+  sensitive data from storage."* Filing before the rewrite wastes the request.
 - The request needs two numbers the rewrite produces. See below.
 
-**2. The two fork-owner requests go out.** Send these first. GitHub's policy treats this as a
-precondition, not a courtesy: *"Ask Nicely First. A great first step before sending us a request to
-remove data is to try contacting the user directly… This is not strictly required, but it is
-appreciated."*
-
-**3. Wait 14 days**, per the trigger note.
-
-**4. The GitHub request goes out**, with the fork count re-run on the day it is sent.
+There is **no 14-day wait.** The first version of the trigger note made filing depend on fork owners
+failing to reply in a fortnight. They are being asked to do nothing, they hold nothing, and their
+silence is not a fact about our exposure. That trigger is withdrawn. The real trigger is the rewrite —
+see [trigger-note.md](./trigger-note.md).
 
 ---
 
@@ -100,6 +139,8 @@ as they are. **A request with a placeholder still in it must not be sent.**
 
 Run through this immediately before any send. It takes about two minutes.
 
+**For the GitHub request:**
+
 - [ ] DIG-1496 is `done`, and the rewrite has been pushed to `digithings-ai/digithings`.
 - [ ] Both placeholders in `github-private-information-request.md` are replaced with real values.
 - [ ] `git filter-repo --version` in the rewritten clone is **2.47 or later**. Below that,
@@ -110,31 +151,61 @@ Run through this immediately before any send. It takes about two minutes.
 - [ ] The paginated fork list re-run the same day and still returns exactly `itsnjstyle27` and
       `webclinic017`. If a third fork has appeared, the enumeration must be updated before sending.
       Enumerate-at-notice-time is the only mechanism that reaches a fork.
-- [ ] Chris has read `trigger-note.md` and agreed the 14-day interval.
+- [ ] The drafting-note box at the top of section 6 is deleted — it is not part of the request.
+- [ ] The conditional paragraph in section 5 about opening a public issue is either completed or
+      deleted. Sending it half-finished would claim a step that was not taken.
 - [ ] The request is pasted as **plain text into the body of the web form**, not attached.
       Their form warns: *"Sending your request in an attachment may result in processing delays."*
 
+**For the fork-owner notices:**
+
+- [ ] Chris is sending the version that matches the actual state: Option A before the rewrite,
+      Option A-after once it is done.
+- [ ] Exactly one channel per owner. Not both.
+
 ---
 
-## Two decisions for Chris that Counsel cannot make
+## The reply address — Counsel's recommendation, not a choice
 
-**1. Which reply address.** The drafts use `contact@digithings.ai`, because that is the address we
-publish at [digithings.ai](https://digithings.ai/) and it is the only one on the site.
+**Use `contact@digithings.ai`.** It is published at [digithings.ai](https://digithings.ai/) and is the
+only address on the site.
 
-The alternative is `dany.stefan@matador.ai`, which appears in the `SECURITY.md` that both forks
-inherited from us. **Counsel cannot confirm that mailbox is monitored.** If it is, it is the more
-natural channel for a data-removal request and the drafts can be switched with a one-line change.
-If it is not, using it means a customer-data request sits unread in an unattended mailbox, and the
-14-day clock runs against a request nobody sees. Verify before sending.
+The alternative was `dany.stefan@matador.ai`, from the `SECURITY.md` both forks inherited from us.
+Counsel investigated whether it is monitored, as instructed, and **could not establish that it is.
+Confidence: UNKNOWN.** What was checked:
 
-**2. Whether the fork-owner requests go by email or by GitHub issue.** Neither `itsnjstyle27` nor
-`webclinic017` has a public email address on their GitHub profile, no contact email in either
-README, and no `SUPPORT.md` in either fork. So the primary channel cannot actually be delivered as
-written. Both files carry both variants. Ask Nicely First explicitly contemplates *"creating an
-issue or pull request in the repository"*, and issues are enabled on both forks — but note that our
-own `SECURITY.md`, which both forks carry, says *"Do not open a public GitHub issue."* That
-instruction is addressed to security reporters, not to us, but it does cut against opening a
-public issue as the first move. Counsel's recommendation is in each file.
+- It appears exactly once in the repository, at `SECURITY.md:211`, as an unreferenced literal. No
+  code, config, secret or CI job routes mail to it.
+- It has been published continuously since 2026-04-18 and never edited — only the subject tag changed
+  once, on 2026-10-01.
+- No agent instruction, org config or Paperclip record anywhere names it — or any mailbox — as monitored.
+- `matador.ai` MX points at Google Workspace; `digithings.ai` MX points at Proton Mail. Both deliver.
+
+Six months of deliberate publication in a security-disclosure section, alongside a 72-hour
+acknowledgement commitment, is real evidence of intent. **It is not evidence that anyone reads it.**
+That distinction decides this: an unread mailbox does not complain, so a request sent there would
+fail silently while the exposure continued. Counsel is not willing to recommend a channel whose
+monitoring status cannot be shown, and says so plainly rather than offering it as a coin-flip.
+
+Switching later is a one-line change if Chris knows the mailbox is live.
+
+---
+
+## The remaining decision for Chris
+
+**How to reach each fork owner, since neither has a reachable address.** Verified 2026-10-06:
+no email on either GitHub profile, no contact address in either README, no `SUPPORT.md` in either fork.
+Both forks have issues enabled, and Ask Nicely First explicitly contemplates *"creating an issue or
+pull request in the repository"* — but our own `SECURITY.md`, which both forks carry, says *"Do not
+open a public GitHub issue."* That instruction is addressed to security reporters rather than to us,
+but it does cut against opening a public issue as the first move.
+
+Both files carry both variants. Counsel's preference is Option A if Chris holds any address from
+outside GitHub; otherwise Option B, once, with no deadline language.
+
+If no channel can be found at all, **record that fact.** It strengthens the GitHub request: it then
+shows the "ask nicely" step was genuinely taken and the reason it produced nothing was that no
+contact route existed — not that it was skipped.
 
 ---
 
@@ -143,8 +214,14 @@ public issue as the first move. Counsel's recommendation is in each file.
 | Point | Label |
 | --- | --- |
 | All factual assertions in these drafts | **CONFIRMED** — verified against the live repository 2026-10-06 |
+| That neither fork holds a copy of the data | **CONFIRMED** — every ref in both forks fetched; commit absent from both |
 | The framing of the eligibility argument as identity and account-takeover exposure | **CONFIRMED** as the strongest available honest argument |
 | GitHub will grant the request | **LIKELY refusal.** Stated as a prediction, not a hedge on the facts |
+
+A note on the second row, because it is the correction that mattered. It was established not by
+reading GitHub's documentation but by cloning both forks and fetching everything in them. The
+documentation is compatible with both readings — GitHub does not promise that a fork URL resolves
+only what the fork itself contains — so the empirical test was the only way to settle it.
 
 Predicting refusal is the honest position and it does not weaken the request. The file contains no
 credentials, so the literal trigger in GitHub's own documentation — that the risk *"can't be
