@@ -189,7 +189,7 @@ not re-applied).
 > `RateLimiter`, `cookies_from_playwright`, `HttpFetcher`), not a way into
 > anyone's data. Before you point these seams at a site, check that site's terms
 > and your own authorisation to access it — see
-> [`docs/VENDOR_CONTENT_BOUNDARY.md`](../../docs/VENDOR_CONTENT_BOUNDARY.md).
+> [`docs/VENDOR_CONTENT_BOUNDARY.md`](../docs/VENDOR_CONTENT_BOUNDARY.md).
 
 ## Deliberately NOT extracted (stays site-specific in twelve-x)
 
