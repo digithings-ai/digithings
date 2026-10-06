@@ -135,8 +135,8 @@ COPY scripts/zammad_mcp ./scripts/zammad_mcp
 # bodies and sender/subject metadata. With the program gone nothing invokes it,
 # and leaving the writer in the image would leave the leak one supervisord line
 # away from returning. The .dockerignore re-include stays: DIG-1210 still has to
-# change what this script writes, and
-# tests/scripts/test_stack_dockerignore_context.py pins the re-include.
+# change what this script writes. tests/scripts/test_stack_dockerignore_context.py
+# pins that re-include, but it is on `main` only and does not exist on develop.
 COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 # SearXNG config — the SAME file docker-compose.yml mounts into the dev
