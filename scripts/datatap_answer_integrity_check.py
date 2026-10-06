@@ -561,8 +561,10 @@ _TRAILING_BRACKET_RE = re.compile(r"\s*\(([^()]+)\)\s*[.!]?\s*$")
 # become name lists. Those are noun phrases the two trading-name guards do not
 # cover, and this check is built to miss rather than to raise a false SEV1 on a
 # client account, so the roles it knows are listed and everything else is left
-# alone. A role the answer words differently ("owner since 2019", "on leave
-# until March") stays a miss, which is the direction this check fails in.
+# alone. One word that is not role wording keeps the whole bracket, and the item
+# with it, a miss — which is the direction this check fails in. In "owner since
+# 2019" every word is role wording except the year; in "on leave until March" the
+# words that are not are "leave" and "March".
 #
 # The small function words are here because they sit inside role phrases ("on
 # leave", "billing contact") and not because they are roles. That means a bracket
@@ -641,19 +643,23 @@ def _name_list_items(answer: str) -> list[str]:
 
     Four guards keep the ordinary English false positive out. The item must not be
     a trading name: not opening with a help-menu word ("1. Open Settings 2. Choose
-    Integrations" is a menu, not two customers), not ending in a company word
-    ("Whitfield Ltd" is a company, not a person), and not being in the
-    not-a-given-name list either whole or by its leading word. The last two are
+    Integrations" is a menu, not two customers), not *ending* in a company word —
+    its last word, wherever the surname sits, so "Whitfield Ltd" and "Dana
+    Whitfield Ltd" are both companies and neither is a person — and not being in
+    the not-a-given-name list either whole or by its leading word. The last two are
     both load-bearing: keeping only the whole-item half loses "- Desktop App", and
     keeping only the leading-word half loses "- Total Accounts".
 
     A leaked list very often says what each person does, so an item may carry a
     trailing role in brackets ("- Dana Whitfield (owner)"). That role is how the
     answer phrased the leak, not the leak, so it is split off before the
-    whole-item test. What is relaxed is the role only: the two-item bar, the
-    whole-item match, and both trading-name guards are unchanged. A bracketed
-    company word, a bracketed customer id and a bracketed note on a non-person
-    ("Manual Approval (beta)") are not roles, so none of them splits.
+    whole-item test. What is relaxed is the role only. The two-item bar and the
+    whole-item match are unchanged, and the four trading-name guards still run on
+    every item that reaches them — now on the role-stripped name rather than on the
+    item, so each of them can suppress more than it did before and none can
+    suppress less. A bracketed company word, a bracketed customer id and a
+    bracketed note on a non-person ("Manual Approval (beta)") are not roles, so
+    none of them splits.
 
     Truncating the prose tail and stripping the role compose into one surface that
     neither does alone: "- Dana Whitfield (owner)\n- Marcus Oyelaran\n\nLet me know
@@ -665,8 +671,9 @@ def _name_list_items(answer: str) -> list[str]:
 
     The cost is real and is recorded in the review: a leaked item carrying extra
     text in no brackets ("- Jane Whitfield, owner") is not caught here, neither is
-    a role worded outside `_ROLE_WORDS` ("owner since 2019"), and neither is a
-    list of people whose names start with one of the guarded words. Between
+    a bracket holding one word outside `_ROLE_WORDS` ("owner since 2019" — `owner`
+    and `since` are both role words, and the year is what stops it), and neither
+    is a list of people whose names start with one of the guarded words. Between
     missing a leak and raising a false SEV1 on a client account, this check is
     built to miss.
     """
@@ -706,7 +713,9 @@ def _name_list_items(answer: str) -> list[str]:
         # head is re-reviewed and re-signed rather than merged on the old sign-off.
         name = _strip_trailing_role(candidate)
         if _PERSON_NAME_RE.fullmatch(name):
-            head, _, tail = name.partition(" ")
+            # The leading word, for the two guards that key on it. The rest of the
+            # item is read where it is needed rather than partitioned off here.
+            head = name.partition(" ")[0]
             if head.lower() in _MENU_LEADING_WORDS:
                 continue
             # The whole item, not just its leading word. Only checking the first word
@@ -732,24 +741,41 @@ def _name_list_items(answer: str) -> list[str]:
             # exit 1.
             if head.lower() in _NOT_A_GIVEN_NAME:
                 continue
-            if tail.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
+            # The item's LAST token, not everything after its first space. A company
+            # word ends the name it belongs to ("Whitfield Ltd"), so the last token
+            # is the thing to compare. The old tail only ever *was* a suffix when
+            # the name had exactly two tokens — `_COMPANY_SUFFIXES` holds no entry
+            # with a space in it — so "Whitfield Ltd" was recognised as a company
+            # and "Dana Whitfield Ltd" was not, and two companies went through as
+            # three-word names. split() collapses runs of whitespace, so the
+            # double-spaced "Whitfield  Ltd" is judged the way "Whitfield Ltd" is
+            # instead of leaving a leading space on the tail. The strip is a no-op
+            # today, because `_PERSON_NAME_RE` cannot end in punctuation, and is
+            # kept as the shape guard if that regex ever widens.
+            #
+            # `name` fullmatched above, so it holds at least two tokens and split()
+            # is never empty.
+            #
+            # This can only suppress an item the old tail suppressed. A two-token
+            # name's last token IS its old tail, so every suppression already in
+            # place still holds; a company word anywhere but last ("Group
+            # Whitfield") still leaves the item in the finding. It never widens
+            # exit 1.
+            last_token = name.split()[-1].strip(".,;:()").lower()
+            if last_token in _COMPANY_SUFFIXES:
                 continue
-            # Lookahead guard, kept from the branch point; #5086 dropped it. It is
-            # inert as written and is kept only because both sides of this merge
-            # carried a claim about it: `end` is the START of the next marker, or
-            # len(answer) on the last item, so `following_text` always begins with a
-            # marker glyph ("-", "1.", "*", …) or is empty. `following` is therefore
-            # never a bare company word, and no shape in the corpus suppresses here.
-            # Removing it is a behaviour-neutral cleanup, left to the reviewer
-            # rather than taken silently inside a merge resolution.
-            following_text = answer[end:].lstrip()
-            following = (
-                following_text.split(" ", 1)[0].strip(".,;:()").lower() if following_text else ""
-            )
-            if following not in _COMPANY_SUFFIXES:
-                # The bare name, so the finding names the customers and not the
-                # wording the answer used for them.
-                items.append(name)
+            # The bare name, so the finding names the customers and not the wording
+            # the answer used for them. This append used to sit inside a lookahead
+            # that is now deleted: `end` is the START of the next marker, or
+            # len(answer) on the last item, so `answer[end:].lstrip()` always began
+            # with a marker glyph ("-", "1.", "*", …) or was empty, `following` was
+            # therefore never a bare company word, and no shape in the 92,561-input
+            # corpus ever suppressed there. Deleting it is behaviour-neutral.
+            # Repairing it instead would NOT be: a guard that skipped the marker
+            # glyphs and read the next item's first word would swallow item one
+            # whenever item two began with a company word, which is why
+            # test_a_company_word_that_is_not_the_last_word_still_fires is pinned.
+            items.append(name)
     return items
 
 

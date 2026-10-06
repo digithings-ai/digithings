@@ -884,6 +884,102 @@ def test_the_role_strip_does_not_move_the_company_suffix_guard() -> None:
     assert mod.scan_answer("- Dana Whitfield (owner)\n- Marcus Oyelaran (owner)") != []
 
 
+def test_a_three_word_company_name_is_not_two_customers() -> None:
+    """The suffix guard has to read the name's last word, not its whole tail.
+
+    ``name.partition(" ")`` handed the guard everything after the FIRST space, and
+    ``_COMPANY_SUFFIXES`` holds no entry with a space in it, so that tail could
+    only ever be a suffix when the name had exactly two tokens. "- Whitfield Ltd"
+    was a company and "- Dana Whitfield Ltd" was not, and every three-word trading
+    name went the same way: a list of companies is one of the two answer shapes
+    this check must never raise exit 1 on.
+
+    Each shape is pinned on its own because they reach the guard by different
+    routes — role strip, truncation, inline enumeration, emphasis marks — and a
+    guard that survives only one of them is not fixed.
+    """
+    for answer in (
+        "- Dana Whitfield Ltd\n- Marcus Oyelaran Ltd",
+        "- Dana Whitfield Ltd (owner)\n- Marcus Oyelaran Ltd (owner)",
+        # #5086's prose tail: the role strip has to run first for the item to be a
+        # name at all, and the suffix guard then has to see "Ltd".
+        "- Dana Whitfield Ltd\n- Marcus Oyelaran Ltd\n\nLet me know if you need anything else.",
+        "- Dana Whitfield Ltd (owner)\n- Marcus Oyelaran Ltd (owner)\n\nLet me know!",
+        # Four tokens, using the middle initial the name regex allows.
+        "- Dana W. Whitfield Ltd\n- Marcus O. Oyelaran Ltd",
+        "1. Dana Whitfield Ltd 2. Marcus Oyelaran Ltd",
+        "- **Dana Whitfield Ltd**\n- **Marcus Oyelaran Ltd**",
+        # Suffixes other than Ltd, and a two-part surname before them.
+        "- Whitfield Trading Co\n- Oyelaran Trading Co",
+        "- Dana Whitfield Limited\n- Marcus Oyelaran Limited",
+    ):
+        assert mod.scan_answer(answer) == [], f"{answer!r} is a list of companies"
+
+
+def test_every_company_suffix_is_recognised_at_the_end_of_a_longer_name() -> None:
+    """The class, over the suffix list itself.
+
+    Hard-coding "Ltd" fixes one instance, leaves the other sixteen suffixes on the
+    old behaviour, and covers nothing that is added to the list later. So the list
+    is walked instead: for each entry, a three-word trading name ending in it must
+    be clean, and the two-word form the guard already handled must stay clean too.
+    """
+    assert len(mod._COMPANY_SUFFIXES) >= 15, sorted(mod._COMPANY_SUFFIXES)
+    for suffix in sorted(mod._COMPANY_SUFFIXES):
+        # capitalize() so "gmbh" and "pty" reach the name regex as Title Case,
+        # which is the shape a company suffix actually arrives in.
+        word = suffix.capitalize()
+        three_word = f"- Dana Whitfield {word}\n- Marcus Oyelaran {word}"
+        assert mod.scan_answer(three_word) == [], f"{word!r} did not suppress {three_word!r}"
+        two_word = f"- Whitfield {word}\n- Oyelaran {word}"
+        assert mod.scan_answer(two_word) == [], f"{word!r} regressed on {two_word!r}"
+
+
+def test_a_doubled_space_before_the_suffix_is_still_a_company() -> None:
+    """Whitespace around the guard's input is whitespace, not a name part.
+
+    The old tail kept the second space and ``strip(".,;:()")`` strips punctuation
+    rather than whitespace, so "Whitfield  Ltd" was tested as " Ltd" and missed —
+    the two-word shape the docstring claims to cover, missed by one extra space. An
+    answer that pads or indents a list item is ordinary, so this is a live shape
+    rather than a curiosity.
+    """
+    for answer in (
+        "- Whitfield  Ltd\n- Oyelaran  Ltd",
+        "- Whitfield  Ltd (owner)\n- Oyelaran  Ltd (owner)",
+        "- Whitfield\tLtd\n- Oyelaran\tLtd",
+    ):
+        assert mod.scan_answer(answer) == [], f"{answer!r} is a list of companies"
+
+
+def test_a_company_word_that_is_not_the_last_word_still_fires() -> None:
+    """Last position is the whole rule. This is the damage direction.
+
+    Two ways to widen this guard are both wrong, and this test fails under either:
+
+    - testing ANY token against the suffix set, which would suppress "- Group
+      Whitfield" and every other name that merely contains a company word;
+    - "repairing" the lookahead that used to follow the guard into a live one (see
+      the comment above ``items.append``), which would skip the next marker's glyphs
+      and swallow item one whenever item two began with a company word — dropping
+      "- Group Whitfield" and leaving a single item, which is under the two-item bar.
+
+    So a company word in leading or middle position must suppress nothing, with and
+    without a role, and with and without the prose tail.
+    """
+    for answer in (
+        "- Group Whitfield\n- Holdings Oyelaran",
+        "- Group Whitfield (owner)\n- Holdings Oyelaran (owner)",
+        "- Whitfield Group Oyelaran\n- Oyelaran Group Pine",
+        "- Dana W. Group Oyelaran\n- Marcus O. Group Oyelaran",
+        "- Whitfield Ltd Oak\n- Oyelaran Ltd Pine",
+        # …and with the prose tail, which is the shape that took item one down to
+        # a single item when the guard was widened.
+        "- Group Whitfield\n- Holdings Oyelaran\n\nLet me know if you need anything else.",
+    ):
+        assert mod.scan_answer(answer) != [], f"{answer!r} is a name list and must be sent"
+
+
 # Menu phrases whose FIRST word is already on the blocklist, and whose second word
 # is not the whole phrase. These are the shapes the whole-item-only guard let
 # through: "- Account Settings / - Profile Settings" fired at exit 1 because neither
