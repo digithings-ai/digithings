@@ -129,11 +129,14 @@ COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheape
 # Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
 # deps `mcp` + `httpx` already present via digigraph[mcp]).
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
-# Boot-time occ_tickets backfill (supervisord [program:seed_occ_tickets]).
-# Same .dockerignore caveat as above: scripts/ is excluded, so re-include this
-# one file. Needs no extra deps — scripts.zammad_mcp (already copied) uses
-# httpx, which digigraph[mcp] supplies.
-COPY scripts/index_occ_tickets.py /app/scripts/index_occ_tickets.py
+# scripts/index_occ_tickets.py is deliberately NOT copied into the image
+# (DIG-1438). It was only there for [program:seed_occ_tickets], the boot step
+# that backfilled occ_tickets from the live Zammad API with unmasked ticket
+# bodies and sender/subject metadata. With the program gone nothing invokes it,
+# and leaving the writer in the image would leave the leak one supervisord line
+# away from returning. The .dockerignore re-include stays: DIG-1210 still has to
+# change what this script writes. tests/scripts/test_stack_dockerignore_context.py
+# pins that re-include, but it is on `main` only and does not exist on develop.
 COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 # SearXNG config — the SAME file docker-compose.yml mounts into the dev
@@ -177,11 +180,20 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # gap where the bake was only prescribed in a comment and every cold start
 # pulled the snapshot from HF Hub on the seed critical path (#5045). Dockerfile
 # only; full rebuild required (wrangler caches by Dockerfile hash).
+# Rebuild marker v17 (2026-10-06): drops seed_occ_tickets.sh from the image and
+# the [program:seed_occ_tickets] boot step that called it (DIG-1438). That step
+# backfilled the Zammad ticket corpus into occ_tickets at every container start,
+# writing unmasked customer ticket bodies and sender/subject metadata, and
+# ZAMMAD_API_TOKEN is present in the live Worker env, so any deploy built from a
+# branch carrying it refilled the collection. seed_chroma.sh is now the only
+# seeder. Rebuild required: the file and its supervisord block were in the v16
+# image layer.
 # Rebuild marker v16 (2026-10-04): ships seed_occ_tickets.sh, the new
 # [program:seed_occ_tickets] boot step that backfills the Zammad ticket corpus
 # into the occ_tickets index, plus scripts/index_occ_tickets.py and the
-# .dockerignore re-include it needs. Without it occ_tickets stays an
-# auto-created empty collection, so the OCC fan-out half returns nothing (#5045).
+# .dockerignore re-include it needs. Superseded by v17, which removed the boot
+# step again and dropped the COPY (DIG-1438); only the .dockerignore re-include
+# remains, because DIG-1210 still has to change what the script writes.
 # Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
 # in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
 # :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
@@ -208,11 +220,10 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # so force a fresh image (and with it a fresh instance) when secrets/env must land.
 COPY apps/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
 COPY apps/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
-COPY apps/digithings-stack-cloudflare/container/seed_occ_tickets.sh /seed_occ_tickets.sh
 COPY apps/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
 COPY apps/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
 COPY apps/digithings-stack-cloudflare/container/seed /seed
-RUN chmod +x /entrypoint.sh /seed_chroma.sh /seed_occ_tickets.sh \
+RUN chmod +x /entrypoint.sh /seed_chroma.sh \
         /start_digikey.sh /start_digisearch.sh \
     && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor /var/cache/searxng
 

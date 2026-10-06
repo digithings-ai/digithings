@@ -2,6 +2,30 @@
 
 This document describes the security posture of digithings and how to report vulnerabilities. See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram and [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) for the review policy.
 
+## Client data under `projects/`
+
+Every agent runs as the same unix user, so filesystem permissions cannot separate
+engagements. The control is at the **tool-call boundary**: the opencode plugin
+[`.opencode/plugins/projects-path-guard.js`](.opencode/plugins/projects-path-guard.js)
+refuses any read under `projects/` except
+
+1. `projects/README.md` — tracked in git, not client data; and
+2. `projects/<engagement-dir>/**` — the single engagement bound to the run.
+
+It is **default-deny and fails closed**: no bound engagement, a missing or
+unreadable mapping, or a path that cannot be evaluated are all denials. Paths are
+normalised (`..`, absolute paths, symlinks) before matching, so the guard cannot
+be walked around by writing the path differently. Every refusal is logged as a
+`projects_path_denied` audit event. One engagement per run: a run holds the paths
+of the engagement named in `DIGI_ENGAGEMENT`, resolved through the explicit
+mapping in [`config/engagement-paths.json`](config/engagement-paths.json).
+
+Kill switch: `DIGI_PROJECTS_PATH_GUARD=off`, which is logged. Every other value,
+including an unrecognised one, enforces.
+
+`.gitignore` is **not** part of this control. It prevents a commit; it never
+prevented a read. See `knowledge/data-policy.md` §7.
+
 ## Threat model
 
 digithings is designed to run on a single host or private network. The primary threats we design against:

@@ -36,11 +36,6 @@ paths = [
   # No production secrets live in test files (mirrors the ^tests/ Python policy).
   '''\.test\.(ts|tsx|js|jsx)$''',
 
-  # Confidential research vaults (Obsidian markdown briefs under projects/*/vault/):
-  # research prose that occasionally matches the aws-access-token regex. Not
-  # deployable code; never pushed to public remotes (see CLAUDE.md).
-  '''^projects/[^/]+/vault/''',
-
   # History-only path: the pre-migration research example template lived here
   # (file absent at HEAD, present in history). It carries the same three real
   # free-tier data-API keys (FRED / CoinGecko / Alpha Vantage) as the live path
@@ -136,4 +131,34 @@ commits = [
   # with no --log-opts, so this commit stays in scope until the refs are gone.
   # No rotation needed (see SECURITY.md "Secrets scanning").
   "0f193360d21305ca8a65d33c47a7502a7ad5ec60",
+
+  # 2026-10-06: stash-archive snapshot 1a657079c. It was reachable only from the
+  # local refs/tags/stash-archive/28 and /29; DIG-1304 expired all 45
+  # stash-archive/* tags on 2026-10-06, so it is now unreachable from every ref
+  # in the local repo and present on no remote. The commit object is still in the
+  # object database, and Security re-confirmed on 2026-10-06 that it is still
+  # reachable inside .git/stash-archive/stash-archive.bundle. A bundle is not a
+  # ref, so no gc reaches it; retiring it is DIG-1313, which Counsel owns with
+  # Chris. The exemption therefore stays.
+  # The commit adds six strings that match gitleaks' aws-access-token rule
+  # (secretLen 20, entropy 3.52, AWS key-ID prefix true) inside client research
+  # briefs under projects/*/vault/. Their provenance is unestablished: a shape
+  # test cannot distinguish a live key from a quoted sample, and this entry does
+  # not assert liveness in either direction. What is established is that the old
+  # blanket "research prose" justification for muting projects/*/vault/ had the
+  # wrong basis, so the path mute is removed and the exemption is scoped to the
+  # one commit that carries findings. Any NEW file under projects/*/vault/ is
+  # scanned normally. An auditor can enumerate the exact paths with
+  # `git ls-tree -r 1a657079c`; they are deliberately not named here because this
+  # file is tracked outside projects/.
+  # Removing the path mute changes nothing on remote-visible history. 1a657079c
+  # is on no remote and in no branch, so it is not among the commits CI scans,
+  # and a --branches scan reports the same findings before and after with none
+  # under projects/. This commit-scoped entry is what keeps a local
+  # full-history scan quiet on those six.
+  # No rotation identified as owed (see SECURITY.md "Secrets scanning"):
+  # docs/ops/SECRETS_INVENTORY.md records no AWS credential. That inventory is
+  # repo-scoped, so it establishes only that no AWS credential is tracked there,
+  # not that none exists anywhere.
+  "1a657079c54ecd34ab07a881c87c2b2c19543d23",
 ]

@@ -41,6 +41,7 @@ const PATH_A_ENABLED_IDS = [
   "token-canary",
   "secret-staleness",
   "smoke-site",
+  "datatap-answer-check",
 ] as const;
 
 const TWELVE_X_ENABLED_IDS = [
@@ -85,6 +86,7 @@ const ENABLED_CRONS = [
   "41 6 * * *",
   "17 6 1 * *",
   "17 6 * * *",
+  "17 * * * *",
   "7 0 * * MON-FRI",
   "12 7 * * MON-FRI",
   "17 12 * * MON-FRI",

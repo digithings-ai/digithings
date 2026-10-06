@@ -9,9 +9,12 @@ import { ChatEmbedShell } from "@/components/ChatEmbedShell";
 export function ChatPageShell({
   embedOrigin,
   embedHost,
+  acceptsInviteToken,
 }: {
   embedOrigin: string;
   embedHost?: string;
+  /** Forward the invite key off this route's URL to digichat (DIG-1210). */
+  acceptsInviteToken?: boolean;
 }) {
   return (
     <>
@@ -34,7 +37,11 @@ export function ChatPageShell({
           boxSizing: "border-box",
         }}
       >
-        <ChatEmbedShell embedOrigin={embedOrigin} embedHost={embedHost} />
+        <ChatEmbedShell
+          embedOrigin={embedOrigin}
+          embedHost={embedHost}
+          acceptsInviteToken={acceptsInviteToken}
+        />
       </main>
     </>
   );

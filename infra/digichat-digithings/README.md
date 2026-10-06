@@ -90,18 +90,29 @@ Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same host).
 
 ### OCC corpus
 
-Production `DIGICHAT_EMBED_TENANTS` must include OCC:
+Production `DIGICHAT_EMBED_TENANTS` must include OCC. The `token` in that entry is the OCC invite
+key — a bearer capability, never committed, and **not** the `MCP_EDGE_KEY` literal in the nested
+`mcp.servers` entry (that one is a separate credential; see
+[`docs/ops/SECRETS_ROTATION.md` §1](../../docs/ops/SECRETS_ROTATION.md)). Mint, rotate, revoke and
+verify it with [`docs/ops/OCC_INVITE_KEY.md`](../../docs/ops/OCC_INVITE_KEY.md), which is also the
+rollback for taking OCC off the first-party allowlist:
 
 ```json
 "occ.digithings.ai": {
   "slug": "occ",
+  "token": "<the OCC invite key, from the secret store — never a literal in this file>",
   "backend": {
     "type": "digigraph",
-    "digisearchIndex": "occ_help,occ_tickets",
+    "digisearchIndex": "occ_help",
     "vaultPathPrefix": "clients/online-compliance-center"
   }
 }
 ```
+
+`token` is **required** — the registry validator rejects a tenant entry without a non-empty one
+(`apps/digichat/src/lib/embed-tenants.ts:511`). A placeholder like `unused-for-first-party` is a
+real key to anyone who has read this README, and OCC reaches live customer data, so the OCC entry
+carries a minted secret and not a placeholder.
 
 digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
@@ -190,7 +201,7 @@ digichat runtime embed registry (never a Docker build-arg — tokens leak in lay
 ```bash
 export DIGICHAT_REQUIRE_ROOT_AUTH=0
 export DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
-export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":true,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","mcp":{"servers":[{"id":"zammad","url":"http://zammad-mcp:8770/mcp","label":"Zammad tickets","default":true}]},"backend":{"type":"digigraph","digisearchIndex":"occ_help,occ_tickets","vaultPathPrefix":"clients/online-compliance-center"}}}'
+export DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","llmAccess":"free_then_byok","activityDetail":"full","attribution":true,"token":"<unused-for-first-party>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<unused-for-first-party>","mcp":{"servers":[{"id":"zammad","url":"http://zammad-mcp:8770/mcp","label":"Zammad tickets","default":true}]},"backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
 OCC uses virtual host `occ.digithings.ai` (no DNS) for `/chat/occ` — see
@@ -215,7 +226,7 @@ The Pages Function OpenRouter digivault loop is **retired**.
 1. `curl -sf https://graph.digithings.ai/healthz` and `https://key.digithings.ai/healthz`
 2. Open https://digithings.ai/chat — no `/login` wall
 3. Ask a vault-grounded question; expect digigraph tool activity
-4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against `occ_help,occ_tickets` fan-out
+4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against the `occ_help` index
 
 ## Onboard corpus
 
