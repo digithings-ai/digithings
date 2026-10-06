@@ -26,6 +26,8 @@ What it fails on (any of these is exit 1):
 - `migrated`       the binding now points at a Key Vault -- the durable answer was
                    taken, so the fingerprint row is stale and must be deleted
 - `unbound`        the env var no longer references the secret by name
+- `unrecorded`     the app carries a secret that has no owner or fingerprint in the
+                   lock -- the exact gap this detector exists to close
 - `expired`        past the recorded expiry date; re-verify, rotate, or re-decide
 - `lock`           the lock file itself is malformed or incomplete
 
@@ -292,6 +294,18 @@ def check_env_bindings(az_bin: str, lock: dict[str, Any], bindings: Iterable[dic
                 )
                 continue
             report.ok("inline", subject, f"bound to {binding['env_var']} with an inline value (keyVaultUrl null)")
+
+        recorded = {str(b["secret_name"]) for b in group_bindings}
+        for ref in sorted(set(by_ref) - recorded):
+            names = ", ".join(sorted(str(e.get("env")) for e in by_ref[ref]))
+            report.add(
+                FAIL,
+                "unrecorded",
+                f"{group}/{ref}",
+                f"secretRef {ref!r} is bound to {names} but has no row in the lock file, so it "
+                "has no owner, no fingerprint and no detector coverage. Record it, or remove it "
+                "from the app.",
+            )
 
 
 def check_fingerprints(az_bin: str, lock: dict[str, Any], bindings: Iterable[dict[str, Any]],

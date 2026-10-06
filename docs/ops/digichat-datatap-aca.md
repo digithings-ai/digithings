@@ -184,6 +184,8 @@ python3 scripts/digichat_aca_secret_detector.py --offline # lock + expiry only, 
 
 Exit 1 means the digichat secret inventory is not trustworthy — stop and read [`credential-ownership.md`](credential-ownership.md) before promoting. It prints names, lengths and digests only; no value is ever printed.
 
+It fails on the whole drift family (`drift`, `missing`, `unbound`, `migrated`, `expired`, `lock`) **and** on `unrecorded` — a secret added to the app that has no owner and no fingerprint row in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json). Env vars bound with a plain `value` rather than a `secretRef` are ordinary config and do not trip it, so a new `PORT=…` or `NODE_ENV=…` is not a finding.
+
 ### Step 0 — preflight (read-only)
 
 ```bash

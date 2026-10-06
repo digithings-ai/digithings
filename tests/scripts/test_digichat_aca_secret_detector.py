@@ -200,6 +200,45 @@ def test_renamed_env_var_fails_as_unbound(tmp_path: Path, fake_az: Path) -> None
     assert "unbound" in codes(result)
 
 
+def test_a_secret_added_without_an_owner_fails_as_unrecorded(tmp_path: Path, fake_az: Path) -> None:
+    # The exact gap this issue exists to close: a new inline secret on the app that
+    # nobody owns and nobody fingerprinted.
+    fixture = {
+        "values": {"datatap-rg/auth-secret": CANARY, "datatap-rg/embed-tenants": '{"acme":{"token":"other"}}'},
+        "env": {
+            "datatap-rg": [
+                env_entry("AUTH_SECRET", "auth-secret"),
+                env_entry("DIGICHAT_EMBED_TENANTS", "embed-tenants"),
+                env_entry("STRIPE_WEBHOOK_SECRET", "stripe-webhook-secret"),
+            ]
+        },
+    }
+    result = run_detector(tmp_path, lock_document(two_bindings()), fixture, fake_az=fake_az)
+    assert result.returncode == 1
+    assert "unrecorded" in codes(result)
+    assert "datatap-rg/stripe-webhook-secret" in result.stdout
+    assert "STRIPE_WEBHOOK_SECRET" in result.stdout
+    assert "no owner, no fingerprint" in result.stdout
+
+
+def test_plain_env_values_are_not_mistaken_for_unrecorded_secrets(tmp_path: Path, fake_az: Path) -> None:
+    # An env entry bound with `value` rather than `secretRef` is ordinary config, not a
+    # credential, so it must not trip the unrecorded check.
+    fixture = {
+        "values": {"datatap-rg/auth-secret": CANARY, "datatap-rg/embed-tenants": '{"acme":{"token":"other"}}'},
+        "env": {
+            "datatap-rg": [
+                env_entry("AUTH_SECRET", "auth-secret"),
+                env_entry("DIGICHAT_EMBED_TENANTS", "embed-tenants"),
+                {"env": "PORT", "secretRef": None, "keyVaultUrl": None},
+            ]
+        },
+    }
+    result = run_detector(tmp_path, lock_document(two_bindings()), fixture, fake_az=fake_az)
+    assert result.returncode == 0
+    assert "unrecorded" not in codes(result)
+
+
 def test_az_refusal_is_reported_not_swallowed(tmp_path: Path) -> None:
     # A fake that always fails stands in for a lapsed Azure session.
     dead = tmp_path / "dead-az"
