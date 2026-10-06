@@ -180,7 +180,7 @@ function PipelineRail() {
       {PIPELINE_ENGINES.map((engine) => (
         <div
           key={engine.id}
-          role="group"
+          role="listitem"
           aria-label={engine.label}
           className="flex shrink-0 items-stretch gap-[0.5rem]"
         >
@@ -193,7 +193,6 @@ function PipelineRail() {
           {engine.phases.map((phase) => (
             <div
               key={phase.id}
-              role="listitem"
               title={`Phase folder ${phase.id}`}
               className="flex w-[10.5rem] shrink-0 snap-start flex-col gap-[0.2rem] border border-hair bg-surface p-[0.6rem]"
             >
@@ -206,7 +205,6 @@ function PipelineRail() {
           ))}
           {engine.phases.length === 0 ? (
             <div
-              role="listitem"
               className="flex w-[10.5rem] shrink-0 snap-start flex-col gap-[0.2rem] border border-dashed border-hair bg-surface p-[0.6rem]"
             >
               <span className="font-mono text-[0.6rem] uppercase tracking-[0.06em] text-ink-mute">

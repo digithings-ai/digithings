@@ -20,8 +20,22 @@ import { describe, expect, it } from "vitest";
 
 const src = readFileSync(fileURLToPath(new URL("./QuantSection.tsx", import.meta.url)), "utf8");
 
+/**
+ * The rail body, from the component signature to the end of its declaration.
+ * Slicing to a fixed character offset is not safe here: it silently truncated
+ * the last ~570 chars of this function, which meant the negative assertion below
+ * only ever saw the head of the body.
+ */
+function pipelineRailBody(): string {
+  const start = src.indexOf("function PipelineRail()");
+  if (start === -1) throw new Error("PipelineRail not found");
+  // `PipelineRail` is the last function in the module, so its declaration runs
+  // to the end of the file.
+  return src.slice(start);
+}
+
 describe("digiquant pipeline rail", () => {
-  const rail = src.slice(src.indexOf("function PipelineRail()"), src.indexOf("function PipelineRail()") + 1600);
+  const rail = pipelineRailBody();
 
   it("keeps the engine groups from shrinking so the rail scrolls instead of overlapping", () => {
     // The group wrapper carries shrink-0; min-w-0 without shrink-0 is what let
@@ -32,5 +46,17 @@ describe("digiquant pipeline rail", () => {
 
   it("scrolls horizontally rather than wrapping", () => {
     expect(rail).toContain("overflow-x-auto");
+  });
+
+  it("gives every listitem a list that owns it", () => {
+    // A `list` owns its `listitem` children directly. The engine groups sit
+    // between the two, so the cards were grandchildren and screen readers lost
+    // the item count and position (and could surface the cards as list items
+    // with no list at all). Each engine is the list item, carrying the engine
+    // name; the phases inside it are plain content, not orphan list items.
+    expect(rail).toMatch(/role="list"\s+aria-label="digiquant pipeline phases"/);
+    expect(rail).toMatch(/role="listitem"\s+aria-label=\{engine\.label\}/);
+    expect(rail).not.toMatch(/role="group"/);
+    expect(rail).not.toMatch(/role="listitem"\s+title=/);
   });
 });

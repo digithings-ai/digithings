@@ -211,6 +211,105 @@ larger change.
 - Naming and canon: `scripts/check_frontend_canon.py` clean, no app-local `cursor-*`,
   all prose lowercase.
 
+## Second review — fresh context, on the post-review commits
+
+| | |
+|---|---|
+| **Reviewer** | fresh-context review subagent (`ses_eece3ae64ffeUFlAfPFDt0n01Z`) |
+| **Head reviewed** | `66af99a49` |
+| **Verdict** | `approve-with-nits` — no blocking or major findings |
+| **Outcome** | 2 minors + 1 nit fixed here, 1 nit + 2 notes left with reasons |
+
+The first reviewer could not review its own follow-up commits, so these were re-reviewed
+with independent context against the load-bearing claims of the closure correction. It
+confirmed the three claims this branch rests on:
+
+- **The `layer(components)` chain is sound.** `globals.css:6` imports the site sheet
+  inside `layer(components)`; `site.css` declares no `@layer` of its own; `globals.css`
+  declares none either, so the footer rule is unlayered and outranks the clamp. The
+  `max-width: none` fix works.
+- **The blast radius is contained.** Exactly one element in the app carries
+  `.pixel-word-footer` (the `variant="footer"` branch of `PixelWordmark.tsx`, called only
+  from `FooterWordmark.tsx:21`), and the override selector has no combinator and no
+  `!important`, so it cannot reach the hero mark or any other svg.
+- **`beginRest()`'s guard is sound and preserves intent.** It returns only on
+  strictly-off-screen boxes, `resting` is never set so `beginRest` stays re-armable
+  from the scroll timer, `setSkipping(false)` matches the other exit path, and the
+  caller already zeroes `restBlend`.
+- It also verified the scroll-glide tests are **not** tautological by arithmetic on the
+  source: no single-expression stub satisfies the suite, and removing the `??` on
+  `scroll-glide.ts:43` makes the `quietThreshold` test fail.
+- T6 found **no** dead CSS. The `position: absolute` on `.dg-mosaic-enter` has the right
+  containing block (`.dg-cell { position: relative }`) and matching gutters.
+
+### Minor A — `role="group"` broke list ownership in the pipeline rail
+
+`apps/digithings-web/components/landing/QuantSection.tsx:183`
+
+A `list` owns its `listitem` children directly. `role="group"` is not a permitted child
+of `list`, so with the engine groups between them the 19 phase cards had become
+*grand*children of the list: screen readers lose item count and position, can surface
+the cards as list items with no list, and the list itself had zero valid children.
+
+Not a regression — the pre-`a3ee030c6` bare `<div>` wrapper was equally
+ownership-breaking — but the commit set out to fix exactly this and did not.
+
+Fix: the engine group is the `listitem` and carries `aria-label={engine.label}`; the
+phase cards drop `role="listitem"` and become plain content inside it. The list now
+owns its three engine items directly, and the visible label span stays `aria-hidden`
+so the name is announced once. Pinned by a new assertion in
+`QuantSection.pipeline-rail.test.ts`.
+
+### Minor B — the contract test asserted the rule's text but not its layer
+
+`apps/digithings-web/components/landing/pixel-word-footer-width.contract.test.ts`
+
+`ruleBody` matches rules with no layer awareness, so all four original asserts stay
+green if these globals are wrapped in an `@layer` — or if a Tailwind v4 `@import`
+restructure moves them into one. That would put the footer rule below the site's
+`layer(components)` clamp and silently re-inert the enlargement, with nothing in the
+suite noticing. This is the whole mechanism the fix depends on, and it was unguarded.
+
+Fix: a new assert computes the `@layer` block ranges in `globals.css` and requires the
+footer rule's offset to fall outside all of them. Mutation-verified: wrapping the rule
+in `@layer components { … }` fails this assert with the other four still passing.
+
+A computed-style test is not available here and a source contract is the right proxy:
+`apps/digithings-web/vitest.config.ts:5` is `environment: "node"`, and switching to
+jsdom or happy-dom would not help — neither parses on-disk stylesheets nor implements
+cascade layers, so `getComputedStyle` would return nothing real.
+
+### Nit — the negative assertion was scoped to a truncated slice
+
+`apps/digithings-web/components/landing/QuantSection.pipeline-rail.test.ts:24`
+
+The rail was sliced with a `+ 1600` character window, but `function PipelineRail()` spans
+~2168 chars. All asserts sat in the first 960, so the `not.toMatch(/min-w-0/)` guard only
+ever saw the head of the body — reintroducing `min-w-0` in the tail passed silently.
+
+Fix: slice the declaration to the end of the module instead of a magic offset.
+Mutation-verified: a `min-w-0` class placed ~33k chars in — far outside the old window —
+now fails the guard.
+
+### Second-review notes left as-is
+
+- **`globals.css` comment wording** (nit in that review). The mechanism was misdescribed
+  as the layered clamp "losing to this sheet's unlayered `width`". Layers only arbitrate
+  between declarations of the *same* property, and the site sheet declares `max-width`,
+  not `width` — so the clamp applied all along. The conclusion and the code were right;
+  the explanation was not. Both the comment and the test's docblock now say that
+  `width` and `max-width` are independent and only an unlayered `max-width` can outrank
+  the site sheet.
+- **`beginRest()` and a zero-height pin.** A `display: none` ancestor or collapsed section
+  reports `top === bottom === 0`, which satisfies neither half of the guard, so the rAF
+  loop still runs. The guard tests viewport *crossing*, not intersection area. Nothing
+  is visible to animate in that state, so the blast radius is a wasted loop on a hidden
+  element rather than a user-visible fault. Fixing it means a third geometry read per
+  frame — the exact cost the guard was added to avoid — for no user-visible gain.
+- **Unverified by that reviewer**, and worth stating plainly: it reasoned the cascade from
+  the spec and the source, and did not run a browser. The computed-width measurements in
+  this file's major 2 section are the earlier Chrome runs, not its own.
+
 ## Pre-existing, not this PR
 
 `apps/digithings-web` typecheck fails on 4 errors and `next build` fails, both on clean

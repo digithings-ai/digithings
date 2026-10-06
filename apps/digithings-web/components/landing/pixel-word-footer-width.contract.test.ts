@@ -14,16 +14,16 @@ import { describe, expect, it } from "vitest";
  * 1. the flex default, which shrinks an over-wide flex item back to the
  *    container's content box, and
  * 2. the blanket `img, svg { max-width: 100% }` reset in
- *    `packages/design/site/site.css`, which the app imports at
- *    `globals.css:6`. That rule sits in `layer(components)`, so it loses to any
- *    unlayered `width` — which is why the mark *looked* correctly sized — but
- *    nothing unlayered declared a `max-width`, so the clamp still applied and
- *    capped the used width at the band's content box.
+ *    `packages/design/site/site.css`, which the app imports at `globals.css:6`
+ *    inside `layer(components)`.
  *
- * `flex-shrink: 0` only covers (1); it does nothing about a max-width cap. Both
- * have to be neutralised, which is what this asserts: the site sheet still caps
- * every svg, so a footer rule whose width exceeds 100% is only honest if it
- * lifts that cap too.
+ * `width` and `max-width` are independent properties, so the layer did nothing
+ * to save the mark: layered or not, that `max-width: 100%` capped the used
+ * width at the band's content box. `flex-shrink: 0` only covers (1); it cannot
+ * lift a max-width. Both have to be neutralised, which is what this asserts:
+ * the site sheet still caps every svg, so a footer rule whose width exceeds 100%
+ * is only honest if it lifts that cap too — and does so *unlayered*, since that
+ * is the only way a declaration in this sheet can outrank a layered one.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,12 +46,51 @@ function ruleBody(css: string, selector: string): string {
   return last[2];
 }
 
-const footerRule = ruleBody(readFileSync(APP_SHEET, "utf8"), ".pixel-word.pixel-word-footer");
+/** Character offsets of any `@layer` block body in `css`, as [start, end). */
+function layerRanges(css: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const re = /@layer[^{]*\{/g;
+  for (const match of css.matchAll(re)) {
+    const start = match.index! + match[0].length;
+    let depth = 1;
+    let cursor = start;
+    while (depth > 0) {
+      const open = css.indexOf("{", cursor);
+      const close = css.indexOf("}", cursor);
+      if (close === -1) break;
+      if (open !== -1 && open < close) {
+        depth += 1;
+        cursor = open + 1;
+      } else {
+        depth -= 1;
+        cursor = close + 1;
+      }
+    }
+    ranges.push([start, cursor]);
+  }
+  return ranges;
+}
+
+const appCss = stripComments(readFileSync(APP_SHEET, "utf8"));
+const footerRule = ruleBody(appCss, ".pixel-word.pixel-word-footer");
 const siteRule = ruleBody(readFileSync(SITE_SHEET, "utf8"), "svg");
 
 describe("footer wordmark width contract", () => {
   it("confirms the site sheet still caps every svg, which is what the rule has to undo", () => {
     expect(siteRule).toMatch(/max-width:\s*100%/);
+  });
+
+  it("declares the footer rule unlayered, or the layered clamp outranks it again", () => {
+    // The other assertions read the rule's text and stay green no matter what
+    // layer it lands in. Cascade layers only arbitrate *between* layers, so
+    // wrapping these globals in an `@layer` — or a Tailwind v4 `@import`
+    // restructure that moves them into one — would put the footer rule below
+    // the site's `layer(components)` clamp and silently re-inert the
+    // enlargement. Nothing else in this file would notice.
+    const ruleStart = appCss.indexOf(".pixel-word.pixel-word-footer");
+    expect(ruleStart).toBeGreaterThan(-1);
+    const enclosing = layerRanges(appCss).filter(([start, end]) => ruleStart >= start && ruleStart < end);
+    expect(enclosing).toEqual([]);
   });
 
   it("sizes the footer mark past its container", () => {
