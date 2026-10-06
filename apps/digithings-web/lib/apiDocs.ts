@@ -640,7 +640,7 @@ for hit in r.json()["results"]:
     ],
     notes: [
       "Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).",
-      "Self-host: digichat builds from source — there is no published digichat image on GHCR yet (the publish workflow builds one per digichat-v* tag; none has been cut since digichat-v2.3.2). See infra/self-host/compose.ghcr.yml.",
+      "Self-host: digichat builds from source — there is no published digichat image on GHCR yet (the publish workflow builds one per digichat-vX.Y.Z tag; none has been cut since digichat-v2.3.2). See infra/self-host/compose.ghcr.yml.",
     ],
   },
 

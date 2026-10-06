@@ -96,7 +96,7 @@ export const guides: Guide[] = [
       },
       {
         kind: "p",
-        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat has no published image yet — the publish workflow builds one per `digichat-v*` tag, and no tag after `digichat-v2.3.2` has been cut, so digichat builds from source here.",
+        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat has no published image yet — the publish workflow builds one per `digichat-vX.Y.Z` tag, and no tag after `digichat-v2.3.2` has been cut, so digichat builds from source here.",
       },
       { kind: "h", text: "Profiles" },
       {
@@ -143,7 +143,7 @@ export const guides: Guide[] = [
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "Published image: not yet. The publish workflow is back and builds an image from each `digichat-v*` tag, but no tag after `digichat-v2.3.2` has been cut, so there is nothing published to pull. Until the next release, digichat builds from source.",
+          "Published image: not yet. The publish workflow is back and builds an image from each `digichat-vX.Y.Z` tag, but no tag after `digichat-v2.3.2` has been cut, so there is nothing published to pull. Until the next release, digichat builds from source.",
           "Changelog: `apps/digichat/CHANGELOG.md`",
           "Pin by digest once you publish the image yourself — do not rely on `:latest`.",
         ],

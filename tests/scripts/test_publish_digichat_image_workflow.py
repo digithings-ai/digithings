@@ -56,14 +56,43 @@ def _triggers(doc: dict) -> dict:
     return raw
 
 
-def _steps(doc: dict) -> list[dict]:
+def _job(doc: dict) -> dict:
     jobs = doc["jobs"]
     assert len(jobs) == 1, "the lane must stay a single job"
-    return jobs["publish"]["steps"]
+    return next(iter(jobs.values()))
+
+
+def _steps(doc: dict) -> list[dict]:
+    return _job(doc)["steps"]
 
 
 def _run_scripts(doc: dict) -> str:
     return "\n".join(step["run"] for step in _steps(doc) if "run" in step)
+
+
+def _no_comments(script: str) -> str:
+    """Strip ``#`` to end of line, so prose in a comment block cannot satisfy an assertion.
+
+    Every guard in this file is asserted on text. Without this, moving a guard
+    into the comment block above it leaves the tests green and the lane
+    unguarded — which is exactly the failure a reader would not notice.
+    """
+    return re.sub(r"#.*$", "", script, flags=re.M)
+
+
+def _guards(doc: dict) -> str:
+    """The lane's executable text: ``run`` blocks with their comments removed."""
+    return _no_comments(_run_scripts(doc))
+
+
+def _structure(doc: dict) -> str:
+    """The whole parsed workflow, re-serialised — every key, comments dropped.
+
+    Needed because a hand-picked subset of nodes (only ``uses``, only ``run``)
+    cannot see a credential arriving through ``with:``, ``env:``, a job-level
+    ``permissions:`` block, or a job-level ``environment:``.
+    """
+    return yaml.safe_dump(doc)
 
 
 def _build_step(doc: dict) -> dict:
@@ -96,24 +125,32 @@ def test_no_schedule() -> None:
 
 
 def test_the_lane_cannot_reach_azure() -> None:
-    """No cloud credential of any kind — the promotion stays a human step."""
-    doc = _doc()
-    uses = " ".join(str(step.get("uses", "")) for step in _steps(doc))
-    runs = _run_scripts(doc)
-    # The two ways a workflow acquires a cloud identity: an OIDC token, or a
-    # stored secret. Neither may appear.
-    assert "azure/login" not in uses, "an ACA promotion is lane B, not this lane"
-    assert "id-token" not in (doc.get("permissions") or {}), (
-        "id-token: write would let this lane mint an Azure token"
-    )
-    assert not re.search(r"\bsecrets\.(?!GITHUB_TOKEN)", uses + runs), (
+    """No cloud credential of any kind — the promotion stays a human step.
+
+    Scanned over the re-serialised document rather than a hand-picked set of
+    nodes. The widenings that matter all arrive through keys a ``uses``+``run``
+    concatenation cannot see: a step ``env:``, a ``with:``, a job-level
+    ``permissions:`` block, a job-level ``environment:``.
+    """
+    structure = _structure(_doc())
+    job = _job(_doc())
+
+    # A stored secret of any kind other than the automatic GITHUB_TOKEN.
+    assert not re.search(r"secrets\.(?!GITHUB_TOKEN\b)", structure), (
         "the only secret this lane may read is the automatic GITHUB_TOKEN"
     )
-    # Belt and braces: no environment gate means no approval path to a write
-    # either, and the queueing-concurrency invariant in
+    # An OIDC token is the other route to a cloud identity.
+    assert "id-token" not in structure, "id-token: write would mint an Azure token"
+    # No environment gate: there is no approval path to a write, and the
+    # queueing-concurrency invariant in
     # tests/scripts/test_workflow_environment_concurrency.py has nothing to say.
-    assert "environment" not in _steps(doc)[0]
-    assert "az " not in runs and "containerapp" not in runs
+    assert "environment" not in job, "an environment gate implies an approvable write"
+    # Belt and braces on the two spellings of an ACA promotion.
+    assert "azure/login" not in structure, "an ACA promotion is lane B, not this lane"
+    assert not re.search(r"\baz\b", _guards(_doc())), (
+        "no az CLI invocation in a lane that cannot reach Azure"
+    )
+    assert "containerapp" not in _guards(_doc()).lower()
 
 
 def test_permissions_are_the_minimum() -> None:
@@ -157,39 +194,75 @@ def test_the_build_names_its_own_commit() -> None:
 
 def test_the_tag_must_resolve_to_a_commit() -> None:
     """Nothing to bind against means the image proves only that *something* built it."""
-    runs = _run_scripts(_doc())
-    assert 'git rev-list -n1 "$tag"' in runs
-    assert "does not resolve to a commit" in runs
+    # Comment-stripped: a guard that only survives inside a comment is not a guard.
+    guards = _guards(_doc())
+    assert 'git rev-list -n1 "$tag"' in guards
+    assert "does not resolve to a commit" in guards
+    # `set -e` would abort on git's own error before the diagnostic could print,
+    # so the lookup must tolerate a bad ref. Without this the guard is dead code.
+    resolve = re.search(r"git rev-list -n1 \"\$tag\"[^\n]*", guards)
+    assert resolve is not None and "|| true" in resolve.group(0), (
+        "the rev-list lookup must tolerate failure so the emptiness check is reachable"
+    )
 
 
 def test_the_tag_version_must_match_package_json() -> None:
     """The drift the deleted workflow refused to publish; kept."""
-    runs = _run_scripts(_doc())
-    assert "jq -r .version apps/digichat/package.json" in runs
-    assert "does not match apps/digichat/package.json" in runs
+    guards = _guards(_doc())
+    assert "jq -r .version apps/digichat/package.json" in guards
+    assert "does not match apps/digichat/package.json" in guards
     # Same shape as the checker's TAG_RE, so the lane and the checker cannot
     # disagree about what a release tag is.
-    assert re.search(r"\^digichat-v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$", runs)
+    assert re.search(r"\^digichat-v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$", guards)
 
 
 def test_publishing_an_existing_version_is_a_no_op() -> None:
     """Release tags are immutable here: re-pushing one would change the digest under its name."""
-    runs = _run_scripts(_doc())
+    doc = _doc()
+    runs = _run_scripts(doc)
     assert 'docker manifest inspect "$IMAGE_TAG"' in runs
     assert "already published" in runs
     # No force, no re-tag: the escape is a new patch version.
-    assert "force" not in _triggers(_doc())["workflow_dispatch"]["inputs"]
+    assert "force" not in _triggers(doc)["workflow_dispatch"]["inputs"]
+
+    # The manifest check is only a guard if something reads its output. Without
+    # this the check computes `exists` and the build pushes regardless, so a
+    # re-dispatch of an already-released tag would change the digest under it.
+    steps = _steps(doc)
+    check = next((s for s in steps if s.get("id") == "check"), None)
+    assert check is not None, "the manifest check needs an id for the build step to gate on"
+    build = _build_step(doc)
+    assert build.get("if") == "steps.check.outputs.exists == 'false'", (
+        "the build must be gated on the check confirming the tag is not published; "
+        f"got if={build.get('if')!r}"
+    )
+    # Both outcomes must be consumed, or the "already published" branch is dead.
+    conditions = [s.get("if") for s in steps if s.get("if")]
+    assert any("exists == 'true'" in c for c in conditions), (
+        "no step reports the already-published case"
+    )
+    # And the check must distinguish absent from unaskable — collapsing both
+    # into exists=false would repush over a released tag during a registry blip.
+    check_guards = _no_comments(check["run"])
+    assert "manifest unknown" in check_guards, (
+        "the check must key absent off the registry's own answer, not off any failure"
+    )
+    assert "set -euo pipefail" in check_guards
 
 
 def test_the_lane_proves_its_own_output() -> None:
     """A Dockerfile that stops emitting the revision must fail here, not at the next promotion."""
-    runs = _run_scripts(_doc())
-    assert "scripts/check_digichat_image_binding.py --facts -" in runs
-    assert "org.opencontainers.image.revision" in runs
+    guards = _guards(_doc())
+    assert "scripts/check_digichat_image_binding.py --facts -" in guards
+    assert "org.opencontainers.image.revision" in guards
     # `--format` everywhere: a bare `docker inspect` emits a JSON array, which
-    # the checker rejects as bad input (runbook §2).
-    assert "docker inspect --format" in runs
-    assert re.search(r"docker inspect\s+(?!.*--format)", runs) is None
+    # the checker rejects as bad input (runbook §2). Matched per line — a `.`
+    # that does not cross newlines would let the lookahead see only the tail of
+    # one line and pass.
+    inspect_lines = [line for line in guards.splitlines() if "docker inspect" in line]
+    assert inspect_lines, "the verification step must inspect the image it pushed"
+    for line in inspect_lines:
+        assert "--format" in line, f"docker inspect without --format: {line.strip()!r}"
 
 
 def test_the_checkout_can_resolve_the_tag() -> None:

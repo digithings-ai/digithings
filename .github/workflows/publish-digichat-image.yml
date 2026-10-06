@@ -1,7 +1,7 @@
 # Publishes the digichat image to GHCR, bound to the commit its release tag names.
 #
-# WHAT THIS LANE IS (DIG-1242, decision: lane A — build only)
-# ------------------------------------------------------------
+# WHAT THIS LANE IS (DIG-1294 — restoring the build lane, lane A of DIG-1242)
+# -------------------------------------------------------------------------
 # It builds and publishes an image. It cannot promote anything: there is no
 # `azure/login`, no `az`, no `environment:` and deliberately no
 # `id-token: write` below, so this workflow holds no credential that could reach
@@ -41,6 +41,8 @@
 # * Overwrite an existing tag. There is no `force` input, deliberately: a
 #   release tag is the identity clients cite, and re-pushing it would change the
 #   digest under that name. To replace a broken image, cut a new patch version.
+#   The check below distinguishes "absent" from "could not ask" and fails on
+#   the second rather than treating it as the first.
 # * Run on a schedule. develop has zero `on.schedule` keys, pinned by
 #   tests/scripts/test_no_gha_schedules.py.
 #
@@ -119,7 +121,10 @@ jobs:
             echo "::error::$tag does not match apps/digichat/package.json ($version) — refusing to publish."
             exit 1
           fi
-          commit="$(git rev-list -n1 "$tag")"
+          # `|| true` so the emptiness check below is reachable: under `set -e` a
+          # bad ref would abort the step with git's own `fatal: ambiguous
+          # argument` before this diagnostic could explain what went wrong.
+          commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
           if [ -z "$commit" ]; then
             echo "::error::$tag does not resolve to a commit — there is nothing to bind an image to."
             exit 1
@@ -135,10 +140,22 @@ jobs:
         env:
           IMAGE_TAG: "ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}"
         run: |
-          if docker manifest inspect "$IMAGE_TAG" > /dev/null 2>&1; then
+          set -euo pipefail
+          # Three outcomes, not two. `docker manifest inspect` exits non-zero for
+          # a genuinely absent tag and also for "could not ask" — a registry 5xx,
+          # an expired login, DNS, a rate limit. Treating both as "not published"
+          # would repush `:vX.Y.Z` over a released name and change the digest
+          # under a tag clients already cite. So: success means published,
+          # the registry's own "manifest unknown" means absent, and anything else
+          # fails the run rather than guessing.
+          if output="$(docker manifest inspect "$IMAGE_TAG" 2>&1)"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
+          elif grep -q '^manifest unknown$' <<< "$output"; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::could not determine whether $IMAGE_TAG is published — refusing to guess. Registry said:"
+            echo "$output"
+            exit 1
           fi
 
       - name: Build and push
@@ -172,12 +189,15 @@ jobs:
           set -euo pipefail
           tag="${TAG#refs/tags/}"
           image="ghcr.io/digithings-ai/digichat:v${VERSION}"
+          docker pull -q "$image" > /dev/null
           # --format everywhere: a bare `docker inspect` emits a JSON array,
           # which the checker rejects as bad input (see the runbook §2).
-          revision="$(docker pull -q "$image" \
-            | xargs docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          # Guard the two index lookups — `index .RepoDigests 0` raises
+          # index out of range on an image with no repo digest, and that would
+          # fail this step *after* the push already succeeded.
+          revision="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
           image_version="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$image")"
-          repo_digest="$(docker inspect --format '{{ index .RepoDigests 0 }}' "$image")"
+          repo_digest="$(docker inspect --format '{{ if .RepoDigests }}{{ index .RepoDigests 0 }}{{ end }}' "$image")"
           {
             echo "### digichat image published"
             echo ""

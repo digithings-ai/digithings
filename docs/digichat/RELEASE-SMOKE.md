@@ -1,8 +1,8 @@
 # digichat release smoke checklist
 
 > **Steps 1–2 below assume a published image, and there is not one yet.**
-> `publish-digichat-image.yml` is back (DIG-1294) and publishes on each
-> `digichat-v*` tag, but the tag ladder stops at `digichat-v2.3.2`, so
+> `publish-digichat-image.yml` is back (DIG-1294) and publishes on a
+> `digichat-vX.Y.Z` tag, but the tag ladder stops at `digichat-v2.3.2`, so
 > `ghcr.io/digithings-ai/digichat` does not exist yet (verified 2026-10-06) and
 > no image has been published. Substitute a local build until the next tag
 > lands. The steps themselves — probe, health, embed, Foundry — remain correct

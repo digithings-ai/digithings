@@ -42,15 +42,15 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 
 The lane is [`.github/workflows/publish-digichat-image.yml`](../../.github/workflows/publish-digichat-image.yml). It is the deleted workflow (recoverable at `git show f54af7052^:.github/workflows/publish-digichat-image.yml`) re-derived for lane A, not a straight revert:
 
-- triggers on the `digichat-v*` tag push, plus `workflow_dispatch` with an explicit `tag` input. The deleted file's `branches: [main]` push trigger is **deliberately dropped** — a main-push build would publish `v2.4.0` carrying main's commit, and the idempotency guard would then skip the tag build, leaving the tag bound to the wrong commit;
+- triggers on the `digichat-v*` tag push, plus `workflow_dispatch` with an explicit `tag` input, and **refuses any tag that is not exactly `digichat-v<major>.<minor>.<patch>`** — the glob is wider than what the lane will publish, deliberately, so a malformed tag fails loudly instead of producing an image named after it. The deleted file's `branches: [main]` push trigger is **deliberately dropped** — a main-push build would publish `v2.4.0` carrying main's commit, and the idempotency guard would then skip the tag build, leaving the tag bound to the wrong commit;
 - **refuses to publish when the tag version ≠ `apps/digichat/package.json` version** (the deleted workflow's own guard, and the check `scripts/check_digichat_image_binding.py` now enforces offline);
-- idempotency guard via `docker manifest inspect` (already-published ⇒ no-op). No `force` input: a released tag is immutable;
+- idempotency guard via `docker manifest inspect`, with three outcomes rather than two: present ⇒ no-op, the registry's own `manifest unknown` ⇒ publish, and **anything else fails the run** — collapsing "absent" and "could not ask" into one answer would let a registry blip repush a released tag and change the digest under its name. No `force` input: a released tag is immutable;
 - builds `context: .`, `file: apps/digichat/Dockerfile` — the repo root is required, it is an npm workspace whose lockfile and private `@digithings/design` dependency resolve only through the workspace link;
 - passes `--build-arg DIGICHAT_REVISION=$commit` where `commit` is `git rev-list -n 1 <tag>`, **not** `github.sha`, so the image names the commit its tag points at (see §2);
 - publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`);
 - **re-reads the pushed image and runs `scripts/check_digichat_image_binding.py --facts -` against it**, so the lane proves its own output rather than asserting a build-arg was honoured.
 
-**What it deliberately cannot do.** No `azure/login`, no `az`, no `environment:`, no `id-token: write`, no repository secret beyond `GITHUB_TOKEN` — the job holds `contents: read` and `packages: write` and nothing else. It cannot read `datatap-rg`, cannot name `datatapchatregistry`, and cannot write a revision. `tests/scripts/test_publish_digichat_image_workflow.py` asserts that boundary (13 tests) so it cannot be widened silently.
+**What it deliberately cannot do.** No `azure/login`, no `az`, no `environment:`, no `id-token: write`, no repository secret beyond `GITHUB_TOKEN` — the job holds `contents: read` and `packages: write` and nothing else. It cannot read `datatap-rg`, cannot name `datatapchatregistry`, and cannot write a revision. `tests/scripts/test_publish_digichat_image_workflow.py` asserts that boundary over the **whole parsed workflow** — every key, not a hand-picked subset — so widening it through `with:`, a step or job `env:`, a job-level `permissions:` or an `environment:` fails the suite rather than passing it.
 
 The `az containerapp update` stays a human step, run from this document.
 
@@ -218,10 +218,18 @@ git push origin digichat-v2.4.0
 
 ```bash
 # Azure write. Needs a principal with AcrImport on datatapchatregistry.
+# GHCR is a foreign registry, so --username/--password are required: the import
+# runs server-side and has no GitHub session to borrow. Use a classic PAT with
+# read:packages. If the package is public these can be omitted, but do not
+# assume that — org default visibility decides, and `ghcr.io/digithings-ai/digichat`
+# does not exist yet.
 az acr import -n datatapchatregistry --subscription "$SUB" \
-  --source digichat:v2.4.0 --source registry ghcr.io/digithings-ai \
-  --repository digichat --tag v2.4.0 -o none
+  --source "ghcr.io/digithings-ai/digichat:v${VERSION}" \
+  --username "$GHCR_USER" --password "$GHCR_PAT" \
+  -t "digichat:v${VERSION}" -o none
 ```
+
+`--source` takes one fully-qualified value (`registry/repository:tag`) — there is no two-token form, and `--registry` is only for a source that is itself an ACR. The destination is `-t/--image`, not `--tag`. Import is a no-op-overwrite hazard in its own right: without `--force` it refuses an existing tag, which is the behaviour to keep on a release tag.
 
 Import is by digest-preserving copy, so the `org.opencontainers.image.revision` label the build lane set survives it — re-run `check_digichat_image_binding.py` against the **ACR** digest afterwards to prove that rather than assume it. This step is an Azure write on a customer resource and belongs to the owned principal that DIG-1292's `do_both` answer requires; it is not something the pipeline does.
 

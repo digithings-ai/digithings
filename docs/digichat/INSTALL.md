@@ -24,7 +24,9 @@ chat app.
 
 > **No published digichat image exists today.** The build lane is back —
 > `publish-digichat-image.yml` publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z`
-> on each `digichat-v*` tag — but the package is still absent from GHCR
+> on a `digichat-vX.Y.Z` tag (the trigger is the `digichat-v*` glob, but a tag
+> that is not exactly `digichat-v<major>.<minor>.<patch>` is refused) — but the
+> package is still absent from GHCR
 > (verified 2026-10-06: anonymous pull `401`, org package list empty), because
 > the tag ladder stops at `digichat-v2.3.2` and nothing publishes until a tag
 > lands. Until then, build from the repo root and record the digest you deploy.
