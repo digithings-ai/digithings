@@ -1,19 +1,19 @@
 # digichat release smoke checklist
 
-> **This checklist cannot be run as written.** The image publish workflow
-> (`publish-digichat-image.yml`) was removed in the strict-essentials cut
-> (`f54af7052`, #4919), so tagging a release no longer produces an image anywhere
-> — `ghcr.io/digithings-ai/digichat` does not exist (verified 2026-10-06). Steps
-> 1–2 below assume a published image; until the build lane is restored (DIG-1242)
-> substitute a local build. The steps themselves — probe, health, embed, Foundry
-> — remain correct for whatever image you built.
+> **Steps 1–2 below assume a published image, and there is not one yet.**
+> `publish-digichat-image.yml` is back (DIG-1294) and publishes on each
+> `digichat-v*` tag, but the tag ladder stops at `digichat-v2.3.2`, so
+> `ghcr.io/digithings-ai/digichat` does not exist yet (verified 2026-10-06) and
+> no image has been published. Substitute a local build until the next tag
+> lands. The steps themselves — probe, health, embed, Foundry — remain correct
+> for whatever image you built.
 
 ## Identity
 
 | Artifact | Value |
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
-| Published image | **none today** — build locally, or import to your own registry |
+| Published image | **none yet** — build locally, or import to your own registry |
 | Changelog | `apps/digichat/CHANGELOG.md` |
 | Install unit | **a built image** — not npm (`private: true`) |
 | Current app version | `2.4.0` (`apps/digichat/package.json` on `develop`) |

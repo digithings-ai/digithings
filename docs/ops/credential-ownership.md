@@ -95,7 +95,9 @@ Note that `containerApps/write` is not an image-only permission: it permits chan
 
 ### Lane-B CI credential — scoped, not created
 
-**Status: parked.** DIG-1242's lane question (`lane`: A build-lane-only / **B** gated workflow that also writes Azure / C docs-only) is still open, so nothing here has been created and no ARM write was made. The spec is written down now so that choosing B is a single decision with no further design work:
+**Status: not needed.** DIG-1242's lane question was answered on 2026-10-06: **Option A** (build lane only), so the pipeline never writes Azure and needs no federated credential. Nothing here has been created and no ARM write was made. DIG-1349, which would have built this, is moot unless the lane is revisited.
+
+The spec is kept because choosing B later should be a single decision with no further design work:
 
 | Item | Required shape |
 |------|----------------|
