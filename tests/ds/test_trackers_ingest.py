@@ -1,11 +1,18 @@
-"""Unit tests for luxalgo market-trackers-data congress-trades ingest (#4826).
+"""Unit tests for the digisearch congress-trades refusal ([DIG-1307](/DIG/issues/DIG-1307)).
 
-Covers the spike: fetch (mocked transport — no live HTTP) → normalize →
-``index_chunks`` into a dedicated ``trackers`` stub index with deterministic
-ids, so re-ingest is a no-op. Golden rows are copied from the live
-``congress/trades/latest.json`` schema (verified 2026-09-30): one stock row
-with a ticker, one null-ticker bond row (must be ingested, never dropped
-silently).
+CTO disposition on [DIG-1291](/DIG/issues/DIG-1291) (i) is REFUSED: the
+congressional trade-level feed is not distributable as an indexed record, so
+digisearch must refuse the whole path. The refusal is **deny-only and
+fail-closed** — the code constant refuses `congress-trades` unconditionally and
+`DIGISEARCH_REFUSED_FEEDS` can only *widen* the refused set. No value of that
+env var may ever permit the feed, and a missing/empty/unparseable value must
+never lift the refusal.
+
+These tests are the contract. They were committed by the EM before the leaf was
+assigned and must not be edited by the implementer.
+
+Still covered here: `normalize_congress_trade` stays a pure row→payload mapper
+(no I/O, no fetch, no index write), so its behaviour is pinned unchanged.
 """
 
 from __future__ import annotations
@@ -17,13 +24,37 @@ import pytest
 from digisearch.search._stub import _stub_index
 from digisearch.trackers_ingest import (
     TRACKERS_INDEX_NAME,
-    StaleDatasetError,
+    RefusedDatasetError,
+    check_manifest_not_stale,
     fetch_congress_trades_latest,
+    ingest_congress_trade,
     ingest_congress_trades,
     normalize_congress_trade,
 )
 
-# --- Golden rows (live schema, congress/trades/latest.json, 2026-09-30) --------
+from digisearch import trackers_ingest as congress
+
+#: Every shape a legal ``DIGISEARCH_REFUSED_FEEDS`` value can take, including
+#: the ones an operator would try in order to *permit* the feed again. All of
+#: them must leave the refusal standing.
+LEGAL_REFUSAL_ENV_VALUES: tuple[str, ...] = (
+    "",
+    "   ",
+    "congress-trades",
+    "CONGRESS-TRADES",
+    "congress_trades",
+    "insider-transactions",
+    "all",
+    "*",
+    "none",
+    "0",
+    "false",
+    "allow",
+    "permit",
+    "\x1b[31m{}[],; garbage",
+)
+
+# --- Golden row (live schema, congress/trades/latest.json, 2026-09-30) --------
 
 _TICKER_ROW: dict[str, Any] = {
     "id": "senate:f8d003c0-ca1e-4c39-9d66-632d220180e1:1",
@@ -85,6 +116,7 @@ _NULL_TICKER_BOND_ROW: dict[str, Any] = {
     },
 }
 
+#: Manifest that would (before the refusal) have let the ingest through.
 _MANIFEST_OK: dict[str, Any] = {
     "generatedAt": "2026-09-07T15:13:09.121Z",
     "schemaVersion": 2,
@@ -115,7 +147,11 @@ class _FakeFetchResult:
 class _FakeFetcher:
     """Offline fetcher: serves canned JSON per URL, records calls."""
 
-    def __init__(self, rows: list[dict[str, Any]], manifest: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[dict[str, Any]],
+        manifest: dict[str, Any] | None = None,
+    ) -> None:
         self._rows = rows
         self._manifest = manifest if manifest is not None else _MANIFEST_OK
         self.calls: list[str] = []
@@ -132,14 +168,120 @@ def _isolate_trackers_index(monkeypatch: pytest.MonkeyPatch) -> None:
     """Per-test stub index + legacy recursive chunker (no model download).
 
     ``DIGISEARCH_CHUNKER=recursive`` (not ``token``): ``chonkie`` is not
-    installed in this env, so the Chonkie backends raise ImportError here —
-    the same reason ``test_research_ingest.py`` fails in this env. The
-    legacy recursive chunker needs no extra dependency.
+    installed in this env, so the Chonkie backends raise ImportError here.
+    Also drops ``DIGISEARCH_REFUSED_FEEDS`` so each test starts from the
+    code-constant-only refusal.
     """
     monkeypatch.setenv("DIGISEARCH_CHUNKER", "recursive")
+    monkeypatch.delenv("DIGISEARCH_REFUSED_FEEDS", raising=False)
     _stub_index.pop(TRACKERS_INDEX_NAME, None)
     yield
     _stub_index.pop(TRACKERS_INDEX_NAME, None)
+
+
+# --- Refusal: the whole congress-trades path is closed ----------------------
+
+
+@pytest.mark.unit
+def test_fetch_congress_trades_latest_refuses_before_transport() -> None:
+    """The fetch boundary refuses without ever touching the transport."""
+    fetcher = _FakeFetcher([_TICKER_ROW])
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        fetch_congress_trades_latest(fetcher)
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
+
+
+@pytest.mark.unit
+def test_ingest_congress_trade_refuses_single_row() -> None:
+    """The single-row entry point refuses and writes nothing."""
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        ingest_congress_trade(_TICKER_ROW)
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
+
+
+@pytest.mark.unit
+def test_ingest_congress_trades_refuses_bulk_before_transport() -> None:
+    """The bulk entry point refuses before fetching and writes nothing."""
+    fetcher = _FakeFetcher([_TICKER_ROW, _NULL_TICKER_BOND_ROW])
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        ingest_congress_trades(fetcher)
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
+
+
+@pytest.mark.unit
+def test_check_manifest_not_stale_refuses_congress_trades_dataset() -> None:
+    """No path reaches the ``congress-trades`` dataset, manifest read included.
+
+    ``check_manifest_not_stale`` defaults to ``CONGRESS_TRADES_DATASET``, so it
+    is a live path into the refused dataset and must refuse on its default.
+    Wave-2 calls it with its own (non-refused) dataset and must keep working.
+    """
+    fetcher = _FakeFetcher([_TICKER_ROW])
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        check_manifest_not_stale(fetcher)
+    assert fetcher.calls == []
+    # A non-refused dataset is untouched by the refusal.
+    wave2_fetcher = _FakeFetcher([_TICKER_ROW])
+    assert check_manifest_not_stale(wave2_fetcher, dataset="short-volume") == _MANIFEST_OK
+    assert wave2_fetcher.calls
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("raw", LEGAL_REFUSAL_ENV_VALUES)
+def test_entry_points_refused_under_every_legal_env_value(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    """``DIGISEARCH_REFUSED_FEEDS`` can only widen the refused set.
+
+    Deny-only: a value that names the refused dataset, a wildcard, a
+    permission-sounding token, or garbage all leave the refusal standing.
+    """
+    monkeypatch.setenv("DIGISEARCH_REFUSED_FEEDS", raw)
+    fetcher = _FakeFetcher([_TICKER_ROW])
+
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        fetch_congress_trades_latest(fetcher)
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        check_manifest_not_stale(fetcher)
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        ingest_congress_trade(_TICKER_ROW)
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        ingest_congress_trades(fetcher)
+    assert fetcher.calls == []
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
+
+
+@pytest.mark.unit
+def test_entry_points_refused_when_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing env var → refused (fail-closed, never fail-open)."""
+    monkeypatch.delenv("DIGISEARCH_REFUSED_FEEDS", raising=False)
+    fetcher = _FakeFetcher([_TICKER_ROW])
+
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        fetch_congress_trades_latest(fetcher)
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        check_manifest_not_stale(fetcher)
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        ingest_congress_trade(_TICKER_ROW)
+    with pytest.raises(RefusedDatasetError, match="congress-trades"):
+        ingest_congress_trades(fetcher)
+    assert fetcher.calls == []
+
+
+@pytest.mark.unit
+def test_module_docstring_no_longer_documents_the_parsed_filing_schema() -> None:
+    """The module docstring must not present the filing row as an indexed record.
+
+    Documenting the parsed schema is a reintroduction path: the next reader
+    copies it into a new adapter.
+    """
+    doc = congress.__doc__ or ""
+    for leaked in ("bioguideId", "amountRange", "rowIndex", "docId"):
+        assert leaked not in doc, f"module docstring still documents {leaked!r}"
+
+
+# --- Unchanged behaviour: the pure row→payload mapper -----------------------
 
 
 @pytest.mark.unit
@@ -177,62 +319,3 @@ def test_normalize_requires_natural_key() -> None:
         normalize_congress_trade({"chamber": "senate", "docId": "x"})
     with pytest.raises(ValueError):
         normalize_congress_trade({})
-
-
-@pytest.mark.unit
-def test_fetch_congress_trades_latest_uses_mocked_transport() -> None:
-    """Fetch returns raw row dicts through the injected fetcher (no socket)."""
-    rows = fetch_congress_trades_latest(_FakeFetcher([_TICKER_ROW]))
-    assert rows == [_TICKER_ROW]
-
-
-@pytest.mark.unit
-def test_ingest_two_rows_then_reingest_is_idempotent() -> None:
-    """First ingest writes 2 rows; replay writes nothing and duplicates nothing."""
-    fetcher = _FakeFetcher([_TICKER_ROW, _NULL_TICKER_BOND_ROW])
-
-    first = ingest_congress_trades(fetcher)
-    assert first.ingested == 2
-    assert first.skipped == 0
-    assert first.source == "luxalgo-trackers/congress-trades"
-    count_after_first = len(_stub_index[TRACKERS_INDEX_NAME])
-    assert count_after_first >= 2
-
-    # Null-ticker bond row landed with searchable content.
-    bond_chunks = [
-        c
-        for c in _stub_index[TRACKERS_INDEX_NAME]
-        if c.metadata.get("natural_key") == "senate:257795ae-e1b2-411d-b562-8fe4c2a4f2a1:15"
-    ]
-    assert bond_chunks, "null-ticker row must be ingested, not dropped"
-    assert "ticker" not in bond_chunks[0].metadata
-
-    # Every stored chunk carries the exact upstream source_url.
-    for chunk in _stub_index[TRACKERS_INDEX_NAME]:
-        assert chunk.metadata.get("source_url", "").startswith("https://efdsearch.senate.gov/")
-
-    second = ingest_congress_trades(fetcher)
-    assert second.ingested == 0
-    assert second.skipped == 2
-    assert len(_stub_index[TRACKERS_INDEX_NAME]) == count_after_first
-
-
-@pytest.mark.unit
-def test_ingest_refuses_stale_manifest() -> None:
-    """A dataset flagged stale:true refuses before any chunk is written."""
-    stale_manifest = {
-        "datasets": {"congress-trades": {"stale": True, "rows": 175}},
-    }
-    fetcher = _FakeFetcher([_TICKER_ROW], manifest=stale_manifest)
-    with pytest.raises(StaleDatasetError, match="[Ss]tale"):
-        ingest_congress_trades(fetcher)
-    assert not _stub_index.get(TRACKERS_INDEX_NAME)
-
-
-@pytest.mark.unit
-def test_ingest_skips_keyless_row_with_count() -> None:
-    """A row without a natural key is counted as skipped, loudly — not silent."""
-    fetcher = _FakeFetcher([_TICKER_ROW, {"ticker": "ORPHAN"}])
-    result = ingest_congress_trades(fetcher)
-    assert result.ingested == 1
-    assert result.skipped == 1
