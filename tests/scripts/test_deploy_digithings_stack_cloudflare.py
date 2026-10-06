@@ -25,6 +25,10 @@ from typing import Any
 import pytest
 import yaml
 
+# `make test-unit` and ci.yml both run `-m unit`; an unmarked file is deselected
+# entirely, so an unmarked test is a test that never runs.
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 STACK_WORKFLOW = WORKFLOWS_DIR / "deploy-digithings-stack-cloudflare.yml"
@@ -177,6 +181,64 @@ def test_deploy_waits_for_its_gate_job() -> None:
         "on push there is no pull_request event, so `check` is skipped; deploy "
         "must depend on a gate that actually runs"
     )
+
+
+def test_the_gate_job_does_not_depend_on_the_pull_request_only_check() -> None:
+    """The bug that made this whole PR a no-op, pinned where it happened.
+
+    ``check-deploy-gate`` originally carried ``needs: [check]``. ``check`` is
+    ``if: github.event_name == 'pull_request'``, and GitHub skips every downstream
+    job when a need is skipped. So on a merge to main: ``check`` skipped ->
+    ``check-deploy-gate`` skipped -> ``deploy`` skipped. The push trigger was
+    present and did nothing.
+
+    ``actionlint`` exits 0 on this file, and the previous version of this suite
+    read only ``jobs["deploy"]["needs"]`` -- never this one -- so all 56 tests
+    passed against a workflow that could not deploy. ci.yml depends on ~23
+    path-filtered jobs and survives only because its consumer declares
+    ``if: always()``.
+    """
+    jobs = _stack_spec()["jobs"]
+    gate_needs = jobs["check-deploy-gate"].get("needs") or []
+    assert not gate_needs, (
+        f"check-deploy-gate depends on {gate_needs}. Anything it needs is skipped on "
+        "the event that should deploy, and a skipped need skips this job, which then "
+        "skips `deploy`. This is DIG-1569 reproduced inside its own fix."
+    )
+    # And nothing it needs may itself be scoped to a pull_request-only event.
+    for need in gate_needs:
+        assert "pull_request" not in str(jobs.get(need, {}).get("if", "")), need
+
+
+def test_the_push_filter_covers_every_tree_the_image_bakes_in() -> None:
+    """A merge that changes shipped code must not deploy nothing.
+
+    The deployed image's build context is the repo root, so it copies from these
+    trees. The original filter listed ``digiquant/Dockerfile.mcp`` and
+    ``digivault/Dockerfile.mcp`` but none of the library source they COPY, so a
+    merge touching ``digikey/**`` (JWT auth) or ``digisearch/seeds`` compiled into
+    production and deployed nothing -- DIG-1569's defect class surviving the fix.
+    """
+    paths = set(_triggers(_stack_spec())["push"]["paths"])
+    for tree in (
+        "digibase",
+        "digiclaw",
+        "digifetch",
+        "digigraph",
+        "digikey",
+        "digillm",
+        "digismith",
+        "digisearch",
+        "digiquant",
+        "digivault",
+        "config",
+        "infra",
+        "scripts",
+    ):
+        assert f"{tree}/**" in paths, (
+            f"{tree}/ is compiled into the deployed image but a push to main "
+            f"changing it matches no path filter, so the merge deploys nothing"
+        )
 
 
 def test_the_pull_request_check_job_is_scoped_to_pull_requests() -> None:

@@ -47,24 +47,48 @@ on:
     paths:
       - "Dockerfile.digithings-stack-cloudflare"
       - "apps/digithings-stack-cloudflare/**"
-      - "digiquant/Dockerfile.mcp"
-      - "digivault/Dockerfile.mcp"
+      - "digiquant/**"
+      - "digivault/**"
       - "apps/dashboard-api/**"
       - "apps/digichat-cloudflare/**"
       - "Dockerfile.digichat-cloudflare"
       - "apps/digichat/**"
+      - "config/**"
+      - "infra/**"
+      - "scripts/**"
+      - "digibase/**"
+      - "digiclaw/**"
+      - "digifetch/**"
+      - "digigraph/**"
+      - "digikey/**"
+      - "digillm/**"
+      - "digismith/**"
+      - "digisearch/**"
       - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
+      - ".github/workflows/deploy-digichat-cloudflare.yml"
   pull_request:
     paths:
       - "Dockerfile.digithings-stack-cloudflare"
       - "apps/digithings-stack-cloudflare/**"
-      - "digiquant/Dockerfile.mcp"
-      - "digivault/Dockerfile.mcp"
+      - "digiquant/**"
+      - "digivault/**"
       - "apps/dashboard-api/**"
       - "apps/digichat-cloudflare/**"
       - "Dockerfile.digichat-cloudflare"
       - "apps/digichat/**"
+      - "config/**"
+      - "infra/**"
+      - "scripts/**"
+      - "digibase/**"
+      - "digiclaw/**"
+      - "digifetch/**"
+      - "digigraph/**"
+      - "digikey/**"
+      - "digillm/**"
+      - "digismith/**"
+      - "digisearch/**"
       - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
+      - ".github/workflows/deploy-digichat-cloudflare.yml"
   workflow_dispatch:
     inputs:
       ref:
@@ -91,10 +115,14 @@ concurrency:
   # tests/scripts/test_workflow_environment_concurrency.py enforces the rule repo-wide
   # and failed this branch, correctly.
   #
-  # The race is instead bounded by the `production` gate: at most one deployment is
-  # ever actually applying per environment approval, and a deploy that gets superseded
-  # mid-flight fails its own run rather than corrupting the container. Serialising
-  # deploys is a separate change with its own test, not a drive-by here.
+  # The serialising race between two merges is real and is NOT solved here: nothing
+  # in this file mutual-excludes two `production` deployments, and the group above is
+  # per-run by design. An earlier draft claimed the environment gate bounds it; that
+  # is wrong -- GitHub environments gate each deployment independently and do not
+  # exclude one another, so two approved merges can run `wrangler deploy` against the
+  # same container name at once. Fixing it needs a shared group or a deploy-level
+  # lock, each of which trades against #2541, so it is separate work with its own
+  # test rather than a drive-by inside a production-trigger change.
   group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
   cancel-in-progress: false
 jobs:
@@ -136,7 +164,12 @@ jobs:
   check-deploy-gate:
     name: "check (deploy gate)"
     if: github.event_name != 'pull_request'
-    needs: [check]
+    # Deliberately no `needs`. `check` is pull_request-only, and a skipped need
+    # skips everything downstream: with `needs: [check]` here, merging to main
+    # skipped `check`, which skipped this job, which skipped `deploy` -- the exact
+    # DIG-1569 failure, reproduced inside its own fix. `actionlint` does not catch
+    # it, and the repo's own ci.yml only gets away with depending on path-filtered
+    # jobs because its consumer declares `if: always()`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
