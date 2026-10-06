@@ -168,9 +168,10 @@ the record; it is deliberately incomplete on the one axis that matters.
 | sha256 of the saved artefact | `92be603b367d7d721591e60062388c898102519d664425afafe772953e7deeea` |
 | Relevant clauses | §11 (reproduction and derivative works require prior written consent; licence is personal/internal only), §12 (prohibits automated or unauthorised access, scraping, crawling, browser automation, and creating competing products or services) |
 | Classification | **Prohibited** |
-| Decision | Freeze publication. Hold the research-producer package and the `twelve_x/nodes/scrape.py` mapping. Await the DIG-478 decision and Counsel's confirmation. |
+| Decision (2026-08-01, the decision that should have been made) | Freeze publication. Hold the research-producer package and the `twelve_x/nodes/scrape.py` mapping. |
+| Current state | DIG-478 decided — path C, continue and accept the risk, 2026-10-05. That decision does not lift the freeze and does not depend on it; the hold lifts only on Counsel's written confirmation that the publication exposure is closed. |
 | Decider | the board |
-| Counsel memo | DIG-461 revision 2 |
+| Counsel memo | document `12476ad7-f45e-4ebc-8d9b-ceb41af268fb` (DIG-461, through Amendment C). Cited by document id rather than as "DIG-461 revision 2" because the memo key currently resolves to a forked, incomplete document — see DIG-1357. |
 
 **What is missing from this table is the point.** On 2026-08-01 the row that
 existed was a conclusion — "the vendor is fine with us using their data" — with
@@ -185,6 +186,16 @@ The access-method row is withheld, and the clauses that matter are quoted. That
 is not a contradiction to be smoothed over. Publishing §12 is what makes the
 Prohibited classification reviewable; publishing the method is the harm. The
 rule is the distinction, not a compromise between them.
+
+The clause list names §11 and §12 and stops. It does **not** name the
+credential-share clause in the same terms, and that omission is deliberate —
+Counsel's recommendation, recorded here so that nobody later reads the gap as an
+oversight and "completes" it. That clause is the one where our own conduct is
+the issue and the client's account is the thing at stake; naming it in a public
+repository would record, under our own name, that we hold a credential to a
+client's account. It adds exposure and it changes nothing about the
+classification, because §12 alone carries "Prohibited". **The public record
+needs to justify the decision, not to be complete.**
 
 The artefact is in private storage and this repository does not say where.
 Counsel's review was that a policy should not instruct anyone to copy a
@@ -201,10 +212,12 @@ without us republishing it.
    the `CONTRIBUTING.md` update.
 2. **Scope?** Any repository, public or private, that meets conditions 1–4. Is
    there a repository you want excluded, on the record?
-3. **Retroactive Gloomber audit?** Already owned by Security as DIG-1194.
-   Confirm that is the right home.
-4. **Escalation path?** Counsel and Security, for a recorded position. Any other
-   required signatory?
+
+**Answered, not open.** Counsel's position on the two that were theirs: the
+Gloomber audit is correctly homed with Security as DIG-1194; and the escalation
+path is Counsel and Security for a recorded position, with no further signatory
+required. Adding one would recreate the defect fixed in step 5 — a gate nobody
+can satisfy is a gate that gets ignored.
 
 ---
 
