@@ -251,6 +251,36 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+  # ── Tracked .example/.template credential guard (#5030, DIG-31) — UNCONDITIONAL ──
+  # No `needs`/`if` gate, for the same reason frontend-canon above has none:
+  # check_example_credentials.py runs `git ls-files` and scans every tracked
+  # `.example`/`.template` file in the monorepo regardless of the diff, so its
+  # verdict is a property of the whole tree while a path filter is a property of
+  # the diff. Gate it on any filter and a PR touching an unrelated path would skip
+  # a check whose scope was never the diff.
+  #
+  # This job exists because the guard itself was already on develop when #5030
+  # merged and nothing ran it: `scripts/check_example_credentials.py` shipped with
+  # #5030, but no workflow referenced it, so it could not fail a build. A guard
+  # nothing executes is not a guard, and DIG-31's requirement 4 (plus its
+  # acceptance criterion "the CI check exists and fails on a deliberately planted
+  # non-placeholder value") was therefore unmet despite the scrub in #5030 being
+  # correct. Registered in required-checks.needs below — its drift guard fails if
+  # this job is ever left out of that list.
+  # Stdlib-only; no npm/pip install needed.
+  example-credentials:
+    name: Example credential guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tracked .example/.template credential guard
+        run: python3 scripts/check_example_credentials.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -632,6 +662,7 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - example-credentials
       - digibase
       - digikey
       - digitrace
