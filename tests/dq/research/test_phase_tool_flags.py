@@ -435,7 +435,7 @@ def test_politician_segment_domain_list_names_no_refused_domain():
     except ImportError:
         pytest.skip("no REFUSED_SEARCH_DOMAINS yet; DIG-1133 deny layer not merged")
 
-    from digiquant.research.phases.graph import _research_config_root
+    from digiquant.research.graph import _research_config_root
 
     config = yaml.safe_load(
         (_research_config_root() / "search_domains.yaml").read_text(encoding="utf-8")
@@ -443,3 +443,26 @@ def test_politician_segment_domain_list_names_no_refused_domain():
     domains = config.get("per_segment", {}).get("alt-politician-signals", []) or []
     for domain in domains:
         assert domain not in REFUSED_SEARCH_DOMAINS, f"domain list still carries refused {domain}"
+
+
+def test_politician_skill_steps_have_no_trade_step():
+    """Guard the step headings, not just the exact wording we removed (review SF3).
+
+    A re-introduction titled e.g. "### 1. Congressional Trading Activity" passes all three
+    wording guards above, so assert on the headings themselves.
+    """
+    import re as _re
+
+    text = _politician_skill_text()
+    headings = _re.findall(r"^###\s*\d+\.\s*(.+)$", text, flags=_re.MULTILINE)
+    assert headings, "no numbered steps found; the prompt structure changed shape"
+    for heading in headings:
+        # "Tariff & Trade Actions" is lawful policy work, so trade/tariff is allowed only
+        # when the heading says trade-POLICY. Filing/disclosure/congressional is never allowed.
+        assert not _re.search(
+            r"filing|disclosure|congress", heading, _re.IGNORECASE
+        ), f"step heading reintroduces trade-level content: {heading!r}"
+        if _re.search(r"\btrade\b", heading, _re.IGNORECASE):
+            assert _re.search(r"tariff|policy", heading, _re.IGNORECASE), (
+                f"step heading names trades without saying policy/tariff: {heading!r}"
+            )

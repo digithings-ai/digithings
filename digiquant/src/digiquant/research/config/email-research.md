@@ -62,7 +62,7 @@ Subscribe to the following newsletters/alerts at your dedicated email:
 |--------|----------|-------|--------------|
 | SpotGamma HIRO | https://spotgamma.com (~$399/yr) | RESEARCH/Options-AltData | Dealer gamma exposure, real-time GEX |
 | Glassnode Advanced | https://glassnode.com (~$799/yr) | RESEARCH/Crypto | Full on-chain analytics |
-| Unusual Whales ($29/mo) | https://unusualwhales.com | RESEARCH/Options-AltData | Options flow, dark pool, congress trades |
+| Unusual Whales ($29/mo) | https://unusualwhales.com | RESEARCH/Options-AltData | Options flow, dark pool, policy signals |
 | WhaleWisdom Pro | https://whalewisdom.com (~$40/mo) | RESEARCH/HedgeFund | 13F analytics, fund tracking |
 | Bridgewater Daily Observations | Institutional only | RESEARCH/HedgeFund | Direct macro view (if accessible) |
 | Energy Intel | https://energyintel.com | RESEARCH/Energy | Upstream oil market intelligence |

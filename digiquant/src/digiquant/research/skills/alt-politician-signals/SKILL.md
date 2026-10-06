@@ -7,12 +7,13 @@ description: Official-signals product — key committee chair policy positions, 
 
 ## Grounding Tools (use first)
 
-- **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
-  `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
-  apnews.com, sec.gov, cftc.gov, treasury.gov, federalreserve.gov, finance.yahoo.com) is
-  provided in PHASE_INPUTS when available; ground on it and carry its source URLs for Fed /
-  Treasury official signals into the `sources` field; if no `web_grounding` is present, say so
-  and lower conviction.
+- **There is no web grounding for this segment.** Since DIG-1252 it runs with
+  `live_search=False`: no `web_grounding` block is placed in PHASE_INPUTS, and no search or
+  data tool is granted. Do **not** attempt to fetch anything and do not describe a search you
+  did not make. The only reads available are `query_research` and `fetch_prior_document`, which
+  return our own previously stored rows.
+- **Write from prior context, and mark what you cannot ground.** For any claim you cannot
+  source from the supplied inputs, say it is unverified rather than asserting it.
 
 ## Purpose
 Politicians and regulators move markets through policy signals. Committee chair rhetoric
@@ -35,22 +36,22 @@ unverified rather than asserting it.
 ## Research Steps
 
 ### 1. Recent Policy Position Statements
-Scan Treasury, Fed, SEC/CFTC/FDIC/OCC, and relevant executive agencies for last-48h market-moving statements.
+Scan Treasury, Fed, SEC/CFTC/FDIC/OCC, and relevant executive agencies for last-48h market-moving statements. You have no fetch tool: write from prior context and label what you cannot ground as unverified.
 
 ### 2. Geopolitical Official Statements
-Scan official updates for any active conflicts relevant to markets.
+Scan official updates for any active conflicts relevant to markets. You have no fetch tool: write from prior context and label what you cannot ground as unverified.
 
 ### 3. Tariff & Trade Actions
-Scan for new trade/tariff policy actions.
+Cover new trade/tariff policy actions (as distinct from congressional trade disclosures). You have no fetch tool: write from prior context and label what you cannot ground as unverified.
 
 ### 4. Regulatory Actions Affecting Watchlist
-Flag actions impacting portfolio sectors (energy, healthcare, financials, crypto).
+Flag actions impacting portfolio sectors (energy, healthcare, financials, crypto). You have no fetch tool: write from prior context and label what you cannot ground as unverified.
 
 ---
 
 ## Output Format
 
-Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations.
 
 ```markdown
 # Politician and official signals — {as-of date of the data}
