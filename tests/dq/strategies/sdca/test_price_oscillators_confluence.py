@@ -505,6 +505,20 @@ class TestNoLookAhead:
         assert all(v is None for v in weekly[:13])
 
 
+#: The seven weight fields develop published, in develop's order, with develop's
+#: defaults. Later leaves of the DIG-1597 port may add *dormant* research-only
+#: fields; nothing in this port may rename, reorder or re-default these.
+_PUBLISHED_WEIGHT_DEFAULTS: dict[str, float] = {
+    "valuation": 1.0,
+    "m2": 0.0,
+    "rs_eth": 0.0,
+    "dxy": 0.0,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.0,
+}
+
+
 class TestDevelopApiUnchanged:
     """This leaf must not disturb what develop already publishes."""
 
@@ -513,12 +527,38 @@ class TestDevelopApiUnchanged:
         assert z == [0.0, 0.0, 0.0]
 
     def test_published_weight_fields_are_unchanged(self) -> None:
-        """Leaf 1 adds dormant functions; it does not add weight fields."""
+        """The published weights keep develop's names, order and defaults."""
+        fields = SdcaCompositeWeights.model_fields
+        assert [name for name in fields if name in _PUBLISHED_WEIGHT_DEFAULTS] == list(
+            _PUBLISHED_WEIGHT_DEFAULTS
+        )
+        for name, default in _PUBLISHED_WEIGHT_DEFAULTS.items():
+            assert fields[name].default == default, name
+
+    def test_any_added_weight_field_is_dormant(self) -> None:
+        """`valuation` stays the only non-zero default.
+
+        This is what makes an additive leaf safe: a research-only field can only
+        join the model at 0.0, so it cannot shift a published composite risk
+        vector unless a caller explicitly asks for it by weight.
+        """
+        nonzero = {
+            name
+            for name, field in SdcaCompositeWeights.model_fields.items()
+            if field.default != 0.0
+        }
+        assert nonzero == {"valuation"}
+
+    def test_deferred_branch_renames_stay_deferred(self) -> None:
+        """The branch's oscillator-weight and valuation-rename rewires are not here.
+
+        Landing them needs an `SdcaOscillatorSpec` expansion, so they are a
+        separate, separately-measured leaf rather than a side effect of a port.
+        """
         fields = set(SdcaCompositeWeights.model_fields)
         assert "monthly_rsi" not in fields
         assert "weekly_monthly_rsi" not in fields
-        assert "fast_crash_vol" not in fields
-        assert "valuation" in fields  # the valuation -> power_law rename is NOT this leaf
+        assert "valuation" in fields  # valuation -> power_law is deferred
 
     def test_generic_oscillator_vector_shape_is_unchanged(self, sample: tuple) -> None:
         dates, close = sample
