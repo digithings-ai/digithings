@@ -47,7 +47,7 @@ members = [
   "digiquant",
   "digisearch",
   "digiskills",
-  "digismith",
+  "digitrace",
   "digivault",
   "digivoice",
 ]
@@ -62,6 +62,6 @@ digillm = { workspace = true }
 digiquant = { workspace = true }
 digisearch = { workspace = true }
 digiskills = { workspace = true }
-digismith = { workspace = true }
+digitrace = { workspace = true }
 digivault = { workspace = true }
 digivoice = { workspace = true }

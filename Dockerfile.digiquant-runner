@@ -42,8 +42,19 @@ COPY digifetch ./digifetch
 COPY digiquant ./digiquant
 COPY digigraph ./digigraph
 COPY digillm ./digillm
-COPY digismith ./digismith
+COPY digitrace ./digitrace
 COPY config/byok-providers.json ./config/byok-providers.json
+# Second fail-loud-at-import config file: model_config._load_model_policy. The house
+# chain steps run digigraph in-process, so this image needs it for the same reason it
+# needs byok-providers.json. See digigraph/Dockerfile.
+COPY config/model-policy.json ./config/model-policy.json
+# Third config file, and the only one this image loads *softly*. digiquant's
+# research.pricing resolves the repo root to /app, and this image ships a
+# /app/config/ directory that already holds the two files above -- so an
+# omitted prices file is not a missing-directory warning, it is a silently
+# empty price table, and diagnostics.est_cost_usd would report $0 for every
+# model while the telemetry spend alert could never fire. Copy it.
+COPY config/digiquant-model-prices.json ./config/digiquant-model-prices.json
 
 RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus \
     && uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres

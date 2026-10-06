@@ -133,6 +133,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `AzureAISearchBackend` (`query_azure`) | Implemented | `indexes/backends/azure_search.py` |
 | `VectorizeBackend` (Cloudflare Vectorize v2 REST) | Implemented | `indexes/backends/vectorize.py` |
 | `MiniLMEmbedder` (local ONNX, 384-dim) | Implemented | `embedding/providers/minilm.py` |
+| `MultilingualEmbedder` (local quantized ONNX, 384-dim, 50+ langs) | Implemented | `embedding/providers/multilingual.py` |
 | `HippoRAGBackend`, `PageIndexBackend` | Experimental stubs | `indexes/backends/` |
 | `HybridSearcher` (RRF fusion) | Implemented | `search/hybrid.py` |
 | `Reranker` (Cohere, BGE) | Implemented | `search/reranker.py` |
@@ -153,6 +154,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Agent LangGraph pipeline (`plan → retrieve → aggregate`) | Implemented (optional `[agent]` extra) | `agent/pipeline.py` |
 | Agent citations helper | Implemented | `agent/citations.py` |
 | Crossref discovery | Implemented | `discovery/crossref.py` |
+| Grokopedia JSON client + MCP tools (unofficial spike) | Implemented (HOLD) | `grokipedia/` |
 | Bulk ingest worker | **Placeholder** — logs and exits | `ingest_worker.py` |
 | Canonical filesystem ingest (`ingest_source` / `ingest_paths`) | Implemented | `pipeline/ingest.py` |
 | Embed pipeline factory (`resolve_embedding_pipeline`) | Implemented | `embedding/factory.py` |
@@ -983,6 +985,8 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | `websets_list_items` | Compact item text newest-first (`webset_id`, `verification`, `limit`, `cursor`) | No |
 | `websets_events` | Compact event tail oldest-first (`webset_id`, `after`, `limit`) | No |
 | `websets_export` | CSV/JSON export text for verified items (caps at 200 rows in chat) | No |
+| `grokipedia_search` | Unofficial spike: `GET /api/full-text-search` on grokipedia.com; JSON hits or `{ok:false}` | Spike (HOLD) |
+| `grokipedia_get_page` | Unofficial spike: `GET /api/page-preview?slug=` (`/api/page` 404s); content capped | Spike (HOLD) |
 
 The four monitor tools share the HTTP API's store/runner and its
 `watch_config_error` create gate (a watch whose cron could not parse would raise
@@ -1293,6 +1297,12 @@ digisearch/src/digisearch/
 │   ├── pipeline.py            # LangGraph: plan → retrieve → aggregate | web_retrieve → web_aggregate
 │   ├── web_branch.py          # web-branch nodes + resolve_web_config() (#4064)
 │   └── citations.py           # rag_sources_from_hits()
+│
+├── grokipedia/                # Unofficial grokipedia.com JSON spike (HOLD hatch)
+│   ├── client.py              # httpx + polite limiter; search + page-preview only
+│   ├── models.py              # Pydantic search/page/error envelopes
+│   ├── rate_limit.py          # min-interval (≥300ms) + token bucket
+│   └── tools.py               # grokipedia_search / grokipedia_get_page JSON strings
 │
 ├── discovery/
 │   └── crossref.py            # DOI → EvidenceMetadata via Crossref REST API
@@ -1830,7 +1840,7 @@ The allowlist (`^[\w \t'\"<>=!(),./\\:\-\+\*\?%@]+$`) permits `*`, `?`, `@`, and
 
 ### Embedding model API key exposure
 
-The `OpenAIEmbedder` (and other cloud providers) read API keys from environment variables (`OPENAI_API_KEY`, `COHERE_API_KEY`, etc.). These are never logged or returned in API responses. The `Reranker._rerank_cohere()` reads `COHERE_API_KEY` at call time. The digismith/ARCHITECTURE.md spec prohibits including API keys in spans — this is respected in the current implementation.
+The `OpenAIEmbedder` (and other cloud providers) read API keys from environment variables (`OPENAI_API_KEY`, `COHERE_API_KEY`, etc.). These are never logged or returned in API responses. The `Reranker._rerank_cohere()` reads `COHERE_API_KEY` at call time. The digitrace/ARCHITECTURE.md spec prohibits including API keys in spans — this is respected in the current implementation.
 
 **Potential risk:** the `EmbeddingCache` stores embedding vectors in a local SQLite file. If the file is accessible to multiple processes or shared across container mounts, the vectors could in principle be used to reconstruct approximate original text via inversion attacks. This is a low-severity theoretical risk for most use cases.
 
@@ -1962,7 +1972,9 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces and the unofficial `grokipedia_*` spike (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`) and `digisearch_grokipedia_search` / `digisearch_grokipedia_get_page`.
+
+`grokipedia_search` / `grokipedia_get_page` wrap public grokipedia.com JSON APIs (`/api/full-text-search`, `/api/page-preview` — **`/api/page` 404s**). robots.txt currently `Disallow: /api/`; this is unofficial third-party use, polite-rate-limited, no HTML scrape, spike-only (HOLD hatch). See `grokipedia/README.md`.
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
@@ -2130,7 +2142,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_SYNTHESIS_MODEL` | _(unset)_ | digillm model id for Phase B web-research synthesis (`source=web\|auto` turns only). Unset ⇒ every web turn fails hard with `WebResearchError`, never an uncited answer; no new port/service (#4064) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
-| `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |
+| `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` \| model id (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) — explicit provider or model (fails loud if unloadable) |
 | `DIGISEARCH_EMBED_CACHE` | `1` | Wrap BatchEmbedder in EmbeddingCache |
 | `DIGISEARCH_EMBED_BATCH_SIZE` | `100` | BatchEmbedder batch size |
 | `DIGISEARCH_EMBEDDING_MODEL` | _(unset)_ | Active embedding model id (OpenAI model or versioning) |

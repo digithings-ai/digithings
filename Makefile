@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -57,9 +57,9 @@ adr-check:
 vault-check:
 	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
 
-# Coverage for Phase 1 code (digigraph + digiquant + digismith). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"
+# Coverage for Phase 1 code (digigraph + digiquant + digitrace). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digitrace"
 test-cov:
-	pytest -m unit -v --tb=short --cov=digigraph --cov=digiquant --cov=digismith --cov-report=term-missing --cov-fail-under=0
+	pytest -m unit -v --tb=short --cov=digigraph --cov=digiquant --cov=digitrace --cov-report=term-missing --cov-fail-under=0
 
 # Coverage with HTML report (output in htmlcov/).
 test-cov-html:
@@ -216,6 +216,16 @@ gen-api-vault:
 agents-init:
 	python3 scripts/agents_init.py
 
+# Refresh the vendored model catalog from models.dev (#4994). Network, and
+# commits both artifacts: config/model-catalog.json and the digichat TS module.
+model-catalog:
+	python3 scripts/refresh_model_catalog.py
+
+# CI drift guard. Network-free — re-renders the TS module from the committed
+# JSON and asserts the data-model invariants. Mirrors agents-init --check.
+model-catalog-check:
+	python3 scripts/refresh_model_catalog.py --check
+
 # Validate research env + Supabase baseline row + graph compilation before a real run.
 # Fail-fast house: no provider pings — provider errors surface from the real run.
 # Usage: make research-validate              (full check)
@@ -333,3 +343,17 @@ secrets-scan:
 .PHONY: secrets-audit
 secrets-audit:
 	python3 scripts/secrets_audit.py --strict
+
+# Age every GitHub secret name (repo, org and the `cron` environment), list the ones
+# past the rotation window, and open or update one tracking issue.
+#
+# Run this by hand, from a shell whose `gh auth` token carries `repo` (and
+# `admin:org`, for the org level). It is deliberately NOT automated: the Actions
+# secrets endpoints need a token with the `repo` scope, which a workflow's
+# GITHUB_TOKEN never has, so from CI this script would read nothing. The monthly
+# `secret-staleness-check.yml` run therefore does the environment-gate drift half
+# only, via `--gates-only` (Paperclip DIG-477, option D). Reads names and
+# last-written dates only — GitHub never returns a value here.
+.PHONY: secrets-staleness
+secrets-staleness:
+	python3 scripts/secret_staleness_check.py --open-issue

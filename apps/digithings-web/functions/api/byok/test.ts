@@ -10,6 +10,36 @@ interface EventContext {
 type TestResult = { ok: boolean; model?: string; error?: string };
 
 const TIMEOUT_MS = 10_000;
+
+/**
+ * Hand copy of `config/byok-providers.json` fallbackModels.
+ * Cloudflare Pages copies this file to repo-root `functions/`, so it cannot
+ * import the catalog or `lib/providerSettings`.
+ */
+export const FALLBACK_MODELS: Record<ProviderId, readonly string[]> = {
+  openrouter: [
+    "openai/gpt-4o-mini",
+    "openai/gpt-4o",
+    "anthropic/claude-sonnet-4",
+    "google/gemini-2.5-flash",
+  ],
+  openai: ["gpt-4o-mini", "gpt-4o", "o4-mini"],
+  anthropic: [
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+  ],
+  gemini: ["gemini/gemini-3.5-flash-lite", "gemini/gemini-3.5-flash", "gemini/gemini-3.7-flash"],
+  xai: ["grok-4.3", "grok-4.5"],
+};
+
+/** Catalog member the caller asked for, otherwise that provider's first fallback. */
+export function reportedModel(provider: ProviderId, requested: string | undefined): string {
+  const fallbacks = FALLBACK_MODELS[provider];
+  const trimmed = requested?.trim() ?? "";
+  if (trimmed && fallbacks.includes(trimmed)) return trimmed;
+  return fallbacks[0] ?? "";
+}
 // Defensive cap on upstream provider error text passed through to the client
 // (see `sanitizeUpstreamError` below) -- not a UX limit, just a ceiling.
 const MAX_UPSTREAM_ERROR_LEN = 300;
@@ -98,7 +128,7 @@ function abortMessage(e: unknown): string {
   return "Unknown error";
 }
 
-async function testOpenRouter(key: string): Promise<TestResult> {
+async function testOpenRouter(key: string, requested: string): Promise<TestResult> {
   const resp = await fetchWithTimeout("https://openrouter.ai/api/v1/models", {
     headers: { Authorization: `Bearer ${key}` },
   });
@@ -111,7 +141,7 @@ async function testOpenRouter(key: string): Promise<TestResult> {
         `OpenRouter returned HTTP ${resp.status}`,
     };
   }
-  return { ok: true, model: "openai/gpt-4o-mini" };
+  return { ok: true, model: reportedModel("openrouter", requested) };
 }
 
 async function testOpenAI(key: string): Promise<TestResult> {
@@ -126,7 +156,7 @@ async function testOpenAI(key: string): Promise<TestResult> {
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
-  return { ok: true, model: data.data?.[0]?.id ?? "gpt-4o-mini" };
+  return { ok: true, model: data.data?.[0]?.id ?? reportedModel("openai", undefined) };
 }
 
 async function testAnthropic(key: string): Promise<TestResult> {
@@ -142,10 +172,10 @@ async function testAnthropic(key: string): Promise<TestResult> {
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
-  return { ok: true, model: data.data?.[0]?.id ?? "claude-3-5-haiku-20241022" };
+  return { ok: true, model: data.data?.[0]?.id ?? reportedModel("anthropic", undefined) };
 }
 
-async function testGemini(key: string): Promise<TestResult> {
+async function testGemini(key: string, requested: string): Promise<TestResult> {
   const resp = await fetchWithTimeout("https://generativelanguage.googleapis.com/v1beta/models", {
     headers: { "x-goog-api-key": key },
   });
@@ -156,7 +186,7 @@ async function testGemini(key: string): Promise<TestResult> {
       error: sanitizeUpstreamError(body.error?.message, key) || `Gemini returned HTTP ${resp.status}`,
     };
   }
-  return { ok: true, model: "gemini-2.5-flash" };
+  return { ok: true, model: reportedModel("gemini", requested) };
 }
 
 async function testXai(key: string): Promise<TestResult> {
@@ -171,7 +201,7 @@ async function testXai(key: string): Promise<TestResult> {
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
-  return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
+  return { ok: true, model: data.data?.[0]?.id ?? reportedModel("xai", undefined) };
 }
 
 function sameSiteOK(request: Request): boolean {
@@ -209,6 +239,7 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     return jsonResponse({ ok: false, error: "Unknown BYOK provider." }, 400);
   }
   const provider: ProviderId = raw;
+  const requestedModel = ctx.request.headers.get("x-byok-model")?.trim() ?? "";
 
   const validation = validateKey(key, provider);
   if (validation) return jsonResponse({ ok: false, error: validation }, 400);
@@ -217,7 +248,7 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     let result: TestResult;
     switch (provider) {
       case "openrouter":
-        result = await testOpenRouter(key);
+        result = await testOpenRouter(key, requestedModel);
         break;
       case "openai":
         result = await testOpenAI(key);
@@ -226,7 +257,7 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
         result = await testAnthropic(key);
         break;
       case "gemini":
-        result = await testGemini(key);
+        result = await testGemini(key, requestedModel);
         break;
       case "xai":
         result = await testXai(key);

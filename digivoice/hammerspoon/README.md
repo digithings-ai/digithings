@@ -18,19 +18,26 @@ Do not invent other default binds in this sample.
 
 Status is a custom overlay banner, not Hammerspoon notifications. The one allowed toast is at Hammerspoon launch: it lists the configured commands and the resolved `digivoice` path.
 
-The banner is **display only** (a click just expands long text; it never steals focus and never starts or stops anything). Esc is the only control.
+The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only control.
 
-| Phase | Animation (digichat `DotMatrix` port) | Text shown |
+| Phase | Animation (digichat 5x5 square grid) | Text shown |
 | --- | --- | --- |
-| recording | red equalizer wave | none (`Esc to cancel`) |
+| recording | red equalizer wave | none (grid only) |
 | transcribing | teal diagonal sweep | none yet (no live streaming STT) |
-| rewriting | teal circular sweep | the raw transcript, preset name |
+| rewriting | teal circular sweep | the raw transcript glimpse |
 | pasting | teal downward sweep | the text being pasted |
 | speaking | teal equalizer | the selected text |
 | loading | teal grid twinkle | none |
 | done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final text, "take discarded", "no speech detected", or the error line |
 
-Long text is clipped to 3 lines with an ellipsis; click the banner to widen it to a 14-line box (click again to collapse). The banner reads `status.json` that the CLI writes, so it shows exactly what digivoice is doing.
+No titles, no hints, no settings UI on the banner — state reads from the grid alone.
+Density comes from settings: **mini** is grid only, **peek** (default) is a short
+glimpse that auto-dismisses a few seconds after idle/done, **full** shows the whole
+transcript and stays until collapsed or removed. The banner reads `status.json`
+that the CLI writes, so it shows exactly what digivoice is doing.
+
+Long text is clipped to a 3-line glimpse in peek; click the banner to cycle density
+(mini → peek → full → mini).
 
 The menubar mark (`assets/digivoice-mark.png` + `REC`) stays during a dictation as a mic-in-use indicator, even when the banner is disabled. Errors are also printed to the Hammerspoon console.
 
@@ -42,15 +49,17 @@ Stored in digivoice's `settings.json`, changed with the CLI, and **re-read at th
 digivoice settings set live_banner false          # disable the overlay entirely (default true)
 digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
                                                   # | bottom-center | bottom-left | bottom-right | center
-digivoice settings set banner_animations false    # still dot-matrix frame (default true)
+digivoice settings set banner_density full        # mini (grid only) | peek (default) | full (stays)
+digivoice settings set banner_animations false    # still grid frame (default true)
 digivoice settings --json                         # show everything
 ```
 
-An unknown `banner_position` falls back to `top-center`.
+An unknown `banner_position` falls back to `top-center`; an unknown `banner_density` falls back to `peek`.
 
 ## How stop works
 
-Toggle recording uses a **stop-file** (not only the PR1 length cap):
+Toggle recording uses a **stop-file** (there is no UX time limit; the safety cap
+only bounds a stuck recorder):
 
 1. First Right Option → Hammerspoon starts  
    `digivoice dict --toggle --stop-file "$DATA/dict.stop"`  
@@ -59,6 +68,10 @@ Toggle recording uses a **stop-file** (not only the PR1 length cap):
 3. digivoice notices the file, sends SIGINT to the recorder process group so the
    wav closes cleanly, then continues whisper → optional rewrite → history → paste
    of what was captured (interrupt-safe; no resume-same-take).
+
+On the sox path, ~10s of silence pauses the take the same way (the recorder ends
+itself; the wav is kept and dictation proceeds with what was captured) — long
+dictation is never cut mid-speech.
 
 SIGINT/SIGTERM to the digivoice process itself takes the same early-stop path
 (Hammerspoon falls back to `task:terminate()` if the stop-file cannot be written).

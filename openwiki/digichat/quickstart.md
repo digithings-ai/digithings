@@ -40,7 +40,7 @@ make digichat-dev  # Next.js dev server → http://127.0.0.1:3000
 ```
 
 `make stack-local` runs digikey (8005) plus digigraph, digiquant, digisearch,
-and digismith (8000–8003) directly on the host, no Docker. `make digichat-dev`
+and digitrace (8000–8003) directly on the host, no Docker. `make digichat-dev`
 runs `npm run dev` from `apps/digichat/` with hot reload on port 3000.
 
 ## 2. Configure `.env.local`
@@ -56,7 +56,7 @@ Copy `apps/digichat/.env.example` to `.env.local` and set at minimum:
   `upstream_auth`.
 - `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:8000`,
   `DIGIQUANT_INTERNAL_URL=http://127.0.0.1:8001`,
-  `DIGISMITH_INTERNAL_URL=http://127.0.0.1:8003`,
+  `DIGITRACE_INTERNAL_URL=http://127.0.0.1:8003`,
   `DIGISEARCH_INTERNAL_URL=http://127.0.0.1:8002`.
 - `DIGICHAT_DEV_AUTH=1` and `DIGICHAT_DEV_PASSWORD` (e.g. `dev`) for password
   login at `/login`.

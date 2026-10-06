@@ -2,7 +2,7 @@
 
 For the operator rotating a live credential. This is the *procedure* companion to
 [SECRETS_INVENTORY.md](SECRETS_INVENTORY.md) (the evidence base: names, locations,
-risk ids R1–R13). No value is ever printed here; every literal below is masked `***`.
+risk ids R1–R15). No value is ever printed here; every literal below is masked `***`.
 
 **Preconditions for every procedure.**
 
@@ -16,40 +16,42 @@ risk ids R1–R13). No value is ever printed here; every literal below is masked
 ## The container boot-env trap
 
 **A running Container is not replaced when a new Worker version deploys.** It keeps the environment it
-booted with until the instance is recycled. Evidence: `apps/digithings-stack-cloudflare/README.md:18-23`
-("a running digichat Container keeps start-time env values until recycled"); `sleepAfter` is `15m`
-(`apps/digichat-cloudflare/src/index.ts:26`), `15m` for the stack sibling (`apps/digithings-stack-cloudflare/src/index.ts:54`),
-`15m` for the MCP container (`:166`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
+booted with until the instance is recycled. Evidence: `apps/digithings-stack-cloudflare/README.md:27-28`
+("a running digichat Container keeps start-time env values until recycled"); `sleepAfter` is `3m`
+(`apps/digichat-cloudflare/src/index.ts:26`), `3m` for the stack sibling (`apps/digithings-stack-cloudflare/src/index.ts:83`),
+`3m` for the MCP container (`:208`) and the folded digichat class (`:260`). So a re-`put` secret looks rotated in `secret list` while the old value stays live — R5.
 
 **The lever that works today: bump the container id.** Change `SHARED_DIGICHAT_CONTAINER_ID`
-(`apps/digichat-cloudflare/src/paths.ts:22`) from `shared-v7` to `shared-v8` and deploy. Incident #4289 / PR #4290
-did exactly this: `shared-v6`→`shared-v7` booted a new instance with the current image + env while the old one went
+(`apps/digichat-cloudflare/src/paths.ts:23`) from `shared-v9` to `shared-v10` and deploy. Incident #4289 / PR #4290
+did the same bump on an earlier suffix (`shared-v6`→`shared-v7`): a new instance boots with the current image + env while the old one goes
 inactive. The stack equivalent is `SHARED_STACK_CONTAINER_ID` (`apps/digithings-stack-cloudflare/src/ports.ts:37`,
-`shared-v15`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
-reads worker env only when the instance starts" (`ports.ts:33`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
+`shared-v16`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
+reads worker env only when the instance starts" (`ports.ts:33-35`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
 
-**Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:18-23` and the rebuild-marker
+**Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:30-31` and the rebuild-marker
 comments (`Dockerfile.digichat-cloudflare:65-69`, `Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
 **Dockerfile rebuild marker** to propagate env. That changes the image tag, not the instance id; it does not by itself
 replace a warm instance. Prefer the `SHARED_*_CONTAINER_ID` bump, and treat the marker as an image-rebuild trigger only.
 
 **The `envVars` whitelist is the only path into the container.** A secret `put` on the Worker but absent from the
 Container's `envVars` never reaches the process — silently. The digichat whitelist is `apps/digichat-cloudflare/src/index.ts:32-56`;
-the stack whitelists are `DigiStackContainer` (`apps/digithings-stack-cloudflare/src/index.ts:60-112`)
-and `DigiQuantMcpContainer` (`:176-184`). Known silent drops: on digichat,
+the stack Worker runs three Container classes, each with its own `envVars`:
+`DigiStackContainer` (`apps/digithings-stack-cloudflare/src/index.ts:89-146`),
+`DigiQuantMcpContainer` (`:218-227`), and `DigiChatContainer` (`:256`, `envVars`
+at `:277-305`). Known silent drops: on digichat,
 `DIGICHAT_DATABASE_URL` (`wrangler.toml:58`), `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY`; on the stack,
 `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` are no longer
-`[vars]` — the `container/entrypoint.sh` defaults are the live values (`wrangler.toml:214-217`) (R4).
+`[vars]` — the `container/entrypoint.sh` defaults are the live values (`wrangler.toml:266-269`) (R4).
 
 **Trap verification commands.**
 
 ```bash
-# stack: the live instance id is served by the Worker itself (src/index.ts:319).
+# stack: the live instance id is served by the Worker itself (src/index.ts:507).
 curl -sf https://graph.digithings.ai/_stack/meta \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v15 (or the bumped value)
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v16 (or the bumped value)
 # digichat has no id probe. Prove the recycle behaviourally: rotate AUTH_SECRET, then a
 # pre-rotation browser session must fail and a fresh login must succeed (see §13).
-sleep 900   # digichat sleepAfter == 15m; the old instance drains within this window (paths.ts:22, index.ts:26)
+sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance drains within this window (paths.ts:23, index.ts:26)
 ```
 
 ## Per-target procedures
@@ -63,7 +65,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 1. Generate: `openssl rand -hex 32`.
 2. On the stack Worker: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put MCP_EDGE_KEY`. The Worker reads it per request, so the edge rotates instantly.
 3. Replace the literal `token` in `DIGICHAT_EMBED_TENANTS`, then `printf '%s' "$JSON" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_EMBED_TENANTS` in `apps/digichat-cloudflare`.
-4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:22`) so the container reboots with the new tenant JSON.
+4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`) so the container reboots with the new tenant JSON.
 5. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
 **Verify** — new key not 401, old/absent key 401:
 `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → any status except `401`; drop the header → `401`.
@@ -79,7 +81,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_BFF_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Same command in `apps/digichat-cloudflare`.
-4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:22`).
+4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 5. Deploy both Workers.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/oauth/token -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{"grant_type":"bff_session","tenant_slug":"digithings","subject":"bff-rotation-probe"}'` → `200`; with the previous value → `401`.
 **Rollback** — re-put the previous value on both Workers and bump both ids again.
@@ -87,7 +89,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 
 ### 3. Cloudflare token family — `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN`
 
-**Blast radius** — Vectorize + D1 access (digivault, digisearch, the remote-index cutover); deploy workflows (`deploy-*.yml`, `docs-onboard-digithings.yml`, `sync-cheaperinference-cf-secrets.yml`); local `scripts/d1_sync.py:442`, `scripts/vectorize_sync.py:365` (R7).
+**Blast radius** — Vectorize + D1 access (digivault, digisearch, the remote-index cutover); deploy workflows that still read the repo secret (`deploy-digithings-cron.yml`, `deploy-digiquant-runner.yml`, `sync-digiquant-runner-*.yml`); local `scripts/d1_sync.py:442`, `scripts/vectorize_sync.py:365` (R7). `docs-onboard-digithings.yml` and `sync-cheaperinference-cf-secrets.yml` are not in `.github/workflows`.
 **Copies** — stack Worker: canonical `CLOUDFLARE_API_TOKEN` (`apps/digithings-stack-cloudflare/wrangler.toml:159`) and legacy `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` (`:190-193`), forwarded at `src/index.ts:89-93`; GitHub repo secret; local `.env`.
 **Pre-flight** — the wrangler self-auth trap: `CLOUDFLARE_API_TOKEN` is also wrangler's own auth variable (`wrangler.toml:167-180`). Never `set -a; . .env` before wrangler; use `env -u CLOUDFLARE_API_TOKEN` and keep `CLOUDFLARE_ACCOUNT_ID` exported.
 **Steps**
@@ -105,18 +107,18 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 
 ### 4. `GH_DISPATCH_TOKEN`
 
-**Blast radius** — every cron→GitHub `workflow_dispatch` / `repository_dispatch`; all scheduled pipelines stop (`apps/digithings-cron/src/dispatch.ts:92,101`).
-**Copies** — cron Worker (`apps/digithings-cron/wrangler.toml:18` comment); GitHub repo secret (source), pushed by `deploy-digithings-cron.yml:51`.
-**Pre-flight** — fine-grained PAT with Actions write on `digithings-ai/digithings` + `digithings-ai/twelve-x` (`wrangler.toml:18-19` comment).
+**Blast radius** — every cron→GitHub `workflow_dispatch` / `repository_dispatch`; all scheduled pipelines stop (token read at `apps/digithings-cron/src/dispatch.ts:289`, bearer header `:298`; all 38 crons in `apps/digithings-cron/wrangler.toml:38-77`). **This is also the DIG-71 alarm's only GitHub credential**, so one PAT failure takes out the clocks and the alarm that reports on them together — see [R14](SECRETS_INVENTORY.md#risk-register).
+**Copies** — cron Worker (`apps/digithings-cron/wrangler.toml:24` comment); GitHub repo secret (source), pushed by `deploy-digithings-cron.yml:51`.
+**Pre-flight** — fine-grained PAT with Actions read/write **and** Issues read/write on `digithings-ai/digithings` + `digithings-ai/twelve-x` (`wrangler.toml:24-25` comment). **Manual step:** the PAT is a *personal* token, so minting and revoking are account-level actions on a human's GitHub account. An agent cannot rotate this on a schedule; escalate to Chris. Both grants are proved weekly by `scripts/check_workflow_tokens.py`.
 **Steps**
 1. Mint the new PAT in GitHub (dashboard action), same repos + Actions write.
 2. `gh secret set GH_DISPATCH_TOKEN`.
 3. Either re-run `deploy-digithings-cron.yml` (workflow_dispatch), or put directly: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put GH_DISPATCH_TOKEN` in `apps/digithings-cron`.
 4. Deploy. No Container here — no id bump.
 **Verify** — trigger one job and confirm a run appears:
-`curl -s -X POST https://digithings-cron.<subdomain>.workers.dev/kick -H "Authorization: Bearer $CRON_KICK_SECRET" -H 'Content-Type: application/json' -d '{"cron":"17 9 * * *"}'` → `{"ok":true,...}`; then `gh run list --limit 5`. `<subdomain>` is the `*.workers.dev` URL printed by the last deploy (`workers_dev = true`, `wrangler.toml:10`); `/kick` is 404 without `CRON_KICK_SECRET` (`src/index.ts:85-86`).
+`curl -s -X POST https://digithings-cron.<subdomain>.workers.dev/kick -H "Authorization: Bearer $CRON_KICK_SECRET" -H 'Content-Type: application/json' -d '{"cron":"17 9 * * MON"}'` → `{"ok":true,...}` with a `house-run-09` run id; then `GET /runs/:id`. `<subdomain>` is the `*.workers.dev` URL printed by the last deploy (`workers_dev = true`, `wrangler.toml:12`); `/kick` is 404 without `CRON_KICK_SECRET` (`src/index.ts`). Daily `17 9 * * *` is no longer a mapped cron (weekly Mon lock 2026-10-01).
 **Rollback** — re-put the previous PAT and redeploy.
-**Gotchas** — `DRY_RUN = "0"` (`wrangler.toml:15`); with `DRY_RUN=1` the dispatch is logged but never sent (`dispatch.ts:61`).
+**Gotchas** — `DRY_RUN = "0"` (`wrangler.toml:18`); with `DRY_RUN=1` the dispatch is logged but never sent (`dispatch.ts:258`).
 
 ### 5. `DIGIKEY_ADMIN_TOKEN`
 
@@ -203,12 +205,12 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 
 ### 11. Provider keys — `OPENROUTER_API_KEY`, `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`
 
-**Blast radius** — house LLM routing (`digillm/src/digillm/client.py:242,485`) and digigraph/LiteLLM (`apps/digithings-stack-cloudflare/src/index.ts:100-104`).
-**Copies (note the dead/misdirected ones)** — `OPENROUTER_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:145`); digichat Worker **dead** (put but not in `envVars`, `apps/digichat-cloudflare/src/index.ts:32-56`); local `.env`; Pages `digithings-web` **dead** (`wrangler.toml:24`; `/chat` returns 410). `CHEAPERINFERENCE_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:146`); digichat Worker **dead**; synced by the stack-only `sync-stack` job (`sync-cheaperinference-cf-secrets.yml:39-40`). `GROQ_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:145`); local `.env` (R4/R9).
+**Blast radius** — house LLM routing (`digillm/src/digillm/client.py:242,485`) and digigraph/LiteLLM (`apps/digithings-stack-cloudflare/src/index.ts:134-138`).
+**Copies (note the dead/misdirected ones)** — `OPENROUTER_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:179`); digichat Worker **dead** (put but not in `envVars`, `apps/digichat-cloudflare/src/index.ts:32-56`); local `.env`; Pages `digithings-web` **dead** (`wrangler.toml:24`; `/chat` returns 410). `CHEAPERINFERENCE_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:180`); digichat Worker **dead**; put with `wrangler secret put` / `gh secret set` — no sync workflow remains (`sync-cheaperinference-cf-secrets.yml` is not in `.github/workflows`). `GROQ_API_KEY`: GitHub repo secret; stack Worker (`wrangler.toml:179`); local `.env` (R4/R9).
 **Steps**
 1. Rotate upstream in the provider console.
 2. `gh secret set OPENROUTER_API_KEY` (and `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`).
-3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). The CI sync workflow can do the stack put for `CHEAPERINFERENCE_API_KEY` / `OPENROUTER_API_KEY`.
+3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). There is no CI workflow that puts these Worker secrets.
 4. Bump `SHARED_STACK_CONTAINER_ID`; deploy the stack.
 **Verify** — a one-token completion through LiteLLM: `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/chat/completions -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' -d '{"model":"house","messages":[{"role":"user","content":"ping"}],"max_tokens":1}'` → `200`.
 **Rollback** — re-put the previous key and bump the id.
@@ -233,7 +235,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 **Steps**
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put AUTH_SECRET` in `apps/digichat-cloudflare`.
-3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:22`).
+3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 4. Deploy the digichat Worker.
 5. Update the compose / profile env files for the non-Cloudflare instances.
 **Verify** — `/api/auth/*` is not a Worker-proxied path (`paths.ts:6-19`), so there is no curl probe. Prove it in a browser: `curl -s -o /dev/null -w '%{http_code}\n' 'https://digithings.ai/embed?host=digithings.ai'` → not `5xx` (container up), then log in at `https://digithings.ai/chat` and reload a pre-rotation session — it must be logged out, which is the expected proof of the rotation.
@@ -268,6 +270,7 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 | `OPENROUTER_API_KEY` / `CHEAPERINFERENCE_API_KEY` / `GROQ_API_KEY` | 6 months | provider breach notice; spend anomaly | LLM platform owner |
 | `ZAMMAD_API_TOKEN` | 12 months | helpdesk incident; offboarding | OCC / support owner |
 | Supabase service-role pair | 12 months | Supabase advisory; role audit | data platform |
+| `NEXT_PUBLIC_*_SUPABASE_ANON_KEY` (twelve-x publishable key) | 12 months — but rotation only takes effect on the next production build | bundle-scraped key notice; Supabase deprecation of `anon` by end of 2026 | digiquant / dashboard owner. **Never rotate the core `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a twelve-x fix** — the fallback in `apps/dashboard/lib/twelve-x/supabase.ts:23-26` makes that a platform-wide action |
 | `DIGIQUANT_VAULT_MASTER_KEY` | **do not rotate** until a re-seal job exists (§8) | only on confirmed compromise | digiquant / security owner |
 | Any secret | immediately | incident, public exposure, offboarding | the owning role above |
 
@@ -275,14 +278,132 @@ sleep 900   # digichat sleepAfter == 15m; the old instance drains within this wi
 
 These docs must never claim the following — the evidence is not available in this repo:
 
-- **Pages `digithings-web` env vars.** `wrangler secret list` does not list Pages; the live Pages env is unknown, and its documented `OPENROUTER_API_KEY` is dead (`apps/digithings-web/wrangler.toml:24`). A Pages surface needs `pages secret list --project-name digithings-web`.
+- **Pages env var *values*.** No value is readable on a Pages surface, ever, not even for the operator — a Pages secret is write-only exactly like a Worker `secret_text`. Names *are* discoverable, but only partly: `wrangler pages secret list --project-name <name>` prints **`secret_text` vars only**, each as the fixed string `NAME: Value Encrypted`, and silently drops `plain_text` vars — `digiquant-io` production has 6 env vars but shows 4 that way. For a complete, typed view use the raw API, `GET /accounts/<account-id>/pages/projects/<name>` → `deployment_configs.<production|preview>.env_vars`. To confirm what a page actually *serves*, scrape the deployed `_next/static` chunks. (The `digithings-web` Pages env remains unmapped, and its documented `OPENROUTER_API_KEY` is dead — `apps/digithings-web/wrangler.toml:23`.)
+- **Whether a rebuilt bundle carries a rotated `NEXT_PUBLIC_*` value.** Putting the var and building are separate steps, so between them the old value is still the live one. Confirm by scanning the deployed chunks, not by trusting the `put`.
 - **A Container's runtime env.** Only the Worker `envVars` whitelist in source is visible; nothing reports the container process env at runtime (inventory Gaps).
 - **Liveness of keys committed in history.** Whether the gitleaks-allowlisted `mcp.secrets.env.example` values or `local-dev-unused-first-party` are still live cannot be proven without the values, and the "owner-confirmed dead" note is not reproducible (R3).
 - **Alias equality.** The two `DIGIKEY_BFF_TOKEN` copies, `MCP_EDGE_KEY` vs the tenant literal, and legacy `VECTORIZE_*`/`D1_*` presence are inferred from config, never diffed against live state.
 - **The actual GitHub secret/var set.** Only workflow *references* are mapped; whether `CORE_SUPABASE_*` exist or workflows silently fall back is unverified.
+
+## Rotating a `NEXT_PUBLIC_*` Supabase client key (Pages build-time inlining)
+
+**A `NEXT_PUBLIC_*` Pages var is inlined into the bundle at build time. Re-`put`ting it changes nothing that is
+already live** — the old value keeps shipping from `_next/static` until the next production build. This is the
+same class of trap as the Container boot-env above, with a different lever: there is no "secret id" to bump, only a
+rebuild. So the verification order for one of these is always **put → rebuild → then prove the new value is live**,
+never put → probe.
+
+**The rebuild has no trigger you can push on — for a git-integrated Pages project, the rebuild is the merge.**
+`digiquant-io` deploys from Cloudflare Pages' Git integration on `main` (`production_branch: main`,
+`build_command: bash scripts/build-digiquant.sh`, `destination_dir: dist`), so every merge to `main` rebuilds and
+re-inlines the var. Two consequences: (a) a var set today stops shipping only once `main` is merged *after* this
+date — not the moment you `put`; (b) `.github/workflows/deploy-digiquant-cloudflare.yml` is a **PR build check, not
+the deploy**, so "wait for the workflow" is the wrong instinct and that file is an inviting wrong turn. If you need
+the new value live without merging, the lever is the Cloudflare Pages dashboard's retry-redeploy, and there is no
+sanctioned CLI for it in this runbook — get a Decision rather than improvising one.
+
+**Look up the Pages env before you touch anything.** `wrangler secret list` does not cover Pages, and
+`wrangler pages secret list --project-name <name>` is a *partial* view — it lists `secret_text` vars only, as
+`NAME: Value Encrypted`, and hides `plain_text` vars (see [Cannot verify from here](#cannot-verify-from-here)).
+For the real list, with every name and its type, read
+`GET /accounts/<account-id>/pages/projects/<name>` → `deployment_configs.<production|preview>.env_vars`.
+Check **both** environments: the `preview` env on a project is often missing a var that production has, and the
+app's own fallback chain can then quietly substitute a different key.
+
+**Proving which key a bundle actually ships takes the base path, and getting it wrong fakes an all-clear.**
+`digiquant.io` mounts the dashboard app under a base path, so its assets are `/dashboard/_next/static/…`, **not**
+`/_next/static/…`. Requesting the un-prefixed form returns **HTTP 404 with a ~32 KB HTML body**, which a scraper that
+only counts successful reads will silently treat as "no key found in the bundle" — the exact opposite of the truth,
+and the worst possible failure mode for the one check that tells you whether the rotation landed. Take the asset
+prefix from the `<script src=…>` values in the served HTML, not from the `href` values of the preload links, which
+carry the un-prefixed form. Crawl transitively (each chunk names further chunks) and use the **HTTP status** of every
+fetch, not the byte count, to decide what was scanned. Record findings as a **non-reversible fingerprint** — length
+plus the first 8 hex of the SHA-256 — never the value: a client key is a public identifier, and a digest is enough to
+prove presence or absence and safe to write in this file. Scanned 2026-10-05: 25 chunks, 3,055,146 bytes.
+
+**Verify a publishable key is a safe drop-in for a legacy `anon` JWT, do not assume it.** A Supabase *publishable*
+key (`sb_publishable_…`) is accepted by PostgREST and GoTrue in place of the legacy `anon` JWT, but the two are not
+interchangeable everywhere — measured on twelve-x project `lfghjucjrsabiqwxerxv`, `GET /auth/v1/user` returns
+`403 {"error_code":"bad_jwt","msg":"invalid claim: missing sub claim"}` for the legacy `anon` and
+`401 {"error_code":"no_authorization",…}` for the publishable key. Neither impersonates a user, and PostgREST
+behaviour was identical, but the status codes differ. Probe the specific endpoints the surface actually calls before
+pointing prod at it.
+
+**Legacy `anon` / `service_role` JWTs cannot be rotated in place.** The Management API `POST /v1/projects/{ref}/api-keys`
+accepts only `type: publishable | secret`; there is no regenerate for a legacy JWT key. And
+`PUT /v1/projects/{ref}/api-keys/legacy` takes no body and returns a single `{"enabled": bool}` — it is **one flag over
+both `anon` and `service_role`**, so disabling it kills the service role too. The only supported sequence is
+create-publishable → repoint every consumer → rebuild → *then* disable legacy (reversible in the dashboard), and the
+last step is a separate, riskier change. Supabase is deprecating `anon`/`service_role` by end of 2026.
+
+**Two anon keys in one bundle is a trap.** `apps/dashboard/lib/twelve-x/supabase.ts:23-26` falls back to
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` — the **core** digithings key — when the twelve-x var is unset, and both projects'
+keys sit side by side as live Pages secrets on `digiquant-io`. Rotating the *twelve-x* key is scoped and safe;
+rotating the *core* key as a twelve-x fix is a platform-wide action that breaks every other surface. **Confirm which
+of the two you are rotating before you click**, and note that the fallback fires on any build where the twelve-x var
+is missing (preview builds included, where no such secret is set).
+
+## Registering a secret for a Paperclip agent
+
+A credential an **agent** needs at run time is a different object from a repo secret or a Pages env var. It lives in
+Paperclip's own store and takes **two** records, not one. Checked against the running API on 2026-10-05; the
+"verified" and "schema" labels below are load-bearing, because the obvious endpoint does not exist.
+
+### What does not exist
+
+- `GET`/`POST /api/agents/{id}/secrets` → **`404 {"error":"API route not found"}`**. There is no per-agent secrets
+  route to "register for" another agent.
+- The per-agent route is **`/api/agents/me/secrets`**, which is **GET-only** and answers for the **calling** agent
+  alone. For Security it returns `{"secrets": []}`.
+- `POST /api/agents/me/secrets/{key}/value` has **no request-body schema** in `/api/openapi.json`. Treat it as
+  internal plumbing; do not build a runbook on it.
+- `GET /api/agents/{id}/keys` → **`{"error":"Board access required"}`**. Minting an agent key is a board action and
+  stays a red line for agents.
+
+### What does exist — two records
+
+1. **The secret**, at company scope:
+   `POST /api/companies/{companyId}/secrets` with `{name, key, provider, value, managedMode, description, ...}`.
+   `provider` ∈ `local_encrypted | aws_secrets_manager | gcp_secret_manager | vault`;
+   `managedMode` ∈ `paperclip_managed | external_reference`; `key` must match `^[a-zA-Z0-9_.-]+$`, so
+   `GROK_ROUTINE_WEBHOOK_URL` is a legal key. Only `name` is required.
+2. **The binding**, which puts it into one agent's environment:
+   `POST /api/agents/me/secret-proposals` with `kind: "binding"`, `targetAgentId`, `configPath` (the env var name),
+   `justification`, and optionally `secretId`. A board approval at
+   `POST /api/secret-proposals/{id}/approve` is what commits it.
+
+The sibling proposal kind is `kind: "secret"` — `{name, value, justification}` — and **that one requires the value**,
+so it is only usable by whoever already holds the credential. *Verified:* the 404s, the GET bodies, the 28 routines
+and the `Board access required` above. *Schema only, not executed:* the two POST shapes and their field enums.
+
+### The rule this gives us
+
+**Only the value has to come from outside.** `managedMode: "external_reference"` with `value: null` and an
+`externalRef` is the shape for registering the *name and location* of a credential you are not permitted to hold.
+Security can own the store's metadata while the value never enters the model, a comment, a document or a commit.
+Verification stays a **names-only** read — never a value fetch.
+
+### The gap this exposed: `GROK_ROUTINE_WEBHOOK_*`
+
+`skills/grok-mailbox/SKILL.md` tells the EA that urgent jobs are also pushed by POST to a Grok Bot routine webhook,
+using `GROK_ROUTINE_WEBHOOK_URL` and `GROK_ROUTINE_WEBHOOK_KEY`. Those two names appear **exactly once in the whole
+company** — that one sentence. Verified 2026-10-05:
+
+- **No consumer.** Nothing reads either name. `git grep GROK_ROUTINE_WEBHOOK github/develop` → no match; the kit has
+  no matching file.
+- **No spec.** The sentence gives no endpoint path and no payload, so there is nothing to implement against.
+- **No holder.** The EA agent record contains **zero** occurrences of `webhook`, and its `/api/agents/me/secrets`
+  is empty.
+- **No Paperclip trigger.** All 28 company routines are `kind: "schedule"`; there is no webhook-kind trigger, and
+  `/api/routine-triggers/{id}/rotate-secret` is not the credential the skill means.
+
+So the urgent path is **documented but not implemented and not credentialed**. Registering the two names would turn
+that issue's checklist green with a dead feature behind it. Specify the POST or drop the claim — do not mint
+credentials for an endpoint nobody has written down. (DIG-570.)
 
 ## Rotation log
 
 | Date (UTC) | Secret | Actor | Ticket | Verification evidence |
 |---|---|---|---|---|
 | 2026-09-29 | MCP_EDGE_KEY + DIGICHAT_EMBED_TENANTS (occ zammad entry) | agent (user-authorized rotation) | occ zammad `Unknown tool` | edge GET no-key→401 / with-key→406 (gate passes; 406=MCP GET negotiation); occ tenant-config now lists zammad server (was []); JSON-RPC tools/list via edge returns 5 tools; digichat Worker e6901a69 live, container shared-v9 |
+| 2026-10-05 | `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` — Pages `digiquant-io` **production**; legacy `anon` JWT → Supabase **publishable** key `fx_hub_dashboard` on twelve-x project `lfghjucjrsabiqwxerxv` (id `591e8ceb-1e46-498a-af0b-8447f3f77018`). Core `NEXT_PUBLIC_SUPABASE_ANON_KEY` **not touched** | agent (keymaster) | DIG-258 (split from DIG-147) | Pre-mutation: `pages secret list` showed 4 digiquant-io vars as `Value Encrypted`, and the raw API shows **6** env vars in total (the fifth `secret_text`, `NEXT_PUBLIC_MARKET_DATA_URL`, plus `plain_text` `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` were outside what that command printed) — treat the API as the authority, not the command; substring scan of the live digiquant.io JS chunks confirmed the twelve-x legacy anon JWT was the shipped `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` (and the core anon JWT separately). Compat probe before pointing prod at it: publishable key returns identical results to legacy anon on all 20 RLS-locked FX tables (**401 on 20/20, 0 readable**) and on `POST /rest/v1/rpc/fx_hub_has_access` (**401**) — the lock-down holds for both key types. Post-mutation: `pages secret put` → `✨ Success! Uploaded secret`; value identity confirmed **against the provider** (`GET /api-keys/591e8ceb-…` → 200, len 46 == local len 46, `identical=True`, `sha256=bd1ffc63…`) because the Pages secret is write-only. **Pending:** production rebuild and the separate legacy-disable step — so "old key rejected" is **not** yet true; see [Rotating a `NEXT_PUBLIC_*` Supabase client key](#rotating-a-next_public_-supabase-client-key-pages-build-time-inlining) and inventory R15. **Re-scanned the live bundle 2026-10-05T05:05Z** (25 chunks, 3,055,146 bytes, `/dashboard/_next/static/…`): the twelve-x legacy `anon` JWT `sha256=43ed8e14` is **still shipped**, the core `anon` JWT `sha256=fac4879c` is shipped alongside it, and `sha256=bd1ffc63` (the new publishable key) is **absent** — i.e. the `put` has not reached users. Both hosts appear in the same build: `lfghjucjrsabiqwxerxv.supabase.co` and `rwagjbkvxkdwqmouagad.supabase.co`. Last production deploy was `main` at `2026-10-02T17:12:10Z`, before this rotation. The live FX Hub route to re-check after the rebuild is **`/dashboard/twelve-x/`** (`/fx-hub` and `/twelve-x` both 404). Post-rebuild re-scan is the acceptance check, and it must assert **absence** of `43ed8e14`, not just presence of `bd1ffc63` |

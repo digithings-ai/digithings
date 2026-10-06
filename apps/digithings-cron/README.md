@@ -33,11 +33,18 @@ Set secrets from this directory with wrangler secret put (never echo values).
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
-(20 expressions after the 2026-10-01 Human Gate pause: DigiQuant pipeline
-jobs stay in `src/jobs.ts` with `enabled: false` and are omitted from
-wrangler). twelve-x-new-york stays weekday-only on `17 12 * * MON-FRI`.
-Resume: set those jobs `enabled: true` and restore wrangler from
-`uniqueEnabledCrons()`.
+(37 expressions after twelve-x digisearch parity). House-run is
+weekly Monday morning only (`house-run-09` at `17 9 * * MON`); daily
+`house-run-10/11/12` stay in `src/jobs.ts` with `enabled: false`.
+`checkpoint-archive` is live at `30 13 * * *` on digiquant-runner.
+GHA `schedule:` stays off — this Worker is the SSOT. Leftover sweep after
+#4970: develop YAML has zero `on.schedule` keys; `digisearch_parity` is
+not a workflow in this repo. Path A traps
+(`agent-pr-finalizer`, `agent-backlog-snapshot`, `refresh-repo-activity`,
+`project-enforce-assignment`) are live `workflow_dispatch` jobs; their
+YAML is dispatch-only. twelve-x-new-york is weekday-only
+on `17 12 * * MON-FRI`. `twelve-x-digisearch-parity` is weekly Monday
+09:08 UTC (`8 9 * * MON`; GHA was `0 9 * * 1`, offset avoids house-run-09).
 
 ## Local
 
@@ -62,15 +69,20 @@ digithings: schedule blocks removed in this PR, workflow_dispatch / repository_d
 
 twelve-x follow-up (other repo): remove schedule from daily_run_asia/london/new_york,
 market_context_ingest (keep bucket input), performance_eval, primemarket_session_heartbeat,
-session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
+session_catchup, digisearch_parity_check; keep workflow_dispatch; add header pointing at
+digithings-cron.
 
 ## Jobs
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
-intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type digiquant-baseline (Phase 3).
-Price jobs, market-data-refresh, onchain, tearsheets, research-metrics, and
-execution-cron-check use `kind: container`. Those four Phase 2 workflows have
-no `schedule:` of their own. The runner command catalog is
+intraday / daily / weekly. agent-pr-finalizer dispatches with `dry_run=false`.
+twelve-x-archive-maintenance dispatches with `dry_run=false` and
+`dump_before_prune=true`. `twelve-x-digisearch-parity` dispatches
+`digisearch_parity_check.yml` with no inputs (workflow default days=14).
+House-run is `kind: container`
+(`house-run-09` Monday 09:17 UTC). Price jobs, market-data-refresh,
+checkpoint-archive, onchain, tearsheets, research-metrics, and
+execution-cron-check use `kind: container`. Those workflows have no
+`schedule:` of their own. The runner command catalog is
 `apps/digiquant-runner/commands.json`. Operator notes:
 `docs/ops/digiquant-runner.md`.

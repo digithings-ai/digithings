@@ -45,6 +45,17 @@ export function houseArgs(
   };
 }
 
+/** Ordinary ticks and unforced kicks send {}. Only force may keep dry_run "true". */
+export function checkpointArgs(
+  force: boolean,
+  bodyArgs: Record<string, string>,
+): Record<string, string> {
+  if (force && bodyArgs.dry_run === "true") {
+    return { dry_run: "true" };
+  }
+  return {};
+}
+
 function startedRun(job: Job, result: DispatchResult): StartedRun {
   const run: StartedRun = {
     job_id: job.id,
@@ -85,10 +96,12 @@ async function runJobsForCron(
       continue;
     }
     started.push(job.id);
-    const args =
-      job.command === "house-run"
-        ? houseArgs(opts.force === true, opts.args ?? {}, scheduledTime)
-        : opts.args;
+    let args = opts.args;
+    if (job.command === "house-run") {
+      args = houseArgs(opts.force === true, opts.args ?? {}, scheduledTime);
+    } else if (job.command === "checkpoint-archive") {
+      args = checkpointArgs(opts.force === true, opts.args ?? {});
+    }
     pending.push(
       dispatch(env, job, cron, scheduledTime, { args }).then((result) =>
         startedRun(job, result),

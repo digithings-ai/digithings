@@ -96,7 +96,7 @@ export const guides: Guide[] = [
       },
       {
         kind: "p",
-        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).",
+        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat is not on GHCR yet — the image publish workflow was removed in the strict-essentials cut, so digichat builds from source here.",
       },
       { kind: "h", text: "Profiles" },
       {
@@ -113,7 +113,7 @@ export const guides: Guide[] = [
       {
         kind: "list",
         items: [
-          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digismith, digivault, digiclaw (pin `sha-<12>` in production).",
+          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw (pin `sha-<12>` in production).",
           "`DIGICHAT_IMAGE_TAG` — digichat only; prefer `vX.Y.Z` from release-please.",
         ],
       },
@@ -137,15 +137,15 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker pull ghcr.io/digithings-ai/digichat:v2.3.2",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.4.0 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.4.0 .",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (currently published through `v2.3.2`)",
+          "Published image: none today. The digichat image publish workflow was removed in the strict-essentials cut and has not been replaced, so digichat builds from source. Restore tracked in DIG-1242.",
           "Changelog: `apps/digichat/CHANGELOG.md`",
-          "Pin a published tag — do not assume a version exists on GHCR until the digichat release workflow has published it from `main`.",
+          "Pin by digest once you publish the image yourself — do not rely on `:latest`.",
         ],
       },
       { kind: "h", text: "Profiles" },
@@ -166,7 +166,7 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          "Does not start digiquant / digisearch / digismith / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.",
+          "Does not start digiquant / digisearch / digitrace / heartbeat. Full operator guide: `docs/digichat/INSTALL.md`. Minimal compose overlays live under `infra/digichat-release/`.",
       },
     ],
   },
@@ -186,7 +186,7 @@ export const guides: Guide[] = [
           "`digigraph` `:8000` — workflows, OpenAI-compatible chat, federated tools",
           "`digiquant` `:8001` — NautilusTrader backtest / optimize",
           "`digisearch` `:8002` — RAG ingest + query",
-          "`digismith` `:8003` — observability helpers + status",
+          "`digitrace` `:8003` — observability helpers + status",
           "`digivault` `:8004` — vault (opt-in compose profile)",
           "`digikey` `:8005` — API keys + JWT exchange + JWKS",
           "`digichat` `:3005` — Next.js BFF + chat UI (profile `digichat`)",
@@ -279,7 +279,7 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          '`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (digigraph, digismith) is a richer operator diagnostic; never use it for health checks.',
+          '`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (digigraph, digitrace) is a richer operator diagnostic; never use it for health checks.',
       },
       { kind: "h", text: "Error envelope" },
       { kind: "p", text: "Every service returns the same error shape:" },

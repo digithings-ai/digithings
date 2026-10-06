@@ -371,8 +371,16 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     for needle in (
         "COPY digigraph ./digigraph",
         "COPY digillm ./digillm",
-        "COPY digismith ./digismith",
+        "COPY digitrace ./digitrace",
+        # Both are loaded fail-loud at import by digigraph (llm_auth / model_config);
+        # the house chain steps run it in-process, so omitting either crash-loops the
+        # house image. Pinned because the failure only shows up in production.
         "COPY config/byok-providers.json",
+        "COPY config/model-policy.json",
+        # Loaded *softly*, so its absence is silent rather than a crash-loop:
+        # /app/config/ already exists here, so pricing.py finds the directory
+        # and returns an empty table. Pinned for that reason.
+        "COPY config/digiquant-model-prices.json",
         "COPY .github/digiquant-pipeline.yml",
         "COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml",
         "/opt/runner/house_chain_step.py",
@@ -468,6 +476,11 @@ def _check_house_run(commands: dict[str, Any]) -> None:
         "CHEAPERINFERENCE_API_KEY",
         "DIGIQUANT_DIGIKEY_API_KEY",
         "LANGSMITH_API_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_BASE_URL",
+        "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
+        "DIGI_OTEL_HEADERS",
         "CORE_POSTGRES_URI",
         "CORE_SUPABASE_URL",
         "CORE_SUPABASE_SERVICE_KEY",
@@ -489,6 +502,9 @@ def _check_house_run(commands: dict[str, Any]) -> None:
         "CORE_SUPABASE_URL",
         "SUPABASE_URL",
         "LANGSMITH_API_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
+        "DIGI_OTEL_HEADERS",
         "CORE_POSTGRES_URI",
         "R2_SECRET_ACCESS_KEY",
         "GITHUB_RUN_ID",
@@ -503,6 +519,41 @@ def _check_house_run(commands: dict[str, Any]) -> None:
         raise SystemExit("interrupted body drifted")
     if exec_job.interrupted_key("2026-09-30") != "pipeline-runs/house-run/2026-09-30/interrupted.json":
         raise SystemExit("interrupted key drifted")
+    if exec_job.interrupted_key(" 2026-09-30 ") != exec_job.interrupted_key("2026-09-30"):
+        raise SystemExit("interrupted key must ignore surrounding run_date whitespace")
+    padded = exec_job.interrupted_body("run-abc", " 2026-09-30 ")
+    if padded["run_date"] != "2026-09-30":
+        raise SystemExit(f"interrupted body must store a stripped run_date, got {padded}")
+    exec_job.upload_interrupted("run-abc", "   ")
+    gated = {
+        "argv": ["echo", "ok"],
+        "when_arg": "run_writers",
+        "equals": "true",
+    }
+    kept = exec_job._resolve_step(
+        gated,
+        {"run_writers": "true "},
+        today="2026-09-30",
+        workdir=Path("."),
+    )
+    if kept is None:
+        raise SystemExit("when_arg must match after stripping the provided value")
+    skipped = exec_job._resolve_step(
+        gated,
+        {},
+        today="2026-09-30",
+        workdir=Path("."),
+    )
+    if skipped is not None:
+        raise SystemExit("a missing when_arg must not match equals")
+    spaced = exec_job._resolve_step(
+        {"argv": ["echo"], "append_arg": "note"},
+        {"note": "keep  spaces"},
+        today="2026-09-30",
+        workdir=Path("."),
+    )
+    if spaced is None or spaced.argv[-1] != "keep  spaces":
+        raise SystemExit(f"append_arg must keep internal spaces, got {spaced}")
 
     dry = exec_job.steps_for(
         "house-run",

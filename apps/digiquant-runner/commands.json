@@ -107,7 +107,7 @@
       ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/verify_strategy_calibrations_rls.py"],
       ["uv", "run", "--frozen", "--with", "ccxt", "python", "digiquant/scripts/fetch_coinbase.py", "--through-yesterday"],
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/export_sdca_macro.py"], "when_file": "digiquant/scripts/export_sdca_macro.py"},
-      ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/generate_tearsheets.py", "--from-supabase", "--push-supabase", "--signal-delay-days", "3", "--cache-dir", "digiquant/data/price-history"]
+      ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/generate_tearsheets.py", "--strategy", "btc_sdca", "--from-supabase", "--push-supabase", "--signal-delay-days", "3", "--cache-dir", "digiquant/data/price-history"]
     ]
   },
   "house-run": {
@@ -138,6 +138,11 @@
       "CHEAPERINFERENCE_API_BASE",
       "CORE_POSTGRES_URI",
       "LANGSMITH_API_KEY",
+      "LANGFUSE_SECRET_KEY",
+      "LANGFUSE_PUBLIC_KEY",
+      "LANGFUSE_BASE_URL",
+      "DIGITRACE_LANGFUSE_OTLP_ENDPOINT",
+      "DIGI_OTEL_HEADERS",
       "R2_ACCOUNT_ID",
       "R2_BUCKET",
       "R2_ACCESS_KEY_ID",

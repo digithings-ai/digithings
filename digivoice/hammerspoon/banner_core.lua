@@ -1,11 +1,11 @@
 --- digivoice banner core: pure Lua, no Hammerspoon calls, so it can be unit-tested anywhere.
 ---
 --- Holds everything the status banner decides:
----   * the dot-matrix animations (a port of the digichat 5x5 DotMatrix states)
+---   * the square status-grid animations (a port of the digichat 5x5 grid states)
 ---   * which state to show (local phase vs the CLI's status.json)
----   * labels, text wrapping/clipping, box size, screen position
+---   * density (mini/peek/full), text wrapping/clipping, box size, screen position
 ---   * banner settings from settings.json
---- init.lua only draws what this module computes.
+--- init.lua only draws what this module computes. No chrome: no titles, no hints.
 
 local M = {}
 
@@ -29,9 +29,16 @@ M.POSITIONS = {
   ["center"] = true,
 }
 
+M.DENSITIES = {
+  ["mini"] = true,
+  ["peek"] = true,
+  ["full"] = true,
+}
+
 M.DEFAULTS = {
   live_banner = true,
   banner_position = "top-center",
+  banner_density = "peek",
   banner_animations = true,
 }
 
@@ -39,6 +46,7 @@ function M.parse_settings(raw)
   local out = {
     live_banner = M.DEFAULTS.live_banner,
     banner_position = M.DEFAULTS.banner_position,
+    banner_density = M.DEFAULTS.banner_density,
     banner_animations = M.DEFAULTS.banner_animations,
   }
   if type(raw) ~= "table" then
@@ -53,7 +61,20 @@ function M.parse_settings(raw)
   if type(raw.banner_position) == "string" and M.POSITIONS[raw.banner_position] then
     out.banner_position = raw.banner_position
   end
+  if type(raw.banner_density) == "string" and M.DENSITIES[raw.banner_density] then
+    out.banner_density = raw.banner_density
+  end
   return out
+end
+
+--- Click cycles density mini → peek → full → mini (no dedicated expand button).
+function M.next_density(density)
+  if density == "mini" then
+    return "peek"
+  elseif density == "peek" then
+    return "full"
+  end
+  return "mini"
 end
 
 function M.launch_notice(bin)
@@ -307,7 +328,11 @@ function M.final_view(code, snapshot, session, stdout, stderr, cancelling)
   return { state = "error", text = "", detail = detail }
 end
 
-function M.linger_seconds(state)
+function M.linger_seconds(state, density)
+  -- Full density stays until collapsed or removed: no auto-hide timer.
+  if density == "full" then
+    return nil
+  end
   if state == "error" then
     return 4.0
   elseif state == "empty" then
@@ -315,7 +340,8 @@ function M.linger_seconds(state)
   elseif state == "cancelled" then
     return 1.2
   end
-  return 1.6
+  -- Peek (and mini) auto-dismiss a few seconds after idle/done.
+  return 4.0
 end
 
 --------------------------------------------------------------------------------
@@ -352,7 +378,8 @@ function M.wrap(text, cols)
   cols = math.max(8, cols)
   for paragraph in (tostring(text or "") .. "\n"):gmatch("(.-)\r?\n") do
     local line = ""
-    for word in paragraph:gmatch("%S+") do
+    for w in paragraph:gmatch("%S+") do
+      local word = w
       while #word > cols do
         if line ~= "" then
           lines[#lines + 1] = line
@@ -394,19 +421,47 @@ function M.clip_lines(lines, max, cols)
   return out, true
 end
 
---- Box geometry for a view. The box grows to fit the body up to the collapsed
---- line limit; `expanded` (a click) raises the limit and widens it.
-function M.layout(view, kind, expanded)
+--- Square frame for status-grid cell `i` (0-based, row-major): DigiChat-style
+--- squares, not dots. The grid hugs the top-left with equal padding.
+function M.cell_box(i)
+  local pitch = M.ICON / M.GRID
+  local side = pitch * 0.66
+  local row, col = i // GRID, i % GRID
+  local cx = M.PAD + pitch * (col + 0.5)
+  local cy = M.PAD + pitch * (row + 0.5)
+  return { x = cx - side / 2, y = cy - side / 2, w = side, h = side }
+end
+
+--- Box geometry for a view at a density. No chrome: no title line, no hints —
+--- state reads from the grid symbol/animation alone. Mini is grid only.
+--- Peek is a short glimpse; full widens and shows the whole transcript.
+function M.layout(view, kind, density)
+  kind = kind -- kind no longer changes geometry; kept for call shape.
+  if density ~= "peek" and density ~= "full" then
+    density = "mini"
+  end
   local text_x = M.PAD + M.ICON + 10
   local function columns(width)
     return math.floor((width - text_x - M.PAD) / M.CHAR_WIDTH)
   end
+  if density == "mini" then
+    local side = M.PAD * 2 + M.ICON
+    return {
+      w = side,
+      h = side,
+      text_x = text_x,
+      text_w = 0,
+      cols = 0,
+      lines = {},
+      body = "",
+      clipped = false,
+    }
+  end
   local body = M.body_for(view)
-  local width = expanded and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
+  local width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
   local cols = columns(width)
-  local limit = expanded and M.LINES_EXPANDED or M.LINES_COLLAPSED
+  local limit = density == "full" and M.LINES_EXPANDED or M.LINES_COLLAPSED
   local lines, clipped = M.clip_lines(M.wrap(body, cols), limit, cols)
-  local expandable = #M.wrap(body, columns(M.WIDTH_COLLAPSED)) > M.LINES_COLLAPSED
   local height = M.PAD * 2 + M.ICON
   if #lines > 0 then
     height = math.max(height, M.PAD + M.HEAD_HEIGHT + #lines * M.LINE_HEIGHT + M.PAD)
@@ -420,9 +475,6 @@ function M.layout(view, kind, expanded)
     lines = lines,
     body = table.concat(lines, "\n"),
     clipped = clipped,
-    expandable = expandable,
-    hint = M.cancellable(kind, view.state) and "Esc to cancel" or nil,
-    title = "digivoice · " .. (M.LABELS[view.state] or view.state),
   }
 end
 

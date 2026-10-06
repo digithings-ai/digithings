@@ -1,5 +1,10 @@
 # Checkpoint payload archive: Supabase stays metadata-light, blobs live in R2 (#3761).
 #
+# Prod clock is digithings-cron → digiquant-runner (checkpoint-archive, 30 13 * * *).
+# Job row stays enabled: false with DigiQuant peers (Human Gate #4917) until Chris
+# resumes — wrangler omits the cron while paused. workflow_dispatch remains the
+# manual override. Do not add schedule:.
+#
 # Supabase `core` sits at 588MB / 500MB quota; ~200MB is LangGraph checkpoint
 # bytea across old run threads (price/macro/documents are already deduped —
 # no consolidation headroom). This job offloads finished threads' payloads to
@@ -7,9 +12,9 @@
 # Metadata rows stay; restore path is `restore_thread` in
 # digiquant/ops/checkpoint_archive.py.
 #
-# Schedule 13:30 UTC is the intended archive window (after the 09–12 UTC
-# house-run retries). PAUSED 2026-10-01 Human Gate: the GHA schedule block
-# is commented out until Chris resumes. workflow_dispatch remains.
+# The 13:30 UTC clock runs after the morning daily-pipeline window (crons at
+# :17 past 09–12 UTC) plus buffer, so the just-finished run's thread is left
+# alone by --retain-days 1 and only older threads archive.
 #
 # R2 prerequisites completed 2026-09-09 (issue #3761): R2 enabled, bucket
 # `digithings-archive` created, GH secrets R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/
@@ -23,11 +28,6 @@
 name: "Pipeline: checkpoint archive"
 
 on:
-  # PAUSED 2026-10-01 Human Gate: DigiQuant pipeline clocks off until Chris resumes.
-  # Do not restore this schedule without also re-enabling the matching
-  # digithings-cron job + wrangler cron (or merging the CHR-B+D container flip).
-  # schedule:
-  #   - cron: "30 13 * * *"
   workflow_dispatch:
 
 permissions:
@@ -40,6 +40,8 @@ concurrency:
 jobs:
   archive:
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 60
     env:
       CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}

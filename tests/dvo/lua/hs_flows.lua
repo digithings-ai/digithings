@@ -279,8 +279,9 @@ local function write_status(kind, state, text, detail)
   )
 end
 
-local function title_of(c) return c[2].text end
-local function body_of(c) return c[4].text end
+-- Canvas contract: [1] background, [2] body text (no title/hint chrome),
+-- [3..27] square status-grid cells.
+local function body_of(c) return c[2].text end
 
 local scenarios = {}
 
@@ -312,9 +313,10 @@ function scenarios.dict_banner_recording_then_done()
   check(c, "banner canvas shown")
   check(c.shown, "canvas visible")
   eq(c.clickActivating, false, "click must not steal focus")
-  eq(c[1].trackMouseUp, true, "background must track mouse-up or click-to-expand never fires")
+  eq(c[1].trackMouseUp, true, "background must track mouse-up or click-to-cycle never fires")
   check(c.mouse, "mouse callback registered")
-  check(title_of(c):find("recording", 1, true), "title says recording: " .. title_of(c))
+  eq(c[3].type, "rectangle", "status grid is squares, not dots")
+  eq(body_of(c), "", "recording shows the grid, no chrome text")
   eq(c.frame.x, (1440 - 380) / 2, "top-center x")
   eq(c.frame.y, 12, "top-center y")
   eq(menubars[1].title, " REC", "menubar mark while recording")
@@ -322,20 +324,17 @@ function scenarios.dict_banner_recording_then_done()
   check(esc_tap.enabled, "Esc tap armed while a take is active")
   press_right_option()
   check(exists(DATA .. "/dict.stop"), "stop-file written")
-  check(title_of(live_canvas()):find("transcribing", 1, true), "title after stop")
   write_status("dict", "rewriting", "hello there world", "preset email")
   advance(0.2)
   c = live_canvas()
-  check(title_of(c):find("rewriting", 1, true), "rewriting shown: " .. title_of(c))
-  eq(body_of(c), "hello there world", "transcript shown while processing")
+  eq(body_of(c), "hello there world", "transcript glimpse while processing")
   write_status("dict", "done", "Hello there, world.", "pasted into the focused app")
   t:finish(0, "Hello there, world.\n", "")
   c = live_canvas()
-  check(title_of(c):find("done", 1, true), "done")
   eq(body_of(c), "Hello there, world.", "final text")
   eq(menubars[1].deleted, true, "menubar removed on exit")
-  advance(3)
-  eq(live_canvas(), nil, "banner clears after the linger")
+  advance(5)
+  eq(live_canvas(), nil, "peek banner clears a few seconds after done")
   find_taps()
   eq(esc_tap.enabled, false, "Esc tap released")
 end
@@ -347,13 +346,12 @@ function scenarios.esc_cancels_and_swallows()
   eq(press_esc(), true, "Esc during recording is swallowed")
   check(exists(DATA .. "/dict.cancel"), "cancel-file written")
   check(not exists(DATA .. "/dict.stop"), "cancel is not a stop")
-  check(title_of(live_canvas()):find("cancelling", 1, true), "cancelling shown")
+  check(body_of(live_canvas()):find("discarded", 1, true), "discard note shown, no chrome")
   eq(press_esc(), false, "second Esc passes through")
   press_right_option()
   check(not exists(DATA .. "/dict.stop"), "Right Option ignored while cancelling")
   tasks[1]:finish(3, "", "digivoice dict: cancelled\n")
   local c = live_canvas()
-  check(title_of(c):find("cancelled", 1, true), "cancelled shown")
   check(body_of(c):find("discarded", 1, true), "says the take was discarded")
   eq(#notifications, 1, "no cancel toast")
   advance(3)
@@ -366,7 +364,7 @@ function scenarios.unwritable_cancel_file_never_kills_the_cli()
   eq(press_esc(), false, "Esc is not swallowed when the cancel-file cannot be written")
   eq(tasks[1].killed, false, "CLI not killed (its recorder would be orphaned)")
   eq(tasks[1].terminated, nil, "CLI not terminated (that would paste)")
-  check(title_of(live_canvas()):find("recording", 1, true), "still recording")
+  eq(body_of(live_canvas()), "", "still recording, grid only")
 end
 
 function scenarios.esc_cancels_during_processing()
@@ -393,11 +391,10 @@ function scenarios.speak_is_not_esc_cancelled()
   write_status("speak", "speaking", "selected reply text", "")
   advance(0.2)
   local c = live_canvas()
-  check(title_of(c):find("speaking", 1, true), "speaking shown")
-  eq(body_of(c), "selected reply text", "selected text shown")
+  eq(body_of(c), "selected reply text", "selected text shown, no chrome")
   eq(press_esc(), false, "Esc does not swallow during speech")
   tasks[1]:finish(0, "selected reply text\n", "")
-  advance(3)
+  advance(5)
   eq(live_canvas(), nil, "cleared")
 end
 
@@ -405,8 +402,7 @@ function scenarios.speak_failure_goes_to_the_banner()
   double_tap_left_option()
   tasks[1]:finish(1, "", "digivoice speak: nothing selected: select text first\n")
   local c = live_canvas()
-  check(title_of(c):find("error", 1, true), "error title")
-  eq(body_of(c), "nothing selected: select text first", "reason shown, prefix stripped")
+  eq(body_of(c), "nothing selected: select text first", "reason shown, prefix stripped, no chrome")
   eq(#notifications, 1, "no toast")
 end
 
@@ -421,8 +417,7 @@ function scenarios.error_and_empty_exit_states()
   write_status("dict", "empty", "", "nothing recognized")
   tasks[2]:finish(1, "", "digivoice dict: whisper-cli returned no text; take discarded\n")
   local c = live_canvas()
-  check(title_of(c):find("nothing heard", 1, true), "empty shown as nothing heard")
-  check(body_of(c):find("nothing pasted", 1, true), "says nothing was pasted")
+  check(body_of(c):find("nothing pasted", 1, true), "says nothing was pasted, no chrome")
 end
 
 function scenarios.stale_status_is_ignored()
@@ -430,8 +425,7 @@ function scenarios.stale_status_is_ignored()
   clock = clock + 10
   press_right_option()
   local c = live_canvas()
-  check(title_of(c):find("recording", 1, true), "stale done must not show")
-  eq(body_of(c), "", "no stale text")
+  eq(body_of(c), "", "stale done must not show text")
 end
 
 function scenarios.position_setting()
@@ -463,14 +457,15 @@ end
 function scenarios.animations_toggle()
   local function alphas(c)
     local out = {}
-    for i = 5, 29 do out[#out + 1] = c[i].fillColor.alpha end
+    for i = 3, 27 do out[#out + 1] = c[i].fillColor.alpha end
     return table.concat(out, ",")
   end
   press_right_option()
   local c = live_canvas()
+  eq(c[3].type, "rectangle", "grid cells are squares")
   local first = alphas(c)
   advance(0.3)
-  check(alphas(live_canvas()) ~= first, "dots animate")
+  check(alphas(live_canvas()) ~= first, "grid animates")
   tasks[1]:finish(3, "", "")
   advance(5)
   write(DATA .. "/settings.json", '{"banner_animations": false}')
@@ -478,27 +473,56 @@ function scenarios.animations_toggle()
   c = live_canvas()
   first = alphas(c)
   advance(0.3)
-  eq(alphas(live_canvas()), first, "dots are a still frame")
+  eq(alphas(live_canvas()), first, "grid is a still frame")
 end
 
-function scenarios.click_expands_long_text()
+function scenarios.click_cycles_density()
   local long = string.rep("alpha beta gamma delta ", 30)
   press_right_option()
   write_status("dict", "rewriting", long, "")
   advance(0.2)
   local c = live_canvas()
-  local collapsed_h = c.frame.h
-  check(c[3].text:find("click: expand", 1, true), "expand hint")
-  check(body_of(c):find("…", 1, true), "collapsed text is clipped")
-  c.mouse(c, "mouseUp")
+  eq(c.frame.w, 380, "peek glimpse width")
+  check(body_of(c):find("…", 1, true), "glimpse is clipped")
+  c.mouse(c, "mouseUp") -- peek → full
   advance(0.2)
   c = live_canvas()
-  eq(c.frame.w, 580, "expanded width")
-  check(c.frame.h > collapsed_h, "expanded is taller")
-  check(c[3].text:find("click: collapse", 1, true), "collapse hint")
-  c.mouse(c, "mouseUp")
+  eq(c.frame.w, 580, "full width")
+  check(#body_of(c) > 0, "full shows more text")
+  c.mouse(c, "mouseUp") -- full → mini
   advance(0.2)
-  eq(live_canvas().frame.w, 380, "collapsed again")
+  c = live_canvas()
+  eq(c.frame.w, 12 * 2 + 28, "mini hugs the grid")
+  eq(body_of(c), "", "mini is grid only")
+  c.mouse(c, "mouseUp") -- mini → peek
+  advance(0.2)
+  eq(live_canvas().frame.w, 380, "back to peek")
+end
+
+function scenarios.density_mini_setting_is_grid_only()
+  write(DATA .. "/settings.json", '{"banner_density": "mini"}')
+  press_right_option()
+  local c = live_canvas()
+  eq(c.frame.w, 12 * 2 + 28, "mini hugs the grid")
+  eq(body_of(c), "", "mini shows no text")
+end
+
+function scenarios.density_full_stays_after_done()
+  write(DATA .. "/settings.json", '{"banner_density": "full"}')
+  press_right_option()
+  press_right_option()
+  write_status("dict", "done", "final words", "")
+  tasks[1]:finish(0, "final words\n", "")
+  eq(body_of(live_canvas()), "final words", "final text shown")
+  advance(8)
+  check(live_canvas(), "full stays: no auto-hide")
+  eq(body_of(live_canvas()), "final words", "text kept")
+end
+
+function scenarios.bad_density_falls_back_to_peek()
+  write(DATA .. "/settings.json", '{"banner_density": "huge"}')
+  press_right_option()
+  eq(live_canvas().frame.w, 380, "peek width")
 end
 
 function scenarios.cli_missing_is_reported()

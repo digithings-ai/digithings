@@ -12,9 +12,11 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 
 Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copilot automation — see §0). Every file has a row in the inventory below.
 
+**GHA leftover sweep (2026-10-01, develop after #4970):** `.github/workflows` on `develop` has **zero** `on.schedule` keys (pinned by `tests/scripts/test_no_gha_schedules.py`). Production clocks fire from `apps/digithings-cron`. Keep `workflow_dispatch` / `repository_dispatch`. `digisearch_parity` is not a workflow in this repo. Trigger cells below that still say `schedule` are historical GHA clocks now owned by Cloudflare, or files that exist only on `main`.
+
 | File | Name | Trigger | Purpose | Status | Path filter |
 |------|------|---------|---------|--------|-------------|
-| `agent-backlog-snapshot.yml` | Agent: backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
+| `agent-backlog-snapshot.yml` | Agent: backlog snapshot | dispatch (CF clock Mon 06:13 UTC) | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
 | `agent-quota-reset.yml` | Agent: quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
 | `pipeline-digiquant.yml` | Pipeline: dashboard research | schedule (`17 9/10/11/12 * * *`, off-peak retries before NY open), `repository_dispatch` `digiquant-baseline`, dispatch | Unified research+portfolio pipeline; skip-if-already-succeeded on later crons; `resolve` picks Sunday `all` / else `none` | Working | none |
 | *(spec, not installed)* `docs/agent-backlog/execution-tenancy/kairos-cron-check.workflow.yml` | Pipeline: execution cron check | schedule (daily 12:15 UTC), dispatch | Overlay + execution sync + notify `--check`/`--dry-run` probe; **must not** share the house portfolio job. Copy to `.github/workflows/execution-cron-check.yml` on a `chore/`/`feat/` branch (`cursor/*` cannot write workflows) | Spec pinned by `tests/scripts/test_digiquant_cron_workflow.py` | none |
@@ -33,8 +35,8 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `pipeline-continuous-improvement.yml` | Pipeline: continuous improvement | schedule (Sun 22:00), dispatch | Weekly Claude-synthesized digest of activity patterns; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
 | `test-digibase.yml` | Test: digibase | workflow_call | digibase unit tests | Working | `digibase/**`, `tests/db/**` |
 | `test-digichat.yml` | Test: digichat | workflow_call | digichat (Next.js) lint + tests | Working | `apps/digichat/**`, `packages/design/**`, `package.json` |
-| `release-please-digichat.yml` | Release please: digichat | push (`develop`) | Track digichat version + changelog from Conventional Commits on `develop` (decoupled from image publish, #1343). Retargeted off `module/digichat` in #1948 — that branch had not moved since `digichat-v0.6.0`, so two releases were hand-cut and left untagged. Root `package-lock.json` workspace version is bumped via `extra-files` (#1974); the consistency tests ride `ruff_and_scripts` on release PRs. | Working | `apps/digichat/**`, release-please config/manifest |
-| `publish-digichat-image.yml` | Publish: digichat image | push (`main`), dispatch | Build + push digichat image to GHCR once a version reaches `main`; skips if that version tag already exists (#1343) | Working | `apps/digichat/**` |
+| `release-please-digichat.yml` | Release please: digichat | push (`develop`) | Track digichat version + changelog from Conventional Commits on `develop` (decoupled from image publish, #1343). Retargeted off `module/digichat` in #1948 — that branch had not moved since `digichat-v0.6.0`, so two releases were hand-cut and left untagged. Root `package-lock.json` workspace version is bumped via `extra-files` (#1974); the consistency tests ride `ruff_and_scripts` on release PRs. | **Removed** — deleted in the strict-essentials cut (`f54af7052`, #4919). Recover with `git show f54af7052^:.github/workflows/release-please-digichat.yml`. Versions are now hand-bumped on `develop`; see [RELEASES.md](../../RELEASES.md). | `apps/digichat/**`, release-please config/manifest |
+| `publish-digichat-image.yml` | Publish: digichat image | push (`main`), dispatch | Build + push digichat image to GHCR once a version reaches `main`; skips if that version tag already exists (#1343) | **Removed** — deleted in the strict-essentials cut (`f54af7052`, #4919). Recover with `git show f54af7052^:.github/workflows/publish-digichat-image.yml`. Consequence: **no digichat image is published anywhere today** — `ghcr.io/digithings-ai/digichat` does not exist (verified 2026-10-06). Restore tracked in DIG-1242; runbook at [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md). | `apps/digichat/**` |
 | `test-digiclaw.yml` | Test: digiclaw | workflow_call | digiclaw unit tests | Working | `digiclaw/**`, `tests/dc/**` |
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
@@ -42,19 +44,20 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper + BTC-SDCA tearsheet regen: Coinbase + M2/DXY siblings, Nautilus generate, upsert `strategy_tearsheets` (#1068, #3453). Checkout pinned to `main`. | Working | none |
 | `test-digiquant.yml` | Test: digiquant | workflow_call | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
-| `test-digismith.yml` | Test: digismith | workflow_call | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |
+| `test-digitrace.yml` | Test: digitrace | workflow_call | digitrace unit tests | Working | `digitrace/**`, `tests/dsm/**` |
 | `ci-docs.yml` | CI: docs | push (main/develop), PR | Internal markdown link check + agents-init drift check (single job) | Working | markdown, agents surface |
-| `project-enforce-assignment.yml` | Project: enforce assignment | schedule (daily 09:00), dispatch | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
+| `project-enforce-assignment.yml` | Project: enforce assignment | dispatch (CF clock daily 09:23 UTC) | Comment on issues not assigned to any project board; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
 | `security-gitleaks.yml` | Security: gitleaks | push (main/develop), PR | Secrets scan — PR diff or full history; pinned OSS CLI (not the paid action) | Working | PR: paths-ignore `**.md`, `docs/**` |
 | `security-pip-audit.yml` | Security: pip-audit | workflow_call, PR, push (main/develop), schedule (Mon 06:00) | CVE audit per Python component; blocks on HIGH/CRITICAL | Working | none |
 | `ci-pr-hygiene.yml` | CI: PR hygiene | PR, schedule (daily 06:00), dispatch | Issue linkage (`Require Fixes`) + path-gated `project_fields.tsv` coverage | Working | TSV job: `project_fields.tsv` + this workflow |
+| `ci-dco-sign-off.yml` | CI: DCO sign-off | PR (opened/sync/reopened), dispatch | Reject a PR whose commits lack `Signed-off-by` (DCO 1.1, forward-only from 2026-10-04). Not yet a required check — see #393 | Working | none |
 | `project-status.yml` | Project: status automation | issues, PR closed (merge), push (task/cursor/claude branches) | Move issues through project board pipeline (Todo → In Progress → Done) | Working | PR: merge/close only |
 | `pipeline-provider-review.yml` | Pipeline: provider review | schedule (Sun 00:00), dispatch | `pytest tests/provider_review/ -m unit` then weekly probe + Claude agent; guarded by `CLAUDE_CODE_OAUTH_TOKEN` | Working | none |
 | `docs-reindex-guide.yml` | Docs: reindex guide | push (develop) | Re-index docs into digisearch (dry-run; the apply step is local-only — it posts a filesystem path and no auth, #4357) | Working | many doc paths |
 | `sync-architecture-vault.yml` | sync-architecture-vault | push (`main`), dispatch | Mirror digivault-managed `docs/vision/**` → Supabase `public.architecture_notes` for the digithings.ai docs chat; `production` env (human gate); needs migration 048 | Working | `docs/vision/**`, sync script |
 | `project-route-issues.yml` | Project: route issues | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `pipeline-maintenance.yml` | Pipeline: scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
-| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working (do not inject empty `REDIS_URL` into LiteLLM) | none |
+| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digitrace | Working (do not inject empty `REDIS_URL` into LiteLLM) | none |
 | `ci-type-check.yml` | CI: type check | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 | `test-digivault.yml` | Test: digivault | workflow_call | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
 | `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/docs/`, stable `/og.png` canaries (SPA-fallback MIME masking, #671 / #800); one further job per site (`freshness`, `freshness-digithings`) checks that site's deploy build stamp so a frozen Pages project is detected rather than discovered (#1759) | Working | none |
@@ -66,7 +69,8 @@ Workflow `.yml` files only (gh-aw `.md` / `.lock.yml` sources retired with Copil
 | `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
 | `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
 | `agent-pr-automerge.yml` | Agent: PR auto-merge | pull_request, workflow_run (CI) | Enable squash auto-merge for PRs labeled `automerge-agent` | Working | none |
-| `agent-pr-finalizer.yml` | Agent: PR finalizer | schedule (daily 07:00), dispatch | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
+| `agent-pr-finalizer.yml` | Agent: PR finalizer | dispatch (CF clock daily 07:11 UTC) | Daily backstop for `cursor/*` PRs that missed the Cursor Automation merge path | Working | none |
+| `refresh-repo-activity.yml` | Refresh: repo activity snapshot | dispatch (CF clock Mon 06:10 UTC) | Regenerates `apps/digithings-web/lib/repo-activity.json` and opens a `chore/` PR | Working | none |
 | `agent-dispatch-replay.yml` | Agent: dispatch replay | dispatch only | Re-fire `exec:*` dispatch for issues labeled at creation time (GitHub skips `issues:labeled` for `gh issue create` labels) | Working (on-demand) | none |
 
 ---
@@ -271,7 +275,7 @@ Current watched workflows in `agent-ci-failure-triage.yml`:
 - `digikey tests` → `test-digikey.yml`
 - `digiquant tests` → `test-digiquant.yml`
 - `digisearch tests` → `test-digisearch.yml`
-- `digismith tests` → `test-digismith.yml`
+- `digitrace tests` → `test-digitrace.yml`
 
 ---
 

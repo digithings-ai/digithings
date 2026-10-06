@@ -23,7 +23,7 @@ jobs:
     outputs:
       digibase: ${{ steps.filter.outputs.digibase }}
       digikey: ${{ steps.filter.outputs.digikey }}
-      digismith: ${{ steps.filter.outputs.digismith }}
+      digitrace: ${{ steps.filter.outputs.digitrace }}
       digivault: ${{ steps.filter.outputs.digivault }}
       digiclaw: ${{ steps.filter.outputs.digiclaw }}
       digivoice: ${{ steps.filter.outputs.digivoice }}
@@ -60,10 +60,10 @@ jobs:
               - 'digikey/**'
               - 'tests/dk/**'
               - '.github/workflows/test-digikey.yml'
-            digismith:
-              - 'digismith/**'
+            digitrace:
+              - 'digitrace/**'
               - 'tests/dsm/**'
-              - '.github/workflows/test-digismith.yml'
+              - '.github/workflows/test-digitrace.yml'
             digivault:
               - 'digivault/**'
               - 'tests/dv/**'
@@ -127,6 +127,10 @@ jobs:
               - 'apps/reference/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
+              - 'apps/digitrace-langfuse/**'
+              - 'Dockerfile.digitrace-langfuse-web'
+              - 'Dockerfile.digitrace-langfuse-worker'
+              - 'apps/dashboard-api/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -176,7 +180,7 @@ jobs:
               - 'digigraph/**'
               - 'digiquant/**'
               - 'digisearch/**'
-              - 'digismith/**'
+              - 'digitrace/**'
               - 'digivault/**'
               - 'tests/**'
               - 'scripts/**'
@@ -184,6 +188,7 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - 'apps/digichat/src/lib/model-catalog.generated.ts'
               - 'apps/digithings-cron/**'
               - 'apps/dashboard-api/**'
               - 'config/**'
@@ -257,10 +262,10 @@ jobs:
     if: needs.changes.outputs.digikey == 'true'
     uses: ./.github/workflows/test-digikey.yml
 
-  digismith:
+  digitrace:
     needs: changes
-    if: needs.changes.outputs.digismith == 'true'
-    uses: ./.github/workflows/test-digismith.yml
+    if: needs.changes.outputs.digitrace == 'true'
+    uses: ./.github/workflows/test-digitrace.yml
 
   digivault:
     needs: changes
@@ -408,11 +413,23 @@ jobs:
             exit 1
           fi
 
+      # Model catalog drift guard (#4994). config/model-catalog.json and
+      # apps/digichat/src/lib/model-catalog.generated.ts are both written by
+      # scripts/refresh_model_catalog.py. --check is network-free by contract:
+      # it re-renders the TS module from the committed JSON, asserts the
+      # data-model invariants, and compares byte-for-byte, so it fails fast
+      # instead of re-fetching 5.7 MB on every build. It catches a stale
+      # artifact, NOT a hand-edited one -- an offline guard cannot tell a
+      # fabricated price from a real one; that is what the review of the
+      # refresh PR is for.
+      - name: Model catalog drift guard
+        run: uv run --frozen --no-sync python scripts/refresh_model_catalog.py --check
+
       - name: Ruff (all src + tests)
         run: |
           uv run --frozen --no-sync ruff check \
             digibase/src digiclaw/src digigraph/src digiquant/src \
-            digisearch/src digismith/src tests
+            digisearch/src digitrace/src tests
 
       - name: Pytest (scripts + config + agents + integration hops + baseline)
         # tests/config/ carries the house-model / LiteLLM-config contract
@@ -617,7 +634,7 @@ jobs:
       - frontend-canon
       - digibase
       - digikey
-      - digismith
+      - digitrace
       - digivault
       - digiclaw
       - digivoice

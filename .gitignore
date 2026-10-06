@@ -18,6 +18,25 @@
 # only cover.
 node_modules/
 
+# Next.js build output at any depth. Deliberately NOT anchored, for the same
+# reason as node_modules/ above: coverage otherwise falls to each app shipping
+# its own .gitignore, and a new app that does not (apps/digiquant-app on
+# feat/dig-183 is the live example — it had to be added by hand after 0f193360
+# committed its .next/dev tree) leaks the moment someone runs a build in it.
+# A .next/dev tree carries Next-generated draft-mode and signing material, so
+# committing it puts secrets in permanent history and forces a
+# .gitleaks.toml allowlist entry to silence the scanner — an allowlist entry is
+# the wrong instrument for build output. `.next-*` covers digichat, whose
+# distDir is DIGICHAT_DIST_DIR (apps/digichat/next.config.ts) and is therefore
+# not always literally `.next`.
+.next/
+.next-*/
+
+# Agent session state (opencode session/storage/db files) — regenerated per
+# machine, never shared. Unanchored for the same reason as the rules above: a
+# worktree-local or nested checkout carries its own .opencode/.
+.opencode/
+
 # Cloudflare Pages Functions for digithings.ai are authored under
 # apps/digithings-web/functions/ and mirrored to a repo-root functions/ by
 # scripts/build-digithings.sh at build time (CF requires functions/ at the project

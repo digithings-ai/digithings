@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.secret_staleness_check import can_wait, manifest_environments
+
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -89,7 +91,7 @@ class TestExecutionCronSpecIsProbeOnly:
         assert crons == ["15 12 * * *"]
         house_crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert house_crons == [
-            "17 9 * * *",
+            "17 9 * * MON",
             "17 10 * * *",
             "17 11 * * *",
             "17 12 * * *",
@@ -133,10 +135,34 @@ class TestExecutionCronSpecIsProbeOnly:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
         assert doc["permissions"] == {"contents": "read"}
 
-    def test_no_environment_gate(self) -> None:
+    def test_gated_on_an_environment_that_cannot_wait(self) -> None:
+        """The gate exists so CI-read secrets can move to `cron` scope (#248), and
+        `environment:` is the only GitHub mechanism that exposes an environment-scope
+        secret to a job. So this file can no longer assert *no* gate.
+
+        What replaces it is the property that made the gate safe: `cron` has no
+        required reviewer and no wait timer, so the job occupies the static
+        `execution-cron-check` concurrency group without ever lingering in an approval
+        gate. A required reviewer here would reproduce #2541 on this workflow — 15 days
+        of migrations lost to a stall that every assertion still called green.
+        `test_the_cron_environment_cannot_wait` pins the same property in the file that
+        owns the invariant, and `scripts/secret_staleness_check.py` re-checks it against
+        the live API, because both are armed from the GitHub UI and neither runs on
+        every commit.
+        """
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
+        manifest = manifest_environments()
         for name, job in doc["jobs"].items():
-            assert "environment" not in job, name
+            assert job.get("environment") == "cron", (
+                f"{name} should declare `environment: cron`, the scope the CI-read "
+                "secret names move to; environment-scope secrets are invisible to a job "
+                "that does not declare it"
+            )
+        assert can_wait(manifest["cron"]) is False, (
+            "`cron` gained a required reviewer or a wait timer, so this workflow's "
+            "static concurrency group can be held by an unapproved run (#2541). "
+            "Remove the rule, then refresh `.github/environments.json`"
+        )
 
     def test_timeout_and_concurrency_are_set(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
@@ -185,7 +211,7 @@ class TestHouseScheduleRetriesOffPeak:
         jobs = _worker_jobs()
         crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert crons == [
-            "17 9 * * *",
+            "17 9 * * MON",
             "17 10 * * *",
             "17 11 * * *",
             "17 12 * * *",
@@ -194,6 +220,8 @@ class TestHouseScheduleRetriesOffPeak:
         for cron in crons:
             minute, _hour, *_rest = cron.split()
             assert minute != "0", cron
+        assert crons[0].endswith(" * * MON"), crons[0]
+        for cron in crons[1:]:
             assert cron.endswith(" * * *"), cron
 
     def test_house_pipeline_has_no_sunday_forced_refresh(self) -> None:

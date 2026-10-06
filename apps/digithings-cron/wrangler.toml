@@ -3,9 +3,8 @@
 # private digiquant-runner Worker (service binding RUNNER). This Worker does
 # not run Containers itself. wrangler deploy is the source of truth for
 # [triggers] crons. The set matches uniqueEnabledCrons() in src/jobs.ts.
-# DigiQuant pipeline clocks paused 2026-10-01 (Human Gate) — those job
-# rows stay in jobs.ts with enabled: false and are omitted here.
-# 2026-10-01 Path A: also paused agent/project/refresh + all twelve-x traps.
+# DigiQuant clocks resumed 2026-10-01; house-run is weekly Monday only.
+# twelve-x FX Hub clocks live. Path A traps restored (dispatch-only YAML).
 name = "digithings-cron"
 account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
@@ -22,7 +21,10 @@ DRY_RUN = "0"
 GITHUB_OVERRIDE_JOBS = ""
 
 # Secrets (wrangler secret put; never commit values):
-#   GH_DISPATCH_TOKEN   — Actions write on digithings-ai/digithings + digithings-ai/twelve-x
+#   GH_DISPATCH_TOKEN   — Actions write + Issues read/write on digithings-ai/digithings
+#                         + digithings-ai/twelve-x. No Contents grant, so this token
+#                         must be used over REST; `gh issue create` (GraphQL
+#                         defaultBranchRef) fails with it. See docs/ops/SECRETS_INVENTORY.md.
 #   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
 #   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
 #
@@ -34,10 +36,42 @@ service = "digiquant-runner"
 
 [triggers]
 crons = [
-  "21 6 * * *",   # ci-pr-hygiene
-  "27 7 * * *",   # smoke-stack
-  "33 6 * * MON", # security-pip-audit
-  "37 6 * * MON", # security-npm-audit
-  "41 6 * * *",   # token-canary
-  "17 6 * * *"    # smoke-site
+  "40 13 * * MON-FRI", # prices-at-open-13
+  "40 14 * * MON-FRI", # prices-at-open-14
+  "19 */2 * * MON-FRI", # prices-fx-refresh
+  "19 22 * * SUN",     # prices-fx-refresh-sun
+  "27 21 * * MON-FRI", # prices-eod-macro
+  "0 13 * * *",        # market-data-refresh-morning
+  "30 13 * * *",       # checkpoint-archive
+  "30 21 * * *",       # market-data-refresh-evening
+  "17 9 * * MON",      # house-run-09 (weekly Mon lock 2026-10-01)
+  "5 22 * * *",        # research-metrics
+  "12 0 * * *",        # tearsheets
+  "40 22 * * *",       # onchain
+  "15 12 * * *",       # execution-cron-check
+  "8 22 * * SUN",      # continuous-improvement
+  "8 8 * * MON",       # maintenance
+  "9 0 * * SUN",       # provider-review
+  "11 7 * * *",        # agent-pr-finalizer
+  "13 6 * * MON",      # agent-backlog-snapshot
+  "21 6 * * *",        # ci-pr-hygiene
+  "10 6 * * MON",      # refresh-repo-activity
+  "23 9 * * *",        # project-enforce-assignment
+  "27 7 * * *",        # smoke-stack
+  "33 6 * * MON",      # security-pip-audit
+  "37 6 * * MON",      # security-npm-audit
+  "41 6 * * *",        # token-canary
+  "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
+  "17 6 * * *",        # smoke-site
+  "7 0 * * MON-FRI",   # twelve-x-asia
+  "12 7 * * MON-FRI",  # twelve-x-london
+  "17 12 * * MON-FRI", # twelve-x-new-york
+  "4 */4 * * *",       # twelve-x-market-context-intraday
+  "30 5 * * *",        # twelve-x-market-context-daily
+  "8 7 * * SAT",       # twelve-x-market-context-weekly
+  "30 17 * * MON-FRI", # twelve-x-performance-eval
+  "3 6,18 * * *",      # twelve-x-primemarket-heartbeat
+  "52 * * * MON-FRI",  # twelve-x-session-catchup
+  "30 2 * * *",        # twelve-x-archive-maintenance
+  "8 9 * * MON"        # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
 ]

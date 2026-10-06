@@ -516,12 +516,12 @@ for hit in r.json()["results"]:
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  digismith: {
-    baseUrlVar: "DIGISMITH_URL",
+  digitrace: {
+    baseUrlVar: "DIGITRACE_URL",
     authNote: "Status and metrics are public diagnostics. Tracing is a library wrapper, not an HTTP surface.",
     run: {
-      compose: "docker compose up -d digismith",
-      standalone: "uvicorn digismith.server:app",
+      compose: "docker compose up -d digitrace",
+      standalone: "uvicorn digitrace.server:app",
     },
     env: [
       { name: "LANGSMITH_API_KEY", description: "Enable LangSmith trace export; absent = no-op." },
@@ -541,18 +541,18 @@ for hit in r.json()["results"]:
   "langsmith_host": "api.smith.langchain.com",
   "request_id": "..."
 }`,
-        examples: [{ lang: "bash", code: `curl $DIGISMITH_URL/v1/status` }],
+        examples: [{ lang: "bash", code: `curl $DIGITRACE_URL/v1/status` }],
       },
       { method: "GET", path: "/metrics", summary: "Prometheus metrics (text/plain 0.0.4).", auth: "none" },
     ],
     publicInterface: [
       {
-        signature: "from digismith.trace import traceable",
+        signature: "from digitrace.trace import traceable",
         description:
           "@traceable(\"name\") wraps a function with langsmith.traceable when LANGSMITH_API_KEY is set; otherwise a no-op. PII is redacted from span inputs/outputs.",
       },
       {
-        signature: "from digismith.config import tracing_enabled",
+        signature: "from digitrace.config import tracing_enabled",
         description: "Returns True when tracing is configured (key set + SDK importable).",
       },
     ],
@@ -640,7 +640,7 @@ for hit in r.json()["results"]:
     ],
     notes: [
       "Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).",
-      "Self-host: make up-ghcr-digichat pulls ghcr.io/digithings-ai/digichat (see infra/self-host/compose.ghcr.yml).",
+      "Self-host: digichat builds from source — there is no published digichat image on GHCR (publish workflow removed in the strict-essentials cut; DIG-1242). See infra/self-host/compose.ghcr.yml.",
     ],
   },
 

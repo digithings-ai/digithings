@@ -42,7 +42,7 @@ _LONG_STANCES = ("buy", "hold")
 
 
 def _ensure_importable() -> None:
-    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
+    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digitrace/src"):
         path = str(_REPO_ROOT / rel)
         if path not in sys.path:
             sys.path.insert(0, path)

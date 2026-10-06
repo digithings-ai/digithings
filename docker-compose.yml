@@ -71,13 +71,13 @@ services:
       retries: 5
       start_period: 30s
 
-  # ─── digismith: LangSmith-aligned observability (health + tracing status) ───
-  digismith:
+  # ─── digitrace: LangSmith-aligned observability (health + tracing status) ───
+  digitrace:
     build:
       context: .
-      dockerfile: digismith/Dockerfile
-    image: digi-digismith:latest
-    container_name: digi-digismith
+      dockerfile: digitrace/Dockerfile
+    image: digi-digitrace:latest
+    container_name: digi-digitrace
     ports:
       - "127.0.0.1:8003:8003"
     env_file:
@@ -107,7 +107,7 @@ services:
     environment:
       - DIGIQUANT_URL=http://digiquant:8001
       - DIGISEARCH_URL=http://digisearch:8002
-      - DIGISMITH_URL=http://digismith:8003
+      - DIGITRACE_URL=http://digitrace:8003
       # digivault is opt-in (dedicated Compose profile, not part of the always-on
       # core stack) — leave empty by default so the digivault skill stays hidden
       # unless an operator explicitly enables the profile and sets this.
@@ -131,11 +131,13 @@ services:
       - AUDIT_LOG_PATH=/audit/events.jsonl
     volumes:
       # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
-      # with it. ./config here must contain byok-providers.json or digigraph
-      # crash-loops at startup (fails loud, by design). A missing
-      # model_modes.yaml does NOT crash -- it silently falls back to a
-      # hardcoded default model -- so supply both regardless. See
-      # digigraph/Dockerfile and ARCHITECTURE.md's DIGI_CONFIG_PATH entry.
+      # with it. ./config here must contain byok-providers.json AND
+      # model-policy.json or digigraph crash-loops at startup (both load
+      # fail-loud at import, by design). A missing model_modes.yaml does NOT
+      # crash -- that loader degrades to an empty config and the mode ladder
+      # falls through to `fallback_model` from model-policy.json -- so supply
+      # all three regardless. See digigraph/Dockerfile and ARCHITECTURE.md's
+      # DIGI_CONFIG_PATH entry.
       - ./config:/app/config:ro
       - ./digiquant/results/audit:/audit
     depends_on:
@@ -553,7 +555,7 @@ services:
       - DIGICHAT_DATABASE_URL=postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
       - DIGIGRAPH_INTERNAL_URL=http://digigraph:8000
       - DIGIQUANT_INTERNAL_URL=http://digiquant:8001
-      - DIGISMITH_INTERNAL_URL=http://digismith:8003
+      - DIGITRACE_INTERNAL_URL=http://digitrace:8003
       - DIGISEARCH_INTERNAL_URL=http://digisearch:8002
       - DIGIGRAPH_UPSTREAM_API_KEY=${DIGIGRAPH_UPSTREAM_API_KEY:-}
       - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}

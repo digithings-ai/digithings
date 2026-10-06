@@ -40,7 +40,7 @@
                                    Rose, 6.4:1 on the dark canvas (AA+), distinct from digikey's
                                    terracotta #d97a5a and every other hue in the livery table. */
   --accent-digikey:    #d97a5a;
-  --accent-digismith:  #6fa3a3;
+  --accent-digitrace:  #6fa3a3;
   --accent-digiclaw:   #b87840;
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
@@ -129,7 +129,7 @@
 .accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
-.accent-digismith  { --accent: var(--accent-digismith);  --on-accent: #06110f; }
+.accent-digitrace  { --accent: var(--accent-digitrace);  --on-accent: #06110f; }
 .accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
 .accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
 .accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
@@ -296,7 +296,7 @@
      --surface/--bg there) but seven of the eleven fall under the 3:1
      minimum for graphical objects against THIS theme's white --surface:
      measured digiquant 1.81:1, digigraph 1.86:1, digibase 2.62:1,
-     digisearch 2.81:1, digismith 2.82:1, digivault 2.91:1, digilink 2.98:1.
+     digisearch 2.81:1, digitrace 2.82:1, digivault 2.91:1, digilink 2.98:1.
      Darkened here, light-theme only — the :root values above are untouched
      and still serve the dark theme. digichat (3.04:1), digikey (3.05:1),
      digiclaw (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
@@ -319,7 +319,7 @@
   --accent-digigraph:  #B27C1E;
   --accent-digiquant:  #0E8C7F;
   --accent-digisearch: #408FB3;
-  --accent-digismith:  #5C8F8F;
+  --accent-digitrace:  #5C8F8F;
   --accent-digibase:   #84878D;
   --accent-digivault:  #8D7DC0;
   --accent-digilink:   #47938C;

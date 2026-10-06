@@ -504,7 +504,7 @@ The library has no internal circular dependencies. `errors.py` and `audit.py` de
 | digigraph | `outbound_service_headers` (connectors, hub, nodes, tools) | `json_error_response`, `register_fastapi_error_handlers` | `emit_event` (via thin `digigraph.audit.audit_log`) | `setup_otel_fastapi` |
 | digiquant | — | `json_error_response`, `register_fastapi_error_handlers` | `emit_event` (via thin `digiquant.audit.audit_log`) | `setup_otel_fastapi` |
 | digisearch | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
-| digismith | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
+| digitrace | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
 | digikey | — | `register_fastapi_error_handlers` | — | — |
 | digiclaw | — | — | `emit_event` (via thin `digiclaw.audit.audit_log`) | — |
 
@@ -597,7 +597,7 @@ The digibase service will need to expose Postgres connection pools sized for the
 
 **digisearch** (`digisearch/src/digisearch/server.py`) mirrors digiquant: error handlers and OTel wiring, no outbound header usage from digibase.
 
-**digismith** (`digismith/src/digismith/server.py`) uses `register_fastapi_error_handlers` and `setup_otel_fastapi`. Minimal consumer — it is itself a thin observability status service.
+**digitrace** (`digitrace/src/digitrace/server.py`) uses `register_fastapi_error_handlers` and `setup_otel_fastapi`. Minimal consumer — it is itself a thin observability status service.
 
 **digikey** (`digikey/src/digikey/server.py`) uses only `register_fastapi_error_handlers`. It does not emit OTel traces via digibase (it may have its own tracing concerns given its role as the identity service).
 

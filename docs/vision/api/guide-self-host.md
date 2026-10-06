@@ -41,7 +41,7 @@ Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR
 
 ### Image tags
 
-- `DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digismith, digivault, digiclaw (pin `sha-<12>` in production).
+- `DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw (pin `sha-<12>` in production).
 - `DIGICHAT_IMAGE_TAG` — digichat only; prefer `vX.Y.Z` from release-please.
 
 All services bind loopback by default. Use Tailscale or Cloudflare Tunnel for remote access — never expose ports publicly. Full notes: `docs/templates/self-host/README.md` and `docs/DEPLOYMENT.md` in the repo.

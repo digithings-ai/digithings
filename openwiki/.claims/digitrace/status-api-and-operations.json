@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:be8d2e5e70181b5a5ed42a59760cfe9cd224cf42f5df144a8f8da7c8a29c751d",
+  "claims": [
+    {
+      "id": "claim_f376f1dc290f4bd6b1e8371bff4391fe",
+      "statement": "GET /healthz returns {\"ok\": true} as the preferred auth-exempt liveness probe and Compose healthcheck target, while GET /health returns {\"status\": \"ok\"} for back-compat; both coexist with /v1/status under a liveness-vs-diagnostic contract.",
+      "evidence": [
+        {
+          "resource": "repo://digitrace/src/digitrace/server.py#L39-L53",
+          "version": "repo-lines-v1:sha256:ab7d1b4f4ceaf8a63d1778498ec004bcef898df741272341ac8e4ade08815006:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTllYmE5M2JjYWVmNWE1MmVmYjQwYmE1YTg5MTRkNjljNjA4M2MzNWRkZDUxODJiY2M4NTM0NDExYzExYTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNhNjhiZTk0NWMxZmNkMzk0ODI5Y2YyNDZlMGQ1ZTY5NTA0ZTlhNzE1ZmQwMzI1MzhhZGQ5M2E1NmY0ZjY5MTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2NjhjYWQxYzg3OWM3ZTE5ZDUwODY5Y2YwN2JiZTI0NTA5OWRlYjNhZDJiYzU5MjM2ZjI2NzNkODZhMzRmYTAifQ"
+        },
+        {
+          "resource": "repo://tests/dsm/test_healthz.py#L17-L36",
+          "version": "repo-lines-v1:sha256:c75804cde7c7c8d85d7fa267b3b903718f48686b271159eb70e7d27625db9dde:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjZTM2NWIxZTk2YWRhMjU4M2Y5MjJmNWQ2MTI2OWU4Y2YwNjkyN2JjMzc2MWZlNDZjZDlmZTY3NGJhZDllODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhYmZkNTYzYmJiZDYwNzczYmZlMjYzYWRjNDc4NGQyOTUyODBmYzBkMWJhM2JjZDZjODEwZDg5NGQxM2U5MDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUxZTQ3Nzg1YjMwMTQ4NGVhYzZlZjU5ZTM1ZDE1Y2JkNTM4YjRhODVhZjgxNTc3YTlhYmQ1YjFhYTlhNGQ5ODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_851958a0730547ad9c1e313d04c37c35",
+      "statement": "GET /v1/status returns a SmithStatus where tracing_configured requires both a non-empty LANGSMITH_API_KEY and an importable langsmith SDK, and langsmith_host is only the sanitized hostname of LANGSMITH_ENDPOINT.",
+      "evidence": [
+        {
+          "resource": "repo://digitrace/src/digitrace/config.py#L25-L40",
+          "version": "repo-lines-v1:sha256:684b01cf563fec8e8395db6ae74447aed0fab5effa04df06897e76199da8d972:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViYWNhZTlmZjZkOThlOGI0YjkyNGY5ZGI4Zjg4MmFkMTUxNmFmODA0MjBjNzBmNzQzNDQ0NzRiNTE2NWUwMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzMzZjY2Y5M2RmMTc1YTg3ZWE2ZjMyOGFhMWRiMzE5Nzk1OGVkMjkwZTVjMDQ5Mzc1YWJmNWQ2ZGYwNmYwMjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5OWVmZWRmZDJkOTcwNmQ4OTFjN2JhOTgzZTdmODRlMDVhZDBlMDE5MWMxMzI3OThiZTVlM2MxY2M1MzA0MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhMGVhZmU3MDcwNzY1OTIyODBiZjE5MTk1YWI2MTJmYTc4Y2ZiODZmZTg3MGU2ZWE2N2UwYTdlMTFmYmRlYWYifQ"
+        },
+        {
+          "resource": "repo://digitrace/src/digitrace/server.py#L55-L63",
+          "version": "repo-lines-v1:sha256:2ea211c2f8344683b71cbe5ad93b0ffee5a5d3d2960bffd45eb614011d024df1:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjg5MWRjZmU0YTA4ODEzOWVhNzA0MDIzMTVhMzEyNjM1MTY0NjlhZjgyNGJkZjUzNDkxNzFhOTJhN2IxY2JmNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzBjMWYxODhmMTQyZWQ3YTgyNDY4MGIyMDcxNzJjNTUxOWJjNjE0YTQ4ZmRhN2NmMTY3ZWRiOGRkZjc5OTU2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTI3ODAyOTFhOWYyNjI1YmFmNDA0ZmIwYWIxZDExMmZiYmQ0MmQ3ZDNiNzBiMWY3NzU2ZGY4OWVkMzBkNDFjZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGU4ZDc2YjE0OWY3NzYyNDdjN2I2Nzg4MDBiYTQ5NmNiMzliOWViNTMwYTg3NTUwNDE1MTA0YzhkNmM1YTlhZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ead02398920481696aa68f9062df46d",
+      "statement": "GET /v1/status never leaks key material: even with LANGSMITH_API_KEY set, the secret and its key prefix appear nowhere in the response body.",
+      "evidence": [
+        {
+          "resource": "repo://tests/dsm/test_server.py#L31-L37",
+          "version": "repo-lines-v1:sha256:266004621d648dbbc64e23d36deedd98bae1f0578a2a52ab119be78e7111461c:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmY0ODI5NWNhMWI3M2VhZjMwMTE3MWM2NTIxNmQ5ZDliNzMwNGYxMTFlZTg5M2EzMTBlYWQyNmY1OWNjOTNlOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGMxNzY3YTQ4YjlhZWJjNjQ1MzQxYjk4MGYxNzgyZDQ0MTRjMWMyMWVjYjE1YjU3ZTcyNjU4YTQ1N2VhODhjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzVjYWNkZGI4Zjg5MDIzN2MxYTEwNmJhYWE3ZTM1M2M3MTQ3ODc4OWU4ZDhjNTFkNmZlMmYwZjQzYWUxMTk0NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5b8f767db6b94ea68c2372ab3653e886",
+      "statement": "GET /metrics is installed via digibase install_metrics with service=\"digitrace\" and exposes the standard counter/histogram/gauge series labelled with service, version, and environment for internal scraping.",
+      "evidence": [
+        {
+          "resource": "repo://digitrace/src/digitrace/server.py#L33-L36",
+          "version": "repo-lines-v1:sha256:0fa7f97fe944214b8bd55cd0bd8eb34bde225fdef5dd7e8b0366f371ceb67a3c:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc5MjJkZDk0YzU2NWI2ZTFjNzY4OTg0MTE5OTEwMjUyYWZiNDBlNThjY2E0ODkwOTU0ZDEwNmVlYWI2ODdjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc5YjY4ZDU1MzVlZjk2Yzk0OGQyMWFhNzVkOWFlNWU5YjIxMzEyMmRhYzAwMWE3MTFmMDQ5YjNhODJlNTM5ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ1NzhiMzk4NDA2ZjMwMzViN2E3NGY1NDA0ZGQ0ZjViMDRkYmFjMzc5MGQ3MTMyYzM4NWI3YTNlYTg2MGIyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWRlYzNkZDNlNTI1ZjBhODljOWJhZjc1ZTE4N2U5OTQ0NWQ2OGY2MWEzNzdhMTQ2NzZiYWNiZTI5YTE0ZjE0MSJ9"
+        },
+        {
+          "resource": "repo://tests/dsm/test_metrics_endpoint.py#L14-L19",
+          "version": "repo-lines-v1:sha256:a5d9da80fa27d0a23d75d8058ff77f697e599b83c2af54ffc8800c128f54e503:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGM2MGM1M2U3NTRlOTdiMGY2NGJiMzhiNGIwZjUyZTVmODdlODQ3MTk2NjEzYjVjYTA1ZTY3MzdjOTczMDgwYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWRiY2QyMzJjM2YzZDc3YTE2NDI4NDYxNGEyMjVhNjljOWQ5Njk2OWIzMzU3ZjZhMzcyYzE1YjJlYzM3ZDRiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmY4ZjlkYTQyNjE1NGM4NWE0MmQ4Y2JiODI1ZjI2NzdiZjUzOTIyZjdjODIyYTgwY2FiMmM4ZjA5MTQ5MGI4OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_10b90a26485447bea1d01e2072207d6c",
+      "statement": "CORS uses the shared digibase helper with allowlist precedence DIGITRACE_CORS_ORIGINS, DIGI_CORS_ORIGINS, then legacy DIGI_ALLOWED_ORIGINS defaulting to empty, and disallowed origins get no allow-origin header.",
+      "evidence": [
+        {
+          "resource": "repo://digitrace/src/digitrace/server.py#L33-L36",
+          "version": "repo-lines-v1:sha256:0fa7f97fe944214b8bd55cd0bd8eb34bde225fdef5dd7e8b0366f371ceb67a3c:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc5MjJkZDk0YzU2NWI2ZTFjNzY4OTg0MTE5OTEwMjUyYWZiNDBlNThjY2E0ODkwOTU0ZDEwNmVlYWI2ODdjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDc5YjY4ZDU1MzVlZjk2Yzk0OGQyMWFhNzVkOWFlNWU5YjIxMzEyMmRhYzAwMWE3MTFmMDQ5YjNhODJlNTM5ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ1NzhiMzk4NDA2ZjMwMzViN2E3NGY1NDA0ZGQ0ZjViMDRkYmFjMzc5MGQ3MTMyYzM4NWI3YTNlYTg2MGIyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWRlYzNkZDNlNTI1ZjBhODljOWJhZjc1ZTE4N2U5OTQ0NWQ2OGY2MWEzNzdhMTQ2NzZiYWNiZTI5YTE0ZjE0MSJ9"
+        },
+        {
+          "resource": "repo://tests/dsm/test_cors.py#L28-L51",
+          "version": "repo-lines-v1:sha256:110fa331f48e12f28cf76f8f368e34cebfdf881368b77da68a86e33be48c12be:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmNDgyOTVjYTFiNzNlYWYzMDExNzFjNjUyMTZkOWQ5YjczMDRmMTExZWU4OTNhMzEwZWFkMjZmNTljYzkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhZTZiZDRiMDM0MTk4Nzk1YmQ0ZTkxZDVhMTMxN2ZkODIzZWUxMzQ0ZWFiNzE5MTMyMDQ2Njc1YzZiOTgxNTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYwNzk5Yjg4MGQyZjBlMjhjYWM0Zjk2ZTg5NGIxMWYwNGY2ODFmNjdkYjk1ZDUwMGJkNzQ1Y2JkNDBmMzc0ODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7832a151fa234cdc980f2abb7f7c57a3",
+      "statement": "OTel FastAPI instrumentation is wired at app construction but is a no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set, covering only the service's own HTTP spans.",
+      "evidence": [
+        {
+          "resource": "repo://digibase/src/digibase/otel.py#L39-L71",
+          "version": "repo-lines-v1:sha256:587a7c4151a98290452438c4c04d89c438c46f17aa53dab7e0d90ad9e8c3066d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmN2U3Y2IwMTM4MzVjMzA3MmIxMTJlY2Y0YTQ2ODZjMzU2ZDhhOGE4ZGViMDkzZWJjZGJmN2JlNmI1MGM3NzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiNWM4MjYzMmZjODJkNGIyYzM0MGY0MjU1OGJhM2RmYTMxYzc2NTVkZjZmY2MxNjhiNGZkY2U1N2ZhYzYwNDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAxYjBiZWRlNzQxYzY5ZWJhZjhiZjQxYTE1MjQyZjViNjY5ZDQ4Njg0YmExZjBkZjlhYzRkMzAxZTRlNjRlOTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4ZmRlNDBjYzUwZTg5NjcyMTRkMjBiYjVmMDA3YzY2YjkyODNjOTNmMzUxMzZmMjk0YjMyMTRiZTU2OTZkZGMifQ"
+        },
+        {
+          "resource": "repo://digitrace/src/digitrace/server.py#L67-L67",
+          "version": "repo-lines-v1:sha256:64c0044d832ef4e4fb02828b89a0fafa5cb213c2302d0f7d52f608dc8b1436d1:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRjMDA0NGQ4MzJlZjRlNGZiMDI4MjhiODlhMGZhZmE1Y2IyMTNjMjMwMmQwZjdkNTJmNjA4ZGM4YjE0MzZkMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjRjMDA0NGQ4MzJlZjRlNGZiMDI4MjhiODlhMGZhZmE1Y2IyMTNjMjMwMmQwZjdkNTJmNjA4ZGM4YjE0MzZkMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGU4ZDc2YjE0OWY3NzYyNDdjN2I2Nzg4MDBiYTQ5NmNiMzliOWViNTMwYTg3NTUwNDE1MTA0YzhkNmM1YTlhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://digitrace/src/digitrace/server.py#L9-L9",
+          "version": "repo-lines-v1:sha256:7ee79e004860afc53274f20e6e5c8501e9d51bc8eb31ad4c7d578145af50a6b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2VlNzllMDA0ODYwYWZjNTMyNzRmMjBlNmU1Yzg1MDFlOWQ1MWJjOGViMzFhZDRjN2Q1NzgxNDVhZjUwYTZiNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2VlNzllMDA0ODYwYWZjNTMyNzRmMjBlNmU1Yzg1MDFlOWQ1MWJjOGViMzFhZDRjN2Q1NzgxNDVhZjUwYTZiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjJmZGM5YzhmNjNjODY0OTJjMDE4NjViYjAwYmNmNGFmZTViMThkMDRkNDI4NjAyYmE5NmFkYWU3MzdkYmY1MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTA1MWYyNzZkZmFkZDY5ZDBhN2VmYzJmZjc3ODkxYTJmYzE1MmRiNWQ2MTFhYWQzMTM3ZmY1NjY5NmY3YTA0YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_729fed0e0e564cc08eb966fa1d9e2896",
+      "statement": "The Docker image installs digibase then digitrace[langsmith] and serves digitrace.server:app on port 8003 via uvicorn, published on the host as 127.0.0.1:8003 with a /healthz healthcheck.",
+      "evidence": [
+        {
+          "resource": "repo://digitrace/Dockerfile#L22-L28",
+          "version": "repo-lines-v1:sha256:a1d855268c028fb4024d26c4ad591c29385e20621132fd63fc793160a24a1346:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjg0NjI4MmUzYzFkMWIzZTMxYzU4OTVjMDYxZDZkNTkzYWViNzczN2JiNTdjMzQ1YmY0NDdmNzQwNzg0ODFiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU3NzVhZjhkMzEwYWZlNDg0ZDI0M2IzZDJiMmI1MWQ5ZTRlYTBlNzNjOThmOWEzMjFhZTMyOGJmOGI3NDZkOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmI5NGFjOWZlZTA5ZmExNjM0NWMyNDllMzliYzVjZTQ5N2Y5NGY5ZmUzNDA0MWQzZTgyZTQwMjhiOTgyMTY1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-09T14:37:17.158Z"
+  }
+}
