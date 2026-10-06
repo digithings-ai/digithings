@@ -16,9 +16,50 @@ macro row cannot null an unpublished path.
 Omitted on purpose (see ARCHITECTURE.md):
 - Mayer / 200w SMA — *r* ≈ 0.84 vs ``valuation_z`` (research PR #3232)
 - a second power-law residual ("alpha") — collinear with ``valuation_z``
-- on-chain MVRV/SOPR — provider ready (#1086); not published votes yet
 - equity CAPE / Buffett / ERP — #3176 forbade equity RiskModel in v1
 - RS rotation pool — #1084; this module only uses ETH from the Coinbase cache
+
+Research-only families (ported from ``claude/sdca-develop-sync`` in DIG-1597)
+------------------------------------------------------------------
+Seven weights were added with the branch: ``onchain_mvrv`` / ``onchain_asopr``
+/ ``onchain_puell`` / ``onchain_rhodl`` (Bitview/BRK), ``onchain_addr_ratio``
+(CoinMetrics ``AdrActCnt``), ``fear_greed`` (alternative.me) and
+``fast_crash_vol``. All default to ``0.0`` and none of their ids are in
+``MACRO_INDICATOR_NAMES`` / ``EXTRA_INDICATOR_NAMES``, so they are **dormant**:
+nothing published changes, and Stage A / weight search do not widen their
+default scope. They are reachable only by setting a weight and supplying a
+source. Two reasons for keeping them out of the published tuples: those tuples
+drive the BTC asset-profile allowlist (``asset_profile.py``) and the chart
+layout (``chart_series.py``), so widening them is a behaviour change rather
+than a port; and the branch's own docstrings call these unvalidated pending a
+solo-validation gate.
+
+- **On-chain ratios** (MVRV, aSOPR, Puell, RHODL) share one core,
+  ``_log_ratio_sign_flipped_z``: each is a strictly-positive, right-skewed
+  multiplicative ratio, so it is log-transformed before the rolling z (a
+  bull-market spike would otherwise dominate a level-based rolling std), then
+  sign-flipped like ``dxy_z`` — an elevated ratio (overheated/euphoric) is
+  sell-favorable (−z), a depressed one (capitulation) is buy-favorable (+z).
+  Provider ready since #1086.
+- ``onchain_addr_ratio`` is a network-usage read, not a price-derived
+  transform: ``btc_price / active_addresses`` (NVT/Metcalfe-style). It is
+  computed here rather than fetched pre-derived, because CoinMetrics ships the
+  raw daily ``AdrActCnt`` (free, no auth, full history to 2010). Pre-adoption
+  days report 0 addresses, so the divide must be guarded.
+- ``fear_greed`` is pure **sentiment** — the one extra not derived from price
+  or the chain. Read contrarian (extreme fear near lows, greed near highs) and
+  therefore sign-flipped like ``dxy_z``: elevated ("greed") → −z. Single-window
+  like ``m2``/``dxy``; there is no comparably fast sentiment rotation to
+  confluence against.
+- ``fast_crash_vol`` is the opposite design choice: every extra above is a
+  slow structural read that lags a sharp move by construction, so this one is
+  deliberately fast — a 14-day realized volatility of daily log returns (vs
+  ``DEFAULT_ROLLING_WINDOW``'s 90), rolling-z-scored against its own trailing
+  history, then sign-flipped so a vol spike reads sell/de-risk-favorable.
+  Tracking return *magnitude* means it decays back toward 0 once swings shrink,
+  instead of staying pinned negative for as long as price sits below a recent
+  high, so it stops fighting a slower indicator's "cheap, buy" read once a
+  crash has bottomed.
 """
 
 from __future__ import annotations
@@ -34,6 +75,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
+    agreement_scaled_blend,
     mtf_rsi_z,
     price_oscillator_z_vectors,
     sma_band_z,
@@ -48,14 +90,28 @@ EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATO
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 20
 _SIGMA_FLOOR = 1e-12
+# fast_crash_vol's raw realized-vol lookback -- short on purpose, see the module
+# docstring. The z-score window stays DEFAULT_ROLLING_WINDOW.
+_FAST_CRASH_VOL_WINDOW = 14
+_FAST_CRASH_VOL_MIN_SAMPLES = 7
+_RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
+_RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "valuation": "valuation_weight",
     "m2": "m2_weight",
     "rs_eth": "rs_eth_weight",
     "dxy": "dxy_weight",
+    "onchain_mvrv": "onchain_mvrv_weight",
+    "onchain_asopr": "onchain_asopr_weight",
+    "onchain_puell": "onchain_puell_weight",
+    "onchain_rhodl": "onchain_rhodl_weight",
+    "onchain_addr_ratio": "onchain_addr_ratio_weight",
+    "fear_greed": "fear_greed_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
+    "fast_crash_vol": "fast_crash_vol_weight",
 }
 
 # User-facing labels. Code ids stay ``valuation``; charts must say "power law".
@@ -64,9 +120,16 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "m2": "M2 liquidity",
     "rs_eth": "BTC/ETH relative strength",
     "dxy": "DXY",
+    "onchain_mvrv": "on-chain MVRV",
+    "onchain_asopr": "on-chain aSOPR",
+    "onchain_puell": "on-chain Puell Multiple",
+    "onchain_rhodl": "on-chain RHODL Ratio",
+    "onchain_addr_ratio": "on-chain price/active-address ratio",
+    "fear_greed": "Fear & Greed Index",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
+    "fast_crash_vol": "fast-crash volatility",
 }
 
 
@@ -84,9 +147,22 @@ class SdcaCompositeWeights(BaseModel):
     m2: float = Field(0.0, ge=0.0)
     rs_eth: float = Field(0.0, ge=0.0)
     dxy: float = Field(0.0, ge=0.0)
+    # Research-only families (DIG-1597). Dormant at 0.0 and absent from the
+    # published name tuples -- see the module docstring. Each needs an
+    # ExtraIndicatorSources pair before it can be enabled at all.
+    onchain_mvrv: float = Field(0.0, ge=0.0)
+    onchain_asopr: float = Field(0.0, ge=0.0)
+    onchain_puell: float = Field(0.0, ge=0.0)
+    onchain_rhodl: float = Field(0.0, ge=0.0)
+    onchain_addr_ratio: float = Field(0.0, ge=0.0)
+    fear_greed: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
+    # Fast crash-detection vote. Unlike the six above this one reads only BTC
+    # close, so it has no source pair -- build_extra_indicators materializes it
+    # from ``btc_price`` alone.
+    fast_crash_vol: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -99,9 +175,16 @@ class SdcaCompositeWeights(BaseModel):
             ("m2", self.m2),
             ("rs_eth", self.rs_eth),
             ("dxy", self.dxy),
+            ("onchain_mvrv", self.onchain_mvrv),
+            ("onchain_asopr", self.onchain_asopr),
+            ("onchain_puell", self.onchain_puell),
+            ("onchain_rhodl", self.onchain_rhodl),
+            ("onchain_addr_ratio", self.onchain_addr_ratio),
+            ("fear_greed", self.fear_greed),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
+            ("fast_crash_vol", self.fast_crash_vol),
         )
 
     def enabled_extras(self) -> dict[str, float]:
@@ -114,7 +197,11 @@ class SdcaCompositeWeights(BaseModel):
 
 
 class ExtraIndicatorSources(BaseModel):
-    """Optional aligned series. Missing sources are fine while the weight is 0."""
+    """Optional aligned series. Missing sources are fine while the weight is 0.
+
+    The research-only families each need a ``*_dates`` / ``*_values`` pair
+    (``fast_crash_vol`` needs none -- it is derived from ``btc_price``).
+    """
 
     model_config = ConfigDict(frozen=True, strict=True, arbitrary_types_allowed=True)
 
@@ -124,6 +211,18 @@ class ExtraIndicatorSources(BaseModel):
     eth_close: pl.Series | None = None
     dxy_dates: pl.Series | None = None
     dxy_values: pl.Series | None = None
+    onchain_mvrv_dates: pl.Series | None = None
+    onchain_mvrv_values: pl.Series | None = None
+    onchain_asopr_dates: pl.Series | None = None
+    onchain_asopr_values: pl.Series | None = None
+    onchain_puell_dates: pl.Series | None = None
+    onchain_puell_values: pl.Series | None = None
+    onchain_rhodl_dates: pl.Series | None = None
+    onchain_rhodl_values: pl.Series | None = None
+    onchain_addr_ratio_dates: pl.Series | None = None
+    onchain_addr_ratio_values: pl.Series | None = None
+    fear_greed_dates: pl.Series | None = None
+    fear_greed_values: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -133,9 +232,16 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         m2=float(params.get("m2_weight", 0.0)),
         rs_eth=float(params.get("rs_eth_weight", 0.0)),
         dxy=float(params.get("dxy_weight", 0.0)),
+        onchain_mvrv=float(params.get("onchain_mvrv_weight", 0.0)),
+        onchain_asopr=float(params.get("onchain_asopr_weight", 0.0)),
+        onchain_puell=float(params.get("onchain_puell_weight", 0.0)),
+        onchain_rhodl=float(params.get("onchain_rhodl_weight", 0.0)),
+        onchain_addr_ratio=float(params.get("onchain_addr_ratio_weight", 0.0)),
+        fear_greed=float(params.get("fear_greed_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
+        fast_crash_vol=float(params.get("fast_crash_vol_weight", 0.0)),
     )
 
 
@@ -152,9 +258,16 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         m2=float(payload.get("m2", 0.0)),
         rs_eth=float(payload.get("rs_eth", 0.0)),
         dxy=float(payload.get("dxy", 0.0)),
+        onchain_mvrv=float(payload.get("onchain_mvrv", 0.0)),
+        onchain_asopr=float(payload.get("onchain_asopr", 0.0)),
+        onchain_puell=float(payload.get("onchain_puell", 0.0)),
+        onchain_rhodl=float(payload.get("onchain_rhodl", 0.0)),
+        onchain_addr_ratio=float(payload.get("onchain_addr_ratio", 0.0)),
+        fear_greed=float(payload.get("fear_greed", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
+        fast_crash_vol=float(payload.get("fast_crash_vol", 0.0)),
     )
 
 
@@ -236,6 +349,231 @@ def dxy_z(
     return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("dxy")
 
 
+def _log_ratio_sign_flipped_z(
+    dates: pl.Series,
+    src_dates: pl.Series,
+    src_values: pl.Series,
+    *,
+    window: int,
+    min_samples: int,
+    name: str,
+) -> pl.Series:
+    """Shared core for the Bitview/BRK on-chain ratio indicators (MVRV,
+    aSOPR, Puell Multiple, RHODL Ratio). See the module docstring.
+
+    Log-transformed first since each is a strictly-positive, right-skewed
+    multiplicative ratio (a bull-market spike would otherwise dominate a
+    level-based rolling std), then sign-flipped like ``dxy_z``: an elevated
+    ratio (overheated/euphoric) is sell-favorable (−z) and a depressed one
+    (capitulation) is buy-favorable (+z).
+
+    A handful of pre-history warmup days report ``0.0`` (not enough chain
+    history yet to compute the ratio). Those are nulled *before* the log so
+    ``align_to_dates``'s forward-fill treats them as an ordinary coverage gap
+    instead of producing ``-inf``.
+    """
+    frame = pl.DataFrame({"value": src_values})
+    positive_values = frame.select(
+        pl.when(pl.col("value") > 0).then(pl.col("value")).otherwise(None)
+    )["value"]
+    aligned = align_to_dates(dates, src_dates, positive_values, forward_fill=True)
+    log_values = aligned.log()
+    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)
+
+
+def onchain_mvrv_z(
+    dates: pl.Series,
+    mvrv_dates: pl.Series,
+    mvrv_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK MVRV — see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        mvrv_dates,
+        mvrv_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_mvrv",
+    )
+
+
+def onchain_asopr_z(
+    dates: pl.Series,
+    asopr_dates: pl.Series,
+    asopr_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK adjusted SOPR (24h) — see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        asopr_dates,
+        asopr_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_asopr",
+    )
+
+
+def onchain_puell_z(
+    dates: pl.Series,
+    puell_dates: pl.Series,
+    puell_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK Puell Multiple — see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        puell_dates,
+        puell_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_puell",
+    )
+
+
+def onchain_rhodl_z(
+    dates: pl.Series,
+    rhodl_dates: pl.Series,
+    rhodl_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Bitview/BRK RHODL Ratio — see ``_log_ratio_sign_flipped_z``."""
+    return _log_ratio_sign_flipped_z(
+        dates,
+        rhodl_dates,
+        rhodl_values,
+        window=window,
+        min_samples=min_samples,
+        name="onchain_rhodl",
+    )
+
+
+def onchain_addr_ratio_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    addr_dates: pl.Series,
+    addr_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Price-per-active-address ratio (NVT/Metcalfe-style) — see ``_log_ratio_sign_flipped_z``.
+
+    Unlike the four series above, this ratio is not fetched pre-derived:
+    ``addr_values`` is CoinMetrics' raw daily active-address count
+    (``AdrActCnt``), so the ratio is computed here. Pre-adoption days report 0
+    addresses; those are nulled *before* the divide (not just the resulting
+    ratio) so a zero denominator cannot produce ``inf`` before the core ever
+    sees it.
+    """
+    addr_aligned = align_to_dates(dates, addr_dates, addr_values, forward_fill=True)
+    positive_addr = pl.DataFrame({"value": addr_aligned}).select(
+        pl.when(pl.col("value") > 0).then(pl.col("value")).otherwise(None)
+    )["value"]
+    ratio = (btc_price / positive_addr).alias("value")
+    return _log_ratio_sign_flipped_z(
+        dates, dates, ratio, window=window, min_samples=min_samples, name="onchain_addr_ratio"
+    )
+
+
+def fear_greed_z(
+    dates: pl.Series,
+    fear_greed_dates: pl.Series,
+    fear_greed_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """alternative.me Fear & Greed (0-100), rolling-z, sign-flipped.
+
+    Same shape as ``dxy_z`` — a *level* series, so no log transform — but read
+    contrarian: elevated ("greed") is sell-favorable (−z), depressed ("fear")
+    is buy-favorable (+z). The source publishes weekly, so the forward-fill in
+    ``align_to_dates`` matters here.
+    """
+    aligned = align_to_dates(dates, fear_greed_dates, fear_greed_values, forward_fill=True)
+    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("fear_greed")
+
+
+def fast_crash_vol_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    *,
+    window: int = _FAST_CRASH_VOL_WINDOW,
+    min_samples: int = _FAST_CRASH_VOL_MIN_SAMPLES,
+    z_window: int = DEFAULT_ROLLING_WINDOW,
+    z_min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Short-window realized volatility of daily log returns, sign-flipped z.
+
+    See the module docstring. ``window``/``min_samples`` control the raw
+    realized-vol lookback — deliberately short (14d vs. the 90d default), since
+    the fast reaction to a crash *is* the signal. The resulting series is then
+    rolling-z-scored against its own trailing history (``causal_rolling_z``, as
+    everywhere else here) and sign-flipped so an unusual vol spike reads
+    sell/de-risk-favorable.
+    """
+    if dates.len() != btc_price.len():
+        raise ValueError("dates and btc_price must be the same length")
+    log_ret = btc_price.log() - btc_price.shift(1).log()
+    realized_vol = log_ret.rolling_std(window_size=window, min_samples=min_samples)
+    z = causal_rolling_z(realized_vol, window=z_window, min_samples=z_min_samples)
+    return (-z).alias("fast_crash_vol")
+
+
+def rs_eth_confluence_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    eth_dates: pl.Series,
+    eth_close: pl.Series,
+    *,
+    slow_window: int = DEFAULT_ROLLING_WINDOW,
+    slow_min_samples: int = _MIN_SAMPLES,
+    fast_window: int = 30,
+    fast_min_samples: int = 15,
+    slow_weight: float = _RS_ETH_CONFLUENCE_SLOW_WEIGHT,
+    agreement_boost: float = _RS_ETH_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Slow (long-term) + fast (medium-term) BTC/ETH relative-strength z.
+
+    The same agreement-scaled blend as the price-oscillator confluences
+    (``rsi_confluence_z`` / ``macd_confluence_z`` / ``sma_band_confluence_z`` in
+    ``price_oscillators.py``). As in ``sma_band_confluence_z``, both legs share
+    one formula — ``rs_eth_z``'s rolling z of the BTC/ETH log ratio — so the
+    timeframe separation is window length, not bar aggregation. BTC/ETH rotation
+    has both a slow multi-quarter cycle and faster swings, so a two-timeframe
+    read fits the ratio the same way it fits a price band.
+
+    Not wired into ``build_extra_indicators`` in this leaf: ``rs_eth`` still
+    resolves to plain ``rs_eth_z`` there, and switching it over is a measured
+    behaviour change tracked as its own leaf.
+    """
+    slow = rs_eth_z(
+        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples
+    )
+    fast = rs_eth_z(
+        dates, btc_price, eth_dates, eth_close, window=fast_window, min_samples=fast_min_samples
+    )
+    return agreement_scaled_blend(
+        slow,
+        fast,
+        long_term_weight=slow_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="rs_eth",
+    )
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -309,6 +647,109 @@ def build_extra_indicators(
                 weight=enabled["dxy"],
             )
         )
+    if "onchain_mvrv" in enabled:
+        mvrv_dates = _require_pair(
+            sources.onchain_mvrv_dates, sources.onchain_mvrv_values, "onchain_mvrv"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_mvrv",
+                z=onchain_mvrv_z(
+                    dates,
+                    mvrv_dates,
+                    sources.onchain_mvrv_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_mvrv"],
+            )
+        )
+    if "onchain_asopr" in enabled:
+        asopr_dates = _require_pair(
+            sources.onchain_asopr_dates, sources.onchain_asopr_values, "onchain_asopr"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_asopr",
+                z=onchain_asopr_z(
+                    dates,
+                    asopr_dates,
+                    sources.onchain_asopr_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_asopr"],
+            )
+        )
+    if "onchain_puell" in enabled:
+        puell_dates = _require_pair(
+            sources.onchain_puell_dates, sources.onchain_puell_values, "onchain_puell"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_puell",
+                z=onchain_puell_z(
+                    dates,
+                    puell_dates,
+                    sources.onchain_puell_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_puell"],
+            )
+        )
+    if "onchain_rhodl" in enabled:
+        rhodl_dates = _require_pair(
+            sources.onchain_rhodl_dates, sources.onchain_rhodl_values, "onchain_rhodl"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_rhodl",
+                z=onchain_rhodl_z(
+                    dates,
+                    rhodl_dates,
+                    sources.onchain_rhodl_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_rhodl"],
+            )
+        )
+    if "onchain_addr_ratio" in enabled:
+        addr_dates = _require_pair(
+            sources.onchain_addr_ratio_dates,
+            sources.onchain_addr_ratio_values,
+            "onchain_addr_ratio",
+        )
+        extras.append(
+            IndicatorWeight(
+                name="onchain_addr_ratio",
+                z=onchain_addr_ratio_z(
+                    dates,
+                    btc_price,
+                    addr_dates,
+                    sources.onchain_addr_ratio_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["onchain_addr_ratio"],
+            )
+        )
+    if "fear_greed" in enabled:
+        fg_dates = _require_pair(sources.fear_greed_dates, sources.fear_greed_values, "fear_greed")
+        extras.append(
+            IndicatorWeight(
+                name="fear_greed",
+                z=fear_greed_z(
+                    dates,
+                    fg_dates,
+                    sources.fear_greed_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["fear_greed"],
+            )
+        )
     if "weekly_rsi" in enabled:
         extras.append(
             IndicatorWeight(
@@ -343,6 +784,15 @@ def build_extra_indicators(
                     min_samples=spec.sma_band_min_samples,
                 ),
                 weight=enabled["sma_band"],
+            )
+        )
+    if "fast_crash_vol" in enabled:
+        # No source pair: derived from btc_price alone.
+        extras.append(
+            IndicatorWeight(
+                name="fast_crash_vol",
+                z=fast_crash_vol_z(dates, btc_price),
+                weight=enabled["fast_crash_vol"],
             )
         )
     return extras
@@ -415,6 +865,11 @@ def sources_from_optional_paths(
     *,
     m2_path: Path | str | None = None,
     dxy_path: Path | str | None = None,
+    onchain_mvrv_path: Path | str | None = None,
+    onchain_asopr_path: Path | str | None = None,
+    onchain_puell_path: Path | str | None = None,
+    onchain_rhodl_path: Path | str | None = None,
+    fear_greed_path: Path | str | None = None,
     eth_dates: pl.Series | None = None,
     eth_close: pl.Series | None = None,
 ) -> ExtraIndicatorSources:
@@ -425,6 +880,21 @@ def sources_from_optional_paths(
     dxy_dates = dxy_values = None
     if dxy_path is not None:
         dxy_dates, dxy_values = load_date_value_frame(dxy_path)
+    onchain_mvrv_dates = onchain_mvrv_values = None
+    if onchain_mvrv_path is not None:
+        onchain_mvrv_dates, onchain_mvrv_values = load_date_value_frame(onchain_mvrv_path)
+    onchain_asopr_dates = onchain_asopr_values = None
+    if onchain_asopr_path is not None:
+        onchain_asopr_dates, onchain_asopr_values = load_date_value_frame(onchain_asopr_path)
+    onchain_puell_dates = onchain_puell_values = None
+    if onchain_puell_path is not None:
+        onchain_puell_dates, onchain_puell_values = load_date_value_frame(onchain_puell_path)
+    onchain_rhodl_dates = onchain_rhodl_values = None
+    if onchain_rhodl_path is not None:
+        onchain_rhodl_dates, onchain_rhodl_values = load_date_value_frame(onchain_rhodl_path)
+    fear_greed_dates = fear_greed_values = None
+    if fear_greed_path is not None:
+        fear_greed_dates, fear_greed_values = load_date_value_frame(fear_greed_path)
     return ExtraIndicatorSources(
         m2_dates=m2_dates,
         m2_values=m2_values,
@@ -432,6 +902,18 @@ def sources_from_optional_paths(
         eth_close=eth_close,
         dxy_dates=dxy_dates,
         dxy_values=dxy_values,
+        onchain_mvrv_dates=onchain_mvrv_dates,
+        onchain_mvrv_values=onchain_mvrv_values,
+        onchain_asopr_dates=onchain_asopr_dates,
+        onchain_asopr_values=onchain_asopr_values,
+        onchain_puell_dates=onchain_puell_dates,
+        onchain_puell_values=onchain_puell_values,
+        onchain_rhodl_dates=onchain_rhodl_dates,
+        onchain_rhodl_values=onchain_rhodl_values,
+        onchain_addr_ratio_dates=None,
+        onchain_addr_ratio_values=None,
+        fear_greed_dates=fear_greed_dates,
+        fear_greed_values=fear_greed_values,
     )
 
 
@@ -498,11 +980,19 @@ __all__ = [
     "dxy_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
+    "fast_crash_vol_z",
+    "fear_greed_z",
     "indicator_display_name",
     "load_date_value_frame",
     "m2_liquidity_z",
     "missing_extra_names",
+    "onchain_addr_ratio_z",
+    "onchain_asopr_z",
+    "onchain_mvrv_z",
+    "onchain_puell_z",
+    "onchain_rhodl_z",
     "parse_indicator_weights_json",
+    "rs_eth_confluence_z",
     "rs_eth_z",
     "sources_from_optional_paths",
 ]
