@@ -303,8 +303,8 @@ jobs:
       CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
       # transition (#1090): legacy names fed from the same secrets until readers migrate
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      # Macro panel seals from anonymous Gloomberb econ_series (#4794): no FRED key.
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
-      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:

@@ -62,12 +62,27 @@ def _synthetic_bundle(n: int = 400) -> tuple[pl.Series, dict[str, pl.DataFrame]]
     return dates, series
 
 
+def _four_spec_config() -> MacroLiquidityConfig:
+    """Explicit custom specs for the pre-panel blend (dxy/pmi need caller frames)."""
+    return MacroLiquidityConfig(
+        specs=(
+            MacroSeriesSpec(name="m2", series_id="M2SL", transform="yoy", sign=1),
+            MacroSeriesSpec(name="dxy", series_id="DTWEXBGS", transform="level", sign=-1),
+            MacroSeriesSpec(name="unrate", series_id="UNRATE", transform="level", sign=-1),
+            MacroSeriesSpec(name="pmi", series_id="MANEMP", transform="yoy", sign=1),
+        )
+    )
+
+
 class TestMacroSeriesSpec:
-    def test_default_specs_include_m2_and_two_new(self) -> None:
-        names = {s.name for s in DEFAULT_MACRO_SPECS if s.enabled}
-        assert "m2" in names
-        assert {"dxy", "unrate"} <= names
-        assert len(names) >= 3
+    def test_default_specs_are_the_live_panel_pair(self) -> None:
+        assert {s.series_id for s in DEFAULT_MACRO_SPECS} == {"M2SL", "UNRATE"}
+        assert {s.name for s in DEFAULT_MACRO_SPECS if s.enabled} == {"m2", "unrate"}
+
+    def test_default_specs_exclude_dropped_panel_ids(self) -> None:
+        from digiquant.data.prices.gloomberb_macro import DROPPED_SERIES_IDS
+
+        assert {s.series_id for s in DEFAULT_MACRO_SPECS}.isdisjoint(DROPPED_SERIES_IDS)
 
     def test_rejects_bad_weight(self) -> None:
         with pytest.raises(ValidationError):
@@ -77,7 +92,7 @@ class TestMacroSeriesSpec:
 class TestMacroLiquidityModel:
     def test_blends_m2_plus_macros_into_regime_columns(self) -> None:
         dates, series = _synthetic_bundle()
-        model = MacroLiquidityModel()
+        model = MacroLiquidityModel(_four_spec_config())
         out = model.compute(dates, series)
         for col in (
             "m2_z",
@@ -102,6 +117,20 @@ class TestMacroLiquidityModel:
             RegimeState.NEUTRAL.value,
             RegimeState.CONTRACTION.value,
         }
+
+    def test_default_pair_computes_regime_columns(self) -> None:
+        dates, series = _synthetic_bundle()
+        out = MacroLiquidityModel().compute(dates, {"m2": series["m2"], "unrate": series["unrate"]})
+        assert set(out.columns) >= {
+            "m2_z",
+            "unrate_z",
+            "composite_z",
+            "regime_score",
+            "regime_state",
+            "risk_on",
+        }
+        assert "dxy_z" not in out.columns and "pmi_z" not in out.columns
+        assert out["regime_score"].drop_nulls().len() > 0
 
     def test_dxy_sign_flips_strong_dollar_to_negative_z(self) -> None:
         n = 200
@@ -129,11 +158,11 @@ class TestMacroLiquidityModel:
         dates, series = _synthetic_bundle(120)
         del series["dxy"]
         with pytest.raises(KeyError, match="dxy"):
-            MacroLiquidityModel().compute(dates, series)
+            MacroLiquidityModel(_four_spec_config()).compute(dates, series)
 
     def test_write_and_load_regime_series(self, tmp_path: Path) -> None:
         dates, series = _synthetic_bundle(250)
-        model = MacroLiquidityModel()
+        model = MacroLiquidityModel(_four_spec_config())
         out = model.compute(dates, series)
         path = model.write_regime_series(out, tmp_path / "regime.parquet")
         loaded = load_regime_series(path)
@@ -163,7 +192,7 @@ class TestMacroLiquidityModel:
         # start — drop the first half of DXY observations entirely.
         dxy = series["dxy"].sort("date")
         series["dxy"] = dxy.slice(len(dxy) // 2)
-        out = MacroLiquidityModel().compute(dates, series)
+        out = MacroLiquidityModel(_four_spec_config()).compute(dates, series)
         # Days before DXY appears must be null on composite (no partial blend).
         first_dxy = series["dxy"]["date"][0]
         early = out.filter(pl.col("date") < first_dxy)

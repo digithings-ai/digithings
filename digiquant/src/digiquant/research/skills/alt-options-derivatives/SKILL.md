@@ -7,17 +7,17 @@ description: Analyzes options market structure, volatility term structure, gamma
 
 ## Grounding Tools (use first)
 
-- **Volatility data tool (`get_macro_series`)** — the volatility complex is ingested
-  from FRED (which republishes the CBOE indices) into Supabase. Call
-  `get_macro_series(series_ids=["VIXCLS", "VXVCLS", "VXNCLS", "GVZCLS", "OVXCLS"])`:
+- **Volatility data tool (`get_macro_series`)** — the volatility complex is sealed
+  from the gloomberb panel into R2. Call
+  `get_macro_series(series_ids=["VIXCLS", "VXVCLS"])`:
   - `VIXCLS` = VIX (1-month S&P implied vol), `VXVCLS` = VIX3M (3-month).
-  - `VXNCLS` = Nasdaq-100 vol (VXN), `GVZCLS` = gold vol, `OVXCLS` = crude-oil vol.
+  - `VXNCLS`, `GVZCLS`, `OVXCLS` are not on the panel — do not request them.
   These are exact daily closes — cite them as numbers (with `obs_date`) in `sources`,
   not paraphrased commentary. The term-structure ratio **VIXCLS / VXVCLS** is the
   contango/backwardation regime signal (ratio < 1 = contango/calm; > 1 = backwardation/stress).
-- **Coverage gap (be explicit):** put/call ratios, dealer gamma/GEX, max pain, and
+- **Coverage gap (be explicit):** cross-asset vol (VXN/GVZ/OVX), put/call ratios, dealer gamma/GEX, max pain, and
   unusual-activity scans have **no free data source** and are no longer fetched. Use the
-  VIX term structure + cross-asset vol (VXN/GVZ/OVX) as the sentiment/positioning proxy,
+  VIX term structure (VIXCLS/VXVCLS) as the sentiment/positioning proxy,
   and explicitly state in the output that GEX/put-call are unavailable rather than
   inventing them. Lower conviction where the proxy is thin.
 
