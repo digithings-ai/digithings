@@ -54,6 +54,15 @@ digithings.ai/chat/occ  → embed host occ.digithings.ai → tenant occ       �
 
 ## Embed (operator env)
 
+> **Access (DIG-1210).** The OCC chat is moving from open to **invite-key gated**:
+> visitors need `https://digithings.ai/chat/occ?token=<key>`, and the key is
+> forwarded to digichat as `X-Embed-Token`. The key is a **bearer capability, not
+> authentication** — anyone holding the link can use the tenant, so distribute it
+> like a password and rotate it if it leaks. `digithings.ai/chat` stays tokenless.
+> Note this is a barrier against the public, **not** a substitute for masking
+> (see ADR-0031, which lands with the masking work in #5159) or for the breach
+> assessment Counsel holds as DIG-1229.
+
 ```bash
 DIGICHAT_REQUIRE_ROOT_AUTH=0
 DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
