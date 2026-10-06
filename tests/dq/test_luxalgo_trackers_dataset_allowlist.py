@@ -15,8 +15,11 @@ What is pinned here:
   dataset (the regression this issue exists for),
 * that the orchestrator schemas for those two tools advertise the same six as an
   ``enum`` (DIG-1519), so the model reads the allowlist off the schema instead
-  of paying a refused round trip,
-* that the listing call still accepts ``dataset=None``,
+  of paying a refused round trip, and that the two descriptions point at that
+  enum as the limit,
+* that the listing call still accepts ``dataset=None``, and that it is a
+  pass-through to the upstream catalog rather than a view of the allowlist —
+  which is why the listing's description may not claim the catalog is the six,
 * that the risk-acceptance note stays attached to the ``congress-trades``
   entry, so a later reader cannot mistake the allowlist for legal clearance,
 * and that no environment variable can widen the allowlist.
@@ -24,8 +27,11 @@ What is pinned here:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -33,8 +39,10 @@ pytestmark = pytest.mark.unit
 
 from digiquant.data.luxalgo import (  # noqa: E402
     LUXALGO_TRACKERS_ALLOWED_DATASETS,
+    LuxAlgoClient,
     TrackersDatasetsInput,
     TrackersLatestInput,
+    build_luxalgo_tool_dispatcher,
 )
 from digiquant.data.luxalgo.models import TrackersDatasetName  # noqa: E402
 from digiquant.orchestrator_tools import (  # noqa: E402
@@ -153,24 +161,56 @@ def test_only_the_two_dataset_taking_tools_advertise_the_enum() -> None:
     assert "dataset" not in properties
 
 
-def test_the_dataset_taking_descriptions_do_not_claim_more_than_the_allowlist() -> None:
-    """A public repo going live in early 2027 must not overclaim its coverage.
+def test_the_dataset_taking_descriptions_point_at_the_enum_as_the_limit() -> None:
+    """Both dataset-taking descriptions must hand the model the same limit.
 
-    The two tools that take a ``dataset`` named six datasets and then said "and
-    more"; the allowlist is exactly those six, so "and more" was a claim their
-    own schema contradicts.
+    The enum is what makes the limit legible, so a description that left the
+    reader guessing which ids are legal would undercut the change that added
+    it. Deliberately checked for the pointer rather than for a specific
+    sentence: the point is that the limit is stated, not how it is worded.
 
-    ``luxalgo_trackers_ticker`` is deliberately not covered here: it takes no
-    ``dataset`` and its upstream call is not filtered by the allowlist, so
-    whether its "and more" is accurate is an open question for DIG-1519 rather
-    than a text fix.
+    ``luxalgo_trackers_ticker`` is out of scope here — it takes no ``dataset``.
     """
     for builder in (
         build_luxalgo_trackers_datasets_tool,
         build_luxalgo_trackers_latest_tool,
     ):
         description = builder()["function"]["description"]
-        assert "and more" not in description, builder.__name__
+        assert "enum" in description, builder.__name__
+
+
+def test_the_catalog_listing_is_upstreams_and_is_not_the_allowlist() -> None:
+    """Why the listing's description may not claim the catalog is the six.
+
+    ``trackers_datasets`` with no ``dataset`` is a pass-through to the upstream
+    catalog, which publishes datasets this service does not ingest, so the
+    response legitimately names ids outside the allowlist. The allowlist bounds
+    the ``dataset`` *filter*; it does not bound what the listing reports.
+
+    This is the distinction DIG-1519's review caught the description blurring:
+    trimming "and more" by claiming the six were the whole catalog would have
+    replaced one false claim with another.
+    """
+    seen: dict[str, Any] = {}
+    upstream_datasets = sorted(LUXALGO_TRACKERS_ALLOWED_DATASETS) + [
+        "bills",
+        "hearings",
+        "options-flow",
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen["arguments"] = body["params"]["arguments"]
+        return httpx.Response(200, json={"result": {"datasets": upstream_datasets}})
+
+    dispatcher = build_luxalgo_tool_dispatcher(
+        client=LuxAlgoClient(transport=httpx.MockTransport(handler)),
+    )
+    result = json.loads(dispatcher("luxalgo_trackers_datasets", {})["content"])
+
+    assert "dataset" not in seen["arguments"]
+    assert set(upstream_datasets) - set(LUXALGO_TRACKERS_ALLOWED_DATASETS)
+    assert result["data"]["datasets"] == upstream_datasets
 
 
 def test_no_env_var_can_widen_the_allowlist(

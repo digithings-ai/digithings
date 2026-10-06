@@ -1433,16 +1433,17 @@ def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
         "function": {
             "name": "luxalgo_trackers_datasets",
             "description": (
-                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): every "
-                "dataset of US public-record market data the LuxAlgo pipeline "
-                "publishes as CC0 dumps — congressional trades, insider "
-                "transactions, 13F holdings, federal contracts and grants, "
-                "lobbying filings, short-sale volume — with row counts, "
-                "freshness, the years with data, and whether it is "
-                "ticker-searchable. `dataset` selects one dataset's full field "
-                "roster (read it before composing filters) and is limited to the "
-                "allowlisted ids in its enum; any other dataset is refused. "
-                "The dumps are the source of record."
+                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): the "
+                "datasets of US public-record market data the LuxAlgo pipeline "
+                "publishes as CC0 dumps, with row counts, freshness, the years "
+                "with data, and whether it is ticker-searchable. That list is "
+                "upstream's own and runs past the six datasets we ingest — "
+                "congressional trades, insider transactions, 13F holdings, "
+                "federal contracts and grants, lobbying filings, short-sale "
+                "volume. `dataset` narrows the listing to one dataset's full "
+                "field roster (read it before composing filters) and accepts "
+                "only those six, the ids in its enum; any other dataset is "
+                "refused. The dumps are the source of record."
             ),
             "parameters": {
                 "type": "object",
