@@ -106,7 +106,11 @@ Beyond root `AGENTS.md`:
   `DIGILLM_EGRESS_DIGEST_KEY` entirely, so production code must not pass it.)
 - ❌ **Storing the pepper beside the records it protects.** The key and the JSONL
   ledger must not share a mount, a backup, or a read grant in any shared
-  deployment — see [ARCHITECTURE.md § Deployment](ARCHITECTURE.md#deployment-the-pepper-must-not-live-next-to-the-ledger).
+  deployment — and a file mode is not a read grant, because every service in
+  this stack is uid 0 (no `user:` in `docker-compose.yml`, no `USER` in any
+  Dockerfile), so root reads the ledger whatever its bits say. Only a sink the
+  process cannot read back separates them; see
+  [ARCHITECTURE.md § Deployment](ARCHITECTURE.md#deployment-the-pepper-must-not-live-next-to-the-ledger).
 - ❌ `.md` edits via `ruff format` — Markdown is not source (see root `ruff.toml`).
 
 ---
