@@ -66,7 +66,9 @@ Beyond root `AGENTS.md`:
 - **An egress record is evidence, and evidence carries no payload.**
   `EgressRecord` records where a call went and a keyed digest of what went, never
   the content. The digest is off (`"absent"`) without a pepper, which is reported
-  honestly rather than substituted with something weaker. Delivery is fail-soft,
+  honestly rather than substituted with something weaker. (An `absent` record is
+  not proof a pepper was missing — the `completion()` cache-hit record has no
+  payload to digest and is `absent` either way.) Delivery is fail-soft,
   and the sink writes whether or not an observer is registered.
 - **MCP hosting is loopback-only.** `python -m digillm.mcp_server` defaults to
   `127.0.0.1:8768` (`DIGILLM_MCP_PORT` override, `--stdio` for Claude Desktop).
@@ -97,9 +99,11 @@ Beyond root `AGENTS.md`:
   unkeyed `sha256`, never to a default key, never to "only if it's long enough to
   look like one". An unkeyed hash of a low-entropy payload is a table lookup, and
   the silent fallback is what hides that. Absent-and-honest beats present-and-lying.
-- ❌ **Accepting a caller-supplied pre-computed digest.** There is deliberately no
-  such parameter: any caller-supplied string is indistinguishable from a keyed
-  one, which is exactly the hole `record_egress` refuses to offer.
+- ❌ **Accepting a caller-supplied pre-computed digest.** `record_egress` deliberately
+  takes no such parameter: any caller-supplied string is indistinguishable from a
+  keyed one, which is exactly the hole it refuses to offer. (`compute_payload_digest`'s
+  `key=` is a test seam, not a caller feature — it bypasses
+  `DIGILLM_EGRESS_DIGEST_KEY` entirely, so production code must not pass it.)
 - ❌ **Storing the pepper beside the records it protects.** The key and the JSONL
   ledger must not share a mount, a backup, or a read grant in any shared
   deployment — see [ARCHITECTURE.md § Deployment](ARCHITECTURE.md#deployment-the-pepper-must-not-live-next-to-the-ledger).
