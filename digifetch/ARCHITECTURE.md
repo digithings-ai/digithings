@@ -130,7 +130,7 @@ fetcher.fetch(url, *, method="GET", params=None, data=None, json=None,
 fetcher.download(url, *, method="GET", headers=None, cookies=None) -> DownloadResult
 ```
 
-The non-browser seam. `fetch` generalizes an ad-hoc
+The non-browser seam. `fetch` generalizes twelve-x's
 `requests.post(AJAX_URL, data=..., cookies=..., timeout=30)` →
 `raise_for_status()` → text body; it returns a typed, frozen `FetchResult`
 (never a bare dict). `download` streams binary content (a research PDF) with a
@@ -156,8 +156,8 @@ variables; a consumer (`digisearch`) sources the allowlist from
 `DIGISEARCH_FETCH_ALLOWED_HOSTS` and passes it in.
 
 `cookies_from_playwright(context.cookies())` flattens Playwright's list of cookie
-dicts to the `{name: value}` dict an HTTP client sends — the hand-off a consumer
-performs inline to continue an authenticated browser session over plain HTTP.
+dicts to the `{name: value}` dict an HTTP client sends — the exact hand-off
+twelve-x's `scrape_research` performs inline before its AJAX call.
 
 Per-call `cookies=` are host-agnostic, so redirect handling forwards them only
 while the hop stays on the **original origin**; a hop to another origin drops
@@ -183,12 +183,12 @@ not re-applied).
 | TE: `page.content()` → `parse_calendar_html(html)` | engine yields the live `page`; caller calls `page.content()` and parses — **parsing stays site-specific** |
 
 > **The library ships no vendor access and no vendor authorisation — you bring
-> your own.** Every site-specific endpoint, selector, request contract, and
-> credential stays in the consumer; this package ships the *seams*
-> (`browser_session`, `with_retry`, `RateLimiter`, `cookies_from_playwright`,
-> `HttpFetcher`) and no way into anyone's particular data. Before you point
-> these seams at a site, check that site's terms and your own authorisation to
-> access it — see
+> your own.** No endpoint, selector, request shape, or credential for any named
+> third-party site appears anywhere in this package or its documentation. The
+> rows above describe the *seams* (`browser_session`, `with_retry`,
+> `RateLimiter`, `cookies_from_playwright`, `HttpFetcher`), not a way into
+> anyone's data. Before you point these seams at a site, check that site's terms
+> and your own authorisation to access it — see
 > [`docs/VENDOR_CONTENT_BOUNDARY.md`](../docs/VENDOR_CONTENT_BOUNDARY.md).
 
 ## Deliberately NOT extracted (stays site-specific in twelve-x)
@@ -197,7 +197,7 @@ Keeping these out is the core design decision — the engine manages *lifecycle 
 transport*; the consumer owns *what to do on the page* and *how to read it*.
 
 - **Login / auth flows.** Selector-driven (`page.fill(USERNAME_SELECTOR, …)`,
-  `page.click(SUBMIT_SELECTOR)`, `wait_for_url(LOGGED_IN_GLOB)`). The
+  `page.click(SUBMIT_SELECTOR)`, `wait_for_url("**/prime-dashboard**")`). The
   issue's candidate scope listed "auth/login flows", but the overriding rule is
   "keep site-specific logic out" — and login is entirely selectors + post-login
   URL waits, which have no generic shape from one consumer. The engine exposes
