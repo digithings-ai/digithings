@@ -81,6 +81,27 @@ the broader delegation framework.
 | PR quality gate | **removed** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges existed as `pr-quality-gate.yml` from #131 (`abc7e541`) until #378 (`5abc4f41`) replaced it with the finish-task skill. Nothing enforces it in CI today. Listed rather than deleted so the gap is visible instead of assumed-covered. |
 | PR issue linkage | removed 2026-08 per `docs/adr/0024-drop-pr-linkage-enforcement.md` (was `check-linkage` in `ci-pr-hygiene.yml`) | — | Convention only: `task/<N>-slug` branch or `Fixes #N` in PR body; nothing enforces it |
 
+## Paperclip board (host-resident clocks)
+
+Everything above runs in GitHub Actions, which cannot see the Paperclip
+board at all: Paperclip is loopback-only and private
+(`server.bind: loopback`, 127.0.0.1:3100), so no off-host clock can read its
+routines API. Its automation is a family of launchd jobs on the operator's Mac
+(`~/paperclip-workspace/kit/bin/dt-*`, `StartInterval`, logs under
+`~/.config/digithings/`). Until DIG-1220 this index had no row for that board at
+all, which is the same class of gap the index exists to make visible.
+
+| Coverage | Clock | Cadence | What it does |
+|---|---|---|---|
+| Paperclip routines on a `schedule` trigger that never fire | `dt-routine-watch` (`scripts/dt-routine-watch`) | launchd, every 300 s | Reads each watched trigger's own `nextRunAt`; once past the boundary plus grace it asks **another system** whether the firing is visible — the routine's run history and the trigger's `lastFiredAt` / `lastResult`. No run and no `lastFiredAt` files an issue. Watches every active, enabled, non-archived schedule trigger (21 of 29 as of 2026-10-06), derived from the board rather than hardcoded, so a routine created tomorrow is watched tomorrow. Also files on its own silence (`self-gap`) and on its own lookup failing (`api-gap`). Runbook: [paperclip-routine-watch.md](../ops/paperclip-routine-watch.md) |
+| Paperclip board agent routine runs | **none** | — | A routine that *does* fire writes a run row and creates an execution issue, so its activity is visible on the board; what nothing watched was the firing that never happened. Listed so the remaining half of the gap is visible instead of assumed covered |
+
+Two known limits are accepted on the board (2026-10-06) and documented in the
+runbook rather than papered over: pages are unauthenticated and land as
+`local-board` (Paperclip mints no durable credential for a daemon; each issue
+names the agent that installed it), and a powered-off host cannot report its own
+silence — sleep is covered by `self-gap`, power-off is not observable at all.
+
 ## Escalation paths
 
 There are no label-based escalation paths any more. Priority and spec quality
