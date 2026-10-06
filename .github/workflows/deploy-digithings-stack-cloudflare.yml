@@ -4,10 +4,27 @@
 #
 # Before this file the stack deploy was manual-only (`npx wrangler deploy`
 # from apps/digithings-stack-cloudflare/ on a developer machine with
-# Docker + `wrangler login`) — verified no workflow anywhere ran it. It stays
-# human-approved after it: the `deploy` job runs on `workflow_dispatch` only,
-# behind the `production` environment gate; pull requests run the `check` job
-# only and can never deploy.
+# Docker + `wrangler login`) — verified no workflow anywhere ran it. Automation
+# replaced the manual keyboard, NOT the human: the `deploy` job runs on a merge
+# to `main` and on `workflow_dispatch`, always behind the `production`
+# environment gate. Pull requests run the `check` job only and can never deploy.
+#
+# DIG-1569: this file originally triggered on `pull_request` +
+# `workflow_dispatch` ONLY — there was no `push` trigger, so a merge to `main`
+# deployed nothing at all. On DIG-1484 the fix that retired an unmasked
+# customer-PII seed payload was merged as `da88fa71` and production served the
+# retiring container (`shared-v16`) for ~19 hours afterwards, with three
+# deployments parked on the `production` gate and no alert. The gate is still
+# the control that lets Chris stop a deploy; the trigger is what makes the gate
+# observable. Do not remove `push` without replacing the merge-to-main deploy
+# path, and keep `.github/workflows/production-deploy-gate-watchdog.yml` able to
+# see anything that sits on the gate.
+#
+# The `push` and `pull_request` path filters below are deliberately duplicated
+# rather than shared through a YAML anchor: an anchor here is invisible to
+# review, and the one thing this file must never do is let the merge path and
+# the review path drift apart. `tests/scripts/test_deploy_digithings_stack_cloudflare.py`
+# pins the two lists as byte-identical and fails on drift.
 #
 # Deploy runs from the repo root (`-c apps/digithings-stack-cloudflare/
 # wrangler.toml`) — the documented command, and it keeps the relative `-c` path
@@ -24,6 +41,19 @@
 name: "Deploy: digithings-stack (Cloudflare Containers)"
 
 on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "Dockerfile.digithings-stack-cloudflare"
+      - "apps/digithings-stack-cloudflare/**"
+      - "digiquant/Dockerfile.mcp"
+      - "digivault/Dockerfile.mcp"
+      - "apps/dashboard-api/**"
+      - "apps/digichat-cloudflare/**"
+      - "Dockerfile.digichat-cloudflare"
+      - "apps/digichat/**"
+      - ".github/workflows/deploy-digithings-stack-cloudflare.yml"
   pull_request:
     paths:
       - "Dockerfile.digithings-stack-cloudflare"
@@ -46,14 +76,28 @@ permissions:
   contents: read
 
 concurrency:
-  # Per-run group: manual deploys may target different refs (inputs.ref), so the
-  # newest run is NOT a superset of what it displaces — cancel-in-progress would
-  # kill a running approved deploy. Unique-per-run groups never queue (#2541).
-  group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
+  # Per-target-ref group. Previously keyed on run_id, which made every run its
+  # own group and so never queued (#2541) — harmless while the only trigger was
+  # a rare manual dispatch, wrong now that every merge to main fires this: two
+  # merges in quick succession would race two `wrangler deploy`s onto the same
+  # container name and the older one could land last.
+  #
+  # Keying on the ref to be deployed keeps the original intent (deploys aimed at
+  # different refs must never displace each other) while making same-ref deploys
+  # queue in order. cancel-in-progress stays false: an approved deploy already
+  # waiting on Cloudflare must never be killed by a newer push.
+  group: deploy-digithings-stack-cloudflare-${{ inputs.ref || 'main' }}
   cancel-in-progress: false
 
 jobs:
+  # ── Validation only. Runs on every trigger, deploys nothing. ────────────────
+  # Its steps are duplicated in `check-deploy-gate` rather than shared through a
+  # composite action on purpose: the pull_request path must be readable on its
+  # own as "this cannot deploy", with no shared job whose steps could later grow
+  # a deploy command.
   check:
+    name: "check (pull request — validation only)"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,16 +121,55 @@ jobs:
         working-directory: apps/digithings-stack-cloudflare
         run: npx vitest run
 
-  deploy:
-    if: github.event_name == 'workflow_dispatch'
+  # ── The gate that decides whether a deploy is allowed to start. ─────────────
+  # Same checks as `check`, on the ref that will actually be deployed. A failed
+  # gate skips the deploy job below, so a red typecheck on main cannot reach
+  # production.
+  check-deploy-gate:
+    name: "check (deploy gate)"
+    if: github.event_name != 'pull_request'
     needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Dispatch may target inputs.ref; on push it is always the pushed sha.
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Typecheck stack worker
+        working-directory: apps/digithings-stack-cloudflare
+        run: npx tsc --noEmit
+
+      - name: Test stack worker
+        working-directory: apps/digithings-stack-cloudflare
+        run: npx vitest run
+
+  deploy:
+    name: "deploy (production)"
+    # Merge to main, or an explicit manual dispatch. Never a pull request.
+    # The `production` environment below is the human-approval control — a
+    # reviewer (Chris) still has the last word, so automation here does not
+    # remove the gate, it only stops the gate from silently holding a deploy
+    # for a day. production-deploy-gate-watchdog.yml alerts when it does.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [check-deploy-gate]
     environment: production
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           # Default input is main: a no-input dispatch ships the promoted tip.
-          ref: ${{ inputs.ref }}
+          # On push, inputs.ref is unset, so this is github.sha — the exact
+          # commit the gate above validated.
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
