@@ -44,7 +44,20 @@ server = [
     "python-json-logger>=2.0",
 ]
 chroma = ["chromadb>=0.4"]
-embedding = ["openai>=1.0"]
+# digillm carries the keyed egress record (digillm.egress_record) that the remote
+# embedding path emits, so there is one digest implementation in the stack instead
+# of a second one here (DIG-1407). It sits behind [embedding], the same extra that
+# already carries openai, and NOT in the base install: digillm's own hard dep is
+# openai>=1.0, so a base placement would drag the whole OpenAI client into every
+# plain `pip install digisearch`, which the base-install-is-light note above
+# deliberately avoids.
+#
+# This does NOT keep openai out of the deployed image -- see the digillm sibling
+# block in Dockerfile, which installs digillm (and therefore openai) so the record
+# import resolves there. Whether the deployed image should have the remote embedding
+# path at all is an open decision routed to the EM on DIG-1407; do not read this
+# extra as having settled it.
+embedding = ["openai>=1.0", "digillm>=0.1.0"]
 # Small multilingual ONNX path (#4756): paraphrase-multilingual-MiniLM-L12-v2
 # via onnxruntime + tokenizers, model files fetched from HuggingFace Hub on
 # first use. CPU-only, no torch, no third-party embedding API.
@@ -144,7 +157,8 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 # Monorepo tests live at repo root tests/ds/; from digisearch/: `pytest` picks these up; or `make test-unit` from repo root.
 #
 # pythonpath must list the repo root plus every workspace sibling that src/digisearch or
-# tests/ds imports directly (digibase, digikey, digiclaw, digifetch) -- not just "src".
+# tests/ds imports directly (digibase, digikey, digiclaw, digifetch, digillm) -- not
+# just "src".
 # Reason: when pytest is
 # invoked with no path args from *inside* digisearch/ (e.g. `cd digisearch && uv run
 # pytest -m unit`), its rootdir/config search starts at cwd and stops at the first
@@ -157,4 +171,4 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 # editable copy -- see digigraph's fix for the full root-cause writeup. Listing them
 # here is both the fix and the safety net.
 testpaths = ["../tests/ds"]
-pythonpath = ["..", "src", "../digibase/src", "../digikey/src", "../digiclaw/src", "../digifetch/src"]
+pythonpath = ["..", "src", "../digibase/src", "../digikey/src", "../digiclaw/src", "../digifetch/src", "../digillm/src"]

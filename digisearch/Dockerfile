@@ -30,6 +30,23 @@ COPY digiclaw/pyproject.toml digiclaw/ARCHITECTURE.md ./digiclaw/
 COPY digiclaw/src ./digiclaw/src
 RUN uv pip install --system -e "./digiclaw"
 
+# digillm (sibling package; carries the keyed egress record the remote
+# embedding path emits -- digillm.egress_record, one digest implementation for
+# the whole stack). Installed as a sibling, before digisearch, so the import
+# resolves in the image (DIG-1407).
+#
+# NOTE: this DOES put `openai` in the image, because digillm's own hard
+# dependencies install with it and digillm/__init__.py imports digillm.client,
+# which imports openai at module scope -- so `import digillm.egress_record`
+# cannot resolve without it. The [embedding] extra placement in
+# digisearch/pyproject.toml therefore does NOT keep openai out of the container;
+# it only keeps it out of digisearch's base install. Whether the deployed
+# digisearch image should have the remote embedding path at all is an open
+# decision, routed to the EM on DIG-1407 -- do not read this line as settled.
+COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
+COPY digillm/src ./digillm/src
+RUN uv pip install --system -e "./digillm"
+
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
