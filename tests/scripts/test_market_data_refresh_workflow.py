@@ -927,6 +927,223 @@ def test_main_marks_stale_and_exits_nonzero_on_ticker_failure(
     assert by_ticker["BOOM"]["mode"] == "history-only"
 
 
+# -- unreadable macro manifest is a loud run outcome (DIG-1371) --------------
+
+
+#: The synthetic outcome name an unreadable ``--macro-manifest`` must produce.
+UNREADABLE_MANIFEST = "macro-manifest-unreadable"
+
+
+def _unreadable_manifest(tmp_path: Path) -> Path:
+    """A manifest path that cannot be read, so the resolver's except arm runs."""
+    return tmp_path / "no-such-directory" / "macro_series.yaml"
+
+
+def _healthy_price_store() -> FakeStore:
+    live = price_rows(HIST_DEFAULT) + price_rows([("2026-01-05", 105.0)])
+    return FakeStore(histories={"SPY": price_rows(HIST_DEFAULT)}, lives={"SPY": live})
+
+
+def _run_main_unreadable_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, extra: list[str]
+) -> tuple[int, dict[str, Any], FakeStore, FakeCoreClient]:
+    """``main`` with a manifest path that cannot be read, plus a healthy price leg.
+
+    ``--macro-series`` is deliberately absent so the manifest branch of
+    :func:`_resolve_macro_specs` is the one taken, and the core client is a
+    :class:`FakeCoreClient` so the test can assert the mirror never wrote
+    anything on this run.
+    """
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    store = _healthy_price_store()
+    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
+    store.manifest = manifest_doc
+    client = FakeCoreClient()
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
+    monkeypatch.setattr(refresh_mod, "build_core_supabase_client", lambda: client)
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--as-of",
+            "2026-01-06",
+            "--manifest-out",
+            str(tmp_path / "refresh.json"),
+            *extra,
+        ]
+    )
+    return rc, json.loads((tmp_path / "refresh.json").read_text()), store, client
+
+
+def test_main_unreadable_macro_manifest_fails_loud_and_names_itself(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """DIG-1371: an unreadable manifest is a run failure, not an empty spec list.
+
+    It used to print ``warn: ... skipping macro refresh`` and return ``[]``, so
+    ``exempt`` was empty, ``macro_outcomes`` was empty, ``failed`` was empty and
+    the run exited 0 claiming fresh while the macro panel kept serving its last
+    seal. The one signal the resolver has now has to reach the artifact.
+    """
+    manifest_path = _unreadable_manifest(tmp_path)
+
+    rc, artifact, _store, _client = _run_main_unreadable_manifest(
+        monkeypatch, tmp_path, extra=["--macro-manifest", str(manifest_path)]
+    )
+
+    assert rc == 1, "an unreadable macro manifest must fail the run, not exit 0 fresh"
+    assert artifact["stale"] is True
+    assert UNREADABLE_MANIFEST in artifact["failed"]
+    notes = {o["ticker"]: o["note"] for o in artifact["outcomes"]}
+    assert notes[UNREADABLE_MANIFEST].startswith("macro manifest unreadable:")
+    assert "FileNotFoundError" in notes[UNREADABLE_MANIFEST], (
+        "the outcome must name the cause, not just that something failed: "
+        f"{notes[UNREADABLE_MANIFEST]!r}"
+    )
+
+
+def test_main_unreadable_macro_manifest_still_refreshes_the_price_leg(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The loud failure must not cost the run its equity price refresh.
+
+    This is the regression that pins "do not raise": a raise at the resolver
+    would abort ``main`` *before* ``refresh_universe`` and turn a broken macro
+    manifest into a total market-data outage.
+    """
+    manifest_path = _unreadable_manifest(tmp_path)
+
+    _rc, artifact, store, _client = _run_main_unreadable_manifest(
+        monkeypatch, tmp_path, extra=["--macro-manifest", str(manifest_path)]
+    )
+
+    by_ticker = {o["ticker"]: o for o in artifact["outcomes"]}
+    assert by_ticker["SPY"]["mode"] == "incremental", (
+        f"the price leg must still run on an unreadable macro manifest: {by_ticker.get('SPY')}"
+    )
+    assert [p for p in store.puts if "SPY" in p["key"]], "the price generation was never written"
+
+
+def test_main_unreadable_macro_manifest_seeds_the_core_macro_mirror_skip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The client-visible half: the mirror must say it was skipped, and why.
+
+    An empty spec list skipped the whole mirror block and left the artifact
+    reporting ``{"rows": 0, "series": 0, "skipped": []}`` — byte-identical to a
+    healthy-but-empty mirror, and with an *empty* ``skipped``, so it never even
+    claimed to have been skipped. That silence reaches twelve-x, which reads the
+    Yahoo FX pairs straight out of core ``macro_series_observations``.
+    """
+    manifest_path = _unreadable_manifest(tmp_path)
+
+    _rc, artifact, _store, client = _run_main_unreadable_manifest(
+        monkeypatch, tmp_path, extra=["--macro-manifest", str(manifest_path)]
+    )
+
+    mirror = artifact["core_macro_mirror"]
+    assert mirror["skipped"], f"the mirror still reports a healthy empty run: {mirror}"
+    assert mirror["rows"] == 0
+    assert mirror["series"] == 0
+    assert any(
+        "manifest unreadable" in entry and "FileNotFoundError" in entry
+        for entry in mirror["skipped"]
+    ), f"the mirror must name the manifest problem, got {mirror['skipped']}"
+    assert client.calls == [], "no macro generation exists to mirror on this run"
+
+
+def test_main_skip_macro_stays_quiet_on_an_unreadable_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A deliberate price-only run must not be turned loud by the manifest.
+
+    ``--skip-macro`` never resolves the manifest, so it cannot manufacture a
+    ``manifest_error``; ``--macro-manifest`` is still unreadable here to prove
+    the flag, not the manifest's readability, is what keeps the run quiet.
+    """
+    manifest_path = _unreadable_manifest(tmp_path)
+
+    rc, artifact, _store, client = _run_main_unreadable_manifest(
+        monkeypatch,
+        tmp_path,
+        extra=["--skip-macro", "--macro-manifest", str(manifest_path)],
+    )
+
+    assert rc == 0, f"a --skip-macro run must stay as quiet as the price leg allows: {artifact}"
+    assert UNREADABLE_MANIFEST not in artifact["failed"]
+    assert UNREADABLE_MANIFEST not in {o["ticker"] for o in artifact["outcomes"]}
+    assert artifact["core_macro_mirror"]["skipped"] == []
+    assert client.calls == []
+
+
+def test_main_readable_manifest_still_reports_an_empty_mirror_skip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The other side: a healthy run keeps reporting ``skipped == []``.
+
+    The mirror guard may only seed ``skipped`` on the manifest problem. This
+    drives the real shipped ``macro_series.yaml`` over a store whose whole
+    declared panel answers with its seal row, so every macro outcome is
+    ``up-to-date`` and the mirror block runs for real.
+    """
+    import scripts.refresh_market_data_r2 as refresh_mod
+
+    macro_yaml = REPO_ROOT / "digiquant/src/digiquant/research/config/macro_series.yaml"
+    specs = list(refresh_mod._resolve_macro_specs([], str(macro_yaml)))
+    assert specs, "the shipped manifest must declare a macro panel"
+
+    live = price_rows(HIST_DEFAULT) + price_rows([("2026-01-05", 105.0)])
+    macros: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for source, series, _cadence in specs:
+        # The live row is the seal row itself: nothing newer, so ``up-to-date``.
+        macros[(source, series)] = [
+            {
+                "source": source,
+                "series_id": series,
+                "obs_date": "2026-01-02",
+                "value": 1.5,
+                "unit": "fx" if source == "yahoo" else "level",
+            }
+        ]
+    store = FakeStore(
+        histories={"SPY": price_rows(HIST_DEFAULT)},
+        lives={"SPY": live},
+        macros=macros,
+        macro_lives=dict(macros),
+    )
+    manifest_doc = {"version": 1, "as_of": "2026-01-02", "datasets": {}}
+    store.manifest = manifest_doc
+    client = FakeCoreClient()
+    monkeypatch.setattr(refresh_mod, "build_store", lambda uri: (store, manifest_doc))
+    monkeypatch.setattr(refresh_mod, "build_core_supabase_client", lambda: client)
+
+    rc = refresh_mod.main(
+        [
+            "--tickers",
+            "SPY",
+            "--postgres-uri",
+            "postgresql://fake",
+            "--as-of",
+            "2026-01-06",
+            "--manifest-out",
+            str(tmp_path / "refresh.json"),
+        ]
+    )
+
+    artifact = json.loads((tmp_path / "refresh.json").read_text())
+    assert rc == 0, f"a healthy readable-manifest run must stay fresh: {artifact['failed']}"
+    assert artifact["stale"] is False
+    assert artifact["failed"] == []
+    assert UNREADABLE_MANIFEST not in artifact["failed"]
+    assert artifact["core_macro_mirror"]["skipped"] == [], (
+        f"a healthy mirror must not be seeded with a skip: {artifact['core_macro_mirror']}"
+    )
+    assert client.calls, "the mirror leg must actually run on a readable manifest"
+
+
 def test_workflow_installs_uv_before_first_use() -> None:
     """`uv` is not on the GitHub runner; the job must set it up before running it (#4008)."""
     steps = _workflow()["jobs"]["refresh"]["steps"]

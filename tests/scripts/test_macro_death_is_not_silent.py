@@ -387,3 +387,77 @@ def test_stale_comprehension_keeps_a_whole_leg_guard() -> None:
         "macro outage would be reported as a fresh run. Re-wire the aggregate "
         f"guard. Calls found: {calls}"
     )
+
+
+# -- unreadable manifest (DIG-1371) -----------------------------------------
+
+
+def test_unreadable_manifest_outcome_survives_the_real_reduction(
+    r2: dict[str, Any], shipped_specs: list[tuple[str, str, str | None]]
+) -> None:
+    """An unreadable manifest reaches the artifact through the *real* reduction.
+
+    ``main`` reports it as one ``error`` outcome named ``macro-manifest-unreadable``
+    with no spec behind it. With no spec there is nothing for the #4621 exemption
+    to exempt (``exempt`` is empty), so it must land in ``failed`` and drive the
+    run stale — the same route every other loud outcome takes, run against this
+    file's extracted comprehension rather than a paraphrase of it.
+    """
+    specs: list[tuple[str, str, str | None]] = []  # unreadable: nothing was declared
+    outcomes = _healthy_run(r2)
+    outcomes.append(
+        r2["_outcome"](
+            "macro-manifest-unreadable",
+            r2["MODE_ERROR"],
+            note="macro manifest unreadable: FileNotFoundError: [Errno 2] macro_series.yaml",
+        )
+    )
+
+    failed = _real_failed(r2, outcomes, specs)
+
+    assert [o["ticker"] for o in failed] == ["macro-manifest-unreadable"], (
+        "an unreadable manifest must fail the run; the reduction needs no new mode "
+        f"for it. Got {failed}"
+    )
+
+
+def test_unreadable_manifest_does_not_regress_the_dig981_leg_guard(
+    r2: dict[str, Any],
+) -> None:
+    """No DIG-981 regression: the whole-leg guard still fires on its own shape.
+
+    Two declared monthly series coming back ``history-only`` at once is the exact
+    shape the guard exists for, and it must keep tripping. Nothing about the
+    unreadable-manifest outcome may enter this reduction — with a *readable*
+    manifest there is no such outcome at all.
+
+    Note the direction of the aggregate, which is easy to read backwards: the
+    comprehension is ``not (exempt and history-only and not _macro_leg_dead)``,
+    so a *firing* ``_macro_leg_dead`` **suspends** the #4621 exemption and those
+    two series land **in** ``failed``. That is the DIG-981 intent (a whole dead
+    leg must be loud), it is what
+    :func:`test_total_macro_feed_death_fails_the_leg` already pins over the
+    shipped panel, and it is why this asserts ``failed`` names exactly the two
+    dead series rather than staying empty.
+    """
+    specs = [("fred", "M2SL", "monthly"), ("fred", "PCEPI", "monthly")]
+    exempt = r2["_slow_macro_exempt_ids"](specs)
+    outcomes = [
+        r2["_outcome"](name, r2["MODE_HISTORY_ONLY"], note="fetch failed, serving history")
+        for name in sorted(exempt)
+    ]
+
+    assert r2["_macro_leg_dead"](outcomes, exempt) is True, (
+        "the DIG-981 whole-leg guard stopped firing: two monthly series dead at "
+        "once must suspend the #4621 exemption"
+    )
+
+    failed = _real_failed(r2, outcomes, specs)
+
+    assert {o["ticker"] for o in failed} == exempt, (
+        "the guard must still name the whole dead leg, and nothing else: "
+        f"{[o['ticker'] for o in failed]}"
+    )
+    assert "macro-manifest-unreadable" not in {o["ticker"] for o in failed}, (
+        "a readable manifest must not manufacture an unreadable-manifest outcome"
+    )

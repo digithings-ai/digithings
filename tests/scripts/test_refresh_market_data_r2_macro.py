@@ -201,3 +201,46 @@ def test_resolver_carries_the_manifest_cadence() -> None:
 
 def test_cli_specs_default_to_daily() -> None:
     assert refresh._resolve_macro_specs(["fred:PCEPI"], "unused") == [("fred", "PCEPI", None)]
+
+
+# -- unreadable manifest is reported, not raised or discarded (DIG-1371) -----
+
+
+def test_resolver_reports_an_unreadable_manifest_without_raising(tmp_path: Path) -> None:
+    """The resolver must not raise, and must not just return ``[]``.
+
+    A raise here would abort ``main`` *before* ``refresh_universe``, turning a
+    broken manifest into a total market-data outage; a bare ``[]`` is what made
+    the run report fresh. The empty spec list therefore carries the cause, and
+    ``main`` turns it into a loud outcome after the price leg has run.
+    """
+    missing = tmp_path / "no-such-directory" / "macro_series.yaml"
+
+    result = refresh._resolve_macro_specs([], str(missing))  # must not raise
+
+    assert list(result) == [], "an unreadable manifest resolves to no series"
+    assert result.manifest_error, (
+        "the resolver discarded the failure: main cannot tell a deliberate "
+        "price-only run from a manifest it could not read"
+    )
+    assert "FileNotFoundError" in result.manifest_error, result.manifest_error
+    assert str(missing) in result.manifest_error, result.manifest_error
+
+
+def test_resolver_manifest_error_is_empty_on_every_readable_path(tmp_path: Path) -> None:
+    """Only the except arm may manufacture a ``manifest_error``.
+
+    Two failure modes the readable paths would each introduce if they did:
+    a ``--skip-macro``-style price-only run turning loud, and the shipped
+    panel's daily run failing every day. The result also stays a plain ``list``
+    so every existing caller — ``main``'s refresh loop, ``_slow_macro_exempt_ids``
+    and the digiquant test doubles that substitute this resolver — keeps working.
+    """
+    from_cli = refresh._resolve_macro_specs(["fred:PCEPI"], "unused")
+    from_manifest = refresh._resolve_macro_specs([], str(MACRO_YAML))
+
+    assert from_cli.manifest_error == ""
+    assert from_manifest.manifest_error == ""
+    assert from_manifest, "the shipped manifest must still resolve a panel"
+    for result in (from_cli, from_manifest):
+        assert isinstance(result, list)
