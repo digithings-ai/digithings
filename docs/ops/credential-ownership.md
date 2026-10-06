@@ -135,7 +135,13 @@ A committed README is also **not an acceptable canonical store** under this file
 
 > **Accepted exception (Chris Stefan, 2026-10-06).** The `datatap-web` README holds a *non-production* embed placeholder. It is not the canonical store for the deployed registry and must never be treated as one. If a real tenant token is ever committed there, that is a leak and a rotation trigger, not a documented store.
 
-**What is still missing, and is a board question, not an engineering one:** who is accountable for rotating both secrets, and whether the ACA stays the store past `2027-01-04`. No agent can answer that. The card is open on DIG-1344.
+**Custody closed on the second card (Chris Stefan, 2026-10-06T12:41Z).** The first card asked one question about two secrets and got one answer that only covered `embed-tenants`; the CTO asked for a second card for the rest. Chris answered it: accountable holder for `auth-secret` = **Chris Stefan**, canonical store = **the Container App**. Both cards are now `answered`, so this record is a decision and not an assumption:
+
+- **Owner** for all four bindings (two secrets x prod + dev) is **Chris Stefan**, as recorded in the table above.
+- **Canonical store** is the Container App itself. Confirmed by the answer *and* by the fingerprint evidence — the only provable location of each deployed value. This supersedes `path = document` from the first card for the deployed values; that answer describes the client's repo, which holds only a non-production placeholder (see the accepted exception below).
+- **No ARM write was made and none is pending.** Keeping the ACA as the store means no Key Vault is created, no role is granted and no value moves, so nothing waits on a DataTap tenant `Owner` account. Rotation stays an agent-executable operation because the values are readable.
+
+**What this does not settle:** whether the ACA is still the store after `2027-01-04`, and the `listSecrets` blast radius below. Both are DataTap-side ARM decisions and are recorded as open items, not as custody gaps.
 
 **The values are recoverable, and that changes the risk.** `Microsoft.App/containerApps/listSecrets/action` returns secret values in cleartext — the CLI exposes it as `az containerapp secret list --show-values`, and `Contributor`'s `Actions: ["*"]` covers it with no `notActions` exclusion. So any principal that can authenticate and holds `listSecrets` on the app can read `AUTH_SECRET` and every `DIGICHAT_EMBED_TENANTS` token in plaintext.
 
@@ -167,7 +173,7 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 
 | Credential | Owner | Canonical Store | Refresh Path | Detector |
 |------------|-------|-----------------|--------------|----------|
-| ACA inline `auth-secret` / `embed-tenants` — 4 bindings (DataTap ACA, prod + dev) | Chris Stefan | the Container App itself (no Key Vault exists in the subscription) | read back with `az containerapp secret list --show-values`, then `az containerapp secret set -n digichat -g <rg> --secrets <name>=<new-value>` on one app at a time | `scripts/digichat_aca_secret_detector.py` — fingerprints in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json), expiry 2027-01-04 (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
+| ACA inline `auth-secret` / `embed-tenants` — 4 bindings (DataTap ACA, prod + dev) | Chris Stefan (confirmed by board answer, 2026-10-06) | the Container App itself, confirmed by board answer (no Key Vault exists in the subscription) | read back with `az containerapp secret list --show-values`, then `az containerapp secret set -n digichat -g <rg> --secrets <name>=<new-value>` on one app at a time | `scripts/digichat_aca_secret_detector.py` — fingerprints in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json), expiry 2027-01-04 (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
 
 ---
 
