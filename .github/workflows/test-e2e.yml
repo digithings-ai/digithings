@@ -13,6 +13,10 @@ on:
       - "tests/test_e2e.py"
       - "tests/test_e2e_contract.py"
       - "docker-compose.yml"
+      # The only CI job that builds the digisearch image is the e2e stack job
+      # below (docker compose up digisearch), so a Dockerfile edit must start this
+      # workflow or the image change is never built (DIG-1407).
+      - "digisearch/Dockerfile"
       - ".github/workflows/test-e2e.yml"
 
 permissions:
