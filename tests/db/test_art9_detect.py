@@ -32,6 +32,10 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+import os
+import subprocess
+import sys
+import time
 from typing import Any
 
 import pytest
@@ -399,12 +403,101 @@ def test_reason_never_carries_the_matched_value(payload: dict[str, Any]) -> None
 
 
 def test_reason_codes_are_stable_across_repeated_calls() -> None:
-    """Same payload, same reason — no set or dict iteration order leaking out."""
+    """Same payload, same reason — no *dict* iteration order leaking out.
+
+    Insertion order only. Set order is not observable this way, because a set's
+    order is fixed for the life of the process; see
+    `test_reason_is_identical_across_process_restarts` for that half.
+    """
     payload = {"religion": "x", "medical": "y", "dna": "z"}
 
     reasons = {art9.screen_request(payload).reason for _ in range(50)}
 
     assert reasons == {"art9:health:field_name"}
+
+
+def test_reason_tie_break_is_total_when_two_value_signals_share_a_category() -> None:
+    """Two value hits in one category resolve by signal name, not by luck.
+
+    `rs4988235` and `BRCA1` are both `genetic` and neither is a field name, so
+    they tie on both of `_decide`'s earlier sort keys. The tie is broken on the
+    signal name, which makes the choice total. Before the third key was added,
+    `min` returned whichever of the two the set happened to yield first.
+    """
+    result = art9.screen_text("panel found rs4988235 and BRCA1 together")
+
+    assert result.reason == "art9:genetic:brca_marker"
+    # Alphabetically first of the two signals present: brca_marker < rs_id.
+    assert result.reason < "art9:genetic:rs_id"
+
+
+def test_reason_is_identical_across_process_restarts() -> None:
+    """`reason` is a stable machine code, so it must survive a restart.
+
+    `found` is a set of `(category, signal)` tuples, and tuple ordering hashes
+    the strings inside it — which CPython salts per process. A reason chosen by
+    set order is therefore stable for the life of one interpreter and different
+    in the next, which is the worst shape for the things that consume it: log
+    lines, metric labels and error envelopes all aggregate on this string.
+
+    Nothing inside one process can observe this, so the check has to actually
+    start interpreters and vary the salt.
+    """
+    seeds = [str(n) for n in range(1, 9)]
+    child = (
+        "from digibase import art9;"
+        "print(art9.screen_text('panel found rs4988235 and BRCA1 together').reason);"
+        "print(art9.screen_request("
+        "{'note': 'NHS number: 943 476 5919 and medical record number 4471902'}"
+        ").reason)"
+    )
+
+    observed: list[tuple[str, ...]] = []
+    for seed in seeds:
+        env = {**os.environ, "PYTHONHASHSEED": seed}
+        proc = subprocess.run(
+            [sys.executable, "-c", child],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+            timeout=120,
+        )
+        observed.append(tuple(proc.stdout.split()))
+
+    assert len(set(observed)) == 1, f"reason varies with PYTHONHASHSEED: {set(observed)}"
+    assert observed[0] == ("art9:genetic:brca_marker", "art9:health:nhs_number")
+
+
+@pytest.mark.parametrize(
+    ("pattern_name", "payload"),
+    [
+        ("_genotype_call_re", "c." + "9" * 40_000),
+        ("_date_of_birth_re", "date of birth" + " " * 40_000),
+        ("_nhs_number_re", "health number" + " " * 40_000),
+    ],
+)
+def test_value_patterns_stay_linear_on_long_non_matching_input(
+    pattern_name: str, payload: str
+) -> None:
+    """The identifier patterns must be linear, not quadratic, in input length.
+
+    These patterns sit on a request-screening path, so the string is
+    caller-controlled by design and there is no length cap upstream. An
+    ambiguous quantifier — adjacent `\\s*` around an optional character, or
+    `[0-9]+_?[0-9]*` — makes the engine retry every split of the tail on a
+    non-match, which is quadratic. Measured before the fix, on exactly these
+    inputs: 22.3 s, 18.5 s and 3.8 s. They now take about 2 ms, so the ceiling
+    below has roughly a 500x margin while a quadratic regression still fails in
+    seconds rather than hanging the suite.
+    """
+    pattern = getattr(art9, pattern_name)
+
+    started = time.perf_counter()
+    assert pattern.search(payload) is None  # worst case: no match
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 1.0, f"{pattern_name} took {elapsed:.3f}s on a 40k-char miss"
 
 
 # ── 6. decisions ─────────────────────────────────────────────────────────────

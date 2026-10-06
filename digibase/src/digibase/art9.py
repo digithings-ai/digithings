@@ -386,16 +386,16 @@ field_names: Mapping[str, tuple[str, ...]] = MappingProxyType(
 #   word on its own.
 
 _nhs_number_re = re.compile(
-    r"\b(?:nhs|health)\s*(?:record\s*)?(?:number|no\.?|#)\s*[:#]?\s*\d[\d\s-]{7,}\d",
+    r"\b(?:nhs|health)\s*(?:record\s*)?(?:number|no\.?|#)\s*(?:[:#]\s*)?\d[\d\s-]{7,}\d",
     re.IGNORECASE,
 )
 _record_number_re = re.compile(
     r"\b(?:medical|patient|health)\s*(?:record|file)\s*(?:number|no\.?|#)"
-    r"\s*[:#]?\s*\d[\d\s-]{4,}\d",
+    r"\s*(?:[:#]\s*)?\d[\d\s-]{4,}\d",
     re.IGNORECASE,
 )
 _date_of_birth_re = re.compile(
-    r"\b(?:date\s*of\s*birth|birth\s*date|d\.?o\.?b\.?)\s*[:#=]?\s*"
+    r"\b(?:date\s*of\s*birth|birth\s*date|d\.?o\.?b\.?)\s*(?:[:#=]\s*)?"
     r"(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])"
     r"|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})",
     re.IGNORECASE,
@@ -404,7 +404,7 @@ _brca_marker_re = re.compile(r"\bbrca[12]\b", re.IGNORECASE)
 _rs_id_re = re.compile(r"\brs\d{3,}\b", re.IGNORECASE)
 _genotype_call_re = re.compile(
     r"\b(?:(?:chr)?[0-9]{1,2}|x|y|mt)[:.][0-9]+[:. ]?[acgt]*[acgt]>[acgt]"
-    r"|c\.[0-9]+_?[0-9]*(?:del|dup|ins|inv|[acgt]>)[a-z]*",
+    r"|c\.[0-9]+(?:_[0-9]*)?(?:del|dup|ins|inv|[acgt]>)[a-z]*",
     re.IGNORECASE,
 )
 _biometric_template_re = re.compile(
@@ -527,6 +527,14 @@ def _decide(
     category a field-name hit outranks a value-pattern hit: the key is the
     stronger signal, and the value may have matched by accident.
 
+    The ordering is *total*, not merely first-by-category. Two value signals in
+    one category (an NHS number and a date of birth, say) tie on both earlier
+    keys, and `found` is a set whose iteration order follows string hashing —
+    randomised per process. Ties therefore have to be broken on the signal name
+    as well, or the code would be stable within a run and flip across restarts,
+    which is exactly where a reason string is consumed: log lines, metric labels
+    and error envelopes all aggregate on it.
+
     ``mask`` is reachable only alongside an ``exception_ref`` and is never the
     default. §2.4 is explicit that masking a row requires already holding it, and
     holding it is the processing Art. 9(1) prohibits — so `refuse` is the floor and
@@ -542,7 +550,7 @@ def _decide(
     )
     category, signal = min(
         found,
-        key=lambda hit: (category_order.index(hit[0]), hit[1] != "field_name"),
+        key=lambda hit: (category_order.index(hit[0]), hit[1] != "field_name", hit[1]),
     )
     decision: Literal["allow", "mask", "refuse"] = "mask" if exception_ref else "refuse"
     return categories, decision, f"art9:{category}:{signal}"
