@@ -188,14 +188,33 @@ def test_reinclude_above_the_exclusion_is_detected() -> None:
     assert _is_included("scripts/thing.py", ["scripts", "!scripts/thing.py"])
 
 
-def test_occ_ticket_seed_scripts_are_reincluded() -> None:
-    """The #4988 regression itself, named so a revert is obviously wrong.
+def test_occ_ticket_writer_stays_out_of_the_image() -> None:
+    """The inverse of the #4988 guard, because #4988's premise is now false.
 
-    `seed_chroma.sh` invokes `python3 -m scripts.build_occ_tickets_seed`, which
-    imports `scripts.index_occ_tickets`; without both files in the image the
-    OCC `occ_tickets` seed silently degrades to a missing-file WARN and the
-    fan-out searches an empty index.
+    `test_occ_ticket_seed_scripts_are_reincluded` required both
+    `scripts/index_occ_tickets.py` and `scripts/build_occ_tickets_seed.py` to be
+    re-included, because `seed_chroma.sh` invoked the seeder and the image build
+    broke without them (#4988). That chain is gone: the seeder is not a
+    supervisor program, `seed_chroma.sh` does not name either module, and
+    `seed/occ_tickets.jsonl` is no longer tracked. Keeping the assertion would
+    have kept re-including a writer nothing calls.
+
+    So this is now the opposite guard. The two scripts write customer email,
+    display name and `[internal]` staff notes unmasked (DIG-1210), so the
+    production image must not carry them at all. Re-adding either one to the
+    Dockerfile now requires a deliberate decision about masking, not just the
+    matching `.dockerignore` line.
     """
+    copied = set(_all_copied_paths())
     reincluded = _reincluded_paths()
-    for required in ("scripts/index_occ_tickets.py", "scripts/build_occ_tickets_seed.py"):
-        assert required in reincluded, f"`.dockerignore` must re-include `{required}`"
+    for writer in ("scripts/index_occ_tickets.py", "scripts/build_occ_tickets_seed.py"):
+        assert writer not in copied, (
+            f"`{writer}` builds the retired unmasked occ_tickets corpus and must not "
+            "be COPYed into the production image; if it is coming back, reopen "
+            "DIG-1210 and decide the masking position first"
+        )
+        assert writer not in reincluded, (
+            f"`.dockerignore` still re-includes `{writer}`, but the stack Dockerfile "
+            f"no longer COPYs it — drop the `!{writer}` line and update this test's "
+            "docstring, or restore the COPY deliberately"
+        )
