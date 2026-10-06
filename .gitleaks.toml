@@ -162,3 +162,109 @@ commits = [
   # not that none exists anywhere.
   "1a657079c54ecd34ab07a881c87c2b2c19543d23",
 ]
+
+# ---------------------------------------------------------------------------
+# DIG-1723 (2026-10-07, Security) — labeled credentials the default ruleset
+# provably cannot reach.
+#
+# A live X-API-Key for a client MCP endpoint was found sitting in a
+# digithings-books inbox transcript that gitleaks reported as clean. It was not
+# the allowlist. Two independent limits of the default `generic-api-key` rule
+# were measured on gitleaks 8.30.1, using synthetic fixtures only:
+#
+#   1. Length ceiling. `X-API-Key: <n random chars>` hits generic-api-key at
+#      n = 146..150 and misses at n >= 151. The real value was 381 chars, so it
+#      was structurally invisible.
+#   2. Value character class. The rule matches a contiguous [A-Za-z0-9_-+/=]
+#      run. Inserting a single `:` at offset 4, 20, 60 or 119 inside an
+#      otherwise-matching 120-char value made it miss every time; the same value
+#      with `-` in that position still hit. The real value is <36>:<344>.
+#
+# The default ruleset is not broken; it simply has no rule for "a credential
+# label whose value is longer than ~150 chars, or contains a delimiter".
+# These two rules cover exactly that region and nothing else:
+#
+#   labeled-credential-long-value      value of 100+ chars in the value class
+#   labeled-credential-delimited-value value of <20+>:<20+>
+#
+# They are strictly additive to `useDefault`, so no existing detection
+# behaviour changes; they can only add findings. The 100-char floor and the
+# two-sided 20-char delimiter pair are the FP controls: the reference-shaped
+# text that a naive "label then value" rule sweeps up is short (measured 22-35
+# chars) and delimiter-free — `os.environ/FOO_BAR_KEY`, `process.env.X_API_KEY`,
+# a bare `_OPENAI_API_KEY` name — so it matches neither rule.
+#
+# Measured against the two corpora, values masked, counts and lengths only:
+#   this repo (working tree)          0 findings from these two rules
+#   digithings-books, tracked inbox/chat (121 files)  0 findings from these rules
+#   digithings-books, whole repo      only the one live file, in inbox/chat/
+#   synthetic true shapes             4 of 4 caught (two by both rules)
+#   env-reference / variable-name shapes              0 findings
+#
+# A 64-char colon-free labeled value is deliberately left to generic-api-key:
+# it is inside the region the default ruleset already covers.
+#
+# Regression test: tests/scripts/test_gitleaks_labeled_credential_rule.py
+# (pytest -m unit). It pins both rules to the four measured shapes, so a future
+# edit that widens them past the false-positive surface fails the test.
+#
+# Rotation owed by this finding is tracked on DIG-1723, not here. No credential
+# value is recorded in this file, in the test, or in any issue.
+
+[[rules]]
+id = "labeled-credential-long-value"
+description = "A credential label followed by a value of 100+ characters. The default generic-api-key rule stops matching above 150 characters, so this region is unscanned by default. Labeled values this long are not environment-variable references."
+keywords = [
+  "api key",
+  "api-key",
+  "api_key",
+  "apikey",
+  "x-api-key",
+  "authorization",
+  "auth-token",
+  "auth_token",
+  "access-token",
+  "access_token",
+  "bearer",
+  "client-secret",
+  "client_secret",
+  "api-secret",
+  "api_secret",
+  "webhook-secret",
+  "webhook_secret",
+  "private-token",
+  "private_token",
+  "session-key",
+  "session_key",
+]
+regex = '''(?i)\b(?:x[-_ ]?api[-_ ]?key|api[-_ ]?key|apikey|authorization|auth[-_ ]?token|access[-_ ]?token|bearer|client[-_ ]?secret|api[-_ ]?secret|webhook[-_ ]?secret|private[-_ ]?token|session[-_ ]?key)\b[^\n]{0,16}?["']?\s*[:=]\s*(?:["']?\s*)(?:bearer\s+|basic\s+|token\s+)?["']?([A-Za-z0-9_:\-+/=.~]{100,})'''
+secretGroup = 1
+
+[[rules]]
+id = "labeled-credential-delimited-value"
+description = "A credential label followed by a value of the form <20+>:<20+>. The default generic-api-key rule matches only a contiguous [A-Za-z0-9_-+/=] run, so any delimiter inside the value makes it miss. Composed credentials (id:secret, tenant:key) and JWT-shaped values live here."
+keywords = [
+  "api key",
+  "api-key",
+  "api_key",
+  "apikey",
+  "x-api-key",
+  "authorization",
+  "auth-token",
+  "auth_token",
+  "access-token",
+  "access_token",
+  "bearer",
+  "client-secret",
+  "client_secret",
+  "api-secret",
+  "api_secret",
+  "webhook-secret",
+  "webhook_secret",
+  "private-token",
+  "private_token",
+  "session-key",
+  "session_key",
+]
+regex = '''(?i)\b(?:x[-_ ]?api[-_ ]?key|api[-_ ]?key|apikey|authorization|auth[-_ ]?token|access[-_ ]?token|bearer|client[-_ ]?secret|api[-_ ]?secret|webhook[-_ ]?secret|private[-_ ]?token|session[-_ ]?key)\b[^\n]{0,16}?["']?\s*[:=]\s*(?:["']?\s*)(?:bearer\s+|basic\s+|token\s+)?["']?([A-Za-z0-9_\-+/=.~]{20,}:[A-Za-z0-9_\-+/=.~]{20,})'''
+secretGroup = 1
