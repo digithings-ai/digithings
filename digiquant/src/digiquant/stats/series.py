@@ -12,12 +12,19 @@ from typing import Any  # score:allow untyped any — duck-typed series boundary
 
 
 def _finite_or_none(value: Any) -> float | None:
-    """value as a finite float, or None if null, non-numeric or non-finite."""
-    if value is None or isinstance(value, bool):
+    """value as a finite float, or None if null, non-numeric or non-finite.
+
+    ``OverflowError`` belongs with the type and value errors: an ``int`` wider
+    than a float raises it, and such a row is as null as a NaN, so it drops one
+    row instead of blanking the series. ``bool`` is deliberately not
+    special-cased — the chart path casts Boolean to 1.0/0.0, so a boolean row
+    has to count here too or the rate and the chart disagree about N.
+    """
+    if value is None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if math.isfinite(number) else None
 
