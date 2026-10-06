@@ -287,9 +287,13 @@ MACRO_TOOLS: tuple[str, ...] = (
     # stay MCP-only, see below).
     "digifetch_treasury_auctions",
 )
-# ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
-# upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
-# a typed upstream_error. Re-add to MACRO_TOOLS when upstream recovers.
+# ``digifetch_congress_trades`` is in no subset and must stay that way
+# (DIG-1057): Counsel refused it under 5 U.S.C. 13107(c)(1)(B), so it is denied
+# at registration on every surface (see ``digiquant.tool_refusals``). An earlier
+# note here said its upstream OCR dependency answered HTTP 500 and to re-add it
+# once upstream recovered — that was wrong; the upstream is live (probed
+# 2026-10-05, HTTP 200). Do not re-add it to MACRO_TOOLS or any other subset
+# without Counsel's written clearance.
 
 PM_TOOLS: tuple[str, ...] = (
     "digifetch_quote",

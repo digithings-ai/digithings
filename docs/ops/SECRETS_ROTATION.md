@@ -343,6 +343,64 @@ rotating the *core* key as a twelve-x fix is a platform-wide action that breaks 
 of the two you are rotating before you click**, and note that the fallback fires on any build where the twelve-x var
 is missing (preview builds included, where no such secret is set).
 
+## Registering a secret for a Paperclip agent
+
+A credential an **agent** needs at run time is a different object from a repo secret or a Pages env var. It lives in
+Paperclip's own store and takes **two** records, not one. Checked against the running API on 2026-10-05; the
+"verified" and "schema" labels below are load-bearing, because the obvious endpoint does not exist.
+
+### What does not exist
+
+- `GET`/`POST /api/agents/{id}/secrets` → **`404 {"error":"API route not found"}`**. There is no per-agent secrets
+  route to "register for" another agent.
+- The per-agent route is **`/api/agents/me/secrets`**, which is **GET-only** and answers for the **calling** agent
+  alone. For Security it returns `{"secrets": []}`.
+- `POST /api/agents/me/secrets/{key}/value` has **no request-body schema** in `/api/openapi.json`. Treat it as
+  internal plumbing; do not build a runbook on it.
+- `GET /api/agents/{id}/keys` → **`{"error":"Board access required"}`**. Minting an agent key is a board action and
+  stays a red line for agents.
+
+### What does exist — two records
+
+1. **The secret**, at company scope:
+   `POST /api/companies/{companyId}/secrets` with `{name, key, provider, value, managedMode, description, ...}`.
+   `provider` ∈ `local_encrypted | aws_secrets_manager | gcp_secret_manager | vault`;
+   `managedMode` ∈ `paperclip_managed | external_reference`; `key` must match `^[a-zA-Z0-9_.-]+$`, so
+   `GROK_ROUTINE_WEBHOOK_URL` is a legal key. Only `name` is required.
+2. **The binding**, which puts it into one agent's environment:
+   `POST /api/agents/me/secret-proposals` with `kind: "binding"`, `targetAgentId`, `configPath` (the env var name),
+   `justification`, and optionally `secretId`. A board approval at
+   `POST /api/secret-proposals/{id}/approve` is what commits it.
+
+The sibling proposal kind is `kind: "secret"` — `{name, value, justification}` — and **that one requires the value**,
+so it is only usable by whoever already holds the credential. *Verified:* the 404s, the GET bodies, the 28 routines
+and the `Board access required` above. *Schema only, not executed:* the two POST shapes and their field enums.
+
+### The rule this gives us
+
+**Only the value has to come from outside.** `managedMode: "external_reference"` with `value: null` and an
+`externalRef` is the shape for registering the *name and location* of a credential you are not permitted to hold.
+Security can own the store's metadata while the value never enters the model, a comment, a document or a commit.
+Verification stays a **names-only** read — never a value fetch.
+
+### The gap this exposed: `GROK_ROUTINE_WEBHOOK_*`
+
+`skills/grok-mailbox/SKILL.md` tells the EA that urgent jobs are also pushed by POST to a Grok Bot routine webhook,
+using `GROK_ROUTINE_WEBHOOK_URL` and `GROK_ROUTINE_WEBHOOK_KEY`. Those two names appear **exactly once in the whole
+company** — that one sentence. Verified 2026-10-05:
+
+- **No consumer.** Nothing reads either name. `git grep GROK_ROUTINE_WEBHOOK github/develop` → no match; the kit has
+  no matching file.
+- **No spec.** The sentence gives no endpoint path and no payload, so there is nothing to implement against.
+- **No holder.** The EA agent record contains **zero** occurrences of `webhook`, and its `/api/agents/me/secrets`
+  is empty.
+- **No Paperclip trigger.** All 28 company routines are `kind: "schedule"`; there is no webhook-kind trigger, and
+  `/api/routine-triggers/{id}/rotate-secret` is not the credential the skill means.
+
+So the urgent path is **documented but not implemented and not credentialed**. Registering the two names would turn
+that issue's checklist green with a dead feature behind it. Specify the POST or drop the claim — do not mint
+credentials for an endpoint nobody has written down. (DIG-570.)
+
 ## Rotation log
 
 | Date (UTC) | Secret | Actor | Ticket | Verification evidence |

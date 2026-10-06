@@ -105,7 +105,11 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 - MCP-first: every capability is a discoverable tool
 - Every change traces to a GitHub Issue: `task/<N>-slug` branch or `Fixes #N` in the PR body
 - Never touch live-trading paths without explicit human approval
-- `projects/` is confidential — never push to public remotes
+- `projects/` is confidential — never push to public remotes. Reading it is **enforced, not merely
+  forbidden**: the opencode plugin `.opencode/plugins/projects-path-guard.js` denies any read under
+  `projects/` outside `projects/README.md` and the engagement bound to this run. A denial is not a
+  bug to work around — read the refusal, and if the engagement is genuinely yours, bind it with
+  `DIGI_ENGAGEMENT`. Details in [SECURITY.md](SECURITY.md#client-data-under-projects).
 - **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). Missing cursor = missing kit part.
 - **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
 
