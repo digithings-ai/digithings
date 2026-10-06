@@ -450,6 +450,12 @@ jobs:
         # uv run so the script's own `python3` calls resolve to the locked venv.
         run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
+      - name: Credential-file guard (DIG-1653)
+        # The canary creates a fake OAuth config + PEM in a throwaway HOME and
+        # asserts the value never reaches captured run output. A real credential
+        # is never used — the value is generated per run.
+        run: uv run --frozen --no-sync bash tests/scripts/test_credential_file_guard.sh
+
       - name: Install ripgrep (pandas boundary gate)
         run: |
           # Avoid apt-get: ubuntu runners' Chrome repo Hash Sum mismatches

@@ -43,7 +43,10 @@ Mac Compose remains **dev-only** — see
 
 - Docker running locally (for `wrangler deploy` image build)
 - Cloudflare account with **Workers Paid**
-- `npx wrangler login` (digithings CF account — same zone as digithings.ai)
+- Cloudflare auth: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` exported (digithings CF
+  account — same zone as digithings.ai), and wrangler invoked via
+  `scripts/wrangler-auth.sh`. `wrangler login` is a human-only path, never an agent's —
+  see [`docs/ops/SECRETS_ROTATION.md`](../../docs/ops/SECRETS_ROTATION.md).
 - Profile A stack deployed (or reachable digigraph/digikey URLs for bring-up)
 
 ## Deploy

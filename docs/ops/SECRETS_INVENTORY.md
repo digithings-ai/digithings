@@ -279,6 +279,48 @@ the Supabase name. The takeaway for the next writer: **verify a line citation by
 reading the line on `github/develop`, not the working tree, and check the other
 repo before calling a shared name dead.**
 
+## Cloudflare agent auth — exactly one path (DIG-1653)
+
+**An agent has exactly one supported way to authenticate to Cloudflare: `CLOUDFLARE_API_TOKEN`
+(plus `CLOUDFLARE_ACCOUNT_ID`, which is an account id, not a credential). There is no second
+path, and no interactive fallback.**
+
+That is a deliberate inversion of the previous advice. Until DIG-1653 the runbooks
+(`docs/ops/SECRETS_ROTATION.md`, `apps/digithings-stack-cloudflare/wrangler.toml`) told
+operators to `env -u CLOUDFLARE_API_TOKEN` and fall back to a `wrangler login` OAuth session —
+pointing them at exactly the grant that leaked a refresh token into a Paperclip run transcript
+(DIG-1639). The docs pointed people at the worst available path.
+
+| Path | Agent-usable | Why |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` via `scripts/wrangler-auth.sh` | **yes — the only one** | Scoped, rotatable on a schedule, revocable from the dashboard by an agent. |
+| `wrangler login` OAuth session (`~/Library/Preferences/.wrangler/config/default.toml`) | **no** | A long-lived grant holding a `refresh_token`; that value is what leaked. Revocation is not scriptable and the file lives outside every git scanner's reach. |
+| `wrangler` invoked bare from a `Bash` tool call | **no — blocked** | The agent harness sets `XDG_CONFIG_HOME` to a temp dir, so wrangler reads an empty config and answers "Not logged in" while the real credential file is untouched. A silent no-op that reads as success cost DIG-1639 a rotation that never happened. |
+
+Enforcement, not convention:
+
+- `scripts/wrangler-auth.sh` is the only sanctioned entry point. It unsets `XDG_CONFIG_HOME` and
+  `CLOUDFLARE_API_TOKEN` for wrangler's own process and **refuses `login` / `logout` / `oauth*`**.
+- `scripts/claude-hooks/credential-file-guard.sh` blocks a bare `wrangler` invocation and any
+  command that would print a value from a credential file into a run transcript. Registered on
+  `Read`, `Grep` and `Bash` in `.claude/settings.json`; proved by
+  `tests/scripts/test_credential_file_guard.sh`, which runs a generated canary and asserts the
+  value never reaches captured output.
+- `scripts/check_transcript_secrets.py` audits an existing transcript using the value rules in
+  `digitrace.redaction.CREDENTIAL_RULES` (PEM blocks, JWTs, bearer tokens, secret assignments).
+  It reports the rule *name* and a byte offset, never the matched text.
+
+**Chris may still run `wrangler login` in his own terminal** when he wants an interactive session
+for dashboard-adjacent work. That is scoped to his session and is not an agent auth path; if an
+agent needs an OAuth capability, mint a scoped API token instead.
+
+**Known limit, stated so it is not mistaken for coverage.** The guard covers reads routed through
+the hook. It cannot cover a credential that reaches a transcript through a channel the hook does
+not see — a CI log, a crash report, or output from a program that prints a value it fetched
+itself. `digitrace.redaction`'s credential rules were added because the PII ruleset ran over the
+DIG-1639 output and matched nothing: an opaque OAuth token has no prefix to anchor on the way
+`sk-` does. Detection there is a backstop, not a substitute for not asking for the value.
+
 ## Risk register
 
 **R1 — `DIGIKEY_PRIVATE_KEY_PEM` has no rollover path.** Severity: critical. Evidence: `digikey/src/digikey/crypto_keys.py:61`, `digikey/src/digikey/jwt_issue.py:88`, [`digikey/ARCHITECTURE.md`](../../digikey/ARCHITECTURE.md):305-335. Why: static `kid=digikey-1`, no JWKS overlap or grace period; rotating invalidates every outstanding JWT until each consumer refetches (300 s cache, `DIGIKEY_JWKS_CACHE_SEC`). Action: run `docs/ops/SECRETS_ROTATION.md`; implement multi-key JWKS overlap per `docs/adr/0029-secrets-management.md`.

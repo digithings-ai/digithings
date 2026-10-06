@@ -543,14 +543,16 @@ hooks_dst="scripts/claude-hooks"
 
 for f in _lib.sh project-root-guard.sh protected-path-guard.sh branch-warn.sh \
           remote-guard.sh network-host-guard.sh protected-path-bash-guard.sh \
-          component-router-preflight.sh auto-format.sh; do
+          component-router-preflight.sh auto-format.sh \
+          credential-file-guard.sh credential_paths.py; do
   install_file "$hooks_src/$f" "$hooks_dst/$f"
 done
 
 # Make hook scripts executable.
 for f in project-root-guard.sh protected-path-guard.sh branch-warn.sh \
           remote-guard.sh network-host-guard.sh protected-path-bash-guard.sh \
-          component-router-preflight.sh auto-format.sh; do
+          component-router-preflight.sh auto-format.sh \
+          credential-file-guard.sh; do
   make_exec "$hooks_dst/$f"
 done
 

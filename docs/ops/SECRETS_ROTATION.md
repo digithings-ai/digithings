@@ -7,8 +7,23 @@ risk ids R1–R15). No value is ever printed here; every literal below is masked
 **Preconditions for every procedure.**
 
 - Work from the Worker directory: `cd apps/<worker>` — `digichat-cloudflare`, `digithings-stack-cloudflare`, `digithings-cron` (each has its own `wrangler.toml`).
-- Pin wrangler: `npx --yes wrangler@4.133.0` (`apps/digichat-cloudflare/package.json:16`, `apps/digithings-stack-cloudflare/package.json:19`).
-- Use `env -u CLOUDFLARE_API_TOKEN` for wrangler so a shell token cannot shadow `wrangler login` — auth error 10000 otherwise (`apps/digithings-stack-cloudflare/wrangler.toml:167-180`).
+- Pin wrangler: `4.133.0` (`apps/digichat-cloudflare/package.json:16`, `apps/digithings-stack-cloudflare/package.json:19`).
+  `scripts/wrangler-auth.sh` pins it and overrides with `DIGI_WRANGLER_VERSION`.
+- **Run wrangler through `scripts/wrangler-auth.sh`, not directly.** It unsets `XDG_CONFIG_HOME`
+  and `CLOUDFLARE_API_TOKEN` before invoking wrangler, and refuses the OAuth subcommands. Both
+  unsets are load-bearing, not hygiene:
+  - `XDG_CONFIG_HOME` — the agent harness points it at a temp dir, so wrangler reads an empty
+    config, answers "Not logged in", and leaves `~/Library/Preferences/.wrangler/config/default.toml`
+    untouched. That is a **silent no-op that reads as success**; it cost DIG-1639 a rotation that
+    never happened.
+  - `CLOUDFLARE_API_TOKEN` — it is both a Worker secret and wrangler's own auth variable. Exported,
+    wrangler authenticates as that token (Vectorize + D1, not Workers) and every `secret put` /
+    `deploy` fails with auth error 10000. The secret **value** still arrives on stdin, a separate
+    channel, so unsetting costs nothing.
+
+  `credential-file-guard.sh` blocks a bare `wrangler` invocation from a `Bash` tool call, so the
+  wrapper is enforced rather than remembered. Keep `CLOUDFLARE_ACCOUNT_ID` exported — it is an
+  account id, not a credential, and wrangler needs it to pick the account.
 - Worker secrets are `secret_text` and **write-only** (`wrangler secret list` returns names + type, never values). "Verify" below always means **behaviour**, never readback.
 - Bump the container id whenever a rotated value must reach a running Container — see the next section. `wrangler deploy` alone does **not**.
 - Log every rotation in [`## Rotation log`](#rotation-log). An unlogged rotation is an unverified rotation.
@@ -66,10 +81,10 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 **Pre-flight** — read the tenant JSON shape at `apps/digichat-cloudflare/README.md:81-142`; locate the single `mcp.servers` entry for the OCC Zammad route.
 **Steps**
 1. Generate: `openssl rand -hex 32`.
-2. On the stack Worker: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put MCP_EDGE_KEY`. The Worker reads it per request, so the edge rotates instantly.
-3. Replace the literal `token` in `DIGICHAT_EMBED_TENANTS`, then `printf '%s' "$JSON" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_EMBED_TENANTS` in `apps/digichat-cloudflare`.
+2. On the stack Worker: `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put MCP_EDGE_KEY`. The Worker reads it per request, so the edge rotates instantly.
+3. Replace the literal `token` in `DIGICHAT_EMBED_TENANTS`, then `printf '%s' "$JSON" | scripts/wrangler-auth.sh secret put DIGICHAT_EMBED_TENANTS` in `apps/digichat-cloudflare`.
 4. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`) so the container reboots with the new tenant JSON.
-5. `npx --yes wrangler@4.133.0 deploy` for the digichat Worker.
+5. `scripts/wrangler-auth.sh deploy` for the digichat Worker.
 **Verify** — new key not 401, old/absent key 401:
 `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → any status except `401`; drop the header → `401`.
 **Rollback** — re-put the previous `MCP_EDGE_KEY` **and** the previous tenant JSON together.
@@ -86,7 +101,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Pre-flight** — both Workers must be deployable in the same window; the values **must agree**.
 **Steps**
 1. Generate the new value once.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_BFF_TOKEN` in `apps/digithings-stack-cloudflare`.
+2. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put DIGIKEY_BFF_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Same command in `apps/digichat-cloudflare`.
 4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 5. Deploy both Workers.
@@ -98,17 +113,16 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 
 **Blast radius** — Vectorize + D1 access (digivault, digisearch, the remote-index cutover); deploy workflows that still read the repo secret (`deploy-digithings-cron.yml`, `deploy-digiquant-runner.yml`, `sync-digiquant-runner-*.yml`); local `scripts/d1_sync.py:442`, `scripts/vectorize_sync.py:365` (R7). `docs-onboard-digithings.yml` and `sync-cheaperinference-cf-secrets.yml` are not in `.github/workflows`.
 **Copies** — stack Worker: canonical `CLOUDFLARE_API_TOKEN` (`apps/digithings-stack-cloudflare/wrangler.toml:159`) and legacy `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` (`:190-193`), forwarded at `src/index.ts:89-93`; GitHub repo secret; local `.env`.
-**Pre-flight** — the wrangler self-auth trap: `CLOUDFLARE_API_TOKEN` is also wrangler's own auth variable (`wrangler.toml:167-180`). Never `set -a; . .env` before wrangler; use `env -u CLOUDFLARE_API_TOKEN` and keep `CLOUDFLARE_ACCOUNT_ID` exported.
+**Pre-flight** — the wrangler self-auth trap: `CLOUDFLARE_API_TOKEN` is also wrangler's own auth variable (`wrangler.toml`). Never `set -a; . .env` before wrangler; `scripts/wrangler-auth.sh` unsets it for wrangler's own process and keeps `CLOUDFLARE_ACCOUNT_ID` exported. The secret value still arrives on **stdin**, a channel separate from the environment, so the unset does not weaken step 3.
 **Steps**
 1. Create the new token in the Cloudflare dashboard with the same scopes (Workers Scripts, Vectorize, D1 as used).
-2. `env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 whoami` — confirm you are authenticated as the login, not the token.
-3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put CLOUDFLARE_API_TOKEN` in `apps/digithings-stack-cloudflare`. Leave the legacy names in place — they are the fallback.
+2. `scripts/wrangler-auth.sh whoami` — confirm wrangler is not shadowed by the shell token. **An agent authenticates as the token and nothing else**: there is no OAuth session behind it, so a "not logged in" answer means the token is wrong, not that wrangler is merely idle. That silence is exactly the trap `XDG_CONFIG_HOME` sets — see the top of this file.
+3. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put CLOUDFLARE_API_TOKEN` in `apps/digithings-stack-cloudflare`. Leave the legacy names in place — they are the fallback.
 4. `gh secret set CLOUDFLARE_API_TOKEN` (stdin / `--body-file -`).
 5. Update the gitignored local `.env`.
 6. Bump `SHARED_STACK_CONTAINER_ID`, then deploy the stack.
 7. Only after Verify passes, delete `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` (`wrangler secret delete` or dashboard).
-**Verify** — three checks, because `env -u` makes wrangler use the login, not the secret:
-`CLOUDFLARE_API_TOKEN="$NEW" npx --yes wrangler@4.133.0 vectorize info digithings_docs` → non-empty `vectorCount` (the new token itself carries Vectorize scope); `env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 whoami` → the login identity (wrangler is not shadowed); then a digisearch query on `search.digithings.ai` with a digikey JWT scoped `digisearch:query` returns hits from the remote index, i.e. the container resolved the credentials on boot (`docs/ops/vectorize-cutover.md:132-207`).
+**Verify** — three checks. The first proves the **new token's own scope** (the token is exported here on purpose, so wrangler authenticates as it): `CLOUDFLARE_API_TOKEN="$NEW" npx --yes wrangler@4.133.0 vectorize info digithings_docs` → non-empty `vectorCount`. The second proves wrangler is **not** shadowed in the ordinary path: `scripts/wrangler-auth.sh whoami`. The third proves the running container actually resolved the rotated credentials: a digisearch query on `search.digithings.ai` with a digikey JWT scoped `digisearch:query` returns hits from the remote index (`docs/ops/vectorize-cutover.md:132-207`).
 **Rollback** — re-put the previous token, bump the id, redeploy. The legacy names still cover the fallback path.
 **Gotchas** — one logical token, three names; legacy presence is inferred, not diffed (inventory Gaps). `CLOUDFLARE_ACCOUNT_ID` / `D1_ACCOUNT_ID` / `VECTORIZE_ACCOUNT_ID` are ids, not credentials.
 
@@ -120,7 +134,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Mint the new PAT in GitHub (dashboard action), same repos + Actions write.
 2. `gh secret set GH_DISPATCH_TOKEN`.
-3. Either re-run `deploy-digithings-cron.yml` (workflow_dispatch), or put directly: `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put GH_DISPATCH_TOKEN` in `apps/digithings-cron`.
+3. Either re-run `deploy-digithings-cron.yml` (workflow_dispatch), or put directly: `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put GH_DISPATCH_TOKEN` in `apps/digithings-cron`.
 4. Deploy. No Container here — no id bump.
 **Verify** — trigger one job and confirm a run appears:
 `curl -s -X POST https://digithings-cron.<subdomain>.workers.dev/kick -H "Authorization: Bearer $CRON_KICK_SECRET" -H 'Content-Type: application/json' -d '{"cron":"17 9 * * MON"}'` → `{"ok":true,...}` with a `house-run-09` run id; then `GET /runs/:id`. `<subdomain>` is the `*.workers.dev` URL printed by the last deploy (`workers_dev = true`, `wrangler.toml:12`); `/kick` is 404 without `CRON_KICK_SECRET` (`src/index.ts`). Daily `17 9 * * *` is no longer a mapped cron (weekly Mon lock 2026-10-01).
@@ -134,7 +148,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Pre-flight** — if compromise is suspected, also revoke keys the old token could mint.
 **Steps**
 1. Generate.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_ADMIN_TOKEN` in `apps/digithings-stack-cloudflare`.
+2. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put DIGIKEY_ADMIN_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37` — its comment names this exact token as the reason).
 4. Deploy.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/admin/keys -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{}'` → anything except `503` / `401` (a 4xx validation error still proves the bearer was accepted); with the old token → `401`.
@@ -148,7 +162,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Pre-flight — what does not work today.** There is no JWKS overlap: the JWKS returns exactly one key (`digikey/src/digikey/jwt_issue.py:88-99`), `kid` is a static string, and no `DIGIKEY_PREV_KEY_PEM` exists (`digikey/ARCHITECTURE.md:305-335,572-610`). Rotating invalidates all outstanding tokens once consumers' caches expire — up to `DIGIKEY_JWKS_CACHE_SEC` = 300 s (`jwt_verify.py:45`). **Least-bad procedure:** rotate in a maintenance window and accept a hard ≤300 s 401 window, then have clients re-authenticate. Flag: keep `DIGIKEY_ALLOW_EPHEMERAL_KEY="0"` in prod — `"1"` generates a non-persistent key that rotates JWKS on every restart and breaks cross-instance verification (R2; `crypto_keys.py:65`; `apps/digithings-stack-cloudflare/wrangler.toml:203`).
 **Steps**
 1. Generate a new RSA-2048 PKCS8 PEM (unencrypted) offline and store it in the secrets manager.
-2. `printf '%s' "$PEM" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_PRIVATE_KEY_PEM` in `apps/digithings-stack-cloudflare`.
+2. `printf '%s' "$PEM" | scripts/wrangler-auth.sh secret put DIGIKEY_PRIVATE_KEY_PEM` in `apps/digithings-stack-cloudflare`.
 3. Bump `SHARED_STACK_CONTAINER_ID`.
 4. Deploy, and announce the 401 window.
 **Verify** — fingerprint the served public key (never the private one):
@@ -163,7 +177,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Pre-flight** — confirm the new role/password on the same Postgres/Supabase instance; keys minted into a *different* store do not exist there.
 **Steps**
 1. Change the role password in Postgres (dashboard or `ALTER ROLE … PASSWORD`).
-2. `printf '%s' "$NEW_DSN" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_DATABASE_URL` in `apps/digithings-stack-cloudflare`.
+2. `printf '%s' "$NEW_DSN" | scripts/wrangler-auth.sh secret put DIGIKEY_DATABASE_URL` in `apps/digithings-stack-cloudflare`.
 3. Bump `SHARED_STACK_CONTAINER_ID`.
 4. Deploy.
 5. If the store itself changed, re-issue the digiquant service key per `docs/ops/digiquant-digikey-service-key.md:77-103`.
@@ -203,7 +217,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Copies** — stack Worker `LITELLM_PROXY_API_KEY` (`apps/digithings-stack-cloudflare/wrangler.toml:149`, forwarded `src/index.ts:108`); `LITELLM_MASTER_KEY` live but undocumented (forwarded `src/index.ts:109` — R9); `docker-compose.yml:36,127`; `.env.example:43` (commented).
 **Steps**
 1. Generate both new values.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put LITELLM_MASTER_KEY` and the same for `LITELLM_PROXY_API_KEY` in `apps/digithings-stack-cloudflare`.
+2. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put LITELLM_MASTER_KEY` and the same for `LITELLM_PROXY_API_KEY` in `apps/digithings-stack-cloudflare`.
 3. Rotate `DIGIKEY_LITELLM_PROXY_KEY` in lockstep **only** if it is not derived from the master key.
 4. Bump `SHARED_STACK_CONTAINER_ID`; deploy.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"` → `200` (loopback in the container; reproduce locally with `PATH="$PWD/.venv/bin:$PATH" make stack-local` then the same curl). Hosted verification is indirect: a chat completion through `graph.digithings.ai` with a digikey JWT.
@@ -217,7 +231,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Rotate upstream in the provider console.
 2. `gh secret set OPENROUTER_API_KEY` (and `CHEAPERINFERENCE_API_KEY`, `GROQ_API_KEY`).
-3. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). There is no CI workflow that puts these Worker secrets.
+3. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put OPENROUTER_API_KEY` in `apps/digithings-stack-cloudflare` (repeat per key). There is no CI workflow that puts these Worker secrets.
 4. Bump `SHARED_STACK_CONTAINER_ID`; deploy the stack.
 **Verify** — a one-token completion through LiteLLM: `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4000/v1/chat/completions -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' -d '{"model":"house","messages":[{"role":"user","content":"ping"}],"max_tokens":1}'` → `200`.
 **Rollback** — re-put the previous key and bump the id.
@@ -229,7 +243,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Copies** — stack Worker (`apps/digithings-stack-cloudflare/wrangler.toml:150`, forwarded `src/index.ts:111`); `docker-compose.yml:457-458` (via `.env`); the tenant entry references the env name, not the value (`apps/digichat/config/examples/occ-embed.yaml`).
 **Steps**
 1. Regenerate the token in Zammad.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put ZAMMAD_API_TOKEN` in `apps/digithings-stack-cloudflare`.
+2. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put ZAMMAD_API_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Bump `SHARED_STACK_CONTAINER_ID`; deploy.
 **Verify** — the edge gate first: `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $MCP_EDGE_KEY" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → not `401`; then confirm a real Zammad tool call succeeds from the OCC embed (edge key and Zammad token are independent gates).
 **Rollback** — re-put the previous token and bump the id.
@@ -241,7 +255,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Copies** — digichat Worker (`apps/digichat-cloudflare/wrangler.toml:50`, forwarded `src/index.ts:47`); `docker-compose.yml:550`; root `.env.example:240` (plaintext-literal, placeholder-shaped — not verified); `infra/digichat-release/.env.profile-a.example:17`.
 **Steps**
 1. Generate the new value once.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put AUTH_SECRET` in `apps/digichat-cloudflare`.
+2. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put AUTH_SECRET` in `apps/digichat-cloudflare`.
 3. Bump `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 4. Deploy the digichat Worker.
 5. Update the compose / profile env files for the non-Cloudflare instances.
@@ -255,7 +269,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Copies** — digichat Worker (`apps/digichat-cloudflare/wrangler.toml:55`, forwarded `src/index.ts:52`); `apps/digichat/.env.example:111` (commented). The verifier is digichat itself, and must hold the same value.
 **Steps**
 1. Generate.
-2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGICHAT_PLAN_PROOF_SECRET` in `apps/digichat-cloudflare`.
+2. `printf '%s' "$NEW" | scripts/wrangler-auth.sh secret put DIGICHAT_PLAN_PROOF_SECRET` in `apps/digichat-cloudflare`.
 3. Bump `SHARED_DIGICHAT_CONTAINER_ID`; deploy.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://digithings.ai/api/plan-proof -H 'X-Embed-Host: digiquant.io' -H 'X-Embed-Token: ***'` → `401`/`403` without a valid Supabase access token; a real dashboard session mints `{proof,…}` and `/api/chat` accepts `X-Embed-Plan-Proof`. A proof minted before rotation must now fail verification.
 **Rollback** — re-put the previous secret and bump the id.
@@ -281,6 +295,35 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 | `NEXT_PUBLIC_*_SUPABASE_ANON_KEY` (twelve-x publishable key) | 12 months — but rotation only takes effect on the next production build | bundle-scraped key notice; Supabase deprecation of `anon` by end of 2026 | digiquant / dashboard owner. **Never rotate the core `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a twelve-x fix** — the fallback in `apps/dashboard/lib/twelve-x/supabase.ts:23-26` makes that a platform-wide action |
 | `DIGIQUANT_VAULT_MASTER_KEY` | **do not rotate** until a re-seal job exists (§8) | only on confirmed compromise | digiquant / security owner |
 | Any secret | immediately | incident, public exposure, offboarding | the owning role above |
+
+## An agent never reads a credential value (DIG-1653)
+
+Every procedure above hands a value to a shell through `printf '%s' "$NEW" | … secret put`, so
+the value travels on **stdin** and never appears in a command line, an environment dump, or a
+transcript. Keep it that way. Concretely, an agent must not:
+
+- **read a credential file.** `scripts/claude-hooks/credential-file-guard.sh` (on `Read`, `Grep`
+  and `Bash`) blocks it — `cat ~/Library/Preferences/.wrangler/config/default.toml`,
+  `grep -rn token ~/.aws/credentials`, `python3 -c "print(open('.dev.vars').read())"` and friends
+  all fail closed with the reason on stderr. Non-disclosing commands (`mkdir`, `rm`, `ls`, `git`,
+  `gh`) still work on those paths, so creating or cleaning up a credential directory is fine.
+- **echo a value.** `security find-generic-password … -w`, `bws secret get`, and `bw get password`
+  print the secret into the transcript and are blocked for the same reason.
+- **run wrangler bare.** Use `scripts/wrangler-auth.sh`; the guard blocks the direct form.
+
+When a procedure below says "read it back", it means behaviour, never a value — Worker secrets are
+write-only, so no readback path exists even for the operator.
+
+To audit a transcript that already exists:
+
+```bash
+scripts/check_transcript_secrets.py path/to/run.log   # exits 1 if a live credential is found
+```
+
+It uses the same value rules as the trace redactor (`digitrace.redaction.CREDENTIAL_RULES`) and
+reports the rule name and a byte offset, never the matched text. **A hit means treat the
+transcript as compromised: revoke the credential first, then clean the history.** Rotation is the
+only fix — deleting the line does not un-ring the bell.
 
 ## Cannot verify from here
 

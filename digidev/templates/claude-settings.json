@@ -19,11 +19,18 @@
         ]
       },
       {
+        "matcher": "Read|Grep|NotebookRead",
+        "hooks": [
+          { "type": "command", "command": "scripts/claude-hooks/credential-file-guard.sh" }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "scripts/claude-hooks/remote-guard.sh" },
           { "type": "command", "command": "scripts/claude-hooks/network-host-guard.sh" },
-          { "type": "command", "command": "scripts/claude-hooks/protected-path-bash-guard.sh" }
+          { "type": "command", "command": "scripts/claude-hooks/protected-path-bash-guard.sh" },
+          { "type": "command", "command": "scripts/claude-hooks/credential-file-guard.sh" }
         ]
       }
     ],

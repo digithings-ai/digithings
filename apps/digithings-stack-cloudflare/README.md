@@ -70,7 +70,11 @@ R2 binding (`digithings-archive`); browser CORS is allowlisted via the
 
 - Docker running (for `wrangler deploy` image build)
 - Cloudflare account with **Workers Paid** (same zone as digithings.ai)
-- `npx wrangler login`
+- Cloudflare auth: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` exported, then run wrangler
+  through `scripts/wrangler-auth.sh` (which unsets `XDG_CONFIG_HOME` and `CLOUDFLARE_API_TOKEN`
+  for wrangler's own process). **Do not `wrangler login` for this path** — the OAuth grant is
+  long-lived and is what leaked in DIG-1639. See `wrangler.toml` and
+  [`docs/ops/SECRETS_ROTATION.md`](../../docs/ops/SECRETS_ROTATION.md).
 - Provider keys for LiteLLM (e.g. `GROQ_API_KEY`)
 - Stable `DIGIKEY_PRIVATE_KEY_PEM` (do **not** use ephemeral keys in prod)
 - A durable Postgres database for digikey's API keys + JWT revocation state

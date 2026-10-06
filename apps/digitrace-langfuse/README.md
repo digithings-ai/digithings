@@ -32,7 +32,10 @@ and keep `NEXTAUTH_URL` in lockstep.
 - House Postgres: create dedicated database (e.g. `langfuse`) — see runbook
 - R2 bucket `digitrace-langfuse-events` + S3 API token (human)
 - Managed ClickHouse (~2 CPU / 8 GiB **minimum**) + Redis (human)
-- `npx wrangler login` on the digithings Cloudflare account
+- Cloudflare auth for agents: `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` exported, and
+  wrangler invoked via `scripts/wrangler-auth.sh`. A human may run `npx wrangler login` in
+  their own terminal instead, but that OAuth grant is long-lived and must never be an agent's
+  auth path (DIG-1639).
 
 ## Deploy (after human secrets)
 
