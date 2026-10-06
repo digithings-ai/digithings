@@ -65,6 +65,15 @@ Consequences:
 
 ## Rollout — Act B1 (Chris-only: this touches a production Worker secret and deploys)
 
+> **One command, if you prefer:** `bash scripts/occ_invite_key_rollout.sh` runs steps 2-5
+> below in order and prints the verification at the end. It prompts for the current registry
+> value and the new key with terminal echo off, refuses to put anything unless the edit changes
+> *exactly one field* (`occ.digithings.ai.token`), computes the next container id from the file
+> instead of hard-coding one, makes the bump and the deploy inseparable, and prints the
+> fingerprint plus the rotation-log line. It does **not** mint the key and does **not** push the
+> container-id commit. Read it before running it: `scripts/occ_invite_key_rollout.sh`.
+> The steps below remain the reference for what it does and for the rollback.
+
 The container boot-env trap applies: `DIGICHAT_EMBED_TENANTS` reaches the digichat Container
 process env (`apps/digichat-cloudflare/src/index.ts:32-56`), but a warm instance keeps its boot
 env until it is recycled. `secret put` **plus** `deploy` is **not** enough on its own — the
