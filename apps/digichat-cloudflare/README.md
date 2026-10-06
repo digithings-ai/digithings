@@ -104,7 +104,7 @@ Domains & Routes) for `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/ap
     "token": "unused-for-first-party",
     "backend": {
       "type": "digigraph",
-      "digisearchIndex": "occ_help,occ_tickets",
+      "digisearchIndex": "occ_help",
       "vaultPathPrefix": "clients/online-compliance-center"
     }
   }
