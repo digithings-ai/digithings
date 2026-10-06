@@ -173,7 +173,16 @@ Both ACAs declare exactly two secrets, `auth-secret` and `embed-tenants`, and **
 
 Consequence: **never pass `--secrets` to a promote.** Re-declaring the secret list requires the original values, which the read paths above do not give you. A promote that re-declares them with empty or placeholder values destroys working auth and embed configuration, and the app boots into a login nobody can explain. The image update does not need them — `az containerapp update --image` patches the template and leaves the rest alone.
 
-If the secret list is ever genuinely lost, it must be re-supplied by whoever holds the values out of band. That is a credential-ownership question, not a deploy question — tracked in the Security child issue.
+If the secret list is ever genuinely lost, it is **not** unrecoverable: `az containerapp secret list --show-values` reads both values back, so rotation never depends on someone remembering the original out of band. That is a credential-ownership question, not a deploy question — tracked in the Security child issue DIG-1344.
+
+**There is now a check for it** (DIG-1344), and it belongs at the top of every promote. It compares a fingerprint of each live value against the recorded inventory, so a secret that changed outside the inventory fails loudly instead of being discovered during an incident:
+
+```bash
+python3 scripts/digichat_aca_secret_detector.py          # exit 0 clean, 1 = a finding
+python3 scripts/digichat_aca_secret_detector.py --offline # lock + expiry only, no Azure call
+```
+
+Exit 1 means the digichat secret inventory is not trustworthy — stop and read [`credential-ownership.md`](credential-ownership.md) before promoting. It prints names, lengths and digests only; no value is ever printed.
 
 ### Step 0 — preflight (read-only)
 
