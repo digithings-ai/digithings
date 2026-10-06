@@ -1,7 +1,6 @@
 """Macro-liquidity regime gauge (#1085).
 
-Expands the M2-only vote in ``m2_signals.M2SignalComputer`` into a pluggable
-composite of macro series (M2 + dollar + labor + manufacturing activity). Each
+Pluggable composite of macro series (M2 + labor by default). Each
 enabled series becomes a causal rolling z-score (liquidity-positive = +z), then:
 
 1. **Continuous blend** — weight-normalized ``composite_z`` ∈ [-3, 3] maps to
@@ -14,7 +13,7 @@ enabled series becomes a causal rolling z-score (liquidity-positive = +z), then:
    score thresholds; ``risk_on`` is true only in expansion (gate open).
 
 Series are expected as ``{name: DataFrame[date, value]}`` already sourced from
-the macro pipeline (``macro_series_observations`` / FRED via
+the macro pipeline (sealed R2 ``fred__*`` generations via
 ``digiquant prices fetch-macro``). This module never fetches and never holds
 secrets. Default YoY specs need roughly ``roc_days + min_samples`` calendar
 days (~395) before ``regime_score`` is non-null.
@@ -61,7 +60,7 @@ class MacroSeriesSpec(BaseModel):
     name: str = Field(min_length=1)
     series_id: str = Field(
         min_length=1,
-        description="FRED (or Yahoo FX) series id in macro_series_observations.",
+        description="Macro series id in the sealed R2 fred__* generations.",
     )
     weight: float = Field(default=1.0, gt=0.0)
     sign: Literal[-1, 1] = 1
@@ -78,13 +77,12 @@ class MacroSeriesSpec(BaseModel):
         return token
 
 
-# Published default blend: M2 + ≥2 new macros (DXY, UNRATE) + manufacturing
-# activity proxy (MANEMP YoY — FRED does not carry live ISM PMI).
+# Published default blend: M2 + unemployment (2026-09-29 gloomberb panel drop:
+# DTWEXBGS and MANEMP left the refreshed panel, so the dxy/pmi default votes
+# are deleted; callers holding their own frames may still pass custom specs).
 DEFAULT_MACRO_SPECS: tuple[MacroSeriesSpec, ...] = (
     MacroSeriesSpec(name="m2", series_id="M2SL", transform="yoy", sign=1, weight=1.0),
-    MacroSeriesSpec(name="dxy", series_id="DTWEXBGS", transform="level", sign=-1, weight=1.0),
     MacroSeriesSpec(name="unrate", series_id="UNRATE", transform="level", sign=-1, weight=1.0),
-    MacroSeriesSpec(name="pmi", series_id="MANEMP", transform="yoy", sign=1, weight=1.0),
 )
 
 
@@ -194,8 +192,8 @@ class MacroLiquidityModel:
     Parameters
     ----------
     config:
-        Thresholds, window, and indicator specs. Defaults enable M2 + DXY +
-        UNRATE + MANEMP (manufacturing-activity / PMI proxy).
+        Thresholds, window, and indicator specs. Defaults enable M2 + UNRATE
+        (DTWEXBGS/MANEMP need caller-supplied frames since leaving the panel).
     """
 
     def __init__(self, config: MacroLiquidityConfig | None = None) -> None:

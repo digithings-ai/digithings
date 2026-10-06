@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Stage M2 / DXY CSVs next to the Coinbase OHLCV cache for published btc_sdca.
+"""Stage the M2SL CSV next to the Coinbase OHLCV cache for published btc_sdca.
 
 ``generate_tearsheets.py`` loads extras via ``load_sdca_extra_sources(cache_dir)``.
-Missing ``M2SL.csv`` / ``DTWEXBGS.csv`` silently zeros those weights, so the
-nightly job would publish a different composite than ``settings.json``.
+A missing ``M2SL.csv`` silently zeros that weight, so the nightly job would
+publish a different composite than ``settings.json``.
 
-Sources (first hit wins per series):
+Sources for M2SL (first hit wins):
 
-1. Supabase ``macro_series_observations`` (service role) — already populated
-   for DTWEXBGS by the prices pipeline
-2. FRED observations API when ``FRED_API_KEY`` is set (same secret as the
-   prices job)
-3. FRED ``fredgraph.csv`` (no key) as a last resort
+1. Supabase ``macro_series_observations`` (service role) — existing rows
+2. Sealed R2 ``fred__M2SL`` generation (no key; same bytes the panel refresh seals)
+
+``DTWEXBGS`` is not on the gloomberb panel (dropped 2026-09-29, #4794 PR3), so
+this script no longer touches the FRED observations API or fredgraph.csv. A
+missing ``DTWEXBGS.csv`` makes the existing SDCA loader zero ``dxy_weight``
+loudly via ``drop_extras_missing_sources``.
 
 Usage:
     python digiquant/scripts/export_sdca_macro.py
@@ -25,7 +27,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 import polars as pl
 
@@ -42,10 +43,10 @@ from _env import load_repo_env  # noqa: E402
 # Filename ``load_sdca_extra_sources`` looks for next to BTC-USD.csv.
 SERIES_FILES: dict[str, str] = {
     "M2SL": "M2SL.csv",
-    "DTWEXBGS": "DTWEXBGS.csv",
 }
 
-FRED_GRAPH_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+#: Legacy dollar sibling: not on the gloomberb panel, never fetched here.
+DTWEXBGS_SKIP_MESSAGE = "DTWEXBGS is not on the gloomberb panel; dxy sibling CSV skipped"
 
 
 def write_observation_csv(rows: list[tuple[str, float]], dest: Path) -> Path:
@@ -110,101 +111,98 @@ def rows_from_supabase(series_id: str) -> list[tuple[str, float]]:
     return out
 
 
-def rows_from_fred_api(series_id: str, api_key: str) -> list[tuple[str, float]]:
-    from digiquant.data.prices.macro_ingest import fetch_fred_series
-
-    observations = fetch_fred_series(api_key, series_id, observation_start="1959-01-01")
-    rows: list[tuple[str, float]] = []
-    for obs in observations:
-        day = obs.get("date")
-        raw = obs.get("value")
-        if not day or raw in (None, ".", ""):
-            continue
-        try:
-            rows.append((str(day)[:10], float(raw)))
-        except (TypeError, ValueError):
-            continue
-    return rows
-
-
-def rows_from_fredgraph(series_id: str, *, opener: Any | None = None) -> list[tuple[str, float]]:
-    """Keyless FRED CSV export. ``opener`` is ``urlopen``-compatible for tests."""
-    from urllib.parse import urlencode
-    from urllib.request import urlopen
-
-    fetch = opener or urlopen
-    query = urlencode({"id": series_id})
-    with fetch(f"{FRED_GRAPH_CSV}?{query}") as resp:
-        body = resp.read()
-    text = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)
-    frame = pl.read_csv(text.encode("utf-8") if isinstance(text, str) else body)
-    date_col = next(
-        (c for c in ("observation_date", "DATE", "date") if c in frame.columns),
-        None,
+def rows_from_r2(series_id: str) -> list[tuple[str, float]]:
+    """Read the sealed R2 ``fred__{series_id}`` generation. Empty if unavailable."""
+    from digiquant.data.prices.r2_history import MANIFEST_KEY
+    from digiquant.ops.checkpoint_archive import (
+        R2_ACCESS_KEY_ENV,
+        R2_ACCOUNT_ENV,
+        R2_BUCKET_ENV,
+        R2_SECRET_KEY_ENV,
+        R2Backend,
     )
-    if date_col is None:
-        raise ValueError(f"fredgraph.csv for {series_id} has no date column: {frame.columns}")
-    value_col = next((c for c in (series_id, "value") if c in frame.columns), None)
-    if value_col is None:
-        numeric = [c for c in frame.columns if c != date_col]
-        if len(numeric) != 1:
-            raise ValueError(f"fredgraph.csv for {series_id} has no value column: {frame.columns}")
-        value_col = numeric[0]
-    rows: list[tuple[str, float]] = []
-    for day, raw in zip(frame[date_col].to_list(), frame[value_col].to_list(), strict=True):
-        if raw in (None, ".", "") or day is None:
-            continue
-        try:
-            rows.append((str(day)[:10], float(raw)))
-        except (TypeError, ValueError):
-            continue
-    return rows
+
+    account = os.environ.get(R2_ACCOUNT_ENV, "").strip()
+    bucket = os.environ.get(R2_BUCKET_ENV, "").strip()
+    access = os.environ.get(R2_ACCESS_KEY_ENV, "").strip()
+    secret = os.environ.get(R2_SECRET_KEY_ENV, "").strip()
+    if not (account and bucket and access and secret):
+        return []
+    try:
+        import hashlib
+        import io
+        import json
+
+        backend = R2Backend(
+            endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
+            bucket=bucket,
+            access_key=access,
+            secret_key=secret,
+        )
+        manifest = json.loads(backend.get(MANIFEST_KEY).decode("utf-8"))
+        entry = (manifest.get("datasets") or {}).get(f"fred__{series_id}")
+        if not isinstance(entry, dict):
+            return []
+        raw = backend.get(str(entry["object"]))
+        if hashlib.sha256(raw).hexdigest() != str(entry.get("sha256")):
+            logger.warning("SHA mismatch reading R2 fred__%s — skip R2 source", series_id)
+            return []
+        frame = pl.read_parquet(io.BytesIO(raw))
+        if "obs_date" not in frame.columns or "value" not in frame.columns:
+            return []
+        rows: list[tuple[str, float]] = []
+        for day, value in zip(frame["obs_date"].to_list(), frame["value"].to_list(), strict=True):
+            if day is None or value is None:
+                continue
+            try:
+                rows.append((str(day)[:10], float(value)))
+            except (TypeError, ValueError):
+                continue
+        return sorted(rows)
+    except Exception:
+        logger.warning("R2 read failed for fred__%s — skip R2 source", series_id, exc_info=True)
+        return []
 
 
-def export_series(series_id: str, cache_dir: Path) -> tuple[Path, str, int]:
-    """Write one series. Returns ``(path, source, row_count)``."""
+def export_series(series_id: str, cache_dir: Path) -> tuple[Path | None, str, int]:
+    """Write one series. Returns ``(path, source, row_count)``.
+
+    ``DTWEXBGS`` is not staged: one warning, zero rows, no file.
+    """
+    if series_id == "DTWEXBGS":
+        logger.warning(DTWEXBGS_SKIP_MESSAGE)
+        return None, "skipped", 0
     dest = cache_dir / SERIES_FILES[series_id]
     rows = rows_from_supabase(series_id)
     source = "supabase"
     if not rows:
-        api_key = (os.environ.get("FRED_API_KEY") or "").strip()
-        if api_key:
-            try:
-                rows = rows_from_fred_api(series_id, api_key)
-                source = "fred_api"
-            except Exception:
-                logger.warning(
-                    "FRED API failed for %s — falling through to fredgraph",
-                    series_id,
-                    exc_info=True,
-                )
-                rows = []
+        rows = rows_from_r2(series_id)
+        source = "r2"
     if not rows:
-        rows = rows_from_fredgraph(series_id)
-        source = "fredgraph"
-    if not rows:
-        raise RuntimeError(f"no observations for {series_id} from supabase, FRED API, or fredgraph")
+        raise RuntimeError(f"no observations for {series_id} from supabase or sealed R2")
     write_observation_csv(rows, dest)
     return dest, source, len(rows)
 
 
 def main() -> None:
     load_repo_env()
-    parser = argparse.ArgumentParser(description="Stage SDCA M2/DXY CSVs for tearsheet generate")
+    parser = argparse.ArgumentParser(description="Stage SDCA M2 CSV for tearsheet generate")
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE)
     parser.add_argument(
         "--series",
         default=",".join(SERIES_FILES),
-        help="Comma-separated FRED series ids (default: M2SL,DTWEXBGS)",
+        help="Comma-separated series ids (default: M2SL). DTWEXBGS is skipped with a warning.",
     )
     args = parser.parse_args()
     args.cache_dir.mkdir(parents=True, exist_ok=True)
     wanted = [s.strip() for s in args.series.split(",") if s.strip()]
-    unknown = [s for s in wanted if s not in SERIES_FILES]
+    unknown = [s for s in wanted if s not in SERIES_FILES and s != "DTWEXBGS"]
     if unknown:
         parser.error(f"unknown series {unknown}; known: {sorted(SERIES_FILES)}")
     for series_id in wanted:
         dest, source, n = export_series(series_id, args.cache_dir)
+        if dest is None:
+            continue
         logger.info("  %s: %d rows via %s → %s", series_id, n, source, dest)
 
 
