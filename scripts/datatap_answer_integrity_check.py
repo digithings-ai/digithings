@@ -550,6 +550,84 @@ _NOT_A_GIVEN_NAME = frozenset(
 )
 
 
+# A trailing bracket at the end of a list item.
+_TRAILING_BRACKET_RE = re.compile(r"\s*\(([^()]+)\)\s*[.!]?\s*$")
+
+# What may sit in those brackets and still be read as a role somebody holds, as
+# opposed to a note the answer attached to something that is not a person. The
+# set has to be closed. Any bracketed tail would split, and a bracketed tail is
+# also how a changelog, a plan table and a feature list annotate their items, so
+# "Added Session Cookies (privacy)" and "Manual Approval (default)" would both
+# become name lists. Those are noun phrases the two trading-name guards do not
+# cover, and this check is built to miss rather than to raise a false SEV1 on a
+# client account, so the roles it knows are listed and everything else is left
+# alone. A role the answer words differently ("owner since 2019", "on leave
+# until March") stays a miss, which is the direction this check fails in.
+#
+# The small function words are here because they sit inside role phrases ("on
+# leave", "billing contact") and not because they are roles. That means a bracket
+# holding one of them on its own splits, because every word in the bracket is a
+# member. A sweep of noun phrases against each of them found no answer that fires
+# here and stays clean at base, so the widening is measured at zero; the direction
+# is still the safe one, since the surrounding noun phrases are already caught when
+# the parentheses are missing.
+_ROLE_WORDS = frozenset(
+    {
+        "account",
+        "admin",
+        "administrator",
+        "approver",
+        "as",
+        "backup",
+        "billing",
+        "buyer",
+        "chair",
+        "contact",
+        "delegate",
+        "editor",
+        "employee",
+        "guest",
+        "lead",
+        "leave",
+        "manager",
+        "member",
+        "on",
+        "owner",
+        "primary",
+        "requester",
+        "reviewer",
+        "secondary",
+        "since",
+        "signatory",
+        "signer",
+        "supervisor",
+        "technical",
+        "treasurer",
+        "until",
+        "user",
+    }
+)
+
+
+def _strip_trailing_role(candidate: str) -> str:
+    """Drop the trailing role, so "Dana Whitfield (owner)" is tested as a name.
+
+    Every word in the brackets has to be a word that names a role. A customer
+    identifier in brackets ("Jane Whitfield (CUS-4821)") is not made of role
+    words, so it stays whole and stays the identifier half's finding, and so does
+    a company word ("Contoso Retail (Ltd)") or an annotation on something that is
+    not a person ("Manual Approval (beta)"). Those keep their brackets, fail the
+    whole-item name test, and stay out of the finding.
+    """
+    match = _TRAILING_BRACKET_RE.search(candidate)
+    if match is None:
+        return candidate
+    words = match.group(1).strip(".,;:()").lower().split()
+    if not words or not all(word in _ROLE_WORDS for word in words):
+        return candidate
+    return candidate[: match.start()].rstrip()
+
+
 def _name_list_items(answer: str) -> list[str]:
     """List items whose whole content is a person name.
 
@@ -569,10 +647,28 @@ def _name_list_items(answer: str) -> list[str]:
     both load-bearing: keeping only the whole-item half loses "- Desktop App", and
     keeping only the leading-word half loses "- Total Accounts".
 
+    A leaked list very often says what each person does, so an item may carry a
+    trailing role in brackets ("- Dana Whitfield (owner)"). That role is how the
+    answer phrased the leak, not the leak, so it is split off before the
+    whole-item test. What is relaxed is the role only: the two-item bar, the
+    whole-item match, and both trading-name guards are unchanged. A bracketed
+    company word, a bracketed customer id and a bracketed note on a non-person
+    ("Manual Approval (beta)") are not roles, so none of them splits.
+
+    Truncating the prose tail and stripping the role compose into one surface that
+    neither does alone: "- Dana Whitfield (owner)\n- Marcus Oyelaran\n\nLet me know
+    if you need anything else." is reported. Truncation runs first, so the role
+    strip reads the tail of the name and not the tail of the prose. It is a true
+    leak, and it is a wider exit 1 than either half is on its own, so the
+    composition is signed as its own artifact rather than on either side's
+    sign-off.
+
     The cost is real and is recorded in the review: a leaked item carrying extra
-    text ("- Jane Whitfield, owner") is not caught here, and neither is a list of
-    people whose names start with one of those words. Between missing a leak and
-    raising a false SEV1 on a client account, this check is built to miss.
+    text in no brackets ("- Jane Whitfield, owner") is not caught here, neither is
+    a role worded outside `_ROLE_WORDS` ("owner since 2019"), and neither is a
+    list of people whose names start with one of the guarded words. Between
+    missing a leak and raising a false SEV1 on a client account, this check is
+    built to miss.
     """
     items: list[str] = []
     # Walk the marker matches rather than splitting, so each candidate keeps its
@@ -581,34 +677,45 @@ def _name_list_items(answer: str) -> list[str]:
     # decide the company guard for the list item that repeats it.
     markers = list(_LIST_ITEM_SPLIT_RE.finditer(answer))
     for index, marker in enumerate(markers):
-        piece = (
-            answer[marker.end() :]
-            if index == len(markers) - 1
-            else answer[marker.end() : markers[index + 1].start()]
-        )
+        start = marker.end()
+        end = markers[index + 1].start() if index + 1 < len(markers) else len(answer)
+        piece = answer[start:end]
         candidate = _LEADING_MARKER_RE.sub("", piece).strip().strip("*_")
         if not candidate:
             continue
         if "\n" in candidate:
             if index + 1 < len(markers):
                 continue
-            # The list closed with prose — "…- Marcus Oyelaran\n\nLet me know if
-            # you need anything else." A chat answer almost always ends this way, so
-            # taking the item's own line is what catches a leak at all. It does not
-            # move the person-name bar: candidate still has to fullmatch
-            # _PERSON_NAME_RE, and two items are still required.
+            # Truncation guard, from #5086. The list closed with prose — "…- Marcus
+            # Oyelaran\n\nLet me know if you need anything else." A chat answer almost
+            # always ends this way, so taking the item's own line is what catches a
+            # leak at all. It does not move the person-name bar: candidate still has
+            # to fullmatch _PERSON_NAME_RE, and two items are still required. It runs
+            # BEFORE the role strip, so the role strip reads the tail of the name and
+            # not the tail of the prose that follows it.
             candidate = candidate.split("\n", 1)[0].strip().strip("*_")
             if not candidate:
                 continue
-        if _PERSON_NAME_RE.fullmatch(candidate):
-            head, _, tail = candidate.partition(" ")
+        # Role strip, from the signed DIG-998 leaf, and the one place this
+        # composition WIDENS exit 1 past what either parent detects:
+        # "- Dana Whitfield (owner)\n- Marcus Oyelaran" is now reported. The branch
+        # point skipped every candidate holding a newline, so it missed the prose
+        # tail; #5086 truncates that tail but left the trailing role in place, so its
+        # whole-item fullmatch failed. It is a true leak and it belongs in the
+        # finding, but it is a wider exit 1 than the signed bytes, so the resolved
+        # head is re-reviewed and re-signed rather than merged on the old sign-off.
+        name = _strip_trailing_role(candidate)
+        if _PERSON_NAME_RE.fullmatch(name):
+            head, _, tail = name.partition(" ")
             if head.lower() in _MENU_LEADING_WORDS:
                 continue
             # The whole item, not just its leading word. Only checking the first word
             # left every multi-word entry in the list unreachable ("billing overview",
             # "audit log", ...), which is how "- Desktop App / - Mobile App" reached
-            # exit 1. A two-word menu phrase is not two customers.
-            if candidate.lower() in _NOT_A_GIVEN_NAME:
+            # exit 1. A two-word menu phrase is not two customers. Tested on `name`,
+            # so a menu entry that also carries a role ("- Desktop App (beta)") is
+            # judged as the menu entry and not as the bracketed string.
+            if name.lower() in _NOT_A_GIVEN_NAME:
                 continue
             # …and keep the leading word too. The whole-item check alone lets any
             # two-word Title-Case phrase whose FIRST word is blocklisted through as
@@ -627,7 +734,22 @@ def _name_list_items(answer: str) -> list[str]:
                 continue
             if tail.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
                 continue
-            items.append(candidate)
+            # Lookahead guard, kept from the branch point; #5086 dropped it. It is
+            # inert as written and is kept only because both sides of this merge
+            # carried a claim about it: `end` is the START of the next marker, or
+            # len(answer) on the last item, so `following_text` always begins with a
+            # marker glyph ("-", "1.", "*", …) or is empty. `following` is therefore
+            # never a bare company word, and no shape in the corpus suppresses here.
+            # Removing it is a behaviour-neutral cleanup, left to the reviewer
+            # rather than taken silently inside a merge resolution.
+            following_text = answer[end:].lstrip()
+            following = (
+                following_text.split(" ", 1)[0].strip(".,;:()").lower() if following_text else ""
+            )
+            if following not in _COMPANY_SUFFIXES:
+                # The bare name, so the finding names the customers and not the
+                # wording the answer used for them.
+                items.append(name)
     return items
 
 
