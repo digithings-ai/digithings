@@ -61,6 +61,7 @@ npx wrangler secret put DIGIGRAPH_INTERNAL_URL   # https://graph.digithings.ai
 npx wrangler secret put DIGIKEY_URL              # https://key.digithings.ai
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGICHAT_PLAN_PROOF_SECRET
+npx wrangler secret put DIGICHAT_MONITOR_TOKENS   # optional (DIG-613); omit => free-turn gate applies to all
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_URL
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 
