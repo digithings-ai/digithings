@@ -59,6 +59,17 @@ Gloomberb's. It does not transfer to another vendor without reading theirs.
 MCP server or developer interface, that is the access method to build on. A
 cookie is the fallback of last resort and is never the design.
 
+**And a fifth, which is the one that bit us:** **an open-source licence on a data
+dump says nothing about whether the vendor may relicense it.** A vendor can hold
+perfect title to its own normalisation and still be unable to grant you anything,
+because the source data was somebody else's. Our
+[FINRA record](finra/INDEX.md) is the worked example: the trackers dumps carry a
+verified `CC0-1.0`, and one family (`short-volume`) is still **Prohibited**,
+because CC0 §4(b)–(c) has the affirmer disclaim responsibility for clearing
+third-party rights — and the third party here is a private SRO whose own terms
+permit no commercial redistribution to anyone. Verify the licence **and** the
+title chain behind it. They fail independently.
+
 ---
 
 ## The steps
@@ -77,6 +88,15 @@ cookie is the fallback of last resort and is never the design.
    they cannot evidence.
 6. Record the decision here.
 
+**Where the data is redistributed to our own customers, add a second pass:** for
+every upstream source named by the vendor, is the *source* itself freely
+redistributable, and does the vendor hold a licence that survives re-sale? A
+verified `CC0` on a dump answers the first question only for material the vendor
+owns. Where a source is a private or foreign body — a self-regulatory
+organisation, a data exchange, a commercial provider — read that body's own terms
+and record them here as their own entry. The [FINRA record](finra/INDEX.md) is
+the first of these and was found late, after ingest.
+
 A vendor's terms can change in place with no new URL and no announcement, so an
 entry carries a **re-retrieve date**, not only a retrieval date. When the sha256
 no longer matches, re-read and re-record; do not assume the old clauses hold.
@@ -92,12 +112,26 @@ and it stays his.
 | Vendor | Access method | Classification | Retrieved |
 |---|---|---|---|
 | [Bloomberg](bloomberg/INDEX.md) | no integration, no credential, no contact; one scoped news-retrieval domain | **pending Security** | 2026-10-06 |
-| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **pending Security** | 2026-10-06 |
+| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **data licence CONFIRMED CC0-1.0 per family · three items open with Counsel** | 2026-10-06 |
+| [FINRA](finra/INDEX.md) | none — **title record only**; we hold a normalised extract served inside a paid product | **PROHIBITED** (Counsel, 2026-10-06) | 2026-10-06 |
 
 "Pending Security" means the clauses are recorded and quoted but nobody has
 signed a classification yet. Under step 5 that blocks implementation on anything
 that adds access — it does not block the record existing, which is the point of
 writing it early.
+
+**The FINRA row is a different shape from the other two, and it is the one to
+learn from.** Bloomberg and LuxAlgo are access records: an integration exists and
+the question is whether it is permitted. FINRA has no integration at all — the
+question is whether the *copies* we already serve are permitted, and the answer
+was no. That shape is harder to catch at intake, because the check runs against
+a new integration and this was never one. It reached us as a licence question
+downstream of an ingest that had already shipped.
+
+Which is why step 4 has two answers, not one. A licence classification answers
+"may we take this?" A title classification answers "may we give this away?" Both
+are needed for any dataset we redistribute to customers, and the second is the
+one that was missing.
 
 ---
 
