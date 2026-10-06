@@ -413,4 +413,101 @@ describe("dispatch", () => {
       client_payload: {},
     });
   });
+
+  it("forwards opts.args into the workflow_dispatch body", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const result = await dispatch(env, baseJob, baseJob.cron, 0, {
+      args: { bucket: "weekly", note: "kicked" },
+    });
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("pipeline-research-metrics.yml");
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { bucket: "weekly", note: "kicked" },
+    });
+  });
+
+  it("lets opts.args win over a static input on the row", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const job = JOBS.find(
+      (row) => row.id === "twelve-x-market-context-daily",
+    ) as Job;
+    expect(job.kind).toBe("workflow_dispatch");
+    expect(job.inputs).toEqual({ bucket: "daily" });
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, { args: { bucket: "weekly" } });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: job.ref,
+      inputs: { bucket: "weekly" },
+    });
+  });
+
+  it("keeps the row inputs that opts.args does not mention", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const job = JOBS.find(
+      (row) => row.id === "twelve-x-archive-maintenance",
+    ) as Job;
+    expect(job.inputs).toEqual({ dry_run: "false", dump_before_prune: "true" });
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, { args: { dry_run: "true" } });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).inputs).toEqual({
+      dry_run: "true",
+      dump_before_prune: "true",
+    });
+  });
+
+  it("forwards opts.args into the repository_dispatch client_payload", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const job: Job = {
+      id: "house-run-09",
+      cron: "17 9 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "repository_dispatch",
+      event_type: "digiquant-baseline",
+      enabled: true,
+    };
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, { args: { bucket: "weekly" } });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      event_type: "digiquant-baseline",
+      client_payload: { bucket: "weekly" },
+    });
+  });
+
+  it("still passes opts.args to the container runner", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, run_id: "run-1", status: "accepted" }),
+          { status: 202, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const job = JOBS.find((row) => row.id === "house-run-09") as Job;
+    expect(job.kind).toBe("container");
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    await dispatch(env, job, job.cron, 1_700_000_000_000, {
+      args: { refresh_scope: "all" },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).args).toEqual({
+      refresh_scope: "all",
+    });
+  });
 });

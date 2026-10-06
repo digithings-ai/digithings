@@ -314,6 +314,30 @@ describe("POST /kick", () => {
     const body = JSON.parse(String(init.body)) as { args: Record<string, string> };
     expect(body.args.dry_run).toBe("true");
   });
+
+  it("kick does not drop args on a workflow_dispatch row", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = {
+      DRY_RUN: "0",
+      CRON_KICK_SECRET: "kick-secret",
+      GH_DISPATCH_TOKEN: "token",
+    };
+
+    const res = await worker.fetch(
+      kick({ cron: "30 5 * * *", args: { bucket: "weekly" } }),
+      env,
+      executionContext([]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain(
+      "/repos/digithings-ai/twelve-x/actions/workflows/market_context_ingest.yml/dispatches",
+    );
+    expect(JSON.parse(String(init.body)).inputs).toEqual({ bucket: "weekly" });
+  });
 });
 
 describe("GET /runs", () => {
