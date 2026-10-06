@@ -112,11 +112,20 @@ say "0/7 preflight: confirm Cloudflare auth"
 # `wrangler whoami` exits 0 even when it reports "You are not authenticated", so the
 # exit code is not a usable signal here — match the output instead. Getting this
 # wrong produces a misleading "the secret is not set" failure ten lines later.
+#
+# Order is load-bearing, so do not merge these two cases into one. On an expired
+# token wrangler prints "Not logged in. Your auth token has expired..." — and the
+# substring "logged in" occurs inside "Not logged in". A positive-only check
+# therefore confirms an identity that does not exist, and the operator is then told
+# the registry secret is missing when the real problem is only an expired token.
+# That is the direction that matters: acting on it overwrites the live OCC registry.
+# Asserted by scripts/check_occ_rollout_auth_guard.py.
 WHOAMI_OUT="$(wrangler whoami 2>&1 || true)"
 printf '%s\n' "$WHOAMI_OUT" >&2
 case "$WHOAMI_OUT" in
-  *"not authenticated"*|*"Provide a valid API token"*|*"Missing an account ID"*)
-    fail "wrangler is not authenticated. Run 'wrangler login' first; this script will not fall back to a CLOUDFLARE_API_TOKEN from the shell, on purpose." ;;
+  *"not authenticated"*|*"Not logged in"*|*"auth token has expired"*|\
+  *"Provide a valid API token"*|*"Missing an account ID"*)
+    fail "wrangler is not authenticated (expired token, or not logged in). Run 'wrangler login' in an interactive terminal first; this script will not fall back to a CLOUDFLARE_API_TOKEN from the shell, on purpose. Nothing was written." ;;
 esac
 case "$WHOAMI_OUT" in
   *"OAuth token"*|*"API Token"*|*"logged in"*) : ;;
@@ -125,14 +134,17 @@ esac
 
 say "0/7 preflight: confirm the secret name already exists (names only; values are write-only)"
 # Distinguish "auth/network failed" from "genuinely not set": they look identical
-# after a grep, and only one of them is the operator's problem to fix here.
+# after a grep, and only one of them is the operator's problem to fix here. The
+# auth patterns must mirror the `whoami` guard above — when they drift apart, an
+# unreadable list silently becomes a false "the secret is not set" verdict.
 SECRET_LIST="$(wrangler secret list 2>&1 || true)"
 if ! printf '%s' "$SECRET_LIST" | grep -q "$SECRET_NAME"; then
   case "$SECRET_LIST" in
-    *"not authenticated"*|*"Missing an account ID"*|*"error code:"|*"Invalid"*)
+    *"not authenticated"*|*"Not logged in"*|*"auth token has expired"*|\
+    *"Missing an account ID"*|*"error code:"*|*"Invalid"*)
       fail "could not read the secret list from the Cloudflare API (auth or network). Output:
 $(printf '%s' "$SECRET_LIST" | sed 's/^/    /')
-Nothing was written." ;;
+Nothing was written. Fix the auth or the connectivity, then re-run. This is NOT evidence that the secret is missing." ;;
     *)
       fail "$SECRET_NAME is not set on this Worker. Stop and read the runbook: Act B1 changes a field inside the existing registry, it does not create the secret. Nothing was written." ;;
   esac
