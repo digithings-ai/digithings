@@ -5,8 +5,9 @@
 Submit at: **https://support.github.com/contact/private-information**
 Choose the private-information / sensitive-data option offered on that form.
 
-**Send order:** after the two fork-owner requests and the 14-day wait, and only after
-[DIG-1496](/DIG/issues/DIG-1496) is `done`. See [README.md](./README.md).
+**Send order:** after the two fork-owner notices have been sent, and **only after**
+[DIG-1496](/DIG/issues/DIG-1496) is `done`. There is no waiting period. See
+[trigger-note.md](./trigger-note.md).
 
 **Paste as plain text into the body of the form.** Do not attach anything. GitHub: *"Please include
 a plain-text version of your request in the body of your message. Sending your request in an
@@ -194,33 +195,69 @@ returned exactly these two repositories. **This is the complete list.**
 
 | # | Fork | Forked | Last push | Default branch | File reachable at pinned commit |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `itsnjstyle27/digithings` | 2026-08-18 | 2026-08-18 | `develop` | Yes |
-| 2 | `webclinic017/digithings` | 2026-05-29 | 2026-05-25 | `develop` | Yes |
+| 1 | `itsnjstyle27/digithings` | 2026-08-18 | 2026-08-18 | `develop` | Yes — see below |
+| 2 | `webclinic017/digithings` | 2026-05-29 | 2026-05-25 | `develop` | Yes — see below |
 
 Fork enumeration date: **<<< FILL: DATE OF SEND, YYYY-MM-DD >>>**
 
-Note on the present state of the forks: the file is **not** present at the tip of either fork's
-default branch, nor at the tip of the parent. It is absent from current views and remains
-reachable only through the immutable commit address in section 1. I mention this because it means
-a reviewer browsing the repository today will not see the file, and I do not want that mistaken for
-the claim being stale. I can see it, and anyone holding the link can.
+**I need to be precise about what "reachable" means here, because it changes who can fix what.** I
+cloned each fork and fetched every ref in it, including tags. The commit that introduced the file,
+`86cb1ec5d62b2422cf2c312b6d63722c86fb2000`, **is not present in either fork's own object store.**
+Both forks were created before the commit was made. The file resolves under the forks' URLs anyway
+because your platform serves objects across a fork network from the parent repository: as long as
+`digithings-ai/digithings` still holds the commit, the blob is retrievable under any fork's name.
+
+Two consequences, and I would rather state them than have you discover them. First, neither fork
+owner has anything to clean — there is no file in their history to rewrite, and I am not asking them
+to do anything. Second, **deleting a fork would not purge this data from your storage.** It would
+only remove one of the three URLs. The purge happens when you garbage-collect the parent, which is
+why section 6 of this notice asks you for that specifically.
+
+Note on the present state of the file: it is **not** present at the tip of the parent, nor at the tip
+of either fork's default branch. It is absent from current views and remains reachable only through
+the immutable commit address in section 1. I mention this because it means a reviewer browsing the
+repositories today will not see the file, and I do not want that mistaken for the claim being stale.
+I can see it, and anyone holding the link can.
 
 **What I have already done regarding forks, per the "Ask Nicely First" guidance.** I did not come
-here first. I identified the two fork owners and wrote to both directly, at
-`itsnjstyle27/digithings` and `webclinic017/digithings`, on **<<< FILL: DATE FORK REQUESTS SENT,
-YYYY-MM-DD >>>**, naming the file, the commit, and the fact that it contains customer personal
-data. Each request asked them to delete the fork or rewrite the history to drop the file, gave them
-ready-to-run `git-filter-repo` commands, offered deletion of the fork as the easier option,
-confirmed that the rest of the project is MIT-licensed and they were free to keep using all of it,
-and stated plainly that no legal claim was being made. I gave them a fourteen-day window to respond
-before taking this step.
+here first, and I want to record both the attempt and its limits.
 
-<<< FILL: OUTCOME OF THE FORK-OWNER REQUESTS — e.g. "no response received within the 14-day
-window", or "one fork was deleted on <date>; the other did not respond" >>>
+I checked the three channels your policy names for reaching a user directly: their public profile
+page, the repository's README or Support file, and an issue on the repository. I found no contact
+address on either fork owner's profile, no address in either fork's README, and no `SUPPORT.md` in
+either fork. I could not reach either owner by email through any published address.
+
+I did contact both owners. On **<<< FILL: DATE FORK REQUESTS SENT, YYYY-MM-DD >>>** I sent each of
+them a notice naming the file, the pinned commit, the fact that it contains customer personal data,
+and the live URL under their own fork. I told them plainly that their repository does not contain
+the file and that there was nothing in their history to remove, because that is what my own
+investigation showed. I explained that the fix belongs to us, that we are rewriting our own history,
+and that the link will stop working for everyone once we have done that. I told them that deleting
+the fork would make the link stop sooner but that it was entirely their decision and that I would not
+ask them to discard their work over our mistake. I confirmed the rest of the project is MIT-licensed
+and that they were free to keep using all of it, and I stated that no legal claim was being made and
+that no deadline applied.
+
+<<< FILL: OUTCOME OF THE FORK-OWNER REQUESTS — record what actually happened, e.g. "no response
+received as of <date>", or "itsnjstyle27 deleted the fork on <date>; webclinic017 did not respond",
+or "both forks still in place; neither owner responded" >>>
+
+I flag for completeness that if I was unable to reach either owner by email, I opened a public
+issue on each fork so that the notice could not be said to have been skipped.
+
+<<< FILL: IF TRUE — "I opened an issue on each fork on <date>. Both are unanswered." DELETE THIS
+PARAGRAPH IF NO ISSUE WAS OPENED. >>>
 
 ---
 
 #### 6. What we have already done in the parent repository
+
+> **⚠ DRAFTING NOTE — NOT PART OF THE REQUEST. Delete this box before sending.** Every sentence in
+> this section asserts a completed action. They are only true once the rewrite in
+> [DIG-1496](/DIG/issues/DIG-1496) has finished and been force-pushed. **Do not send this request
+> before that is true.** If the rewrite has not run, this section must be rewritten in the future
+> tense, and section 8's request for garbage collection cannot be made yet, because your
+> documentation is explicit that garbage collection follows a reporter's own refs being clean.
 
 We did not wait for this request to start on our side. The parent repository has been rewritten and
 the file removed from all reachable history.
@@ -236,10 +273,21 @@ Values for the fields your documentation asks for:
 - **LFS:** `<<< FILL: "no LFS objects were involved", or paste the LFS note from the filter-repo
   output >>>`
 
-Our own references are clean. I am asking you for the parts only you can perform: server-side garbage
-collection, removal of any affected pull-request references and cached views, and — since you will
-not investigate forks and a fork owner's own rewrite does not remove content from your storage —
-action against the two forks enumerated in section 5.
+Our own references are clean, which is the precondition your documentation sets for the
+server-side work: *"If you have successfully cleaned up all references other than PRs, and no forks
+have references to the sensitive data, Support will then: Dereference or delete any affected PRs on
+GitHub. Run a garbage collection on the server to expunge the sensitive data from storage. Remove
+cached views."*
+
+I am asking you for those three steps, which only you can perform: dereferencing the affected pull
+requests, the garbage collection that actually expunges the objects, and clearing cached views. That
+single garbage collection is what removes the file from storage — and, because of how fork networks
+resolve, it is also what stops the fork URLs in section 5 from serving the file.
+
+I am deliberately **not** asking you to take action against the two forks themselves. My investigation
+shows they hold no copy of the data, and disabling a third party's repository would not achieve the
+removal anyway. I enumerate them in section 5 because your policy requires that a notice identify all
+existing forks at the time it is submitted, and so that you can verify my enumeration is complete.
 
 ---
 
@@ -269,8 +317,10 @@ organisation, and the list of affected lines is complete and explicit.
 1. Run a garbage collection on `digithings-ai/digithings` to expunge the blob and the rewritten
    objects from storage, per your *Removing sensitive data from a repository* guidance.
 2. Dereference or delete the affected pull-request references, and clear cached views of the file.
-3. Process the two forks enumerated in section 5 as part of the fork network, since they were
-   identified at the time of this notice.
+3. Apply that collection across the fork network, so that the two fork URLs in section 5 stop
+   serving the file as well. I am asking for the network-wide effect of step 1, not for any
+   enforcement action against the fork owners: as section 5 explains, they hold no copy of this data
+   and there is nothing on their side to remove.
 4. Advise us if any of the information above is insufficient for you to act, and tell us what you
    would need. We will supply it promptly.
 
@@ -290,11 +340,12 @@ act for Digi Ecosystem, I can supply it.
 #### 10. Supplementary context, not the basis for this request
 
 Separately from the security grounds above, this data is personal data under the EU General Data
-Protection Regulation and Digi Ecosystem is its controller. A notifiable personal data breach has
-been assessed and we have notified the Italian Garante per Article 33(1) GDPR. I mention this only
-to be transparent about the regulatory context; **it is not the basis for this request**, which
-rests entirely on the security risk described in section 3. If it would be more appropriate to
-handle this through your privacy contact form instead, tell me and I will route it there.
+Protection Regulation and Digi Ecosystem is its controller. We have assessed this as a notifiable
+personal data breach and are required to notify the Italian Garante under Article 33(1) GDPR; that
+notification is being made in parallel with this request. I mention this only to be transparent
+about the regulatory context; **it is not the basis for this request**, which rests entirely on the
+security risk described in section 3. If it would be more appropriate to handle this through your
+privacy contact form instead, tell me and I will route it there.
 
 ---
 
