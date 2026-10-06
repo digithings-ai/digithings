@@ -25,13 +25,129 @@ This document registers every hand-held credential in the digithings monorepo wi
 
 ---
 
-## Other Hand-Held Credentials
+## DataTap Azure — digichat Container App identities and inline secrets
 
-*This section is a placeholder for future credentials. Add entries here following the same schema.*
+**Resource under review** (DIG-1293; read-only sweep 2026-10-06, `az … show` / `list` / `show-tags` / `role definition list` only — no ARM write, no secret value read):
+
+```
+subscription  fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0   "DataTap WebSite"  (East US 2)
+tenant        ac621ee5-844e-4fc9-b757-e3a3c77269b6   datatapstream.onmicrosoft.com
+prod          datatap-rg / digichat        ACA, env datatap-cae
+dev           datatap-dev-rg / digichat    ACA, env datatap-dev-cae
+registry      datatapchatregistry.azurecr.io   (SKU Basic, RG datatap-rg)
+```
+
+This is **DataTap's** tenant, not ours, but the rule at the top of this file applies unchanged: anything digithings hands into that tenant needs one owner, one refresh path, and a check that fails loudly when it is stale.
+
+One deliberate departure from the schema below: owners here are **named humans, not teams.** The usual rule is a team, but a client tenant has no digithings team to name, and "the owner" is only actionable when a person answers to it.
+
+### Named human owner of the production write
+
+| Field | Value |
+|-------|-------|
+| **Owner** | **Chris Stefan** — the digithings side of the production write. He is the `production` GitHub environment's required reviewer (`chrizefan`, read from `GET /repos/digithings-ai/digithings/environments/production`). He is also the operator on whose Mac the authenticated Azure session runs as the shared account (`az account show --query user` returns that UPN, `type: user`). |
+| **Backup / DataTap side** | **Unassigned — this is the gap.** No individual user in the tenant holds any role assignment on the subscription. `az ad user list` returns five users (`DataTap`, `Info`, `Nick Stefan`, `Pierre Chamberland`, `Trials Registration`); the shared account's `memberOf` is empty. The only `Owner` of `fc64972f-…` is the **shared** account `datatap@datatapstream.onmicrosoft.com`, so it cannot be given least privilege without breaking whoever depends on it, and **who holds its credential is recorded nowhere.** |
+| **Required change** | Name a DataTap-side human for the tenant `Owner` role, record who holds the shared account's credential, and move day-to-day work onto per-person accounts (PIM / break-glass). That is a DataTap-side decision; raise it with DataTap through Counsel's provider contact rather than acting on the shared account. |
+
+### Principals and their role assignments
+
+Nothing below holds a credential. Values were never read; these are object ids, display names and role definitions only.
+
+| Principal | Type | Assignments (exact) | Credential state |
+|-----------|------|---------------------|------------------|
+| `datatap-digichat-deploy` — SP `44cfda92-c0d1-46ad-8fab-0e30c80c25d2`, app `be54468d-2f66-4aeb-a231-5db0b6e58789` | Service principal (Application) | `Contributor` on `datatap-rg/digichat` (2026-08-17) · `Contributor` on `datatap-dev-rg/digichat` (2026-08-09) · `Contributor` on ACR `datatapchatregistry` (2026-08-09) | **None.** `keyCredentials: []`, `passwordCredentials: []`, `federatedIdentityCredentials: null`. Dormant, not deleted (`deletedDateTime: null`). |
+| `digichat` prod system-assigned identity `e56a35e6-7d5b-411c-8490-70605a4732b2` (appId `bc89d945-…`) | Managed identity | `AcrPull` on `datatapchatregistry` (2026-07-19) | Managed identity — no stored credential, token minted by ARM. |
+| `digichat` dev system-assigned identity `e338abce-cf20-4113-b280-72a8e123b8a4` (appId `503aa808-…`) | Managed identity | `AcrPull` on `datatapchatregistry` (2026-07-19) | Managed identity — no stored credential. |
+| `datatap-web-github-deploy` `3f597b0e-fedc-4078-86e4-7e41b21cf748` | Service principal | `Contributor` on the whole subscription (2026-07-15, inherited by every scope below) | None — `keyCredentials: []`, `passwordCredentials: []`. |
+| `datatap-digichat-sync` `f2954085-c40f-4ea4-bd76-5ccf8b4dc57a` | Service principal | `Reader` on the whole subscription (2026-09-28, inherited) | None. |
+| `datatap@datatapstream.onmicrosoft.com` `a26eb0a1-…` | **User (shared)** | `Owner` on the subscription (2026-07-15) | Interactive sign-in. Shared password + the auth factors on that account. |
+
+### What `Contributor` actually grants — read this before trusting any scoped grant
+
+`az role definition list --name Contributor` returns `Actions: ["*"]` with a `notActions` list that does **not** exclude `Microsoft.App/containerApps/delete` or `Microsoft.App/containerApps/listSecrets/action`. An action on a resource is authorized at that resource's *own* scope, so a `Contributor` assignment scoped to a single resource carries two consequences that are easy to assume away:
+
+- **It can delete that resource.** `Contributor` on `datatap-rg/digichat` permits `Microsoft.App/containerApps/delete` on the **production digichat app**. It cannot *create* a new app — that needs the parent resource-group scope — but delete works from the resource's own scope. So the two ACA grants are the more dangerous of the grants on this list, not the safe ones.
+- **It can read that resource's secret values.** See the inline-secrets section below. `listSecrets` returns values in cleartext.
+
+On the ACR the registry is `roleAssignmentMode: LegacyRegistryPermissions`, where `Contributor` at registry scope covers registry control-plane operations including **delete the registry**, plus full data-plane access. Azure's least-privilege guidance points CI pushes at `AcrPush`, which carries no control-plane permission at all.
+
+So the grants worth correcting, in order of severity:
+
+1. `datatap-digichat-deploy`'s `Contributor` on **both ACAs** — can delete either Container App, and can read both apps' inline secrets. Replace with `AcrPush` for push and a custom role carrying `Microsoft.App/containerApps/read` + `/write` **without** `/delete` and **without** `listSecrets`.
+2. `datatap-digichat-deploy`'s `Contributor` on the **whole ACR** — can delete repositories and the registry. Replace with `AcrPush`.
+3. The inherited subscription-wide `Contributor` held by `datatap-web-github-deploy` — reaches `datatap-rg`, `datatap-dev-rg`, and any Key Vault or managed identity added later.
+
+None of these is leaking today: all three principals are dormant, with no credential. They are latent grants, not active exposures.
+
+**The prod app pulls with its own identity, not a stored password.** `registry.identity: "system"` on both ACAs, with no `registryCredentials` block and no `username`/`passwordSecretRef`. That part of the setup is correct and needs no credential registered here.
+
+### Rotation path for the CI deploy identity
+
+| Field | Value |
+|-------|-------|
+| **Owner** | Security (this document), with DevOps as the consumer |
+| **Canonical store** | **None today.** The identity has no credential, so there is nothing to store. When lane B is chosen (see `docs/ops/digichat-datatap-aca.md` §1, decision pending), the store becomes the Azure app registration's **federated identity credential**, subject `repo:digithings-ai/digithings:environment:production` — a GitHub OIDC token minted per run from the `production` environment. **No client secret and no repo secret.** |
+| **Refresh path** | There is no value to refresh. Rotation *is* revocation: delete the federated credential, re-create it against the same subject, and re-run. The 90-day value-rotation cadence does not apply to a federated credential — it has no secret value to copy. Instead the binding is re-issued whenever the subject's environment changes, and the app registration itself is reviewed quarterly. |
+| **Staleness detector** | **None yet.** Add with the lane: a pre-flight step that asserts the workflow's OIDC subject matches an expected federated credential on the app registration, so a renamed environment fails loudly instead of silently losing write access. |
+| **Required roles when created** | `AcrPush` on `datatapchatregistry` — **not** `Contributor`, which can delete repositories and the registry — plus a **custom** Container Apps role at `datatap-rg/digichat` granting `Microsoft.App/containerApps/read` and `/write` and **explicitly not** `/delete` or `listSecrets/action`. Do not reuse `datatap-digichat-deploy`'s app id. |
+
+Note that `containerApps/write` is not an image-only permission: it permits changing env vars, command and identity on the app, which is code execution as the app's own managed identity. That is why `listSecrets` must be left out of the role — a compromised CI run should not be able to read the app's secrets on the way past.
+
+### Lane-B CI credential — scoped, not created
+
+**Status: parked.** DIG-1242's lane question (`lane`: A build-lane-only / **B** gated workflow that also writes Azure / C docs-only) is still open, so nothing here has been created and no ARM write was made. The spec is written down now so that choosing B is a single decision with no further design work:
+
+| Item | Required shape |
+|------|----------------|
+| App registration | **New**, purpose-named (e.g. `datatap-digichat-deploy-oidc`), created in the DataTap tenant `ac621ee5-…`. Not `be54468d-…`, not `3f597b0e-…`. |
+| Credential type | **Federated identity credential only.** OIDC, issuer `https://token.actions.githubusercontent.com`, subject `repo:digithings-ai/digithings:environment:production`, audience `api://AzureADTokenExchange`. |
+| Secret material | **None.** No client secret, no certificate, no `AZURE_CLIENT_SECRET` repo secret. The workflow authenticates with `permissions: id-token: write` + `azure/login` with `client-id` only. |
+| Roles | `AcrPush` on `datatapchatregistry` **and** the custom Container Apps role described above at `datatap-rg/digichat`. Neither may inherit from the subscription. |
+| Bound to | The `production` GitHub environment, not a bare workflow ref or branch — so a branch or fork cannot exchange the token, and the environment's existing required reviewer stays in the path. A GitHub OIDC `sub` is a single string; the workflow file path is not a claim dimension, so the binding cannot be narrowed to a specific workflow file. |
+| Detector | Pre-flight assertion that the workflow's OIDC subject matches an expected federated credential. The role-assignment audit runs **from the subscription `Owner` outside CI**, because `az role assignment list` needs `Microsoft.Authorization/roleAssignments/read`, which the CI credential deliberately does not hold. |
+| Verification | After creation: push a test tag, confirm the image lands in `digichat`, and confirm no grant beyond the two above is inherited at either scope. |
+| Retire | When it exists, delete `datatap-digichat-deploy` (`44cfda92-…`) and its three `Contributor` grants in the same change. Nothing should hold `Contributor` on an ACA or on the ACR once a push-only credential works. |
+
+### Container App inline secrets — and yes, they are readable
+
+Both ACAs declare exactly two secrets, and both hold **inline values** rather than referencing a Key Vault secret (`keyVaultUrl: null`, `identity: null` on the secret entry):
+
+| Secret name on the ACA | Env var in the container | Owner | Canonical store | Refresh path | Detector |
+|------------------------|-------------------------|-------|-----------------|--------------|----------|
+| `auth-secret` | `AUTH_SECRET` | Chris Stefan | **None.** Inline on the ACA, and readable in cleartext from Azure. | Re-supply out of band, then `az containerapp secret set -n digichat -g datatap-rg --secrets auth-secret=<new-value>` on **one** app, then re-verify login on that app before touching the other. **Never pass `--secrets` to a promote** — re-declaring the list requires the original values and destroys working auth. | **None** |
+| `embed-tenants` | `DIGICHAT_EMBED_TENANTS` | Chris Stefan | **None.** Same shape. | Same, per app (`-n digichat -g datatap-dev-rg` for the dev app). Carries the per-tenant embed `token` values. | **None** |
+
+**The values are recoverable, and that changes the risk.** `Microsoft.App/containerApps/listSecrets/action` returns secret values in cleartext — the CLI exposes it as `az containerapp secret list --show-values`, and `Contributor`'s `Actions: ["*"]` covers it with no `notActions` exclusion. So any principal that can authenticate and holds `listSecrets` on the app can read `AUTH_SECRET` and every `DIGICHAT_EMBED_TENANTS` token in plaintext.
+
+Who that is today: **only the shared subscription-`Owner` account can authenticate** — all three service principals are dormant with no credential. So the shared account is a single point of compromise for both secrets *and* for deletion of either Container App. That is the finding that matters, and it is why "nobody else can read it" is not the reassuring answer it looks like.
+
+`az keyvault list` on the subscription returns `[]` — there is no Key Vault in it, so these two values have no canonical store, no expiry and no rotation path. Per this file's own enforcement rule, a credential with no detector **is not production-ready**, and both are recorded that way. Adding a Key Vault would not by itself fix the read path — the roles above still hand out `listSecrets` — so the durable fix is Key Vault references on the app **plus** a custom role that omits `listSecrets`.
+
+`AUTH_URL` and `DIGICHAT_ENABLED_SERVICES` are also set on both ACAs but come from `secretRef: null` — plain configuration, not secrets. They are not registered here.
+
+### Registry hygiene
+
+`datatapchatregistry` holds exactly one repository, `digichat`, with 33 tags — no other image.
+
+| Setting | Value | Why it matters here |
+|---------|-------|--------------------|
+| `adminUserEnabled` | `false` | No shared admin password to leak. Good. |
+| `anonymousPullEnabled` | `false` | No unauthenticated pull. Good. |
+| `publicNetworkAccess` | `Enabled` | The registry is reachable from the public internet; `networkRuleSet` is `null`, so there is no IP allow-list. |
+| `roleAssignmentMode` | `LegacyRegistryPermissions` | This is the mode that decides what `Contributor` means above — admin credentials govern registry-level access, RBAC governs token-based access. |
+| `exportPolicy` | enabled | Images can be exported out of the registry by anything with the data-plane permission. |
+| `retentionPolicy` | **disabled** (7 days configured 2026-07-16, never enabled) | Every tag stays pullable forever. |
+| `softDeletePolicy` / `quarantinePolicy` / `trustPolicy` | all disabled | A deleted tag leaves no recovery window, and no scanning gate on push. |
+
+With retention disabled, all 33 tags stay pullable forever, including the two deliberate `v0.9.1-textleak-68d945ce` / `…-amd64` leak-test builds sitting in the production registry. Enabling retention, and adding a trust-policy scan gate for pushes, are policy changes on a client registry — proposals for DataTap, not things to apply from here.
+
+---
+
+## Other Hand-Held Credentials
 
 | Credential | Owner | Canonical Store | Refresh Path | Detector |
 |------------|-------|-----------------|--------------|----------|
-| — | — | — | — | — |
+| ACA inline `auth-secret` / `embed-tenants` (DataTap ACA) | Chris Stefan | **none** | re-supply out of band, then `az containerapp secret set -n digichat -g <rg> --secrets auth-secret=<new-value>` | **none — not production-ready** (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
 
 ---
 

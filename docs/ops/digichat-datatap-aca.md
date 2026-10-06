@@ -169,9 +169,9 @@ This matters for the promotion below: **`/healthz` only becomes a valid probe pa
 
 ### The `--secrets` footgun — read this first
 
-Both ACAs declare exactly two secrets, `auth-secret` and `embed-tenants`, and **both hold inline values** rather than pointing at a Key Vault secret (`secretRef: null` on the secret entry itself). The container still references them by name via `secretRef` — that is how `AUTH_SECRET` and `DIGICHAT_EMBED_TENANTS` resolve to them. `az` redacts inline values on read, so the values **cannot be round-tripped**: `az containerapp show` returns nothing usable, and `az containerapp secret show` reports only `hasValue:false`.
+Both ACAs declare exactly two secrets, `auth-secret` and `embed-tenants`, and **both hold inline values** rather than pointing at a Key Vault secret (`secretRef: null` on the secret entry itself). The container still references them by name via `secretRef` — that is how `AUTH_SECRET` and `DIGICHAT_EMBED_TENANTS` resolve to them. `az containerapp show` returns nothing usable for them and `az containerapp secret show` reports only `hasValue:false`, so the values are not round-tripped by the usual read paths. **They are not, however, unreadable:** `az containerapp secret list --show-values` returns them in cleartext to any principal holding `Microsoft.App/containerApps/listSecrets/action`, and the two dormant `Contributor` principals on these apps would hold it. Treat them as readable by anyone who can authenticate as a principal with that role. See [`credential-ownership.md`](credential-ownership.md).
 
-Consequence: **never pass `--secrets` to a promote.** Re-declaring the secret list requires the original values, which are not recoverable from Azure. A promote that re-declares them with empty or placeholder values destroys working auth and embed configuration, and the app boots into a login nobody can explain. The image update does not need them — `az containerapp update --image` patches the template and leaves the rest alone.
+Consequence: **never pass `--secrets` to a promote.** Re-declaring the secret list requires the original values, which the read paths above do not give you. A promote that re-declares them with empty or placeholder values destroys working auth and embed configuration, and the app boots into a login nobody can explain. The image update does not need them — `az containerapp update --image` patches the template and leaves the rest alone.
 
 If the secret list is ever genuinely lost, it must be re-supplied by whoever holds the values out of band. That is a credential-ownership question, not a deploy question — tracked in the Security child issue.
 
@@ -296,7 +296,7 @@ Each has a child issue on DIG-1242 rather than being folded in here.
 | **No federated Azure credential** | Adding write access to a customer Container App is a security decision with an owner and a rotation path ([`credential-ownership.md`](credential-ownership.md)). |
 | **No build lane** | Depends on the §1 decision and on the release-tagging flow, which a human owns. |
 | **`/healthz` 404s in both running builds** | Self-resolving: any deploy carrying `916c4b5d5` adds the route. Recorded so nobody reads the 404 as a regression. |
-| **Principal `44cfda92-…`** | Display name unknown, and whether its credentials still exist is unverified. Belongs in the credential inventory. |
+| ~~**Principal `44cfda92-…`**~~ | **Closed by DIG-1293** (2026-10-06, read-only). It is the service principal for app registration `datatap-digichat-deploy` (`be54468d-2f66-4aeb-a231-5db0b6e58789`), created 2026-08-09 by the shared account `datatap@datatapstream.onmicrosoft.com`. It holds `Contributor` on both ACAs and on the ACR, and it has **no credential at all** — 0 keys, 0 passwords, 0 federated credentials. Dormant, not deleted. Registered in [`credential-ownership.md`](credential-ownership.md) with the owner and the required roles for a future federated credential. |
 
 ---
 
