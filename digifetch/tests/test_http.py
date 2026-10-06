@@ -61,7 +61,7 @@ def test_fetch_post_returns_typed_result_and_echoes_body() -> None:
         result = f.fetch(
             "https://x.com/ajax",
             method="POST",
-            data={"GetReserchFile": "111"},
+            data={"file_id": "111"},
             cookies={"session": "abc123"},
         )
 
@@ -70,7 +70,7 @@ def test_fetch_post_returns_typed_result_and_echoes_body() -> None:
     assert result.text.startswith("https://s3.example.com/")
     assert result.content_type == "text/plain"
     assert seen["method"] == "POST"
-    assert b"GetReserchFile=111" in seen["content"]  # form-encoded body sent
+    assert b"file_id=111" in seen["content"]  # form-encoded body sent
     assert "session=abc123" in (seen["cookie"] or "")
 
 

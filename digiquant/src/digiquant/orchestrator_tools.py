@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from digiquant.tool_refusals import is_refused
+
+
+def _tool_name(tool: dict[str, Any]) -> str:
+    """Return the declared function name of an OpenAI-style tool schema."""
+    return str(tool.get("function", {}).get("name") or "")
+
 
 def _pipeline_parameters() -> dict[str, Any]:
     return {
@@ -646,11 +653,10 @@ def build_digifetch_congress_trades_tool() -> dict[str, Any]:
         "function": {
             "name": "digifetch_congress_trades",
             "description": (
-                "US House disclosure trades (Gloomberb Cloud, anonymous). The "
-                "upstream OCR dependency is currently failing (HTTP 500, "
-                "Mistral monthly spend cap) and surfaces as typed "
-                "upstream_error; exposed so coverage completes when upstream "
-                "recovers. year/limit filter the tape."
+                "US House disclosure trades (Gloomberb Cloud, anonymous). "
+                "REFUSED on every digiquant surface (5 U.S.C. 13107(c)(1)(B); "
+                "DIG-1057) and filtered out of the manifest. year/limit filter "
+                "the tape."
             ),
             "parameters": {
                 "type": "object",
@@ -3453,6 +3459,10 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     its description; see :mod:`digiquant.data.gloomberb.entitlements`. Every
     luxalgo tool carries ``entitlement="free"`` plus the LuxAlgo
     attribution/license note; see :mod:`digiquant.data.luxalgo.entitlements`.
+
+    Tools on Counsel's refusal list (:mod:`digiquant.tool_refusals`) are
+    filtered out of the returned manifest, so a refused tool is never
+    advertised to a caller.
     """
     tools = [
         build_digiquant_list_strategies_tool(),
@@ -3580,4 +3590,4 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_dashboard_evaluate_policy_gate_tool(),
         build_dashboard_get_policy_gate_evaluation_tool(),
     ]
-    return [_with_entitlement(tool) for tool in tools]
+    return [_with_entitlement(tool) for tool in tools if not is_refused(_tool_name(tool))]

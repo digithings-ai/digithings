@@ -40,10 +40,17 @@ from digiquant.data.gloomberb import (  # noqa: E402
     build_digifetch_tool_dispatcher,
 )
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 
 MANIFEST = {t["function"]["name"]: t for t in build_orchestrator_tool_manifest()}
+
+#: Declared-entitlement names on Counsel's refusal list keep their declaration but
+#: are advertised nowhere (DIG-1057), so every manifest-parity assertion below is
+#: stated over the live names.
+REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetch_")}
+LIVE_ENTITLEMENTS = {n: v for n, v in TOOL_ENTITLEMENTS.items() if n not in REFUSED_DIGIFETCH}
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -113,15 +120,26 @@ def test_schemas_are_the_manifest_entries_for_the_entitled_names() -> None:
     # declaration fails here instead of being silently dropped from the
     # in-process surface (#4146 review F4).
     manifest_digifetch = {name for name in MANIFEST if name.startswith("digifetch_")}
-    assert set(TOOL_ENTITLEMENTS) == manifest_digifetch
+    # A refused tool keeps its declaration but is advertised nowhere (DIG-1057),
+    # so the manifest is the live names.
+    assert set(LIVE_ENTITLEMENTS) == manifest_digifetch
     assert set(names) == manifest_digifetch
+    assert REFUSED_DIGIFETCH <= set(TOOL_ENTITLEMENTS)
+    assert not REFUSED_DIGIFETCH & manifest_digifetch
     for tool in DIGIFETCH_TOOLS:
         assert tool == MANIFEST[tool["function"]["name"]]
 
 
 def test_dispatch_table_covers_every_schema_and_matches_its_parameters() -> None:
-    assert set(DIGIFETCH_DISPATCH) == {t["function"]["name"] for t in DIGIFETCH_TOOLS}
+    # The dispatch table keeps its refused rows on purpose (the client code stays
+    # in-tree for a possible Counsel clearance), so parity is stated over the
+    # live names and the refused rows are checked separately below.
+    assert set(DIGIFETCH_DISPATCH) - REFUSED_DIGIFETCH == {
+        t["function"]["name"] for t in DIGIFETCH_TOOLS
+    }
     for name, spec in DIGIFETCH_DISPATCH.items():
+        if name in REFUSED_DIGIFETCH:
+            continue
         params = MANIFEST[name]["function"]["parameters"]
         assert set(params.get("properties", {})) == set(spec.input_model.model_fields), name
         required = {f for f, v in spec.input_model.model_fields.items() if v.is_required()}
@@ -203,9 +221,11 @@ def test_available_digifetch_tools_drops_exactly_the_gated_names(
 def test_available_digifetch_tools_defaults_to_every_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # No cookie → every free tool, in manifest order.
-    free = [n for n in TOOL_ENTITLEMENTS if TOOL_ENTITLEMENTS[n] == "free"]
+    # No cookie → every free tool, in manifest order. Refused names keep their
+    # entitlement declaration but are never advertised (DIG-1057).
+    free = [n for n, v in LIVE_ENTITLEMENTS.items() if v == "free"]
     assert [t["function"]["name"] for t in available_digifetch_tools()] == free
+    assert not REFUSED_DIGIFETCH & set(free)
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
     # The venue_session reader needs its own venue cookie, not the Gloomberb one.
     assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS) - 1
