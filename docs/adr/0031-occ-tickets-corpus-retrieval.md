@@ -8,10 +8,13 @@ then I was to set up the chat/occ page with a private link that can access it"*.
 **Accepted risk owner:** Chris. There is no named-approver mechanism and no per-deployment
 switch — see Decision 4.
 **Related:** Counsel's ruling on DIG-1229, which removed the masking plan on the legal side;
-board approval `e4c1d067` (pending at the time of writing), which carries the two acts
-below; PR [#5159](https://github.com/digithings-ai/digithings/pull/5159) (closed unmerged),
+board approval `e4c1d067`, which carries the two acts below; PRs
+[#5159](https://github.com/digithings-ai/digithings/pull/5159) and
+[#5148](https://github.com/digithings-ai/digithings/pull/5148) (both closed unmerged),
 PR [#5172](https://github.com/digithings-ai/digithings/pull/5172), PR
-[#5166](https://github.com/digithings-ai/digithings/pull/5166).
+[#5166](https://github.com/digithings-ai/digithings/pull/5166), and the merged Act A
+carriers [#5192](https://github.com/digithings-ai/digithings/pull/5192) and
+[#5198](https://github.com/digithings-ai/digithings/pull/5198).
 
 This ADR supersedes nothing. It is the decision record for AC #2 of DIG-1210. An earlier
 draft of it existed only on the closed PR #5159 and was titled
@@ -21,11 +24,12 @@ was actually taken.
 
 ## Context
 
-`scripts/index_occ_tickets.py` builds the `occ_tickets` digisearch index. Per its own
-docstring it writes "full non-anonymized metadata" plus full article bodies. The OCC tenant
-queries `digisearchIndex: occ_help,occ_tickets` and is served by an embed that is
-`auth: anonymous` and `gateMode: ungated` in production, so corpus content reaches anonymous
-internet visitors through retrieval on every question.
+`scripts/index_occ_tickets.py` built the `occ_tickets` digisearch index. Per its own
+docstring it wrote "full non-anonymized metadata" plus full article bodies. The OCC tenant
+queried `digisearchIndex: occ_help,occ_tickets` and is served by an embed that is
+`auth: anonymous` and `gateMode: ungated` in production, so corpus content reached anonymous
+internet visitors through retrieval on every question. The fan-out has since been retired —
+see Decision 1.
 
 Measured against the committed payload
 `apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl`, counts only, no values:
@@ -54,10 +58,19 @@ and 86 metadata display names to 0. The board rejected it.
 ## Decision
 
 **1. No masking. The corpus is removed, not filtered.**
-PR #5159 is closed unmerged. No masking code exists on `develop` or on `main` and none ever
-did, so nothing needs reverting. Instead of redacting the corpus, the `occ_tickets` fan-out
-is trimmed to `occ_help`, the seed payload and its `seed_chroma.sh` wiring are deleted, and
-the live Chroma index is purged (Act A of board approval `e4c1d067`).
+PRs #5159 and #5148 are closed unmerged. No masking code exists on `develop` or on `main` and
+none ever did, so nothing needs reverting. Instead of redacting the corpus, the `occ_tickets`
+fan-out is trimmed to `occ_help`, the seed payload and its `seed_chroma.sh` wiring are
+deleted, and the live Chroma index is purged (Act A of board approval `e4c1d067`).
+
+Act A is now **merged**. PR [#5192](https://github.com/digithings-ai/digithings/pull/5192)
+removed the committed payload on `main`, and PR
+[#5198](https://github.com/digithings-ai/digithings/pull/5198) retired the fan-out on
+`develop`: `occ.digisearchIndex` is `occ_help`, the OCC research prompt no longer mentions
+`occ_tickets`, the seeder is deleted, `scripts/index_occ_tickets.py` is no longer copied into
+the image, and `test_no_layer_fans_out_to_occ_tickets` guards all of it. Because the corpus is
+no longer wired on `develop`, the masked default that #5159 and #5148 proposed has nothing left
+to protect, and the two halves can no longer be landed separately — see Consequences.
 
 **2. The OCC surface is gated behind a private invite link, not a login.**
 digichat already enforces a per-tenant `X-Embed-Token`. OCC was exempt for one reason: the
@@ -91,9 +104,10 @@ teaches suppression rather than fixing.
 
 **Positive.**
 
-- The 372 `[internal]` staff notes stop being reachable by anonymous callers once Act A lands
-  and the live index is purged. Deletion closes that hole; masking would have narrowed it.
-- The PII leaves the repository tip.
+- **The 372 `[internal]` staff notes stop being reachable by anonymous callers.** Act A is
+  merged; what remains is purging the live Chroma index. Deletion closes that hole; masking
+  would only have narrowed it.
+- The PII leaves the repository tip, via #5192.
 - No second switch is introduced, and no per-deployment override can silently re-open the
   route. There is one configuration and one owner.
 - Nothing for an OCC visitor to hold beyond the link itself, which is what the board asked
@@ -119,7 +133,14 @@ teaches suppression rather than fixing.
   does not erase the past. The Art. 33 notification duty is unaffected by any of it.
 - **A separate live route is not closed by this decision.** `scripts/zammad_mcp/formatting.py`
   on `main` has no masking and reads live Zammad rather than the committed corpus, so the
-  corpus trim alone does not close live customer PII on that path.
+  corpus trim alone does not close live customer PII on that path. This is why PR #5148's
+  closure is a loss of defence-in-depth on a route that is still open, not on the corpus.
+- **The masking work can no longer be landed, even if that decision is revisited.** The two
+  halves were stacked — the OCC index masking depends on `scripts/zammad_mcp/privacy.py`,
+  which only ever existed on #5148's branch — so the OCC half had no independent base on
+  `develop`. With #5198 having retired the fan-out, `develop` now actively guards against it
+  via `test_no_layer_fans_out_to_occ_tickets`. Restoring masked indexing is therefore a
+  deliberate reversal of a merged change, not a re-land.
 
 ## Links
 
