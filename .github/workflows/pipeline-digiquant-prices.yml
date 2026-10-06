@@ -142,6 +142,8 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fx-refresh' && github.event.inputs.run_writers == true
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 10
     concurrency:
       group: digiquant-fx-refresh
@@ -175,6 +177,8 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fx-refresh'
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 10
     concurrency:
       group: digiquant-fx-candles
@@ -252,6 +256,8 @@ jobs:
     # and is deliberately not duplicated here.
     if: needs.at-open-clock.outputs.in_window == 'true'
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 15
     env:
       CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
@@ -297,14 +303,16 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'eod-macro'
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 20
     env:
       CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
       CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
       # transition (#1090): legacy names fed from the same secrets until readers migrate
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      # Macro panel seals from anonymous Gloomberb econ_series (#4794): no FRED key.
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
-      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:

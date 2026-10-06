@@ -488,13 +488,19 @@ def fetch_macro_cmd(
     dry_run: bool,
     supabase: bool,
 ) -> None:
-    """Ingest macro series (FRED + Yahoo FX) into macro_series_observations."""
+    """Ingest macro series (Gloomberb econ panel + Yahoo FX) into macro_series_observations.
+
+    The ``fred`` source seals the kept panel ids
+    (``digiquant.data.prices.gloomberb_macro.KEPT_SERIES_IDS``) from anonymous
+    Gloomberb ``econ_series`` pages — no vendor API key is read. ``--dry-run``
+    prints the series ids without constructing a client. ``--backfill`` seals a
+    1000-row tail per series, not history back to 1990.
+    """
     import concurrent.futures
 
     from digiquant.data.prices.macro_ingest import (
         MacroManifest,
         dedupe_observation_rows,
-        fetch_fred,
         fetch_fx_yahoo,
     )
     from digiquant.data.prices.supabase_writer import (
@@ -512,23 +518,34 @@ def fetch_macro_cmd(
         # generation (get_fed_rate_probabilities stays Supabase-backed).
     mani = MacroManifest.from_yaml(manifest)
 
-    # Validate FRED creds up-front so --dry-run'd FRED fails fast before the
-    # ThreadPoolExecutor spins up.
-    fred_api_key: str | None = None
-    if "fred" in sources_set:
-        fred_api_key = os.environ.get("FRED_API_KEY", "").strip() or None
-        if fred_api_key is None and not dry_run:
-            raise click.ClickException("FRED_API_KEY required unless --dry-run")
-
     # Run the independent upstream fetchers in parallel. Each call is a
     # network-bound HTTP loop, so threads (not processes) are the right tool.
     from collections.abc import Callable
 
     tasks: dict[str, Callable[[], list[dict]]] = {}
-    if "fred" in sources_set and fred_api_key is not None:
-        fred_start = mani.fred_backfill_start if backfill else None
-        key = fred_api_key  # bind for closure
-        tasks["fred"] = lambda: fetch_fred(mani, key, start=fred_start)
+    if "fred" in sources_set:
+        from digiquant.data.prices.gloomberb_macro import (
+            KEPT_SERIES_IDS,
+            build_ingest_client,
+            fetch_gloomberb,
+            window_limit,
+        )
+
+        kept = [s for s in mani.fred_series if s.get("id") in KEPT_SERIES_IDS]
+        panel = MacroManifest(fred_series=kept, fred_backfill_start=mani.fred_backfill_start)
+        if dry_run:
+            click.echo(
+                "fred panel (dry-run, gloomberb econ series): "
+                + ", ".join(str(s.get("id")) for s in kept)
+            )
+        else:
+            if backfill:
+                # A 1000-row tail per series, not 1990: econ_series has no cursor.
+                limit_for = lambda _cadence: 1000  # noqa: E731
+            else:
+                limit_for = window_limit
+            client = build_ingest_client()
+            tasks["fred"] = lambda: fetch_gloomberb(panel, client, limit_for=limit_for)
     if "yahoo" in sources_set:
         # Yahoo FX backfill starts at the ECB series origin (1999-01-04). This was
         # previously read from the Frankfurter manifest field; Frankfurter was removed
