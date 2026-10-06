@@ -60,6 +60,36 @@ Fix: `flex-shrink: 0` on `.pixel-word-footer`. Fixed together with major 1 —
 enlarging the mark while the band was still a fixed 144px box would have made the
 clipping strictly worse.
 
+**Closure correction (DIG-1599 follow-up).** The `flex-shrink: 0` fix was necessary but
+not sufficient: it addressed the flex default and left a second clamp untouched. The
+reviewer's own measurement above (`1177.61px` actual against a `1389.6px` hypothetical)
+was the tell — that gap survived the commit, so the finding was never driven to closure.
+
+The second clamp is `packages/design/site/site.css:34`, `img, svg { max-width: 100%;
+display: block; }`, imported by `apps/digithings-web/app/globals.css:6` inside
+`layer(components)`. Being layered, it loses to `globals.css`'s unlayered
+`width: min(118%, 1600px)` — which is why the mark still *looked* correctly sized, and
+why reading a computed `width` would not have caught it. But nothing unlayered declared
+a `max-width`, so the clamp survived and capped the used width at the band's content box.
+`flex-shrink` cannot lift a max-width cap; the two are independent.
+
+Verified in the browser after adding `max-width: none`:
+
+| viewport | band content | mark before | mark after | pct of band |
+|---------:|-------------:|------------:|-----------:|------------:|
+| 1280 | 1177.6 | 1177.61 (100%, inert) | 1389.58 | 118% |
+| 1366 | 1262 | — | 1489.16 | 118% |
+| 1440 | 1336 | 1336 (100%, inert) | 1576.48 | 118% |
+| 1512 | 1408 | — | 1600 | capped |
+| 1728 | 1624 | 1600 (cap only) | 1600 | capped |
+
+Top and bottom clip stay `0` at every width and the mark stays centred, so major 1's
+`min-height` + `overflow-x: clip` fix is unaffected. `scrollWidth === innerWidth` at every
+width, so the mark bleeding past the gutters still causes no horizontal page scroll.
+Pinned by `apps/digithings-web/components/landing/pixel-word-footer-width.contract.test.ts`,
+which asserts the site sheet's clamp is what the footer rule has to undo, and that it
+lifts both that clamp and the flex default.
+
 ### Major 3 — the pipeline rail was keyboard-unreachable (WCAG 2.1.1)
 
 `apps/digithings-web/components/landing/QuantSection.tsx:172`

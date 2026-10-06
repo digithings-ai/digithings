@@ -959,6 +959,13 @@ html {
   /* A flex item shrinks by default, which would fold 118% straight back to the
      band width and make the enlargement a no-op below the 1600px cap. */
   flex-shrink: 0;
+  /* …and `packages/design/site/site.css` puts `max-width: 100%` on every svg.
+     It lands in `layer(components)`, so it loses to this sheet's unlayered
+     `width` above — which is why the mark still looked correctly sized — but
+     nothing unlayered declared a max-width, so the clamp survived and capped
+     the used width at the band's content box anyway. flex-shrink cannot lift a
+     max-width; only this can. */
+  max-width: none;
 }
 
 .pixel-word .c { opacity: var(--f); }
