@@ -44,7 +44,23 @@ server = [
     "python-json-logger>=2.0",
 ]
 chroma = ["chromadb>=0.4"]
-embedding = ["openai>=1.0"]
+# digillm: digisearch already calls the digillm client on its web-research / websets
+# path -- web/answer.py, web/structured.py, websets/verify.py, websets/enrich.py --
+# each behind a lazy import guard, but the package was never declared. Declaring it
+# fixes that, and it is also the package DIG-1141 needs for digillm.egress_record,
+# the one digest implementation for the stack (nothing in digisearch imports
+# egress_record yet, and embedding/providers/openai.py drives openai.OpenAI
+# directly, so the OpenAI embedder cannot emit one today).
+#
+# Behind [embedding] rather than the base install because every call site above is on
+# the optional web path, and those import guards exist precisely so base installs stay
+# importable. The deployed digisearch image installs [server,ingestion,azure,chroma,
+# web-search] and not this extra, so digillm stays out of the container: the board
+# ruled that the image does not need the remote embedding path (DIG-1407), and
+# installing digillm would drag openai in with it and enable that path for the first
+# time. Dockerfile.digithings-stack-cloudflare, which does use digillm, installs it as
+# its own sibling.
+embedding = ["openai>=1.0", "digillm>=0.1.0"]
 # Small multilingual ONNX path (#4756): paraphrase-multilingual-MiniLM-L12-v2
 # via onnxruntime + tokenizers, model files fetched from HuggingFace Hub on
 # first use. CPU-only, no torch, no third-party embedding API.
@@ -144,7 +160,9 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 # Monorepo tests live at repo root tests/ds/; from digisearch/: `pytest` picks these up; or `make test-unit` from repo root.
 #
 # pythonpath must list the repo root plus every workspace sibling that src/digisearch or
-# tests/ds imports directly (digibase, digikey, digiclaw, digifetch) -- not just "src".
+# tests/ds imports directly (digibase, digikey, digiclaw, digifetch, digillm) -- not
+# just "src". tests/ds also imports digigraph (test_orchestrator_invoke.py); that gap
+# predates this list and is left alone here.
 # Reason: when pytest is
 # invoked with no path args from *inside* digisearch/ (e.g. `cd digisearch && uv run
 # pytest -m unit`), its rootdir/config search starts at cwd and stops at the first
@@ -157,4 +175,4 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 # editable copy -- see digigraph's fix for the full root-cause writeup. Listing them
 # here is both the fix and the safety net.
 testpaths = ["../tests/ds"]
-pythonpath = ["..", "src", "../digibase/src", "../digikey/src", "../digiclaw/src", "../digifetch/src"]
+pythonpath = ["..", "src", "../digibase/src", "../digikey/src", "../digiclaw/src", "../digifetch/src", "../digillm/src"]
