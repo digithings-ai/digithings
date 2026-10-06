@@ -746,9 +746,11 @@ validate. Ported from LuxAlgo edge-stats `stats.ts` (MIT — code only, no
 disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
 95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
 strip (thresholds act on the CI lower bound, not the point estimate), and the
-win/loss donut (caller-counted `(k, n)` from realized fills, never
-`round(rate * n)`). `BacktestResult` is untouched, so no model versioning was
-needed. Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+win/loss donut, whose `k` is caller-counted from realized **round trips**
+(`count_winning_trades(realized_pnls_series)`, counting `PnL > 0`) while its `n`
+is the **fill** count `num_trades` — so the pair is not a like-for-like sample,
+and the donut must never fall back to `round(rate * n)` as an observed count).
+Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
 
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
