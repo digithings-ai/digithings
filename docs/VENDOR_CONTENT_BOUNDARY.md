@@ -85,6 +85,41 @@ cookie-replay pattern.
 Before a change touching a vendor merges, the author (or reviewer) completes
 this checklist and attaches it as a PR comment:
 
+### Before step 1: read the data licence, not the repository's `LICENSE`
+
+**This is the mistake we have made twice, so it is a step of its own rather
+than a note.**
+
+Every vendor in this boundary ships an open-source SDK and a separately-licensed
+data product. Gloomberb's terms put MIT on the source code and said in the same
+paragraph that the terms govern "the data and content we provide" (§2). Reading
+the repository's `LICENSE` tells you nothing about the data licence — it is a
+different document, from a different grantor, covering a different subject.
+
+Three corollaries that each cost us time:
+
+- **A wrapper is ours, the credential is theirs.** Wrapping a vendor SDK but
+  authenticating with a copied browser session does not change whose terms
+  govern. The transport does not launder the credential.
+- **A licence claim inherited from a repo is an assumption wearing a citation.**
+  If our code asserts a data licence, that assertion needs the vendor's terms
+  behind it, not a note in a sibling module. See the
+  [LuxAlgo record](vendor-terms/luxalgo/INDEX.md), where an unverified "CC0"
+  claim sits next to a guard that only covers the code licence.
+- **"Client brings their own account" must come from the vendor's terms.** It was
+  permitted in Gloomber's §12 ("for yourself **or for users who have their own
+  access**"). That reading is Gloomber's and does not transfer without reading
+  theirs.
+
+### Where the record lives
+
+Step 6 writes to `docs/vendor-terms/<vendor>/INDEX.md`, indexed from
+[`docs/vendor-terms/INDEX.md`](vendor-terms/INDEX.md). The standing line lives
+there too:
+
+> No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md`
+> entry. The check runs when the integration is proposed, not at review time.
+
 | Step | Action | Evidence Required |
 |------|--------|-------------------|
 | 1 | **Locate the vendor's current Terms of Use / ToS / API Terms / Developer Agreement.** | URL + retrieval timestamp (ISO 8601 UTC). |
