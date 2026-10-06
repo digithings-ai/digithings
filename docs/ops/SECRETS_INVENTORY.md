@@ -80,6 +80,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGISEARCH_SMTP_USER` · `DIGISEARCH_SMTP_PASS` | `digisearch/src/digisearch/monitors/delivery.py:320` | `.env.example:109` | yes (`.env`) | monitor email delivery fails | local `.env` | |
 | `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12`; history-only `digiquant/src/digiquant/olympus/atlas/config/mcp.secrets.env.example` (absent at HEAD, byte-identical literals, verified 2026-10-04) | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
 | `OMNIROUTE_API_KEY` · `OMNIROUTE_AUTH_PASSWORD` | `docker-compose.yml:358,384-385` | `.env.example:14-15` | yes (`.env`) | omniroute profile breaks | local `.env` | vendor default forbidden |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `digillm/src/digillm/egress_record.py` (`DIGEST_KEY_ENV`), read on every record | `.env.example` (commented, no value) | no — write-only | no outage: records keep emitting with `digest_algorithm: "absent"` and `payload_digest: null` | **unset everywhere as of 2026-10-06** — the one silent failure in this table | HMAC pepper over outbound LLM payloads for the GDPR egress ledger. Floor 32 chars, per environment, no unkeyed fallback by design. **Must not be co-located with the ledger it protects** — see [§ (g5) the egress pepper](#g5-the-egress-pepper--not-a-normal-api-key) |
 
 ### (c) infrastructure tokens (Cloudflare / Supabase / DB)
 
@@ -262,6 +263,53 @@ surface stop being anyone's problem:
 None of these are done here. This section records the owner and the refresh path so
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
+
+### (g5) the egress pepper — not a normal API key
+
+`DIGILLM_EGRESS_DIGEST_KEY` (added by DIG-1139 / PR #5152, documented for
+operators by DIG-1184) is the only secret in this inventory whose **absence is
+silent**. Every other row here breaks loudly: a missing key is a 401, a failed
+health check, a dead workflow. This one does not. With no pepper set, digillm
+still writes every egress record — it just writes `digest_algorithm: "absent"`
+and `payload_digest: null`, because `egress_record.compute_payload_digest`
+refuses to substitute an unkeyed hash for a missing secret.
+
+So the failure mode is not an outage, it is a **ledger that looks complete and
+cannot evidence what was sent**. Measured on `develop` after #5152:
+`pytest digillm/tests/test_digillm.py` produced 397 records, all 397 `absent`.
+That is the correct code behaviour and the point of DIG-1139; it is also a
+privacy mechanism that is off in every shipped configuration today.
+
+Two rules that differ from every other row here:
+
+1. **Do not co-locate the pepper with the ledger.** By default both land in the
+   same checkout — the key in `.env`, the records in
+   `digiquant/results/egress/records.jsonl`, reachable by the same process under
+   the same operator. That is fine for local development and wrong anywhere a
+   second person can read. In staging and production, inject the pepper from the
+   secret store into the digillm process environment and point
+   `DIGILLM_EGRESS_LOG_PATH` at a store digillm can **append to but not read
+   back**. Same mount, same backup, or same read grant defeats the mechanism: an
+   HMAC next to its own ledger is a dictionary for any candidate list the reader
+   holds.
+2. **One key per environment, never shared.** A reused pepper makes every
+   deployment's digests comparable, so one leaked ledger becomes a dictionary for
+   all of them. Rotation changes future digests, so a rotated environment can no
+   longer recompute historical records against new ones — keep the old key and
+   old ledger in separately-guarded custody if counsel must verify past entries.
+
+**Verification, before anyone relies on the ledger for a compliance question:**
+
+```bash
+# must report a pepper in this environment, and must not print the value
+bws secret list --search DIGILLM_EGRESS_DIGEST_KEY
+
+# the ledger must not be 100% "absent" — a count, no payload content
+jq -r '.digest_algorithm' digiquant/results/egress/records.jsonl | sort | uniq -c
+```
+
+An `absent`-only distribution is a finding: that environment never had a pepper,
+so its digests cannot be recomputed. Wire the secret, then read the ledger.
 
 ## Review coverage for this section
 

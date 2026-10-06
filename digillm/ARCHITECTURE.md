@@ -29,6 +29,7 @@ to it later (their current in-tree LLM modules are superseded by this package).
 | `digillm/mcp_server.py` | Optional MCP server (`complete` tool over house routing; `[mcp]` extra). |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
 | `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
+| `digillm/egress_record.py` | GDPR egress ledger: one frozen `EgressRecord` per provider attempt that reaches the wire (plus one for the `completion()` cache-hit path), carrying a keyed `HMAC-SHA256` digest of the outbound payload and never the payload itself. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
 
 ## Public API
@@ -42,6 +43,7 @@ from digillm import (
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
     set_byok, reset_byok, get_byok, byok, clear_byok,           # BYOK override
     set_fan_out_detach_hook,                                    # consumer detach hook
+    set_egress_observer, EgressRecord, EgressDecision, EgressCategoryId,  # GDPR egress ledger
     clear_caches,
 )
 ```
@@ -413,6 +415,88 @@ The observer receives no messages, prompts, response bodies, tool arguments/resu
 credentials, or reasoning. It is optional and observer exceptions are swallowed so telemetry
 cannot change the public completion/search return contract or fail a provider call.
 
+## Egress record (GDPR: "what left the process")
+
+`digillm/egress_record.py` answers the question telemetry cannot: for any single outbound
+call, *what data left this process, to where, under whose decision*. It emits one
+`EgressRecord` per provider attempt at the `_create_with_retry` chokepoint, plus one for
+the `completion()` cache-hit path where nothing left.
+
+Each record is `frozen=True` with `extra="forbid"`, and carries destination, provider,
+model, purpose, `decision`, `category_ids`, `cache_status` and `outcome`. It carries **no
+payload**. A copy of the outbound messages in a log file is not an audit trail — it is a
+second copy of the data with weaker access control than the database it came from.
+
+What it carries instead is `HMAC-SHA256` over the canonical outbound messages under the
+pepper in `DIGILLM_EGRESS_DIGEST_KEY`. That keeps two properties that both matter:
+a reader can still answer "were these the same bytes on the wire?" (joinable across runs
+and providers), while a reader holding a candidate list cannot rank or confirm it.
+
+**The digest is off by default, and that is visible on purpose.** With no pepper (or one
+under `MIN_DIGEST_KEY_LENGTH`), records still emit, with `digest_algorithm: "absent"` and
+`payload_digest: null`. There is no unkeyed fallback: `sha256` of a low-entropy payload is
+the payload, found by table lookup, and a silent fallback would hide that. Measured on
+`develop` after #5152, `pytest digillm/tests/test_digillm.py` produced 397 records, all 397
+`absent`. So read the ledger's `digest_algorithm` distribution before relying on it: a
+ledger of `absent` records proves egress *happened* and *where it went*, not what was sent.
+
+`decision` is `unscreened` on every call that reaches the wire. This leaf screens nothing
+— the filter is L3 (DIG-1085, DIG-959). `unscreened` is the honest value and the baseline
+the filter will later be judged against. `EgressDecision` also defines `pass` / `masked` /
+`refused` so L3 has somewhere to write its verdict without changing the record's shape,
+and `EgressCategoryId` closes the Art. 9 category set to the eight GDPR special-category
+ids (duplicated locally because digillm must not import `digibase`, and a record that
+could hold free text could hold a matched value).
+
+Delivery is fail-soft, like `set_usage_observer`: neither a registered observer nor a
+failing disk may break an LLM call. The JSONL sink writes whether or not an observer is
+registered, because a callback nobody registers is not evidence.
+
+### Reading limits
+
+Three, so no reader over-reads the ledger:
+
+- **Granularity is one digillm provider attempt, not one HTTP packet.** The OpenAI SDK
+  retries a single `create()` internally, so one record can stand for more than one
+  request on the wire.
+- **A streaming attempt records `outcome: "started"`**, not `succeeded`. The record is
+  written when the request is accepted, before the stream is read, because the payload has
+  already left by then and the record is frozen. The terminal result is in the telemetry
+  record, joinable on `call_id`.
+- **A failed attempt is recorded even when it failed before the wire** (DNS, local
+  serialization). That over-counts on purpose: a ledger that misses calls it could not
+  prove went is worse than one that lists the ones it could not prove did not go.
+
+### Deployment: the pepper must not live next to the ledger
+
+The digest is only a privacy mechanism if the key is **not** co-located with the records
+it protects. Today both default into the same checkout — the key in `.env`, the records in
+`digiquant/results/egress/records.jsonl`, both reachable by the same process under the same
+operator. That is acceptable for local development and wrong for any deployment a second
+person can read.
+
+Required separation in staging and production:
+
+- Inject `DIGILLM_EGRESS_DIGEST_KEY` from the secret store into the digillm process
+  environment (`bws run -- docker compose up`, org secret in CI). Never a committed
+  `.env`, never a value in `.env.example`.
+- One key per environment, never shared. A reused pepper makes every deployment's digests
+  comparable, so a copy of one ledger becomes a dictionary for all of them.
+- Point `DIGILLM_EGRESS_LOG_PATH` at a store the digillm process can **append to but not
+  read back** (write-only log sink, or a separate volume with no read grant to the digillm
+  user). Do not bind the key and the ledger onto the same mount, and do not let one backup
+  cover both — a backup containing the pepper and its own ledger recovers candidate
+  ranking wholesale, which defeats the mechanism.
+- Rotate the pepper per environment on the usual cadence. Rotation changes every future
+  digest, so records written under the old key become unverifiable against new records;
+  keep the old ledger and the old key in separately-guarded custody if counsel needs to
+  verify historical entries.
+
+Reading `digest_algorithm: "absent"` in a ledger is a **finding**, not a curiosity: it
+means that environment never had a pepper, so its digests cannot be recomputed and the
+ledger cannot evidence what was sent. Wire the secret before the ledger is relied on for a
+compliance question.
+
 ## Per-request override contract (contextvars)
 
 This is the contract **digigraph** will use after migration (follow-up #12). The
@@ -499,6 +583,8 @@ digitrace on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
 | `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_BACKOFF` | `completion` | Empty-response self-heal: retry count (default 4, raised in #814) + backoff seconds (default 5.0). `DIGILLM_EMPTY_RETRY_DELAY` is a back-compat alias for `..._BACKOFF`. |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `egress_record` | HMAC pepper over the canonical outbound payload, minimum `MIN_DIGEST_KEY_LENGTH` (32) characters. Unset or shorter → `digest_algorithm: "absent"`, `payload_digest: null`. **No unkeyed fallback.** Secret, per environment, must not be co-located with the ledger — see [Egress record](#egress-record-gdpr-what-left-the-process). |
+| `DIGILLM_EGRESS_LOG_PATH` | `egress_record` | JSONL sink path (default `digiquant/results/egress/records.jsonl` at the checkout root). `off` / `none` disables the file sink; a registered observer still receives records. |
 
 ## Tests and CI
 

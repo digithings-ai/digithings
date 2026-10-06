@@ -63,6 +63,11 @@ Beyond root `AGENTS.md`:
   must never abort caller work; prompts, responses, search text, API keys, and
   raw exceptions are never fields on a contract (only a sanitized exception
   type).
+- **An egress record is evidence, and evidence carries no payload.**
+  `EgressRecord` records where a call went and a keyed digest of what went, never
+  the content. The digest is off (`"absent"`) without a pepper, which is reported
+  honestly rather than substituted with something weaker. Delivery is fail-soft,
+  and the sink writes whether or not an observer is registered.
 - **MCP hosting is loopback-only.** `python -m digillm.mcp_server` defaults to
   `127.0.0.1:8768` (`DIGILLM_MCP_PORT` override, `--stdio` for Claude Desktop).
   There is intentionally no supervisord program, stack slot, or Worker route.
@@ -81,6 +86,23 @@ Beyond root `AGENTS.md`:
   contextvars.
 - ❌ Leaking prompts, responses, keys, or raw exception text into telemetry
   records.
+- ❌ **Adding a field to an egress record that can hold a value.** `EgressRecord`
+  is `frozen` and `extra="forbid"` on purpose: a record that can grow a new field
+  can grow a `prompt` field, and a record that carries the prompt is a liability,
+  not an audit trail. Provenance ("which call, which provider, which model")
+  belongs on the record; content does not.
+- ❌ **Letting a missing secret degrade into a weaker but working value.** If
+  `DIGILLM_EGRESS_DIGEST_KEY` is unset, records must say
+  `digest_algorithm: "absent"` / `payload_digest: null` — never fall back to an
+  unkeyed `sha256`, never to a default key, never to "only if it's long enough to
+  look like one". An unkeyed hash of a low-entropy payload is a table lookup, and
+  the silent fallback is what hides that. Absent-and-honest beats present-and-lying.
+- ❌ **Accepting a caller-supplied pre-computed digest.** There is deliberately no
+  such parameter: any caller-supplied string is indistinguishable from a keyed
+  one, which is exactly the hole `record_egress` refuses to offer.
+- ❌ **Storing the pepper beside the records it protects.** The key and the JSONL
+  ledger must not share a mount, a backup, or a read grant in any shared
+  deployment — see [ARCHITECTURE.md § Deployment](ARCHITECTURE.md#deployment-the-pepper-must-not-live-next-to-the-ledger).
 - ❌ `.md` edits via `ruff format` — Markdown is not source (see root `ruff.toml`).
 
 ---
