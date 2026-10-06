@@ -609,7 +609,7 @@ series the manifest actually declared. Four whole-leg freezes still exit 0:
 | Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip; a subset is not evidence | accepted, by design |
 | Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | accepted, by design |
 | Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **open, pre-dates this guard** |
-| Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
+| Unreadable manifest | `_resolve_macro_specs` swallowed the exception and returned `[]`, so `exempt` was empty and the guard had no ids to reason about | **closed (DIG-1371)** — the resolver now returns a list carrying `manifest_error`; `main` reports it as a `macro-manifest-unreadable` `error` outcome *after* the equity leg has run (never a raise, which would abort before `refresh_universe`), so the run exits 1 with the cause in `failed` and `core_macro_mirror.skipped` names the manifest problem |
 
 The last two are the same class of defect this guard closed — a macro panel frozen while
 the run reports fresh — reached by a sibling route. They need their own fixes: the
