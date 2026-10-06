@@ -337,6 +337,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
     rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for DIG-1464 (LuxAlgo trackers
+    data-licence classification: the module-map row and the CC0 public-records
+    layer note now read CC0-1.0, the licence Security classified against the
+    upstream LICENSE file) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -412,12 +416,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "9fdf82f0c003a7a4",
+        "f08d3f3b18f3c305",
         "9ebbe22f37b1ac89",
         "75aa00c56fa87d4c",
         "acc08c97a5620aaf",
         "2da9a534085afc86",
-        "d040c14d01f65a04",
+        "c6d52504ad6af7ba",
         "3021ca751898fc7b",
         "ef1849e4569e10b8",
         "8e7e26ccae99b4a2",
