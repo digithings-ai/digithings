@@ -35,13 +35,16 @@ node_modules/
 # Agent session state (opencode session/storage/db files) — regenerated per
 # machine, never shared. Unanchored for the same reason as the rules above: a
 # worktree-local or nested checkout carries its own .opencode/.
-# Ignored by contents, not by directory, so the one exception below can reach
-# the file. Goals, memory, node_modules and package-lock stay ignored.
-.opencode/*
+# Matched by contents at any depth (`**/`), not just at the root: nested app
+# trees carry their own .opencode/ too, and `apps/digichat/.opencode/` must stay
+# ignored. Ignoring contents rather than the directory itself is what lets the
+# exception below reach a file. Goals, memory, node_modules stay ignored.
+**/.opencode/*
 # Exception: the agent-runtime plugins are tracked code, not machine state.
 # projects-path-guard.js is the projects/ read boundary (DIG-1302); a control
-# that is not in every clone is not a control.
-!.opencode/plugins/
+# that is not in every clone is not a control. Anchored to the root repo, so a
+# nested app's .opencode/plugins/ stays ignored.
+!/.opencode/plugins/
 
 # Cloudflare Pages Functions for digithings.ai are authored under
 # apps/digithings-web/functions/ and mirrored to a repo-root functions/ by
