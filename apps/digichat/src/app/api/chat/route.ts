@@ -302,7 +302,15 @@ export async function POST(req: Request) {
           quotaSatisfied = true;
         }
       } catch (e) {
-        console.warn("[trial-gate] monitor allowlist error, failing open:", e);
+        // Fails CLOSED for the bypass: the assignment above never ran, so
+        // quotaSatisfied stays false and the per-IP quota below applies to this
+        // caller exactly as it did before the monitor check existed. Do not set
+        // quotaSatisfied here to "reconcile" this log with the wording above —
+        // that would turn a safe fallback into a real quota bypass (DIG-1165).
+        console.warn(
+          "[trial-gate] monitor allowlist error, falling back to the per-IP cap:",
+          e,
+        );
       }
     }
 
