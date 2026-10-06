@@ -1411,26 +1411,44 @@ def build_luxalgo_edge_report_tool() -> dict[str, Any]:
     }
 
 
+def _trackers_dataset_enum() -> list[str]:
+    """The pinned trackers dataset ids, for the tool schemas (DIG-1479).
+
+    Advertising the allowlist saves the model a refused round trip; the
+    dispatcher still validates against ``TrackersLatestInput`` /
+    ``TrackersDatasetsInput``, so the enum is a shortcut, never the gate.
+
+    Imported lazily because ``digiquant.data.luxalgo.agent_tools`` imports
+    ``build_orchestrator_tool_manifest`` from this module to build the same
+    schemas — a module-level luxalgo import here would be a cycle.
+    """
+    from digiquant.data.luxalgo.models import LUXALGO_TRACKERS_ALLOWED_DATASETS
+
+    return sorted(LUXALGO_TRACKERS_ALLOWED_DATASETS)
+
+
 def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
             "name": "luxalgo_trackers_datasets",
             "description": (
-                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): every "
-                "dataset of US public-record market data the LuxAlgo pipeline "
-                "publishes as CC0 dumps — congressional trades, insider "
-                "transactions, 13F holdings, federal contracts and grants, "
-                "lobbying filings, short-sale volume, and more — with row "
-                "counts, freshness, the years with data, and whether it is "
-                "ticker-searchable. `dataset` selects one dataset's full field "
-                "roster (read it before composing filters). The dumps are the "
-                "source of record."
+                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): the "
+                "datasets of US public-record market data the LuxAlgo pipeline "
+                "publishes as CC0 dumps, with row counts, freshness, the years "
+                "with data, and whether it is ticker-searchable. That list is "
+                "upstream's own and runs past the six datasets we ingest — "
+                "congressional trades, insider transactions, 13F holdings, "
+                "federal contracts and grants, lobbying filings, short-sale "
+                "volume. `dataset` narrows the listing to one dataset's full "
+                "field roster (read it before composing filters) and accepts "
+                "only those six, the ids in its enum; any other dataset is "
+                "refused. The dumps are the source of record."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dataset": {"type": "string"},
+                    "dataset": {"type": "string", "enum": _trackers_dataset_enum()},
                 },
             },
         },
@@ -1446,15 +1464,16 @@ def build_luxalgo_trackers_latest_tool() -> dict[str, Any]:
                 "Newest ingestion day's rows for one Market Trackers dataset "
                 "(hosted LuxAlgo MCP, anonymous): the cheapest freshness check "
                 "— today's insider filings, this week's congressional "
-                "disclosures. `dataset` is required; `ticker`/`text`/`where` "
-                "narrow the rows; `sort` is newest|oldest; `limit` is 1-100 "
+                "disclosures. `dataset` is required and must be one of the "
+                "allowlisted ids in its enum; `ticker`/`text`/`where` narrow the "
+                "rows; `sort` is newest|oldest; `limit` is 1-100 "
                 "(default 25); `offset` pages. Freshness checks and ad-hoc "
                 "lookups only — never build a pipeline on live queries alone."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dataset": {"type": "string"},
+                    "dataset": {"type": "string", "enum": _trackers_dataset_enum()},
                     "ticker": {"type": "string"},
                     "text": {"type": "string"},
                     "where": {"type": "object"},

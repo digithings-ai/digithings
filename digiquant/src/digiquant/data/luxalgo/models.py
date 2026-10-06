@@ -252,7 +252,10 @@ LUXALGO_TRACKERS_ALLOWED_DATASETS: frozenset[str] = frozenset(
     }
 )
 
-#: Derived from the frozenset so the two can never drift apart.
+#: The pydantic-facing spelling of the six datasets above. Hand-written rather
+#: than derived — a ``Literal`` cannot be built from a frozenset — so it is a
+#: second place to forget. Drift is caught, not prevented, by
+#: ``test_the_literal_alias_and_the_frozenset_agree`` (corrected in DIG-1519).
 TrackersDatasetName = Literal[
     "insider-transactions",
     "thirteenf-holdings",

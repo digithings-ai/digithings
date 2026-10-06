@@ -13,7 +13,13 @@ What is pinned here:
   the business owner decided that on 2026-10-06 against Counsel's advice,
 * that an unknown dataset string is refused on both trackers tools that take a
   dataset (the regression this issue exists for),
-* that the listing call still accepts ``dataset=None``,
+* that the orchestrator schemas for those two tools advertise the same six as an
+  ``enum`` (DIG-1519), so the model reads the allowlist off the schema instead
+  of paying a refused round trip, and that the two descriptions point at that
+  enum as the limit,
+* that the listing call still accepts ``dataset=None``, and that it is a
+  pass-through to the upstream catalog rather than a view of the allowlist —
+  which is why the listing's description may not claim the catalog is the six,
 * that the risk-acceptance note stays attached to the ``congress-trades``
   entry, so a later reader cannot mistake the allowlist for legal clearance,
 * and that no environment variable can widen the allowlist.
@@ -21,8 +27,11 @@ What is pinned here:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -30,10 +39,17 @@ pytestmark = pytest.mark.unit
 
 from digiquant.data.luxalgo import (  # noqa: E402
     LUXALGO_TRACKERS_ALLOWED_DATASETS,
+    LuxAlgoClient,
     TrackersDatasetsInput,
     TrackersLatestInput,
+    build_luxalgo_tool_dispatcher,
 )
 from digiquant.data.luxalgo.models import TrackersDatasetName  # noqa: E402
+from digiquant.orchestrator_tools import (  # noqa: E402
+    build_luxalgo_trackers_datasets_tool,
+    build_luxalgo_trackers_latest_tool,
+    build_luxalgo_trackers_ticker_tool,
+)
 
 MODELS_PY = Path(__file__).resolve().parents[2] / "digiquant/src/digiquant/data/luxalgo/models.py"
 
@@ -113,9 +129,88 @@ def test_the_listing_call_still_allows_no_dataset() -> None:
 
 
 def test_the_literal_alias_and_the_frozenset_agree() -> None:
-    """One source of truth: the Literal is derived from the frozenset, not retyped."""
+    """Both spellings the same six names.
+
+    The Literal is hand-written, not derived from the frozenset — a ``Literal``
+    cannot be built from a frozenset — so this test is what catches drift
+    between the two (DIG-1519 corrected the comment that claimed otherwise).
+    """
     literal_members = set(TrackersDatasetName.__args__)
     assert literal_members == set(LUXALGO_TRACKERS_ALLOWED_DATASETS)
+
+
+def test_the_orchestrator_schemas_advertise_the_allowlist() -> None:
+    """DIG-1519: the model reads the six ids off the schema, not from a refusal.
+
+    Without the enum a wrong ``dataset`` costs a round trip to discover it is
+    refused. The enum is a shortcut, not the gate: the dispatcher still
+    validates the payload, which is what the refusal tests below pin.
+    """
+    expected = sorted(LUXALGO_TRACKERS_ALLOWED_DATASETS)
+    for builder in (
+        build_luxalgo_trackers_datasets_tool,
+        build_luxalgo_trackers_latest_tool,
+    ):
+        properties = builder()["function"]["parameters"]["properties"]
+        assert properties["dataset"]["enum"] == expected, builder.__name__
+
+
+def test_only_the_two_dataset_taking_tools_advertise_the_enum() -> None:
+    """``trackers_ticker`` takes no ``dataset``, so it must not imply one."""
+    properties = build_luxalgo_trackers_ticker_tool()["function"]["parameters"]["properties"]
+    assert "dataset" not in properties
+
+
+def test_the_dataset_taking_descriptions_point_at_the_enum_as_the_limit() -> None:
+    """Both dataset-taking descriptions must hand the model the same limit.
+
+    The enum is what makes the limit legible, so a description that left the
+    reader guessing which ids are legal would undercut the change that added
+    it. Deliberately checked for the pointer rather than for a specific
+    sentence: the point is that the limit is stated, not how it is worded.
+
+    ``luxalgo_trackers_ticker`` is out of scope here — it takes no ``dataset``.
+    """
+    for builder in (
+        build_luxalgo_trackers_datasets_tool,
+        build_luxalgo_trackers_latest_tool,
+    ):
+        description = builder()["function"]["description"]
+        assert "enum" in description, builder.__name__
+
+
+def test_the_catalog_listing_is_upstreams_and_is_not_the_allowlist() -> None:
+    """Why the listing's description may not claim the catalog is the six.
+
+    ``trackers_datasets`` with no ``dataset`` is a pass-through to the upstream
+    catalog, which publishes datasets this service does not ingest, so the
+    response legitimately names ids outside the allowlist. The allowlist bounds
+    the ``dataset`` *filter*; it does not bound what the listing reports.
+
+    This is the distinction DIG-1519's review caught the description blurring:
+    trimming "and more" by claiming the six were the whole catalog would have
+    replaced one false claim with another.
+    """
+    seen: dict[str, Any] = {}
+    upstream_datasets = sorted(LUXALGO_TRACKERS_ALLOWED_DATASETS) + [
+        "bills",
+        "hearings",
+        "options-flow",
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen["arguments"] = body["params"]["arguments"]
+        return httpx.Response(200, json={"result": {"datasets": upstream_datasets}})
+
+    dispatcher = build_luxalgo_tool_dispatcher(
+        client=LuxAlgoClient(transport=httpx.MockTransport(handler)),
+    )
+    result = json.loads(dispatcher("luxalgo_trackers_datasets", {})["content"])
+
+    assert "dataset" not in seen["arguments"]
+    assert set(upstream_datasets) - set(LUXALGO_TRACKERS_ALLOWED_DATASETS)
+    assert result["data"]["datasets"] == upstream_datasets
 
 
 def test_no_env_var_can_widen_the_allowlist(
