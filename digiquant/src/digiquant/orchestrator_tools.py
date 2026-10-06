@@ -1167,7 +1167,7 @@ def build_digifetch_ibkr_execute_order_tool() -> dict[str, Any]:
 # keyless (``free``); every payload carries a per-family "Sourced from LuxAlgo
 # ..." attribution + a canonical link. Indicator source code is deliberately
 # NOT wrapped (CC BY-NC-SA license boundary), and neither is trackers_query
-# (the CC0 dumps stay the source of record).
+# (the CC0-1.0 dumps stay the source of record).
 
 
 def build_luxalgo_library_search_tool() -> dict[str, Any]:
@@ -1417,15 +1417,18 @@ def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
         "function": {
             "name": "luxalgo_trackers_datasets",
             "description": (
-                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): every "
-                "dataset of US public-record market data the LuxAlgo pipeline "
-                "publishes as CC0 dumps — congressional trades, insider "
+                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): the "
+                "six datasets of US public-record data the LuxAlgo pipeline "
+                "publishes as CC0-1.0 dumps — congressional trades, insider "
                 "transactions, 13F holdings, federal contracts and grants, "
-                "lobbying filings, short-sale volume, and more — with row "
-                "counts, freshness, the years with data, and whether it is "
+                "lobbying filings, short-sale volume — with row counts, "
+                "freshness, the years with data, and whether it is "
                 "ticker-searchable. `dataset` selects one dataset's full field "
                 "roster (read it before composing filters). The dumps are the "
-                "source of record."
+                "source of record. The CC0 grant does not clear two of them: "
+                "congress-trades rows are 13107(c) reports whose commercial use "
+                "5 U.S.C. 13107(c)(1)(B) restricts, and short-volume carries "
+                "unresolved upstream FINRA terms (DIG-1464, DIG-1472)."
             ),
             "parameters": {
                 "type": "object",
