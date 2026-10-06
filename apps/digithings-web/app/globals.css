@@ -937,13 +937,20 @@ html {
 }
 
 .pixel-word-band {
-  padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
-  overflow-x: clip;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: clamp(4.5rem, 12vw, 9rem);
+  padding-left: var(--page-pad);
+  padding-right: var(--page-pad);
+  overflow: clip;
 }
 
 .pixel-word.pixel-word-footer {
-  width: min(100%, 1400px);
-  margin: 0 auto;
+  width: min(118%, 1600px);
+  height: auto;
+  margin: 0;
+  margin-top: 0;
 }
 
 .pixel-word .c { opacity: var(--f); }
