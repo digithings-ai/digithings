@@ -289,11 +289,15 @@ MACRO_TOOLS: tuple[str, ...] = (
 )
 # ``digifetch_congress_trades`` is in no subset and must stay that way
 # (DIG-1057): Counsel refused it under 5 U.S.C. 13107(c)(1)(B), so it is denied
-# at registration on every surface (see ``digiquant.tool_refusals``). An earlier
-# note here said its upstream OCR dependency answered HTTP 500 and to re-add it
-# once upstream recovered — that was wrong; the upstream is live (probed
-# 2026-10-05, HTTP 200). Do not re-add it to MACRO_TOOLS or any other subset
-# without Counsel's written clearance.
+# at registration on every surface (see ``digiquant.tool_refusals``). That
+# refusal means using a 5 U.S.C. 13105(l) periodic transaction report for a
+# commercial purpose is unlawful unless the user is news and communications
+# media disseminating to the general public — it is not a bar on all
+# non-media purposes, which is what an earlier note here implied (DIG-1479).
+# An earlier note also said its upstream OCR dependency answered HTTP 500 and to
+# re-add it once upstream recovered — that was wrong; the upstream is live
+# (probed 2026-10-05, HTTP 200). Do not re-add it to MACRO_TOOLS or any other
+# subset without Counsel's written clearance.
 
 PM_TOOLS: tuple[str, ...] = (
     "digifetch_quote",
