@@ -274,22 +274,30 @@ and because it carries live rotation decisions that a docs edit would quietly
 overwrite. Three questions were put to Security. Answered 2026-10-05.
 
 **Q1 — Are the vendor-specific rows generalised, and at what level?**
-**No. The vendor name stays, and so do the `file:line` citations.** Anonymising
-them buys nothing: `PRIMEMARKET_*` is already public and unavoidable in
-`.env.example`, in `digithings-ai/twelve-x`'s workflow files, and in the Python
-config; `https://desk.prime-terminal.com` is a vendor login page anyone can reach.
-Scrubbing one audit file while the same strings sit in the code would make the
-file *less* honest without making the exposure smaller. What is generalisable here
-is the **method**, not the **name** — and the method is what is being removed.
+**No. The vendor name stays, and so do the `file:line` citations.** They are our own
+configuration identifiers: no secret inside a name, and no actionable step it enables,
+so deleting them would remove exactly zero attack surface. The audit needs them
+regardless — named owner, both storage locations, read-by path, refresh script and
+rotate-on-expiry state. Strip the names and every row becomes an unactionable rumour.
+`https://desk.prime-terminal.com` stays too: a public login page, and load-bearing —
+this credential authenticates **as a person**, which is why its refresh path is a human
+sign-in. What is generalisable here is the **method**, not the **name** — and the
+method is what is being removed.
 
 **Q2 — Is the session-acquisition procedure at the `PRIMEMARKET_SESSION_TOKEN`
 row a recipe that belongs out of a public repo?**
-**Yes, and it has been removed.** "Sign in at the desk and copy
-`localStorage['pmt_auth_token']`" was the *session-acquisition* half of the
-prohibited pattern, and it was the most operational sentence in the file. It is
-now "a human operator's own sign-in", with the procedure held in the private
-`twelve-x` repo. Nothing was lost that the audit needs: the row still records the
-name, both storage locations, the reader, the owner, and the refresh script.
+**Yes, and it has been removed.** A session-acquisition procedure — a human sign-in at
+the vendor's desk, then reading the resulting credential out of a named browser storage
+slot — was the *session-acquisition* half of the prohibited pattern, and it was the most
+operational sentence in the file. The row now reads "a human operator's own sign-in",
+and **the acquisition procedure is not published in this repo**: the canonical copy is
+held in the private `twelve-x` repo, for the reason given in [Vendor terms and what
+this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194) — the
+vendor's terms prohibit automated access. It is not restated here either. A removal is
+not an amendment: deleting a step from the operative document does not license
+republishing the step in the document that records the removal. Nothing was lost that
+the audit needs: the row still records the name, both storage locations, the reader,
+the owner, the refresh script, and the rotate-on-expiry rule.
 
 **Q3 — Does the `PRIMEMARKET_SESSION_COOKIE` finding survive in a public file?**
 **Yes, unchanged.** "Delete it; do not rotate it" and "an expiry alert tells you
@@ -305,6 +313,22 @@ vendor name, both storage locations, the three-place spread of the desk login pa
 "a human's desk credentials", the delete-don't-rotate conclusion, the alert gap,
 and every `file:line` above are all as they were, because Security's judgement is
 that an audit which softens its own findings is worse than one that publishes them.
+
+**Corrected 2026-10-06 (DIG-1413, on Security's ruling at DIG-1418), in Q1 and Q2
+only.** Two of this section's own claims were wrong, and the corrections are to its
+reasoning, not to any finding. The Q2 narrative quoted the removed sentence back
+verbatim; it now describes the mechanism and points at the canonical copy instead.
+And Q1 rested on a claim that a later check disproved — that the `PRIMEMARKET_*` names
+are "already public and unavoidable" in `.env.example`, the twelve-x workflow files and
+the Python config. They are not: on the public `develop` every hit for those names is
+inside this file, and the `.env.example` that does carry them lives in the **private**
+`twelve-x` repo. That premise is withdrawn. The names stay anyway, on the reason that
+does hold — they are our own configuration identifiers, and an audit row without its
+name, owner, storage locations and rotation state is an unactionable rumour. **No row
+was edited, no owner changed, no rotation state changed, and no risk-register entry
+changed by this correction.** The general rule recorded for DIG-1415: *our own
+configuration identifiers and a public login page stay; names that locate a credential
+on someone else's system go.*
 
 **Vendor terms are now recorded separately, with artefacts.** A secret inventory
 cannot answer "are we allowed to use this at all" — that is a different question
