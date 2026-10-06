@@ -1,7 +1,7 @@
 # LuxAlgo — terms record
 
 **Vendor:** LuxAlgo Global, LLC (Delaware)
-**Classification:** **pending Security** — see [Classification status](#classification-status)
+**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — two families limited · redistribution question still open · see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
 **Related:** DIG-1318 · DIG-1447 (three live trackers tools) · DIG-1251 (Counsel's ruling that *bounds* these tools — it is not their origin, and their absence from `REFUSED_TOOLS` is not a clearance)
 
@@ -59,6 +59,15 @@ never sent to the hosted MCP, so those calls are local mirrors under
 | Size | 101,670 bytes |
 | Effective date | Stated: **"Last updated: September 6, 2026"** |
 | Artefact location | private — `digithings-ai/digithings-ops`. Not committed here. |
+
+| Field | Trackers dump licence |
+|---|---|
+| Artefact | `https://github.com/LuxAlgo/market-trackers-data` — `LICENSE` at `main` |
+| Retrieved (ISO 8601 UTC) | 2026-10-06T08:50:50Z |
+| sha256 | `a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499` |
+| Size | 7,048 bytes |
+| SPDX | `CC0-1.0` (GitHub licence detection agrees) |
+| Artefact location | public — the repository is `private: false` |
 
 | Field | Licensing page |
 |---|---|
@@ -219,66 +228,158 @@ self-serve purchase, and there is nothing further to read until it exists.
 *code* licence (CC BY-NC-SA indicator source) only, and is about as far from a
 data licence as a flag gets.
 
+### The claim that has now been checked — **CC0-1.0 CONFIRMED**
+
+Security read the primary source on 2026-10-06 and the answer came back
+**positive**, not negative. This section replaces the "never been checked"
+framing it was written under.
+
+The artefact nobody in this thread had read is the repository itself, named by
+our own code as the fallback `source_url`
+(`digiquant/src/digiquant/data/luxalgo/attribution.py`, `LUXALGO_TRACKERS_URL`):
+
+| Field | Value |
+|---|---|
+| Artefact | `https://github.com/LuxAlgo/market-trackers-data` — `LICENSE` at `main` |
+| Read (ISO 8601 UTC) | 2026-10-06T08:50:50Z |
+| sha256 | `a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499` |
+| Size | 7,048 bytes — verbatim CC0 1.0 Universal legal code |
+| SPDX | `CC0-1.0` (GitHub's own detection on that repository) |
+| Repository state | `private: false`, org `LuxAlgo`, created 2026-08-24, last push 2026-09-24 |
+
+The README's licence section states the same thing in the vendor's words: *"The
+data in this repository is dedicated to the public domain under CC0 1.0
+Universal. The underlying records are US-government public records; the
+normalized form stays as unencumbered as its sources. Use it for anything,
+commercial or not, no attribution required."*
+
+**The tension this record raised resolves in the claim's favour.** The "may not
+be redistributed" sentence is under the heading **Market Data & Delays**, and
+every sentence in that block is scoped to quote and price data — "In **Vela**,
+U.S. equities data is real-time from the Cboe EDGX exchange…", "**Market pages
+on luxalgo.com** use data from providers including…". Cboe EDGX, CME Group via
+Databento, Financial Modeling Prep, Massive and Twelve Data are quote and price
+feeds. The trackers feeds are public-record extracts from a separate public
+repository the vendor CC0-dedicated. The hypothesis stated when this issue was
+filed — that these datasets are public-record derived while the clause covers a
+different surface — **holds**.
+
+Per dataset family, which is how the verdict is recorded (six families, not
+one; see §[Per-family classification](#per-family-classification) below).
+
+### Per-family classification
+
+| Family | Upstream dir | Primary source | Verdict |
+|---|---|---|---|
+| insider-transactions | `insider/transactions/` | SEC EDGAR Form 4 | **CC0-1.0 CONFIRMED** |
+| thirteenf-holdings | `thirteenf/holdings/` | SEC EDGAR Form 13F-HR | **CC0-1.0 CONFIRMED** |
+| gov-contracts | `contracts/awards/` | USAspending | **CC0-1.0 CONFIRMED** |
+| lobbying-filings | `lobbying/filings/` | Senate LDA API | **CC0-1.0 CONFIRMED** |
+| congress-trades | `congress/trades/` | House Clerk, Senate eFD | **CC0-1.0 CONFIRMED** as licence · **commercial use restricted by statute** |
+| short-volume | `short-volume/daily/` | FINRA | **UNCLEAR** — upstream terms unresolved · with Counsel |
+
+The four plain confirmations do not rest on the vendor's assertion alone.
+EDGAR filings, House Clerk and Senate disclosure reports, Senate LDA and
+USAspending records are **works of the US federal Government**, which 17 U.S.C.
+§105 places outside the scope of US copyright. That is a stronger basis than a
+vendor's CC0 dedication, and it means these four would survive a dispute about
+the vendor's own rights.
+
+**congress-trades carries a limit no licence can supply.** The rows are 13107(c)
+disclosure reports. 5 U.S.C. §13107(c)(1)(B) restricts their use for a
+commercial purpose, and §13107(c)(2) runs to whoever obtains or uses the report.
+A CC0 dedication is a waiver by the affirmer; it cannot waive a statutory use
+prohibition, and it cannot move the exposure to the vendor. Counsel classified
+this data class refused (DIG-1472). **The dataset is in service by business
+decision dated 2026-10-06 against that advice, which is not a clearance** —
+recorded at `LUXALGO_TRACKERS_ALLOWED_DATASETS` and pinned by
+`tests/dq/test_congress_trades_statute_and_ingest_provenance.py`.
+
+**short-volume is Unclear, and this is where the CC0 grant runs out.** FINRA is
+a **private self-regulatory organisation**, not a federal records custodian
+like the other four. Its short-sale-volume compilation carries FINRA's own
+terms, and CC0 §4(b)–(c) is explicit about what that means: the affirmer makes
+no warranty of title or non-infringement and disclaims responsibility for
+clearing other people's rights. LuxAlgo cannot license what it does not hold.
+This is exactly the failure mode Counsel predicted — *"Form 4 and 13F data are
+republished third-party data and may carry upstream redistribution terms
+regardless of what LuxAlgo asserts about its own dump."* Routed to Counsel.
+
+### The defect this record was filed against
+
+The original finding was that our code asserts a licence nobody had read. That
+was right, and the claim turned out to be true — which means the finding's real
+consequence is not "the claim was false" but **the claim was unqualified**.
+
+Every trackers surface shipped "CC0 public-record dumps" with no per-family
+caveat: `attribution.py`'s `LUXALGO_TRACKERS_LICENSE_NOTE`, the three
+`TOOL_NOTES` entitlement sentences, the `luxalgo_trackers_datasets` MCP
+docstring, and the orchestrator tool description. A reader — human or model —
+concludes CC0 makes congress-trades fine. It does not. That is the same defect
+shape `tool_refusals.py` was fixed for under DIG-1479: the §13107 note reached
+the refusal module and never reached the attribution constants.
+
+Fixed 2026-10-06 (DIG-1464): the classification now lives in
+`digiquant/src/digiquant/data/luxalgo/attribution.py` as
+`LUXALGO_TRACKERS_DATA_LICENSE`, `LUXALGO_TRACKERS_LICENSE_ARTEFACT` and
+`LUXALGO_TRACKERS_DATA_CAVEATS`, and every trackers licence and entitlement
+note renders the caveats via `trackers_data_caveat`. The guard is
+surface-wide: a file that says CC0 for trackers data without naming a limit
+fails `test_no_user_visible_cc0_claim_is_left_unqualified`. That guard closes
+the wider hole this issue found — **nothing in the tree checked the data
+licence at all**, while `scripts/check_luxalgo_license_boundary.py` and
+`license_guard.py` cover the *code* licence only.
+
 ### The specific claim that has never been checked
 
-Our code asserts that the trackers datasets are **"CC0 public-record dumps"**,
-with `provenance.sourceUrl` on every row, and the entitlement note repeats it.
+Our code asserted that the trackers datasets are **"CC0 public-record dumps"**,
+with `provenance.sourceUrl` on every row, and the entitlement note repeated it.
 Three tools expose them (`luxalgo_trackers_datasets`, `_latest`, `_ticker`), and
 **six ingest datasets** sit behind them: congress-trades
 (`trackers_ingest.py`) plus insider-transactions, thirteenf-holdings,
 short-volume, lobbying-filings and gov-contracts (`trackers_wave2_ingest.py`).
 
-**That is our own assertion, in our own code, made without anyone reading the
-LuxAlgo terms.** It is exactly trap 1 from the [intake record](../INDEX.md): a
-licence claim inherited from a repository rather than read from the vendor. The ToS
-states that market data "includes data licensed from third parties" and names
+That was our own assertion, in our own code, made without anyone reading the
+LuxAlgo terms — exactly trap 1 from the [intake record](../INDEX.md): a licence
+claim inherited from a repository rather than read from the vendor. **It has now
+been checked; see [above](#the-claim-that-has-now-be-checked--cc0-10-confirmed).
+The claim is CONFIRMED, and what was wrong with it was its unqualifiedness.**
+
+Retained for the audit trail, superseded by the sections above: the ToS states
+that market data "includes data licensed from third parties" and names
 Cboe EDGX, CME Group via Databento, Financial Modeling Prep, Massive and Twelve
-Data — all commercial market-data businesses, none a public-record source. It
-also states the data "may not be redistributed". Meanwhile our own code says the
-hosted MCP is the transport while "the dumps are the source of record".
-**The CC0 claim is therefore unverified.**
-
-Precisely: no quoted clause addresses these dumps. The market-data prohibitions
-are scoped to *quote and price* data and are written about Vela and
-luxalgo.com ("In **Vela**, U.S. equities data is real-time from the Cboe EDGX
-exchange…", "**Market pages on luxalgo.com** use data from providers
-including…"). The trackers feeds are public-record extracts from the
-`LuxAlgo/market-trackers-data` repository, and the exhaustion clause may not
-reach `raw.githubusercontent.com` at all. So the answer is **unknown**, not
-"the vendor disagrees". Nobody has read anything that speaks to these datasets
-either way, which is precisely why the claim in our code is the problem.
-
-This is the highest-value thing in this record. It is stated here rather than
-fixed here: a data-provenance claim is Security's to classify and Counsel's to
-sign off, and we should not silently re-label it either way before they do.
+Data — all commercial market-data businesses, none a public-record source — and
+states the data "may not be redistributed". Our own code said the hosted MCP is
+the transport while "the dumps are the source of record". On that reading the
+claim looked unverified. It was not false; the clause simply covers a different
+surface.
 
 ---
 
 ## Classification status
 
-**Pending Security.** Clauses recorded, quoted and hashed. Nobody has signed a
-classification. Security owns that step (DIG-1318 acceptance criterion 3);
-Counsel takes anything Unclear or Prohibited before implementation.
+**The trackers data licence is signed by Security: CC0-1.0, per family, as
+tabulated above (2026-10-06).** Clauses recorded, quoted and hashed. Two items
+remain open and both are Counsel's, because Security's classification is about
+the licence and theirs is about what we may do with it.
 
-Questions already shaped, in the order they should be answered:
-
-1. **Is the CC0 assertion on the six trackers datasets correct**, and if not,
-   what licence are they actually under? No vendor clause read so far speaks to
-   them. (Security to classify; affects three live tools and two ingest modules.)
-1b. **Is congress-trades data refusable as a matter of statute?** This is a
-   separate question from the licence and it is the sharper one. Counsel has
-   already refused the same data class under 5 U.S.C. 13107(c)(1)(B)
-   (`digiquant/src/digiquant/tool_refusals.py`, `phase1_altdata.py:76-78`:
-   *"Counsel has ruled this feed permanently refused under 5 U.S.C.
-   13107(c)(1)(B)"*), yet `trackers_ingest.py:1` ingests
-   `congress/trades/latest.json` and `TrackersLatestInput` accepts an
-   unrestricted `dataset`, so a caller can request congress trades through a live
-   tool. **A statutory prohibition is not a licensing question and no clause in
-   this folder answers it.** This should be answered before the licence
-   questions.
+1. **short-volume upstream terms (UNCLEAR → Counsel).** FINRA is a private SRO,
+   not a federal records custodian, so the CC0 grant reaches LuxAlgo's own
+   normalisation and not FINRA's compilation. Counsel to give a recorded
+   position: keep, refuse, or condition on FINRA's own redistribution terms.
+   Raised as a child of DIG-1464.
+1b. ~~Is congress-trades data refusable as a matter of statute?~~ **Answered.**
+   Counsel ruled the data class refused under 5 U.S.C. 13107(c)(1)(B) on
+   DIG-1472 (CONFIRMED). The dataset remains in service by business decision
+   dated 2026-10-06 against that advice — a decision to accept the
+   §13107(c)(2) exposure, not a clearance. DIG-1479 records it at
+   `LUXALGO_TRACKERS_ALLOWED_DATASETS`.
 2. **Does rendering LuxAlgo-sourced values with attribution inside our product
    count as redistribution** under the ToS, and which tier covers it —
-   Business Tier within its §1.6 limits, or an Enterprise Agreement? (Counsel.)
+   Business Tier within its §1.6 limits, or an Enterprise Agreement? Still open
+   (Counsel). Note the trackers dumps are a separate question from the Library
+   surfaces this clause was written about, and their CC0 dedication does not
+   answer it for anything the vendor delivers over the hosted MCP.
 3. Is the free/anonymous entitlement tier itself permitted for our use, given the
    exhaustion clause?
 
