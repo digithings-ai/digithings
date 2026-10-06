@@ -72,6 +72,28 @@ the image, and `test_no_layer_fans_out_to_occ_tickets` guards all of it. Because
 no longer wired on `develop`, the masked default that #5159 and #5148 proposed has nothing left
 to protect, and the two halves can no longer be landed separately — see Consequences.
 
+`main` carried the same writer in the image until PR
+[#5226](https://github.com/digithings-ai/digithings/pull/5226) removed the `COPY` lines and
+inverted the `#4988` re-include guard. The two branches were not in the same state, and an
+earlier revision of this ADR said "no longer copied into the image" without saying which
+branch. Recorded here so the next reader does not inherit the ambiguity.
+
+### Production containment, verified against the deployed bundle
+
+Repo state is not production state, and this ticket spent two days being wrong about that
+distinction. The check that matters reads the **deployed** Worker, not the branch:
+
+| checked | result |
+|---|---|
+| `digithings-stack` `modified_on` | `2026-10-06T20:03:24Z`, after the #5215 merge |
+| `occ_tickets` in the deployed bundle | **0 occurrences** |
+| `[internal]` in the deployed bundle | **0 occurrences** |
+| "full customer names" in the deployed bundle | **0 occurrences** |
+| live `occ` entry in `DIGI_TENANT_CORPUS_MAP` | `digisearchIndex: occ_help`, prompt scoped to `occ_help` |
+
+Containment reached production. **This does not un-publish the payload**: the snapshot has been
+retrievable from a public repo since 2026-10-02 and the history rewrite is a separate decision.
+
 **2. The OCC surface is gated behind a private invite link, not a login.**
 digichat already enforces a per-tenant `X-Embed-Token`. OCC was exempt for one reason: the
 host `occ.digithings.ai` was added to `FIRST_PARTY_EMBED_HOSTS`, and a first-party host is
