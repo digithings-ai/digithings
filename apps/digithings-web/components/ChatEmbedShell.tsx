@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
+import { readInviteToken } from "@/lib/inviteToken";
 
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
@@ -89,7 +90,12 @@ function parseOrigin(raw: string): string {
   }
 }
 
-function embedSrc(origin: string, embedHost: string, theme: EmbedShellTheme): string {
+function embedSrc(
+  origin: string,
+  embedHost: string,
+  theme: EmbedShellTheme,
+  inviteToken?: string,
+): string {
   const base = origin.replace(/\/$/, "");
   const url = new URL(`${base}/embed`);
   url.searchParams.set("host", embedHost);
@@ -98,6 +104,9 @@ function embedSrc(origin: string, embedHost: string, theme: EmbedShellTheme): st
   // Full-page host, not a narrow widget — drop digichat-ui's 1080px reading
   // column so the session fills the shell (see .dc-session--wide).
   url.searchParams.set("wide", "1");
+  // Invite key for a gated tenant (DIG-1210). Omitted entirely when absent so a
+  // tokenless embed URL is byte-identical to the pre-invite one.
+  if (inviteToken) url.searchParams.set("token", inviteToken);
   const copy = EMBED_SHELL_COPY[embedHost];
   if (copy) {
     url.searchParams.set("welcome", copy.welcome);
@@ -111,6 +120,16 @@ export type ChatEmbedShellProps = {
   embedOrigin: string;
   /** digichat embed registry host key (default digithings.ai). */
   embedHost?: string;
+  /**
+   * Read the invite key off the parent URL and forward it to digichat as
+   * `token=` (DIG-1210). Set only on invite-gated routes: /chat leaves it off,
+   * so a stray `?token=` there can never reach a tenant that never asked for one.
+   *
+   * Resolved per visit in the browser, never during render — this app is
+   * `output: "export"`, so the shipped HTML is one static artifact shared by
+   * every visitor. See `@/lib/inviteToken`.
+   */
+  acceptsInviteToken?: boolean;
 };
 
 /**
@@ -137,6 +156,7 @@ export type ChatEmbedShellProps = {
 export function ChatEmbedShell({
   embedOrigin,
   embedHost = DEFAULT_CHAT_EMBED_HOST,
+  acceptsInviteToken = false,
 }: ChatEmbedShellProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeLoadedRef = useRef(false);
@@ -182,13 +202,23 @@ export function ChatEmbedShell({
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
       setShellTheme(theme);
+      // Invite key, read from the live URL (DIG-1210). Resolved here rather
+      // than during render: the SSR pass cannot see the query, and the exported
+      // HTML must not carry one visitor's key to the next.
+      const token = acceptsInviteToken
+        ? readInviteToken(window.location.search)
+        : undefined;
       // The inline script above already rewrote the theme param when the
       // real theme is dark; only rebuild the src when the live attribute
       // still disagrees (client-only mounts, embed target changes).
       // Rebuilding just for the theme reloads the iframe and flashes.
       const current = iframeRef.current?.getAttribute("src") ?? "";
-      if (!current.includes(`theme=${theme}`)) {
-        setSrc(embedSrc(embedOrigin, embedHost, theme));
+      // The exported first paint never had the key, so an invite link needs one
+      // extra src swap on hydration even when the theme already agrees. Any
+      // other visitor's src is left alone: no token means no rebuild.
+      const missingToken = Boolean(token) && !current.includes("token=");
+      if (!current.includes(`theme=${theme}`) || missingToken) {
+        setSrc(embedSrc(embedOrigin, embedHost, theme, token));
       }
     });
 
@@ -211,7 +241,7 @@ export function ChatEmbedShell({
       attributeFilter: ["data-theme"],
     });
     return () => observer.disconnect();
-  }, [embedOrigin, embedHost, targetOrigin]);
+  }, [acceptsInviteToken, embedOrigin, embedHost, targetOrigin]);
 
   useEffect(() => {
     if (!targetOrigin) return;
