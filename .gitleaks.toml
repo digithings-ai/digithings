@@ -132,10 +132,16 @@ commits = [
   # No rotation needed (see SECURITY.md "Secrets scanning").
   "0f193360d21305ca8a65d33c47a7502a7ad5ec60",
 
-  # 2026-10-06: stash-archive snapshot 1a657079c, reachable only from the local
-  # refs/tags/stash-archive/28 and /29 and present on no remote. It adds six
-  # 20-char aws-access-token-shaped strings inside third-party broker research
-  # briefs under projects/twelve_x/vault/briefs/2026-06-05/ (SEB and ING notes).
+  # 2026-10-06: stash-archive snapshot 1a657079c. It was reachable only from the
+  # local refs/tags/stash-archive/28 and /29; DIG-1304 expired all 45
+  # stash-archive/* tags on 2026-10-06, so it is now unreachable from every ref
+  # in the local repo and present on no remote. The commit object is still in the
+  # object database and still scannable, and Security re-confirmed on 2026-10-06
+  # that it is still reachable inside .git/stash-archive/stash-archive.bundle,
+  # so the exemption stays. Retiring that bundle is DIG-1313 (Counsel and Chris
+  # own it). It adds six 20-char aws-access-token-shaped strings inside
+  # third-party broker research briefs under
+  # projects/twelve_x/vault/briefs/2026-06-05/ (SEB and ING notes).
   # Measured: matchLen 20, secretLen 20, entropy 3.52, AWS key-ID prefix true.
   # So they are genuinely key-ID shaped, NOT prose, and the blanket
   # "research prose" justification that used to mute the entire
