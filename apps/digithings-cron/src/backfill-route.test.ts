@@ -84,6 +84,26 @@ class FakeLedger {
 
 const SECRET = "kick-secret";
 
+/**
+ * GitHub's 422 body for a `workflow_dispatch` against a workflow disabled with
+ * `disabled_manually`, captured live on 2026-10-06 from a throwaway repo whose
+ * only workflow was `workflow_dispatch`-only — the same dispatch against that
+ * workflow while enabled answers 204. twelve-x `maintenance.yml` is in exactly
+ * this state (DIG-757).
+ *
+ * Pinned verbatim because the distinction is load-bearing and easy to document
+ * wrongly: this is a 422 like any other, but it is *not* one of the bodies
+ * `isBenign422` matches ("already queued" / "already running"), so it does not
+ * become `dispatch_suppressed`. It is a dispatch failure — 502, claim released.
+ * Both outcomes leave the date dispatchable; only the status differs.
+ */
+const DISABLED_WORKFLOW_422 = JSON.stringify({
+  message: "Cannot trigger a 'workflow_dispatch' on a disabled workflow",
+  documentation_url:
+    "https://docs.github.com/rest/actions/workflows#create-a-workflow-dispatch-event",
+  status: "422",
+});
+
 /** Same shape as the existing suite's helper; POST /backfill never waitUntil()s. */
 function executionContext(): ExecutionContext {
   return { waitUntil() {} } as unknown as ExecutionContext;
@@ -408,6 +428,51 @@ describe("POST /backfill — failure handling", () => {
     // no-op claiming the date was already handled.
     const live = githubAnswers(204);
     live.mockClear(); // the same global spy, now answering 204 only
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      dispatched: ["2026-06-02"],
+      states: { "2026-06-02": "done" },
+    });
+    expect(live).toHaveBeenCalledTimes(1);
+  });
+
+  it("502s a disabled workflow's 422 instead of reporting it suppressed", async () => {
+    const fetchSpy = githubAnswers(422, DISABLED_WORKFLOW_422);
+    const { env: e, ledger } = withLedger(env());
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+
+    // The state a disabled maintenance.yml actually produces. It is a 422, but
+    // `isBenign422` does not recognise its body, so the dispatch failed rather
+    // than being suppressed — which is why the docs used to claim 409 here.
+    // What matters is what it is NOT: never `done`, so no later POST can answer
+    // "already remediated" for a date twelve-x never backfilled.
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ error: "dispatch_failed", release_failed: false });
+    expect(body.error).not.toBe("dispatch_suppressed");
+    // Nothing recorded at all — in particular not `done`, so no later POST can
+    // answer "already remediated" for a date twelve-x never backfilled.
+    expect(ledger.records.has("2026-06-02")).toBe(false);
+
+    // One upstream call, not three: this is a refusal, not a rate limit.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the claim on a disabled workflow, so re-enabling it retries for real", async () => {
+    githubAnswers(422, DISABLED_WORKFLOW_422);
+    const { env: e, ledger } = withLedger(env());
+    expect((await postBackfill({ dates: "2026-06-02" }, e)).status).toBe(502);
+
+    // The 502 released the claim, so the date is claimable again — this is what
+    // keeps a disabled workflow from costing a date. DIG-757 re-enables it and
+    // the retry is a real dispatch, not a no-op claiming the date was handled.
+    expect(ledger.records.has("2026-06-02")).toBe(false);
+
+    const live = githubAnswers(204);
+    live.mockClear();
     const res = await postBackfill({ dates: "2026-06-02" }, e);
 
     expect(res.status).toBe(200);

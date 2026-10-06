@@ -110,13 +110,23 @@ cannot rebuild the surplus that a second backfill of the same date created once 
 A date is `done` only when GitHub **started a run**. A dispatch GitHub declined is a third
 state, `dispatch_suppressed`, and it is the one that keeps the endpoint honest:
 
-- **A benign 422 is not remediation.** `maintenance.yml` being disabled, or a run for the ref
-  already being queued, makes GitHub answer `422` with "workflow is already running". No run
-  exists for those dates. The endpoint answers `409 dispatch_suppressed`, records
-  `dispatch_suppressed` with the GitHub status, and leaves the date **claimable** — so the
-  next POST retries it. Recording `done` here instead is what would make every later retry
-  answer `200 {"dispatched": [], "already_remediated": true}` with zero upstream calls, for a
-  date that was never backfilled.
+- **A benign 422 is not remediation.** A run for the ref already being queued makes GitHub
+  answer `422`; `isBenign422` recognises only bodies containing `already queued` or
+  `already running`, and a date whose dispatch got one of those starts no run. The endpoint
+  answers `409 dispatch_suppressed`, records `dispatch_suppressed` with the GitHub status, and
+  leaves the date **claimable** — so the next POST retries it. Recording `done` here instead is
+  what would make every later retry answer
+  `200 {"dispatched": [], "already_remediated": true}` with zero upstream calls, for a date that
+  was never backfilled.
+- **A disabled workflow is a different 422, and it is a failure.** GitHub answers a dispatch
+  against a `disabled_manually` workflow with
+  `422 {"message":"Cannot trigger a 'workflow_dispatch' on a disabled workflow"}` — captured
+  live 2026-10-06 and pinned in `src/backfill-route.test.ts`. That body matches none of
+  `isBenign422`'s substrings, so the dispatch **fails** rather than being suppressed:
+  `502 dispatch_failed`, the claim released, no state recorded. It is not, and never was,
+  `409 dispatch_suppressed`; see [Deployment caution](#deployment-caution). The safety outcome
+  is the same as for the benign 422 — nothing marked `done`, the date claimable, the next POST
+  a real retry — but the status code is 502.
 - **A claim ages out.** `IN_FLIGHT_TTL_MS` (30 min) is the window a claim may stand. A request
   killed between `claim` and settle — isolate eviction, client abort — otherwise locks its
   dates out forever, and every later POST reports them as remediated. Past the TTL an
@@ -145,8 +155,8 @@ Every rung runs before the first request leaves the Worker:
 | Element is not a real calendar date | 400 `invalid_dates` |
 | More than 32 dates | 400 `too_many_dates` |
 | `BACKFILL_LEDGER` binding absent | 503 `backfill_unconfigured` |
-| GitHub dispatch failed | 502 `dispatch_failed` (claims released) |
-| GitHub declined with a benign 422 | 409 `dispatch_suppressed` (dates stay dispatchable) |
+| GitHub dispatch failed, including a disabled workflow | 502 `dispatch_failed` (claims released) |
+| GitHub declined with an already-running 422 | 409 `dispatch_suppressed` (dates stay dispatchable) |
 
 Success dispatches `maintenance.yml` on `digithings-ai/twelve-x` at `ref: develop` with
 inputs `{backfill_snapshots: "true", dates: "<csv>"}` only.
@@ -183,10 +193,14 @@ enabled by default: `BACKFILL_ENABLED = "0"` in `wrangler.toml`, and turning it 
 separate, explicit act.
 
 **Prerequisite:** twelve-x `maintenance.yml` is currently `disabled_manually`, and GitHub
-refuses to dispatch a disabled workflow. Until it is re-enabled, every `POST /backfill` gets a
-benign 422 and answers **`409 dispatch_suppressed`** — not yet live, not success. Nothing is
-recorded as remediated, so re-enabling the workflow (DIG-757) and POSTing again is all it
-takes; no date is lost to the attempt.
+refuses to dispatch a disabled workflow. Until it is re-enabled (DIG-757), every
+`POST /backfill` answers **`502 dispatch_failed`**, not `409 dispatch_suppressed`. GitHub's 422
+for a disabled workflow is `Cannot trigger a 'workflow_dispatch' on a disabled workflow`, which
+is not a body `isBenign422` treats as benign, so the dispatch counts as a failure rather than a
+suppression. The claim is released and nothing is recorded as remediated, so re-enabling the
+workflow and POSTing again is all it takes; no date is lost to the attempt.
+`409 dispatch_suppressed` is the *other* 422 case — a run for the ref already queued — and it
+cannot occur while the workflow is disabled.
 
 ## Local
 

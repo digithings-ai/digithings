@@ -48,12 +48,16 @@ for an already-remediated date a no-op with zero upstream requests, and a bare
 kick with no `dates` is refused before any request leaves the Worker.
 
 A date is only remediated when GitHub actually starts a run. A dispatch GitHub
-declines — `maintenance.yml` is `disabled_manually`, or a run is already queued —
+declines with a benign 422 — one whose body `isBenign422` matches on `already
+queued` or `already running`, in practice a run for the ref already queued —
 answers `409 dispatch_suppressed`, records nothing as remediated, and leaves the
 date dispatchable, so the next POST retries it instead of reporting a backfill
-that never happened. Every response carries a per-date `states` map, and an
-in-flight claim ages out after `IN_FLIGHT_TTL_MS` rather than locking its date
-out forever.
+that never happened. A `disabled_manually` workflow is a different 422 with a
+different body (`Cannot trigger a 'workflow_dispatch' on a disabled workflow`),
+which is not benign: it answers `502 dispatch_failed`, releases the claim, and
+equally records nothing, so the date stays dispatchable. Every response carries a
+per-date `states` map, and an in-flight claim ages out after `IN_FLIGHT_TTL_MS`
+rather than locking its date out forever.
 
 Off by default (`BACKFILL_ENABLED = "0"`) and gated behind `CRON_KICK_SECRET`.
 Full contract, guard ladder and the `disabled_manually` prerequisite are in
