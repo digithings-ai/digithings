@@ -31,7 +31,7 @@ class OptionsDerivativesReport(ResearchMemo):
 
 
 class PoliticianSignalsReport(ResearchMemo):
-    """Phase 1D — Congressional trades (STOCK Act) + policy signals."""
+    """Phase 1D — official policy signals (Treasury/Fed/regulatory)."""
 
 
 class AiPortfoliosReport(ResearchMemo):
