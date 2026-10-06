@@ -1,26 +1,34 @@
-"""luxalgo market-trackers-data congress-trades CC0 dump → digisearch index.
+"""digisearch trackers adapter — the congress-trades path is refused here.
 
-Primary-source US public-records layer **beside Gloomberg** (never replacing
-the terminal digest). Thin wrap mirroring :mod:`digisearch.research_ingest`:
-fetch rows → normalize to flat payloads → write through the shared
-:func:`digisearch.pipeline.ingest.index_chunks`.
+Counsel on DIG-1291 refused item (i) and the CTO disposition is REFUSED:
+congressional transaction data, parsed under 5 U.S.C. 13105(l), must not be
+fetched, indexed or served from a client-queryable digisearch index. This
+module therefore closes the ``congress-trades`` fetch and ingest path **in
+code**. No function here can reach :data:`CONGRESS_TRADES_URL`, and the parsed
+filing shape is deliberately no longer documented here: documenting an indexed
+record is how the next adapter gets written back into existence.
 
-Row schema (``congress/trades/latest.json``, verified 2026-09-30): a bare JSON
-array of ``{id, chamber, docId, rowIndex, member{name,bioguideId,party,state},
-filedAt, transactedAt, ticker|null, assetDescription, assetType, side,
-amountRange{min,max,text}, owner|null, provenance{source, sourceUrl,
-retrievedAt, parser, confidence, needsReview}}``. Null-ticker rows are
-ingested like any other row (no silent drop) — the ``ticker`` metadata key is
-simply absent after Chroma normalization.
+Refusal shape (DIG-1057 Q5): ``refused = CODE_CONSTANT ∪ ENV_DENYLIST``, and it
+is deny-only and fail-closed. :data:`CODE_REFUSED_DATASETS` refuses
+unconditionally; ``DIGISEARCH_REFUSED_FEEDS`` (:data:`REFUSAL_DENYLIST_ENV_VAR`)
+can only *widen* the refused set. No value of that variable — ``allow``,
+``permit``, ``*``, ``none``, ``0``, an empty string or garbage — ever permits a
+refused feed, and a missing or unparseable value leaves the code constant
+standing. There is deliberately no allow-list, no subtraction and no override:
+CC0 is not a distribution right, and 5 U.S.C. 13107(c) is not a copyright right
+a private party can waive.
 
-Idempotency: the natural key ``{chamber}:{docId}:{rowIndex}`` seeds stable
-``Document``/chunk ids (the ``Document.id`` reuses
-:func:`digisearch.research_ingest._stable_doc_id`), so every backend upserts
-by id. The ``ingested``/``skipped`` counts additionally probe the in-memory
-stub index — exact on the unit-test path; on production backends a rewritten
-row reports as ingested while storage still dedupes by stable id.
+What survives the refusal: :func:`normalize_congress_trade` stays a pure
+in-memory row→payload mapper with no I/O, no fetch and no index write, so it is
+not a way back in.
 
-Network: all HTTP goes through
+Not refused: the five wave-2 datasets (``insider-transactions``,
+``thirteenf-holdings``, ``short-volume``, ``lobbying-filings``,
+``gov-contracts``) in :mod:`digisearch.trackers_wave2_ingest` — scope item 3
+enumerates congress-trades only. digisearch keeps its own denylist constant and
+does not import digiquant; two independent constants beat one coupled one.
+
+Network: all HTTP still goes through
 :func:`digisearch.pipeline.url_ingest.fetch_json_feed` — the single URL-fetch
 site (SSRF-guarded digifetch ``HttpFetcher`` via ``validate_fetch_url``).
 This module never opens sockets itself and never fetches URLs directly.
@@ -32,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Mapping, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -50,7 +59,9 @@ from digisearch.search._stub import _stub_index
 logger = logging.getLogger(__name__)
 
 
-#: Stable feed: current congress-trades snapshot (CC0-1.0 data).
+#: Refused feed URL. Retained as an *identifier* only: every fetch path refuses
+#: before this URL can be dialled (see :func:`_assert_url_not_refused`), so it is
+#: never a live source. CC0 is not a distribution right.
 CONGRESS_TRADES_URL: str = (
     "https://raw.githubusercontent.com/LuxAlgo/market-trackers-data"
     "/main/congress/trades/latest.json"
@@ -76,6 +87,23 @@ TRACKERS_ORIGIN: str = "luxalgo-trackers/congress-trades"
 #: index so the primary-source layer stays queryable beside Gloomberg.
 TRACKERS_INDEX_NAME: str = os.environ.get("DIGISEARCH_TRACKERS_INDEX", "trackers")
 
+# --- Refusal (DIG-1291 (i) REFUSED / DIG-1307) --------------------------------
+#
+# Shape: ``refused = CODE_CONSTANT ∪ ENV_DENYLIST``. Deny-only, fail-closed.
+# ``DIGISEARCH_REFUSED_FEEDS`` can widen the refused set and nothing else — it
+# is never an allow-list and never an override, and it can never subtract from
+# the code constant.
+
+#: Env var holding *additional* refused dataset names. Extra denylist only.
+REFUSAL_DENYLIST_ENV_VAR: str = "DIGISEARCH_REFUSED_FEEDS"
+
+#: Datasets refused unconditionally by code. Never derived from the environment.
+CODE_REFUSED_DATASETS: frozenset[str] = frozenset({CONGRESS_TRADES_DATASET})
+
+#: URL fragments refused unconditionally. Repointing :data:`CONGRESS_TRADES_URL`
+#: at another aggregator relocates the violation; it does not lift it.
+CODE_REFUSED_URL_FRAGMENTS: tuple[str, ...] = ("/congress/trades/",)
+
 
 class StaleDatasetError(RuntimeError):
     """The upstream manifest flags this dataset ``stale`` — ingest refused."""
@@ -91,13 +119,64 @@ class TrackersFetchError(RuntimeError):
 
 
 class TrackersIngestResult(BaseModel):
-    """Outcome of one congress-trades ingest run."""
+    """Outcome of one trackers ingest run."""
 
     model_config = ConfigDict(extra="forbid")
 
     ingested: int = Field(ge=0)
     skipped: int = Field(ge=0)
     source: str = TRACKERS_ORIGIN
+
+
+class RefusedDatasetError(RuntimeError):
+    """A refused dataset or URL was reached — the call is denied, not degraded.
+
+    Raised before any transport, index write or shape validation happens. It is
+    not a :class:`TrackersFetchError`: a refused feed never becomes a fetch
+    problem, and callers must not catch it and carry on.
+    """
+
+
+def refused_datasets() -> set[str]:
+    """Every dataset name refused right now: code constant ∪ env tokens.
+
+    Reads :data:`REFUSAL_DENYLIST_ENV_VAR` on every call (no import-time
+    snapshot, so a test or a deployment can widen the set at runtime) and splits
+    it on ``[,\\s]+``, lowercases the tokens and drops the empty ones.
+
+    Deny-only by construction: the union is one-directional, so the env list can
+    only add names. A missing, empty or unparseable value yields exactly
+    :data:`CODE_REFUSED_DATASETS` — still refused, never fail-open.
+    """
+    raw = os.environ.get(REFUSAL_DENYLIST_ENV_VAR) or ""
+    tokens = {token.lower() for token in re.split(r"[,\s]+", raw) if token}
+    return set(CODE_REFUSED_DATASETS) | tokens
+
+
+def _assert_not_refused(dataset: str) -> None:
+    """Raise :class:`RefusedDatasetError` when *dataset* is refused."""
+    if dataset in refused_datasets():
+        raise RefusedDatasetError(
+            f"dataset {dataset!r} is refused by policy (DIG-1291 (i) REFUSED) "
+            f"— no fetch, no ingest, no substitute feed"
+        )
+
+
+def _assert_url_not_refused(url: str) -> None:
+    """Raise :class:`RefusedDatasetError` when *url* hits a refused fragment.
+
+    Second line of defence behind :func:`_assert_not_refused`: repointing a
+    feed constant at another aggregator relocates the violation, and this must
+    still refuse. The fetch boundary is the single choke point every feed in
+    digisearch goes through, so this covers callers that never name a dataset.
+    """
+    for fragment in CODE_REFUSED_URL_FRAGMENTS:
+        if fragment in url:
+            raise RefusedDatasetError(
+                f"fetch refused: url {url!r} matches refused feed "
+                f"{CONGRESS_TRADES_DATASET!r} (fragment {fragment!r}) — "
+                f"no fetch, no ingest, no substitute feed"
+            )
 
 
 class _FetcherLike(Protocol):
@@ -115,9 +194,15 @@ def _fetch_feed_json(
 ) -> Any:
     """Fetch + JSON-decode via ``pipeline.url_ingest`` (the only fetch site).
 
+    The single choke point every trackers fetch goes through, and therefore the
+    single fetch boundary the refusal is enforced at: a refused URL fragment
+    raises :class:`RefusedDatasetError` here, before the fetcher is touched.
+
     Maps :class:`UrlFetchError` onto :class:`TrackersFetchError` so callers
     can distinguish transport problems from a genuine stale flag.
     """
+    _assert_url_not_refused(url)
+
     from digisearch.pipeline.url_ingest import UrlFetchError, fetch_json_feed
 
     try:
@@ -186,7 +271,14 @@ def check_manifest_not_stale(
     signal); an explicit ``stale: true`` raises :class:`StaleDatasetError`.
     Returns the parsed manifest (``None`` when unreadable) so callers can
     reuse it — e.g. the row-count check — without a second fetch.
+
+    Refusal is checked **first** and independently of freshness: this function
+    defaults to :data:`CONGRESS_TRADES_DATASET`, so it is itself a live path
+    into a refused dataset. Wave-2 callers pass their own (non-refused) dataset
+    and are unaffected.
     """
+    _assert_not_refused(dataset)
+
     try:
         manifest = _fetch_feed_json(TRACKERS_MANIFEST_URL, fetcher, allowed_hosts)
     except TrackersFetchError as exc:
@@ -217,12 +309,15 @@ def fetch_congress_trades_latest(
     *,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> list[dict[str, Any]]:
-    """GET the congress-trades snapshot and return raw row dicts.
+    """Always refuses — the congress-trades snapshot is not distributable.
 
-    Accepts the verified bare-array shape; also unwraps common ``{"trades" /
-    "rows" / "data": [...]}`` envelopes. Raises :class:`TrackersFetchError`
-    when the body is not a row list.
+    Raises :class:`RefusedDatasetError` as the first statement, before any
+    transport. The body below is kept only so a future, separately-cleared feed
+    has its shape handling one edit away; it is unreachable today and no
+    environment value reaches it.
     """
+    _assert_not_refused(CONGRESS_TRADES_DATASET)
+
     payload = _fetch_feed_json(CONGRESS_TRADES_URL, fetcher, allowed_hosts)
     url = CONGRESS_TRADES_URL
     if isinstance(payload, list):
@@ -362,14 +457,14 @@ def ingest_congress_trade(
     chunker: Chunker | None = None,
     _known_keys: set[str] | None = None,
 ) -> str | None:
-    """Index one congress-trade row; return its ``Document.id``.
+    """Always refuses — the single-row entry point is closed.
 
-    Returns ``None`` when the row's natural key is already indexed (idempotent
-    skip). Raises :class:`ValueError` for rows without a natural key.
-    ``_known_keys`` is the bulk-run memo: callers ingesting many rows pass the
-    set built once by :func:`_natural_keys_in_index` (each newly indexed key
-    is added); single-row callers omit it and pay one scan.
+    Raises :class:`RefusedDatasetError` as the first statement, before the row
+    is normalized and before any index write. :func:`normalize_congress_trade`
+    stays callable on its own; this function is the gate.
     """
+    _assert_not_refused(CONGRESS_TRADES_DATASET)
+
     normalized = normalize_congress_trade(row)
     key = str(normalized["doc_id"])
     target_index = (index_name or TRACKERS_INDEX_NAME).strip() or TRACKERS_INDEX_NAME
@@ -432,14 +527,15 @@ def ingest_congress_trades(
     chunker: Chunker | None = None,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> TrackersIngestResult:
-    """Fetch → normalize → index the congress-trades snapshot (entry point).
+    """Always refuses — the congress-trades bulk entry point is closed.
 
-    Checks the manifest freshness flag first (refuses on ``stale: true``),
-    then ingests each row. Warns when the served row count differs from the
-    manifest-declared count. Rows without a natural key are counted as
-    skipped (logged, never silent); already-indexed rows are skipped
-    idempotently.
+    Raises :class:`RefusedDatasetError` as the first statement: before the
+    manifest read, before the feed fetch, before any index write. The body below
+    is unreachable today and exists only as the shape a future, separately
+    cleared feed would need.
     """
+    _assert_not_refused(CONGRESS_TRADES_DATASET)
+
     manifest = check_manifest_not_stale(fetcher, allowed_hosts=allowed_hosts)
     rows = fetch_congress_trades_latest(fetcher, allowed_hosts=allowed_hosts)
     expected = _manifest_expected_rows(manifest)
@@ -493,12 +589,16 @@ def ingest_congress_trades(
 
 
 __all__ = [
+    "CODE_REFUSED_DATASETS",
+    "CODE_REFUSED_URL_FRAGMENTS",
     "CONGRESS_TRADES_DATASET",
     "CONGRESS_TRADES_URL",
+    "REFUSAL_DENYLIST_ENV_VAR",
     "TRACKERS_ALLOWED_HOSTS",
     "TRACKERS_INDEX_NAME",
     "TRACKERS_MANIFEST_URL",
     "TRACKERS_ORIGIN",
+    "RefusedDatasetError",
     "StaleDatasetError",
     "TrackersFetchError",
     "TrackersIngestResult",
@@ -507,4 +607,5 @@ __all__ = [
     "ingest_congress_trade",
     "ingest_congress_trades",
     "normalize_congress_trade",
+    "refused_datasets",
 ]
