@@ -225,13 +225,27 @@ def test_the_deploy_job_is_still_behind_the_production_environment_gate() -> Non
     assert _stack_spec()["jobs"]["deploy"]["environment"] == "production"
 
 
-def test_concurrency_is_keyed_on_the_target_ref_not_the_run_id() -> None:
-    """Per-run_id groups never queue, so two merges race one container name."""
-    group = _stack_spec()["concurrency"]["group"]
-    assert "github.run_id" not in group
-    assert "inputs.ref" in group and "main" in group
-    assert _stack_spec()["concurrency"]["cancel-in-progress"] is False, (
-        "an approved deploy already waiting on Cloudflare must never be cancelled"
+def test_the_concurrency_group_stays_unique_per_run() -> None:
+    """A shared group would restore #2541 now that a push trigger exists.
+
+    The group is per-run on purpose and an earlier draft of this PR changed it to a
+    per-ref group, reasoning that two quick merges would race two deploys onto one
+    container name. That is the wrong trade: with `environment: production` and
+    `cancel-in-progress: false`, a shared group means an unapproved run does not delay
+    the workflow, it stops it, and every later run is evicted and reports `cancelled`
+    with zero jobs (#2541, 15 days and migrations 066-070 on db-migrate). Before this PR
+    that shape was latent because only a rare manual dispatch fired. With `push: main` it
+    would be on the common path.
+
+    `tests/scripts/test_workflow_environment_concurrency.py` already enforces this
+    repo-wide and failed this branch. This test states the stack workflow's half of the
+    reason next to the trigger that makes it matter.
+    """
+    group = str(_stack_spec()["concurrency"]["group"])
+    assert "github.run_id" in group, (
+        f"the concurrency group is {group!r}, which is shared across runs. Combined with "
+        "`environment: production` and cancel-in-progress: false, one unapproved run stops "
+        "every deploy behind it instead of delaying them (#2541)"
     )
 
 
