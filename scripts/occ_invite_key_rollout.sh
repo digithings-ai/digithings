@@ -50,6 +50,16 @@
 # Usage, from the repo root:
 #   bash scripts/occ_invite_key_rollout.sh
 #
+#   Non-interactive (CI). Two env vars supply the secrets and one opts in to
+#   token auth, because the default deliberately refuses a shell token:
+#     OCC_ROLLOUT_AUTH=api-token \
+#     OCC_EMBED_TENANTS_CURRENT=<current registry JSON from the secrets manager> \
+#     OCC_INVITE_KEY=<new key> \
+#     bash scripts/occ_invite_key_rollout.sh
+#   The confirmation prompt is still read from stdin, so feed it ROLLOUT:
+#     printf 'ROLLOUT\n' | bash scripts/occ_invite_key_rollout.sh
+#   .github/workflows/occ-invite-key-rollout.yml is the one-click wrapper.
+#
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -60,9 +70,25 @@ OCC_HOST="occ.digithings.ai"
 WRANGLER_VERSION="4.133.0"
 DRAIN_SECONDS=180
 
-# A bare `wrangler login` must win over a shell token; a shell CLOUDFLARE_API_TOKEN
-# shadows it and fails with auth error 10000 (docs/ops/SECRETS_ROTATION.md preamble).
-wrangler() { env -u CLOUDFLARE_API_TOKEN npx --yes "wrangler@$WRANGLER_VERSION" "$@"; }
+# Two load-bearing deviations from a plain `npx wrangler` call.
+#
+#   1. Every call runs inside $WORKER_DIR. The digichat Worker is configured by
+#      apps/digichat-cloudflare/wrangler.toml and there is no wrangler.toml at the
+#      repo root, so from the root `wrangler secret put` and `wrangler deploy`
+#      resolve no Worker at all — the put would not land on digithings-digichat.
+#      One wrapper covers all four call sites (secret list, secret put, deploy,
+#      versions list).
+#
+#   2. CLOUDFLARE_API_TOKEN is dropped so a bare `wrangler login` wins over a
+#      shell token; a shell token shadows it and fails with auth error 10000
+#      (docs/ops/SECRETS_ROTATION.md preamble). CI has no interactive terminal,
+#      so a caller that has deliberately provisioned a token opts in with
+#      OCC_ROLLOUT_AUTH=api-token. The default is unchanged: login only.
+if [ "${OCC_ROLLOUT_AUTH:-login}" = "api-token" ]; then
+  wrangler() { (cd -- "$WORKER_DIR" && npx --yes "wrangler@$WRANGLER_VERSION" "$@"); }
+else
+  wrangler() { (cd -- "$WORKER_DIR" && env -u CLOUDFLARE_API_TOKEN npx --yes "wrangler@$WRANGLER_VERSION" "$@"); }
+fi
 
 say()  { printf '\n=== %s\n' "$*" >&2; }
 fail() { printf '\nFATAL: %s\n' "$*" >&2; exit 1; }
@@ -73,6 +99,20 @@ say "0/7 preflight"
 for tool in git jq npx curl node; do
   command -v "$tool" >/dev/null 2>&1 || fail "$tool is required and was not found on PATH."
 done
+
+# Refuse an auth mode this script does not implement instead of silently falling
+# back to `login`. In CI `login` cannot succeed (no terminal, no browser) and the
+# failure surfaces later as a confusing whoami error.
+case "${OCC_ROLLOUT_AUTH:-login}" in
+  login) ;;
+  api-token)
+    [ -n "${CLOUDFLARE_API_TOKEN:-}" ] \
+      || fail "OCC_ROLLOUT_AUTH=api-token but CLOUDFLARE_API_TOKEN is empty. Nothing was written. Unset OCC_ROLLOUT_AUTH to authenticate with an interactive 'wrangler login' instead."
+    [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] \
+      || fail "OCC_ROLLOUT_AUTH=api-token but CLOUDFLARE_ACCOUNT_ID is empty, so wrangler cannot tell which account a deploy would land on. Nothing was written."
+    ;;
+  *) fail "OCC_ROLLOUT_AUTH must be 'login' (the default) or 'api-token'; got '${OCC_ROLLOUT_AUTH}'. Nothing was written." ;;
+esac
 
 [ -d "$WORKER_DIR" ] || fail "expected the digichat Worker at $WORKER_DIR"
 [ -f "$PATHS_TS" ]    || fail "expected $PATHS_TS"
@@ -125,7 +165,7 @@ printf '%s\n' "$WHOAMI_OUT" >&2
 case "$WHOAMI_OUT" in
   *"not authenticated"*|*"Not logged in"*|*"auth token has expired"*|\
   *"Provide a valid API token"*|*"Missing an account ID"*)
-    fail "wrangler is not authenticated (expired token, or not logged in). Run 'wrangler login' in an interactive terminal first; this script will not fall back to a CLOUDFLARE_API_TOKEN from the shell, on purpose. Nothing was written." ;;
+    fail "wrangler is not authenticated (expired token, or not logged in). Run 'wrangler login' in an interactive terminal first, or set OCC_ROLLOUT_AUTH=api-token with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for a non-interactive caller. By default this script will not fall back to a CLOUDFLARE_API_TOKEN from the shell, on purpose. Nothing was written." ;;
 esac
 case "$WHOAMI_OUT" in
   *"OAuth token"*|*"API Token"*|*"logged in"*) : ;;
