@@ -32,11 +32,13 @@ the network.
   entitled to be here but not to the route; the upstream plan gate is mapped to
   a typed, non-retryable `pro_required` (distinct from `auth_required`, so a
   caller can tell a missing session from a missing plan) (`client.py:307-322`).
-- **The family kill switch is `GLOOMBERB_ENABLED` (default ON).** Only
+- **The family kill switch is `GLOOMBERB_ENABLED` (default OFF in every
+  environment, local included).** Only
   `1`/`true`/`yes`/`on` (case-insensitive) enable the family; **any other value —
-  a typo included — disables it**, and every call then returns a typed
+  a typo included — keeps it off**, and every call then returns a typed
   `upstream_error` with no request (`client.py:248-272`). This fails closed on
-  purpose.
+  purpose. **The cookie above does nothing while the switch is off** — set
+  `GLOOMBERB_ENABLED=1` in `.env` (see `.env.example`) to opt back in.
 - **The pipeline in-process surface filters rather than errors.** When the
   cookie is unset, `available_digifetch_tools` drops the session/preview/pro
   tools (and the whole family when the kill switch is off) so a pipeline LLM is
