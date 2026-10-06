@@ -34,11 +34,59 @@ CRED_VALUE_PATTERNS = [
     # anchor lets that comment hide the key. And a body class must be the
     # alphabet the vendor really uses, because a value carrying a comment never
     # reaches the entropy score below - the prose exclusion runs first - so this
-    # loop is the only gate that can catch it. `sk-` is URL-safe base64, and its
-    # two common families (`sk-proj-`, `sk-ant-api03-`) put a `-` inside the
-    # first 20 characters.
-    r'^sk-[A-Za-z0-9_-]{20,}',
+    # loop is the only gate that can catch it. This is a list of vendor
+    # prefixes, not a shape rule: a prefix the guard has never heard of reports
+    # clean behind a comment while the identical key is reported bare, which is
+    # the false negative this list exists to close.
+    #
+    # `sk-` bodies are base64, and both alphabets occur in the wild. URL-safe
+    # base64 (`-` and `_`) covers the two common families (`sk-proj-`,
+    # `sk-ant-api03-`) that put a `-` inside the first 20 characters; standard
+    # base64 puts `+` and `/` there instead. A body class that omits either of
+    # those stops at the first character it does not hold, which is how a key
+    # hides behind the comment that follows it. Base64's `=` padding is
+    # deliberately left out: it only ever occurs at the tail of a body, so it
+    # cannot be the character that satisfies the `{20,}` count below, and
+    # admitting it would only let a too-short body match on its padding. Match
+    # the value, not the line: a greedy class over a whole line is what put the
+    # generic patterns back.
+    r'^sk-[A-Za-z0-9_+/-]{20,}',
     r'^ghp_', r'^gho_', r'^glpat-',
+    # Stripe. `sk_live_` is 8 characters, and the rest of a real key is a
+    # 24-character body, so a floor of 20 sits under the real length rather
+    # than at a copied constant.
+    r'^sk_live_[A-Za-z0-9]{20,}',
+    # Google. `AIza` is 4, and the documented key is 35 characters of
+    # URL-safe base64 after it - a floor of 20 stays under that, since the
+    # prefix alone is already a high-signal token.
+    r'^AIza[A-Za-z0-9_-]{20,}',
+    # AWS. An access key ID is 20 characters *in total*, so the body is 16 and
+    # a 20-character floor would miss every real key. The class is wider than
+    # the alphabet AWS issues, which is upper-case only: it is permissive on
+    # purpose because the prefix alone carries the signal and the class only
+    # bounds the length. The committed `aws_akia` probe is what pins this - its
+    # body is lower-case, so an upper-case-only class would fail the probe and
+    # no prose in the tracked example files begins with `AKIA`.
+    r'^AKIA[A-Za-z0-9]{16,}',
+    # AWS temporary (STS) access key IDs, `ASIA`, are the same 20 characters in
+    # total and are issued in real deployments, so they take the same floor.
+    # Leaving this prefix out reported a temporary credential clean behind a
+    # comment while the identical bare key was reported, which is the exact
+    # false negative this list exists to close.
+    r'^ASIA[A-Za-z0-9]{16,}',
+    # HuggingFace. `hf_` is 3, then an opaque 34-character token.
+    r'^hf_[A-Za-z0-9]{20,}',
+    # Slack. A bot token is three hyphen-separated groups after the prefix, so
+    # the class has to hold `-`; a 20-character floor clears the 10-13 digit
+    # first group and its separator and still stops short of the whole token.
+    r'^xoxb-[A-Za-z0-9-]{20,}',
+    # SendGrid. The `.` is a literal in the key, hence the escape. A key is a
+    # fixed 69 characters - `SG.`, a 22-character id, a separator, then a
+    # 43-character secret - so the first run of the body is well past this
+    # floor. The class only has to cover that first run, because nothing here
+    # is end-anchored and the separator is not part of the alphabet being
+    # matched.
+    r'^SG\.[A-Za-z0-9_-]{20,}',
 ]
 #: Bits per character at or above which a value counts as a credential. Set
 #: below the weakest probe (3.565) on purpose: the floor also has to cover the
