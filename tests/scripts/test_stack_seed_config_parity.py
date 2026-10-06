@@ -35,6 +35,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = REPO_ROOT / "apps" / "digithings-stack-cloudflare"
 RELEASE = REPO_ROOT / "infra" / "digichat-release"
@@ -68,28 +70,46 @@ def _wrangler_vars() -> dict[str, str]:
     return tomllib.loads((CONTAINER / "wrangler.toml").read_text(encoding="utf-8"))["vars"]
 
 
-def _legacy_marker_clearing_merged() -> bool:
-    """True once ``#4987`` (``86cb1ec5d``) is on this branch.
+def _seed_marker_is_provider_qualified() -> bool:
+    """True when ``seed_chroma.sh`` uses the provider-qualified ``${SEED_TAG}``.
 
-    That PR moved the seed marker to a provider-qualified ``${SEED_TAG}``, which
-    replaces the per-version ``rm -f`` list (the tag always differs, so the seed
-    always re-runs), and pinned ``DIGISEARCH_EMBEDDING_PROVIDER`` in the compose
-    override and the example env. It landed on ``main`` only; ``develop`` does
-    not have it yet, so the three tests that describe the post-``#4987`` state
-    cannot hold here. Keyed on the marker change because that is the one this
-    branch's own ``seed_chroma.sh`` is missing, and it flips by itself when the
-    PR merges — no edit to this file needed at that point.
+    ``#4987`` (``86cb1ec5d``, ``main`` only) moved the marker to ``${SEED_TAG}``
+    and replaced the per-version ``rm -f`` list with it: the tag always differs
+    from a previous boot's, so the seed always re-runs and no stale marker can be
+    mistaken for a fresh one. ``#5048`` (``22f08b717``) brought the same change
+    to ``develop``. The branches therefore differ *here* — ``develop`` has the
+    qualified marker, ``main`` still has the bare ``${SEED_VER}`` with the
+    ``v1``-``v4`` cleanup list — so the predicate reads the marker out of the
+    seeder instead of asking which PR added it, and is correct on both.
     """
     seeder = (CONTAINER_SCRIPTS / "seed_chroma.sh").read_text(encoding="utf-8")
-    return ".stack_chroma_seeded_v1" in seeder
+    return 'SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_TAG}"' in seeder
 
 
-needs_4987 = pytest.mark.skipif(
-    not _legacy_marker_clearing_merged(),
+def _layer_pins_provider(path: Path) -> bool:
+    """True when a runtime layer pins ``DIGISEARCH_EMBEDDING_PROVIDER``.
+
+    ``#4987`` pinned it in the compose override and the example env, on ``main``.
+    ``develop`` does not carry that half yet (``wrangler.toml`` already does), so
+    a test that demands the pin cannot hold there. Keyed on the file the test
+    actually reads, so the skip lifts by itself when the pin lands and no edit to
+    this file is needed at that point.
+    """
+    return path.exists() and "DIGISEARCH_EMBEDDING_PROVIDER" in path.read_text(encoding="utf-8")
+
+
+#: The ``rm -f`` list only exists while the marker is the bare ``${SEED_VER}``.
+needs_bare_seed_marker = pytest.mark.skipif(
+    _seed_marker_is_provider_qualified(),
     reason=(
-        "#4987 (86cb1ec5d) is on main but not on develop: the provider-qualified "
-        "SEED_TAG marker and the DIGISEARCH_EMBEDDING_PROVIDER pins are absent here."
+        "seed_chroma.sh marks success with the provider-qualified ${SEED_TAG}: it can "
+        "never equal a previous boot's name, so there is no prior marker to clear."
     ),
+)
+
+needs_provider_pin_in_env_example = pytest.mark.skipif(
+    not _layer_pins_provider(RELEASE / ".env.profile-a-bundle.example"),
+    reason=".env.profile-a-bundle.example does not pin DIGISEARCH_EMBEDDING_PROVIDER yet.",
 )
 
 
@@ -104,15 +124,10 @@ def test_seed_version_matches_between_seeder_and_waiter() -> None:
     )
 
 
-@needs_4987
+@needs_bare_seed_marker
 def test_seed_version_clears_every_prior_marker() -> None:
     """The seeder must delete the marker it used to write, or a stale volume
-    reports 'already done' before the new seed content exists.
-
-    Only meaningful while the marker is the bare ``${SEED_VER}``. Under the
-    provider-qualified ``${SEED_TAG}`` (#4987) the tag can never match a
-    previous boot's name, so the ``rm -f`` list is unnecessary by construction.
-    """
+    reports 'already done' before the new seed content exists."""
     current = _shell_var(CONTAINER_SCRIPTS / "seed_chroma.sh", "SEED_VER")
     script = (CONTAINER_SCRIPTS / "seed_chroma.sh").read_text(encoding="utf-8")
     for prior in ("v1", "v2", "v3", "v4"):
@@ -127,10 +142,10 @@ def test_seed_version_clears_every_prior_marker() -> None:
 def test_embedding_provider_pinned_on_every_runtime_layer(layer: str) -> None:
     """Each layer that runs digisearch must pin the provider its seed writes with."""
     if layer == "compose":
-        if not _legacy_marker_clearing_merged():
+        if not _layer_pins_provider(RELEASE / "compose.profile-a-bundle.override.yml"):
             pytest.skip(
-                "#4987 (86cb1ec5d) is on main but not on develop: "
-                "compose.profile-a-bundle.override.yml does not pin the provider yet."
+                "compose.profile-a-bundle.override.yml does not pin "
+                "DIGISEARCH_EMBEDDING_PROVIDER yet."
             )
         env = _compose_stack_environment()
         value = env.get("DIGISEARCH_EMBEDDING_PROVIDER")
@@ -148,7 +163,7 @@ def test_embedding_provider_pinned_on_every_runtime_layer(layer: str) -> None:
     )
 
 
-@needs_4987
+@needs_provider_pin_in_env_example
 def test_env_example_documents_the_same_provider() -> None:
     """The operator-facing example must not teach an unpinned provider."""
     text = (RELEASE / ".env.profile-a-bundle.example").read_text(encoding="utf-8")
@@ -315,24 +330,32 @@ def test_dockerfile_has_a_rebuild_marker_for_the_removal() -> None:
     ],
 )
 def test_no_layer_fans_out_to_occ_tickets(rel: str) -> None:
-    """No runtime or operator-facing layer may point a tenant at ``occ_tickets``.
+    """No runtime or operator-facing layer may still name the retired ticket index.
 
     ``occ_help,occ_tickets`` is the #4992 fan-out leg. PR #5192 removes it from
     ``main``; if this branch keeps it, the next develop->main promotion brings it
     back together with the boot step, and every ``/chat/occ`` answer starts
     searching a corpus that is either empty or, once the writer is reachable
     again, full of unmasked customer tickets.
+
+    Pinned on the bare index name rather than on the comma pair, because prose
+    drifted too: a summary row that reads "``occ_help`` docs + ``occ_tickets``
+    fan-out" carries the same routing with no comma in it, and that is how the
+    row in ``docs/projects/online-compliance-center/README.md`` survived an
+    earlier pass at this file. The one historical mention that must stay — the
+    ``occ_tickets.jsonl`` payload retired in DIG-1380 — is deliberately absent
+    from every layer listed above.
     """
     path = REPO_ROOT / rel
     offenders = [
-        f"{rel}:{lineno}"
+        f"{rel}:{lineno}: {line.strip()}"
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
-        if "occ_help,occ_tickets" in line
+        if "occ_tickets" in line
     ]
     assert not offenders, (
-        f"{rel} still fans out to occ_tickets (DIG-1380 retired the ticket corpus). "
+        f"{rel} still names occ_tickets (DIG-1380 retired the ticket corpus). "
         "Promoting this branch to main would resurrect the #4992 fan-out leg: "
-        + ", ".join(offenders)
+        + "; ".join(offenders)
     )
 
 
