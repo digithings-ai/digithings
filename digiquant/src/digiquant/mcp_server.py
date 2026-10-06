@@ -123,7 +123,7 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 # ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
 # module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
 # builder remains the patchable seam tests use to inject a MockTransport-backed
-# client. ``GLOOMBERB_ENABLED`` defaults ON (author decision, spec §11/§12.6);
+# client. ``GLOOMBERB_ENABLED`` defaults OFF (Counsel memo DIG-1233);
 # the session cookie is never logged or echoed into tool payloads.
 
 
@@ -1036,7 +1036,7 @@ def create_mcp_server(
 
         `exchange` is optional. Enrichment only: free-tier data is delayed up
         to 15 minutes and is never a pipeline primary. Disabled by the
-        GLOOMBERB_ENABLED kill switch (default ON). Carries "Sourced from
+        GLOOMBERB_ENABLED kill switch (default OFF; explicit opt-in re-enables). Carries "Sourced from
         Gloomberb" attribution and a term.gloom.sh deep link.
         """
         try:
